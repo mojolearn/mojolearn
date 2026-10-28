@@ -8,18 +8,17 @@
 # `ols/base` lane on the HOST column (MOJOLEARN_VENDOR=cpu), so no Metal.
 #
 # Column mode (records from tools/record_identity_column.sh on each box):
-#   Incoming columns must already have byte-identical committed copies under
-#   bench/results/identity_break (the recorder retains them there). External
-#   run directories may select those copies; they are never generator inputs.
+#   Incoming columns are retained under bench/results/identity_break before
+#   generation. Commit the records and updated table together after checks.
 #   1. every <records dir>/*.identical.json must pass
 #      tools/identity_columns.py check (the same _verify_reference.admit() the
 #      table builder applies, plus this harness's fixture bytes); all must name
 #      ONE commit, and that commit must be in this repository (its commit time
 #      decides "newest wins")
-#   2. resolves them to byte-identical committed records under
-#      bench/results/identity_break/; preserves their original paths and bytes
+#   2. retains byte-identical copies under bench/results/identity_break/,
+#      reusing existing copies without requiring a separate prerequisite commit
 #   3. regenerates python/mojolearn/verify_reference/table.json from every
-#      committed column for the selected lanes (`verify --all --emit-reference`
+#      repository column for the selected lanes (`verify --all --emit-reference`
 #      with `--reference-table` and `--lanes`; newest commit wins per cell part
 #      and device class, older classes kept as superseded)
 #      INCREMENTAL RE-RECORD (Andrew 2026-10-10): re-record only what changed;
@@ -214,10 +213,19 @@ for d in "${dirs[@]}"; do
     for f in "$d"/*.identical.json; do [ -f "$f" ] && files+=("$f"); done
 done
 [ ${#files[@]} -gt 0 ] || die "no *.identical.json under ${dirs[*]}"
-"${PY[@]}" tools/identity_admission_guard.py inputs --source-root "$ROOT" "${files[@]}" \
-    > "$EVID/committed-records.txt" || die "retain and commit incoming identity records before admission; table unchanged"
+preview_args=()
+if [ $CHECK_ONLY = 1 ]; then
+    mkdir -p "$ROOT/bench/results/identity_break"
+    PREVIEW_INPUTS=$(mktemp -d "$ROOT/bench/results/identity_break/.admission-preview-XXXXXX") \
+        || die "cannot prepare temporary record inputs"
+    trap 'rm -rf -- "$PREVIEW_INPUTS"' EXIT
+    preview_args=(--preview-dir "$PREVIEW_INPUTS")
+fi
+"${PY[@]}" tools/identity_admission_guard.py inputs --source-root "$ROOT" \
+    ${preview_args[@]+"${preview_args[@]}"} "${files[@]}" \
+    > "$EVID/repository-records.txt" || die "could not retain incoming records in MojoLearn; table unchanged"
 files=()
-while IFS= read -r -d '' f; do files+=("$f"); done < "$EVID/committed-records.txt"
+while IFS= read -r -d '' f; do files+=("$f"); done < "$EVID/repository-records.txt"
 "${PY[@]}" tools/identity_columns.py check "${files[@]}" > "$EVID/check.txt" 2>&1
 crc=$?
 cut -c1-300 "$EVID/check.txt"
@@ -252,6 +260,12 @@ LANES=$("${PY[@]}" tools/identity_admission_guard.py lanes --lanes "$LANES" "${f
     || die "invalid admission scope"
 tmp=$(mktemp -d "$EVID/admission.XXXXXX")
 cp "$TABLE" "$tmp/base.json" || die "cannot retain base table"
+record_args=(--records "$ROOT/bench/results/identity_break")
+if [ $CHECK_ONLY = 1 ]; then
+    for f in "${files[@]}"; do
+        case "$f" in "$PREVIEW_INPUTS/"*) record_args+=(--records "$f") ;; esac
+    done
+fi
 candidate() {
     cli --all --emit-reference "$tmp/table.json" --reference-table "$tmp/base.json" \
         --lanes "$LANES" "$@" > "$tmp/emit.log" 2>&1 \
@@ -260,7 +274,7 @@ candidate() {
         --candidate "$tmp/table.json" --lanes "$LANES" > "$tmp/agreement.json" \
         || die "GPU and cpu reference agreement refused; table unchanged; see $tmp/agreement.json"
 }
-candidate --records "$ROOT/bench/results/identity_break"
+candidate "${record_args[@]}"
 if [ $CHECK_ONLY = 1 ]; then
     "${PY[@]}" tools/identity_columns.py report --table "$tmp/table.json" --commit "$C" --out "$tmp/report.json"
     checks "$tmp/table.json"
@@ -269,8 +283,7 @@ if [ $CHECK_ONLY = 1 ]; then
     exit $?
 fi
 
-# Admission receipts are not raw columns. Keep them out of the generator's
-# input directory, so a new uncommitted receipt cannot block the next candidate.
+# Admission receipts are not raw columns; keep them outside the input tree.
 DEST=bench/results/reference_admissions/$DATE-${REF_TAG:-0836}
 mkdir -p "$DEST"
 {
@@ -291,8 +304,8 @@ for f in "${files[@]}"; do
     echo "| \`${f#"$ROOT/"}\` | $line | \`$(shasum -a 256 "$f" | cut -c1-16)\` |" >> "$DEST/README.md"
 done
 
-# The candidate already cites final committed paths. Never create an
-# uncommitted duplicate of its input and rebuild from that duplicate.
+# The candidate already cites its final repository inputs; retain those exact
+# bytes and commit them together with the checked table.
 tail -n 1 "$tmp/emit.log" > "$DEST/admission-summary.json"
 cp "$tmp/agreement.json" "$DEST/agreement-summary.json"
 cut -c1-400 "$DEST/admission-summary.json"
@@ -310,7 +323,14 @@ checks "$tmp/table.json"
     --candidate "$tmp/table.json" --lanes "$LANES" --destination "$TABLE" \
     > "$tmp/publication.json" || die "table publication refused; see $tmp/publication.json"
 echo "NEXT (after SELFTEST rc=0):"
-echo "  git add $DEST $TABLE && git commit -m 'verify_reference: table regenerated from ${C:0:9} columns' && git push"
+printf '  git add -- %q %q ' "$DEST" "$TABLE"
+for f in "${files[@]}"; do
+    printf '%q ' "${f#"$ROOT/"}"
+    for prov in "${f%/*}"/*.provenance.txt; do
+        [ ! -f "$prov" ] || printf '%q ' "${prov#"$ROOT/"}"
+    done
+done
+echo "&& git commit -m 'verify_reference: table regenerated from ${C:0:9} columns' && git push"
 echo "  Re-record portable model files only if their admitted model/batch hashes changed."
 echo "  Preserve every unaffected model in the replacement manifest; --models replaces the whole bundle."
 [ $ST_RC = 0 ] && [ $COV_RC = 0 ] && [ $PTX_RC = 0 ]

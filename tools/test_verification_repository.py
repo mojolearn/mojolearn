@@ -134,23 +134,59 @@ class RepositoryVerification(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "source commit"):
             V.validate(self.root)
 
-    def test_generator_refuses_external_dirty_and_untracked_records(self):
+    def generator(self):
         path = Path(__file__).resolve().parents[1] / "python/mojolearn/_verify_reference.py"
         spec = importlib.util.spec_from_file_location("vref", path)
         ref = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(ref)
-        ref.require_committed_records([self.column], self.root)
+        return ref
+
+    def test_generator_accepts_repository_records_without_a_prerequisite_commit(self):
+        ref = self.generator()
+        ref.require_repository_records([self.column], self.root)
         extra = self.column.with_name("untracked.json")
         extra.write_bytes(self.column.read_bytes())
-        with self.assertRaisesRegex(ValueError, "uncommitted"):
-            ref.require_committed_records([extra], self.root)
+        ref.require_repository_records([extra], self.root)
         external = Path(self.temp.name) / "external.json"
         external.write_bytes(self.column.read_bytes())
-        with self.assertRaisesRegex(ValueError, "committed under"):
-            ref.require_committed_records([external], self.root)
+        with self.assertRaisesRegex(ValueError, "regular repository file"):
+            ref.require_repository_records([external], self.root)
         self.column.write_text("{}")
-        with self.assertRaisesRegex(ValueError, "changed"):
-            ref.require_committed_records([self.column], self.root)
+        ref.require_repository_records([self.column], self.root)
+        link = self.column.with_name('alias.json')
+        link.symlink_to(extra)
+        with self.assertRaisesRegex(ValueError, 'regular repository file'):
+            ref.require_repository_records([link], self.root)
+        directory_link = self.root / V.RECORDS / 'linked-directory'
+        directory_link.symlink_to(extra.parent, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'regular repository file'):
+            ref.require_repository_records([directory_link / extra.name], self.root)
+
+    def test_records_and_table_land_in_one_commit_but_packaging_stays_commit_pinned(self):
+        original_head = git(self.root, 'rev-parse', 'HEAD')
+        extra = self.column.with_name('fresh.json')
+        extra.write_text(json.dumps(dict(commit='b'*40, vendor='cpu')))
+        self.generator().require_repository_records([extra], self.root)
+        path = self.root / V.TABLE
+        table = json.loads(path.read_text())
+        table['records'].append(dict(dir='fixture', file=extra.name, commit='b'*40,
+            vendor='cpu', sha256=hashlib.sha256(extra.read_bytes()).hexdigest()))
+        path.write_text(json.dumps(table))
+        with self.assertRaisesRegex(ValueError, 'source commit'):
+            V.validate_payload(self.root)
+        self.commit()
+        self.assertEqual(git(self.root, 'rev-list', '--count', original_head+'..HEAD'), '1')
+        V.validate(self.root)
+
+    def test_discovery_cannot_consume_another_admissions_temporary_preview(self):
+        base = self.root / V.RECORDS
+        preview = base / '.admission-preview-other' / 'temporary.json'
+        preview.parent.mkdir()
+        preview.write_bytes(self.column.read_bytes())
+        ref = self.generator()
+        self.assertEqual(set(map(Path, ref.repository_record_paths([base], self.root))), {self.column})
+        self.assertEqual(set(map(Path, ref.repository_record_paths([base, preview], self.root))),
+                         {self.column, preview})
 
 
 if __name__ == "__main__":

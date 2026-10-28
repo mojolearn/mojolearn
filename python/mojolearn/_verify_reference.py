@@ -68,27 +68,46 @@ import sys
 FORMAT = "mojolearn.verify-reference.v1"
 
 
-def require_committed_records(paths, repo_root):
-    """Maintainer generation accepts only public, committed record inputs."""
+def require_repository_records(paths, repo_root):
+    """Generate from repository files; commit records and table together later.
+
+    Release packaging separately pins its inputs to the selected Git commit.
+    Requiring HEAD here would unnecessarily split one evidence update into two
+    commits. Citations record the exact input bytes' SHA-256 in build_table.
+    """
     from pathlib import Path
     root = Path(repo_root).resolve()
     base = root / "bench/results/identity_break"
-    rows = subprocess.check_output(["git", "-C", str(root), "ls-tree", "-r", "-z", "HEAD"])
-    blobs = {}
-    for row in rows.split(b"\0"):
-        if row:
-            meta, name = row.split(b"\t", 1)
-            if meta.split()[0] in (b"100644", b"100755"):
-                blobs[name.decode()] = meta.split()[2].decode()
     for filename in paths:
-        path = Path(filename)
+        path = Path(os.path.abspath(filename))
         resolved = path.resolve()
-        if path.is_symlink() or not resolved.is_relative_to(base):
-            raise ValueError("reference input must be committed under bench/results/identity_break: " + str(path))
-        data = path.read_bytes()
-        oid = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
-        if blobs.get(resolved.relative_to(root).as_posix()) != oid:
-            raise ValueError("reference input is uncommitted or changed: " + str(path))
+        bad = not resolved.is_relative_to(base) or not resolved.is_file()
+        # Permit aliases above the checkout, e.g. macOS /var -> /private/var,
+        # while rejecting symlink files/directories within the record tree.
+        for ancestor in (path, *path.parents):
+            if ancestor.resolve() == root:
+                break
+            if ancestor.is_symlink():
+                bad = True
+                break
+        if bad:
+            raise ValueError("reference input must be a regular repository file under bench/results/identity_break: " + str(path))
+
+
+def repository_record_paths(records, repo_root):
+    """Discover normal records; temporary check-only inputs require explicit selection."""
+    paths = []
+    for record in records:
+        if os.path.isfile(record):
+            paths.append(record)
+            continue
+        for directory, children, names in os.walk(record):
+            # A concurrent or interrupted preview must never become another
+            # admission's input. Its owner supplies the exact preview files.
+            children[:] = [name for name in children if not name.startswith('.admission-preview-')]
+            paths.extend(os.path.join(directory, name) for name in names if name.endswith('.json'))
+    require_repository_records(paths, repo_root)
+    return paths
 
 
 TABLE_DIR = "verify_reference"
