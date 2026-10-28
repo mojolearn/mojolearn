@@ -704,3 +704,17 @@ Main moved (84e2bc7dda) and was merged at 53225682e5, EXPERIMENTS.md resolved ad
 Receipt: experiments/amd_mfma_kpack_20261028/compile.json; evidence ~/mojolearn-evidence/amd-mfma-20261028/.
 RUN OWED (ab-runner): the A/B on nv and amd, one run per arm, A = define off, B = define on (lines in experiments/amd_mfma_kpack_20261028/HANDOFF.txt); B's AMD hashes are expected to equal A's.
 Not compiled: any binding with the define on; NVIDIA/Metal targets (the arm is gated at compile time to the AMD column).
+
+SELF-MERGE 2026-10-28 (lane norm-folds) — MOJOLEARN_IDN_NORM_FIXED_LANES, default OFF on main
+- What it does: a fixed 32-lane fold (32 slots plus fold32's tree) for the transformer/LM RMSNorm S1 row sum, the variant LayerNorm sums and the
+  RMSNorm backward dot. Device rows run on 32-lane cells. The host oracles and the byte-LM host kernel run the same slots serially. With the define on,
+  bits change on every column together; with it off, behavior is unchanged (arm B).
+- Pod mnuuorpita3jxe (32 vCPU, 60-min lease) on lane head cab21edb35 = lane + main ebcd7f9477; reaped, terminated_verified=1:
+  - pod smoke: 46/46 host families, smoke_after rc=0, tier_dir probe rc=0.
+  - norm-folds roots 6/6 rc=0: CPU probe root on/off, transformer_host on, sm_89 transformer on/off, sm_89 training on.
+  - test_no_python_runtime rc=0.
+  - test_tombstones_preserved rc=1 on the pod only: the shipped tarball has no .git, and the test enumerates files through git.
+- Gates on the Mac git checkout: test_tombstones_preserved rc=0 at cab21edb35. Both gates rc=0 again at 299e36716f (re-merge of main 3159cadf5f;
+  that merge touches no lane file, so no recompile).
+- Receipts: experiments/norm_folds_20261028/compile.json and ~/mojolearn-evidence/norm-folds-20261028/pod/.
+- Not done: no GPU runtime, identity or timing. The A/B and ID runs owed are in ~/mojolearn-evidence/norm-folds-20261028/HANDOFF.md.

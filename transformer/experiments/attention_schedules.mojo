@@ -11,6 +11,7 @@ All numeric loops run in Mojo; no vendor or benchmark dimension dispatch.
 from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
+from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import (
@@ -38,9 +39,14 @@ def rms_sumsq_kernel(
     if row >= Int(m_in):
         return
     var acc = Float32(0.0)
-    for j in range(dm):
-        var v = ftz(x.unsafe_load(row * dm + j))
-        acc = ftz(identical_mul_add(v, v, acc))
+    comptime if IDN_NORM_FIXED_LANES:
+        # MOJOLEARN_IDN_NORM_FIXED_LANES: S1 is the fixed 32-lane fold
+        # (one thread here; the same bits as the cell kernels)
+        acc = nfl_dot(x, x, row * dm, row * dm, dm)
+    else:
+        for j in range(dm):
+            var v = ftz(x.unsafe_load(row * dm + j))
+            acc = ftz(identical_mul_add(v, v, acc))
     comptime if NN24_NORM_LANES8:
         acc = norm_profile_dot[NN24_LANES](x, x, row * dm, row * dm, dm)
     sumsq.unsafe_store(row, acc)

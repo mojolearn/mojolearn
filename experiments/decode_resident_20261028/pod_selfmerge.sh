@@ -16,10 +16,15 @@ if [ ! -d .git ]; then
     && git -c user.email=pod@local -c user.name=pod commit -q -m shipped-tree > /dev/null 2>&1
   echo "git_index_rc=$?" >> "$S"
 fi
-bash experiments/decode_resident_20261028/compile.sh "$OUT/cpu" > "$OUT/compile_cpu.out" 2>&1; echo "compile_cpu rc=$?" >> "$S"
+# No CPU-column leg here: these roots import the device bindings, and on a GPU-less Linux pod a
+# CPU-column build of them stops in std's GPU info ("Unknown GPU architecture detected", at main's own
+# mamba2_block_forward launch); the CPU column of these roots is the Mac receipt.
 COLUMN_DEFS="-D MOJOLEARN_COLUMN_NVIDIA" bash experiments/decode_resident_20261028/compile.sh "$OUT/sm89" --target-accelerator sm_89 > "$OUT/compile_sm89.out" 2>&1; echo "compile_sm89 rc=$?" >> "$S"
 pixi run -e default python tools/tests/test_no_python_runtime.py > "$OUT/gate_no_python_runtime.log" 2>&1; echo "gate_no_python_runtime rc=$?" >> "$S"
 pixi run -e default python tools/tests/test_tombstones_preserved.py > "$OUT/gate_tombstones.log" 2>&1; echo "gate_tombstones rc=$?" >> "$S"
+# --release-bincache stages host binaries before the command; the smoke builds every family through
+# the cache into python/mojolearn/host and refuses an existing output, so start it from an empty dir.
+rm -f python/mojolearn/host/_mojolearn_*.so
 LEG_OUT=$OUT/smoke bash experiments/decode_resident_20261028/pod_smoke.sh > "$OUT/pod_smoke.out" 2>&1; echo "pod_smoke rc=$?" >> "$S"
 MOJOLEARN_VENDOR=cpu pixi run -e default python -c "
 import numpy as np

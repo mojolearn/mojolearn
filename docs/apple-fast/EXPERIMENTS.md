@@ -2224,6 +2224,12 @@ Evidence: `~/mojolearn-evidence/boxes-20261021/amd-out/graph-opt/ab-table.tsv` a
 | `MOJOLEARN_IDN_SSD_OCCUPANCY` (default off) | mamba2-forward / gaussian (B1 L2048 DM384) | lane/nv-occupancy@87595704da | pending nv | NV 15.78 (Oct 27 board, RTX 6000 Ada) / AMD 5.06 -> pending | PENDING | Mamba-2 SSD S10 discretize one thread per (b,t,h,p) (coalesced), S12 G=C.B as 16x16 shared tiles (stride-129 rows), S18 C.h_prev row tile with the entering state staged once and exp(dA_cs) once per row; same chains and operands, so same bits (identical-safe; host column keeps the cell kernels) |
 | `MOJOLEARN_IDN_PARAM_GRAD_VIEWS` | lm-train-step / bytes (IDENTICAL, NVIDIA + AMD) | lane/grad-views @ 7d2703511a | pending nv (gview-off / gview-on), pending amd | NV 35.98, AMD 42.99 (Oct 27 board) -> pending | pending | idea 9 (roadmap C2): block, embedding and head parameters and weight gradients as views of the flat param/grad owners; drops the per-step unpack, pack and dw_emb/dw_lm copies; aliases only, same bits required |
 
+## Neural speed lanes (2026-10-28)
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_IDN_NORM_FIXED_LANES` (IDENTICAL, default OFF) | neural:transformer-forward / gaussian, neural:lm-forward / bytes, neural:lm-train-step / bytes | lane/norm-folds@61076ab98c | pending nv (nf-A / nf-B), pending amd | Oct 27 board, ours: transformer-forward NV 13.87 / AMD 4.74; lm-forward NV 57.97 / AMD 34.43; lm-train-step NV 35.98 / AMD 42.99 -> pending | PENDING | BITS CHANGE (fold order, every column in one commit): the RMSNorm S1 row sum, the variant LayerNorm sums and the RMSNorm backward dot fold as 32 strided slots plus fold32's pairwise tree (transformer/experiments/norm_fixed_lanes.mojo); device RMSNorm, residual+RMSNorm and backward dot kernels run one 32-lane cell per row (shuffle_xor tree), one-thread kernels and the host oracles/byte-LM host kernel run the same slots serially. Chain depth d_model -> d_model/32 + 5. Idea 12 of the Oct 28 neural report. |
+
 
 ## Resident decode I/O and the one-wait train step (lane decode-resident-20261028)
 

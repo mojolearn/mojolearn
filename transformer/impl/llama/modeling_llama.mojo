@@ -270,6 +270,10 @@ transcendentals and division below are OURS.
 from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
+from transformer.experiments.norm_fixed_lanes import (
+    IDN_NORM_FIXED_LANES, NFL_LANES, nfl_cell, nfl_cell_dot, nfl_cell_total, nfl_dot,
+    nfl_square, nfl_sum, norm_row_threads,
+)
 from transformer.experiments.attention_schedules import (
     NN25_RMS_SPLIT_SCALE, NN29_RING_PAIR,
     rms_sumsq_kernel, rms_parallel_scale_kernel, training_swiglu_kernel,
@@ -2008,6 +2012,39 @@ def ensure_attention_stage_capacity(
 # ===========================================================================
 
 
+@always_inline
+def _nfl_rms_norm_cell(
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    out_buf: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    m: Int,
+    dm: Int,
+    eps_in: Float32,
+):
+    """S1-S4 of one row on a 32-lane cell (MOJOLEARN_IDN_NORM_FIXED_LANES).
+    S1 is `nfl_cell_dot(x, x)`, the fixed 32-lane fold every column runs;
+    every lane holds the same total, so the S2 scalars are the same bits on
+    every lane; S3/S4 are elementwise products (lane c owns c, c + 32, ...)."""
+    var cell = nfl_cell(m)
+    if not cell[2]:
+        return
+    var t = cell[0]
+    var lane = cell[1]
+    var acc = nfl_cell_dot(x, x, t * dm, t * dm, dm, lane)
+    if lane == 0:
+        sumsq.unsafe_store(t, acc)
+    var mean = ftz(identical_div(acc, Float32(dm)))
+    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    var j = lane
+    while j < dm:  # device-loop: this lane's elements of one row
+        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
+        out_buf.unsafe_store(
+            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
+        )
+        j += NFL_LANES
+
+
 def llama_rms_norm_kernel(
     sumsq: MutPointer[Float32, MutAnyOrigin],
     out_buf: MutPointer[Float32, MutAnyOrigin],
@@ -2019,7 +2056,18 @@ def llama_rms_norm_kernel(
 ):
     """One thread per TOKEN ROW. Contract S1: "serial ascending j from +0.0,
     one fold per row, no block fold" -- so the row's fold never leaves this
-    thread's registers and no launch geometry can reorder it."""
+    thread's registers and no launch geometry can reorder it.
+
+    MOJOLEARN_IDN_NORM_FIXED_LANES: one 32-lane cell per row instead
+    (launched with `norm_row_threads(m)` threads); S1 is the fixed 32-lane
+    fold (transformer/experiments/norm_fixed_lanes.mojo), S2-S4 unchanged
+    and computed per element by the lane that owns it."""
+    comptime if IDN_NORM_FIXED_LANES:
+        comptime assert not (SAB_S1_FOLD_DESCENDING or SAB_BATCHINV_NORM_CHUNK_FROM_M or NN24_NORM_LANES8), (
+            "MOJOLEARN_IDN_NORM_FIXED_LANES replaces S1's fold; it does not combine with S1 sabotage or MOJOLEARN_IDN_NORM=1/4"
+        )
+        _nfl_rms_norm_cell(sumsq, out_buf, x, weight, Int(m_in), Int(dm_in), eps_in)
+        return
     var m = Int(m_in)
     var dm = Int(dm_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -2104,9 +2152,13 @@ def llama_rms_norm_row_block_kernel(
     var shared = stack_allocation[1, Float32, address_space=AddressSpace.SHARED]()
     if lane == 0:
         var acc = Float32(0.0)
-        for j in range(dm):
-            var xj = ftz(x.unsafe_load(t * dm + j))
-            acc = ftz(identical_mul_add(xj, xj, acc))
+        comptime if IDN_NORM_FIXED_LANES:
+            # the fixed 32-lane fold, one thread (same bits as the cell)
+            acc = nfl_dot(x, x, t * dm, t * dm, dm)
+        else:
+            for j in range(dm):
+                var xj = ftz(x.unsafe_load(t * dm + j))
+                acc = ftz(identical_mul_add(xj, xj, acc))
         sumsq.unsafe_store(t, acc)
         var mean = ftz(identical_div(acc, Float32(dm)))
         shared.unsafe_store(0, ftz(identical_rsqrt(ftz(mean + eps_in))))
@@ -2133,7 +2185,43 @@ def residual_rms_norm_kernel(
     One row owner preserves S1's serial ascending fold. The residual is still
     materialized for tracing/backward, but its value feeds S1 directly rather
     than being written by one launch and reread by the next.
+
+    MOJOLEARN_IDN_NORM_FIXED_LANES: one 32-lane cell per row (launched with
+    `norm_row_threads(m)` threads). Lane l adds, stores and folds the
+    residual cells j = l, l + 32, ... (the fixed fold's slot l, the
+    S22 add unchanged), then the shuffle tree; each lane later rereads only
+    the residual cells it wrote itself.
     """
+    comptime if IDN_NORM_FIXED_LANES:
+        comptime assert not NN24_NORM_LANES8, "MOJOLEARN_IDN_NORM_FIXED_LANES does not combine with MOJOLEARN_IDN_NORM=1/4"
+        var cell = nfl_cell(Int(m_in))
+        if not cell[2]:
+            return
+        var ct = cell[0]
+        var lane = cell[1]
+        var cdm = Int(dm_in)
+        var cacc = Float32(0.0)
+        var cj = lane
+        while cj < cdm:  # device-loop: this lane's slot of one row
+            var ci = ct * cdm + cj
+            var cr = ftz(ftz(a.unsafe_load(ci)) + ftz(b.unsafe_load(ci)))
+            residual.unsafe_store(ci, cr)
+            cacc = ftz(identical_mul_add(cr, cr, cacc))
+            cj += NFL_LANES
+        cacc = nfl_cell_total(cacc)
+        if lane == 0:
+            sumsq.unsafe_store(ct, cacc)
+        var cmean = ftz(identical_div(cacc, Float32(cdm)))
+        var crstd = ftz(identical_rsqrt(ftz(cmean + eps_in)))
+        cj = lane
+        while cj < cdm:  # device-loop: this lane's elements of one row
+            var ci2 = ct * cdm + cj
+            var cinner = ftz(identical_mul(ftz(residual.unsafe_load(ci2)), crstd))
+            out_buf.unsafe_store(
+                ci2, ftz(identical_mul(ftz(weight.unsafe_load(cj)), cinner))
+            )
+            cj += NFL_LANES
+        return
     var m = Int(m_in)
     var dm = Int(dm_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -2239,9 +2327,13 @@ def llama_rms_norm(
     # without the trial define and without a column default carrying a rows
     # token (DEVIATION 2649) the two values below are the shipped `_grid(m)`
     # and `LLAMA_TPB`.
-    var norm_blocks = _grid(m)
+    # MOJOLEARN_IDN_NORM_FIXED_LANES: one 32-lane cell per row
+    # (`norm_row_threads`); LLAMA_TPB is a multiple of 32 and 64, so a cell
+    # never straddles a warp. The step-glue rows geometry (4-16 threads per
+    # block) cannot hold a cell and is not offered under the define.
+    var norm_blocks = _grid(norm_row_threads(m))
     var norm_threads = LLAMA_TPB
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS:
+    comptime if (STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS) and not IDN_NORM_FIXED_LANES:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             norm_blocks = step_glue_blocks(m, glue_rows)
@@ -2300,15 +2392,22 @@ def llama_norm_variant_kernel(
         return
     if kind == NORM_LAYERNORM:
         var acc = Float32(0.0)
-        for j in range(dm):
-            acc = ftz(ftz(acc) + ftz(x.unsafe_load(t * dm + j)))
+        comptime if IDN_NORM_FIXED_LANES:
+            # one thread, the fixed 32-lane fold (norm_fixed_lanes.mojo)
+            acc = nfl_sum(x, t * dm, dm)
+        else:
+            for j in range(dm):
+                acc = ftz(ftz(acc) + ftz(x.unsafe_load(t * dm + j)))
         comptime if NN24_NORM_LANES8:
             acc = _sum[NN24_LANES](x, t * dm, dm)
         var mean = ftz(identical_div(acc, Float32(dm)))
         var acc2 = Float32(0.0)
-        for j in range(dm):
-            var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
-            acc2 = ftz(identical_mul_add(dev, dev, acc2))
+        comptime if IDN_NORM_FIXED_LANES:
+            acc2 = nfl_square(x, t * dm, dm, mean)
+        else:
+            for j in range(dm):
+                var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
+                acc2 = ftz(identical_mul_add(dev, dev, acc2))
         comptime if NN24_NORM_LANES8:
             acc2 = _square[NN24_LANES](x, t * dm, dm, mean)
         sumsq.unsafe_store(t, acc2)
@@ -2323,9 +2422,12 @@ def llama_norm_variant_kernel(
             out_buf.unsafe_store(t * dm + j, y)
         return
     var acc = Float32(0.0)
-    for j in range(dm):
-        var xj = ftz(x.unsafe_load(t * dm + j))
-        acc = ftz(identical_mul_add(xj, xj, acc))
+    comptime if IDN_NORM_FIXED_LANES:
+        acc = nfl_dot(x, x, t * dm, t * dm, dm)
+    else:
+        for j in range(dm):
+            var xj = ftz(x.unsafe_load(t * dm + j))
+            acc = ftz(identical_mul_add(xj, xj, acc))
     comptime if NN24_NORM_LANES8:
         acc = norm_profile_dot[NN24_LANES](x, x, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
@@ -5872,7 +5974,7 @@ def _afn_mlp_and_residual2(
                     next_norm_sumsq.value(), next_norm_out.value(),
                     stages.residual2.unsafe_ptr(), next_norm_weight.value(), Int32(m),
                     Int32(dm), next_norm_eps.value(),
-                    grid_dim=(_grid(m), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+                    grid_dim=(_grid(norm_row_threads(m)), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
                 )
         return True
     comptime if AFN_ATTN_NORM_SG:
@@ -5900,7 +6002,7 @@ def _afn_mlp_and_residual2(
             stages.residual2.unsafe_ptr(), next_norm_sumsq.value(),
             next_norm_out.value(), stages.residual1.unsafe_ptr(),
             stages.down_proj.unsafe_ptr(), next_norm_weight.value(), Int32(m),
-            Int32(dm), next_norm_eps.value(), grid_dim=(_grid(m), 1, 1),
+            Int32(dm), next_norm_eps.value(), grid_dim=(_grid(norm_row_threads(m)), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
     else:
@@ -6205,7 +6307,7 @@ def llama_decoder_layer_forward_planted(
                     stages.residual1.unsafe_ptr(), stages.norm2_sumsq.unsafe_ptr(),
                     stages.norm2_out.unsafe_ptr(), x.unsafe_ptr(),
                     stages.o_proj.unsafe_ptr(), w.norm2_w.unsafe_ptr(), Int32(m),
-                    Int32(dm), w.eps, grid_dim=(_grid(m), 1, 1),
+                    Int32(dm), w.eps, grid_dim=(_grid(norm_row_threads(m)), 1, 1),
                     block_dim=(LLAMA_TPB, 1, 1),
                 )
             else:
@@ -6221,7 +6323,7 @@ def llama_decoder_layer_forward_planted(
                 stages.residual1.unsafe_ptr(), stages.norm2_sumsq.unsafe_ptr(),
                 stages.norm2_out.unsafe_ptr(), x.unsafe_ptr(),
                 stages.o_proj.unsafe_ptr(), w.norm2_w.unsafe_ptr(), Int32(m),
-                Int32(dm), w.eps, grid_dim=(_grid(m), 1, 1),
+                Int32(dm), w.eps, grid_dim=(_grid(norm_row_threads(m)), 1, 1),
                 block_dim=(LLAMA_TPB, 1, 1),
             )
         else:
@@ -6292,7 +6394,7 @@ def llama_decoder_layer_forward_planted(
                     stages.residual2.unsafe_ptr(), next_norm_sumsq.value(),
                     next_norm_out.value(), stages.residual1.unsafe_ptr(),
                     stages.down_proj.unsafe_ptr(), next_norm_weight.value(), Int32(m),
-                    Int32(dm), next_norm_eps.value(), grid_dim=(_grid(m), 1, 1),
+                    Int32(dm), next_norm_eps.value(), grid_dim=(_grid(norm_row_threads(m)), 1, 1),
                     block_dim=(LLAMA_TPB, 1, 1),
                 )
             else:
@@ -6317,7 +6419,7 @@ def llama_decoder_layer_forward_planted(
                 stages.residual2.unsafe_ptr(), next_norm_sumsq.value(),
                 next_norm_out.value(), stages.residual1.unsafe_ptr(),
                 stages.down_proj.unsafe_ptr(), next_norm_weight.value(), Int32(m),
-                Int32(dm), next_norm_eps.value(), grid_dim=(_grid(m), 1, 1),
+                Int32(dm), next_norm_eps.value(), grid_dim=(_grid(norm_row_threads(m)), 1, 1),
                 block_dim=(LLAMA_TPB, 1, 1),
             )
         else:
