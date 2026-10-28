@@ -1,0 +1,59 @@
+Shared sparse metadata snapshot repair, 2026-10-27
+
+Branch: lane/peer2-decomposition-20261027
+Base local main: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Root explicitly assigned this lane sole ownership of the narrow
+bindings/host_sparse_native.mojo metadata region. No other shared owner edits.
+
+The provider now copies the admitted sparse field dictionary once. Numeric
+data, signed index arrays and LIL object-row arrays use a native snapshot of
+their dtype, shape, strides, count, address and byte order. A retained native
+memoryview pins the original exporter and its captured layout. A temporary
+public CPython Py_buffer export from that memoryview supplies native address,
+shape and stride words without rereading the original ndarray's fields; every
+temporary export is released on success/error. The snapshot retains original
+array, memoryview and dtype owners. Supported 64-bit little-endian CPython
+Py_buffer layout is documented inline, following existing native scalar ABI
+capture in bindings/native_scalar_decode.mojo.
+
+No original data.shape/data.strides/index.itemsize/index.dtype property reads
+remain inside compressed, COO or DIA execution. Rank is checked from
+that same frozen export before dtype-role validation; original ndim is not
+queried separately. Dtype width is cross-checked against the buffer width. NumPy scalar dtype objects
+are likewise read once before their existing byte decoding.
+
+CSR, CSC and BSR call the unchanged host_sparse_compressed routine; COO and DIA
+call the unchanged host_sparse_coo/host_sparse_dia routines. DOK retains native
+dictionary insertion-order expansion and additive placement. LIL reads object
+references from captured address/stride words, then snapshots admitted native
+row lists; its repeated-column behavior still keeps the last stored word.
+No sparse Python property/method, __array__, toarray, NumPy arithmetic, index
+protocol or user conversion hook was added. Native buffer/list publication
+remains provider binding work. core/host_sparse_impl.mojo and all scalar/float
+conversion arithmetic are unchanged.
+
+Shape, rank, signed-index widths, byte order, coordinate/pointer/block bounds,
+unsupported dtype/float16 errors, integer wrap, Boolean OR and uint64 overflow
+checks remain. Data conversion still finishes in the existing scaler_cast.
+The fresh dense Array's native _pin slot retains original exporters and row/
+dict snapshots (plus any existing pin) through downstream public execution even if sparse fields or rows
+are replaced. Its owned float32 storage and public shape remain unchanged.
+
+Compile scope:
+The existing experiments/peer2_decomposition_20261027/pca_query_compile.mojo
+and manifold compile roots instantiate host_sparse_dense transitively,
+including all seven runtime format branches. Root reuses that compilation for
+the same frozen closure; no separate duplicate sparse compile is required. Public signature is unchanged, so shared callers
+do not need new call-site ABIs. No broad family dispatch or arithmetic change.
+
+Validation status:
+No tests, runtime verification, native compile, benchmarks or GPU runs were
+performed, per the owner's latest instruction. This is source for the next
+coordinator compile freeze. Source reading is not runtime compliance proof;
+all installed public sparse-format/runtime/vendor coverage remains pending.
+Complete commit/push output is retained under
+~/mojolearn-evidence/peer2-decomposition-20261027/sparse-snapshot-*.log.
+
+This source repair addresses the sparse metadata reread prerequisite recorded
+by PCA_QUERY_HANDOFF.txt. It does not qualify unrelated public callers' own
+surrounding admission/lifecycle/output paths or their remaining callback debt.
