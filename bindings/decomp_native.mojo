@@ -13,6 +13,9 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.ica_native import ica_fit, ica_project
 from bindings.fa_native import fa_fit, fa_query
 from bindings.kpca_native import kpca_fit, kpca_fit_transform, kpca_transform
+from bindings.classical_error_boundary import classical_python_error
+from providers.python.family_public_lifecycle_pyapi import kpca_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from bindings.rp_native import rp_components, rp_fit, rp_getstate, rp_project, rp_query, rp_set_components
 from bindings.lda_native import lda_fit, lda_partial_fit, lda_project, lda_query
 from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
@@ -112,14 +115,27 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
             else:
                 raise Error("unknown private LatentDirichletAllocation operation")
         elif family == "KernelPCA":
-            if operation == "fit":
-                result = kpca_fit(model, args[0], context)
-            elif operation == "fit_transform":
-                result = kpca_fit_transform(model, args[0], context)
-            elif operation == "transform":
-                result = kpca_transform(model, args[0], context)
-            else:
+            # The whole public lifecycle (fitted check, X validation, width and
+            # feature names, fit bookkeeping, NumPy results) around the owner
+            # (providers/python/family_public_lifecycle_pyapi.mojo).
+            var lifecycle = kpca_lifecycle_spec(operation)
+            if lifecycle.method.byte_length() == 0:
                 raise Error("unknown private KernelPCA operation")
+            var public = family_lifecycle_begin(model, operation, lifecycle, args, 0, context)
+            try:
+                var x = public.args[0]
+                if operation == "fit":
+                    result = kpca_fit(model, x, context)
+                elif operation == "fit_transform":
+                    result = kpca_fit_transform(model, x, context)
+                else:
+                    result = kpca_transform(model, x, context)
+            except error:
+                var failure = neighbors_public_refusal(error, public, model)
+                raise failure^
+            finally:
+                neighbors_public_end(model, public)
+            result = family_lifecycle_finish(model, lifecycle, result, public, context)
         elif family == "GaussianRandomProjection" or family == "SparseRandomProjection":
             var sparse = family == "SparseRandomProjection"
             if operation == "fit":
@@ -143,6 +159,8 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
             raise Error("unknown private decomposition estimator")
         return result.steal_data()
     except error:
+        if String(error).startswith("NotFittedError:"):
+            return classical_python_error(error^, args_ptr)
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error^)
         if String(error).startswith("TypeError:"):

@@ -148,6 +148,9 @@ class KMeans(NumericModeMixin):
         sequential k-means++, any positive value runs scalable k-means||
         with this oversampling. Negative values raise `ValueError`. Only used
         with `init='k-means++'`.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode for this estimator (``'fast'`` is Apple only). None uses
+        the process default.
 
     Attributes
     ----------
@@ -179,6 +182,9 @@ class KMeans(NumericModeMixin):
     >>> labels = model.predict(X)
     >>> distances = model.transform(X)
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
 
@@ -196,6 +202,8 @@ class KMeans(NumericModeMixin):
         init_centroids=None,
         metric="euclidean",
         oversampling_factor=2.0,
+        *,
+        numeric_mode=None,
     ):
         self.n_clusters = n_clusters
         self.init = init
@@ -206,6 +214,7 @@ class KMeans(NumericModeMixin):
         self.init_centroids = init_centroids
         self.metric = metric
         self.oversampling_factor = oversampling_factor
+        self.numeric_mode = numeric_mode
 
     # A callable `init` is called once with the fit's rows and its centers
     # take the 'array' path (bindings/kmeans_native.mojo, scikit-learn's
