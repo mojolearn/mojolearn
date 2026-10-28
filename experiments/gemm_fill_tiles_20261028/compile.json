@@ -141,5 +141,73 @@
       "reaped_verified": true,
       "spend_usd": 0.0827
     }
+  },
+  "final2_tile_and_groups": {
+    "source_commit": "code 0086885a1a (pod); Mac roots at efda083744 (adds only the EXPERIMENTS.md text); dirty tracked files 0",
+    "compiler": "Mojo 1.0.0 (ed45d567)",
+    "note": "CPU roots define ON; sm_89 -O0 and gfx942 default optimization, arms A (off) and B (on)",
+    "results": [
+      {
+        "name": "mamba_host_cpu_mac",
+        "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
+        "exit": 0,
+        "seconds": 663,
+        "jobs": 10,
+        "binary_sha256": "74e2a4dd55a73204a696da8aa619ae33b2d41f12de95d723b7b6791f064ebde4",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/mac-cpu/build.log"
+      },
+      {
+        "name": "byte_lm_host_cpu_mac",
+        "entry": "bindings/entry/entry__mojolearn_byte_lm_host.mojo",
+        "exit": 0,
+        "seconds": 640,
+        "jobs": 10,
+        "binary_sha256": "845f5e80453fd290354599efa20813537410d10fa68af207f7c5f0df1850f1cd",
+        "note": "green after origin/main 4a10a3069e (byte_lm_host_compat_pyapi fix)",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/mac-cpu-bytelm/build.log"
+      },
+      {
+        "name": "bytelm_gfx942_armA",
+        "exit": 0,
+        "seconds": 149,
+        "jobs": 8,
+        "binary_sha256": "3d0292a2df1c73f82f5b032f84b611b08f0ee743bd76da3d90fffe740fe8cea5",
+        "opt": "default",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/pod-run/remote/leg_out/bytelm_gfx942_armA.log"
+      },
+      {
+        "name": "bytelm_gfx942_armB",
+        "exit": 0,
+        "seconds": 151,
+        "jobs": 8,
+        "binary_sha256": "b0e4cd426a0c49f2ce636e8285417b20577c72c33eff2dd8c281309e5283629e",
+        "opt": "default",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/pod-run/remote/leg_out/bytelm_gfx942_armB.log"
+      },
+      {
+        "name": "bytelm_sm89_armB",
+        "exit": 0,
+        "seconds": 232,
+        "jobs": 8,
+        "binary_sha256": "43cda21c868a833c705f42a33a18118f2630e9f717f6ce1b725edce746b31158",
+        "opt": "-O0",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/pod-run/remote/leg_out/bytelm_sm89_armB.log"
+      },
+      {
+        "name": "bytelm_sm89_armA",
+        "exit": 0,
+        "seconds": 235,
+        "jobs": 8,
+        "binary_sha256": "f81a34a354ddb1f1fb6f5740b243a30d692f1d7551203f3357714be8c441ff2c",
+        "opt": "-O0",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/pod-run/remote/leg_out/bytelm_sm89_armA.log"
+      }
+    ],
+    "pod": {
+      "name": "mojolearn-cpu-gemm-fill-tiles-20261028-105110",
+      "vcpu": 32,
+      "reaped_verified": true,
+      "spend_usd": 0.0984
+    }
   }
 }
