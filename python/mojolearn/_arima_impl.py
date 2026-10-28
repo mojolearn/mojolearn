@@ -442,6 +442,12 @@ class ARIMA(NumericModeMixin):
 
     _BINDING = "_mojolearn_arima"
 
+    # Every public method is one tsa_native_call whose owner does the whole
+    # lifecycle (numeric_mode in arima_initialize, fit bookkeeping and the
+    # NotFittedError of predict in bindings/tsa_public_native.mojo), so no
+    # `_mode` class-creation wrappers are installed.
+    _mojolearn_native_public = True
+
     def __init__(
         self,
         order=(1, 0, 0),
@@ -452,8 +458,10 @@ class ARIMA(NumericModeMixin):
         maxiter=1000,
         verbose=False,
         output_type=None,
+        numeric_mode=None,
     ):
-        return _TSA(self, "arima_initialize", (order, seasonal_order, trend, method, maxiter, verbose, output_type), _TSA_CONTEXT)
+        return _TSA(self, "arima_initialize", (order, seasonal_order, trend, method, maxiter, verbose, output_type,
+                                               numeric_mode), _TSA_CONTEXT)
 
     # -- the binding, and the tier it really is -----------------------------
 

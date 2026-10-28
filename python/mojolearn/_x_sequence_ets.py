@@ -94,6 +94,11 @@ class ETS(ParamsMixin):
     (12,)
     """
 
+    # Every public method is one native call whose owner does the whole
+    # lifecycle (fit bookkeeping and the NotFittedError of predict in
+    # bindings/xseq_forecast_native.mojo), so no `_mode` class-creation wrappers are installed.
+    _mojolearn_native_public = True
+
     def __init__(self, season_length=1, model="AAN", damped=True, alpha=None, beta=None, phi=None,
                  gamma=None, numeric_mode=None):
         _XSEQ(self, "ets_initialize", (season_length, model, damped, alpha, beta, phi, gamma, numeric_mode), _XSEQ_CONTEXT)
