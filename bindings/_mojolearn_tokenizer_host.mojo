@@ -84,6 +84,7 @@ from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
+from providers.python.transformer_decode_pyapi import transformer_decode_native_c, TransformerDecodeHandle
 from bindings.mamba_public_native import mamba_native_c, MambaDecodeHandle
 from bindings.samba_config_native import samba_config_c
 from bindings.samba_public_native import samba_public_c
@@ -1441,6 +1442,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
+        module.def_py_c_function(transformer_decode_native_c, "transformer_decode_native_call")
+        _ = module.add_type[TransformerDecodeHandle]("_TransformerDecodeHandle")
         module.def_py_c_function(mamba_native_c, "mamba_native_call")
         _ = module.add_type[MambaDecodeHandle]("_MambaDecodeHandle")
         module.def_py_c_function(causal_model_c[0], "causal_model_init")
