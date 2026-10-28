@@ -176,3 +176,58 @@ def prepared_namespace_admit(mut mods: NativeModules, module: PythonObject, fiel
     # Compatibility entry for existing callers; live native admission above
     # needs no retained Python record and cannot retain the binding module.
     pass
+
+
+def _class_stamp_identity(stamp: PythonObject, value: PythonObject, mut offset: Int) raises -> Bool:
+    ref cpy = Python().cpython()
+    if offset >= cpy.lib.get_function[Int]("PyList_Size")(stamp._obj_ptr):
+        return False
+    var current = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")(stamp._obj_ptr, offset)
+    offset += 1
+    return current == value._obj_ptr
+
+
+def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: List[PythonObject], stamp: PythonObject) raises -> Bool:
+    # Compare the retained admission directly. No new identity list, items
+    # list or per-field tuple is built on the reuse path. Python >=3.10 uses
+    # its supported mappingproxy iterator; PyType_GetDict requires >=3.12,
+    # so this boundary still creates a proxy and iterator per mutable row.
+    var offset = 0
+    for i in range(len(extras)):  # small-loop(extras: fixed admission inputs)
+        if not _class_stamp_identity(stamp, extras[i], offset):
+            return False
+    var bi = mods.module("builtins")
+    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    if not _class_stamp_identity(stamp, ancestry, offset):
+        return False
+    var dict_get = bi.type.__dict__["__dict__"].__get__
+    ref cpy = Python().cpython()
+    for i in range(len(ancestry)):  # driver-loop: over class ancestry metadata
+        var row = ancestry[i]
+        if not _class_stamp_identity(stamp, row, offset):
+            return False
+        var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(row._obj_ptr)
+        if (flags & UInt64(1 << 8)) != 0:
+            continue
+        var fields = py_call(dict_get, row)
+        var raw_iterator = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")(fields._obj_ptr)
+        if not raw_iterator:
+            raise cpy.unsafe_get_error()
+        var iterator = PythonObject(from_owned=raw_iterator)
+        var field_count = len(fields)
+        for field_index in range(field_count):  # small-loop(field_count: class fields): compare class metadata identities only
+            var raw_key = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")(iterator._obj_ptr)
+            if not raw_key:
+                if cpy.PyErr_Occurred():
+                    raise cpy.unsafe_get_error()
+                return False
+            var key = PythonObject(from_owned=raw_key)
+            if not _class_stamp_identity(stamp, key, offset):
+                return False
+            var raw_value = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(fields._obj_ptr, key._obj_ptr)
+            if not raw_value:
+                raise cpy.unsafe_get_error()
+            var value = PythonObject(from_owned=raw_value)
+            if not _class_stamp_identity(stamp, value, offset):
+                return False
+    return offset == cpy.lib.get_function[Int]("PyList_Size")(stamp._obj_ptr)

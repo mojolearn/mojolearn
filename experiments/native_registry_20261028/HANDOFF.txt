@@ -21,3 +21,13 @@ Remaining: generic PreparedOwners registry still Python dict/list-backed because
   replacing its weakref cleanup requires a supported native lifetime mechanism.
   Class identity stamp is still a Python list; native owner identity repair is a
   separate lane. These changes do not establish Python-free product execution.
+
+Followup: class admission reuse compares its retained cold stamp directly using
+native offsets and live namespace iteration. No new Python identity/items list or
+per-field tuple on a cache hit. Both family and public-layout consumers changed.
+Python >=3.10 still requires mappingproxy/iterator objects per mutable class row;
+this is an explicit remaining boundary allocation, not an allocation-free claim.
+Expanded compile probe covers actual classical family/layout admission paths.
+Logs class-compile2.log retain rejected native List initializer syntax;
+class-compile3.log records the corrected compilation. Module namespace loops are
+bounded by namespace size, with explicit metadata tags for source/push guards.
