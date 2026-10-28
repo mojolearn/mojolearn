@@ -143,3 +143,19 @@ Settings snapshot review follow-up
   buffers pending dedicated typed capture before the algorithm executes.
 - settings-frozen-source-tests.log: exit 0, 10 passed. Compile and public
   mutation/race controls remain pending; this does not freeze fitted buffers.
+
+Native matrix/device lifetime increment
+- MKit now owns typed ManifoldMatrix/ManifoldDevice values instead of Python
+  _M/_DevBuf slots. Matrix views share their native host/device owner; device
+  cleanup calls the retained compiled free cell and keeps its original module.
+- Native cleanup preserves pending CPython exceptions and silently handles
+  pool shutdown like the previous Python destructor. It does not resolve a
+  Python destructor, module attribute, or unraisable callback during cleanup.
+- Reviewed free-cell closure: providers/python/x_decomp_resident_pyapi.mojo
+  dev_free_py -> x_decomp/resident.mojo pool_free (native pool bookkeeping).
+- Private types are registered by _mojolearn_runtime_manifold_host; native
+  scratch caches use separate context keys from legacy Python _Kit caches.
+  Old private _M fitted internals require refitting; public embeddings/shapes
+  and training/query algorithms retain their existing buffers and operations.
+- No new verification run per latest owner steering. Focused compile target:
+  runtime_manifold host. Source compile and all runtime/vendor coverage pending.
