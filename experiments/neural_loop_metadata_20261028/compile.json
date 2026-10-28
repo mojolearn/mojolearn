@@ -1,0 +1,77 @@
+{
+  "scope": "runtime_sequential host root: admission inventories, retained native description registration and fit/forward/predict paths; other importing families and GPU targets not compiled",
+  "source_commit": "51be031c9798bd7576a2512b1f01eb2c879ca3c4",
+  "source_base": "dde8d170c4",
+  "exit_code": 0,
+  "target": "Mac arm64 CPU, identical",
+  "command": "MOJOLEARN_HOST_OUTDIR=/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/release-checked-host MOJOLEARN_COMPILE_JOBS=8 bash tools/compile_slot.sh sh bindings/build_runtime_sequential_host.sh",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "flags": [
+    "-j",
+    "8",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-Xlinker",
+    "-platform_version",
+    "-Xlinker",
+    "macos",
+    "-Xlinker",
+    "11.0",
+    "-Xlinker",
+    "26.5",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    ".",
+    "-I",
+    "bindings"
+  ],
+  "compile_slot": "machine-wide tools/compile_slot.sh default slot pool; one held slot; compiler -j 8 (does not assert saturation)",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/release-checked-host/_mojolearn_runtime_sequential_host.so",
+  "binary_sha256": "a97d05b52f5146eb2e29576624b6c52af68238f546204d4f97bf1ba5c1bf1e73",
+  "log": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/release-checked-compile.log",
+  "log_sha256": "050194e123277204762723ee38fdccac6273df550b7090fc3251e1418e9a39d9",
+  "environment": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/environment.json",
+  "source_retention": {
+    "archive": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/compiled-source-envelope.tar.gz",
+    "archive_sha256": "c92f84fb720467760013312f8883e7d1a6d3aaf58ac52f63924cac44ef106eeb",
+    "archive_commit": "57e5133a9c5895a0691d3aec0e2fe90c4badee9d",
+    "scope": "conservative superset: every tracked Mojo source, binding build script, compile slot script and dependency manifest",
+    "file_count": 3933,
+    "manifest": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/compiled-source-envelope.json",
+    "update_patch": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/compiled-source-update.patch",
+    "update_patch_sha256": "f67dc24494030593f1627727744b65bb1519805ba54ec849393d30338cc6ac54"
+  },
+  "source_guards": {
+    "source_commit": "4b8a018fababd6112e5c2222f1759b1c842b21ba",
+    "exit_code": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/final-source-push-guards.log",
+    "later_source_change": "51be031c97 adds native builtins connection re-admission after release windows; final integrated source/push guards pending root integration"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_qualified": false,
+  "rented_boxes": [],
+  "earlier_runs": [
+    {
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/compile.log",
+      "exit_code": 0,
+      "status": "superseded by cache eligibility refinement"
+    },
+    {
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/final-compile.log",
+      "exit_code": 0,
+      "source_commit": "57e5133a9c5895a0691d3aec0e2fe90c4badee9d",
+      "status": "superseded by release-window re-admission refinement"
+    },
+    {
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/source-push-guards.log",
+      "exit_code": 1,
+      "status": "two driver-loop comments lacked required over literal; repaired without baseline changes"
+    }
+  ]
+}

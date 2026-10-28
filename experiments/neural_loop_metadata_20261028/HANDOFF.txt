@@ -1,0 +1,63 @@
+Sequential metadata reuse, 2026-10-28
+Branch: lane/neural-loop-metadata-20261028
+Base: dde8d170c4
+Implementation commits: 57e5133a9c, 4b8a018fab, 51be031c97
+
+Repeated work removed:
+- Recursive Sequential admission (also used by other providers) no longer
+  constructs empty Python list/tuple objects to discover their types for each
+  item, rereads the context's type tuples per item, or indexes those Python
+  tuples for each type comparison. One native inventory captures the connected
+  type references per scan/public Sequential operation. Recursive comparisons
+  borrow native vectors. Mapping pair objects are fetched once per pair.
+- Sequential fit/forward/predict no longer build Python program/scalar lists
+  and immediately convert those lists back to native vectors on every call.
+  A native SequentialDescription stores the program and Float64 scalar table;
+  execution borrows these vectors and retains their owner through the native
+  provider call, including GIL release windows.
+
+Setup, reuse and invalidation:
+- Type inventories are captured per operation, not kept across calls. Mutable
+  call inputs still receive recursive admission. Builtins connections are
+  re-admitted after mapping/native-tensor release windows before retained type
+  handles are reused; no Python subclass hook is introduced.
+- Native description reuse requires unchanged input width and recursively
+  matching layer/sample identities and container lengths. In-place replacement,
+  append and nested argument edits invalidate the record. Mutable model fields
+  still pass the existing public admission checks before execution.
+- Retention is limited to exact list/tuple containers containing immutable
+  builtin numeric scalars/None. Buffer-like scalar conversions and other
+  uncacheable metadata rebuild the description each time; writable array
+  contents cannot become stale cached scalar words. A record retaining its
+  model owner is not published. The prepared registry owns weak lifecycle
+  lookup; the current execution owns its borrowed plan until the call ends.
+- Public program/table inspection and checkpoint interfaces keep their result
+  formats. The arithmetic and numerical dispatch modes are unchanged.
+
+Compilation/source checks:
+See compile.json for exact source commit, result, binary hash and command.
+Focused Mac arm64 CPU runtime_sequential host root compilation only; the shared
+admission helper is compiled through that root, not every importing family.
+The source/push guards passed at 4b8a018fab (host-route, rebuild, tombstone,
+Python-in-kernel, compute-in-shell and static public-runtime endpoint guards).
+The later release-window change only adds native connection re-admission;
+final integrated source/push guards remain the root integrator's responsibility.
+The first guard run refused two metadata loops for missing the literal "over"
+in their driver-loop annotation; the corrected annotations passed. Both logs
+are retained. No guard baseline changed.
+
+Limits/remaining work:
+- This is work elimination and metadata reuse, not full Python removal. Mutable
+  boundaries still scan Python containers for identity; native-owned model
+  metadata with explicit mutation generations remains future work.
+- Public argument/result objects, specialized provider routes, weight import
+  and checkpoint orchestration retain their existing boundaries.
+- No runtime, performance, identity or cross-vendor campaign ran. Compilation
+  does not qualify runtime behavior, measured speed or bitwise identity. Other
+  importing host families and GPU targets were not compiled in this batch.
+
+Evidence (complete logs, binaries, source envelope, environment and receipts):
+/Users/andrewhendel/mojolearn-evidence/neural-loop-metadata-20261028/
+No rented boxes. The compiled-source envelope retains all tracked Mojo/build
+sources at 57e5133a9c plus compiled-source-update.patch to the final source;
+this is a conservative source superset, not a claim that every file compiled.
