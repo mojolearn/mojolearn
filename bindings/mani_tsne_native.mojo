@@ -14,6 +14,7 @@ from bindings.classical_arrays import classical_address, classical_word
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
+from bindings.manifold_scalar_native import manifold_number
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.classical_validate import classical_view
 from bindings.manifold_lifecycle_native import _cast
@@ -28,11 +29,11 @@ from bindings.family_common import (
 comptime _TSNE_EXPLORATION_MAX_ITER = 250
 
 
-def _tsne_int(name: String, value: PythonObject) raises -> PythonObject:
+def _tsne_int(name: String, value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_ann_int("TSNE", name, value)`."""
     if not family_is_int(value):
         raise Error("TypeError: mojolearn TSNE: " + name + " must be an int, got " + family_type_name(value))
-    return family_call(native_loaded_module("builtins").int, value)
+    return manifold_number(value, True, context)
 
 
 def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k: Int,
@@ -100,11 +101,11 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     if (_tsne_is_bool(components)
             or not Bool(py=py_call(op.contains, Python.tuple(PythonObject(1), PythonObject(2)), components))):
         raise Error("mojolearn TSNE: n_components must be 1 or 2, got " + family_repr(components))
-    var k = Int(py=family_call(b.int, components))
-    var max_iter = _tsne_int("max_iter", family_field(fields, "max_iter"))
-    var seed = _tsne_int("random_state", family_field(fields, "random_state"))
+    var k = Int(py=manifold_number(components, True, context))
+    var max_iter = _tsne_int("max_iter", family_field(fields, "max_iter"), context)
+    var seed = _tsne_int("random_state", family_field(fields, "random_state"), context)
     var perplexity_param = family_field(fields, "perplexity")
-    var perplexity = Float64(py=family_call(b.float, perplexity_param))
+    var perplexity = Float64(py=manifold_number(perplexity_param, False, context))
     # scikit-learn's rules: perplexity > 0 (its parameter constraint) and
     # perplexity < n_samples (`_check_params_vs_input`), in its words
     if not perplexity > 0.0:
@@ -113,7 +114,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     if perplexity >= Float64(n):
         raise Error("perplexity (" + family_str(perplexity_param) + ") must be less than n_samples ("
                     + String(n) + ")")
-    var exag = Float64(py=family_call(b.float, family_field(fields, "early_exaggeration")))
+    var exag = Float64(py=manifold_number(family_field(fields, "early_exaggeration"), False, context))
     var rate = family_field(fields, "learning_rate")
     var lr: Float64
     if Bool(py=py_call(b.bool, py_call(op.eq, rate, PythonObject("auto")))):
@@ -121,9 +122,9 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         var auto_rate = Float64(n) / exag / 4.0
         lr = Float64(50.0) if 50.0 > auto_rate else auto_rate
     else:
-        lr = Float64(py=family_call(b.float, rate))
+        lr = Float64(py=manifold_number(rate, False, context))
     var post_param = family_field(fields, "post_exaggeration_learning_rate_factor")
-    var post_factor = Float64(py=family_call(b.float, post_param))
+    var post_factor = Float64(py=manifold_number(post_param, False, context))
     # `0.0 < factor < inf`: positive, and not infinite or NaN (inf - inf is NaN)
     if not (0.0 < post_factor and post_factor - post_factor == 0.0):
         raise Error("mojolearn TSNE: post_exaggeration_learning_rate_factor must be positive and finite, got "
