@@ -1,0 +1,9 @@
+# Owner-authorized exceptions to "No Python in the runtime" (AGENTS.md), read by tools/tests/test_no_python_runtime.py.
+# A prohibited_source endpoint listed here passes the gate; every row cites its rule. Known violations that are
+# NOT exceptions live in prohibited_debt.tsv (debt to remove). scikit-learn tag metadata needs no row: the
+# scanner classifies it itself (allowed_tag_metadata; AGENTS.md owner clarification 2026-10-24).
+# Unresolved endpoints are static qualification debt (installed slots, availability descriptors,
+# class-definition hooks; see experiments/python_audit_20261028/UNRESOLVED.tsv); the gate fails above this pin:
+# pin: unresolved_endpoints=229
+file	name	rule
+python/mojolearn/_array.py	mojolearn.Array.__len__	AGENTS.md "No Python in the runtime", owner exception 2026-10-25 (documented fallback after the Daybreak interruption; inline PYTHON COMPATIBILITY EXCEPTION in _array.py, registry _runtime_fallbacks.ARRAY_LENGTH_METADATA). Native meta-estimator paths call len(Array); not a confirmed Mojo bug.

@@ -10,6 +10,38 @@ from mojolearn.linear_model import _dtype_name, _is_integer_labels, _shape_of
 from mojolearn.neighbors import _XN, _check_metric_input, _resolve_metric
 
 
+
+# The former NearestNeighbors resident-index helpers, kept with the frozen
+# body: the public class reads its holder through the native attribute slot.
+def _holder(self):
+    holder = self.__dict__.get("_resident_holder")
+    if holder is None:
+        holder = self.__dict__["_resident_holder"] = {}
+    return holder
+
+
+def _resident_door(binding, name):
+    try:
+        return getattr(binding, name)
+    except (ImportError, AttributeError):
+        return None
+
+
+def _resident_index_handle(self, binding, idx):
+    try:
+        prepare = binding.knn_index_prepare
+    except (ImportError, AttributeError):
+        return None
+    key = (addr_ro(idx, name="idx"), tuple(idx.shape))
+    cached = _holder(self).get("index")
+    if cached is not None and cached[0] == key:
+        return cached[1]
+    if cached is not None:
+        self._release_resident_index()
+    handle = int(prepare(key[0], [int(idx.shape[0]), int(idx.shape[1])]))
+    _holder(self)["index"] = (key, handle, binding)
+    return handle
+
 def nn_fit(self, X):
     self._check_refusals()
     self._release_resident_index()
@@ -80,16 +112,16 @@ def _clf_predict(self, X, want_proba):
     idx = self._index
     y_cols = self._y_cols
     binding = self._bind("_mojolearn")
-    resident = self._resident_door(binding, "knn_classify_resident")
-    handle = self._resident_index_handle(binding, idx) if resident is not None else None
+    resident = _resident_door(binding, "knn_classify_resident")
+    handle = _resident_index_handle(self, binding, idx) if resident is not None else None
     params = [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out, 1 if want_proba else 0] + n_classes
     if handle is not None:
-        self.used_query_tile_ = resident(
+        _holder(self)["used_query_tile_"] = resident(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
             addr(labels, name="labels"), addr(proba, name="proba"), addr(uniq, name="uniq"),
             [handle] + params, self._dist_params())
     else:
-        self.used_query_tile_ = binding.knn_classify(
+        _holder(self)["used_query_tile_"] = binding.knn_classify(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
             addr(labels, name="labels"), addr(proba, name="proba"), addr(uniq, name="uniq"),
             params, self._dist_params())
@@ -171,15 +203,15 @@ def reg_predict(self, X):
     idx = self._index
     y_cols = self._y_cols
     binding = self._bind("_mojolearn")
-    resident = self._resident_door(binding, "knn_regress_resident")
-    handle = self._resident_index_handle(binding, idx) if resident is not None else None
+    resident = _resident_door(binding, "knn_regress_resident")
+    handle = _resident_index_handle(self, binding, idx) if resident is not None else None
     params = [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out]
     if handle is not None:
-        self.used_query_tile_ = resident(
+        _holder(self)["used_query_tile_"] = resident(
             handle, addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
             addr(out, name="out"), params, self._dist_params())
     else:
-        self.used_query_tile_ = binding.knn_regress(
+        _holder(self)["used_query_tile_"] = binding.knn_regress(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
             addr(out, name="out"), params, self._dist_params())
     if self.outputs_2d_:
