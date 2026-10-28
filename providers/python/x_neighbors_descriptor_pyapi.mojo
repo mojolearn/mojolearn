@@ -7,25 +7,12 @@ from bindings.py_balanced import py_call, py_type
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_common import family_call
 from providers.python.neural_descriptor_pyapi import (
-    neural_descriptor_entry, neural_descriptor_connect,
-    neural_descriptor_execute,
+    neural_descriptor_entry, neural_descriptor_execute,
 )
 from providers.python.estimator_binding_pyapi import estimator_binding
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
-from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT, XN_MODE_OPERATION, xn_operation_id
-
-
-def xn_is_module(value: PythonObject) raises -> Bool:
-    return py_type(value) is py_type(native_loaded_module("builtins"))
-
-
-def xn_module(value: PythonObject) raises -> PythonObject:
-    if xn_is_module(value):
-        return value
-    var owner = value.downcast_value_ptr[CompiledBindingSnapshot]()
-    if owner[].abi != String(XN_ABI_NAME):
-        raise Error("x_neighbors requires its admitted shared native provider")
-    return owner[].module
+from providers.python.x_neighbors_admission_pyapi import xn_is_module, xn_module, xn_capabilities, xn_admit_checked
+from x_neighbors.descriptor_schema import xn_operation_id
 
 
 def xn_admit(binding: PythonObject) raises -> PythonObject:
@@ -35,17 +22,7 @@ def xn_admit(binding: PythonObject) raises -> PythonObject:
         return binding
     if getenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0") != "1":
         return binding
-    var factory = neural_descriptor_entry(binding, "x_neighbors_native_api_v1")
-    var provider = neural_descriptor_connect(factory, String(XN_ABI_NAME), XN_OPERATION_COUNT)
-    var mode = neural_descriptor_execute(provider, XN_MODE_OPERATION, [], [], [])
-    if mode != 1:
-        raise Error("x_neighbors native dispatch candidate requires identical mode")
-    var capabilities = neural_descriptor_execute(provider, xn_operation_id("capabilities"), [], [], [])
-    return PythonObject(alloc=CompiledBindingSnapshot(provider, binding, String(XN_ABI_NAME), mode, [capabilities]))
-
-
-def xn_capabilities(binding: PythonObject) raises -> Int:
-    return binding.downcast_value_ptr[CompiledBindingSnapshot]()[].capabilities[0]
+    return xn_admit_checked(binding)
 
 
 def xn_pcs_draw_entry(binding: PythonObject) raises -> PythonObject:
