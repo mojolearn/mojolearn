@@ -2213,3 +2213,9 @@ Evidence: `~/mojolearn-evidence/boxes-20261021/amd-out/graph-opt/ab-table.tsv` a
 |---|---|---|---|---|---|---|
 | `SCHED_FAST_TABLE` (rollback `SCHED_FAST_TABLE_OFF`) | lr-exponential / synthetic | lane/dead-native-entries-0859@9552c0ecb (code at 485ba9cc1) | rab13-schedtable (2026-10-05) | 231.8 -> 19.2 (then); no reader since | DELETED (dead code) | it only registered `sched_exp_block`, which nothing called after the schedules moved into `lr_schedule_at` / `lr_schedule_series`; the define now refuses (docs/TOMBSTONES.md) |
 | `PURITY_3_OFF`, `PURITY_6_OFF` | nearest-centroid, per-row argmax (lane apple-fast-purity) | lane/dead-native-entries-0859@1d3757533 (code at 485ba9cc1) | none | not timed | DELETED (dead code) | they only changed the `x_neighbors_purity_flags` word, which nothing read; the defines now refuse (docs/TOMBSTONES.md) |
+
+## Resident generation for CausalLM without a final norm (lane lm-resident-generate-20261028)
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_IDN_LM_RESIDENT_GENERATE` (IDENTICAL, default off) | neural:causal-lm-generate (mojolearn-162m, `final_norm=False`); smollm2 unchanged by construction | lane/lm-resident-generate-20261028@ddc36b06cb | pending (NV + AMD, one run per arm; arm B = define off) | pending (B: 47.6 ms/token NV, 33.6 AMD, Oct 27 board) | PENDING | admits models without a final norm to the resident session (`causal_lm_session_run`: KV caches resident for the whole call, greedy pick on the device with the lowest-index rule); the head reads the stack output (device copy), no float operation changes; off, those models take the per-layer route (stage allocation + upload + download per layer per token) |
