@@ -1,0 +1,23 @@
+{
+ "source_commit": "6592b962e2ca9f685d9e552e46c4b278e807b470",
+ "worktree": "/Users/andrewhendel/mojolearn-wt/peer6-metrics-20261027",
+ "entry": "checks/metrics_program_fields_compile.mojo",
+ "exit_code": 0,
+ "seconds": 42,
+ "jobs": 10,
+ "command": "compile_slot.sh pixi run mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I <wt> -I <wt>/bindings <entry> -o <out>",
+ "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+ "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/metrics-program-fields/_mojolearn_metrics_program_fields_compile.so",
+ "artifact_sha256": "12a43e84dbe07e6df51f8838912273a8bb561b65682ec01e2f66578861961e1f",
+ "log": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/metrics-program-fields/compile.log",
+ "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/metrics-program-fields/source.tgz",
+ "runtime_executed": false,
+ "gpu_compiled": false,
+ "scope": "Mac CPU/O0/identical/apple-m1 -j10: metrics_boundaries closure (classification/regression/expanded metric owners) plus arena_prog_native._metrics_run Prog wrapper and _metrics_run_fields; lane includes origin/main and linalg helper a3a8150111",
+ "not_covered": [
+  "other _metrics_run callers (trees_public_score, classical_labels): API unchanged, not recompiled",
+  "GPU targets",
+  "runtime/identity execution (excluded)",
+  "metric pandas input gaps remain"
+ ]
+}
