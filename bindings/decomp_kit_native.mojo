@@ -244,9 +244,11 @@ struct DecompKit(Movable):
         return self.resident and self.has(name)
 
     # ---- matrices
-    def add(mut self, host: PythonObject, rows: Int, cols: Int, device: Int = -1) -> Int:
+    def add(mut self, host: PythonObject, rows: Int, cols: Int, device: Int = -1,
+            host_address: Int = -1) -> Int:
         var result = len(self.matrices)
         self.matrices.append(DecompMatrix(host, device, rows, cols, device >= 0))
+        self.matrices[result].host_address = host_address
         return result
 
     def size(self, a: Int) -> Int:
@@ -547,7 +549,7 @@ struct DecompKit(Movable):
         var source = self.host(a)      # `self.s[...]`: the store is read (A is a host matrix after)
         if (hi - lo) * cols:
             memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
-                   src=DecompF32(unsafe_from_address=Int(py=classical_address(source))) + lo * cols,
+                   src=DecompF32(unsafe_from_address=Int(py=self.address(a))) + lo * cols,
                    count=(hi - lo) * cols)
             _ = source  # keep the Python object alive through the native call above
         _ = source^
@@ -568,7 +570,7 @@ struct DecompKit(Movable):
         var out = self.zeros(rows, max(width, 0))
         if rows * width > 0:
             var source = self.host(a)
-            tsqr_copy_columns(DecompF32(unsafe_from_address=Int(py=classical_address(source))),
+            tsqr_copy_columns(DecompF32(unsafe_from_address=Int(py=self.address(a))),
                               DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
                               rows, cols, start, width)
             _ = source  # keep the Python object alive through the native call above
@@ -589,9 +591,9 @@ struct DecompKit(Movable):
             # matrix, else of the host store.
             if self.matrices[a].on_device:
                 var shared = self.matrices[a].host
-                return self.add(shared, cols, rows, d)
+                return self.add(shared, cols, rows, d, self.matrices[a].host_address)
             var store = self.host(a)
-            var view = self.add(store, cols, rows, d)
+            var view = self.add(store, cols, rows, d, self.matrices[a].host_address)
             self.matrices[view].on_device = False
             return view
         if self.matrices[a].on_device and n < XD_I32_MAX:
@@ -617,9 +619,9 @@ struct DecompKit(Movable):
         if self.matrices[a].on_device:
             var shared = self.matrices[a].host
             var handle = self.matrices[a].device
-            return self.add(shared, rows, cols, handle)
+            return self.add(shared, rows, cols, handle, self.matrices[a].host_address)
         var store = self.host(a)
-        var view = self.add(store, rows, cols, self.matrices[a].device)
+        var view = self.add(store, rows, cols, self.matrices[a].device, self.matrices[a].host_address)
         self.matrices[view].on_device = False
         return view
 
@@ -684,7 +686,7 @@ struct DecompKit(Movable):
             if count:
                 var source = self.host(ms[i])
                 memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))) + at,
-                       src=DecompF32(unsafe_from_address=Int(py=classical_address(source))), count=count)
+                       src=DecompF32(unsafe_from_address=Int(py=self.address(ms[i]))), count=count)
                 _ = source  # keep the Python object alive through the native call above
                 _ = source^
             at += count
@@ -752,7 +754,7 @@ struct DecompKit(Movable):
             index = self.strided(a, 1, 1, i)
             at = 0
         var owner = self.host(index)
-        var value = Float64(DecompF32(unsafe_from_address=Int(py=classical_address(owner)))[at])
+        var value = Float64(DecompF32(unsafe_from_address=Int(py=self.address(index)))[at])
         _ = owner  # keep the Python object alive through the native call above
         _ = owner^
         return value
