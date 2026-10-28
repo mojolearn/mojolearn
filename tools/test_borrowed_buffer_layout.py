@@ -23,3 +23,14 @@ def test_export_is_retained_and_released_on_error_and_destruction():
     assert 'except problem:\n            self.release()' in source
     assert 'def __deinit__' in source and source.count('"PyBuffer_Release"') == 2
     assert 'already-admitted' in source.lower()
+
+
+def test_shared_exporter_admission_precedes_buffer_protocols():
+    source=(ROOT/'providers/python/borrowed_buffer_pyapi.mojo').read_text()
+    admission=source.split('def admit_native_buffer_exporter(')[1].split('struct AdmittedBorrowedBuffer')[0]
+    assert 'admit_native_buffer_exporter(owner, depth + 1)' in admission
+    assert 'PyType_GetFlags' in admission
+    assert 'flags & UInt64(512)' in admission
+    assert '"__buffer__"' in admission and '"__release_buffer__"' in admission
+    assert 'PyObject_GetBuffer' not in admission
+    assert 'py_call(bi.memoryview' not in admission

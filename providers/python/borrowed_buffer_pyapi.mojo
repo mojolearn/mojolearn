@@ -6,6 +6,50 @@
 # words on supported 64-bit little-endian targets (same as optimizer tensor_view).
 from std.python import Python, PythonObject
 from core.borrowed_buffer import BorrowedBufferLayout
+from bindings.native_loaded_module import native_loaded_module
+from bindings.py_balanced import py_type, py_get, py_fields, py_call, py_contains
+
+
+def admit_native_buffer_exporter(value: PythonObject, depth: Int = 0) raises:
+    # Shared no-context exporter admission. Exact memoryviews may retain a
+    # Python-defined exporter, so inspect their base before acquiring a pin.
+    # This routine never invokes a buffer protocol while deciding admission.
+    if depth > 64:
+        raise Error("TypeError: native buffer exporter nesting exceeds the supported limit")
+    var bi = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is bi.bytes or cls is bi.bytearray:
+        return
+    if cls is bi.memoryview:
+        var owner = value.obj
+        if owner is not None:
+            admit_native_buffer_exporter(owner, depth + 1)
+        return
+    var sys = native_loaded_module("sys")
+    var array_module = py_get(sys.modules, "array")
+    if array_module is not None:
+        array_module = native_loaded_module("array")
+        if cls is py_get(py_fields(array_module), "array"):
+            return
+    var numpy_module = py_get(sys.modules, "numpy")
+    if numpy_module is not None and py_type(numpy_module) is py_type(sys):
+        # ndarray is a static extension type. A substituted Python class or
+        # ndarray subclass cannot qualify merely by occupying this export.
+        ref cpy = Python().cpython()
+        var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(cls._obj_ptr)
+        if (flags & UInt64(512)) == 0 and cls is py_get(py_fields(numpy_module), "ndarray"):
+            return
+    var ctypes_module = py_get(sys.modules, "_ctypes")
+    if ctypes_module is not None and py_type(ctypes_module) is py_type(sys):
+        var base = py_get(py_fields(ctypes_module), "Array")
+        var bases = py_call(bi.type.__dict__["__bases__"].__get__, cls)
+        if base is not None and len(bases) == 1 and bases[0] is base:
+            # Same admission as Sequential: a direct native ctypes array
+            # class may provide storage, but Python buffer/release hooks may not.
+            var fields = py_call(bi.type.__dict__["__dict__"].__get__, cls)
+            if not py_contains(fields, "__buffer__") and not py_contains(fields, "__release_buffer__"):
+                return
+    raise Error("TypeError: native buffers require an exact native exporter; Python buffer hooks and subclasses are not supported")
 
 
 struct AdmittedBorrowedBuffer(Movable):
