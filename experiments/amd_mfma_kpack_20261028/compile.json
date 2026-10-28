@@ -147,5 +147,29 @@
  "not_covered": "any binding (_mojolearn_linalg, _mojolearn_byte_lm, the other 31 bindings that import gemm_identical), NVIDIA and Metal targets (the arm is comptime-gated to the AMD column), -O0 on gfx942, any runtime, identity or timing",
  "runtime": "NOT_RUN",
  "identity": "NOT_RUN",
- "timing": "NOT_RUN"
+ "timing": "NOT_RUN",
+ "post_merge": {
+  "merge_commit": "20e8caa2ae",
+  "origin_main": "45b0630582",
+  "compiles": [
+   {
+    "arm": "on",
+    "define": true,
+    "exit": "rc=0",
+    "start_utc": "2026-10-28T10:02:30Z",
+    "log": "/Users/andrewhendel/mojolearn-evidence/amd-mfma-20261028/mac2/cpu_on.log",
+    "binary_sha256": "2c85dfa600b757d4e94e5dbb9e5b12dfab3750e48b9ded070d6bb55ff328e42f"
+   },
+   {
+    "arm": "off",
+    "define": false,
+    "exit": "rc=0",
+    "start_utc": "2026-10-28T10:02:38Z",
+    "log": "/Users/andrewhendel/mojolearn-evidence/amd-mfma-20261028/mac2/cpu_off.log",
+    "binary_sha256": "44998d5158539036fc572ebf864bc3eab20df57cc0336709c613758459f99933"
+   }
+  ],
+  "gfx942": "not re-run after merge"
+ },
+ "arm_convention": "A = define OFF, B = define ON"
 }
