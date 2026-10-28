@@ -1,0 +1,25 @@
+Normalizer fit/fit_transform native ownership — source review and compile note, 2026-10-28.
+Compile-only evidence: compile_prep_20261028.json (local Mac CPU, identical, -O0, -j10). No runtime,
+identity or vendor run. Do not read this as runtime coverage.
+
+What the native operation owns (bindings/prep_normalizer_fit.mojo):
+- outer _sk_validate.before_fit: X description/refusals through prep_transform_snapshot (same as
+  transform, incl. 9608dee4e5 object/string-before-width order, ed41316e9c long-double refusal,
+  f10fbb18a0 sparse wording); ignored y through prep_target_pyapi (None/required, complex,
+  column-vector warning, finite, consistent length); required default follows exact-string
+  _estimator_type (classifier/regressor), as _check_y does.
+- _track_fit: fitting depth +1/-1 from native numbers, n_features_in_/numeric_mode_ published at the
+  old _fit stage, _mojolearn_fitted after success, feature_names_in_ removed as after_fit did.
+- reraise: prep_fit_error rebuilds the n_samples=1 / n_features=1 / NaN-or-infinity context with the
+  original cause, without user exception repr/str hooks.
+- public output: fit_transform converts inside the tracked call (PublicOutputsMixin order).
+
+Explicit narrow refusals (TypeError) instead of running Python hooks: instance
+_mojolearn_allows_nan / _sklearn_instance_target_tags hooks, _mojolearn_after_fit hooks,
+non-string _estimator_type, classifier _estimator_type with a target (old integral-label and
+classes_ wrapping path), non-number fitting depth (message differs from Python's '+' TypeError).
+
+Still pending (not claimed): exact-subclass-only pending exceptions get the small-fit context
+(old used isinstance); Arrow/categorical/nullable target promotion and pandas version semantics;
+NumPy longdouble scalar lists vs old _buffer._materialize widening; X pandas extensions beyond
+Categorical/StringArray/DatetimeArray/TimedeltaArray/PeriodArray and nullable numeric blocks.

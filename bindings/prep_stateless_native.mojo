@@ -11,6 +11,8 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_loaded_module import native_loaded_module
+from bindings.prep_context_native import prep_operation_context
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -22,6 +24,8 @@ from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.py_typed_call import py_call_typed
 from bindings.prep_support_native import prep_support
+from bindings.prep_normalizer_lifecycle import normalizer_transform
+from bindings.prep_normalizer_fit import normalizer_fit
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 alias I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -79,7 +83,7 @@ comptime OUT_MIN_WORDS = 134217728
 
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
     # The admitted class this model is (or subclasses), by its MRO.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native preprocessing refuses Python metaclass hooks")
@@ -97,13 +101,13 @@ def _name(model: PythonObject) raises -> String:
 
 
 def _repr(value: PythonObject) raises -> String:
-    return String(py_call(Python.import_module("builtins").repr, value))
+    return String(py_call(native_loaded_module("builtins").repr, value))
 
 
 def _int_like(value: PythonObject, context: PythonObject) raises -> Bool:
     # numbers.Integral without its Python __instancecheck__: Python ints
     # (bool included) and NumPy integer scalars when NumPy is connected.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if Bool(py=py_call(b.isinstance, value, b.int)):
         return True
     var integer = py_get(context, "integer")
@@ -111,7 +115,7 @@ def _int_like(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _norm_code(fields: PythonObject) raises -> Int:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var norm = fields["norm"]
     if py_type(norm) is b.str:
         var text = String(norm)
@@ -125,7 +129,7 @@ def _norm_code(fields: PythonObject) raises -> Int:
 
 
 def _degrees(fields: PythonObject, context: PythonObject) raises -> Tuple[Int, Int]:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var degree = fields["degree"]
     var lo = 0
     var hi = 0
@@ -190,7 +194,7 @@ def _fit(model: PythonObject, kind: String, values: PythonObject, context: Pytho
         _ = _norm_code(fields)
     elif kind == "polynomial":
         var order = fields["order"]
-        if py_type(order) is not Python.import_module("builtins").str or (String(order) != "C" and String(order) != "F"):
+        if py_type(order) is not native_loaded_module("builtins").str or (String(order) != "C" and String(order) != "F"):
             raise Error("mojolearn: PolynomialFeatures order must be 'C' or 'F'")
         var degrees = _degrees(fields, context)
         var replacement = not Bool(py=fields["interaction_only"])
@@ -221,7 +225,7 @@ def _fit(model: PythonObject, kind: String, values: PythonObject, context: Pytho
 
 def _take_f(storage: PythonObject, offset: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
     # The (rows, cols) column-major block p2m_transpose wrote, as an F-order Array.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var part = py_call(b.memoryview, storage)[py_call(b.slice, offset, offset + rows * cols)]
     var store = py_call(context["array_type"], "f")
     _ = py_call(store.frombytes, py_call(part.cast, "B"))
@@ -235,15 +239,15 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var fitted = fields["n_features_in_"]
-    if py_type(fitted) is not Python.import_module("builtins").int or Int(py=fitted) != d:
-        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(Python.import_module("builtins").str, fitted)))
+    if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
     var entries = _entries(fields["numeric_mode_"], context)
     var inputs = Python.list(Python.tuple(0, values))
     var program = List[Int32]()
     if kind == "binarizer":
         # X, the threshold word, then the output as arena words.
         var threshold = classical_typed(Python.tuple(1), "<f4", context["output_context"])
-        _ptr(threshold)[0] = Float32(Float64(py=py_call(Python.import_module("builtins").float, fields["threshold"])))
+        _ptr(threshold)[0] = Float32(Float64(py=py_call(native_loaded_module("builtins").float, fields["threshold"])))
         _ = threshold  # keep the Python object alive through the native call above
         _ = py_call(inputs.append, Python.tuple(n * d, Python.tuple(0, threshold, PythonObject(None), 1, 1)))
         var out = n * d + 1
@@ -381,7 +385,7 @@ def _f64_input(value: PythonObject, context: PythonObject) raises -> PythonObjec
     var words = classical_typed(Python.tuple(2), "<f4", context["output_context"])
     var bits = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
     _ = words  # keep the Python object alive through the native call above
-    bits[0] = bitcast[DType.uint64](Float64(py=py_call(Python.import_module("builtins").float, value)))
+    bits[0] = bitcast[DType.uint64](Float64(py=py_call(native_loaded_module("builtins").float, value)))
     _ = words  # keep the Python object alive through the native call above
     return words
 
@@ -390,7 +394,7 @@ def _variance_fit(model: PythonObject, values: PythonObject, context: PythonObje
     """VarianceThreshold.fit: column statistics, var_ptp, then variance >
     threshold compared in binary64 on the device (c2_key64, c2_gt): the
     stages, operands and order of the Python program."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -441,9 +445,9 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var fitted = fields["n_features_in_"]
-    if py_type(fitted) is not Python.import_module("builtins").int or Int(py=fitted) != d:
-        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(Python.import_module("builtins").str, fitted)))
-    var mask = py_call(Python.import_module("builtins").list, fields["_mask"])
+    if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
+    var mask = py_call(native_loaded_module("builtins").list, fields["_mask"])
     var keep = List[Int]()
     for j in range(len(mask)):  # driver-loop: over the fitted support mask (feature metadata)
         if Bool(py=mask[j]):
@@ -496,7 +500,7 @@ def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObje
     p2m_rgather), the reference grid (c2_grid), sort_cols, column statistics,
     quantile and the p2m_transpose of quantiles_: the stages and order of the
     Python program."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var distribution = fields["output_distribution"]
     if py_type(distribution) is not b.str or (String(distribution) != "uniform" and String(distribution) != "normal"):
@@ -570,8 +574,8 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var fitted = fields["n_features_in_"]
-    if py_type(fitted) is not Python.import_module("builtins").int or Int(py=fitted) != d:
-        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(Python.import_module("builtins").str, fitted)))
+    if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
     var entries = _entries(fields["numeric_mode_"], context)
     var nq = Int(py=fields["n_quantiles_"])
     var quantiles = _input(fields["_q"], 1, False, context)
@@ -640,7 +644,7 @@ def _power_fit(model: PythonObject, values: PythonObject, context: PythonObject)
     golden-section search as stages (staged, or speculated `spec` deep, with
     the blocked folds under IDN_PT_BLOCKED), then the standardization
     statistics: the stages, operands and order of the Python program."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var method_name = fields["method"]
     if py_type(method_name) is not b.str or (String(method_name) != "yeo-johnson" and String(method_name) != "box-cox"):
@@ -785,8 +789,8 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var fitted = fields["n_features_in_"]
-    if py_type(fitted) is not Python.import_module("builtins").int or Int(py=fitted) != d:
-        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(Python.import_module("builtins").str, fitted)))
+    if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
     var entries = _entries(fields["numeric_mode_"], context)
     var standardize = Bool(py=fields["standardize"])
     var words = n * d
@@ -849,15 +853,22 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
 def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
+        var b = native_loaded_module("builtins")
+        if py_type(call) is not b.tuple or len(call) != 4 or py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple:
+            raise Error("TypeError: preprocessing requires its native operation argument envelope")
         var model = call[0]
         var operation = String(call[1])
         var args = call[2]
-        var context = call[3]
+        var context = prep_operation_context(call[3])
         classical_connect_numpy(context)
         var kind = _kind(model, context)
         var result = PythonObject(None)
         if operation == "get_support" and (kind == "variance_threshold" or kind == "selector"):
             result = prep_support(model, args[0], context)
+        elif operation == "transform" and kind == "normalizer":
+            result = normalizer_transform(model, args[0], context)
+        elif (operation == "fit" or operation == "fit_transform") and kind == "normalizer":
+            result = normalizer_fit(model, args[0], args[1], operation == "fit_transform", context)
         elif operation == "inverse_transform" and (kind == "quantile" or kind == "power"):
             var fields = py_fields(model)
             if not py_contains(fields, "n_features_in_"):

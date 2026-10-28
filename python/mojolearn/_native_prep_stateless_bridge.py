@@ -3,8 +3,11 @@
 transformers (Binarizer, Normalizer, PolynomialFeatures, VarianceThreshold and
 the selectors' transform) and its fixed ABI."""
 
+CONTEXT_CONNECTION = None
+
 
 def connect(kinds):
+    global CONTEXT_CONNECTION
     # glue: compiled entries and plain metadata are retained during import;
     # `kinds` maps each public class to the kind the owner dispatches on.
     import sys
@@ -14,6 +17,7 @@ def connect(kinds):
     from ._arena_io import DeviceRows, DeviceCache, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context
     from .tokenizer import _binding
+    from ._native_loaded_modules import connect_module
 
     context = _state_context()
     context["output_context"] = _numpy_free_context()
@@ -52,4 +56,25 @@ def connect(kinds):
                    scaler_bindings=connected, scaler_host_contexts={},
                    maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, prep_stateless_kinds=dict(kinds))
+    # glue: immutable identities of the compiled exports actually selected
+    # above; no assumed function name/module-owner convention is required.
+    context["prep_stateless_entry_identities"] = tuple(
+        (mode, tuple(table.items()) if type(table) is dict else None)
+        for mode, table in connected.items()  # glue: freeze fixed import-time native ABI identities
+    )
+    # glue: freeze native class/descriptor references and fixed mapping contents
+    # during package connection. Native operations copy these records and never
+    # execute this setup helper. Process namespaces keep their pinned identity.
+    static_names = ("array_fields", "array_storage_slots", "buffer_codes",
+                    "prep_stateless_kinds", "warning_category_slots")
+    output = context["output_context"]
+    CONTEXT_CONNECTION = (
+        context, tuple(context.items()),
+        tuple((key, context[key], tuple(context[key].items()))
+              for key in static_names if key in context),  # glue: fixed import-time provider maps
+        output, tuple(output.items()),
+        tuple((key, output[key], tuple(output[key].items()))
+              for key in static_names if key in output),  # glue: fixed import-time output provider maps
+    )
+    connect_module(__name__, sys.modules[__name__], ("CONTEXT_CONNECTION",))
     return call, context
