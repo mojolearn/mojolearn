@@ -89,3 +89,40 @@ Evidence
   pca-connection-annotation-push.log
 Full hook output stays in those files. Compiler/runtime evidence belongs to
 the coordinator's frozen compile batch and final integration run.
+
+2026-10-28 compatibility review followup
+The dedicated PCAFitScalar provider now owns scalar conversion completely;
+training_scalar_native is reused only for native warning delivery. This covers
+tol, n_components, n_oversamples and iterated_power, including native temporal
+scalars/arrays through the pure helper7082db091c (local cherry e4fa50751b).
+Temporal dtype/layout and eight raw bytes are captured before input work;
+calendar category/range decisions are native. Neither NumPy number slots nor
+Python date/calendar helpers execute. Exact native scalar admission precedes
+legacy sequential admission so long double/complex/temporal scalars can reach
+the dedicated decoder. Primitive strings/bytes are boxed as native builtin
+text before the fixed CPython parser. Unsupported protocols are refused.
+
+An array.array setting keeps its exact native wrapper and typecode around a
+private bytes copy so native integer/float parser error representation/type is
+preserved. The previous conversion to bare bytes was repaired. Structured void
+number conversion uses a native empty tuple to retain integer-specific versus
+float-specific refusal; no field conversion is needed to refuse a record.
+
+Whiten now uses dedicated native truth handling for numeric/complex/temporal,
+text/object arrays, structured/raw void and builtin containers/buffers. It
+freezes the result before input preparation. Empty-array truth retains the
+NumPy2.2 transition from warning/False to ValueError. Structured fields are
+walked natively with ordinary owned scalar snapshots; Python truth hooks are
+refused before execution. Query truth reuse is a separate followup target.
+
+Deferred native scalar item errors now own the exact CPython (type,value,
+traceback) triple using the same supported FetchTriple/Restore ownership
+pattern as ByteCheckpointIOError. A native item-boxing allocation or dtype
+boxing failure need not preempt the original input-validation stage. The
+record restores the captured exception only when its setting is consumed;
+unused records release owned references normally. No error category is guessed
+from a filtered log or reconstructed Python callback.
+
+Source-only status remains unchanged: no tests/runtime/compile were run.
+The coordinator must compile pca_fit_compile.mojo before merging; runtime,
+negative-control, error-precedence and cross-vendor coverage remain pending.

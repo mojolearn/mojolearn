@@ -7,8 +7,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.sequential_admission import sequential_admit_value
 from bindings.native_loaded_module import native_loaded_module
-from bindings.training_scalar_native import training_scalar_number
-from providers.python.pca_model_pyapi import _native_number, _entry_dictionary
+from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_admit
+from providers.python.pca_model_pyapi import _entry_dictionary
 
 
 def pca_fit_fields(state: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
@@ -17,7 +17,10 @@ def pca_fit_fields(state: PythonObject, operation: String, context: PythonObject
     var names = context["pca_parameters"] + context["pca_state"]
     for index in range(len(names)):  # driver-loop: admitted references retained before settings are replaced
         if py_contains(fields, names[index]):
-            sequential_admit_value(fields[names[index]], context)
+            if index < len(context["pca_parameters"]):
+                pca_fit_scalar_admit(fields[names[index]], context)
+            else:
+                sequential_admit_value(fields[names[index]], context)
             _ = py_call(owners.append, fields[names[index]])
     var b = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
@@ -45,12 +48,13 @@ def pca_fit_preflight(fields: PythonObject, operation: String, context: PythonOb
                     + "'randomized'). 'arpack' is scikit-learn's implicitly restarted Lanczos, a third "
                     + "algorithm; accepting the name and running an exact arm would be a silent substitution, "
                     + "which is why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
-    var scalar = context["pca_fit_scalar_context"]
-    py_setitem(fields, "tol", training_scalar_number(fields["tol"], operation, scalar, False))
+    var tol = PCAFitScalar(fields["tol"], context)
+    py_setitem(fields, "tol", tol.convert(operation, context, False))
     if Float64(py=fields["tol"]) != 0:
         raise Error("NotImplementedError: mojolearn PCA: tol is ARPACK's convergence tolerance and "
                     + "svd_solver='arpack' is not implemented; leave tol=0.0")
-    py_setitem(fields, "whiten", _native_number(fields["whiten"], context, True))
+    var whiten = PCAFitScalar(fields["whiten"], context, True, operation)
+    py_setitem(fields, "whiten", whiten.truth(operation, context))
     return text
 
 
