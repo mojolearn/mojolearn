@@ -1,5 +1,5 @@
 {
-  "test_file_sha256": "bbcfc7aba72240da40727d9c791516de904c054e6ca2f61d93c1a6c19a8b2433",
+  "test_file_sha256": "1989a68872bc6910344cccbd039f012383a68b1d03e137acf7f3b1145f191183",
   "case_counts": {
     "test_fit_does_not_call_mutable_python_binding_selector": 11,
     "test_fit_refuses_input_protocols_before_entering_hooks": 33,
@@ -13,15 +13,18 @@
     "test_new_public_results_do_not_reenter_python_compatibility": 2,
     "test_ivf_extend_accepts_strided_rows_and_searches_appended_ids": 1,
     "test_ivf_extend_admits_before_mutation_and_leaves_fit_unchanged_on_refusal": 3,
-    "test_tsne_source_leaves_both_binding_routes_for_native_admission": 1
+    "test_tsne_source_leaves_both_binding_routes_for_native_admission": 1,
+    "test_kernel_feature_fit_keeps_ignored_target_validation_and_cleans_fit_depth": 4,
+    "test_kernel_ridge_column_target_warns_and_returns_flat_public_prediction": 1,
+    "test_ann_search_returns_stable_completed_results_with_strided_filters": 4
   },
-  "total_cases": 73,
-  "runtime_cases_unrun": 72,
+  "total_cases": 82,
+  "runtime_cases_unrun": 81,
   "source_syntax": "PASS",
   "tsne_source_check": {
     "status": "PASS",
     "path": "/Users/andrewhendel/mojolearn-wt/peer1-neighbors-kernels-20261027/python/mojolearn/_expansion_ann.py",
-    "sha256": "71da072e7719255b822ded6dd14a9dc58afbebb2e270a64863b1545eb934ac52"
+    "sha256": "59db6e923042eb2302eadd8ab79bc3bb8e5352101f11e36a0ed7aa1c523c9249"
   },
   "product_runtime": "NOT_RUN",
   "native_compile": "NOT_RUN"
