@@ -20,6 +20,7 @@ from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call, family_repr
 from bindings.linalg_ops_buffers import LinBuf, lin_truth, lin_new, lin_array
 from bindings.linalg_ops_lowbit import lin_operand, lin_state, lin_ints, lin_connected_binding
+from providers.python.linalg_result_pyapi import linalg_result_new
 from bindings.linalg_ops_kit import LinKit, KIT_F32P, OP_MUL, OP_DIV, OP_ABS, OP_SCALE, OP_ADDS, OP_LE
 
 comptime TS_MAX_N = 512
@@ -42,8 +43,7 @@ def _lin_eq(a: PythonObject, b: String) raises -> Bool:
 
 def _lin_named(cls: String, items: PythonObject, context: PythonObject) raises -> PythonObject:
     """`QRResult(...)` / `SVDResult(...)`: the tuple subclass over `items`."""
-    var b = native_loaded_module("builtins")
-    return py_call(b.tuple.__new__, lin_state(context)[cls], items)
+    return linalg_result_new(lin_state(context)[cls], items, context)
 
 
 def _lin_tsqr_on(rows: Int, cols: Int) -> Bool:

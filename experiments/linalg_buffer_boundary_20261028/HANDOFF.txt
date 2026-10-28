@@ -1,0 +1,28 @@
+Linalg ordinary/low-bit buffer and result metadata batch (2026-10-28)
+
+Branch: lane/linalg-buffer-boundary-20261028
+Frozen source: 1091a9ee1e53b9d1771f0c30ab563b0694bad83b.
+Base: parent receipt 7089f6067a on lane/linalg-decomp-admission-20261027 (source 945d0eaddf).
+
+Changes:
+- Ordinary and low-bit operand/output paths reuse LinAdmission and lin_admitted_c. They capture buffer/Array metadata once, keep the native export and storage owner alive through execution, and validate dtype/layout from that capture. Supplied output objects preserve identity through lin_admitted_output.
+- Supported native owners connected at import, including mmap-backed memoryviews, remain admitted before export. Array slots use existing exact metadata admission; arbitrary dtype/name properties are no longer consulted.
+- Low-bit tuple/scalar controls are admitted before truth, length, indexing or scalar conversion. Matmul boolean controls are captured once and passed onward as native booleans. Numerical kernels and conversion/rounding arithmetic are unchanged.
+- QRResult/SVDResult construction and Q/R/U/S/Vh properties now make one native metadata call. Native tuple construction preserves connected result types and passive subclasses while rejecting replaced tuple/lifetime protocols before invoking them.
+- All builtins import_module calls in linalg_ops_buffers are replaced with native_loaded_module, including the lin_truth/lin_array/lin_tuple dependency requested for Peer6. No resample source was edited.
+
+Compilation:
+- checks/linalg_buffer_boundary_compile.mojo compiles the actual linalg_ops_operation public owner and its low-bit/decomposition/result metadata call graph.
+- Accepted compile PASS: exit 0, 24.65 s, frozen source 1091a9ee1e53b9d1771f0c30ab563b0694bad83b. Complete command, compiler hash, binary hash, source-byte archive and manifest are retained in compile-storage-owners/.
+- Earlier source 911cf66e4d99b2a3a9fc27f2e98d24c1c347fd94 compiled successfully in 30.57 s; that receipt is superseded by the connected-mmap owner preservation above. Both complete attempts remain retained.
+- Apple CPU, optimization 0, identical define; all 10 logical cores configured through -j10. Configured parallelism does not establish saturation of every compiler phase.
+- Required push source guard initially refused four incorrectly formatted loop annotations. The follow-up changes only those comments; executable source is identical to the accepted compiled source, so no duplicate compile was run. The original push output is retained in push.log; the retry is push-annotations.log.
+- Python facade syntax compiled. No runtime, identity or vendor verification was run.
+
+Remaining and scope limits:
+- Existing legacy lin_view remains defined for the resample call site owned by Peer6. Ordinary/low-bit linalg no longer calls it. This batch does not claim a complete resample migration.
+- The resample source at the parent base compiles as part of the import closure. Peer6's newer resample source requires its own focused compile after integration of these helpers.
+- Runtime behavior, callback refusal fixtures and cross-vendor identity remain untested under the current compile-only instruction. No arithmetic kernel changed and no cross-vendor evidence is claimed.
+
+Complete local evidence: /Users/andrewhendel/mojolearn-evidence/linalg-buffer-boundary-20261028/
+No rented machine was used; no pod ownership or teardown exists for this batch.
