@@ -37,6 +37,8 @@ every GEMM leaf descending), which every block's projections reach.
 from std.memory import memcpy
 from std.sys.compile import is_defined
 from std.os import abort
+from mamba.host.native_block_dispatch import NATIVE_MAMBA_HOST_BLOCK_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -343,9 +345,22 @@ def mamba3_forward_tape_enabled_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_mamba_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+def mamba_block_api_binding() raises -> PythonObject:
+    var api = NATIVE_MAMBA_HOST_BLOCK_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def mamba_native_session_handle_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
+    return PythonObject(Int(owner))
+
+
 def build__mojolearn_mamba_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba_host")
+        m.def_function[mamba_block_api_binding]("mamba_block_api_v1")
+        m.def_function[mamba_native_session_handle_binding]("mamba_prefill_native_handle_v1")
         m.def_function[mamba_host_numeric_mode_binding]("mamba_host_numeric_mode")
         m.def_function[mamba_host_vendor_binding]("mamba_host_vendor")
         m.def_function[mamba_host_column_binding]("mamba_host_column")

@@ -405,8 +405,8 @@ def _m3_owned_state_run(mut s: M3OwnedHostSession, a: List[Int], b: Int, l: Int,
     return _mamba3_run(slots, b, l, dm, q0, pend, False)
 
 
-def _nn40_host_require(s: M3OwnedHostSession, dm: Int, generation: Int) raises:
-    if not NN40_OWNED_WEIGHTS or s.busy or not s.usable or not s.weights:
+def _nn40_host_require(s: M3OwnedHostSession, dm: Int, generation: Int, reserved: Bool = False) raises:
+    if not NN40_OWNED_WEIGHTS or s.busy != reserved or not s.usable or not s.weights:
         raise Error("mamba3 owned host: no usable installed snapshot")
     if s.weights.value().dims.d_model != dm or s.generation != generation:
         raise Error("mamba3 owned host: stale generation or changed dimensions")
