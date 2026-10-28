@@ -292,6 +292,14 @@ def reader_frontend_operation(operation: PythonObject, value: PythonObject, opti
     if py_type(operation) is not native_loaded_module("builtins").str:
         raise Error("TypeError: ONNX operation requires native string metadata")
     var op = String(py=operation)
+    if op == "reader_error":
+        var b = native_loaded_module("builtins")
+        if py_type(value) is not b.int or py_type(options[0]) is not b.str or py_type(options[1]) is not b.bool or py_type(options[2]) is not b.str:
+            raise Error("TypeError: reader errors require native status, message, missing flag and path")
+        var status = Int(py=value)
+        if status >= 1 and status <= 4:
+            _status(Python.list(6, status, options[0], Int(Bool(py=options[1]))), options[2], context)
+        raise Error("RuntimeError: mojolearn: the x_sequence binding's ONNX reader returned status " + String(status) + "; rebuild the x_sequence bindings")
     if op == "reader_read":
         return reader_read(value, options, context)
     if op == "reader_resolve" or op == "resolve" or op == "resolve_shapes":

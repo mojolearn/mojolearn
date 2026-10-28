@@ -45,3 +45,14 @@ def test_graph_connection_does_not_depend_on_importing_onnx_first():
     assert 'class _Native:' in graph and 'class _Native:' not in onnx
     assert '_READER_NATIVE, _READER_CONTEXT' in onnx
     assert '_graph._READER_NATIVE' not in onnx
+
+
+def test_reader_frontend_has_no_duplicate_python_decoder():
+    tree = ast.parse((ROOT / 'python/mojolearn/importers/onnx.py').read_text())
+    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
+    assert {n.name for n in functions} == {'read', 'reader_error'}
+    for function in functions:
+        body = function.body[1:]  # documented public entry, then one compiled call
+        assert len(body) == 1 and isinstance(body[0], ast.Return)
+        assert body[0].value.func.id == '_READER_NATIVE'
+    assert (ROOT / 'python/mojolearn/tests/_onnx_reader_oracle.py').exists()
