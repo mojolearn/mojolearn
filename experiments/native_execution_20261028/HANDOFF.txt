@@ -1,0 +1,52 @@
+Native execution migration, 2026-10-28
+
+Integrated setup-once batches 2/3 from db1c55a976, repaired their tokenizer
+compile failure, and replaced additional Python-object execution machinery.
+
+Delivered:
+- Native prepared registry maps, monotonic record IDs and native weakref cleanup;
+  no Python dictionary or callable dispatch on registry hits.
+- Standalone block typed retained plans; no cache-hit identity list, namespace
+  owner or block list; native layer vectors borrowed rather than copied.
+- Native identity snapshots and writable Array metadata/released-view invalidation.
+  Class namespace key admission completes before any keyed lookup.
+- Causal model/layer metadata retained, one layer admission instead of three,
+  model/state deduplication in native maps.
+- Sequential fixed operation schemas retained, native identity checks and native
+  per-operation records; fixes the fresh-tuple identity cache miss.
+- Native descriptor tables connect by default in identical. Supported local
+  nonresident fp32 Transformer/Mamba1 profile 1/Mamba2 forward/generation select
+  the native engine once at entry: token/layer loops use native state and calls.
+  Unsupported routes are selected before execution; no exception fallback.
+
+Scope and limits:
+This is not complete removal of Python/CPython from the library. Boundary
+snapshots and output construction still use Python objects. Identity checks
+remain at mutable public boundaries; they are transitional, not the intended
+native-owned metadata/invalidation endpoint. Some cold cache records and class
+stamps remain Python-backed; caller-created owner-reference cycles need further
+lifecycle work. Distributed, packed/int15, resident, legacy and Mamba1 profile-2
+orchestration retain their existing routes. Explicit environment opt-outs remain.
+No arithmetic/performance tuning switches were promoted; native engine selection
+is the requested architecture migration. No measured speedup or runtime/identity
+qualification is claimed.
+
+Compilation:
+See *_compile.json here plus experiments/native_registry_20261028/ and
+experiments/native_owner_hot_20261028/. Focused Mac CPU compiles cover actual
+standalone forward/allocate/backward, CausalLM model/state capture/publication,
+public forward/generate, classical admission, descriptor/module lookup, native
+registry, Sequential host root, and bound type registration. One older full
+Causal tokenizer host build passed (scope in external causal handoff); a root
+integration full tokenizer build was cancelled after being superseded, rc143.
+It is not counted as successful coverage. No GPU execution or runtime campaign.
+
+Complete logs/binaries:
+~/mojolearn-evidence/native-execution-20261028/
+~/mojolearn-evidence/native-owner-hot-20261028/
+~/mojolearn-evidence/native-registry-20261028/
+~/mojolearn-evidence/causal-native-retain-20261028/
+No new rented boxes. Prior setup-once batch-2 pods were already down on takeover;
+retained reports showed 45/46 CPU families (tokenizer failure), two GPU-target
+root compiles successful, and failed dependent smoke checks. Those failures
+remain retained and are not rewritten as successful runs.
