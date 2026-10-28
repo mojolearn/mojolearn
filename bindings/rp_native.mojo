@@ -91,6 +91,27 @@ def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: Pyt
     return x
 
 
+def rp_components(model: PythonObject) raises -> PythonObject:
+    """The `components_` getter: the fitted matrix, or AttributeError."""
+    var value = _components(py_fields(model))
+    if value is None:
+        raise Error("AttributeError: components_")
+    return value
+
+
+def rp_set_components(model: PythonObject, value: PythonObject) raises:
+    """The `components_` setter: replaces the fitted matrix field."""
+    var fields = py_fields(model)
+    if py_contains(fields, "_rp_lazy"):
+        _ = py_call(fields.pop, "_rp_lazy")
+    py_setitem(fields, "_rp_components", value)
+
+
+def rp_getstate(model: PythonObject) raises -> PythonObject:
+    """`__getstate__`: a shallow copy of the instance fields."""
+    return py_call(Python.import_module("builtins").dict, py_fields(model))
+
+
 def _check(model: PythonObject, fields: PythonObject) raises:
     if _components(fields) is None:
         raise Error("RuntimeError: " + String(py_type(model).__name__) + " is not fitted; call fit first")

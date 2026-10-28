@@ -8,6 +8,8 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from hierarchy.cluster_descriptor_host import HIERARCHY_CLUSTER_HOST_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.hostptr import read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
@@ -16,6 +18,11 @@ from x_cluster.entries import run_entry
 from x_cluster.host.host_ops import HostOps, X_CLUSTER_HOST_SABOTAGE
 from x_cluster.out import ClusterOut
 from providers.python.x_cluster_out_pyapi import cluster_out_to_py, py_floats, py_ints
+
+
+def hierarchy_cluster_native_api_v1_binding() raises -> PythonObject:
+    var api = HIERARCHY_CLUSTER_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def call_binding(
@@ -76,6 +83,7 @@ def build__mojolearn_x_cluster_host() -> PythonObject:
         m.def_function[x_cluster_host_column_binding]("x_cluster_host_column")
         m.def_function[x_cluster_host_sabotage_binding]("x_cluster_host_sabotage")
         m.def_function[call_binding]("x_cluster_call")
+        m.def_function[hierarchy_cluster_native_api_v1_binding]("hierarchy_cluster_native_api_v1")
         m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
         m.def_function[vendor_binding]("x_cluster_vendor")
         # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.

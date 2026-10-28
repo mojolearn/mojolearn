@@ -1,0 +1,7 @@
+PASS tools/test_causal_constructor_capture.py test_constructor_uses_private_metadata_after_native_calls
+PASS tools/test_causal_constructor_capture.py test_live_publication_checks_keys_and_keeps_tied_weight_identity
+PASS tools/test_causal_constructor_capture.py test_parallel_prepare_signature_and_numerical_routes_are_preserved
+PASS tools/test_causal_constructor_capture.py test_post_kernel_array_metadata_and_loop_annotations_are_checked
+PASS tools/test_causal_model_native.py test_construct_captures_plan_options_and_all_weights_before_numerical_work
+PASS tools/test_causal_model_native.py test_packed_weights_admit_metadata_and_keep_original_quantization_routes
+SUMMARY {'passed': 6, 'failed': 0, 'failures': [], 'scope': 'constructor source controls and loop scan; compile/runtime unrun'}

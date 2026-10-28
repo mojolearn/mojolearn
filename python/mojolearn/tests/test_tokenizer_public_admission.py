@@ -1,5 +1,7 @@
 """Focused public boundary controls. Run only against the integrated rebuild."""
 import array
+import _codecs
+import sys
 
 import pytest
 
@@ -131,3 +133,60 @@ def test_training_rendering_files_and_identity_round_trip(tmp_path):
     assert from_ranks.identity == trained.identity == trained.tokenizer().identity
     loaded = Tokenizer.from_pretrained(tokenizer_json)
     assert loaded.decode(loaded.encode("abc")) == "abc"
+
+
+@pytest.mark.parametrize("policy", ["strict", "ignore", "replace", "backslashreplace", "surrogateescape", "surrogatepass"])
+@pytest.mark.parametrize("surface", ["bpe", "bpe_batch", "model"])
+def test_builtin_shaped_error_handler_replacement_is_refused_before_output_hooks(bpe, monkeypatch, policy, surface):
+    tokenizer = Tokenizer([bytes([i]) for i in range(256)], [], pattern="gpt2") if surface == "model" else bpe
+    original = _codecs.lookup_error(policy)
+    seen = []
+
+    class Output:
+        def write(self, text):
+            seen.append(text)
+            return len(text)
+
+        def flush(self):
+            seen.append("flush")
+
+    # print has the same builtin_function_or_method type as the canonical
+    # handlers, but it can invoke the application's Python stdout hooks.
+    assert type(print) is type(original)
+    try:
+        _codecs.register_error(policy, print)
+        with monkeypatch.context() as patch:
+            patch.setattr(sys, "stdout", Output())
+            with pytest.raises(ValueError, match="canonical builtin UTF-8 error policy"):
+                if surface == "bpe_batch":
+                    tokenizer.decode_batch([[0xC3]], errors=policy)
+                else:
+                    tokenizer.decode([0xC3], errors=policy)
+    finally:
+        _codecs.register_error(policy, original)
+    assert seen == []
+
+
+@pytest.mark.parametrize("policy", ["strict", "ignore", "replace", "backslashreplace", "surrogateescape", "surrogatepass"])
+def test_canonical_error_policies_preserve_the_utf8_decoder_result(bpe, policy):
+    raw = b"a\xc3(\xed\xa0\x80"
+    # Independent CPython oracle is test preparation, outside product work.
+    try:
+        expected = raw.decode("utf-8", errors=policy)
+    except UnicodeDecodeError:
+        with pytest.raises(UnicodeDecodeError):
+            bpe.decode(list(raw), errors=policy)
+    else:
+        assert bpe.decode(list(raw), errors=policy) == expected
+
+
+def test_decode_uses_the_captured_native_registry_lookup(bpe, monkeypatch):
+    seen = []
+
+    def lookup(policy):
+        seen.append(policy)
+        raise AssertionError("replaced codec lookup must not execute")
+
+    monkeypatch.setattr(_codecs, "lookup_error", lookup)
+    assert bpe.decode([0xC3], errors="replace") == "\ufffd"
+    assert seen == []
