@@ -1,0 +1,44 @@
+Peer6 Prophet fit/predict native ownership — 2026-10-28
+Branch: lane/peer6-prophet-20261027.
+Dependencies: Prophet lifecycle70bf41dce3; shared pandas reader original
+32276a868c42696c9ffd958b0e438ca6fcfead74 (local copy9999ad785d is not a new batch).
+
+Fit/predict no longer invoke NumPy asarray/ascontiguousarray/empty/zeros/astype
+or Python module import. Native providers admit passive scalar/container/buffer
+inputs, create operation-local ndarray metadata views, retain owners while
+copying strided/endian primitive data and parse text/object numeric values only
+after native leaf admission. Extended real/complex native scalar storage and
+primitive numeric arrays use native conversion; complex casts issue the native
+warning. Temporal arrays and scalar lists preserve their common input unit;
+only time-axis preparation converts to int64 nanoseconds, including calendar,
+fine units, multipliers and byte order. NumPy's retained compiled promote_types
+function handles immutable dtype metadata only; it receives no user values and
+performs no numerical array conversion. Pandas input delegates to the shared
+native resample_pandas_array provider rather than creating a parallel reader.
+
+Model inheritance/storage hooks, scalar settings and seasonality records are
+admitted. Fit stages state publication, preserves existing seasonality record
+and dictionary identities, and admits all released owners before mutation.
+Predict snapshots fitted native buffers, checks fitted state/rank/parameter and
+holiday dimensions, and checks current Fourier feature count against fitted K
+before the native feature writer. Changing seasonalities after fit requires a
+refit instead of writing beyond the fitted feature buffer. Publication updates
+only trend_ while retaining original fitted parameter owners. Numerical
+prophet_fit/prophet_predict kernels are unchanged.
+
+Complete actual xseq dispatcher compile: CPU/O0/identical/apple-m1,-j10,
+exit0,68.48s (attempt4). Final changed source bytes match the retained manifest.
+Attempt1 failed on source syntax and PythonObject.copy overload; retained in
+full. Attempts2/3 compiled successfully, then changed-input compatibility and
+shared-reader improvements required attempt4. No runtime, GPU, identity or
+performance execution, and no runtime or whole-library Python-free claim.
+Evidence: ~/mojolearn-evidence/peer6-prophet-operations-20261028/attempt{1..4}/.
+Retained bytes include full source closure, compiler hash, command, .so and logs.
+Build environment: ~/mojolearn-evidence/peer6-cv-build-environment-20261027/.
+Focused source-review records: ~/mojolearn-evidence/peer6-prophet-20261027/cv-review*/.
+
+Explicit shared pending implementation: current pandas reader still has known
+extended cases (distinct categorical dictionaries, sparse/interval and some
+Arrow/extended dtypes) being repaired by its owning resample lane. This batch
+does not claim those input types qualified. No duplicate runtime or identity
+campaign is authorized; the affected compilation is the development evidence.

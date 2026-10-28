@@ -186,3 +186,18 @@ _register_xseq(xseq_prophet_class=ProphetForecaster,
                    ('__dict__', '__new__', '__init__', '__getattribute__', '__getattr__', '__setattr__',
                     '__del__', 'add_seasonality', 'fit', 'predict', 'seasonalities')))
                    for owner in ProphetForecaster.__mro__))  # glue: fixed native lifecycle identities
+
+if "xseq_unavailable" not in _XSEQ_CONTEXT:
+    if type(np.promote_types) is not type(len):
+        raise TypeError("Prophet temporal metadata requires native NumPy dtype promotion")
+    _register_xseq(xseq_prophet_complex_warning=np.exceptions.ComplexWarning,
+                   xseq_prophet_datetime_type=np.datetime64,
+                   xseq_prophet_timedelta_type=np.timedelta64,
+                   xseq_prophet_datetime_ns=np.dtype('datetime64[ns]'),
+                   xseq_prophet_object_dtype=np.dtype('O'),
+                   xseq_prophet_big_i64=np.dtype('>i8'),
+                   xseq_prophet_promote_types=np.promote_types,
+                   xseq_prophet_extra_scalars=(np.str_, np.bytes_, np.longdouble, np.clongdouble, np.complex64, np.complex128),
+                   xseq_prophet_complex_scalars=(np.complex64, np.complex128, np.clongdouble),
+                   xseq_prophet_complex_dtype=np.dtype("c16"),
+                   xseq_prophet_extended_scalars=(np.longdouble, np.clongdouble, np.complex64, np.complex128))
