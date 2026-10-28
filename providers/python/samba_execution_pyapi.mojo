@@ -128,13 +128,14 @@ struct AdmittedSambaExecution(Movable):
                     var lock = OperationLockLease(layer_fields["_runtime_lock"])
                     if lock.handle == 0:
                         raise Error("native Samba: layer needs its admitted native operation lock")
-                    var snapshot = GenerationLayerSnapshot(layer_fields, "transformer", False)
+                    var packed = layer_fields["_int15"] is not None
+                    var snapshot = GenerationLayerSnapshot(layer_fields, "transformer", packed)
                     var weights = snapshot.weights.resolve(self.keep)
                     publication.weight_addresses = weights.copy()
                     var optional = snapshot.optional.resolve(self.keep)
                     var provider = layer_fields["_native_block_provider_cache"]
                     publication.provider = provider
-                    var use_session = layer_state is not None or Bool(py=py_call(bi.hasattr, entries, "transformer_session_forward_fresh"))
+                    var use_session = packed or layer_state is not None or Bool(py=py_call(bi.hasattr, entries, "transformer_session_forward_fresh"))
                     var session = PythonObject(None)
                     if use_session:
                         session = layer_fields["_native_session"]
@@ -154,6 +155,7 @@ struct AdmittedSambaExecution(Movable):
                         a.append(address)
                     var p = snapshot.words.transformer_params(b, l, l, 0)
                     var operation = 2
+                    var scratch = List[List[Float32]]()
                     if layer_state is not None:
                         var slots = _samba_native_fields(layer_state)
                         if py_get(slots, "_resident_session") is not None:
@@ -174,7 +176,14 @@ struct AdmittedSambaExecution(Movable):
                         a.append(_mutable(slots["k_cache"], [count], self.keep, publication.copies, "k_cache"))
                         a.append(_mutable(slots["v_cache"], [count], self.keep, publication.copies, "v_cache"))
                         p = snapshot.words.transformer_params(b, l, capacity, cached)
-                        operation = 11
+                        operation = 35 if packed else 11
+                    elif packed:
+                        var count = snapshot.words.cache_count(b, l)
+                        scratch.append(List[Float32](length=count, fill=0))
+                        scratch.append(List[Float32](length=count, fill=0))
+                        a.append(Int(scratch[0].unsafe_ptr()))
+                        a.append(Int(scratch[1].unsafe_ptr()))
+                        operation = 35
                     elif use_session:
                         a.append(0)
                         a.append(0)
@@ -190,7 +199,11 @@ struct AdmittedSambaExecution(Movable):
                     a.append(0)
                     for address in optional:  # driver-loop: native optional transformer weight metadata
                         a.append(address)
+                    var planes = snapshot.packed.resolve(self.keep)
+                    for address in planes:  # driver-loop: native packed projection plane metadata
+                        a.append(address)
                     layer = NativeSambaLayer(self.owners[len(self.owners) - 1].endpoint(), operation, a^, p^, [], 0, 12 if use_session else 10, -1, [])
+                    layer.scratch = scratch^
                 else:
                     var h = Int(py=layer_fields["nheads"])
                     var weights = layer_fields["_w"]
@@ -469,7 +482,7 @@ def samba_provider_eligible(fields: PythonObject) raises -> Bool:
         if String(block["_native_route"]) != "gpu" or String(block["numeric_mode"]) != "identical":
             return False
         if String(block["_native_kind"]) == "transformer":
-            if block["_int15"] is not None or getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1" or getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH", "1") == "0":
+            if getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1" or getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH", "1") == "0":
                 return False
             var lock = OperationLockLease(block["_runtime_lock"])
             if lock.handle == 0:

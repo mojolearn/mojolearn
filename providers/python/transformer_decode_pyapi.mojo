@@ -134,7 +134,7 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
         handle.device = _native_function(binding, "transformer_decode_session_create")()
         if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1" and String(fields["numeric_mode"]) == "identical":
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
-                _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 35)
+                _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
             cached = transformer_resident_decode_call(handle.provider, handle.device, 19 if packed else 18, a, open_p)
         else:
             cached = Int(py=py_call(_native_function(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open"),
@@ -142,7 +142,7 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
     else:
         if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
-                _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 35)
+                _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
         var weights = fields["_w"]
         var optional = fields["_wopt"]
         for i in range(len(weights)):  # driver-loop: native session-owned weight copies

@@ -105,3 +105,17 @@ def test_accumulation_reuses_admitted_native_metadata_and_keeps_original_reducti
     assert boundary.count('AdmittedSambaExecution(') == 1
     assert 'admitted.native.accumulated_gradients(' in boundary
     assert 'for k in range(accumulation)' not in boundary
+
+
+def test_packed_forward_retains_scratch_and_original_native_function():
+    boundary=(ROOT/'providers/python/samba_execution_pyapi.mojo').read_text()
+    assert 'operation = 35 if packed else 11' in boundary
+    assert 'layer.scratch = scratch^' in boundary
+    assert 'scratch.append(List[Float32](length=count, fill=0))' in boundary
+    native=(ROOT/'transformer/native_block_dispatch.mojo').read_text()
+    branch=native.split('    if op == 35:')[1].split('    if op == 11:')[0]
+    assert '_transformer_run_session_int15(owner[], a,' in branch
+    assert 'len(a) != INT15_ENTRY_ADDRS' in branch
+    assert 'len(p) != INT15_ENTRY_PARAMS' in branch
+    assert 'owner[].clear()' in branch
+    assert 'op >= 36' in native
