@@ -168,10 +168,10 @@ class Kernel:
     """
 
     def __add__(self, other):
-        return _Combined(self, other, _K_SUM, "+")
+        return _NATIVE(self, "family_gp_kernel_add", (other,), _NATIVE_CONTEXT)
 
     def __mul__(self, other):
-        return _Combined(self, other, _K_PROD, "*")
+        return _NATIVE(self, "family_gp_kernel_mul", (other,), _NATIVE_CONTEXT)
 
     def _nodes(self):
         """Postfix list of `(kind, param, length_scales)` tuples."""
@@ -222,7 +222,7 @@ class Kernel:
         return _NATIVE(self, "family_gp_kernel_bounds", (), _NATIVE_CONTEXT)
 
     def __repr__(self):
-        return self._name()
+        return _NATIVE(self, "family_gp_kernel_repr", (), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `kernels.py:1187`.
@@ -248,8 +248,7 @@ class ConstantKernel(Kernel):
     """
 
     def __init__(self, constant_value=1.0, constant_value_bounds=_DEFAULT_BOUNDS):
-        self.constant_value = float(constant_value)
-        self.constant_value_bounds = _as_bounds(constant_value_bounds, 1, "ConstantKernel")
+        _NATIVE(self, "family_gp_kernel_initialize", (constant_value, constant_value_bounds), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(_K_CONST, self.constant_value, [])]
@@ -291,8 +290,7 @@ class WhiteKernel(Kernel):
     """
 
     def __init__(self, noise_level=1.0, noise_level_bounds=_DEFAULT_BOUNDS):
-        self.noise_level = float(noise_level)
-        self.noise_level_bounds = _as_bounds(noise_level_bounds, 1, "WhiteKernel")
+        _NATIVE(self, "family_gp_kernel_initialize", (noise_level, noise_level_bounds), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(_K_WHITE, self.noise_level, [])]
@@ -335,8 +333,7 @@ class RBF(Kernel):
     """
 
     def __init__(self, length_scale=1.0, length_scale_bounds=_DEFAULT_BOUNDS):
-        self.length_scale = _as_length_scale(length_scale, "RBF")
-        self.length_scale_bounds = _as_bounds(length_scale_bounds, len(self.length_scale), "RBF")
+        _NATIVE(self, "family_gp_kernel_initialize", (length_scale, length_scale_bounds), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(_K_RBF, 0.0, list(self.length_scale))]
@@ -386,9 +383,7 @@ class Matern(Kernel):
     """
 
     def __init__(self, length_scale=1.0, length_scale_bounds=_DEFAULT_BOUNDS, nu=1.5):
-        self.length_scale = _as_length_scale(length_scale, "Matern")
-        self.length_scale_bounds = _as_bounds(length_scale_bounds, len(self.length_scale), "Matern")
-        self.nu = float(nu)
+        _NATIVE(self, "family_gp_kernel_initialize", (length_scale, length_scale_bounds, nu), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(_K_MATERN, self.nu, list(self.length_scale))]
@@ -409,14 +404,7 @@ class Matern(Kernel):
 
 class _Combined(Kernel):
     def __init__(self, a, b, op, sym):
-        if not isinstance(a, Kernel) or not isinstance(b, Kernel):
-            raise TypeError(
-                "mojolearn gaussian process kernels compose only with each "
-                "other; sklearn's magnitude-scaling shorthand "
-                "`2.0 * RBF(...)` is spelled ConstantKernel(2.0) * RBF(...) "
-                "here, so the constant that runs is one you constructed"
-            )
-        self.a, self.b, self.op, self.sym = a, b, op, sym
+        _NATIVE(self, "family_gp_kernel_initialize", (a, b, op, sym), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return self.a._nodes() + self.b._nodes() + [(self.op, 0.0, [])]
@@ -438,7 +426,7 @@ class _SavedKernel(Kernel):
     handed it (the neighbors and density inference lane, 2026-09-15)."""
 
     def __init__(self, nodes):
-        self.__nodes = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]  # glue: copies the kernel's postfix nodes
+        _NATIVE(self, "family_gp_kernel_initialize", (nodes,), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(k, p, list(ls)) for k, p, ls in self.__nodes]  # glue: copies the kernel's postfix nodes
@@ -938,3 +926,7 @@ _native_family_bridge.tables(
     family_gp_seed_bound=2 ** 64,
     family_gp_scaler=(StandardScaler, _STANDARD_CONTEXT),
 )
+
+# Import-time native owner identities for constructor reinitialization.
+from ._native_owner_lifetime import connect_owner_context as _connect_kernel_owners
+_connect_kernel_owners(_NATIVE_CONTEXT)
