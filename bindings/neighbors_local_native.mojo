@@ -18,6 +18,7 @@
 # checks) are the same binary64 operations in the same order; products that
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.math import floor, isinf
 from std.memory import memcpy
 from std.os import getenv
@@ -27,6 +28,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_pandas import classical_admit_value
+from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.host_sparse_native import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -66,7 +68,7 @@ def _admit_local_state(model: PythonObject, context: PythonObject) raises:
     for i in range(len(values)):  # small-loop(fixed native container and buffer owners)
         var value = py_get(fields, values[i])
         if value is not None:
-            classical_admit_value(value, context)
+            classical_admit_value(classifier_label_list(value, context) if String(values[i]) == "classes_" else value, context)
 
 
 def _b() raises -> PythonObject:
@@ -644,7 +646,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
 
 def _nc_uniform(fields: PythonObject) raises -> Bool:
     """`NearestCentroid._uniform`: every prior within isclose of 1/C."""
-    var C = len(family_field(fields, "classes_"))
+    var C = len(classifier_label_list(family_field(fields, "classes_"), context))
     var prior = family_field(fields, "class_prior_")
     var count = _size(prior)
     var pp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(prior)))
@@ -663,7 +665,7 @@ def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: Pyt
     if _ne(family_field(fields, "metric"), PythonObject("euclidean")):
         raise Error("AttributeError: decision_function is available for metric='euclidean' only")
     var q = _f32(source, context)
-    var C = len(family_field(fields, "classes_"))
+    var C = len(classifier_label_list(family_field(fields, "classes_"), context))
     # `Array.from_list(class_prior_.tolist(), "<f4")`: each prior rounded once
     var given = family_field(fields, "class_prior_")
     var count = _size(given)
@@ -693,7 +695,7 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject) 
     var fields = py_fields(model)
     var binding = args[0]
     var q = _f32(args[1], context)
-    var classes = family_field(fields, "classes_")
+    var classes = classifier_label_list(family_field(fields, "classes_"), context)
     if _nc_uniform(fields):
         var cent = family_field(fields, "centroids_")
         var dmat: PythonObject
@@ -944,7 +946,7 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
 # ------------------------------------------------------------------ door
 
 
-def neighbors_local_operation(model: PythonObject, operation: String, var args: PythonObject,
+def _neighbors_local_operation(model: PythonObject, operation: String, var args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     _admit_local_state(model, context)
@@ -987,3 +989,16 @@ def neighbors_local_operation(model: PythonObject, operation: String, var args: 
         _imp_fit(model, args, context)
         return _imp_transform(model, args, context)
     raise Error("RuntimeError: unknown neighbors operation " + operation)
+
+
+def neighbors_local_operation(model: PythonObject, operation: String, args: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    var call = neighbors_public_begin(model, operation, args, context)
+    var result = PythonObject(None)
+    try:
+        result = _neighbors_local_operation(model, operation, call.args, context)
+    except error:
+        raise neighbors_public_refusal(error, call, model)
+    finally:
+        neighbors_public_end(model, call)
+    return neighbors_public_finish(model, operation, result, call, context)

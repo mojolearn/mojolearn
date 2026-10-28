@@ -5,6 +5,7 @@
 from . import _mojolearn_estimators, _native_archive_bridge, _native_family_bridge
 from ._buffer import all_finite, as_f32_c
 from ._mode import NumericModeMixin, available_if
+from ._native_robust_bridge import native_method as _native_kde_method
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
 _KDE_FORMAT = "mojolearn-kde-1"
@@ -527,6 +528,7 @@ class KernelDensity(NumericModeMixin):
         state.pop("_resident", None)
         return state
 
+    @_native_kde_method
     def fit(self, X, y=None, sample_weight=None):
         """Store the training data.
 
@@ -548,9 +550,10 @@ class KernelDensity(NumericModeMixin):
         ValueError
             For a non-finite value or invalid ``sample_weight``.
         """
-        return _NATIVE(self, "family_xn_kde_fit", (None, X, sample_weight),
+        return _NATIVE(self, "family_xn_kde_fit", (None, X, sample_weight, y),
                        _NATIVE_CONTEXT)
 
+    @_native_kde_method
     def score_samples(self, X):
         """Log density at each row of ``X``.
 
@@ -572,6 +575,7 @@ class KernelDensity(NumericModeMixin):
     # The per-row float32 scores are summed in the binding's fixed order (`core/device_fold.mojo`: on the
     # device on a GPU install, the same order on the host column); lane pyglue-numeric replaced a host
     # sum of the downloaded scores.
+    @_native_kde_method
     def score(self, X, y=None):
         """Total log density of ``X``: the sum of :meth:`score_samples`.
 
