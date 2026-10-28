@@ -290,3 +290,19 @@ compile, cross-vendor identity or performance verification is claimed. Several
 adversarial/behavioral fixtures are authored but UNRUN. Latest full public
 owner/codec/parallel closure still needs focused compilation after remaining
 implementation. No rented box, active compile or watcher owned by this peer.
+
+FINAL CHECKPOINT UPDATE — PUSH FAILED, NO SOURCE MUTATIONS
+Handoff documentation was committed locally as 69695b37cc. The ordinary branch
+push returned exit1; it did NOT publish the latest branch. Full retained log:
+/Users/andrewhendel/mojolearn-evidence/peer3-corpus-tape-moe-20261027/compaction-handoff-push.log
+The no_compute_in_shells hook reports 25 unrecognized loop annotations:
+2 in bindings/causal_lm_construct.mojo, 16 in causal_operation_owner.mojo,
+7 in parallel_causal_native.mojo. Examples use driver-loop(...) where the hook
+expects driver-loop: over ..., or small-loop: ... where it expects
+small-loop(...). Review each loop's actual role and repair its accurate comment
+format, then retry ordinary push. Do not bypass hooks or add baseline debt.
+The kernel-Python hook reported 0 kernel .mojo Python imports. This is a source
+guard result only. No source was changed to address push failure before
+compaction; this update is documentation only. Commit this update separately.
+First resume action: repair these precise hook failures alongside the pending
+constructor work, then push the branch and continue planned focused compiles.
