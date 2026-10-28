@@ -3087,7 +3087,14 @@ def race_data_sha(ctx, race, box):
     if race["family"] == "neural" and race.get("dataset") != "higgs":
         w = ((box.get("mojolearn") or {}).get("wheel") or {}).get("sha256")
         v = (box.get("mojolearn") or {}).get("version")
-        return "mojolearn-sources:%s" % (w or v) if (w or v) else None
+        if w or v:
+            return "mojolearn-sources:%s" % (w or v)
+        # A source tree on PYTHONPATH (lq, six_lane_grid_bb) has no dist-info:
+        # name the tree's commit instead, a dirty tree as <sha>+dirty.
+        c = (box.get("repo") or {}).get("commit") or ctx.get("commit") or repo_commit()
+        if c and c != "unknown":
+            return "mojolearn-sources:git %s" % (c[:-len("-dirty")] + "+dirty" if c.endswith("-dirty") else c)
+        return None
     files = race_data_files(ctx, race)
     if not files:
         return "synthetic (seed %d)" % SEED

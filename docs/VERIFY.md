@@ -1269,3 +1269,56 @@ It checks fold models, predictions and scores across device orderings and
 repetitions, retains intermediate evidence, and validates installed file bytes.
 Like the distributed suite, it requires the optional NumPy test dependency.
 Physical GPU traces and native sabotage remain separate qualification gates.
+
+## Repository provenance for reference generation (2026-10-28)
+
+The table lives at `python/mojolearn/verify_reference/table.json` in Git and at
+`mojolearn/verify_reference/table.json` inside the wheel. Installed verification
+reads that packaged table; it does not fetch local evidence folders or GitHub.
+
+The maintainer `verify --all --emit-reference` path now requires a MojoLearn
+checkout and inputs committed under `bench/results/identity_break/`. Copy raw
+records there and commit them before generating a candidate table. Untracked,
+modified, external and symlink record inputs are refused. Generated citations
+include the input file's SHA-256. Existing fixture/revision, vendor, partial-run
+and sabotage admission rules are unchanged; evidence may still be reused when
+those rules admit it. This adds no work to ordinary installed verification.
+
+Wheel packaging requires verification inputs from the selected MojoLearn Git
+commit. The macOS wheel builder, Linux core/combined packer and Python overlay
+packer check the table, cards, portable and CTR models, training columns,
+verification modules, harness copies and historical inventory. Missing, modified
+or untracked payload inputs are refused. Exported macOS staging trees are checked
+against the original repository and frozen commit. Overlays replace verification
+resources from the source tree and discard stale resources inherited from their
+base wheel. No evidence-folder path is read to obtain the packaged references.
+
+`python3 tools/verification_repository.py --commit HEAD --payload-only` runs
+this payload check independently. Without `--payload-only`, it additionally
+audits the table's historical raw-record citations. That deeper retention audit
+is separate: citations are metadata, not packaging inputs. Passing either check
+does not establish numerical correctness or release qualification. Native
+libraries and vendor runtimes are separately built or retained artifacts with
+their own build proofs.
+
+The 2026-10-28 repair imported three historical AMD/NVIDIA/PTX records under
+`bench/results/identity_break/2026-10-26-0858-retained/` and added checksums to
+the 25 currently resolvable citations. All table values and indices were
+preserved. Three of the table's 28 records remain unresolved:
+
+- `apple-mac.lanes-019f3adf.identical.json`, formerly under
+  `~/mojolearn-evidence/codex-takeover-0859/identity-apple-full-r1/`.
+- `cpu.lanes-b2134a2d.identical.json`, formerly under
+  `~/mojolearn-evidence/codex-takeover-0859/identity-cpu-full-r1/shard0/`.
+- `cpu.lanes-93ca423a.identical.json`, formerly under
+  `~/mojolearn-evidence/codex-takeover-0859/identity-cpu-full-r1/shard1/`.
+
+Their recorded source commit is `640adbe7ea09098c644926c845d2719f05a70f34`.
+The original paths, tracked Git history and searched local archives did not
+provide those files. This is not proof that no remote copy exists. The audit
+must fail until their original evidence is recovered and committed; do not
+reconstruct raw records from the table, delete their cells, or substitute a
+new run as though it were the original. This historical retention gap does not
+prevent packaging the already committed table. The wheel continues comparing
+against exactly the values recorded in that table, without reading the original
+records, contacting storage, or adding checks to normal verification runs.
