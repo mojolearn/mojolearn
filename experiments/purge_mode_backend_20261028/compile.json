@@ -1,0 +1,24 @@
+{
+  "exit_code": 0,
+  "seconds": 3,
+  "source_commit": "47564f56ef9c18ff260f1a6313aa2e6e4640f1db",
+  "entry": "experiments/purge_mode_backend_20261028/compile.mojo",
+  "command_script": "/Users/andrewhendel/mojolearn-evidence/purge-mode-backend-20261028/compile2/compile-command.sh",
+  "command": "mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/purge_mode_backend_20261028/compile.mojo",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "compiler_workers": 10,
+  "host": "Mac (compile_slot.sh, nice 19)",
+  "log": "/Users/andrewhendel/mojolearn-evidence/purge-mode-backend-20261028/compile2/build.log",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/purge-mode-backend-20261028/compile2/source.tar.gz",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/purge-mode-backend-20261028/compile2/_mojolearn_purge_mode_backend_compile.so",
+  "artifact_sha256": "5d8130bed9197c032192c5a8ad6ab9d5f50080f483387e8a3f46a87e94b04360",
+  "earlier_pass": {
+    "source_commit": "4fe4a53c9d",
+    "seconds": 13,
+    "log": "/Users/andrewhendel/mojolearn-evidence/purge-mode-backend-20261028/compile1/build.log",
+    "note": "same roots before merging origin/main 1ec42c1502 (samba/prefill only)"
+  },
+  "runtime_executed": false,
+  "scope": "public_attribute_c + public_attribute_generic_c, full_reset_params_c (connected schemas + generic rebuild), full_reset_constructor_c, backend_public_c, numeric_profile_c; CPU/identical compile only",
+  "not_covered": "Python glue execution (_mode/_native_* connections, __init__ rebinding, MLP/RNN constructor bodies, STL/VAR recipes); tokenizer host registration of public_attribute_generic_native_call not rebuilt (merged/product bindings); no runtime, identity or GPU check"
+}
