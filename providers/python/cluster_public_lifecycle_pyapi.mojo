@@ -26,6 +26,18 @@ from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 
 
+def _scalar_state(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    if depth > 8:
+        raise Error("TypeError: cluster scalar state exceeds its native nesting depth")
+    var b = native_loaded_module("builtins")
+    var kind = py_type(value)
+    if kind is b.tuple or kind is b.list:
+        for i in range(len(value)):  # driver-loop: native partial-fit seed and scalar state words
+            _scalar_state(value[i], context, depth + 1)
+    else:
+        host_inference_scalar(value, context)
+
+
 def _admit_model(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var module_fields = py_fields(native_loaded_module("mojolearn._native_public_attributes"))
@@ -62,15 +74,25 @@ def _admit_model(model: PythonObject, context: PythonObject) raises -> PythonObj
             if cpy.lib.get_function[Int32]("PyCallable_Check")(value._obj_ptr) != 0:
                 raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers or use 'k-means++' or 'random'")
         classical_admit_value(value, context)
-        if not py_contains(context["cluster_public_array_parameters"], name):
+        if (not py_contains(context["cluster_public_array_parameters"], name)
+                or (py_type(value) is py_get(context, "ndarray") and Int(py=value.ndim) == 0)):
             # Exact ndarray admission alone would still permit an object-dtype
             # scalar to execute Python __float__/__int__ during old-owner casts.
             host_inference_scalar(value, context, True)
-    var learned = Python.tuple("cluster_centers_", "labels_", "n_features_in_", "counts_", "_partial_init", "_partial_batch", "_partial_state", "_tree_nodes", "_tree_centers", "weights_", "means_", "precisions_cholesky_", "log_det_chol_", "_log_consts", "_full_pchol", "_warm")
+    var learned = Python.tuple("cluster_centers_", "labels_", "n_features_in_", "counts_", "_partial_init", "_partial_batch", "_partial_state", "_tree_nodes", "_tree_centers", "weights_", "means_", "precisions_cholesky_", "log_det_chol_", "_log_consts", "_full_pchol", "_warm", "n_steps_", "lower_bound_")
     for i in range(len(learned)):  # driver-loop: admit only fitted storage the cluster owners actually consume
         if py_contains(fields, learned[i]):
             var value = _lookup(model, learned[i], fields, plan, attributes)
             classical_admit_value(value, context)
+            var name = String(learned[i])
+            if name == "n_features_in_" or name == "_partial_batch" or name == "n_steps_" or name == "lower_bound_":
+                host_inference_scalar(value, context)
+            elif name == "_partial_init" or name == "_partial_state":
+                _scalar_state(value, context)
+            elif name == "_warm" and value is not None:
+                if (py_type(value) is not b.tuple and py_type(value) is not b.list) or len(value) != 2:
+                    raise Error("TypeError: cluster warm state requires its native key and array pair")
+                _scalar_state(value[0], context)
     return fields
 
 
