@@ -155,26 +155,10 @@ def connect_sequence_device(training, device):
     # glue: connect sequence buffer/optimizer ABI symbols once at module import
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
-    from _contextvars import ContextVar
     from . import _backend
-    from ._native_classical_warnings import connect_warnings
-    import re
+    from ._native_array_protocol_bridge import connect_array_protocol
     context = training._OPT_CONTEXT
-    context["sequence_attribute_error"] = AttributeError  # glue: fixed native missing-member category
-    context["sequence_print_context_type"] = ContextVar
-    context["sequence_print_context_get"] = ContextVar.get
-    warning = connect_warnings()
-    code = device.SequenceDeviceTensor.__array__.__code__
-    warning.update(warning_filename=code.co_filename,
-                   warning_lineno=max(line for _, _, line in code.co_lines() if line is not None),  # glue: retain the public array-protocol warning location
-                   warning_module=device.__name__, warning_source_line="")
-    context["sequence_array_warnings"] = warning
-    context["sequence_dtype_pattern"] = re.compile(r"[<>=|]?(?:[?bBhHiIuUlLqQpPnNefdgFDGOSTVcmM][0-9]*(?:\[[0-9a-zA-Z]+\])?|(?:datetime64|timedelta64)(?:\[[0-9a-zA-Z]+\])?)")
-    context["sequence_dtype_fullmatch"] = re.Pattern.fullmatch
-    context["sequence_dtype_match"] = re.Pattern.match
-    context["sequence_dtype_compact"] = re.compile(r"([<>|=]?)( *[(]?[ ,0-9]*[)]? *)([<>|=]?)([A-Za-z0-9.?]*(?:\[[a-zA-Z0-9,.]+\])?)")
-    context["sequence_dtype_separator"] = re.compile(r"\s*,\s*")
-    context["sequence_dtype_space"] = re.compile(r"\s+$")
+    context.update(connect_array_protocol(device.SequenceDeviceTensor.__array__, device.__name__))
     context["sequence_device_class"] = device.SequenceDeviceTensor
     context["sequence_finalizer_types"] = (tuple, dict, int, BuiltinFunctionType)
     slots = tuple(device.SequenceDeviceTensor.__slots__)

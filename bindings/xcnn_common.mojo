@@ -44,12 +44,19 @@ def xcnn_builtins() raises -> PythonObject:
     return native_loaded_module("builtins")
 
 
-def xcnn_numpy(context: PythonObject) raises:
-    """NumPy loaded and its native types connected: the layers return
-    ndarrays, as `_np()` (`require_numpy`) made them."""
+def xcnn_connect_numpy(context: PythonObject) raises:
+    """Connect optional already-loaded native metadata without requiring arrays."""
     classical_connect_numpy(context)
+    var admission = py_get(context, "admission_context")
+    if admission is not None:
+        classical_connect_numpy(admission)
+
+
+def xcnn_numpy(context: PythonObject) raises:
+    """Host-array creation and readback require the optional NumPy dependency."""
+    xcnn_connect_numpy(context)
     if py_get(context, "ndarray") is None:
-        raise Error("ImportError: CNN operations require NumPy; install it before importing mojolearn")
+        raise Error("ImportError: CNN host arrays require NumPy; install NumPy to use this operation")
 
 
 def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -322,6 +329,7 @@ def xcnn_module_entries(module: PythonObject, context: PythonObject) raises -> P
 
 def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`DeviceTensor.numpy()`: the tensor's words as a host float32 array."""
+    xcnn_numpy(context)
     xcnn_tensor_admit(value, context)
     var shape = xcnn_shape(value)
     var handle = xcnn_tensor_slot(value, "h", context)
@@ -348,16 +356,19 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
 
 def xcnn_host_f32(shape: List[Int], context: PythonObject) raises -> PythonObject:
     """A new float32 ndarray of `shape`."""
+    xcnn_numpy(context)
     return sequential_array(xcnn_tuple(shape), context["float32"], context)
 
 
 def xcnn_host_i32(shape: List[Int], context: PythonObject) raises -> PythonObject:
+    xcnn_numpy(context)
     return sequential_array(xcnn_tuple(shape), context["int32"], context)
 
 
 def xcnn_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_f32(x, name)`: `np.asarray(x)`, float32 only (refused by name,
     never converted), C-contiguous."""
+    xcnn_numpy(context)
     if not xcnn_is_t(value, context):
         sequential_admit_value(value, context)
     var a = xcnn_host_of(value, context) if xcnn_is_t(value, context) else sequential_input(value, context)

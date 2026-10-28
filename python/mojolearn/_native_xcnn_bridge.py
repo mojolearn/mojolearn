@@ -3,8 +3,8 @@
 (bindings/xcnn_native.mojo). A migrated layer method is one call,
 `_XCNN(self, "<operation>", args, _XCNN_CONTEXT)`; Python here only connects
 the compiled `_mojolearn_x_cnn` entries of both numeric modes, the switch
-words the binary reports and the layer classes, once, at import. NumPy is
-not imported here: the native call connects it when a layer runs."""
+words the binary reports and the layer classes, once, at import. NumPy is optional during setup; native host-array
+operations require its already loaded native metadata."""
 
 _ENTRY = None
 _CONTEXT = None
@@ -130,7 +130,10 @@ def connect():
             raise TypeError("the CNN layers require the compiled xcnn_native_call entry")
         # Import setup is outside product execution; the native owner only
         # connects already loaded native NumPy metadata.
-        import numpy
+        try:
+            import numpy
+        except ImportError:
+            pass  # glue: scalar-only metadata operations do not require NumPy
         from ._native_classical_bridge import _state_context
         context = _state_context()
         # Shared neural metadata admission expects its native scalar tables
@@ -162,14 +165,19 @@ def register(**tables):
             context["xcnn_tensor_slots"] = {
                 name: vars(cls)[name] for name in ("b", "shape", "h", "_host", "_base")  # glue: connect fixed native slot identities at import
             }  # glue: retain native slot identities during package connection
-            from ._x_sequence_device import _SEQ_CONTEXT
-            context["xcnn_array_context"] = dict(_SEQ_CONTEXT)
-            warning = dict(_SEQ_CONTEXT["sequence_array_warnings"])
-            code = cls.__array__.__code__
-            warning.update(warning_filename=code.co_filename,
-                           warning_lineno=code.co_firstlineno,
-                           warning_module=cls.__module__, warning_source_line="")
-            context["xcnn_array_context"]["sequence_array_warnings"] = warning
+            import sys
+            from types import ModuleType
+            from ._native_classical_bridge import _numpy_free_context
+            from ._native_array_protocol_bridge import connect_array_protocol
+            input_context = _numpy_free_context()
+            input_context["native_module_type"] = ModuleType
+            array_context = connect_array_protocol(cls.__array__, cls.__module__,
+                                                   warning_lineno=cls.__array__.__code__.co_firstlineno)
+            array_context.update(module_type=ModuleType, modules=sys.modules,
+                                 input_context=input_context,
+                                 container_types=(list, tuple, dict, set, frozenset, memoryview),
+                                 scalar_types=(type(None), bool, int, float, complex, str, bytes))
+            context["xcnn_array_context"] = array_context
             from types import BuiltinFunctionType, MethodType
             from .tokenizer import _binding
             descriptor = _binding()._module.classical_attribute_descriptor
