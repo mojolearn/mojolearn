@@ -444,16 +444,25 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
     >>> y = np.arange(1000, dtype=np.float32)
     >>> Xb, yb = mojolearn.resample.resample(X, y, n_samples=500)
     """
-    return _NATIVE(None, "family_rs_resample", (_backend.binding("_mojolearn_resample", numeric_mode), arrays, replace, n_samples, random_state, stratify,
+    return _NATIVE(None, "family_rs_resample", (None, arrays, replace, n_samples, random_state, stratify,
                    sample_weight, numeric_mode), _NATIVE_CONTEXT)
+
+
+# Optional ndarray result storage is connected during package import.
+# Product operations never import NumPy or invoke an array conversion hook.
+try:
+    import numpy as _native_numpy_storage
+except ImportError:
+    _native_numpy_storage = None
 
 
 # The compiled owner of this module's public functions
 # (bindings/linalg_ops_resample.mojo), connected once at import: each public
-# function is one native call, handed the resample binding of its numeric mode.
+# function is one native call; the native owner selects the numeric binding.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
-_native_family_bridge.tables(family_rs_state=globals(),
+_native_family_bridge.tables(family_rs_codes={"STATISTICS": dict(STATISTICS), "METHODS": dict(METHODS),
+                                              "ALTERNATIVES": dict(ALTERNATIVES), "INTEGRANDS": dict(INTEGRANDS)},
                              family_rs_result_classes=(BootstrapResult, PermutationTestResult, MonteCarloResult, ConfidenceInterval))
 _native_family_bridge.connect_bindings("_mojolearn_resample")
 from ._native_owner_lifetime import connect_owner_context as _connect_owner_context
