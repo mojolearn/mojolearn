@@ -131,7 +131,7 @@ def connect_classes(package):
     # tables capture method identities; lazy imports admit only new classes.
     global _CONTEXT
     import sys
-    from . import _mode, _cholesky_impl
+    from . import _mode, _cholesky_impl, _svm_impl
     from ._native_classical_bridge import _layout, _numpy_free_context
     from .tokenizer import _binding
 
@@ -144,7 +144,10 @@ def connect_classes(package):
             raise TypeError('public attributes require compiled native entries')
         context = _numpy_free_context()
         context.update(native_module_type=ModuleType, plans={}, pending={}, missing=object(),
-                       property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet'},
+                       property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet',
+                                         vars(_svm_impl.SVC)['coef_']: 'svm_svc_coef',
+                                         vars(_svm_impl.SVR)['coef_']: 'svm_svr_coef'},
+                       svm_owner=(_svm_impl._NATIVE, _svm_impl._NATIVE_CONTEXT),
                        stl_connected=False, archive_finalizer_entry=finalizer)
         context['descriptor'] = factory(MethodType(entry, context))
         _CONTEXT = context
@@ -154,6 +157,10 @@ def connect_classes(package):
     neighbor_availability = _neighbor_availability(package)
     neighbor_availability.update(_hierarchy_availability(package))
     neighbor_availability.update(_density_availability(package))
+    neighbor_availability[_svm_impl.SVC] = {
+        name: ((vars(vars(_svm_impl.SVC)[name])['check'],), 'svm_probability')
+        for name in ('predict_proba', 'predict_log_proba')  # glue: two fixed native availability schemas
+    }
     stl_module = sys.modules.get(package.__name__ + '._x_sequence_stl')
     if not context['stl_connected'] and type(stl_module) is ModuleType:
         context['property_schemas'][vars(vars(stl_module)['STL'])['config']] = 'stl_config'

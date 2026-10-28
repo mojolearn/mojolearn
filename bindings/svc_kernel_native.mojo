@@ -24,6 +24,10 @@
 # no resident entry for them.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
+from bindings.classical_pandas import classical_admit_value
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.native_owner_lifetime import native_release_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_is_array, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
@@ -60,7 +64,7 @@ comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 63
 
 from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svr_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from std.os import getenv
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
 from providers.python.neural_descriptor_pyapi import (
@@ -115,11 +119,48 @@ def _entry(binding: PythonObject, name: String, context: PythonObject) raises ->
 # ---------------------------------------------------------------- parameters
 
 
+def _svm_integral(value: PythonObject, context: PythonObject) raises -> Bool:
+    var kind = py_type(value)
+    if kind is native_loaded_module("builtins").int:
+        return True
+    var scalars = context["scalar_types"]
+    for i in range(len(scalars)):  # driver-loop: exact connected primitive types instead of Python numbers ABC callbacks
+        if kind is scalars[i]:
+            var letter = String(value.dtype.kind)
+            return letter == "i" or letter == "u"
+    return False
+
+
+def _svm_parameter_admission(fields: PythonObject, classifier: Bool, context: PythonObject) raises:
+    var b = native_loaded_module("builtins")
+    var names = Python.tuple("kernel", "degree", "gamma", "coef0", "C", "tol", "cache_size", "max_iter", "nochange_steps", "verbose", "output_type")
+    for i in range(len(names)):  # driver-loop: scalar controls before native conversion, comparison or truth slots
+        host_inference_scalar(fields[names[i]], context, True)
+    if classifier:
+        for name in ["probability", "random_state", "decision_function_shape", "break_ties"]:  # small-loop(fixed classifier controls)
+            host_inference_scalar(fields[name], context, True)
+        var weights = fields["class_weight"]
+        if py_type(weights) is b.dict:
+            var items = py_call(b.list, weights.items())
+            for i in range(len(items)):  # driver-loop: class-weight hashing/comparison cannot invoke Python scalar protocols
+                host_inference_scalar(items[i][0], context)
+                host_inference_scalar(items[i][1], context)
+        else:
+            host_inference_scalar(weights, context)
+    else:
+        host_inference_scalar(fields["epsilon"], context)
+    var keys = py_call(b.list, fields)
+    for i in range(len(keys)):  # driver-loop: validation can replace checked working metadata only after old owners pass
+        if String(keys[i]).startswith("_hp_"):
+            native_release_admit(fields[keys[i]], context)
+
+
 def _svm_validate(model: PythonObject, fields: PythonObject, classifier: Bool, context: PythonObject) raises:
     """`SVC._validate_params` / `SVR._validate_params`: the refusals in the
     Python's order and wording, then the checked `_hp_*` working values."""
+    _svm_parameter_admission(fields, classifier, context)
     var b = svc_builtins()
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     var head = String("mojolearn SVC: ") if classifier else String("mojolearn SVR: ")
     var kernels = context["family_svc_kernels"]
     var refused = context["family_svc_refused" if classifier else "family_svr_refused"]
@@ -155,7 +196,7 @@ def _svm_validate(model: PythonObject, fields: PythonObject, classifier: Bool, c
     var name = String(k)
     if name == "poly":
         var boolean = family_isinstance(degree, b.bool)
-        if boolean or not family_isinstance(degree, context["family_svc_integral"]):
+        if boolean or not _svm_integral(degree, context):
             raise Error("TypeError: " + head + "degree=" + family_repr(degree) + " must be an integer; the "
                         + "polynomial power is an ascending repeated product (DEVIATION 1663)")
         degree = family_call(b.int, degree)
@@ -231,7 +272,7 @@ def _svm_validate(model: PythonObject, fields: PythonObject, classifier: Bool, c
         # read only by probability's folds: accepted and unused without it
         random_state = PythonObject(None)
     if random_state is not None:
-        var bad = family_isinstance(random_state, b.bool) or not family_isinstance(random_state, context["family_svc_integral"])
+        var bad = family_isinstance(random_state, b.bool) or not _svm_integral(random_state, context)
         if not bad:
             var value = family_call(b.int, random_state)
             bad = (Bool(py=family_call(operator.lt, value, PythonObject(0)))
@@ -606,7 +647,7 @@ def _platt(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, c
     """`SVC._fit_probability`: libsvm's `svm_binary_svc_probability` per class
     pair, five shuffled folds, then `sigmoid_train`; sets probA_ / probB_."""
     var b = svc_builtins()
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     if py_contains(fields, PythonObject("_prob_ab")):
         _ = family_call(fields.pop, PythonObject("_prob_ab"), PythonObject(None))
     if not svc_truthy(svc_field(fields, "_hp_probability")):
@@ -928,7 +969,9 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var settings = _svc_fit_settings(fields, gamma, n_cols, context)
     if labels is None:
         _fit_ovo(fields, binding, x_meta, classes, pair, gamma, c_rows, context, settings, native)
-        _svc_publish_dispatch(fields, native)
+        if native is not None and py_contains(fields, "_native_svc_dispatch"):
+        native_release_admit(fields["_native_svc_dispatch"], context)
+    _svc_publish_dispatch(fields, native)
         _ = x^
         _ = x_meta  # retain captured storage owners through the last native use
         _ = c_rows^
@@ -970,6 +1013,8 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         _platt(fields, binding, x_meta, codes, gamma, c_rows, 2, context, settings, native)
     elif py_contains(fields, PythonObject("_prob_ab")):
         _ = family_call(fields.pop, PythonObject("_prob_ab"), PythonObject(None))
+    if native is not None and py_contains(fields, "_native_svc_dispatch"):
+        native_release_admit(fields["_native_svc_dispatch"], context)
     _svc_publish_dispatch(fields, native)
     _ = x^
     _ = x_meta  # retain captured storage owners through the last native use
@@ -1008,6 +1053,8 @@ def _run(fields: PythonObject, binding: PythonObject, source: PythonObject, pred
     _ = out  # keep the Python object alive through the native call above
     _ = q^
     _ = q_meta  # retain captured storage owners through the last native use
+    if native is not None and py_contains(fields, "_native_svc_dispatch"):
+        native_release_admit(fields["_native_svc_dispatch"], context)
     _svc_publish_dispatch(fields, native)
     return out
 
@@ -1034,6 +1081,8 @@ def _pair_decisions(fields: PythonObject, binding: PythonObject, source: PythonO
         _ = dec  # keep the Python object alive through the native call above
     _ = q^
     _ = q_meta  # retain captured storage owners through the last native use
+    if native is not None and py_contains(fields, "_native_svc_dispatch"):
+        native_release_admit(fields["_native_svc_dispatch"], context)
     _svc_publish_dispatch(fields, native)
     return dec
 
@@ -1331,34 +1380,66 @@ def _svr_score(fields: PythonObject, binding: PythonObject, source: PythonObject
     return PythonObject(1.0 - ss_res / ss_tot)
 
 
+def _coef_snapshot(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
+    if py_type(value) is not context["array_class"] and py_type(value) is not py_get(context, "ndarray"):
+        raise Error("TypeError: " + name + " requires an admitted native array")
+    classical_admit_value(value, context)
+    var shape = array_shape_once(value, context)
+    var captured = array_metadata_once(value, shape^, name, context)
+    if len(captured.shape) != 2 or not captured.f32_c() or not captured.native_byte_order:
+        raise Error("TypeError: " + name + " requires a contiguous native float32 matrix")
+    return captured^
+
+
 def _linear_coef(fields: PythonObject, binding: PythonObject, classifier: Bool,
                  context: PythonObject, native: PythonObject) raises -> PythonObject:
-    # SVC/SVR.coef_ uses the same svc_dual_gemv operation as its former
-    # Python property. RFE reaches it directly, never the property hook.
+    # Public coef_ and composed RFE use the same admitted metadata and GEMV.
+    var b = native_loaded_module("builtins")
     var name = String("SVC" if classifier else "SVR")
     if not svc_has(fields, "dual_coef_"):
         raise Error("AttributeError: mojolearn " + name + ": call fit() first")
+    if py_type(fields["_hp_kernel"]) is not b.str:
+        raise Error("TypeError: fitted SVM kernel requires an exact native string")
     if String(fields["_hp_kernel"]) != "linear":
         raise Error("AttributeError: mojolearn " + name + ": coef_ is only available for kernel='linear'")
-    var pairs = py_get(fields, "_pairs") if classifier else PythonObject(None)
-    var count = len(pairs) if pairs is not None else 1
+    host_inference_scalar(fields["n_features_in_"], context)
     var d = Int(py=fields["n_features_in_"])
+    if d < 0:
+        raise Error("ValueError: SVM feature count cannot be negative")
+    var pairs = py_get(fields, "_pairs") if classifier else PythonObject(None)
+    if pairs is not None and py_type(pairs) is not b.list and py_type(pairs) is not b.tuple:
+        raise Error("TypeError: SVM pair state requires an exact list or tuple")
+    var count = len(pairs) if pairs is not None else 1
+    var duals = List[ArrayMetadata]()
+    var supports = List[ArrayMetadata]()
+    for row in range(count):  # driver-loop: capture each fitted buffer exactly once before execution
+        var pair = pairs[row] if pairs is not None else fields
+        if py_type(pair) is not b.dict:
+            raise Error("TypeError: SVM pair state requires an exact dictionary")
+        var keys = py_call(b.list, pair)
+        for i in range(len(keys)):  # driver-loop: reject key equality/hash hooks before field lookups
+            if py_type(keys[i]) is not b.str:
+                raise Error("TypeError: SVM fitted state requires exact string keys")
+        var dual = _coef_snapshot(pair["dual" if pairs is not None else "dual_coef_"], "dual_coef_", context)
+        var sv = _coef_snapshot(pair["sv" if pairs is not None else "support_vectors_"], "support_vectors_", context)
+        if dual.shape[0] != 1 or dual.shape[1] != sv.shape[0] or sv.shape[1] != d:
+            raise Error("ValueError: SVM coefficient and support-vector shapes disagree")
+        duals.append(dual^)
+        supports.append(sv^)
     var out = family_array(Python.tuple(count, d), "<f4", context)
-    for row in range(count):  # driver-loop: the fitted one-vs-one machines
-        var dual = pairs[row]["dual"] if pairs is not None else fields["dual_coef_"]
-        var sv = pairs[row]["sv"] if pairs is not None else fields["support_vectors_"]
-        var n = Int(py=sv.shape[0])
+    var address = Int(py=classical_address(out))
+    var entry = neural_descriptor_entry(binding, "svc_dual_gemv", False) if native is None else PythonObject(None)
+    for row in range(count):  # driver-loop: one existing GEMV per fitted pair; captured owners remain live
+        var n = supports[row].shape[0]
         if d > 0 and n > 0:
             if native is not None:
-                _ = svc_descriptor_execute(native, 11, [_addr(dual), _addr(sv), _addr(out) + 4 * row * d],
+                _ = svc_descriptor_execute(native, 11, [duals[row].source.addr, supports[row].source.addr, address + 4 * row * d],
                     [n, d, 1 if pairs is not None else 0], [])
             else:
-                _ = family_call(_entry(binding, "svc_dual_gemv", context), classical_address(dual),
-                                classical_address(sv), Python.list(n, d, 1 if pairs is not None else 0),
-                                PythonObject(_addr(out) + 4 * row * d))
-        _ = dual
-        _ = sv
-        _ = out
+                _ = family_call(entry, PythonObject(duals[row].source.addr), PythonObject(supports[row].source.addr),
+                    Python.list(n, d, 1 if pairs is not None else 0), PythonObject(address + 4 * row * d))
+    _ = duals
+    _ = supports
     return out
 
 
@@ -1372,6 +1453,8 @@ def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObj
     var fields = py_fields(model)
     var native = _svc_provider(args[0])
     var result = _svc_kernel_operation(model, operation, args, context, fields, native)
+    if native is not None and py_contains(fields, "_native_svc_dispatch"):
+        native_release_admit(fields["_native_svc_dispatch"], context)
     _svc_publish_dispatch(fields, native)
     return result
 
