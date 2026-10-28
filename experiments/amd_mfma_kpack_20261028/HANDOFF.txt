@@ -44,3 +44,11 @@ One run per arm (reps 1, rounds 1, pairs 1). The bindings to build are build_lin
   lq add nv CMD lane/amd-mfma amfk-A-nv MOJOLEARN_GRID_TAG=amfk-A-nv .pixi/envs/default/bin/python tools/six_lane_grid_bb.py --tag amfk-A-nv --vendor nvidia --race neural:gemm:gaussian --race neural:gemm-bf16:gaussian --race neural:lm-train-step:bytes --race neural:lm-forward:bytes BUILDS=build_linalg,build_byte_lm
 The NV pair is a null control: the arm compiles out on NVIDIA. Identity check: on AMD, each race's output hash must be equal between amfk-A-amd (OFF) and amfk-B-amd (ON); arm B AMD must equal NV. No `lq add ID` line: ID covers algos lanes only, and these are neural rows.
 Pending / held: the A/B above; bindings not compiled; verdict and the EXPERIMENTS row stay pending until the A/B lands. Separately (not this lane): the shipped MFMA16 and NV_STEP_KPACK defaults have never been measured; queue their _OFF arms the same way.
+
+## Self-merge gate (2026-10-28)
+- Pod: mojolearn-cpu-amd-mfma-merge (32 vCPU, 60-min lease), reaped and verified gone, $0.25. On tree 1dac30c3ea:
+  gfx942 define-on build rc=0; pod smoke 46/46 host families, import smoke rc=0 (missing_bindings 0), tier_dir probe rc=0.
+- CPU root: not applicable (GPU-only check program; the entry needs a GPU device context). Earlier Mac compiles are superseded: no compiles on the Mac.
+- origin/main (84e2bc7dda) merged at 29f53ef561: EXPERIMENTS.md conflict resolved additively (both rows kept). On that tree:
+  test_no_python_runtime rc=0, test_tombstones_preserved rc=0.
+- The A/B (nv + amd, one run per arm) belongs to the ab-runner after merge.

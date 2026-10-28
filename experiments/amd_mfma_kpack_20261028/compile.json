@@ -171,5 +171,18 @@
   ],
   "gfx942": "not re-run after merge"
  },
- "arm_convention": "A = define OFF, B = define ON"
+ "arm_convention": "A = define OFF, B = define ON",
+ "self_merge_gate": {
+  "pod": "RunPod CPU pod mojolearn-cpu-amd-mfma-merge (32 vCPU, affinity 32, cgroup max), 60-min lease + Mac dead-man; teardown verified gone; billed 951 s, $0.2536",
+  "pod_tree": "1dac30c3ea (lane head on origin/main ebcd7f9477)",
+  "gfx942_define_on": "rc=0 (gemm_workspace_reuse_check.mojo, --target-accelerator gfx942, -D MOJOLEARN_COLUMN_AMD, define on); sha256 d9b61d55b19fc6f14e579aecca9b91a62ddf7712a0bb30a0b06c84e7bb24f0b6",
+  "cpu_root": "not applicable (GPU-only check program): the entry creates a DeviceContext, so a build with no named accelerator on a GPU-less pod fails to instantiate in std/gpu/host/info.mojo for both arms (rc=1, logs kept); coordinator ruling 2026-10-28",
+  "pod_smoke": "INTEG_BUILD total=46 ok=46; smoke_after rc=0 (missing_bindings 0); probe_tier_dir rc=0",
+  "scripted_gates": {
+   "tree": "29f53ef561 (merge of origin/main a2a47a14b1-era 84e2bc7dda; EXPERIMENTS.md conflict resolved additively)",
+   "test_no_python_runtime": "rc=0",
+   "test_tombstones_preserved": "rc=0 (full worktree checkout)"
+  },
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/amd-mfma-20261028/pod/out"
+ }
 }
