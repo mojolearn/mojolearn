@@ -54,7 +54,7 @@ def neural_block_owner(mut mods: NativeModules, block: PythonObject, context: Py
             raise Error("neural block: saved arithmetic profile differs from binding")
         py_setitem(fields, "_arithmetic_profile", next_profile)
         py_setitem(fields, "_arithmetic_profile_mode", want_mode)
-        py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, bindings[kind], "transformer_arithmetic_profile_changed")())
+        py_setitem(fields, "_arithmetic_profile_changed", PythonObject(Bool(py=_native_function(mods, bindings[kind], "transformer_arithmetic_profile_changed")())))
         mods.released()
     var owner = py_call(mods.module("types").SimpleNamespace)
     py_setattr(owner, "_native_block_fields", Python.list(fields))
@@ -526,7 +526,7 @@ def neural_training_entries(mut mods: NativeModules, fields: PythonObject, conte
             raise Error("RuntimeError: saved transformer arithmetic profile differs from training binding")
         py_setitem(fields, "_arithmetic_profile", profile)
         py_setitem(fields, "_arithmetic_profile_mode", mode)
-        py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, entries, "transformer_arithmetic_profile_changed")())
+        py_setitem(fields, "_arithmetic_profile_changed", PythonObject(Bool(py=_native_function(mods, entries, "transformer_arithmetic_profile_changed")())))
         mods.released()
     if family == "transformer":
         var native = PythonObject(None)
@@ -833,7 +833,7 @@ def neural_block_getstate_binding(mut mods: NativeModules, block: PythonObject, 
             raise Error("transformer serialized model arithmetic profile differs from binding")
         py_setitem(fields, "_arithmetic_profile", profile)
         py_setitem(fields, "_arithmetic_profile_mode", mode)
-        py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, entries, "transformer_arithmetic_profile_changed")())
+        py_setitem(fields, "_arithmetic_profile_changed", PythonObject(Bool(py=_native_function(mods, entries, "transformer_arithmetic_profile_changed")())))
         mods.released()
     elif saved is not None:
         raise Error("transformer: a tagged model requires a binding that reports its arithmetic profile")

@@ -597,7 +597,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             py_setitem(fields, "_arithmetic_profile", _native_function(mods, bindings[kind], "transformer_arithmetic_profile")())
             mods.released()
             py_setitem(fields, "_arithmetic_profile_mode", fields["numeric_mode"])
-            py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, bindings[kind], "transformer_arithmetic_profile_changed")())
+            py_setitem(fields, "_arithmetic_profile_changed", PythonObject(Bool(py=_native_function(mods, bindings[kind], "transformer_arithmetic_profile_changed")())))
             mods.released()
         py_setitem(fields, "numeric_profile", profile)
         _ = py_call(shapes.append, py_ints([dm]))
