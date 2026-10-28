@@ -1,0 +1,77 @@
+{
+  "base": "b3239afc49478f01ff338b35121ee749396417aa",
+  "compile": {
+    "exit_code": 0,
+    "scope": "one CPU GBDT host binding, including public native gbdt_fit entry; compilation only, no product execution",
+    "runtime_executed": false,
+    "identity_checked": false,
+    "binary_sha256": "f3fa072313b9ad45c585feb8aa08c9d178e55716821e88141f6b69f44d115e0e",
+    "binary_bytes": 13591688
+  },
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "compiler_version_exit": 0,
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "command": [
+    "sh",
+    "/Users/andrewhendel/mojolearn-wt/cpu-coverage-comments-20261027/tools/with_build_lock.sh",
+    "pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/cpu-coverage-comments-20261027",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/cpu-coverage-comments-20261027/bindings",
+    "/Users/andrewhendel/mojolearn-wt/cpu-coverage-comments-20261027/bindings/entry/entry__mojolearn_gbdt_host.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/gbdt-cpu-weights-20261027/_mojolearn_gbdt_host.so"
+  ],
+  "allocation": {
+    "active_cpus": 10,
+    "logical_cpus": 10,
+    "compiler_jobs": 10,
+    "source": "sysctl hw.activecpu hw.logicalcpu",
+    "saturation_measured": false
+  },
+  "native_source_manifest_sha256": "d3ff7439f0611d2eec7482cd80fbebaa0c45caf3448128eceb8415457dc085df",
+  "changed_native_source_sha256": {
+    "bindings/_mojolearn_gbdt_host.mojo": "f9c77d854b5c5bd41af8f8f9299794d68402d3184eb9b8ab4f57fd36ca8deccc",
+    "gbdt/host/gbdt_host_entries_impl.mojo": "fc8676105b0579104c447764de51e159560602713cd2bd618f20bcbd362b5847",
+    "gbdt/host/gbdt_oracle.mojo": "62b11ee6e6eb4320b1540dbb8a6cb9358d8f74cdc84c548605a63cd7f95f18df",
+    "gbdt/host/gbdt_oracle_depthwise.mojo": "aed0d782cbbdd2b0aa2a5cfe9241e478215a7aa5b4a33a4ce2ff7ed25895a07e"
+  },
+  "static_checks": {
+    "diff-check": {
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/gbdt-cpu-weights-20261027/diff-check.log"
+    },
+    "docs-facts": {
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/gbdt-cpu-weights-20261027/docs-facts.log"
+    },
+    "python-ast": {
+      "exit_code": 0,
+      "scope": "four changed files, parsed without imports or execution"
+    }
+  },
+  "evidence_dir": "/Users/andrewhendel/mojolearn-evidence/gbdt-cpu-weights-20261027"
+}

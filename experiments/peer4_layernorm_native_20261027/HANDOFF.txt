@@ -1,0 +1,39 @@
+LayerNorm and native sequence tensor lifetime — 2026-10-27
+
+Branch: lane/peer4-moe-native-20261027; follows MoE commit 55184f2c9880565de37205fe2109f17eb68bcf47.
+
+Changes
+- Share pinned host-buffer and resident-tensor metadata snapshots in
+  providers/python/sequence_layer_buffer_pyapi.mojo between MoE and LayerNorm.
+- LayerNorm functional/class forward/backward now prepare each input/parameter
+  once, retain its original owner through execution, and reuse captured shape,
+  stride, dtype, address, binding and handle metadata. Backward gradients are
+  allocated in their final public shapes; no Python result reshape runs.
+- Native LayerNorm owner rejects substituted state descriptors before reading
+  its dictionary. Existing fitted-state, parameter-size, shared device-I/O and
+  kept-statistics routes remain native. Removed unused private NumPy runners
+  from _x_sequence_norm.py; every public wrapper remains one binding call.
+- SequenceDeviceTensor finalization now installs a compiled descriptor at import.
+  Its new sequence_tensor_finalize_c delegates to the existing retained native
+  shutdown-safe release operation. Native temporary-tensor decrefs no longer
+  enter the old Python __del__ wrapper. The optimizer bridge guards the installed
+  descriptor identity. Tokenizer host adds one import and one registration.
+- Underlying LayerNorm/MoE arithmetic kernels and defaults remain unchanged.
+
+Compilation and scope
+- compile.json: final selected-owner fixture compiled on Mac CPU, identical,
+  O0, 10 configured compiler workers, exit0,119.85s. It compiles both complete
+  native owners, shared snapshots, selected native finalizer and dispatcher.
+- Full tokenizer host registration/loading is not compiled by this small
+  fixture; its narrow import/registration patch is source-reviewed only.
+- Prior snapshot-only compile also passed; retained at
+  ~/mojolearn-evidence/peer4-moe-native-20261027/attempt6/ (no runtime).
+- Final complete log/binary/source bytes and manifests:
+  ~/mojolearn-evidence/peer4-layernorm-native-20261027/attempt1/.
+- No runtime, identity, GPU, performance verification or rented boxes.
+- Python syntax and git diff source checks passed. Branch push runs all required
+  source guards and retains full output in the evidence directory.
+
+Remaining work
+GPU compilation and actual runtime behavior remain unproven. Parent separately
+assigned MLPInference/SmallMLPTrainer public-boundary work after this batch.

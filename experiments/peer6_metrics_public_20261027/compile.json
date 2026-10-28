@@ -1,0 +1,38 @@
+{
+  "base_commit": "765a269fc4d0e256ddba8a1a8dbe8cf80f16d2a2",
+  "exit_code": 0,
+  "target": "apple-m1 CPU column",
+  "workers": 10,
+  "cpu_allocation": 10,
+  "flags": [
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "fixture": "checks/metrics_public_compile.mojo",
+  "scope": "Full metrics_cls_operation and transitive metric owners, native mode selection and numerical-entry admission; compile only",
+  "runtime_executed": false,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-20261027/metrics-public.so",
+  "artifact_sha256": "0a4b1fbb7606a073e9b157c06a1c4842f4f2015f03be4aa532e165641982f9de",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-20261027/source-bytes.tgz",
+  "source_archive_sha256": "5da23efccdea7bed3704e5ed049e274f5bd687798930be0eec7d26c9b482c74e",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-20261027/source-manifest.json",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-20261027/compile.log",
+  "failed_attempt_log": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-20261027/compile-attempt1.log",
+  "pending": [
+    "GPU target compilation",
+    "Runtime/identity verification excluded by owner",
+    "Resampling migration in next batch",
+    "Whole transitive metric metadata capture-once audit remains open"
+  ]
+}

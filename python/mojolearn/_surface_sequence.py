@@ -90,7 +90,7 @@ FAMILIES = (
             "ops_shape",
             # checkpoints (autograd/model_checkpoint.mojo)
             "model_save_checkpoint", "model_checkpoint_info", "model_load_checkpoint",
-            "ops_program_fit_native", "ops_session_call", "ops_session_initialize", "ops_program_execute",
+            "ops_program_fit_native", "ops_session_call", "ops_session_initialize", "ops_program_public_call", "ops_program_execute",
             "ops_program_inspect", "ops_program_control",
             "ops_distributed_open", "ops_distributed_load", "ops_distributed_fit",
             "ops_distributed_run", "ops_distributed_state", "ops_distributed_residency",

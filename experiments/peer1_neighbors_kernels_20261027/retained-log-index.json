@@ -1,0 +1,42 @@
+{
+  "peer1-audit-worktree.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/peer1-audit-worktree.log",
+    "exit_code": 0
+  },
+  "peer1-audit-commit.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/peer1-audit-commit.log",
+    "exit_code": 0
+  },
+  "peer1-audit-push.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/peer1-audit-push.log",
+    "exit_code": 0
+  },
+  "peer1-ann-query-commit.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/peer1-ann-query-commit.log",
+    "exit_code": 0
+  },
+  "peer1-ann-query-push.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/peer1-ann-query-push.log",
+    "exit_code": 1
+  },
+  "peer1-ann-materialize-commit.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/peer1-ann-materialize-commit.log",
+    "exit_code": 0
+  },
+  "peer1-ann-materialize-push.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/peer1-ann-materialize-push.log",
+    "exit_code": 0
+  },
+  "diff-check-initial.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/diff-check-initial.log",
+    "exit_code": 2
+  },
+  "diff-check-final.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/diff-check-final.log",
+    "exit_code": 0
+  },
+  "ann-query-diff-check.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/ann-query-diff-check.log",
+    "exit_code": 0
+  }
+}

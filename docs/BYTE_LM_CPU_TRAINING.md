@@ -31,17 +31,18 @@ The wrong-gradient build got 8 of 10 arrays wrong and 2 right, and the 2 right
 are the loss: a backward-only corruption leaves the forward exact and then
 propagates from the gradient into both moments and the updated parameters. The
 gate named the tensor, `block0.w_q` element 0, with both bit patterns.
-- The GPU trainer class on a CPU-only install, for the internal verifier only
-  (2026-09-15, lane/cpu-training-embedding-ivf). Inside
-  `_cpu_reference.reference_training()` (which `tools/identity_break.py` enters),
+- The shared trainer class on a CPU-only install, initially added for the
+  verifier (2026-09-15, lane/cpu-training-embedding-ivf) and available through
+  the public CPU API since 2026-09-20. Select `MOJOLEARN_VENDOR=cpu` before
+  import; `_cpu_reference.reference_training()` is now a compatibility no-op.
   `SmallByteLanguageModelTrainer` and its alias `LanguageModelTrainer`,
   stateless or `resident=True`, run through
   `python/mojolearn/_byte_lm_trainer_host.py`, which serves the GPU binding's
   single-device entries (the step, evaluation, logits and the resident session)
   over this binding's step, loss and reference-path logits and holds no
-  arithmetic; the multi-GPU entries are absent and refuse by name. Outside that
-  scope the class refuses on a CPU-only install, as every public CPU fit does;
-  `LanguageModelHostTrainer` stays the published CPU trainer. The `byte-lm` and
+  arithmetic; the multi-GPU entries are absent and refuse by name because they
+  require multiple GPUs. `LanguageModelHostTrainer` also remains available.
+  The `byte-lm` and
   `byte-lm-resident` identity_break lanes (three AdamW steps at that time, two
   and one now; weight decay
   0.01, the exported gradient, the logits, the checkpoint bytes and the batch
@@ -398,7 +399,7 @@ ordinary CPU `fit` public; it still refuses outside the verifier's scope. Each a
 | hdbscan | `_mojolearn_hdbscan_host.so` | `_mojolearn_hdbscan` | hdbscan, hdbscan-leaf | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | gp_infer | `_mojolearn_gp_infer_host.so` | loaded by path | no | GaussianProcessRegressor, GaussianProcessClassifier (gp, gp-matern12, gp-matern32, gp-matern52-ard, gp-normalize-y, gpc, gpc-multiclass) | tools/classical_host_gate.py | yes |
 | hdbscan_infer | `_mojolearn_hdbscan_infer_host.so` | loaded by path | no | hdbscan.approximate_predict, hdbscan.membership_vector, hdbscan.all_points_membership_vectors (hdbscan, hdbscan-leaf) | tools/classical_host_gate.py | yes |
-| gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide, cross-val, par-cross-val, gbdt-nan-modes, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-parametric-losses, gbdt-exact-mae, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-onevsall, gbdt-multiclass-defaults, gbdt-class-weights, gbdt-multiclass-offgrid, gbdt-ordered-rmse, gbdt-feature-freq, gbdt-pointwise-l2-bayesian-eval, gbdt-categorical-ctr, gbdt-adapter-score-weighted, gbdt-query-rmse, gbdt-pair-logit, gbdt-yeti-rank, gbdt-ranking-defaults, gbdt-border-types, gbdt-ordered, gbdt-ordered-bayesian-noise, gbdt-binary-columns, gbdt-bfa-quantile, gbdt-catboost-defaults, gbdt-symmetric-eval, gbdt-stochastic-arms | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide, cross-val, par-cross-val, gbdt-nan-modes, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-parametric-losses, gbdt-exact-mae, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-onevsall, gbdt-multiclass-defaults, gbdt-class-weights, gbdt-multiclass-offgrid, gbdt-ordered-rmse, gbdt-feature-freq, gbdt-pointwise-l2-bayesian-eval, gbdt-categorical-ctr, gbdt-adapter-score-weighted, gbdt-query-rmse, gbdt-pair-logit, gbdt-yeti-rank, gbdt-ranking-defaults, gbdt-query-rmse-pointwise, gbdt-pair-logit-pointwise, gbdt-yeti-rank-pointwise, gbdt-border-types, gbdt-ordered, gbdt-ordered-bayesian-noise, gbdt-binary-columns, gbdt-bfa-quantile, gbdt-catboost-defaults, gbdt-symmetric-eval, gbdt-stochastic-arms | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | training | `_mojolearn_training_host.so` | `_mojolearn_training` | optim-owner-lifecycle, optim-io-capability, mlp, optim-sgd, optim-adam-clip, optim-maximize, cross-entropy-arms, training-primitives, ordered-gradient-sum, par-mlp, samba, samba-untied-dropout-accum, par-samba, par-samba-clip, mlp-bf16w, mlp-int8w, samba-bf16w, samba-int8w, grad-accumulation, training-chunked-lm-head, training-mlp-sessions, samba-optimizer-state, public-residual-dropout, public-numeric-metadata, neural-trainer-unfused | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | resample | `_mojolearn_resample_host.so` | `_mojolearn_resample` | bootstrap, permutation-test, monte-carlo, resample-bca, resample-unpaired, resample-perm-samples, resample-utils | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | mamba | `_mojolearn_mamba_host.so` | `_mojolearn_mamba` | mamba2, mamba2-dtlimit, mamba1, mamba3, mamba1-bf16w, mamba1-int8w, mamba2-bf16w, mamba2-int8w, mamba3-bf16w, mamba3-int8w, mamba1-decode-session, mamba2-decode-session, mamba3-decode-session | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |

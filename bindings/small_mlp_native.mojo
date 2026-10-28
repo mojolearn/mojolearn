@@ -11,14 +11,10 @@ backward, loss and AdamW update are the training binding's entries, called with
 the same operands, in the same order, as `python/mojolearn/_mlp_impl.py` called
 them before this owner existed, so every route keeps its bits.
 
-Ownership (docs/MODULAR_ASKS.md: a PythonObject passed as a call argument or
-assigned as an attribute keeps one extra reference). The trainer object never
-enters this owner: the Python methods pass `self._handle`, state lives in the
-native store, and the constructor assigns the returned handle itself. Caller
-inputs are read through attribute and method access on the caller's object
-(`__class__`, `__buffer__`, `keys()`, `__float__`, `__index__`), never passed
-as a call argument, so they are not retained either (Python 3.12+; on 3.10
-and 3.11, `memoryview(value)` is the only buffer door).
+The public class hands the owner and arguments to this door once. Native
+admission checks passive class storage and reads its handle without invoking
+Python descriptors. Shared exact input admission precedes native buffer reads;
+balanced call helpers retain original owners without leaking references.
 """
 from std.ffi import _Global
 from std.math import isfinite
@@ -29,6 +25,10 @@ from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
+from bindings.mode_metadata_native import _fields, _class_fields
+from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
+from providers.python.lowbit_weight_pyapi import low_materialize, low_formats
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import sequential_admit_value
@@ -86,6 +86,8 @@ struct SmallMlpBoundary(Defaultable, Movable):
     var posix: PythonObject
     var buffer_flags: PythonObject
     var admission: PythonObject
+    var inference: PythonObject
+    var trainer_finalizer: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -100,6 +102,8 @@ struct SmallMlpBoundary(Defaultable, Movable):
         self.posix = PythonObject(None)
         self.buffer_flags = PythonObject(None)
         self.admission = PythonObject(None)
+        self.inference = PythonObject(None)
+        self.trainer_finalizer = PythonObject(None)
 
 
 comptime SMALL_MLP_BOUNDARY = _Global[
@@ -128,6 +132,7 @@ def small_mlp_initialize(context: PythonObject) raises:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     b[].bi = Python.import_module("builtins")
     b[].trainer_cls = context["trainer"]
+    b[].trainer_finalizer = context["trainer_finalizer"]
     b[].array_cls = context["array"]
     b[].arrays = Python.import_module("array").array
     b[].rlock = Python.import_module("_thread").RLock
@@ -246,18 +251,8 @@ def _view(value: PythonObject, refusal: String) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     if value.__class__ is b[].array_cls:
         return value._mv
-    var exporter = PythonObject(None)
     try:
-        exporter = value.__buffer__
-    except:
-        exporter = PythonObject(None)
-    if exporter is not None:
-        try:
-            return py_call(exporter, b[].buffer_flags)
-        except:
-            raise Error("TypeError: " + refusal)
-    try:
-        return py_call(b[].bi.memoryview, value)
+        return native_buffer_view(value)
     except:
         raise Error("TypeError: " + refusal)
 
@@ -441,9 +436,9 @@ def _same_keys(value: PythonObject, names: String) raises -> Bool:
 
 
 def _handle_of(handle: PythonObject) raises -> Int:
-    """The trainer's `_handle`, passed by the Python method itself."""
+    """The trainer's handle, read from admitted native owner storage."""
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    if handle.__class__ is not bi.int:
+    if py_type(handle) is not bi.int:
         raise Error("RuntimeError: SmallMLPTrainer state is closed or was never created")
     return Int(py=handle)
 
@@ -962,20 +957,23 @@ def small_mlp_create(args: PythonObject) raises -> PythonObject:
 def small_mlp_from_state(cls: PythonObject, state: PythonObject, mode: String) raises -> PythonObject:
     """A new trainer instance of `cls` owning a validated copy of `state`."""
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    _small_class(cls, b[].trainer_cls)
     var typed = _state_from_dict(state, mode)
+    var instance = native_storage_allocate(cls)
     var handle = mlp_store_create(typed^)
-    py_setitem(b[].locks, handle, b[].rlock())
-    # `object.__new__` takes only the class; the handle goes into the new
-    # instance's own dictionary, so the instance is never a call argument.
-    var instance = py_call(b[].bi.object.__new__, cls)
-    py_setitem(instance.__dict__, "_handle", PythonObject(handle))
+    try:
+        py_setitem(b[].locks, handle, b[].rlock())
+        py_setitem(_fields(instance), "_handle", PythonObject(handle))
+    except error:
+        small_mlp_close(PythonObject(handle))
+        raise error^
     return instance
 
 
 def small_mlp_close(handle: PythonObject) raises:
     """Release a trainer's state (its `__del__`); a missing or foreign handle is a no-op."""
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    if handle.__class__ is not b[].bi.int:
+    if py_type(handle) is not b[].bi.int:
         return
     var h = Int(py=handle)
     try:
@@ -1211,7 +1209,7 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
             n *= dims[axis]
         var owned = List[Float32](length=max(n, 1), fill=Float32(0))
         if n > 0:
-            _words_into(value, dims, "session input", Int(owned.unsafe_ptr()))
+            _words_from_view(value, view, shape, dims, "session input", Int(owned.unsafe_ptr()))
             _ = value  # keep the Python object alive through the native call above
         _ = py_call(addresses.append, Int(owned.unsafe_ptr()))
         _ = py_call(shapes.append, shape)
@@ -1393,7 +1391,7 @@ def _os_error(message: String) -> String:
     return "OSError: " + message
 
 
-def _from_checkpoint(cls: PythonObject, path: PythonObject) raises -> PythonObject:
+def _checkpoint_state(path: PythonObject, entries: PythonObject) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var bi = b[].bi
     var posix = b[].posix
@@ -1425,19 +1423,218 @@ def _from_checkpoint(cls: PythonObject, path: PythonObject) raises -> PythonObje
         raise Error("SmallMLPTrainer checkpoint envelope mismatch")
     if Bool(py=envelope["schema"] != PythonObject(_FILE_SCHEMA)):
         raise Error("SmallMLPTrainer checkpoint schema mismatch")
-    var entries = _mode_entries()
     var digest: PythonObject
     try:
-        digest = py_call(bi.str, py_call_typed(entries.legacy["sha256_hex"], _canonical_bytes(envelope["payload"])))
+        digest = py_call(bi.str, py_call_typed(entries["sha256_hex"], _canonical_bytes(envelope["payload"])))
     except:
         raise Error("SmallMLPTrainer checkpoint integrity mismatch")
     if Bool(py=digest != envelope["payload_sha256"]):
         raise Error("SmallMLPTrainer checkpoint integrity mismatch")
-    var expected = py_call(bi.str, entries.legacy["neural_arithmetic_profile"]())
+    var expected = py_call(bi.str, entries["neural_arithmetic_profile"]())
     if Bool(py=py_get(envelope, "arithmetic_profile", PythonObject(_BASE_PROFILE)) != expected):
         raise Error("SmallMLPTrainer checkpoint arithmetic profile mismatch")
     var state = _decode_state(envelope["payload"])
-    return small_mlp_from_state(cls, state, _mode_name(entries))
+    return state
+
+
+
+def _from_checkpoint(cls: PythonObject, path: PythonObject) raises -> PythonObject:
+    var entries = _mode_entries()
+    return small_mlp_from_state(cls, _checkpoint_state(path, entries.legacy), _mode_name(entries))
+
+
+# ------------------------------------------------------------ passive public owners
+
+def _small_class(cls: PythonObject, required: PythonObject) raises:
+    var boundary = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    var bi = boundary[].bi
+    if py_type(cls) is not bi.type:
+        raise Error("TypeError: small MLP owners cannot invoke Python metaclass hooks")
+    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    var found = False
+    for i in range(len(ancestry)):  # driver-loop: over passive owner class metadata
+        found = found or ancestry[i] is required
+        if ancestry[i] is bi.object:
+            continue
+        var namespace = _class_fields(ancestry[i])
+        for name in ["__getattribute__", "__getattr__", "__setattr__", "_handle", "_weights", "_m", "weight_format"]:  # driver-loop: over native storage fields and hooks
+            if py_contains(namespace, name):
+                raise Error("TypeError: small MLP native storage cannot be replaced by Python hooks or descriptors")
+        var finalizer = py_get(namespace, "__del__")
+        if finalizer is not None and finalizer is not boundary[].trainer_finalizer:
+            raise Error("TypeError: small MLP owners require the connected native finalizer")
+    if not found:
+        raise Error("TypeError: small MLP operation requires its connected native owner class")
+
+
+def _small_fields(owner: PythonObject, required: PythonObject) raises -> PythonObject:
+    _small_class(py_type(owner), required)
+    return _fields(owner)
+
+
+def _owner_operation(operation: String, args: PythonObject) raises -> PythonObject:
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    if operation == "owner_close":
+        try:
+            var fields = _small_fields(args[0], b[].trainer_cls)
+            var handle = py_get(fields, "_handle")
+            if handle is not None:
+                small_mlp_close(handle)
+                py_setitem(fields, "_handle", PythonObject(None))
+        except:
+            pass  # Failed construction and interpreter shutdown are best-effort.
+        return PythonObject(None)
+    var fields = _small_fields(args[0], b[].trainer_cls)
+    classical_connect_numpy(b[].admission)
+    if operation == "owner_create":
+        sequential_admit_value(args[1], b[].admission)
+        var handle = small_mlp_create(args[1])
+        try:
+            var previous = py_get(fields, "_handle")
+            if previous is not None:
+                small_mlp_close(previous)
+            py_setitem(fields, "_handle", handle)
+        except error:
+            small_mlp_close(handle)
+            raise error^
+        return PythonObject(None)
+    var packed = Python.list(fields["_handle"])
+    for i in range(1, len(args)):  # driver-loop: over native argument envelope
+        _ = py_call(packed.append, args[i])
+    var values = py_call(b[].bi.tuple, packed)
+    # Every public trainer method now returns its final value from native code;
+    # in particular load_state_dict returns the original owner here.
+    var result = small_mlp_call(String(operation[byte=6:]), values)
+    return args[0] if operation == "owner_load_state_dict" else result
+
+
+def small_mlp_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        if len(args) == 2:
+            _ = _owner_operation("owner_close", Python.tuple(args[1]))
+    except:
+        pass
+    return PythonObject(None).steal_data()
+
+
+# ------------------------------------------------------------ MLPInference host owner
+
+def _inference_entries() raises -> PythonObject:
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    var entries = b[].inference["entries"]
+    if py_type(entries) is b[].bi.str:
+        raise Error("ImportError: MLPInference requires its native host binding: " + String(entries))
+    if py_type(entries) is not b[].bi.dict:
+        raise Error("TypeError: MLPInference host entries require their connected native mapping")
+    for name in ["mlp_forward_logits", "sha256_hex", "neural_arithmetic_profile"]:  # driver-loop: over the three connected host entries
+        if neural_descriptor_entry(entries["module"], name) is not entries[PythonObject(name)]:
+            raise Error("TypeError: MLPInference host entry changed after connection")
+    return entries
+
+
+def _packed_admit(value: PythonObject, context: PythonObject) raises:
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    if py_type(value) is not context["family_low_bf16"] and py_type(value) is not context["family_low_int8"]:
+        sequential_admit_value(value, b[].admission)
+        return
+    var cls = py_type(value)
+    if py_type(cls) is not b[].bi.type:
+        raise Error("TypeError: MLPInference packed weights require native storage classes")
+    var ancestry = py_call(b[].bi.type.__dict__["__mro__"].__get__, cls)
+    for i in range(len(ancestry)):  # driver-loop: over packed weight storage metadata
+        if ancestry[i] is b[].bi.object:
+            continue
+        var namespace = _class_fields(ancestry[i])
+        for name in ["__getattribute__", "__getattr__", "__setattr__", "bits", "codes", "exponents", "shape"]:  # driver-loop: over packed storage hooks and fields
+            if py_contains(namespace, name):
+                raise Error("TypeError: MLPInference packed storage refuses Python hooks and descriptors")
+    _ = _fields(value)
+
+
+def _inference_publish(fields: PythonObject, state: MlpState, format: String, entries: PythonObject) raises:
+    var weights = Python.list()
+    for i in range(4):  # driver-loop: over the fixed inference weight registry
+        _ = py_call(weights.append, _f32_array_of(state.params_addr(i), _dims(i)))
+    py_setitem(fields, "_weights", weights)
+    py_setitem(fields, "weight_format", PythonObject(format))
+    py_setitem(fields, "_m", entries["module"])
+
+
+def _inference_state(fields: PythonObject) raises -> MlpState:
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    var values = fields["_weights"]
+    if (py_type(values) is not b[].bi.list and py_type(values) is not b[].bi.tuple) or len(values) != 4:
+        raise Error("TypeError: MLPInference requires four native weight arrays")
+    sequential_admit_value(values, b[].admission)
+    var state = MlpState()
+    var names = _names()
+    for i in range(4):  # driver-loop: over four inference inputs; each copied from captured metadata
+        _words_into(values[i], _dims(i), names[i], state.params_addr(i))
+        mlp_require_finite(state.params_addr(i), mlp_size(i), names[i])
+    return state^
+
+
+def _inference_operation(operation: String, args: PythonObject) raises -> PythonObject:
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    classical_connect_numpy(b[].admission)
+    var cls = b[].inference["class"]
+    if operation == "inference_checkpoint":
+        _small_class(args[0], cls)
+        var entries = _inference_entries()
+        var payload = _checkpoint_state(args[1], entries)
+        var mode = b[].backend["_DEFAULT_MODE"]
+        if py_type(mode) is not b[].bi.str or (String(mode) != "identical" and String(mode) != "fast"):
+            raise Error(_MODE_REFUSAL)
+        var state = _state_from_dict(payload, String(mode))
+        var owner = native_storage_allocate(args[0])
+        _inference_publish(_fields(owner), state, "float32", entries)
+        return owner
+    var fields = _small_fields(args[0], cls)
+    if operation == "inference_repr":
+        return PythonObject("MLPInference(architecture=[8, 16, 3])")
+    if operation == "inference_initialize":
+        var lowbit = b[].inference["lowbit"]
+        for i in range(1, 5):  # driver-loop: over native weights before conversion
+            if i == 1 or i == 3:
+                _packed_admit(args[i], lowbit)
+            else:
+                sequential_admit_value(args[i], b[].admission)
+        var format = low_formats(Python.tuple(args[1], args[3]), lowbit)
+        var low_binding = PythonObject(None)
+        var w1 = low_materialize(args[1], low_binding, lowbit)
+        var w2 = low_materialize(args[3], low_binding, lowbit)
+        var values = Python.tuple(w1, args[2], w2, args[4])
+        sequential_admit_value(values, b[].admission)
+        var state = MlpState()
+        var names = _names()
+        for i in range(4):  # driver-loop: over fixed initialized parameter arrays
+            _words_into(values[i], _dims(i), names[i], state.params_addr(i))
+            mlp_require_finite(state.params_addr(i), mlp_size(i), names[i])
+        _inference_publish(fields, state, format, _inference_entries())
+        return PythonObject(None)
+    var entries = _inference_entries()
+    if fields["_m"] is not entries["module"]:
+        raise Error("TypeError: MLPInference requires its connected native host module")
+    var state = _inference_state(fields)
+    if operation == "inference_weights":
+        return _weights_out(state)
+    if operation == "inference_predict":
+        sequential_admit_value(args[1], b[].admission)
+        var x = _batch_in(args[1])
+        var rows = len(x) // 8
+        var output = generation_array([rows, 3])
+        var address = Int(py=output._addr)
+        var wrote = Int(py=py_call_typed(entries["mlp_forward_logits"], Python.list(Int(x.unsafe_ptr()), state.params_addr(0),
+            state.params_addr(1), state.params_addr(2), state.params_addr(3), address), Python.list(rows)))
+        _ = x^
+        _ = state^
+        if wrote != rows * 3:
+            raise Error("RuntimeError: MLPInference returned an invalid result count")
+        mlp_require_result_finite(address, rows * 3, "MLPInference")
+        _ = output
+        return output
+    raise Error("ValueError: unknown MLPInference public operation")
 
 
 # ------------------------------------------------------------ dispatch
@@ -1483,12 +1680,23 @@ def small_mlp_call(operation: String, args: PythonObject) raises -> PythonObject
     if operation == "initialize":
         small_mlp_initialize(args[0])
         return PythonObject(None)
+    if operation == "inference_connect":
+        SMALL_MLP_BOUNDARY.get_or_create_ptr()[].inference = args[0]
+        return PythonObject(None)
+    if operation.startswith("inference_"):
+        return _inference_operation(operation, args)
+    if operation.startswith("owner_"):
+        return _owner_operation(operation, args)
     var boundary = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     classical_connect_numpy(boundary[].admission)
     # Shared exact-native-type admission precedes every protocol/attribute read.
     # No caller-defined __buffer__, iterator, descriptor or scalar hook runs.
     if operation == "from_checkpoint":
-        sequential_admit_value(args[1], boundary[].admission)
+        _small_class(args[0], boundary[].trainer_cls)
+        _ = native_path(args[1])
+    elif operation == "save_checkpoint":
+        sequential_admit_value(args[0], boundary[].admission)
+        _ = native_path(args[1])
     else:
         sequential_admit_value(args, boundary[].admission)
     if operation == "native_provider_info":

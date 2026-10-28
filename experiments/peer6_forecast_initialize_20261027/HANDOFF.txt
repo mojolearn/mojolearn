@@ -1,0 +1,24 @@
+Peer6 time-series batch 3 — 2026-10-27
+Branch: lane/peer6-timeseries-20261027, follows forecast convenience batch.
+
+Croston variants, Theta variants, ETS/DampedETS and GARCH constructors now
+perform one native call. The provider admits exact class/scalar metadata,
+normalizes constructor settings, applies prior supported parameter refusals
+and writes the completed state. DampedETS no longer calls Python super.
+Theta fixed-model choices use import-time class records rather than instance
+or class descriptors. Public signatures remain unchanged.
+
+Small compile: complete forecast_initialize provider instantiated through a
+PythonModuleBuilder export, Mac CPU identical O0, configured workers 10.
+Dispatch branch additions were source-reviewed; this small compile does not
+qualify the whole tokenizer/xseq build or installed artifact. Receipt:
+compile.json. Complete logs, sources, manifest and binary:
+~/mojolearn-evidence/peer6-forecast-initialize-20261027/
+Initial fixture export signature failure preserved under attempt1; the
+fixture now converts the Python kind argument to the provider's String.
+No runtime or identity execution; no rented box.
+
+Pending: AutoARIMA.search and older independent fit/predict state admission;
+ARIMA/ExponentialSmoothing broader lifecycle/properties/forecast; Prophet,
+VAR and STL constructors/conveniences; whole-library transitive audit.
+This batch is constructor coverage only, not whole-family/runtime proof.

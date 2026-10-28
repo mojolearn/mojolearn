@@ -1,0 +1,16 @@
+{
+  "starting_commit": "7de54456bde166c42fd0d9f7378e402bb0f3be91",
+  "source_worklist_snapshot": "dcd2a307c1",
+  "groups": 147,
+  "classifications": {
+    "unresolved": 21,
+    "prohibited_source": 45,
+    "native_boundary": 79,
+    "allowed_tag_metadata": 1,
+    "refusal_only": 1
+  },
+  "status": "source review only; worklist classifications are triage, not runtime qualification",
+  "compile": "NOT_RUN",
+  "runtime": "NOT_RUN",
+  "vendors": "NOT_RUN"
+}

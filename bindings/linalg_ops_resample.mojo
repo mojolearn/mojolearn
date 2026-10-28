@@ -2,7 +2,7 @@
 # The public functions of python/mojolearn/resample.py (bootstrap,
 # permutation_test, monte_carlo_integrate, resample_indices, resample), one
 # native call each (`family_rs_*`). The shell hands over the resample binding
-# `_backend.binding("_mojolearn_resample", numeric_mode)` resolved; this owner
+# selected inside the native boundary; this owner
 # makes the Python refusals in their order and words, the compiled-mode
 # cross-check (`_extension`), the input casts and outputs, calls the same
 # binding entries with the same address and params lists in the same order,
@@ -10,8 +10,17 @@
 # do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_type, py_setattr
+from bindings.py_balanced import py_call, py_get, py_type, py_setitem
 from bindings.py_attr import py_attr
+from bindings.classical_pandas import classical_admit_value
+from bindings.classical_validate import classical_view
+from bindings.classical_arrays import classical_is_array
+from bindings.metrics_native_inputs import metric_shape, metric_flatten
+from bindings.mode_metadata_native import _fields
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.native_loaded_module import native_loaded_module
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.resample_public_pyapi import resample_arguments, resample_result_initialize
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_buffer_owner import native_storage_allocate
@@ -20,7 +29,7 @@ from bindings.family_common import (
     FAMILY_F64P, FAMILY_I32P, family_call, family_repr, family_type_name, family_isinstance, family_is_str,
 )
 from bindings.optimizer_public_door import TensorView
-from bindings.linalg_ops_buffers import LinBuf, lin_truth, lin_typed, lin_new, lin_view, lin_tuple
+from bindings.linalg_ops_buffers import LinBuf, LinAdmission, lin_admitted_c, lin_truth, lin_new, lin_view, lin_tuple
 
 comptime RS_BP = MutPointer[UInt8, MutUntrackedOrigin]
 
@@ -33,26 +42,25 @@ def rs_state(context: PythonObject) raises -> PythonObject:
 def rs_extension(binding: PythonObject, numeric_mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_extension(numeric_mode)`: the binary's own compile-time mode must be
     the one requested."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var want = numeric_mode
-    if not lin_truth(want):
+    if want is None:
         want = context["backend_fields"]["_DEFAULT_MODE"]
-        if want is None:
-            want = family_call(context["backend_fields"]["default_mode"])
-    var fn_obj = py_call(b.getattr, binding, "resample_numeric_mode", PythonObject(None))
+    if py_type(want) is not b.str:
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    want = want.strip().lower()
+    var fn_obj = neural_descriptor_entry(binding, "resample_numeric_mode", False)
     if fn_obj is not None:
-        var got = family_call(b.int, family_call(fn_obj))
-        var code = py_get(rs_state(context)["_MODE_CODE"], want, PythonObject(None))
-        if code is None or Int(py=got) != Int(py=code):
-            raise Error("RuntimeError: mojolearn resample: numeric_mode=" + family_repr(want) + " was requested but "
-                        + String(py=py_call(b.getattr, binding, "__name__")) + " reports compile-time mode code "
-                        + String(py=family_call(b.str, got)) + "; rebuild it "
-                        + "with bash bindings/build_resample.sh")
+        var got = Int(py=family_call(fn_obj))
+        var mode = String(want)
+        if (mode != "fast" and mode != "identical") or got != (1 if mode == "identical" else 0):
+            raise Error("RuntimeError: mojolearn resample: requested mode differs from compiled mode; rebuild it with bash bindings/build_resample.sh")
     return binding
 
 
+
 def rs_entry(binding: PythonObject, name: String) raises -> PythonObject:
-    return family_call(Python.import_module("builtins").getattr, binding, PythonObject(name))
+    return neural_descriptor_entry(binding, name)
 
 
 def _rs_is_int(value: PythonObject) raises -> Bool:
@@ -98,6 +106,28 @@ def _rs_nonneg(value: PythonObject) raises -> Int:
     return Int(py=family_call(b.max, value, PythonObject(0)))
 
 
+def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
+              context: PythonObject) raises -> LinBuf:
+    # Capture ordinary input-buffer metadata once. Lists, pandas and Torch
+    # use their existing native materialization before capturing the new owner.
+    classical_admit_value(source, context)
+    var value = source
+    if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
+        value = classical_view(value, context, name)
+    var admitted = LinAdmission(value, context)
+    var rank = len(admitted.view.shape)
+    var shape = family_repr(lin_tuple(admitted.view.shape))
+    if ndim >= 0 and rank != ndim:
+        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(rank) + "-D shape " + shape)
+    if admitted.view.count() == 0:
+        var what = String("sample(s)")
+        if rank == 2 and admitted.view.shape[0] != 0:
+            what = "feature(s)"
+        raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
+                    + " (shape=" + shape + ") while a minimum of 1 is required.")
+    return lin_admitted_c(admitted^, typestr, name, context)
+
+
 def _rs_word(scalars: LinBuf, i: Int) -> Float64:
     return FAMILY_F64P(unsafe_from_address=scalars.addr)[i]
 
@@ -112,25 +142,25 @@ def _rs_bootstrap_result(dist: LinBuf, sdist: LinBuf, scalars: LinBuf, context: 
     var state = rs_state(context)
     var b = Python.import_module("builtins")
     var result = _rs_object(state["BootstrapResult"])
-    py_setattr(result, "point_estimate", PythonObject(_rs_word(scalars, 0)))
-    py_setattr(result, "distribution", dist.keep)
-    py_setattr(result, "sorted_distribution", sdist.keep)
-    py_setattr(result, "standard_error", PythonObject(_rs_word(scalars, 1)))
+    py_setitem(_fields(result), "point_estimate", PythonObject(_rs_word(scalars, 0)))
+    py_setitem(_fields(result), "distribution", dist.keep)
+    py_setitem(_fields(result), "sorted_distribution", sdist.keep)
+    py_setitem(_fields(result), "standard_error", PythonObject(_rs_word(scalars, 1)))
     var interval = py_call(b.tuple.__new__, state["ConfidenceInterval"],
                            Python.tuple(PythonObject(_rs_word(scalars, 2)), PythonObject(_rs_word(scalars, 3))))
-    py_setattr(result, "confidence_interval", interval)
-    py_setattr(result, "order_low", PythonObject(Int(_rs_word(scalars, 4))))
-    py_setattr(result, "order_high", PythonObject(Int(_rs_word(scalars, 5))))
+    py_setitem(_fields(result), "confidence_interval", interval)
+    py_setitem(_fields(result), "order_low", PythonObject(Int(_rs_word(scalars, 4))))
+    py_setitem(_fields(result), "order_high", PythonObject(Int(_rs_word(scalars, 5))))
     return result
 
 
 def _rs_permutation_result(null: LinBuf, scalars: LinBuf, context: PythonObject) raises -> PythonObject:
     var result = _rs_object(rs_state(context)["PermutationTestResult"])
-    py_setattr(result, "statistic", PythonObject(_rs_word(scalars, 0)))
-    py_setattr(result, "null_distribution", null.keep)
-    py_setattr(result, "pvalue", PythonObject(_rs_word(scalars, 1)))
-    py_setattr(result, "count_less", PythonObject(Int(_rs_word(scalars, 2))))
-    py_setattr(result, "count_greater", PythonObject(Int(_rs_word(scalars, 3))))
+    py_setitem(_fields(result), "statistic", PythonObject(_rs_word(scalars, 0)))
+    py_setitem(_fields(result), "null_distribution", null.keep)
+    py_setitem(_fields(result), "pvalue", PythonObject(_rs_word(scalars, 1)))
+    py_setitem(_fields(result), "count_less", PythonObject(Int(_rs_word(scalars, 2))))
+    py_setitem(_fields(result), "count_greater", PythonObject(Int(_rs_word(scalars, 3))))
     return result
 
 
@@ -158,8 +188,8 @@ def _rs_bootstrap_unpaired(args: PythonObject, context: PythonObject) raises -> 
     if lin_truth(py_call(Python.import_module("operator").ne, statistic, PythonObject("diff_means"))):
         raise Error("mojolearn " + where + ": statistic " + family_repr(statistic) + " is refused by name: the unpaired bootstrap's"
                     + " two-sample statistic is 'diff_means' (a one-sample statistic has no pairing; pearson needs pairs)")
-    var xx = lin_typed(data[0], "<f4", 1, "x", context)
-    var yy = lin_typed(data[1], "<f4", 1, "y", context)
+    var xx = _rs_typed(data[0], "<f4", 1, "x", context)
+    var yy = _rs_typed(data[1], "<f4", 1, "y", context)
     var meth = _rs_method(args[5], where, context)
     var alt = rs_code("ALTERNATIVES", args[6], "alternative", where, context)
     var r = rs_int(args[3], "n_resamples", where)
@@ -197,7 +227,7 @@ def _rs_bootstrap(args: PythonObject, context: PythonObject) raises -> PythonObj
     var data = args[1]
     if not lin_truth(args[11]) and family_isinstance(data, Python.tuple(b.tuple, b.list)):
         return _rs_bootstrap_unpaired(args, context)
-    var x = lin_typed(data, "<f4", -1, "data", context)
+    var x = _rs_typed(data, "<f4", -1, "data", context)
     var n: Int
     var d: Int
     if x.rank() == 1:
@@ -248,7 +278,7 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
     var where = String("permutation_test(permutation_type='samples')")
     var y = args[2]
     var statistic = args[3]
-    var xx = lin_typed(args[1], "<f4", 1, "x", context)
+    var xx = _rs_typed(args[1], "<f4", 1, "x", context)
     var want = String("mean") if y is None else String("diff_means")
     if lin_truth(py_call(Python.import_module("operator").ne, statistic, PythonObject(want))):
         var arm = String("one sample") if y is None else String("two paired samples")
@@ -260,7 +290,7 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
         yy = LinBuf(xx.keep, xx.addr, xx.shape.copy())
         _ = xx  # keep the Python object alive through the native call above
     else:
-        yy = lin_typed(y, "<f4", 1, "y", context)
+        yy = _rs_typed(y, "<f4", 1, "y", context)
         ny = yy.dim(0)
     var r = rs_int(args[4], "n_resamples", where)
     var null = lin_new([_rs_nonneg(r)], "<f4", context)
@@ -305,8 +335,8 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
                     + " 'pairings', got " + family_repr(permutation_type))
     if args[2] is None:
         raise Error("mojolearn " + where + ": permutation_type='independent' needs two samples x and y")
-    var xx = lin_typed(args[1], "<f4", 1, "x", context)
-    var yy = lin_typed(args[2], "<f4", 1, "y", context)
+    var xx = _rs_typed(args[1], "<f4", 1, "x", context)
+    var yy = _rs_typed(args[2], "<f4", 1, "y", context)
     var stat = rs_code("STATISTICS", args[3], "statistic", where, context)
     var alt = rs_code("ALTERNATIVES", args[5], "alternative", where, context)
     var r = rs_int(args[4], "n_resamples", where)
@@ -342,7 +372,10 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
 def _rs_corner(values: PythonObject, name: String, where: String, context: PythonObject) raises -> LinBuf:
     """`Array.from_list([_real(v, name, where) for v in values], "<f4")`."""
     var b = Python.import_module("builtins")
-    var items = family_call(b.list, values)
+    var shape = metric_shape(values, context)
+    if len(shape) != 1:
+        raise Error("TypeError: mojolearn " + where + ": " + name + " must be a one-dimensional native sequence")
+    var items = metric_flatten(values, context)
     var count = len(items)
     var words = List[Float64]()
     for i in range(count):  # driver-loop: over the corner's coordinates (the box's dimensions)
@@ -381,10 +414,10 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
     _ = hi  # keep the Python object alive through the native call above
     _ = lo  # keep the Python object alive through the native call above
     var result = _rs_object(rs_state(context)["MonteCarloResult"])
-    py_setattr(result, "integral", PythonObject(_rs_word(scalars, 0)))
-    py_setattr(result, "mean", PythonObject(_rs_word(scalars, 1)))
-    py_setattr(result, "volume", PythonObject(_rs_word(scalars, 2)))
-    py_setattr(result, "closed_form", PythonObject(_rs_word(scalars, 3)))
+    py_setitem(_fields(result), "integral", PythonObject(_rs_word(scalars, 0)))
+    py_setitem(_fields(result), "mean", PythonObject(_rs_word(scalars, 1)))
+    py_setitem(_fields(result), "volume", PythonObject(_rs_word(scalars, 2)))
+    py_setitem(_fields(result), "closed_form", PythonObject(_rs_word(scalars, 3)))
     _ = lo^
     _ = hi^
     return result
@@ -702,7 +735,23 @@ def _rs_resample(args: PythonObject, context: PythonObject) raises -> PythonObje
     return _rs_one_or_all(out)
 
 
-def rs_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def rs_operation(operation: String, var args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == "family_rs_result_initialize":
+        return resample_result_initialize(args, context)
+    classical_connect_numpy(context)
+    # Row resampling still has its separately tracked generic container route.
+    # Its migration must preserve pandas/object dtype and sequence semantics.
+    if operation == "family_rs_resample":
+        return _rs_resample(args, context)
+    args = resample_arguments(operation, args, context)
+    for i in range(1, len(args)):  # driver-loop: admit native public inputs before any legacy scalar/container operations
+        classical_admit_value(args[i], context)
+        var data = ((operation == "family_rs_bootstrap" and i == 1)
+                    or (operation == "family_rs_permutation_test" and (i == 1 or i == 2))
+                    or (operation == "family_rs_monte_carlo_integrate" and (i == 2 or i == 3))
+                    or (operation == "family_rs_resample" and (i == 1 or i == 5 or i == 6)))
+        if not data:
+            host_inference_scalar(args[i], context, True)
     if operation == "family_rs_bootstrap":
         return _rs_bootstrap(args, context)
     if operation == "family_rs_permutation_test":
@@ -711,6 +760,4 @@ def rs_operation(operation: String, args: PythonObject, context: PythonObject) r
         return _rs_monte_carlo(args, context)
     if operation == "family_rs_resample_indices":
         return _rs_resample_indices(args, context)
-    if operation == "family_rs_resample":
-        return _rs_resample(args, context)
     raise Error("RuntimeError: unknown resample operation " + operation)

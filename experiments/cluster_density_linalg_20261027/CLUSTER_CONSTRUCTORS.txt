@@ -1,0 +1,23 @@
+Native cluster constructors — 2026-10-27
+
+Source7dde01e0563c837e4b11cead6b8fc23d62f1104a.
+MiniBatchKMeans, BisectingKMeans, MeanShift, OPTICS, AffinityPropagation and
+BayesianGaussianMixture now retain constructor arguments through one native
+operation. Parameters are retained unchanged, matching the prior assignments;
+fit keeps responsibility for algorithm parameter validation. The import-time
+parameter schemas are reused; no Python signature inspection runs at construction.
+
+Reinitialization admits all replaced owners before mutating any field, refusing
+custom finalizers and weak-reference callbacks through native_release_admit.
+The ownership context is explicitly connected at module import. The original
+Python constructor argument tuple keeps incoming values alive for the call.
+
+Compile PASS: actual cluster_public_operation plus shared family admission,
+Mac CPU column,O0,ten compiler workers,116.24s. No runtime execution/identity
+or GPU claim. Receipt cluster_constructor_compile.json retains frozen source,
+compiler,flags,binary hash,logs and the superseded earlier compilation.
+
+Root must merge repaired Cholesky branch separately before/with this branch:
+lane/cholesky-lifetime-repair-20261027. This branch shares its earlier ancestor
+but makes no later Cholesky edits. Remaining density/mixture lifecycle work is
+not represented as completed by these six constructor changes.

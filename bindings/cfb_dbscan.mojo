@@ -13,12 +13,13 @@ from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_f
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array
 from core.family_cast_impl import family_fill_i32, family_all_finite_f32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_as_f32,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_as_f32,
     family_sample_weight, family_min, family_field,
 )
 from bindings.cluster_native import _reference_queries
 from bindings.cfb_resident import cfb_fresh_holder, cfb_mint, cfb_reference_labels
 from bindings.native_loaded_module import native_loaded_module
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 
 comptime _METRIC_PRECOMPUTED = 3
@@ -152,7 +153,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var params = Python.list(PythonObject(n), PythonObject(d), eps, PythonObject(min_samples),
                              PythonObject(budget), PythonObject(cap), PythonObject(method), PythonObject(metric))
     var core = family_array(Python.tuple(n), "<u1", context)
-    var fit = family_entry(binding, "dbscan_fit_core", context)
+    var fit = neural_descriptor_entry(binding, "dbscan_fit_core")
     var n_iter = family_call(fit, classical_address(x), classical_address(labels), weight_addr,
                              classical_address(core), params)
     _ = labels  # keep the Python object alive through the native call above
@@ -168,7 +169,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     py_setitem(fields, "n_samples_fit_", PythonObject(n))
     # `_store_core`: the core rows, their training indices and their labels,
     # ascending training index, from the fit's own core mask.
-    var gather = family_entry(binding, "dbscan_core_arrays", context)
+    var gather = neural_descriptor_entry(binding, "dbscan_core_arrays")
     var parts = family_call(gather, classical_address(x), classical_address(labels), classical_address(core),
                             Python.list(PythonObject(n), PythonObject(d)))
     _ = core  # keep the Python object alive through the native call above

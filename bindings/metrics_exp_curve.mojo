@@ -12,7 +12,7 @@
 # whose results it never read. Same kernels: the bits do not move.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_contains, py_get
+from bindings.py_balanced import py_call, py_contains, py_get, py_type, py_setitem
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_array, family_str, family_view, family_cast_view_f64,
 )
@@ -495,9 +495,89 @@ def _top_k(args: PythonObject, context: PythonObject) raises -> PythonObject:
     return PythonObject(hits / arena.f32(sw))
 
 
+def _ranking_report(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Keep both incumbent curve producers and their existing stage order.
+    # Candidate switches remain in the shared kernels, with no new defaults.
+    var b = mx_b()
+    if py_type(args[5]) is not b.str or String(args[5]) != "identical":
+        raise Error("ranking_report requires numeric_mode='identical'")
+    from bindings.host_inference_scalars import host_inference_scalar
+    host_inference_scalar(args[4], context, True)
+    var include_curves = Bool(py=args[4])
+    var true = mx_targets(args[0], "ranking_report", context)
+    if mx_len(true.classes) > 2:
+        raise Error("ranking_report currently requires binary targets")
+    var pos = mx_pos_label(args[2], true.kind, true.classes, "ranking_report", context)
+    var n = true.n
+    if n <= 0:
+        raise Error("mojolearn metrics: an empty curve has no thresholds")
+    var scores = mx_scores(args[1], n, "ranking_report", 1, "y_score", context)
+    var weights = mx_weights(args[3], n, "ranking_report", context)
+    var flags = mx_map_eq(true, pos, context)
+    var prog = MxProg(context)
+    var S = prog.put(scores.a)
+    var POS = prog.put_i32(flags)
+    var W = MX_NONE
+    if weights is not None:
+        W = prog.put(weights)
+    var curves = List[Int]()
+    for _ in range(2):  # driver-loop: the report's fixed ROC/AP pair
+        var order = prog.scratch(n)
+        var fps = prog.scratch(n)
+        var tps = prog.scratch(n)
+        var thr = prog.scratch(n)
+        var count = prog.scratch(1)
+        curves.extend([fps, tps, thr, count])
+        prog.stage("bin_curve", 1, [S, 1, POS, W, n, order, fps, tps, thr, count, MX_NONE, 0, 0, 0])
+    var outputs = List[Int]()
+    var totals = List[Int]()
+    var curve_outputs = List[Int]()
+    for fold in range(2):  # driver-loop: fixed ROC/AP scalar and optional curve outputs
+        var fps = curves[4 * fold]
+        var tps = curves[4 * fold + 1]
+        var thr = curves[4 * fold + 2]
+        var count = curves[4 * fold + 3]
+        var folded = prog.alloc(_CF_OUT)
+        totals.append(prog.want(folded + 2, 2))
+        var result = prog.want(prog.alloc(2), 2)
+        var status = prog.want(prog.alloc(1), 1)
+        prog.stage("curve_fold", 1, [n, fps, tps, count, folded, fold, 0, 0, _CF_CHUNK])
+        prog.stage("rank_epi", 1, [_RANK_CURVE_SCORE, folded, 1, fold, result, status, MX_NONE, 0, 0])
+        outputs.extend([result, status])
+        if include_curves:
+            var lengths = prog.want(prog.alloc(6), 6)
+            var output = prog.alloc(6 * (n + 1))
+            for channel in range(3):  # driver-loop: three curve output channels
+                _ = prog.want_count(output + 2 * channel * (n + 1), 2 * (n + 1), lengths, 2)
+            prog.stage("curve_out", 1, [_CO_ROC if fold == 0 else _CO_PR, n, fps, tps, thr, count, 0, output, lengths])
+            curve_outputs.extend([output, lengths])
+    var arena = mx_run(prog, args[5], context)
+    if arena.i32(outputs[1]) == 1:
+        mx_undefined(String(_ROC_ONE_CLASS), context)
+    if arena.i32(outputs[3]) == 2:
+        mx_zero_division("float division by zero")
+    if arena.f32(totals[1] + 1) == 0:
+        mx_warn("No positive class found in y_true, recall is set to one for all thresholds.", b.UserWarning, 2, context)
+    var result = Python.dict()
+    py_setitem(result, "roc_auc", PythonObject(arena.f64(outputs[0])))
+    py_setitem(result, "average_precision", PythonObject(arena.f64(outputs[2])))
+    if include_curves:
+        for kind in range(2):  # driver-loop: fixed ROC/PR result tuples
+            var output = curve_outputs[2 * kind]
+            var length = arena.i32(curve_outputs[2 * kind + 1])
+            var arrays = Python.list()
+            for channel in range(3):  # driver-loop: fixed curve channels with their reported lengths
+                var size = length - 1 if kind == 1 and channel == 2 else length
+                py_call(arrays.append, arena.words(output + 2 * channel * (n + 1), 2 * size, Python.tuple(size), "<f8", context))
+            py_setitem(result, "roc_curve" if kind == 0 else "precision_recall_curve", py_call(b.tuple, arrays))
+    return result
+
+
 def metrics_exp_curve_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The curve metrics; each shell passes its arguments in the order its
     docstring's owner function names (see python/mojolearn/_expansion_metrics.py)."""
+    if operation == "family_mexp_curve_ranking_report":
+        return _ranking_report(args, context)
     if operation == "family_mexp_curve_roc":
         return _roc_curve(args, context)
     if operation == "family_mexp_curve_det":

@@ -1,0 +1,20 @@
+CNN native lifetime/provider follow-up
+DeviceTensor and _Dev now install compiled lifetime descriptors during import;
+CPython decref enters xcnn_c's bound native finalizer directly. The original Python
+__del__ bodies remain source shells but are replaced before product execution.
+The shared float32 boundary captures an admitted buffer layout into a private
+native ndarray view, retaining the original exporter and copying only strided
+input layouts. No Python __array_interface__ or reshape method is used.
+CNNClassifier's numeric-label connection now includes model_native_api_v1,
+required by the shared label provider after the earlier provider migration.
+
+Actual combined xcnn_c dispatcher plus BN resident helper compiled successfully,
+Mac CPU/apple-m1/identical/O0/10 workers, 79.33 seconds. No runtime or GPU execution.
+Full source/binary/logs: ~/mojolearn-evidence/peer4-neural-20261027/tensor-lifetime-attempt1/.
+Receipt compile.json. One subsequent BN comment annotation was moved onto the
+first line of a multiline metadata loop for the source guard; executable source
+is unchanged from the successful compilation. Prior push refusal is preserved
+at ../push-combined.log in the evidence root.
+
+Pending: classifier full label/preparation/result repair, graph batch integration,
+and adjacent neural peers. No whole-library callback-free or behavior claim.

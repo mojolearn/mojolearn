@@ -71,3 +71,22 @@ Saved-binding repair (supersedes the corresponding pending item above)
 - Source runner now passes 15 checks, exit 0. The 19 parameterized public runtime
   control cases are syntax checked only. Log: source-tests-binding.log.
 - Compilation and all product/runtime/vendor qualification remain pending.
+
+2026-10-27 entry-admission follow-up
+- Replaced every remaining builtins runtime import in mamba_public_native with
+  import-connected native_loaded_module access.
+- Replaced all six capability/optional-entry hasattr probes with the shared
+  exact native entry namespace helpers. Canonical image identity uses the raw
+  admitted namespace dictionary, never attribute lookup.
+- Owned-weight revalidation admits the mutable plan record before raw field
+  publication and reads the completed block through neural_block_fields.
+- Added two source controls and an installed-runtime entry-namespace hook refusal
+  test (AST only). Public Mamba admission + typed dispatch closure suite: 17
+  source tests pass, exit0. Full logs: ~/mojolearn-evidence/peer3-mamba-20261027/
+  mamba-entry-source-tests.log, mamba-entry-ast.log, mamba-entry-diff-check.log.
+- Shared causal_lm_public._native_entry_fields/_native_has_entry dependency:
+  parent/Transformer commit 5bc3df9356. Parent compiles compile_mamba.mojo.
+- Transitive callback review still flags causal_lm_construct._model_block's
+  mutable class field/plan/__dict__ lookups and _model_bindings backend default
+  lookup. Exact scope sent to parent/root; this follow-up does not claim those
+  shared constructor routes qualified. No numerical route/arithmetic changed.

@@ -1,0 +1,30 @@
+Branch: lane/peer4-embedding-20261027
+Base: 2e099c1ad4c048a97109104ba6a944e671ddca85
+Owner: peer4 / cnn_pool; parent integrates main serially.
+
+Changes
+- Embedding constructor, from_pretrained, to_device, backward, getstate and set_params enter the native embedding owner directly. Existing forward/load/native attribute lifetime paths were audited and hardened in that owner.
+- Native input snapshots retain caller storage, capture metadata once, reject callback-bearing metadata and unsupported protocols, pack strided/endian buffers, and perform existing native casts. Native Array and ordinary scalar/list paths do not require NumPy.
+- Native host/resident backward prepares gradients, dispatches existing arithmetic, and returns finished Array/device results. Resident tokens retain their actual binding owner for release, including numeric-mode changes.
+- Import-time bridge connects the complete existing embedding ABI and optional host owner. No new router registrations or shared owner edits. Python's inherited fitted-output getter is bypassed for this native public class.
+- Host serialization, supported plan/refusal semantics and integer-id admission remain native. Source changes do not alter arithmetic kernels.
+
+Compilation and source checks
+- Final native compilation: attempt-6, exit 0, 78.980 seconds; Mac apple-m1 target, CPU column, identical define, O0, 10 compiler workers / actual 10 logical cores. Configured workers do not establish saturation.
+- Fixture compiles full embedding public-operation and lifetime owner, shared admission/cast dependencies; dynamically called embedding arithmetic entries and GPU kernels are outside this compilation.
+- Final Mojo bytes match attempt-6's retained source manifest. Final Python getter/guard connection edits followed that snapshot; final Python bytes retained separately and both Python sources AST-parsed. git diff --check passed.
+- attempt-1 failed on two Mojo slice-expression aliasing diagnostics; fixed using local temporaries. Original failure retained. Attempts 2 through 6 passed, each after relevant source changes.
+- Initial push source guard refused three missing line-local import-connection annotations; documented their actual import-only scope. Failure retained in push-attempt-1.log.
+- No runtime tests, identity checks, GPU builds or GPU execution. No claim of verified runtime behavior. No rented box used.
+
+Evidence
+- /Users/andrewhendel/mojolearn-evidence/peer4-embedding-20261027/attempt-6/: full compile.log, result.json, source_manifest.json, source_bytes.tgz, compiled shared library.
+- /Users/andrewhendel/mojolearn-evidence/peer4-embedding-20261027/final-public-sources/: final Python connection bytes and hashes.
+- experiments/peer4_embedding_20261027/compile.json: portable receipt with commands, hashes, scope, prior attempt status and pending coverage.
+- /Users/andrewhendel/mojolearn-evidence/peer4-embedding-20261027/push.log: required push guards (recorded at push).
+
+Remaining work
+- Parent cherry-pick and push successful coherent batch. Runtime and cross-vendor qualification remain unperformed under the current compile-only authorization.
+
+Log reminder
+Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output. Propagate this reminder in resumed assignments.

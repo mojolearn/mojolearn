@@ -24,21 +24,31 @@
 #   score                `ClassifierScoreMixin.score` (the accuracy owner) and
 #                        `RegressorScoreMixin.score` (the metrics owner's R^2)
 #
-# Arguments: args[0] is the binding the shell resolved (`self._bind(...)`):
-# `_mojolearn` for the searches, the x_neighbors binding for the fits.
+# Public methods pass None in the binding slot. The operation owner resolves
+# the import-connected provider after entry: `_mojolearn` for prediction and
+# x_neighbors for fit. Explicit bindings remain supported for native drivers.
+from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
+from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_address
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
+from bindings.classical_pandas import classical_admit_value
+from bindings.host_sparse_native import host_sparse_format
+from bindings.host_inference_scalars import host_inference_scalar
+from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_is_str, family_isinstance, family_call, family_array,
     family_as_f32, family_as_f32_dense, family_owned, family_field,
+    family_f32_snapshot, family_owned_snapshot, family_snapshot_min,
 )
 from bindings.classical_labels import (
     LabelsView, labels_view, labels_check_rank, labels_cast, labels_all_finite, labels_helper,
@@ -65,6 +75,22 @@ comptime _REDUCE_INTEGRAL = 4
 
 
 # ------------------------------------------------------------------ Python glue
+
+
+def _admit_knn_state(model: PythonObject, context: PythonObject) raises:
+    classical_check_layout(model, context)
+    var fields = py_fields(model)
+    var scalars = Python.tuple("algorithm", "metric", "p", "weights", "n_neighbors", "query_tile",
+        "n_features_in_", "n_samples_fit_", "outputs_2d_")
+    for i in range(len(scalars)):  # small-loop(fixed neighbor parameter and fitted scalar schema)
+        var value = py_get(fields, scalars[i])
+        if value is not None:
+            host_inference_scalar(value, context, True)
+    var buffers = Python.tuple("_index", "_y_cols", "_classes_list", "_label_names")
+    for i in range(len(buffers)):  # small-loop(fixed neighbor buffer and class owners)
+        var value = py_get(fields, buffers[i])
+        if value is not None:
+            classical_admit_value(value, context)
 
 
 def _b() raises -> PythonObject:
@@ -109,21 +135,16 @@ def knn_door(binding: PythonObject, name: String) raises -> PythonObject:
     where the loaded binding has no such door (an absent name is ImportError
     on a host binding, AttributeError on a module); any other exception the
     lookup raises reaches the caller unchanged."""
-    ref cpy = Python().cpython()
+    # Both real extensions and the import-connected query export tables are
+    # exact modules. Read their dictionaries directly: a missing entry never
+    # invokes module __getattr__, and replaced Python callables are refused.
     var b = _b()
-    var import_error = b.ImportError
-    var attribute_error = b.AttributeError
-    var key = PythonObject(name)
-    var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GetAttr")(binding._obj_ptr, key._obj_ptr)
-    _ = key^
-    if not pointer:
-        if (cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(import_error._obj_ptr) != 0
-                or cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(attribute_error._obj_ptr) != 0):
-            cpy.lib.get_function[NoneType]("PyErr_Clear")()
-            return PythonObject(None)
-        var failure = stash_python_error()
-        raise failure^
-    return PythonObject(from_owned=pointer)
+    if py_type(binding) is not py_type(b):
+        raise Error("TypeError: neighbor execution requires its connected native module")
+    var entry = py_get(py_fields(binding), name)
+    if entry is not None and (py_type(entry) is not py_type(b.len) or py_type(entry.__self__) is not py_type(b)):
+        raise Error("TypeError: neighbor execution requires compiled entry " + name)
+    return entry
 
 
 def _holder(fields: PythonObject) raises -> PythonObject:
@@ -133,6 +154,12 @@ def _holder(fields: PythonObject) raises -> PythonObject:
     if holder is None:
         holder = Python.dict()
         py_setitem(fields, "_resident_holder", holder)
+    if py_type(holder) is not _b().dict:
+        raise Error("TypeError: neighbor resident holder must be an exact dictionary")
+    var keys = py_call(_b().tuple, holder.keys())
+    for i in range(len(keys)):  # driver-loop: resident metadata keys before dictionary comparisons
+        if py_type(keys[i]) is not _b().str:
+            raise Error("TypeError: neighbor resident keys must be exact strings")
     return holder
 
 
@@ -150,14 +177,19 @@ def knn_release(model: PythonObject) raises:
     var b = _b()
     var fields = py_fields(model)
     var holder = py_get(fields, PythonObject("_resident_holder"), PythonObject(None))
-    if holder is None or py_type(holder) is not b.dict:
+    if holder is None:
         return
+    holder = _holder(fields)
     var held = py_get(holder, PythonObject("index"), PythonObject(None))
     if held is None:
         return
+    if py_type(held) is not b.tuple or len(held) != 3 or py_type(held[1]) is not b.int:
+        raise Error("TypeError: neighbor resident state must retain its native handle and module")
+    var release = knn_door(held[2], "knn_index_release")
     py_setitem(holder, "index", PythonObject(None))
     try:
-        _ = py_call(py_call(b.getattr, held[2], PythonObject("knn_index_release")), held[1])
+        if release is not None:
+            _ = py_call(release, held[1])
     except:
         pass
 
@@ -175,8 +207,17 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
     var key = Python.tuple(classical_address(idx), family_call(b.tuple, idx.shape))
     var holder = py_get(fields, PythonObject("_resident_holder"), PythonObject(None))
     var cached = PythonObject(None)
-    if holder is not None and _truth(holder):
-        cached = py_get(holder, PythonObject("index"), PythonObject(None))
+    if holder is not None:
+        cached = py_get(_holder(fields), PythonObject("index"), PythonObject(None))
+    if cached is not None:
+        if py_type(cached) is not b.tuple or len(cached) != 3 or py_type(cached[1]) is not b.int:
+            raise Error("TypeError: neighbor resident state must retain its native handle and module")
+        var previous = cached[0]
+        if (py_type(previous) is not b.tuple or len(previous) != 2 or py_type(previous[0]) is not b.int
+                or py_type(previous[1]) is not b.tuple or len(previous[1]) != 2
+                or py_type(previous[1][0]) is not b.int or py_type(previous[1][1]) is not b.int):
+            raise Error("TypeError: neighbor resident key must contain native address and shape words")
+        _ = knn_door(cached[2], "knn_index_release")
     if cached is not None and _eq(cached[0], key):
         return cached[1]
     if cached is not None:
@@ -352,21 +393,21 @@ def _dist_params(model: PythonObject, context: PythonObject) raises -> PythonObj
     return Python.list(resolved[0], resolved[1], PythonObject(weights))
 
 
-def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: PythonObject) raises:
-    """`neighbors._check_metric_input`: jensenshannon takes logarithms, so a
-    negative coordinate is refused before any device work (`x.min()` is
-    `Array.min`, the core helper `reduce_stat`)."""
-    if value != _DIST_JS:
-        return
-    var size = Int(py=x.size)
-    if size == 0:
-        return
-    var low = Float64(py=family_call(_b().float, _reduce(Int(py=classical_address(x)), _CODE_F32, size, _REDUCE_MIN,
-                                                           context)))
-    _ = x  # keep the Python object alive through the native call above
-    if low < 0.0:
+def _check_metric_input(cls_name: String, value: Int, x: ArrayMetadata) raises:
+    # The same captured shape/address/owner is used for validation and the
+    # subsequent call. The minimum is native, with no Python reduction door.
+    if value == _DIST_JS and x.count > 0 and Float64(family_snapshot_min(x)) < 0.0:
         raise Error("mojolearn " + cls_name + ": metric='jensenshannon' needs X >= 0 "
                     + "(it takes logarithms of the coordinates)")
+
+
+def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: PythonObject) raises:
+    # Existing native shard workers supply their prepared array, not the
+    # public operation snapshot. Keep that internal ABI while their owner
+    # migrates; plain operations above consume the retained snapshot directly.
+    if value == _DIST_JS:
+        var snapshot = family_f32_snapshot(x, 2, "X", context)
+        _check_metric_input(cls_name, value, snapshot)
 
 
 # ------------------------------------------------------------------ fit
@@ -384,26 +425,22 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject) 
     # Held on the instance so the memory outlives this call: the search
     # borrows the address at query time (an owned float32 Array: the cast
     # result itself, or one copy of a caller's float32 block).
-    var idx = family_owned(family_as_f32_dense(x_source, 2, "X", context), context)
+    var input = family_f32_snapshot(x_source, 2, "X", context, True)
+    var idx = family_owned_snapshot(input, context)
     if not _eq(family_field(fields, "algorithm"), PythonObject("rbc")):
         var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
-        _check_metric_input(cls_name, Int(py=resolved[0]), idx, context)
+        _check_metric_input(cls_name, Int(py=resolved[0]), input)
     py_setitem(fields, "_index", idx)
-    py_setitem(fields, "n_samples_fit_", idx.shape[0])
-    py_setitem(fields, "n_features_in_", idx.shape[1])
+    py_setitem(fields, "n_samples_fit_", PythonObject(input.shape[0]))
+    py_setitem(fields, "n_features_in_", PythonObject(input.shape[1]))
 
 
 def _y_shape(y: PythonObject, fields: PythonObject, context: PythonObject) raises -> List[Int]:
     """`_shape_of(y)` with the k-NN fits' rank and row-count refusals. An
     object with neither a `shape` nor list/tuple nesting reads `(len(y),)`
     when it has a length and `()` otherwise, as `_buffer.shape_of` did."""
-    var b = _b()
-    var shape = List[Int]()
-    if (y is not None and (family_isinstance(y, Python.tuple(b.list, b.tuple))
-                           or _truth(py_call(b.hasattr, y, PythonObject("shape"))))):
-        shape = labels_shape_of(y, context)
-    elif y is not None and _truth(py_call(b.hasattr, y, PythonObject("__len__"))):
-        shape.append(Int(py=family_call(b.len, y)))
+    classical_admit_value(y, context)
+    var shape = List[Int]() if y is None else labels_shape_of(y, context)
     if len(shape) != 1 and len(shape) != 2:
         raise Error("mojolearn: y must be 1-D or 2-D, got " + String(len(shape)) + "-D")
     var n_fit = family_field(fields, "n_samples_fit_")
@@ -419,10 +456,11 @@ def _is_float_buffer(y: PythonObject, context: PythonObject) raises -> Bool:
     var b = _b()
     if y is None:
         return False
-    if (_truth(py_call(b.hasattr, y, PythonObject("tocsr"))) and _truth(py_call(b.hasattr, y, PythonObject("nnz")))
-            and _truth(py_call(b.hasattr, y, PythonObject("shape")))):
+    if host_sparse_format(y).byte_length() > 0:
         return False
-    if family_isinstance(y, Python.tuple(b.list, b.tuple, b.str, b.bytes, b.dict)):
+    classical_admit_value(y, context)
+    var cls = py_type(y)
+    if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes or cls is b.dict:
         return False
     var fmt: String
     if py_type(y) is context["array_class"]:
@@ -560,9 +598,8 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
         if n:
-            _ = family_call(family_call(b.getattr, xn, PythonObject("xn_p2m_transpose_i")),
-                            Python.list(classical_address(y32), classical_address(yc)),
-                            Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
+            xn_execute(xn, "p2m_transpose_i", Python.list(classical_address(y32), classical_address(yc)),
+                       Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
             _ = y32  # keep the Python object alive through the native call above
             _ = yc  # keep the Python object alive through the native call above
     else:
@@ -587,47 +624,53 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var xn = args[0]
     _nn_fit(model, args[1], context)
     var fields = py_fields(model)
-    var shape = _y_shape(args[2], fields, context)
-    var ya = family_as_f32(args[2], len(shape), "y", context)
+    var target = family_f32_snapshot(args[2], -1, "y", context)
+    var shape = target.shape.copy()
+    if len(shape) != 1 and len(shape) != 2:
+        raise Error("mojolearn: y must be 1-D or 2-D, got " + String(len(shape)) + "-D")
+    var n_fit = Int(py=family_field(fields, "n_samples_fit_"))
+    if shape[0] != n_fit:
+        raise Error("mojolearn: y has " + String(shape[0]) + " rows, X has " + String(n_fit))
+    var ya = target.keep
     var n = shape[0]
     var n_out = 1 if len(shape) == 1 else shape[1]
     if n_out == 1:
         # One column IS one contiguous row of the transposed layout.
-        py_setitem(fields, "_y_cols", labels_reshape(family_owned(ya, context), Python.tuple(1, n), context))
+        py_setitem(fields, "_y_cols", labels_reshape(family_owned_snapshot(target, context), Python.tuple(1, n), context))
     else:
         # The transpose on the device (`xn_p2m_transpose`; the host binding's
         # same op on a CPU-only install).
         var yc = family_array(Python.tuple(n_out, n), "<f4", context)
         if n:
-            _ = family_call(family_call(b.getattr, xn, PythonObject("xn_p2m_transpose")),
-                            Python.list(classical_address(ya), classical_address(yc)),
-                            Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
+            xn_execute(xn, "p2m_transpose", Python.list(PythonObject(target.source.addr), classical_address(yc)),
+                       Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
             _ = ya  # keep the Python object alive through the native call above
             _ = yc  # keep the Python object alive through the native call above
         py_setitem(fields, "_y_cols", yc)
     py_setitem(fields, "outputs_2d_", PythonObject(len(shape) == 2 and shape[1] != 1))
+    _ = target
 
 
 # ------------------------------------------------------------------ predict
 
 
-def _queries(model: PythonObject, x_source: PythonObject, context: PythonObject) raises -> PythonObject:
+def _queries(model: PythonObject, x_source: PythonObject, context: PythonObject) raises -> ArrayMetadata:
     """The prediction preamble: fitted check, float32 queries, the metric
     input check (with `_dist_params`' refusals), width and k checks."""
     var fields = py_fields(model)
     if (py_get(fields, PythonObject("_index"), PythonObject(None)) is None
             or py_get(fields, PythonObject("_y_cols"), PythonObject(None)) is None):
         raise Error("mojolearn: call fit before predict")
-    var q = family_as_f32_dense(x_source, 2, "X", context)
-    _check_metric_input(_class_name(model), Int(py=_dist_params(model, context)[0]), q, context)
+    var q = family_f32_snapshot(x_source, 2, "X", context, True)
+    _check_metric_input(_class_name(model), Int(py=_dist_params(model, context)[0]), q)
     var features = family_field(fields, "n_features_in_")
-    if _ne(q.shape[1], features):
-        raise Error("mojolearn: X has " + family_str(q.shape[1]) + " features, index has " + family_str(features))
+    if q.shape[1] != Int(py=features):
+        raise Error("mojolearn: X has " + String(q.shape[1]) + " features, index has " + family_str(features))
     var k = family_field(fields, "n_neighbors")
     var n_fit = family_field(fields, "n_samples_fit_")
     if _lt(k, PythonObject(1)) or _gt(k, n_fit):
         raise Error("mojolearn: n_neighbors must be in [1, " + family_str(n_fit) + "], got " + family_str(k))
-    return q
+    return q^
 
 
 def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject, want_proba: Bool,
@@ -636,9 +679,10 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
     n_classes)`; the search and the vote are one compiled call."""
     var b = _b()
     var fields = py_fields(model)
-    var q = _queries(model, x_source, context)
+    var query = _queries(model, x_source, context)
+    var q = query.keep
     var k = family_field(fields, "n_neighbors")
-    var nq = Int(py=q.shape[0])
+    var nq = query.shape[0]
     var y_cols = family_field(fields, "_y_cols")
     var n_out = Int(py=y_cols.shape[0])
     var classes_list = family_field(fields, "_classes_list")
@@ -675,14 +719,15 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
         # eight arguments and the classifier uses all eight.
         var front = Python.list(handle)
         _ = py_call(front.extend, params)
-        used = family_call(resident, classical_address(idx), classical_address(q), classical_address(y_cols),
+        used = family_call(resident, classical_address(idx), PythonObject(query.source.addr), classical_address(y_cols),
                            classical_address(labels), classical_address(proba), classical_address(uniq), front, dist)
     else:
-        used = family_call(family_call(b.getattr, binding, PythonObject("knn_classify")), classical_address(idx),
-                           classical_address(q), classical_address(y_cols), classical_address(labels),
+        used = family_call(knn_door(binding, "knn_classify"), classical_address(idx),
+                           PythonObject(query.source.addr), classical_address(y_cols), classical_address(labels),
                            classical_address(proba), classical_address(uniq), params, dist)
     _ = idx  # keep the Python object alive through the native call above
     _ = q  # keep the Python object alive through the native call above
+    _ = query  # retain snapshot owners through execution
     _ = y_cols  # keep the Python object alive through the native call above
     _ = labels  # keep the Python object alive through the native call above
     _ = proba  # keep the Python object alive through the native call above
@@ -768,9 +813,10 @@ def _reg_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     query, float32; one compiled call for the search and the mean."""
     var b = _b()
     var fields = py_fields(model)
-    var q = _queries(model, x_source, context)
+    var query = _queries(model, x_source, context)
+    var q = query.keep
     var k = family_field(fields, "n_neighbors")
-    var nq = Int(py=q.shape[0])
+    var nq = query.shape[0]
     var y_cols = family_field(fields, "_y_cols")
     var n_out = Int(py=y_cols.shape[0])
     var out = family_array(Python.tuple(nq, n_out), "<f4", context)
@@ -787,13 +833,14 @@ def _reg_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     var dist = _dist_params(model, context)
     var used: PythonObject
     if handle is not None:
-        used = family_call(resident, handle, classical_address(idx), classical_address(q), classical_address(y_cols),
+        used = family_call(resident, handle, classical_address(idx), PythonObject(query.source.addr), classical_address(y_cols),
                            classical_address(out), params, dist)
     else:
-        used = family_call(family_call(b.getattr, binding, PythonObject("knn_regress")), classical_address(idx),
-                           classical_address(q), classical_address(y_cols), classical_address(out), params, dist)
+        used = family_call(knn_door(binding, "knn_regress"), classical_address(idx),
+                           PythonObject(query.source.addr), classical_address(y_cols), classical_address(out), params, dist)
     _ = idx  # keep the Python object alive through the native call above
     _ = q  # keep the Python object alive through the native call above
+    _ = query  # retain snapshot owners through execution
     _ = y_cols  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _report(fields, "used_query_tile_", used)
@@ -821,13 +868,23 @@ def _reg_score(model: PythonObject, args: PythonObject, context: PythonObject) r
     var truth = family_as_f32(args[2], -1, "y", context)
     var prediction = family_as_f32(_reg_predict(model, args[0], args[1], context), -1, "prediction", context)
     var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
-    return mcls_cluster_operation("family_mcls_r2", Python.tuple(args[4], truth, prediction, args[3],
+    var metrics = args[4] if args[4] is not None else estimator_binding(model, "_mojolearn_metrics", context)
+    return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
                                   PythonObject("uniform_average"), PythonObject(True), mode), context)
 
 
-def neighbors_knn_operation(model: PythonObject, operation: String, args: PythonObject,
+def _neighbors_knn_operation(model: PythonObject, operation: String, var args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
+    _admit_knn_state(model, context)
+    var data_start = 0 if operation == "family_xn_knn_nn_fit" else 1
+    for i in range(data_start, min(len(args), 4)):  # small-loop(public data arguments; metrics binding is not data)
+        if host_sparse_format(args[i]).byte_length() == 0:
+            classical_admit_value(args[i], context)
+    if operation == "family_xn_knn_clf_fit" or operation == "family_xn_knn_reg_fit":
+        args = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
+    elif operation != "family_xn_knn_nn_fit":
+        args = estimator_arguments(model, "_mojolearn", args, context)
     if operation == "family_xn_knn_nn_fit":
         # args = (X,)
         _nn_fit(model, args[0], context)
@@ -854,3 +911,37 @@ def neighbors_knn_operation(model: PythonObject, operation: String, args: Python
         # args = (_mojolearn binding, X, y, sample_weight, metrics binding)
         return _reg_score(model, args, context)
     raise Error("RuntimeError: unknown neighbors operation " + operation)
+
+
+def neighbors_knn_operation(model: PythonObject, operation: String, args: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    if operation == "family_xn_knn_getstate":
+        var fields = _fields(model)
+        var state = py_call(native_loaded_module("builtins").dict, fields)
+        _ = py_call(state.pop, "_resident", PythonObject(None))
+        _ = py_call(state.pop, "_resident_holder", PythonObject(None))
+        return state
+    if operation == "family_xn_knn_setstate":
+        var b = _b()
+        var state = args[0]
+        if py_type(state) is not b.dict:
+            raise Error("TypeError: neighbor pickle state must be an exact dictionary")
+        var keys = py_call(b.tuple, state.keys())
+        for i in range(len(keys)):  # driver-loop: state keys before native dictionary update
+            if py_type(keys[i]) is not b.str:
+                raise Error("TypeError: neighbor pickle state keys must be exact strings")
+        var fields = _fields(model)
+        knn_release(model)
+        _ = py_call(fields.update, state)
+        py_setitem(fields, "_resident_holder", Python.dict())
+        return PythonObject(None)
+    var call = neighbors_public_begin(model, operation, args, context)
+    var result = PythonObject(None)
+    try:
+        result = _neighbors_knn_operation(model, operation, call.args, context)
+    except error:
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
+    finally:
+        neighbors_public_end(model, call)
+    return neighbors_public_finish(model, operation, result, call, context)

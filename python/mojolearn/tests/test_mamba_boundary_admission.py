@@ -144,3 +144,26 @@ def test_owned_operations_refuse_saved_binding_hooks(operation):
     with pytest.raises(TypeError, match="saved binding|native image"):
         getattr(block, operation)()
     assert calls == []
+
+
+def test_mamba3_entry_selection_refuses_replaced_namespace_hooks(monkeypatch):
+    from mojolearn import _mamba_impl
+
+    block, dm = _block("mamba3")
+    context = _mamba_impl._native_neural_bridge.CONTEXT
+    calls = []
+
+    class EntryHook:
+        def __getattribute__(self, name):
+            calls.append(name)
+            raise AssertionError("entry namespace hook was invoked before admission")
+
+    route = block.__dict__["_native_route"]
+    mode = "identical" if route == "cpu" else block.__dict__["numeric_mode"]
+    key = route + ":" + mode
+    with monkeypatch.context() as patch:
+        patch.setitem(context["bindings"][key], "mamba3", EntryHook())
+        patch.setitem(context["training_bindings"][key], "mamba", EntryHook())
+        with pytest.raises(TypeError, match="native|namespace|entry"):
+            block.forward(_tokens(1, 1, dm))
+    assert calls == []

@@ -1,0 +1,128 @@
+{
+  "status": "PASS - five focused native owner roots compiled; no runtime claim",
+  "starting_commit": "7de54456bde166c42fd0d9f7378e402bb0f3be91",
+  "branch": "lane/peer1-neighbors-kernels-20261027",
+  "compiler_version": "551 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ac940000000, nodemask=2730)\nMojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+  "compiler_matches_root_batch5": true,
+  "target": "x86-64-v3 Linux CPU",
+  "flags": [
+    "--optimization-level",
+    "0",
+    "-j32",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "x86-64-v3",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/root/mojolearn",
+    "-I",
+    "/root/mojolearn/bindings"
+  ],
+  "dependency_manifest": "pixi.lock; locked Pixi default environment",
+  "roots": [
+    {
+      "family": "neighbors",
+      "entry": "checks/peer1_neighbors_owner_compile.mojo",
+      "source_commit": "642328adf04dc1cf414e4316da7d769fa0c73b3d",
+      "exit_code": 0,
+      "start": "2026-10-28T03:01:05Z",
+      "end": "2026-10-28T03:01:41Z",
+      "binary_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-compile/remote/leg_out/peer1-native-compile/peer1-neighbors.so",
+      "binary_bytes": 8093744,
+      "binary_sha256": "0b5ee2a471bf68f698f554f3ff6005b477fe1cb009755b2b533ce0142b2b4bf5",
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-compile/remote/leg_out/peer1-native-compile/split-neighbors.log",
+      "log_sha256": "e5841816160f1544cbb36abc602d4e424551b0ce121df26fea5c7d30e80b7fc3"
+    },
+    {
+      "family": "query",
+      "entry": "checks/peer1_query_owner_compile.mojo",
+      "source_commit": "642328adf04dc1cf414e4316da7d769fa0c73b3d",
+      "exit_code": 0,
+      "start": "2026-10-28T03:01:41Z",
+      "end": "2026-10-28T03:01:57Z",
+      "binary_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-compile/remote/leg_out/peer1-native-compile/peer1-query.so",
+      "binary_bytes": 4037152,
+      "binary_sha256": "ae88d769c78c0926f342dcd654d460ffbd9ff1a48b1c2b591a11c1c94610c45d",
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-compile/remote/leg_out/peer1-native-compile/split-query.log",
+      "log_sha256": "8f78e6c38c379dfc838143abecbb6745afdded320cb90974755781a81bd0753c"
+    },
+    {
+      "family": "attribute",
+      "entry": "checks/peer1_attribute_owner_compile.mojo",
+      "source_commit": "17e5f8f71b0661f0f72e90df2329e569f73bf972",
+      "exit_code": 0,
+      "start": "2026-10-28T03:17:37Z",
+      "end": "2026-10-28T03:17:46Z",
+      "binary_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-repaired-compile/remote/leg_out/peer1-repaired-compile/round-1-attribute.so",
+      "binary_bytes": 2193200,
+      "binary_sha256": "b3e27b0f158d70b5d0243a6cbe8116604d64c908179a7e50e030bc3fb8e56101",
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-repaired-compile/remote/leg_out/peer1-repaired-compile/round-1-attribute.log",
+      "log_sha256": "30b91e64d67d7b18973c4f9a6ae4d92ec6ada634cbad13e03a4b77d9ce26f2c2"
+    },
+    {
+      "family": "kernel",
+      "entry": "checks/peer1_kernel_owner_compile.mojo",
+      "source_commit": "17e5f8f71b0661f0f72e90df2329e569f73bf972",
+      "exit_code": 0,
+      "start": "2026-10-28T03:17:46Z",
+      "end": "2026-10-28T03:18:10Z",
+      "binary_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-repaired-compile/remote/leg_out/peer1-repaired-compile/round-1-kernel.so",
+      "binary_bytes": 5924784,
+      "binary_sha256": "34940940fa4a708c38647d29c5767352b2a45b4d1ed42b7f74b5e53f1d4414da",
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-repaired-compile/remote/leg_out/peer1-repaired-compile/round-1-kernel.log",
+      "log_sha256": "8185716d02501723de196ec479701240999b50169ca14becc30269506bb2a352"
+    },
+    {
+      "family": "hierarchy",
+      "entry": "experiments/provider_hierarchy_20261027/compile_hierarchy.mojo",
+      "source_commit": "0f3e7032394132ddf4a59a2c60761dbb821ff015",
+      "exit_code": 0,
+      "start": "2026-10-28T03:20:06Z",
+      "end": "2026-10-28T03:20:24Z",
+      "binary_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-repaired-compile/remote/leg_out/peer1-repaired-compile/round-2-hierarchy.so",
+      "binary_bytes": 4623168,
+      "binary_sha256": "9445b2790ce00dd1faf73e68be8193282c6525819655cf75782516943d530566",
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-repaired-compile/remote/leg_out/peer1-repaired-compile/round-2-hierarchy.log",
+      "log_sha256": "fb38eb47e26c8b9b7c5aaf9053f630aea7aeac6b554c1d5e2ea65b26b9cd29e8"
+    }
+  ],
+  "archives": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-compile/results-complete.tgz",
+      "sha256": "110174bd6ef17f781e8798d442b157b2951795857c2a8204753bf8887ed6144e",
+      "r2_object": "measurements/runpod-cpu/mojolearn-cpu-peer1-native-20261027-20261028-024519/results-complete.tgz",
+      "teardown": "pod=ko6mz7dft4c0x6\nname=mojolearn-cpu-peer1-native-20261027-20261028-024519\nterminated_verified=1\nexit=1\nat=2026-10-28T03:12:45Z\n"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-repaired-compile/results-complete.tgz",
+      "sha256": "fa9274e2436396643afe8891f0cdcce3bfe8e07c1cdda6d3382b64ffb59c4f68",
+      "r2_object": "measurements/runpod-cpu/mojolearn-cpu-peer1-repair-20261027-20261028-031515/results-complete.tgz",
+      "teardown": "pod=enqko1m5yz3q7w\nname=mojolearn-cpu-peer1-repair-20261027-20261028-031515\nterminated_verified=1\nexit=0\nat=2026-10-28T03:20:45Z\n"
+    }
+  ],
+  "runtime_verification": "NOT_RUN - owner requested compilation and merge only",
+  "cross_vendor_verification": "NOT_RUN",
+  "production_artifact_build": "NOT_RUN - focused roots retain real public native owners",
+  "probe_source_note": "Neighbors/query probes added by0163f1f310; production source642328adf0 unchanged. Kernel/attribute changed via resolver17e5f8f71b. Hierarchy final0f3e703239 changes only compile probe; production source17e5f8f71b.",
+  "source_manifests": [
+    "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/local-compile/source-input-hashes.json",
+    "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-compile/remote/leg_out/peer1-native-compile/source-hashes.json",
+    "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/repair-source-hashes.json",
+    "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-repaired-compile/remote/leg_out/peer1-repaired-compile/source-hashes.json",
+    "/Users/andrewhendel/mojolearn-evidence/peer1-neighbors-kernels-20261027/cpu-repaired-compile/remote/leg_out/peer1-repaired-compile/round-2-source-hashes.json"
+  ],
+  "retained_failures": [
+    "Local unactivated compiler could not find std; fixed with normal Pixi activation.",
+    "Local source compile errors repaired before later runs.",
+    "Combined, kernel-only and public-attribute compiles stalled; unchanged baseline attribute also stalled. Internal compiler cause unconfirmed.",
+    "Mac attribute attempt guard stopped for system compressed-memory growth; cleanup verified.",
+    "First CPU runner repair wait expired during extra repair build; first attribute repair exit0 observed but binary unretained. This evidence was not used; missing roots repeated.",
+    "Hierarchy probe used main() with shared-lib and failed linking; exported probe repaired; only hierarchy repeated."
+  ],
+  "remaining_paths": "HANDOFF.txt plus experiments/provider_hierarchy_20261027/HANDOFF.txt; families not complete"
+}
