@@ -1,7 +1,7 @@
 # lane/amd-mfma: MOJOLEARN_IDN_AMD_MFMA_KPACK (REPORT 2026-10-28 idea 3)
 
 ## Branch and head
-lane/amd-mfma (from origin/main cbc14776d7; origin/main 45b0630582 merged at 20e8caa2ae , 4a10a3069e at 680f90fba0, a69666b609 at bed5e1d6d0 and dacfa820ad at 4073aa5682, additive; the second merge touches no file of this lane except appended EXPERIMENTS.md rows, so no recompile). Code at 0ae648f4cd; the head adds the receipt and this file.
+lane/amd-mfma (from origin/main cbc14776d7; origin/main 45b0630582 merged at 20e8caa2ae , 4a10a3069e at 680f90fba0, a69666b609 at bed5e1d6d0, dacfa820ad at 4073aa5682 and ebcd7f9477 at 24533936ec, additive; the second merge touches no file of this lane except appended EXPERIMENTS.md rows, so no recompile). Code at 0ae648f4cd; the head adds the receipt and this file.
 
 ## What the head contains
 - gemm/checks/gemm_identical.mojo:3815: `IDN_AMD_MFMA_KPACK`, default off; IDENTICAL only, off under `MOJOLEARN_IDN_ALL_OFF`.
