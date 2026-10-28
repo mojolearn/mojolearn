@@ -101,4 +101,9 @@ except ImportError:
 else:
     PATH_BASES = (PosixPath, PurePosixPath, Path, PurePath, object, PathBase, PurePathBase)
 PATH_TYPES = (PosixPath, PurePosixPath)
-connect_module('mojolearn._native_loaded_modules', sys.modules[__name__], ('PATH_TYPES', 'PATH_BASES'))
+# glue: exact mapping storage a native owner admits for a caller mapping (a
+# torch `state_dict()` is an OrderedDict); subclasses with their own
+# keys/__getitem__ protocols are refused, never called.
+from collections import OrderedDict
+MAPPING_TYPES = (dict, OrderedDict)
+connect_module('mojolearn._native_loaded_modules', sys.modules[__name__], ('PATH_TYPES', 'PATH_BASES', 'MAPPING_TYPES'))

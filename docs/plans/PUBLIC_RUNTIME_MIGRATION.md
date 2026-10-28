@@ -129,6 +129,32 @@ The tool has limits:
 - The statement and branch totals are summed per method. A shared helper counts once for every method
   that reaches it.
 
+### The no-Python-in-runtime gate (2026-10-28)
+
+`tools/tests/test_no_python_runtime.py` runs the endpoint ledger (`--endpoints-json`) as a source scan
+(nothing is imported) and fails when a `prohibited_source` endpoint is listed neither in
+`experiments/python_audit_20261028/allowed_exceptions.tsv` (owner exceptions, each with its rule
+citation) nor in `experiments/python_audit_20261028/prohibited_debt.tsv` (known violations with their
+owner: debt to remove, never an exemption), or when the unresolved count exceeds the pin in
+`allowed_exceptions.tsv`. The pre-push hook runs it on an exported copy of the pushed commit whenever
+that commit carries the test (rerun `bash tools/hooks/install.sh` after this change lands).
+
+    python3 tools/tests/test_no_python_runtime.py           # the gate, about 15 s
+    python3 tools/tests/test_no_python_runtime.py --prune   # after a migration: drop fixed debt rows, lower the pin
+    MOJOLEARN_NO_PYTHON_STRICT=1 python3 tools/tests/test_no_python_runtime.py   # also fail on any debt
+
+`--prune` never adds a row. New debt or a new exception is a reviewed hand edit.
+`experiments/python_audit_20261028/UNRESOLVED.tsv` classifies every unresolved group by reading the
+source; `tools/mojo_python_callback_audit.py` writes the Mojo-side triage of Python hooks invoked on
+argument objects (`experiments/python_audit_20261028/CALLBACKS.tsv`).
+
+Since 2026-10-28 the ledger also models `_mode`'s class-creation hooks: a plain method of a class that is
+not `_mojolearn_native_public` when it is created is replaced by a Python wrapper (`_public_output`,
+`_track_fit`, `_needs_fit`, `_loader`, `_guard_cpu_training`, the `numeric_mode` constructor wrapper), so
+such an endpoint is `prohibited_source` with `class_creation_wrapper` naming the class even when its source
+body is one native call. Making the class `_mojolearn_native_public` (with the native owner doing the
+validation, fitted checks and output conversion) clears it.
+
 ## Reviewed remaining work (2026-10-21, source 6174c30ad)
 
 The executable inventory still reports **996 operation rows: 81 native-shaped, 396 orchestrated,

@@ -203,7 +203,7 @@ def km_native_kernel_ridge_resident_release(a: List[Int], p: List[Int], f: List[
 
 def km_native_kernel_ridge_predict_resident(original: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     var handle = original[0]
-    var a = List[Int](original[1], original[2])
+    var a: List[Int] = [original[1], original[2]]
     if len(a) != 2:
         raise Error(
             "kernel_ridge_predict_resident: addrs must contain 2 addresses (x_new, out), got "

@@ -76,8 +76,9 @@ FUNCTION_OP = "call"   # the method column for a public function
 
 # Public operations returned by factories/framework registration are not in the
 # package's __all__. Keep them in the same gate as directly exported estimators.
+# (adapters._torch_compile._Compiled was retired with implicit graph capture, 2026-10-27:
+# the module keeps only a native refusal `backend`, no returned class.)
 RETURNED_OPERATIONS = (
-    ("adapters._torch_compile", "_Compiled", "__call__"),
     ("importers._program", "ImportedProgram", "run"),
 )
 
@@ -118,6 +119,11 @@ NATIVE_MODULE = re.compile(r"^_mojolearn\w*$")
 CONNECT_CALL = re.compile(r"^_?connect|native")
 # Instance attributes the compiled runtime sets on the object itself.
 NATIVE_ATTRS = frozenset({"_runtime"})
+# Compiled factories that turn a bound compiled entry into a class-slot descriptor, and
+# refuse anything else at runtime: bindings/classical_attributes.mojo
+# classical_attribute_descriptor_c requires MethodType over a BuiltinFunctionType and
+# returns PyInstanceMethod_New of it. The slot then calls that entry.
+NATIVE_DESCRIPTOR_FACTORIES = frozenset({"classical_attribute_descriptor"})
 NATIVE_CALL = re.compile(r"^_native|_native$")
 TAG = re.compile(r"#\s*(driver-loop:|glue)")
 
@@ -145,6 +151,11 @@ class Mod:
         # module-level names bound to a compiled entry (`_NATIVE = _binding()._module.call`),
         # filled by Index._module_globals: name -> entry
         self.entry_globals = {}
+        # module-level names holding a connection namespace (`_session_connected =
+        # _SESSION_CONNECTIONS["identical"]`, filled by a package function that returns
+        # `SimpleNamespace(call=binding.entry, ...)`), filled by Index._module_globals:
+        # name -> {field: ("binding",) | ("entry", entry)}
+        self.namespace_globals = {}
         self.module_scope = None
         for node in self.tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -294,6 +305,7 @@ class Index:
         self.returns_tuple = {}
         self.returns_entry_tuple = {}   # a connect function returning (entry, context): per-element entry
         self.returns_module = {}
+        self.returns_namespace = {}   # a connect function returning SimpleNamespace(field=binding.entry, ...)
         self.binding_params = {}
         self.binding_attrs = set(NATIVE_ATTRS)
         self._mro = {}
@@ -372,6 +384,20 @@ class Index:
         if mod.is_pkg and self.module_file(modname + "." + name):
             return ("module", modname + "." + name)
         getter = mod.defs.get("__getattr__")
+        if getter is not None:  # PEP 562: `if name == "X": return getattr(module, name)`
+            param = _params(getter)[0][:1]
+            for node in ast.walk(getter):
+                if (isinstance(node, ast.If) and isinstance(node.test, ast.Compare) and len(node.test.ops) == 1
+                        and isinstance(node.test.ops[0], ast.Eq) and isinstance(node.test.left, ast.Name)
+                        and [node.test.left.id] == param and isinstance(node.test.comparators[0], ast.Constant)
+                        and node.test.comparators[0].value == name and len(node.body) == 1
+                        and isinstance(node.body[0], ast.Return) and isinstance(node.body[0].value, ast.Call)
+                        and isinstance(node.body[0].value.func, ast.Name) and node.body[0].value.func.id == "getattr"
+                        and len(node.body[0].value.args) == 2 and isinstance(node.body[0].value.args[1], ast.Name)
+                        and [node.body[0].value.args[1].id] == param):
+                    source = self.resolve_expr(node.body[0].value.args[0], modname, None, depth + 1)
+                    if source and source[0] == "module":
+                        return self.resolve_name(source[1], name, depth + 1)
         if getter is not None:  # PEP 562: `from .x import name` inside the module __getattr__
             for node in ast.walk(getter):
                 if isinstance(node, ast.ImportFrom):
@@ -495,11 +521,15 @@ class Index:
             before = (len(self.getters), len(self.entry_getters), len(self.binding_attrs), len(self.returns_class),
                       len(self.returns_tuple), len(self.returns_module), len(self.returns_entry_tuple),
                       sum(map(len, self.binding_params.values())),
-                      sum(len(m.entry_globals) + len(m.binding_globals) for m in modules))
+                      sum(len(m.entry_globals) + len(m.binding_globals) for m in modules),
+                      len(self.returns_namespace), sum(len(m.namespace_globals) for m in modules))
             for mod in modules:
                 self._module_globals(mod)
             for func in everything:
                 scope = Scope(self, func, func.cls)
+                fields = self._namespace_return(scope, func)
+                if fields:
+                    self.returns_namespace[func.key] = fields
                 for node in _own_nodes(func.node):
                     if isinstance(node, ast.Return) and node.value is not None:
                         made = scope.made_class(node.value)
@@ -539,8 +569,177 @@ class Index:
             if (len(self.getters), len(self.entry_getters), len(self.binding_attrs),
                     len(self.returns_class), len(self.returns_tuple), len(self.returns_module),
                     len(self.returns_entry_tuple), sum(map(len, self.binding_params.values())),
-                    sum(len(m.entry_globals) + len(m.binding_globals) for m in modules)) == before:
+                    sum(len(m.entry_globals) + len(m.binding_globals) for m in modules),
+                    len(self.returns_namespace), sum(len(m.namespace_globals) for m in modules)) == before:
                 break
+
+    def _namespace_return(self, scope, func):
+        """`result = SimpleNamespace(call=module.entry, binding=module, ...); return result`.
+
+        The fields a connect function returns, when every return is that one local, the local
+        is bound exactly once to a keyword-only SimpleNamespace, and nothing in the function
+        (or a package callee it is handed to) rebinds a field. Only fields whose value is
+        statically a binding or a compiled entry are kept; any other field stays unknown, so
+        reading it is never counted as native.
+        """
+        nodes = _own_nodes(func.node)
+        returns = [n for n in nodes if isinstance(n, ast.Return)]
+        if not returns or not all(isinstance(r.value, ast.Name) for r in returns):
+            return None
+        name = returns[0].value.id
+        if any(r.value.id != name for r in returns):
+            return None
+        made, stores = [], []
+        for node in nodes:
+            if isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+                if any(isinstance(t, ast.Name) and t.id == name for t in ast.walk(node.target)):
+                    return None
+            elif isinstance(node, ast.withitem) and node.optional_vars is not None:
+                if any(isinstance(t, ast.Name) and t.id == name for t in ast.walk(node.optional_vars)):
+                    return None
+            elif isinstance(node, ast.NamedExpr) and node.target.id == name:
+                return None
+            elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    if any(isinstance(t, ast.Name) and t.id == name for t in ast.walk(target)
+                           if not isinstance(target, ast.Attribute)):
+                        made.append(node)
+                    if (isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
+                            and target.value.id == name):
+                        stores.append((target.attr, node))
+            elif isinstance(node, ast.Call) and _final(node.func) in ("setattr", "delattr"):
+                if node.args and isinstance(node.args[0], ast.Name) and node.args[0].id == name:
+                    return None
+        if len(made) != 1 or not isinstance(made[0], ast.Assign) or len(made[0].targets) != 1:
+            return None
+        call = made[0].value
+        if (not isinstance(call, ast.Call) or _final(call.func) != "SimpleNamespace" or call.args
+                or any(k.arg is None for k in call.keywords)):
+            return None
+
+        def kind(expr):
+            if scope.is_binding(expr):
+                return ("binding",)
+            entry = scope.entry_of(expr)
+            if not entry and isinstance(expr, ast.Name):
+                entry = scope.entry_names.get(expr.id)
+            return ("entry", entry) if entry else None
+
+        fields = {k.arg: kind(k.value) for k in call.keywords}
+        for attr, node in stores:
+            if sum(a == attr for a, _ in stores) > 1:
+                fields[attr] = None
+            else:
+                fields[attr] = kind(node.value) if isinstance(node, ast.Assign) else None
+        # a package helper handed the namespace must not rebind its fields either
+        for node in nodes:
+            if not isinstance(node, ast.Call):
+                continue
+            for position, arg in enumerate(node.args):
+                if not (isinstance(arg, ast.Name) and arg.id == name):
+                    continue
+                target = scope.resolve_call(node.func) if not isinstance(node.func, ast.Call) else None
+                if not target or target[0] != "func":
+                    return None
+                params = _params(target[1].node)[0]
+                if position >= len(params):
+                    return None
+                param = params[position]
+                for inner in _own_nodes(target[1].node):
+                    if isinstance(inner, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Delete)):
+                        for t in (inner.targets if isinstance(inner, (ast.Assign, ast.Delete)) else [inner.target]):
+                            if (isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name)
+                                    and t.value.id == param):
+                                return None
+                    if (isinstance(inner, ast.Call) and _final(inner.func) in ("setattr", "delattr")
+                            and inner.args and isinstance(inner.args[0], ast.Name) and inner.args[0].id == param):
+                        return None
+        fields = {k: v for k, v in fields.items() if v}
+        return fields or None
+
+    def _namespace_globals(self, mod):
+        """Module-level names that can only hold one connection namespace.
+
+        `_C = {}`, then `_C[mode] = _connect(mode)` (a returns_namespace function) or a
+        refusal string, then `_c = _C["identical"]` (also when rebound under an `if`):
+        `_c` holds the namespace. Every module-level binding of the name (top level and inside
+        if/for/try/with blocks) must agree, and no function may store into the container.
+        """
+        assigned = defaultdict(list)   # name -> values bound by `name = value`
+        stored = defaultdict(list)     # container -> values stored by `name[k] = value`
+
+        def walk(body):
+            for node in body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    continue
+                if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                    for target in targets:
+                        if isinstance(target, ast.Name):
+                            assigned[target.id].append(node.value)
+                        elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                            stored[target.value.id].append(node.value)
+                        else:
+                            for t in ast.walk(target):
+                                if isinstance(t, ast.Name):
+                                    assigned[t.id].append(None)
+                elif isinstance(node, (ast.For, ast.AsyncFor)):
+                    for t in ast.walk(node.target):
+                        if isinstance(t, ast.Name):
+                            assigned[t.id].append(None)
+                for field in ("body", "orelse", "finalbody"):
+                    walk(getattr(node, field, []) or [])
+                for handler in getattr(node, "handlers", []) or []:
+                    if handler.name:
+                        assigned[handler.name].append(None)
+                    walk(handler.body)
+
+        walk(mod.tree.body)
+        inner_stores = set()
+        for node in ast.walk(mod.tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                for inner in ast.walk(node):
+                    if isinstance(inner, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Delete)):
+                        for t in (inner.targets if isinstance(inner, (ast.Assign, ast.Delete)) else [inner.target]):
+                            if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name):
+                                inner_stores.add(t.value.id)
+                    elif isinstance(inner, ast.Global):
+                        inner_stores.update(inner.names)
+        scope = Scope(self, mod.module_scope, None)
+
+        def inert(value):   # a refusal text kept in place of a connection
+            return (isinstance(value, ast.JoinedStr) or isinstance(value, ast.Constant) and isinstance(value.value, str)
+                    or isinstance(value, ast.Attribute) and value.attr == "__name__"
+                    or isinstance(value, ast.BinOp) and isinstance(value.op, ast.Add) and inert(value.left)
+                    or isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "str")
+
+        def fields_of(value, containers):
+            if isinstance(value, ast.Call) and not isinstance(value.func, ast.Call):
+                target = scope.resolve_call(value.func)
+                if target and target[0] == "func":
+                    return self.returns_namespace.get(target[1].key)
+            if isinstance(value, ast.Subscript) and isinstance(value.value, ast.Name):
+                return containers.get(value.value.id)
+            if isinstance(value, ast.Name):
+                return mod.namespace_globals.get(value.id)
+            return None
+
+        containers = {}
+        for name, values in stored.items():
+            if name in inner_stores:
+                continue
+            if not all(isinstance(v, ast.Dict) and not v.keys for v in assigned.get(name, [])):
+                continue
+            made = [fields_of(v, {}) for v in values if not inert(v)]
+            if made and made[0] and all(m == made[0] for m in made):
+                containers[name] = made[0]
+        for name, values in assigned.items():
+            if name in stored or name in inner_stores or name in mod.defs or name in mod.classes:
+                continue
+            made = [fields_of(v, containers) if v is not None else None for v in values]
+            if made and made[0] and all(m == made[0] for m in made):
+                mod.namespace_globals[name] = made[0]
 
     def _module_globals(self, mod):
         """Module-level names bound once at import to a binding or a compiled entry.
@@ -556,6 +755,7 @@ class Index:
                 body=[s for s in mod.tree.body if isinstance(s, (ast.Assign, ast.AnnAssign))],
                 decorator_list=[], returns=None, type_comment=None, lineno=1, col_offset=0)
             mod.module_scope = Func(mod, node)
+        self._namespace_globals(mod)
         scope = Scope(self, mod.module_scope, None)
         mod.binding_globals |= scope.binding_names
         for name, entry in scope.entry_names.items():
@@ -637,6 +837,9 @@ class Scope:
                                 self.binding_names.add(elt.id)
                             elif self.entry_of(part):
                                 self.entry_names[elt.id] = self.entry_of(part)
+                            elif isinstance(part, ast.Name) and part.id in self.entry_names:
+                                # `_ENTRY, _CONTEXT = entry, context` after `entry = module.call`
+                                self.entry_names[elt.id] = self.entry_names[part.id]
                 names = [t.id for t in targets if isinstance(t, ast.Name)]
                 if not names:
                     continue
@@ -735,6 +938,8 @@ class Scope:
         if isinstance(expr, ast.Attribute):
             if expr.attr == "_module" and self.is_binding(expr.value):
                 return True
+            if self._namespace_field(expr) == ("binding",):
+                return True
             if isinstance(expr.value, (ast.Name, ast.Attribute)):
                 # an object a `_native_*` bridge module holds (`_native_neural_bridge.RUNTIME`)
                 base = self.index.resolve_expr(expr.value, self.modname, self.func)
@@ -753,8 +958,22 @@ class Scope:
             return bool(target and target[0] == "func" and target[1].key in self.index.getters)
         return False
 
+    def _namespace_field(self, expr):
+        """The field of a module-level connection namespace (`_session_connected.call`)."""
+        value = expr.value
+        if not isinstance(value, ast.Name):
+            return None
+        fields = self.func.mod.namespace_globals.get(value.id)
+        if not fields or value.id in self.rebound or self._shadowed(value.id) or value.id in self.binding_names:
+            return None
+        return fields.get(expr.attr)
+
     def entry_of(self, expr):
         """`b.entry` or getattr(b, "entry") on a binding: the entry name."""
+        if isinstance(expr, ast.Attribute):
+            field = self._namespace_field(expr)
+            if field and field[0] == "entry":
+                return field[1]
         if isinstance(expr, ast.Attribute) and self.is_binding(expr.value):
             return expr.attr
         if (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name) and expr.func.id == "getattr"
@@ -935,7 +1154,10 @@ def _call(index, scope, node, facts):
                 facts.entries.add(value[1])
                 return
             if value and value[0] == "func":
-                kind, obj = value
+                kind, obj = value[0], value[1]
+                if value[2:] == ("raw",):
+                    facts.callees.append((obj, owner))
+                    return
             else:
                 facts.unresolved += 1
                 facts.unresolved_names.append(f"{node.lineno}:unresolved installed slot {name}")
@@ -1252,6 +1474,7 @@ class EndpointConnections:
 
     def __init__(self, index):
         self.index, self.replacements, self.seen = index, {}, set()
+        self.native_flags = set()   # classes an installer marks `cls._mojolearn_native_public = True`
         self.scopes = {}
         for cls in list(index.classes.values()):
             for node in cls.node.body:
@@ -1267,6 +1490,18 @@ class EndpointConnections:
             self.walk(mod.tree.body, mod, None, {})
         for cls in list(index.classes.values()):
             for decorator in reversed(cls.node.decorator_list):
+                generated = _dataclass_methods(cls, decorator)
+                if generated is not None:
+                    end = getattr(cls.node, "end_lineno", cls.node.lineno)
+                    own = cls.mod.path.relative_to(self.index.root).as_posix() + ":"
+                    for name in generated:
+                        # a module-level replacement after the class statement supersedes it
+                        later = [r for r in self.replacements.get((cls.key, name), [])
+                                 if r["source"].startswith(own) and int(r["source"].rsplit(":", 1)[1]) > end]
+                        if not later:
+                            self.record(cls, name, ("python", "dataclasses.dataclass"), cls.mod, decorator,
+                                        "dataclass-generated Python method")
+                    continue
                 value = self.value(decorator, cls.mod, None, {})
                 if value and value[0] == "func":
                     self.call(value[1], [("class", cls)], [], {})
@@ -1298,11 +1533,51 @@ class EndpointConnections:
                 return self.value(alias, mod, func, env, depth + 1)
         if isinstance(expr, (ast.Tuple, ast.List)):
             return ("sequence", [self.value(e, mod, func, env, depth + 1) for e in expr.elts])
+        if isinstance(expr, ast.Dict) and None not in expr.keys:
+            # a constant table keyed by literals (`_LIFECYCLE_METHODS[(module, name)]`)
+            keys = [_canonical(self.value(k, mod, func, env, depth + 1)) for k in expr.keys]
+            if all(k is not None for k in keys):
+                return ("table", tuple(zip(keys, expr.values)), mod, func)
+            return None
+        if isinstance(expr, ast.Subscript):
+            if (isinstance(expr.value, ast.Attribute) and expr.value.attr == "__dict__"):
+                # `cls.__dict__["fit"]`: the class's own namespace entry, never a base's
+                owner = self.value(expr.value.value, mod, func, env, depth + 1)
+                key = self.value(expr.slice, mod, func, env, depth + 1)
+                if owner and owner[0] == "class" and key and key[0] == "literal":
+                    for node in owner[1].node.body:
+                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == key[1]:
+                            return ("func", self.index.func(owner[1].mod, node, cls=owner[1]))
+                return None
+            table = self.value(expr.value, mod, func, env, depth + 1)
+            key = _canonical(self.value(expr.slice, mod, func, env, depth + 1))
+            if table and table[0] == "table" and key is not None:
+                for candidate, value in table[1]:
+                    if candidate == key:
+                        return self.value(value, table[2], table[3], {}, depth + 1)
+            return None
+        if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
+            # `(base,) + tuple(classes)`: a concatenation of known sequences
+            left = self.value(expr.left, mod, func, env, depth + 1)
+            right = self.value(expr.right, mod, func, env, depth + 1)
+            if left and right and left[0] == right[0] == "sequence":
+                return ("sequence", left[1] + right[1])
+            return None
+        if (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name) and expr.func.id in ("tuple", "list")
+                and len(expr.args) == 1 and not expr.keywords):
+            inner = self.value(expr.args[0], mod, func, env, depth + 1)
+            if inner and inner[0] == "sequence":
+                return inner
         if isinstance(expr, ast.Attribute):
             if (isinstance(expr.value, ast.Name) and expr.value.id == "object"
                     and expr.attr in ("__getattribute__", "__setattr__", "__delattr__", "__new__", "__init__")):
                 return ("native", "object." + expr.attr)
             base = self.value(expr.value, mod, func, env, depth + 1)
+            if base and base[0] == "class" and expr.attr in ("__module__", "__name__", "__qualname__"):
+                # a package class statement: its module and names are fixed by the source
+                if not any(isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == expr.attr
+                                                             for t in n.targets) for n in base[1].node.body):
+                    return ("literal", base[1].mod.name if expr.attr == "__module__" else base[1].name)
             if base and base[0] == "class":
                 return self.index.lookup(base[1], expr.attr)
             if base and base[0] == "func" and expr.attr in ("__wrapped__", "__func__"):
@@ -1315,12 +1590,37 @@ class EndpointConnections:
             entry = scope.entry_of(expr)
             if entry:
                 return ("native", entry)
+        literal = self.literal_test(expr, mod, func, env, depth)
+        if literal is not None:
+            return literal
         if isinstance(expr, ast.Call):
             args = [self.value(a, mod, func, env, depth + 1) for a in expr.args]
             if (_final(expr.func) in ("getattr", "getattr_static") and len(args) >= 2
                     and args[0] and args[0][0] == "class" and args[1] and args[1][0] == "literal"):
-                return self.index.lookup(args[0][1], args[1][1])
+                found = self.index.lookup(args[0][1], args[1][1])
+                if (found is None and len(args) == 3 and args[2] and args[2][0] == "literal"
+                        and isinstance(args[1][1], str) and not args[1][1].startswith("__")
+                        and self.complete_mro(args[0][1])):
+                    # `getattr(cls, "decision_function", None)` on a class whose whole MRO is
+                    # package source that never defines the name: the default.
+                    return args[2]
+                return found
             if _final(expr.func) == "unwrap" and args:
+                # `inspect.unwrap(f)`: the undecorated source body (marked raw, so the
+                # source decorators are not applied to it again)
+                if args[0] and args[0][0] == "func":
+                    return ("func", args[0][1], "raw")
+                return args[0]
+            factory = self.value(expr.func, mod, func, env, depth + 1)
+            if (factory and factory[0] == "native" and factory[1] in NATIVE_DESCRIPTOR_FACTORIES
+                    and len(expr.args) == 1 and isinstance(expr.args[0], ast.Call)
+                    and _is_method_type(mod, func, expr.args[0].func) and expr.args[0].args):
+                bound = self.value(expr.args[0].args[0], mod, func, env, depth + 1)
+                if bound and bound[0] == "native":
+                    return bound
+            if (isinstance(expr.func, ast.Name) and expr.func.id in ("classmethod", "staticmethod")
+                    and len(args) == 1 and args[0] and args[0][0] == "func"):
+                # `cls.load = classmethod(inspect.unwrap(loader.__func__))`: the same source body
                 return args[0]
             called = self.index.resolve_expr(expr.func, mod.name, func)
             if called and called[0] == "func":
@@ -1332,6 +1632,58 @@ class EndpointConnections:
                            for n in _own_nodes(callee.node) if isinstance(n, ast.Return)]
                 if returns and returns[0] and all(r == returns[0] for r in returns):
                     return returns[0]
+        return None
+
+    def complete_mro(self, cls):
+        """Every base on the MRO resolves to package source (or is `object`)."""
+        for klass in self.index.mro(cls):
+            for base in klass.node.bases:
+                if isinstance(base, ast.Name) and base.id == "object":
+                    continue
+                resolved = self.index.resolve_expr(base, klass.mod.name, None)
+                if not resolved or resolved[0] != "class":
+                    return False
+            if klass.node.keywords:
+                return False
+        return True
+
+    def literal_test(self, expr, mod, func, env, depth):
+        """A condition decided by literal values only: `kind == "iforest"`, `kind in _KINDS`,
+        `inspect.isfunction(method)` on a looked-up function or a literal default, `not x`.
+        None when anything in it is not a known literal, so both branches stay walked."""
+        if isinstance(expr, ast.Compare) and len(expr.ops) == 1:
+            left = self.value(expr.left, mod, func, env, depth + 1)
+            right = self.value(expr.comparators[0], mod, func, env, depth + 1)
+            if not left or left[0] != "literal" or not right:
+                return None
+            op = expr.ops[0]
+            if right[0] == "literal" and isinstance(op, (ast.Eq, ast.NotEq, ast.Is, ast.IsNot)):
+                same = left[1] == right[1] if isinstance(op, (ast.Eq, ast.NotEq)) else left[1] is right[1]
+                return ("literal", same if isinstance(op, (ast.Eq, ast.Is)) else not same)
+            if (right[0] == "sequence" and isinstance(op, (ast.In, ast.NotIn))
+                    and all(v and v[0] == "literal" for v in right[1])):
+                inside = any(left[1] == v[1] for v in right[1])
+                return ("literal", inside if isinstance(op, ast.In) else not inside)
+            return None
+        if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.Not):
+            inner = self.value(expr.operand, mod, func, env, depth + 1)
+            if inner and inner[0] == "literal":
+                return ("literal", not inner[1])
+            return None
+        if isinstance(expr, ast.BoolOp):
+            values = [self.value(v, mod, func, env, depth + 1) for v in expr.values]
+            if all(v and v[0] == "literal" for v in values):
+                truth = [bool(v[1]) for v in values]
+                return ("literal", all(truth) if isinstance(expr.op, ast.And) else any(truth))
+            return None
+        if (isinstance(expr, ast.Call) and _final(expr.func) in ("isfunction", "callable")
+                and len(expr.args) == 1 and not expr.keywords):
+            arg = self.value(expr.args[0], mod, func, env, depth + 1)
+            if arg and arg[0] == "literal":
+                return ("literal", callable(arg[1]))
+            if (arg and arg[0] == "func" and not arg[1].node.decorator_list
+                    and isinstance(arg[1].node, ast.FunctionDef)):
+                return ("literal", True)
         return None
 
     def record(self, cls, name, value, mod, node, reason="import-time class-slot replacement"):
@@ -1353,6 +1705,8 @@ class EndpointConnections:
         elif isinstance(target, ast.Attribute):
             cls = self.value(target.value, mod, func, env)
             if cls and cls[0] == "class":
+                if target.attr == "_mojolearn_native_public":
+                    self.native_flags.add(cls[1].key)
                 self.record(cls[1], target.attr, value, mod, node)
 
     def call(self, func, args, keywords, parent_env):
@@ -1388,6 +1742,13 @@ class EndpointConnections:
                     self.walk(node.body, mod, func, dict(env))
                 self.walk(node.orelse, mod, func, dict(env))
                 continue
+            if isinstance(node, ast.If):
+                test = self.value(node.test, mod, func, env)
+                if test and test[0] == "literal":
+                    # a branch decided by literals (`elif kind == "iforest":` for one registered
+                    # class): the installers of the other branch never run for it
+                    self.walk(node.body if test[1] else node.orelse, mod, func, dict(env))
+                    continue
             if isinstance(node, (ast.If, ast.Try, ast.With)):
                 self.walk(node.body, mod, func, dict(env))
                 self.walk(getattr(node, "orelse", []), mod, func, dict(env))
@@ -1444,6 +1805,94 @@ class EndpointConnections:
         return current
 
 
+def _property_factory(index, cls, assigned):
+    """[("get", Func), ("set", Func), ...] when `assigned` calls a package function (module
+    level, or a def in the class body) whose every return is `property(f, g, ...)` of the
+    same nested defs; None otherwise."""
+    if not isinstance(assigned, ast.Call) or not isinstance(assigned.func, ast.Name):
+        return None
+    node = next((n for n in cls.node.body if isinstance(n, ast.FunctionDef) and n.name == assigned.func.id), None)
+    if node is not None:
+        factory = index.func(cls.mod, node, cls=cls)
+    else:
+        target = index.resolve_expr(assigned.func, cls.mod.name, None)
+        if not target or target[0] != "func":
+            return None
+        factory = target[1]
+    returns = [n for n in _own_nodes(factory.node) if isinstance(n, ast.Return)]
+    shapes = {ast.dump(r.value) for r in returns if r.value is not None}
+    if len(returns) != 1 or len(shapes) != 1:
+        return None
+    made = returns[0].value
+    if (not isinstance(made, ast.Call) or not isinstance(made.func, ast.Name) or made.func.id != "property"
+            or made.keywords or not made.args or len(made.args) > 3):
+        return None
+    out = []
+    for suffix, arg in zip(("get", "set", "delete"), made.args):
+        if isinstance(arg, ast.Constant) and arg.value is None:
+            continue
+        if not isinstance(arg, ast.Name) or arg.id not in factory.local_defs:
+            return None
+        out.append((suffix, index.func(factory.mod, factory.local_defs[arg.id], parent=factory)))
+    return out
+
+
+def _dataclass_methods(cls, decorator):
+    """The Python methods `@dataclass(...)` with literal options generates on `cls`, or None
+    when the decorator is not a literal dataclass call (the class's own definitions are kept;
+    a frozen class always gets the generated __setattr__/__delattr__)."""
+    call = decorator if isinstance(decorator, ast.Call) else None
+    target = call.func if call else decorator
+    if ast.unparse(target) not in ("dataclass", "dataclasses.dataclass"):
+        return None
+    imported = cls.mod.imports.get("dataclass") if isinstance(target, ast.Name) else ("mod", "dataclasses")
+    if not imported or (imported[0] == "from" and imported[1] != "dataclasses"):
+        return None
+    options = dict(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False)
+    for keyword in (call.keywords if call else []):
+        if keyword.arg not in options or not isinstance(keyword.value, ast.Constant):
+            return None
+        options[keyword.arg] = bool(keyword.value.value)
+    own = {n.name for n in cls.node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    own |= {t.id for n in cls.node.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
+    names = []
+    for enabled, generated in ((options["init"], ("__init__",)), (options["repr"], ("__repr__",)),
+                               (options["eq"], ("__eq__",)),
+                               (options["order"], ("__lt__", "__le__", "__gt__", "__ge__"))):
+        if enabled:
+            names += [n for n in generated if n not in own]
+    if options["frozen"]:
+        names += ["__setattr__", "__delattr__"]
+    if (options["unsafe_hash"] or options["eq"] and options["frozen"]) and "__hash__" not in own:
+        names.append("__hash__")
+    return names
+
+
+def _is_method_type(mod, func, expr):
+    """`MethodType`, `types.MethodType` or a local alias of `types.MethodType`."""
+    if isinstance(expr, ast.Attribute):
+        return expr.attr == "MethodType" and isinstance(expr.value, ast.Name) and expr.value.id == "types"
+    if not isinstance(expr, ast.Name):
+        return False
+    scope = func
+    while scope is not None:
+        if expr.id in scope.imports:
+            return scope.imports[expr.id] == ("from", "types", "MethodType")
+        scope = scope.parent
+    imported = mod.imports.get(expr.id)
+    return imported == ("from", "types", "MethodType") if imported else expr.id == "MethodType"
+
+
+def _canonical(value):
+    """A hashable form of a literal or a sequence of literals, for table keys."""
+    if value and value[0] == "literal":
+        return ("literal", value[1])
+    if value and value[0] == "sequence":
+        items = [_canonical(v) for v in value[1]]
+        return ("sequence", tuple(items)) if all(i is not None for i in items) else None
+    return None
+
+
 def _endpoint_verdict(func, facts, helpers):
     if (facts.unresolved and facts.statements == 1 and not facts.loops
             and not facts.numpy and not facts.allocs and not facts.shell):
@@ -1476,6 +1925,99 @@ def _tag_metadata_only(index, func, owner):
                 return False
         pending.extend(analyze(index, current, cls).callees)
     return True
+
+
+class ClassHookWrappers:
+    """Python wrappers `_mode`'s class-creation hooks put around source methods.
+
+    `PublicOutputsMixin.__init_subclass__` (install_public_outputs) and
+    `SklearnTagsMixin.__init_subclass__` (install_fit_tracking) replace a class's plain
+    function methods with Python wrappers (`_public_output`, `_track_fit`, `_needs_fit`,
+    `_loader`) unless the class is `_mojolearn_native_public` when it is created. The
+    source body then is not the installed callable: the operation runs Python
+    validation and output conversion around it. Conservative in the reporting
+    direction: a decorated method (decorators can carry the skip markers), a class an
+    installer later marks native (or any of its bases), and a slot an installer
+    replaces are never reported.
+    """
+
+    def __init__(self, index, connections, package):
+        self.index, self.connections = index, connections
+        self.ready = False
+        mode = index.mod(package + "._mode")
+        if mode is None:
+            return
+        names = {}
+        for name in ("_OUTPUTS", "_FITS", "_NEEDS_FIT", "_LOADS"):
+            try:
+                names[name] = frozenset(ast.literal_eval(mode.aliases[name]))
+            except (KeyError, ValueError, TypeError, SyntaxError):
+                return
+        outputs = index.resolve_name(mode.name, "PublicOutputsMixin")
+        tags = index.resolve_name(mode.name, "SklearnTagsMixin")
+        numeric = index.resolve_name(mode.name, "NumericModeMixin")
+        if not outputs or not tags or outputs[0] != "class" or tags[0] != "class":
+            return
+        self.numeric = numeric[1] if numeric and numeric[0] == "class" else None
+        # _mode._install_numeric_mode (NumericModeMixin.__init_subclass__): the class's own
+        # fit-like methods get _guard_cpu_training, its own __init__ the numeric_mode wrapper
+        self.numeric_names = frozenset(("fit", "partial_fit", "fit_predict", "fit_transform",
+                                        "_fit_with_tree_start", "__init__"))
+        self.names, self.outputs, self.tags, self.ready = names, outputs[1], tags[1], True
+
+    def _flagged(self, cls):
+        for klass in self.index.mro(cls):
+            if klass.key in self.connections.native_flags:
+                return True
+            for node in klass.node.body:
+                if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_mojolearn_native_public"
+                                                        for t in node.targets):
+                    return not (isinstance(node.value, ast.Constant) and not node.value.value)
+        return False
+
+    def _reaches_hooks(self, klass, hooks=None):
+        """Creating `klass` runs the _mode hooks: every `__init_subclass__` before them on
+        the MRO hands on with `super().__init_subclass__(...)`."""
+        hooks = hooks or (self.outputs, self.tags)
+        for base in self.index.mro(klass)[1:]:
+            if base in hooks:
+                return True
+            hook = next((n for n in base.node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                         and n.name == "__init_subclass__"), None)
+            if hook is None:
+                continue
+            if not any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                       and n.func.attr == "__init_subclass__" and isinstance(n.func.value, ast.Call)
+                       and _final(n.func.value.func) == "super" for n in ast.walk(hook)):
+                return False
+        return False
+
+    def wrapper(self, owner, name, func):
+        """The class whose creation wrapped `owner.name` (resolving to source `func`), or None."""
+        if not self.ready or owner is None or func is None or func.node.decorator_list:
+            return None
+        if self.connections.get(owner, name) or self._flagged(owner):
+            return None
+        names = self.names
+        for klass in self.index.mro(owner):
+            chain = self.index.mro(klass)
+            if (self.numeric is not None and klass is not self.numeric and self.numeric in chain
+                    and name in self.numeric_names and func.cls is klass and not self._flagged(klass)
+                    and self._reaches_hooks(klass, (self.numeric,))):
+                return klass
+            if klass in (self.outputs, self.tags) or self.outputs not in chain:
+                continue
+            if self._flagged(klass) or not self._reaches_hooks(klass):
+                continue
+            found = self.index.lookup(klass, name)
+            if not found or found[0] != "func" or found[1] is not func:
+                continue
+            own = func.cls is klass
+            if name in names["_OUTPUTS"]:
+                return klass
+            if self.tags in chain and (name in names["_NEEDS_FIT"] or name in names["_FITS"] and own):
+                return klass
+        return None
 
 
 def endpoint_inventory(root, package="mojolearn", installed_slots=None):
@@ -1523,6 +2065,7 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
     connections = EndpointConnections(index)
     index.endpoint_connections = connections
     index.strict_endpoints = True
+    wrappers = ClassHookWrappers(index, connections, package)
 
     def add(group, method, kind, func=None, owner=None):
         names = sorted(group["names"])
@@ -1542,20 +2085,29 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
             item["import_connections"] = [{k: v for k, v in r.items() if k != "value"} for r in replacement]
             item["declared_definition"] = _where(root, func) if func else None
             values = [r["value"] for r in replacement]
+            raw = False
             if values and values[0] and all(v == values[0] for v in values):
                 if values[0][0] == "func":
                     func = values[0][1]
+                    raw = values[0][2:] == ("raw",)
                 elif values[0][0] == "native":
                     func = None
                     item.update(static_verdict="native", native_entries=[values[0][1]],
                                 runtime_status="native_boundary")
+                elif values[0][0] == "python":
+                    # a Python implementation generated at class creation (dataclass)
+                    func = None
+                    item.update(static_verdict="python", runtime_status="prohibited_source",
+                                generated_by=values[0][1], definition=item["import_connections"][0]["source"])
                 else:
                     func = None
             else:
                 func = None
-            if func is None and item["static_verdict"] != "native":
+            if func is None and item["static_verdict"] not in ("native", "python"):
                 item["qualification_debt"].append("import-time replacement requires installed-slot qualification")
-        if func:
+        else:
+            raw = False
+        if func and not raw:
             decorated = connections.decorated(func)
             if decorated and decorated[0] == "func":
                 func = decorated[1]
@@ -1578,6 +2130,12 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                         unresolved_calls=facts.unresolved, shell_calls=facts.shell)
             item["runtime_status"] = ("native_boundary" if item["static_verdict"] == "native" else
                                       "unresolved" if item["static_verdict"] == "unresolved" else "prohibited_source")
+            wrapped = (wrappers.wrapper(owner, method, func)
+                       if kind in ("method", "method_alias", "constructor") and not replacement else None)
+            if wrapped is not None:
+                # the installed callable is a _mode Python wrapper around this body
+                item.update(static_verdict="python", runtime_status="prohibited_source",
+                            class_creation_wrapper=".".join(wrapped.key))
         if method == "__sklearn_tags__" and func is not None and _tag_metadata_only(index, func, owner):
             item["runtime_status"] = "allowed_tag_metadata"
             item["exception"] = "Owner-authorized scikit-learn tag metadata only; native callbacks remain prohibited."
@@ -1627,7 +2185,16 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                     else:
                         assigned = next((n.value for n in cls.node.body if isinstance(n, ast.Assign)
                             and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)), None)
-                        if isinstance(assigned, ast.Call) or isinstance(assigned, (ast.Name, ast.Attribute)) and not found:
+                        accessors = _property_factory(index, cls, assigned)
+                        if accessors:
+                            # `t = _word(0)`: a helper returning property(get, put) of its own
+                            # nested functions; each accessor is the operation that runs
+                            for suffix, accessor in accessors:
+                                func = Func(accessor.mod, accessor.node, parent=accessor.parent)
+                                func.qual += ":" + suffix
+                                func.key = (func.mod.name, func.qual)
+                                add(group, name + ":" + suffix, "property", func, obj)
+                        elif isinstance(assigned, ast.Call) or isinstance(assigned, (ast.Name, ast.Attribute)) and not found:
                             # A custom descriptor or imported callable cannot
                             # disappear just because lookup cannot resolve it.
                             add(group, name, "unresolved_class_attribute", owner=obj)

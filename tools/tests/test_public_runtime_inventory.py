@@ -323,23 +323,23 @@ def test_existing_baseline_debt_cannot_authorize_product_execution():
 def test_returned_framework_callable_is_audited_without_an_export():
     with tempfile.TemporaryDirectory() as tmp:
         root = build(Path(tmp))
-        folder = root / "python/mojolearn/adapters"
+        folder = root / "python/mojolearn/importers"
         folder.mkdir()
         (folder / "__init__.py").write_text("")
-        path = folder / "_torch_compile.py"
+        path = folder / "_program.py"
         path.write_text(textwrap.dedent('''
             from .. import _backend
-            class _Compiled:
-                def __call__(self, X):
+            class ImportedProgram:
+                def run(self, X):
                     X = [x for x in X]
                     return _backend.binding("_mojolearn").run(X)
         '''))
         rows = INV.records_of(INV.inventory_rows(root))
-        returned = [r for r in rows if r["class"].endswith("._Compiled")]
+        returned = [r for r in rows if r["class"].endswith(".ImportedProgram")]
         assert len(returned) == 1 and returned[0]["verdict"] == "python"
-        path.write_text("class _Compiled:\n    pass\n")
+        path.write_text("class ImportedProgram:\n    pass\n")
         rows = INV.records_of(INV.inventory_rows(root))
-        returned = [r for r in rows if r["class"].endswith("._Compiled")]
+        returned = [r for r in rows if r["class"].endswith(".ImportedProgram")]
         assert len(returned) == 1 and returned[0]["verdict"] == "unresolved"
 
 
@@ -606,6 +606,176 @@ def test_class_slot_replacement_does_not_relabel_same_named_module_function():
         rows = {r['method']:r for r in INV.endpoint_inventory(root)['endpoints']}
         assert rows['query']['runtime_status'] == 'native_boundary', rows
         assert rows['search']['runtime_status'] == 'prohibited_source', rows
+
+
+def _rows(root):
+    return {r["method"]: r for r in INV.endpoint_inventory(root)["endpoints"]}
+
+
+def test_connection_namespace_fields_are_compiled_entries():
+    source = """
+        from types import SimpleNamespace
+        def _connect(mode):
+            module = _backend.binding('_mojolearn_x')
+            result = SimpleNamespace(call=module.ops_call, binding=module)
+            return result
+        _C = {}
+        for _mode in ('identical', 'fast'):
+            try:
+                _C[_mode] = _connect(_mode)
+            except ImportError as _error:
+                _C[_mode] = type(_error).__name__ + ': ' + str(_error)
+        _c = _C['identical']
+        if isinstance(_c, str):
+            _c = _C['fast']
+        _CALL = _c.call
+        _RUN = _c.binding.ops_run
+        class Estimator:
+            def fit(self, X):
+                return _CALL(self, X)
+            def predict(self, X):
+                return _RUN(self, X)
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, source)
+        rows = _rows(root)
+        assert rows["fit"]["runtime_status"] == "native_boundary", rows["fit"]
+        assert rows["fit"]["native_entries"] == ["ops_call"]
+        assert rows["predict"]["native_entries"] == ["ops_run"]
+    with tempfile.TemporaryDirectory() as tmp:
+        # a field rebound to anything but an entry is not native
+        root = Path(tmp)
+        endpoint_fixture(root, source.replace("            return result", "            result.call = len\n            return result"))
+        assert _rows(root)["fit"]["runtime_status"] != "native_boundary"
+
+
+def test_installer_branch_decided_by_literal_kind():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, """
+            import inspect
+            _SPECIAL = ('forest',)
+            class Estimator:
+                def fit(self, X):
+                    return _NATIVE(self, X)
+            class Forest:
+                def fit(self, X):
+                    return [float(x) for x in X]
+            def register(cls, kind):
+                special = kind in _SPECIAL
+                if special:
+                    for name in ('fit', 'decision_function'):
+                        method = getattr(cls, name, None)
+                        if inspect.isfunction(method):
+                            setattr(cls, name, inspect.unwrap(method))
+                elif kind == 'other':
+                    cls.decision_function = len
+            register(Estimator, 'plain')
+            register(Forest, 'forest')
+        """, exports=("Estimator", "Forest"))
+        endpoints = INV.endpoint_inventory(root)["endpoints"]
+        names = {r["endpoint"]: r for r in endpoints}
+        assert not any(r["method"] == "decision_function" for r in endpoints), sorted(names)
+        assert names["mojolearn.Estimator.fit"]["runtime_status"] == "native_boundary"
+        assert names["mojolearn.Forest.fit"]["runtime_status"] == "prohibited_source"
+
+
+def test_class_creation_hook_wrappers_are_python():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base = endpoint_fixture(root, """
+            from ._mode import SklearnTagsMixin
+            class Estimator(SklearnTagsMixin):
+                def fit(self, X):
+                    return _NATIVE(self, X)
+            class Owned(SklearnTagsMixin):
+                _mojolearn_native_public = True
+                def fit(self, X):
+                    return _NATIVE(self, X)
+        """, exports=("Estimator", "Owned"))
+        (base / "_mode.py").write_text(textwrap.dedent("""
+            _OUTPUTS = ("predict",)
+            _FITS = ("fit",)
+            _NEEDS_FIT = ("predict",)
+            _LOADS = ("load",)
+            class PublicOutputsMixin:
+                def __init_subclass__(cls, **kw):
+                    super().__init_subclass__(**kw)
+            class SklearnTagsMixin(PublicOutputsMixin):
+                def __init_subclass__(cls, **kw):
+                    super().__init_subclass__(**kw)
+        """))
+        rows = {r["endpoint"]: r for r in INV.endpoint_inventory(root)["endpoints"]}
+        wrapped = rows["mojolearn.Estimator.fit"]
+        assert wrapped["runtime_status"] == "prohibited_source", wrapped
+        assert wrapped["class_creation_wrapper"] == "mojolearn.est.Estimator"
+        assert rows["mojolearn.Owned.fit"]["runtime_status"] == "native_boundary"
+
+
+def test_dataclass_generated_slots_and_later_native_replacement():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, """
+            from dataclasses import dataclass
+            @dataclass(frozen=True, init=False, repr=False, eq=False)
+            class Estimator:
+                def run(self):
+                    return _NATIVE(self)
+            def _set(self, name, value):
+                return _NATIVE(self, name, value)
+            Estimator.__setattr__ = _set
+        """)
+        rows = _rows(root)
+        assert rows["__delattr__"]["runtime_status"] == "prohibited_source", rows["__delattr__"]
+        assert rows["__delattr__"]["generated_by"] == "dataclasses.dataclass"
+        assert rows["__setattr__"]["runtime_status"] == "native_boundary", rows["__setattr__"]
+        assert "__init__" not in rows and "__repr__" not in rows
+
+
+def test_property_factory_accessors_are_measured():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, """
+            def _word(k):
+                def get(self):
+                    return _NATIVE(self, k)
+                def put(self, value):
+                    return _NATIVE(self, k, value)
+                return property(get, put)
+            class Estimator:
+                t = _word(0)
+                def _report(name):
+                    def get(self):
+                        return self.__dict__[name]
+                    return property(get)
+                seen_ = _report("seen_")
+                del _report
+        """)
+        rows = _rows(root)
+        assert rows["t:get"]["runtime_status"] == "native_boundary", rows["t:get"]
+        assert rows["t:set"]["runtime_status"] == "native_boundary"
+        assert rows["seen_:get"]["runtime_status"] == "prohibited_source", rows["seen_:get"]
+
+
+def test_compiled_descriptor_factory_slot_is_its_entry():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, """
+            from types import MethodType as _MethodType
+            class Estimator:
+                def run(self):
+                    return _NATIVE(self)
+            def install(cls):
+                module = _backend.binding('_mojolearn_x')
+                cls.__del__ = module.classical_attribute_descriptor(_MethodType(module.finalize_call, {}))
+                cls.__getattribute__ = module.other_factory(_MethodType(module.finalize_call, {}))
+            install(Estimator)
+        """)
+        rows = _rows(root)
+        assert rows["__del__"]["runtime_status"] == "native_boundary", rows["__del__"]
+        assert rows["__del__"]["native_entries"] == ["finalize_call"]
+        assert rows["__getattribute__"]["runtime_status"] == "unresolved", rows["__getattribute__"]
 
 
 if __name__ == "__main__":
