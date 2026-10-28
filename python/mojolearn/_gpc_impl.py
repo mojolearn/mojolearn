@@ -259,6 +259,10 @@ class GaussianProcessClassifier(NumericModeMixin):
 
     _BINDING = "_mojolearn_gp"
 
+    # The native public owner replaces _mode lifecycle/output decorators.
+    # The shared full-reset installer still owns the field-only constructor.
+    _mojolearn_native_public = True
+
     def __init__(
         self,
         kernel=None,
@@ -271,6 +275,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         random_state=None,
         multi_class="one_vs_rest",
         n_jobs=None,
+        numeric_mode=None,
     ):
         # Stored verbatim, as scikit-learn requires; `_validate_params`
         # checks them when `fit` (or `load`) runs.
@@ -283,6 +288,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         self.random_state = random_state
         self.multi_class = multi_class
         self.n_jobs = n_jobs
+        self.numeric_mode = numeric_mode
 
     def _validate_params(self):
         """The constructor checks, run first in `fit` and `load`; the
@@ -685,7 +691,22 @@ _native_archive_bridge.register(GaussianProcessClassifier, _GPC_FORMAT, (
 # this file's saved kernel), the binary fit class and the default bounds.
 _native_family_bridge.tables(family_gp_kernel_nodes=dict(_GPC_KERNEL_NODES),
                              family_gp_binary_laplace=_BinaryLaplace,
+                             family_gp_binary_namespace=dict(vars(_BinaryLaplace)),
                              family_gp_default_bounds=(1e-5, 1e5))
+
+
+# Import-time connections for native completed-fit labels and archive reads.
+# Family and archive owners have separate contexts; neither inherits the tree
+# or logistic owner's ClassLabels class/namespace metadata.
+from ._labels import ClassLabels as _ClassLabels
+_GP_LABELS_METADATA = dict(
+    classifier_labels_class=_ClassLabels,
+    classifier_labels_namespace=dict(vars(_ClassLabels)),
+    classifier_labels_mro=type.__dict__["__mro__"].__get__(_ClassLabels),
+)
+_native_family_bridge.tables(**_GP_LABELS_METADATA)
+_ARCHIVE_CONTEXT.update(_GP_LABELS_METADATA)
+del _ClassLabels, _GP_LABELS_METADATA
 
 
 __all__ = ["GaussianProcessClassifier"]
