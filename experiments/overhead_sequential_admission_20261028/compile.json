@@ -45,5 +45,11 @@
  ],
  "closure": "sequential_admit has one caller (bindings/sequential_native.mojo -> _mojolearn_runtime_sequential_host, a CPU host binding). No GPU binding calls it, so no sm_89/gfx target is affected.",
  "not_covered": "No GPU/vendor runtime or identity run; x_sequence_host and tokenizer_host were built once from the before tree (they import sequential_admission.mojo but never call sequential_admit).",
- "pod_cmd": "~/mojolearn-evidence/overhead-sequential-admission-20261028/pod_cmd.sh"
+ "pod_cmd": "~/mojolearn-evidence/overhead-sequential-admission-20261028/pod_cmd.sh",
+ "merged_tree": "5b6d4952b4 = lane + origin/main ebcd7f9477 (main moved only tools/test_bench_board_race_data_sha.py + tools/bench_board_evidence.py; no file the root imports changed)",
+ "run_owed": [
+  "RUN OWED: merged-tree pod compile of host families through the cache incl. runtime_sequential (bindings/entry/entry__mojolearn_runtime_sequential_host.mojo, CPU column, identical; no define; no GPU target: host-only root) -- not run, pod cap full 16:58Z-18:08Z (34 refusals), handed to consolidate-neural",
+  "RUN OWED: import mojolearn + top-level modules + `import mojolearn._backend as b; b.tier_dir('identical')` on the merged tree",
+  "RUN OWED: tools/tests/sequential_admission_fixture.py same-bits/same-refusals on the final tree (already PASS on lane head e489d2b957 vs base: 37/37 digests, 27 same refusals, 6 narrowed by design; same_bits.json)"
+ ]
 }
