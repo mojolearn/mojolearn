@@ -1286,7 +1286,7 @@ def _byte_schedule_capability(kind: Int) -> Int:
     # session has every operation; the layer pool has no split-step/fold
     # door; the offloaded replay also has no resident optimizer ownership.
     if kind == BYTE_SCHEDULE_REPLICA:
-        return (1 << BYTE_SCHEDULE_OPERATION_COUNT) - 1
+        return (1 << BYTE_LM_SCHEDULE_OPERATION_COUNT) - 1
     var common = (1 << BYTE_SCHEDULE_CLOSE) | (1 << BYTE_SCHEDULE_OPEN) | (1 << BYTE_SCHEDULE_STEP) | (
         1 << BYTE_SCHEDULE_EXPORT) | (1 << BYTE_SCHEDULE_ROLLBACK) | (1 << BYTE_SCHEDULE_KIND) | (1 << BYTE_SCHEDULE_CAPABILITY)
     if kind == BYTE_SCHEDULE_MODEL_POOL:
@@ -1324,8 +1324,8 @@ def _byte_schedule_losses(address: Int, losses: List[Float32], count: Int) raise
     if len(losses) != count:
         raise Error("RuntimeError: parallel step returned wrong loss count")
     var out = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=address)
-    for i in range(count):  # small-loop(count: one loss per logical shard)
-        out[i] = Float64(losses[i])
+    for i in range(count):  # small-loop(count: one loss per logical shard): copies shard losses, no data
+        out.store(i, Float64(losses[i]))
     return count
 
 
@@ -1511,7 +1511,7 @@ def _byte_schedule_ownership(mut session: ByteScheduleSession, a: List[Int], p: 
     if len(words) > p[0]:
         raise Error("byte LM schedule: ownership output is too short")
     var out = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=a[1])
-    for i in range(len(words)):  # small-loop(words: captured ownership record words)
+    for i in range(len(words)):  # small-loop(words: captured ownership record words): copies record words, no data
         out[i] = words[i]
     return len(words)
 
@@ -1694,7 +1694,7 @@ def byte_lm_schedule_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf
         var p = native_descriptor_words(pp, np)
         var f = List[Float64]()
         var fp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
-        for i in range(nf):  # small-loop(at most the eight optimizer scalars)
+        for i in range(nf):  # small-loop(nf: at most the eight optimizer scalars): reads scalars, no data
             f.append(fp[i])
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = byte_lm_schedule_operation(op, a, p, f)
         return 0
