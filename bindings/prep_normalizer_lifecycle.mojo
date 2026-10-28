@@ -74,7 +74,7 @@ def _tags(model: PythonObject, fields: PythonObject) raises -> PythonObject:
     for i in range(len(names)):  # driver-loop: static native tag names before lookup
         if py_type(names[i]) is not b.str:
             raise Error("TypeError: native Normalizer input tags require exact string keys")
-    return tags
+    return py_call(b.dict, tags)
 
 
 def _native_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -119,7 +119,15 @@ def _native_entries(mode: PythonObject, context: PythonObject) raises -> PythonO
 
 def normalizer_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    var fields = _fields(model)
+    # _fields admits an exact native dictionary and exact string keys. Its
+    # native copy pins operation-local state before input preparation or a
+    # compiled readback can release the GIL. Transform never writes the model.
+    var fields = py_call(b.dict, _fields(model))
+    var missing = Python.list()
+    var mode = py_get(fields, "numeric_mode_", missing)
+    var norm = py_get(fields, "norm", missing)
+    var fitted = py_get(fields, "n_features_in_")
+    var feature_names = py_get(fields, "feature_names_in_")
     var name = String(py_type(model).__name__)
     var requires_fit = _truth(_class_setting(model, "_sklearn_requires_fit", PythonObject(True)))
     if requires_fit and not _fitted(fields):
@@ -136,22 +144,23 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
     # A Python hook used solely to decide validation is still runtime work.
     if not nested and scan and _setting(model, fields, "_mojolearn_allows_nan", PythonObject(None)) is not None:
         raise Error("TypeError: native Normalizer validation requires static input tags; Python allow-NaN hooks cannot execute")
-    var snapshot = prep_transform_snapshot(source, name, validate, scan, context)
-    var fitted = py_get(fields, "n_features_in_")
     var precomputed = False
     for key in ["metric", "kernel", "affinity", "dissimilarity"]:  # small-loop(metadata: existing width-check exemptions)
         var option = _setting(model, fields, key, PythonObject(None))
         precomputed = precomputed or (py_type(option) is b.str and String(option) == "precomputed")
+    var snapshot = prep_transform_snapshot(source, name, validate, scan, context)
     if validate and not precomputed and len(snapshot.shape) == 2:
         if py_type(fitted) is b.int and Int(py=fitted) != snapshot.source.cols:
             raise Error("X has " + String(snapshot.source.cols) + " features, but " + name + " is expecting " + String(Int(py=fitted)) + " features as input.")
         # The former _array_like conversion removed pandas column labels before
         # before_call's _column_names check. Preserve that public behavior.
-        if py_get(fields, "feature_names_in_") is not None:
+        if feature_names is not None:
             metric_warn("X does not have valid feature names, but " + name + " was fitted with feature names", b.UserWarning, context)
     if not py_contains(fields, "n_features_in_"):
         raise Error("RuntimeError: mojolearn: this " + name + " instance is not fitted yet")
-    var mode = fields["numeric_mode_"]
+    if mode is missing:
+        # Preserve the former missing-field error at its original stage.
+        mode = fields["numeric_mode_"]
     var entries = _native_entries(mode, context)
     var values = prep_transform_values(snapshot, context)
     var n = snapshot.source.rows
@@ -159,7 +168,8 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
     if py_type(fitted) is not b.int or Int(py=fitted) != d:
         var text = String(py_call(b.str, fitted)) if py_type(fitted) is b.int or py_type(fitted) is b.bool or py_type(fitted) is b.float else _safe_repr(fitted)
         raise Error("mojolearn: X has " + String(d) + " features, " + name + " was fitted with " + text)
-    var norm = fields["norm"]
+    if norm is missing:
+        norm = fields["norm"]
     var code = -1
     if py_type(norm) is b.str:
         var word = String(norm)
