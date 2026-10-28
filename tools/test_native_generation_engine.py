@@ -28,28 +28,28 @@ def test_token_loop_uses_native_state_and_original_sampling_policy():
 def test_numerical_order_and_native_cached_token_publication_are_explicit():
     src = text('transformer/native_generation_engine.mojo')
     body = src.split('def forward(mut self,')[1].split('struct NativeGenerationProgress')[0]
-    assert body.index('self.primitive_call(0,') < body.index('generation_session_forward(1,')
-    assert body.index('generation_session_forward(1,') < body.index('self.primitive_call(2,') < body.index('self.primitive_call(4,')
+    assert body.index('self.primitive_call(0,') < body.index('self.layers[i].endpoint.call(')
+    assert body.index('self.layers[i].endpoint.call(') < body.index('self.primitive_call(2,') < body.index('self.primitive_call(4,')
     assert 'parameters[8] = self.layers[i].cached' in body
-    assert 'self.layers[i].cached = generation_session_forward' in body
+    assert 'self.layers[i].cached = self.layers[i].endpoint.call' in body
     assert body.index('self.position += length') > body.index('self.primitive_call(4,')
 
 
 def test_reservations_and_outputs_remain_at_checked_boundary():
     provider = text('providers/python/generation_metadata_pyapi.mojo').split('struct GenerationEngineAdmission')[1]
     assert 'generation_mutable(key, [cache_count]' in provider
-    assert 'self.links.append(linked)' in provider
-    assert 'self.reserved.append(i)' in provider and 'while len(self.reserved) > 0' in provider
-    assert 'if already_reserved:' in provider
-    assert 'self.native.layers[i].failure = String(problem)' in provider
-    assert 'Never unlock another owner' in provider
+    assert 'self.owners.append(AdmittedNativeExecution(provider, session, handle,' in provider
+    assert 'OperationLockLease(lock_owner)' in provider
+    assert '-1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle)' in provider
+    assert 'self.reserved' not in provider
+    assert 'native_layer.failure = String(problem)' in provider
     assert '"cached_tokens", PythonObject(self.native.layers[i].cached)' in provider
     assert '"_usable", PythonObject(False)' in provider
     assert 'if self.published:' in provider
     public = text('bindings/causal_lm_public.mojo')
     read = public.split('def _read_engine(')[1].split('def _read(')[0]
-    assert read.index('owner.reserve()') < read.index('with GILReleased(Python())')
-    assert read.count('owner.release()') == 2 and read.count('owner.publish()') == 2
+    assert 'owner.reserve()' not in read and 'GILReleased' not in read
+    assert read.count('owner.publish()') == 2
     assert read.count('_engine_publish_stream(s, progress, batch)') == 2
 
 
@@ -68,7 +68,7 @@ def test_deferred_layer_refusals_keep_earlier_progress_and_profile_publication()
     src = text('transformer/native_generation_engine.mojo')
     forward = src.split('def forward(mut self,')[1].split('struct NativeGenerationProgress')[0]
     assert forward.index('self.primitive_call(0,') < forward.index('self.layers[i].visited = True')
-    assert forward.index('raise Error(self.layers[i].failure)') < forward.index('generation_session_forward(1,')
+    assert forward.index('raise Error(self.layers[i].failure)') < forward.index('self.layers[i].endpoint.call(')
     provider = text('providers/python/generation_metadata_pyapi.mojo')
     assert 'native_layer.failure = String(problem)' in provider
     assert 'self.native.layers[i].visited and self.native.layers[i].profile_admitted' in provider

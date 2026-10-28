@@ -156,53 +156,49 @@ struct GenerationOperationSnapshot(Copyable, Movable):
 from bindings.py_balanced import py_setitem, py_setattr
 from bindings.generation_buffers import generation_mutable
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
-from providers.python.generation_session_pyapi import (
-    GenerationNativeProvider, GenerationNativeSession, generation_connect_native_session,
-    generation_native_session_matches,
-)
+from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_entry
+from providers.python.native_execution_pyapi import AdmittedNativeExecution
+from providers.python.operation_lock_pyapi import OperationLockLease
 from core.generation_metadata import generation_transformer_addresses
 from transformer.native_generation_engine import NativeGenerationLayer, NativeGenerationModel
-from transformer.native_session_call import generation_session_forward
 
 
 struct GenerationEngineAdmission(Movable):
     var snapshot: GenerationOperationSnapshot
     var state: PythonObject
     var states: List[PythonObject]
-    var links: List[PythonObject]
+    var owners: List[AdmittedNativeExecution]
     var buffers: List[PythonObject]
     var native: NativeGenerationModel
-    var reserved: List[Int]
     var published: Bool
 
     def __init__(out self, snapshot: GenerationOperationSnapshot, state: PythonObject, batch: Int, length: Int) raises:
         self.snapshot = snapshot.copy()
         self.state = state
         self.states = List[PythonObject]()
-        self.links = List[PythonObject]()
+        self.owners = List[AdmittedNativeExecution]()
         self.buffers = List[PythonObject]()
-        self.reserved = List[Int]()
         self.published = False
         var entries = snapshot.entries
-        var provider = py_get(entries, "native_session_provider")
+        var provider = py_get(entries, "native_block_operations")
         if snapshot.kind != "transformer" or snapshot.head.packed or snapshot.planes or provider is None or snapshot.native is None:
             raise Error("CausalLM: native generation engine requires admitted nonresident fp32 Transformer descriptors")
         if len(snapshot.embedding.refresh) != 0 or len(snapshot.head.weights.refresh) != 0:
             raise Error("CausalLM: native generation engine foreign-weight descriptor admission is pending")
-        var primitive = snapshot.native.downcast_value_ptr[NeuralDescriptorProvider]()
+        self.owners.append(AdmittedNativeExecution(snapshot.native, PythonObject(None), 0, -1, -1, PythonObject(None), 0))
         var model_limit = snapshot.model.max_positions
         var limited = model_limit is not None
-        self.native = NativeGenerationModel(primitive[].entry, snapshot.embedding.addresses[0],
+        self.native = NativeGenerationModel(self.owners[0].endpoint(), snapshot.embedding.addresses[0],
             snapshot.head.weights.addresses[0], snapshot.head.weights.addresses[1], snapshot.head.norm_eps,
             batch, snapshot.width, snapshot.vocab, Int(py=state.positions), Int(py=state.max_tokens),
             limited, Int(py=model_limit) if limited else 0)
         var layers = state.layers
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
-        var api = provider.downcast_value_ptr[GenerationNativeProvider]()
+        var cpu = Bool(py=entries["cpu"])
         for i in range(len(snapshot.layers)):  # driver-loop: admit layer/state owners once before native execution
             ref layer = snapshot.layers[i]
             var st = layers[i]
-            var native_layer = NativeGenerationLayer(api[].forward, 0, [], [], 0)
+            var native_layer = NativeGenerationLayer(self.owners[0].endpoint(), 33 if cpu else 11, [], [], 0)
             try:
                 if len(layer.weights.refresh) != 0 or len(layer.optional.refresh) != 0:
                     raise Error("CausalLM: native generation engine foreign-weight descriptor admission is pending")
@@ -226,21 +222,26 @@ struct GenerationEngineAdmission(Movable):
                 var key_address = generation_mutable(key, [cache_count], self.buffers, copies, "k_cache")
                 var value_address = generation_mutable(value, [cache_count], self.buffers, copies, "v_cache")
                 var block = layer.block
-                if block["_native_session"] is None:
-                    py_setitem(block, "_native_session", py_call(entries["create"]))
-                    py_setitem(block, "_session_binding", entries["block_binding"])
-                var session = block["_native_session"]
-                var linked = py_get(block, "_native_forward_owner")
-                if linked is None or not generation_native_session_matches(linked, provider, session):
-                    linked = generation_connect_native_session(provider, session)
-                    py_setitem(block, "_native_forward_owner", linked)
-                var held = linked.downcast_value_ptr[GenerationNativeSession]()
+                var lock_owner = block["_runtime_lock"]
+                var lock = OperationLockLease(lock_owner)
+                if lock.handle == 0:
+                    raise Error("CausalLM: native generation requires an admitted native operation lock")
+                var session = PythonObject(None)
+                var handle = 0
+                if not cpu:
+                    if block["_native_session"] is None:
+                        py_setitem(block, "_native_session", py_call(entries["create"]))
+                        py_setitem(block, "_session_binding", entries["block_binding"])
+                    session = block["_native_session"]
+                    handle = neural_descriptor_handle(provider,
+                        neural_descriptor_entry(entries["block_binding"], "transformer_native_session_handle_v1"), session)
+                self.owners.append(AdmittedNativeExecution(provider, session, handle,
+                    -1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle))
+                native_layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
                 var addresses = generation_transformer_addresses(0, layer.weights.addresses.copy(),
                     key_address, value_address, 0, layer.optional.addresses.copy(), [])
-                native_layer.handle = held[].handle
                 native_layer.addresses = addresses^
                 native_layer.parameters = layer.words.transformer_params(batch, length, capacity, cached)
-                self.links.append(linked)
             except problem:
                 # Defer this refusal to its original execution position. Earlier
                 # layers must retain their normal partial progress on failure.
@@ -249,35 +250,6 @@ struct GenerationEngineAdmission(Movable):
             self.native.layers.append(native_layer^)
         _ = provider
         _ = layers
-
-    def reserve(mut self) raises:
-        # The existing ABI specifies reservation under the GIL. Retain that
-        # contract for every shared session while the native operation runs.
-        for i in range(len(self.native.layers)):  # driver-loop: reserve admitted native session owners
-            if self.native.layers[i].failure.byte_length() != 0:
-                break
-            var already_reserved = False
-            for index in self.reserved:  # driver-loop: tied blocks may share one admitted session
-                if self.native.layers[index].handle == self.native.layers[i].handle:
-                    already_reserved = True
-                    break
-            if already_reserved:
-                continue
-            try:
-                _ = generation_session_forward(0, self.native.layers[i].forward,
-                    self.native.layers[i].handle, [], [])
-                self.reserved.append(i)
-            except problem:
-                # Preserve the legacy earlier-layer progress and invalidation
-                # when this session is busy/closed. Never unlock another owner.
-                self.native.layers[i].failure = String(problem)
-                break
-
-    def release(mut self) raises:
-        while len(self.reserved) > 0:  # driver-loop: release only reservations owned by this operation
-            var i = self.reserved.pop()
-            _ = generation_session_forward(2, self.native.layers[i].forward,
-                self.native.layers[i].handle, [], [])
 
     def publish(mut self) raises:
         if self.published:
@@ -292,10 +264,7 @@ struct GenerationEngineAdmission(Movable):
         py_setattr(self.state, "_native_engine_forwards", PythonObject(self.native.forwards))
         if self.native.failed:
             py_setattr(self.state, "_usable", PythonObject(False))
-        var primitive = self.snapshot.native.downcast_value_ptr[NeuralDescriptorProvider]()
-        for i in range(6):  # small-loop(common primitive diagnostic counters)
-            primitive[].calls[i] += self.native.calls[i]
         self.published = True
         _ = self.buffers
-        _ = self.links
+        _ = self.owners
         _ = self.snapshot

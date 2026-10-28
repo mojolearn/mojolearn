@@ -2,16 +2,13 @@
 # Operation-local nonresident fp32 Transformer execution. Numerical operations
 # use the existing sibling ABI entries in their original order. No provider,
 # Python state, Python allocator, or callback is reachable from this module.
-from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
-from transformer.session_abi import GenerationSessionForward
-from transformer.native_session_call import generation_session_forward
+from core.native_execution import NativeExecutionEndpoint
 from transformer.causal_lm_public_impl import causal_lm_pick_step, causal_lm_rows_done
 
 
 struct NativeGenerationLayer(Movable):
-    var forward: GenerationSessionForward
-    var handle: Int
+    var endpoint: NativeExecutionEndpoint
+    var operation: Int
     var addresses: List[Int]
     var parameters: List[Int]
     var cached: Int
@@ -20,10 +17,10 @@ struct NativeGenerationLayer(Movable):
     var profile_admitted: Bool
     var failure: String
 
-    def __init__(out self, forward: GenerationSessionForward, handle: Int,
+    def __init__(out self, endpoint: NativeExecutionEndpoint, operation: Int,
                  var addresses: List[Int], var parameters: List[Int], cached: Int):
-        self.forward = forward
-        self.handle = handle
+        self.endpoint = endpoint
+        self.operation = operation
         self.addresses = addresses^
         self.parameters = parameters^
         self.cached = cached
@@ -34,7 +31,7 @@ struct NativeGenerationLayer(Movable):
 
 
 struct NativeGenerationModel(Movable):
-    var primitive: NativeDescriptorCall
+    var primitive: NativeExecutionEndpoint
     var embedding: Int
     var norm: Int
     var head: Int
@@ -51,7 +48,7 @@ struct NativeGenerationModel(Movable):
     var failed: Bool
     var forwards: Int
 
-    def __init__(out self, primitive: NativeDescriptorCall, embedding: Int, norm: Int, head: Int,
+    def __init__(out self, primitive: NativeExecutionEndpoint, embedding: Int, norm: Int, head: Int,
                  norm_eps: Float64, batch: Int, width: Int, vocab: Int, position: Int,
                  capacity: Int, limited: Bool, max_positions: Int):
         self.primitive = primitive
@@ -73,7 +70,7 @@ struct NativeGenerationModel(Movable):
 
     def primitive_call(mut self, op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises:
         self.calls[op] += 1
-        _ = native_descriptor_call(self.primitive, op, a, p, f)
+        _ = self.primitive.call(op, a, p, f)
 
     def forward(mut self, ids: Int, length: Int) raises -> List[Float32]:
         # These checks precede execution/failure invalidation, matching _state.
@@ -100,8 +97,7 @@ struct NativeGenerationModel(Movable):
                 parameters[1] = length
                 parameters[8] = self.layers[i].cached
                 self.layers[i].attempted = True
-                self.layers[i].cached = generation_session_forward(1, self.layers[i].forward,
-                    self.layers[i].handle, addresses, parameters)
+                self.layers[i].cached = self.layers[i].endpoint.call(self.layers[i].operation, addresses, parameters, [])
                 _ = hidden
                 hidden = next^
             if self.norm != 0:

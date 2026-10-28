@@ -849,14 +849,12 @@ def _run_engine(model: PythonObject, ids: PythonObject, state: PythonObject) rai
     var address = _addr(ids, keep)
     var logits = List[Float32]()
     try:
-        owner.reserve()
-        with GILReleased(Python()):
-            logits = owner.native.forward(address, length)
+        # Common endpoints own per-call GIL release, lock acquisition and
+        # session reservation. The native layer loop enters GIL-held.
+        logits = owner.native.forward(address, length)
     except problem:
-        owner.release()
         owner.publish()
         raise problem
-    owner.release()
     owner.publish()
     var result = generation_array([batch, length, owner.native.vocab])
     memcpy(dest=f32_ptr(Int(py=result._addr)), src=logits.unsafe_ptr(), count=len(logits))
@@ -1255,16 +1253,12 @@ def _read_engine(mut s: GenerationHandle, capacity: Int) raises -> PythonObject:
     var address = _addr(s.current, keep)
     var progress = NativeGenerationProgress(address, batch, length, s.produced, capacity)
     try:
-        owner.reserve()
-        with GILReleased(Python()):
-            native_generation_read(owner.native, progress, capacity, s.max_new, s.finished, s.lengths,
-                s.eos, s.pad, s.greedy, s.temperature, s.top_k, s.top_p, s.seed)
+        native_generation_read(owner.native, progress, capacity, s.max_new, s.finished, s.lengths,
+            s.eos, s.pad, s.greedy, s.temperature, s.top_k, s.top_p, s.seed)
     except problem:
-        owner.release()
         owner.publish()
         _engine_publish_stream(s, progress, batch)
         raise problem
-    owner.release()
     owner.publish()
     _engine_publish_stream(s, progress, batch)
     var out = generation_array([batch, progress.wrote], "i")
