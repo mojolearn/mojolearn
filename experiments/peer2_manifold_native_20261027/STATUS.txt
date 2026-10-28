@@ -62,3 +62,49 @@ Input snapshot source increment
 - Initial push was refused by no_compute_in_shells for an incorrectly formatted
   fixed-loop annotation. The annotation-only follow-up fixes it; retry passed.
   Both routes-push.log and routes-push-retry.log retain the evidence.
+
+UMAP constructor/reset source increment
+- UMAP joins the existing native full-reset constructor and setter connection.
+  Public signatures/default object identities stay with the import-time plan.
+- A dedicated umap_parameters_native module implements integer/scalar bounds,
+  float32 rounding, metric/extras validation and objective refusals. Constructor
+  fields are written in their original order; validation precedes numeric_mode
+  injection. Failed set_params validation leaves original fitted state intact.
+- Native scalar, static Unicode and zero-dimensional numeric ndarray settings
+  are admitted before conversion; Python scalar/dict protocol objects are
+  refused without invoking their hooks. ndarray scalar bytes are read through
+  a single metadata snapshot, including non-native byte order.
+- Constructor validation hooks are pinned in the lifecycle schema; instance
+  _parameters/_extras redirections are refused. Fit/transform share the same
+  validator and no longer recompute extras twice.
+- Shared files explicitly owned for this increment after root coordination:
+  bindings/full_reset_constructor_native.mojo
+  bindings/full_reset_params_native.mojo
+  python/mojolearn/_native_full_reset_params.py
+  tools/native_full_reset_constructor_schemas.json
+  tools/test_native_full_reset_params_connection.py
+- Small compile targets now include BOTH tokenizer host (constructor/reset)
+  and runtime_manifold host (fit/transform validation). No lane compile run.
+
+Validation and retained failures for constructor increment
+- Initial full source suite: exit 1, 24 failed / 87 passed. Two new fixture
+  expectations (hook list/count) were corrected. The other 22 failures are
+  existing retained-source-proof debt: 21 non-UMAP row hashes/line references
+  and one recurrent ancestry declaration. Do not overwrite those proofs without
+  review. Source byte comparison confirms their paths unchanged from this
+  lane's base (constructor-baseline-proof-audit.log).
+- Subsequent connection/routing selection: exit 0, 33 passed, 79 deselected;
+  umap-constructor-connection-tests.log. The deselected stale proof cases are
+  explicit pending coverage, not passes.
+- Focused UMAP proof/connection tests: exit 0, 5 passed, 99 deselected;
+  umap-constructor-focused-source.log. Python syntax and diff checks pass.
+- New public runtime cases: python/mojolearn/tests/test_umap_native_constructor.py.
+  Syntax checked only; all runtime cases are UNRUN until integrated compilation.
+- Original failure log: umap-constructor-source-tests-1.log. Every log above is
+  under ~/mojolearn-evidence/peer2-manifold-20261027/.
+
+Still pending beyond constructor/reset: inherited fit/output decorators,
+whole-operation fitted/feature-name checks and public result completion;
+UMAP categorical labels; MKit _M/_DevBuf state and Python destructor cleanup;
+remaining mutable fitted-state/scalar reads in manifold numerical orchestration.
+The constructor source repair does not qualify those operations or any vendor.

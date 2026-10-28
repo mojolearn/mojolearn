@@ -23,6 +23,7 @@ from . import svm as _m19
 from . import decomposition as _m21
 from . import _svm_impl as _m22
 from . import _spectral_impl as _m23
+from . import _umap_impl as _m24
 
 _ENTRY = _binding()._module.full_reset_params_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
@@ -101,6 +102,7 @@ _CLASSES = (
     _m0.StackingRegressor,
     _m4.TSNE,
     _m21.TruncatedSVD,
+    _m24.UMAP,
     _m0.VotingClassifier,
     _m0.VotingRegressor,
 )
@@ -192,6 +194,7 @@ _EVENTS = {
     'StackingRegressor': (('estimators', 'parameter', 'estimators', False), ('final_estimator', 'parameter', 'final_estimator', False), ('cv', 'parameter', 'cv', False), ('stack_method', 'constant', 'auto', False), ('n_jobs', 'parameter', 'n_jobs', False), ('passthrough', 'parameter', 'passthrough', False), ('verbose', 'parameter', 'verbose', False), ('numeric_mode', 'constant', None, True), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'TSNE': (('n_components', 'parameter', 'n_components', False), ('perplexity', 'parameter', 'perplexity', False), ('early_exaggeration', 'parameter', 'early_exaggeration', False), ('learning_rate', 'parameter', 'learning_rate', False), ('post_exaggeration_learning_rate_factor', 'parameter', 'post_exaggeration_learning_rate_factor', False), ('max_iter', 'parameter', 'max_iter', False), ('init', 'parameter', 'init', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'TruncatedSVD': (('n_components', 'parameter', 'n_components', False), ('tol', 'parameter', 'tol', False), ('algorithm', 'parameter', 'algorithm', False), ('n_iter', 'parameter', 'n_iter', False), ('n_oversamples', 'parameter', 'n_oversamples', False), ('power_iteration_normalizer', 'parameter', 'power_iteration_normalizer', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'UMAP': (('n_neighbors', 'parameter', 'n_neighbors', False), ('n_components', 'parameter', 'n_components', False), ('min_dist', 'parameter', 'min_dist', False), ('spread', 'parameter', 'spread', False), ('n_epochs', 'parameter', 'n_epochs', False), ('random_state', 'parameter', 'random_state', False), ('set_op_mix_ratio', 'parameter', 'set_op_mix_ratio', False), ('local_connectivity', 'parameter', 'local_connectivity', False), ('metric', 'parameter', 'metric', False), ('init', 'parameter', 'init', False), ('learning_rate', 'parameter', 'learning_rate', False), ('repulsion_strength', 'parameter', 'repulsion_strength', False), ('negative_sample_rate', 'parameter', 'negative_sample_rate', False), ('a', 'parameter', 'a', False), ('b', 'parameter', 'b', False), ('metric_kwds', 'parameter', 'metric_kwds', False), ('target_n_neighbors', 'parameter', 'target_n_neighbors', False), ('target_metric', 'parameter', 'target_metric', False), ('target_weight', 'parameter', 'target_weight', False), ('densmap', 'parameter', 'densmap', False), ('output_metric', 'parameter', 'output_metric', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'VotingClassifier': (('estimators', 'parameter', 'estimators', False), ('voting', 'parameter', 'voting', False), ('weights', 'parameter', 'weights', False), ('n_jobs', 'parameter', 'n_jobs', False), ('flatten_transform', 'parameter', 'flatten_transform', False), ('verbose', 'parameter', 'verbose', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'VotingRegressor': (('estimators', 'parameter', 'estimators', False), ('weights', 'parameter', 'weights', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
 }
@@ -251,6 +254,7 @@ def _install(classes):
         _CONTEXT['plans'][cls] = dict(names=names, events=events, signature=signature,
             defaults={p.name: p.default for p in parameters if p.default is not p.empty},  # glue: exact default reference identities
             class_name=cls.__name__,
+            validation_kind='umap' if cls.__name__ == 'UMAP' else None,
             positional=tuple(p.name for p in parameters if p.kind is p.POSITIONAL_OR_KEYWORD),  # glue: native argument schema
             kwonly=kwonly,
             required_positional=tuple(p.name for p in parameters  # glue: native argument schema
@@ -299,11 +303,12 @@ def _connect(classes, parameter_metadata):
                  '__getattribute__', '__getattr__', '__setattr__', '__delattr__', '__del__', '__dict__', '__slots__')
     for cls in classes:  # glue: final snapshots after native attribute installation
         plan = _CONTEXT['plans'][cls]
+        class_protected = protected + (('_parameters', '_extras') if plan['validation_kind'] == 'umap' else ())
         mro = type.__dict__['__mro__'].__get__(cls)
         fields = tuple(dict.fromkeys(event[0] for event in plan['events']))  # glue: constructor destinations in first-insertion order
-        plan.update(mro=mro, protected=protected,
-            layout_hooks=tuple((base, name, vars(base).get(name)) for base in mro for name in protected),  # glue: native storage and constructor identities
-            inherited_hooks=tuple((name, _resolved(cls, name, _CONTEXT['missing'])) for name in protected),  # glue: passive subclass admission
+        plan.update(mro=mro, protected=class_protected,
+            layout_hooks=tuple((base, name, vars(base).get(name)) for base in mro for name in class_protected),  # glue: native storage and constructor identities
+            inherited_hooks=tuple((name, _resolved(cls, name, _CONTEXT['missing'])) for name in class_protected),  # glue: passive subclass admission
             field_hooks=tuple((base, name, vars(base).get(name)) for base in mro for name in fields),  # glue: parameter/constant field descriptors
             field_names=fields)
         if _resolved(cls, '__new__', _CONTEXT['missing']) is not object.__new__:
@@ -317,7 +322,7 @@ def _connect(classes, parameter_metadata):
         if set(metadata['names']) != set(plan['names']):
             raise TypeError('full-reset native constructor and getter schemas differ')
         plan['constructor_hooks'] = tuple((name, _resolved(cls, name, _CONTEXT['missing']))  # glue: final lookup/assignment slots
-                                          for name in _CONSTRUCTOR_HOOKS)  # glue: three fixed slot names
+                                          for name in _CONSTRUCTOR_HOOKS + (('_parameters', '_extras') if plan['validation_kind'] == 'umap' else ()))  # glue: fixed constructor protocols
 
 
 def connect(parameter_metadata, linear, declared, estimator_context):
@@ -346,7 +351,8 @@ def connect(parameter_metadata, linear, declared, estimator_context):
     for classes in _CONTEXT.pop('pending_classes', ()):  # glue: deferred modules loaded during package import
         _connect(classes, parameter_metadata)
     _CONTEXT.update(parameter_metadata=parameter_metadata, linear=linear, declared=declared,
-                    native_setters=native_setters, constructor_hook_types=tuple(hook_types), ready=True)
+                    native_setters=native_setters, constructor_hook_types=tuple(hook_types),
+                    umap_validation_context=estimator_context, ready=True)
 
 
 def connect_module(namespace):
