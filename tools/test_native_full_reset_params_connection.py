@@ -485,7 +485,7 @@ def test_umap_parameter_source_keeps_scalar_arrays_and_native_bounds():
     assert 'array_metadata_once(value, shape^, name, context, True)' in source
     assert 'word > UInt64(UMAP_I64_MAX)' in source
     assert 'var at = i if value.native_byte_order else width - i - 1' in source
-    assert 'result = bitcast[Float64](word)' in source
+    assert 'result = bitcast[DType.float64](word)' in source
     assert 'result = Float64(Float32(result))' not in source  # final return rounds once
     assert 'return Float64(Float32(result))' in source
     array_refusal = source.split('def _parameter_array(', 1)[1].split('def umap_integer(', 1)[0]

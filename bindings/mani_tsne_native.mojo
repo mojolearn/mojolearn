@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # TSNE's public methods, one native call each (python/mojolearn/_expansion_ann.py:
-# `fit`, `fit_transform`). The shell hands over the x_ann binding `_bind`
-# resolved and the `_mojolearn_estimators` binding of the same numeric mode;
+# `fit`, `fit_transform`). The shell hands over input/settings; this native
+# owner selects x_ann and estimators bindings from one captured numeric mode;
 # this owner makes the Python method's refusals (same wording, same order),
 # builds the 'pca' start with the call `PCA(n_components=k).fit_transform`
 # made (`pca_fit_owned`, the same arguments), runs `x_ann_tsne_fit` with the
@@ -13,6 +13,9 @@ from bindings.classical_arrays import classical_address, classical_word
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
+from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from bindings.classical_validate import classical_view
+from bindings.manifold_lifecycle_native import _cast
 from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
 from core.family_cast_impl import family_all_finite_f32
 from bindings.family_common import (
@@ -72,7 +75,7 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     return z
 
 
-def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, snapshot: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`TSNE.fit(X)`; returns the embedding."""
     classical_connect_numpy(context)
     var b = Python.import_module("builtins")
@@ -82,7 +85,6 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var fields = settings.values
     # Reject nonfinite coordinates before PCA initialization reaches its
     # eigensolver; preserve TSNE's public input refusal for every init mode.
-    var snapshot = family_f32_snapshot(args[2], 2, "X", context)
     var x = snapshot.keep
     var x_address = snapshot.source.addr
     var n = snapshot.source.rows
@@ -129,6 +131,8 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var exploration = min(_TSNE_EXPLORATION_MAX_ITER, iterations)
     var init = family_field(fields, "init")
     var y0: PythonObject
+    var y0_address = 0
+    var initial_snapshot = Optional[ArrayMetadata]()
     var mode = 0
     var low = PythonObject(0)
     var high = PythonObject(0)
@@ -146,23 +150,30 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
                                                  PythonObject(1)))
         low = py_call(op.and_, s64, PythonObject(0xFFFFFFFF))
         high = py_call(op.rshift, s64, PythonObject(32))
+        y0_address = Int(py=classical_address(y0))
     else:
         # the caller's start array (n, k) float32 (`TSNE._init`)
         if family_is_str(init):
             raise Error("mojolearn TSNE: init must be 'pca', 'random' or an array, got " + family_repr(init))
-        var view = family_view(init, -1, "init", context)
-        if Int(py=view.ndim) != 2 or Int(py=view.shape[0]) != n or Int(py=view.shape[1]) != k:
+        var view = classical_view(init, context, "init")
+        var shape = array_shape_once(view, context)
+        var captured = array_metadata_once(view, shape^, "init", context,
+                                           allow_non_native=True, allow_unsupported=True)
+        if len(captured.shape) != 2 or captured.shape[0] != n or captured.shape[1] != k:
             raise Error("mojolearn TSNE: an init array must have shape (" + String(n) + ", " + String(k)
-                        + "), got " + family_shape_repr(view))
-        y0 = family_cast_view(view, "init", context)
-        _ = view^
+                        + "), got " + family_repr(captured.python_shape()))
+        var prepared = _cast(captured, "init", context)
+        y0 = prepared.keep
+        y0_address = prepared.source.addr
+        initial_snapshot = Optional(prepared)
+        _ = view
     var embedding = family_array(Python.tuple(n, k), "<f4", context)
     var kl = family_array(Python.tuple(1), "<f4", context)
     var fit = family_entry(binding, "x_ann_tsne_fit", context)
     # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, perplexity,
     # early_exaggeration, learning_rate, post_exaggeration_learning_rate_factor,
     # init mode, random_state low, high, n_components
-    _ = family_call(fit, Python.list(PythonObject(x_address), classical_address(y0), classical_address(embedding),
+    _ = family_call(fit, Python.list(PythonObject(x_address), PythonObject(y0_address), classical_address(embedding),
                                      classical_address(kl)),
                     Python.list(PythonObject(n), PythonObject(d), max_iter, PythonObject(exploration),
                                 PythonObject(perplexity), PythonObject(exag), PythonObject(lr),
@@ -171,6 +182,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     _ = x  # keep the Python object alive through the native call above
     _ = kl  # keep the Python object alive through the native call above
     _ = snapshot
+    _ = initial_snapshot
     _ = x^
     _ = y0^
     py_setitem(settings.fields, "embedding_", embedding)
@@ -187,11 +199,11 @@ def _tsne_is_bool(value: PythonObject) raises -> Bool:
 
 
 def tsne_operation(model: PythonObject, settings: ManifoldSettings, operation: String, args: PythonObject,
-                   context: PythonObject) raises -> PythonObject:
+                   snapshot: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """TSNE: args = (x_ann binding, estimators binding, X)."""
     if operation == "family_mani_tsne_fit":
-        _ = _tsne_fit(model, settings, args, context)
+        _ = _tsne_fit(model, settings, args, snapshot, context)
         return model
     if operation == "family_mani_tsne_fit_transform":
-        return _tsne_fit(model, settings, args, context)
+        return _tsne_fit(model, settings, args, snapshot, context)
     raise Error("RuntimeError: unknown TSNE operation " + operation)
