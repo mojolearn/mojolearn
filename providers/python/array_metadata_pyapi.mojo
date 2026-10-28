@@ -24,10 +24,14 @@ struct ArrayMetadata(Copyable, Movable):
     var owner: PythonObject
     var copied: Bool
     var owned_writable: Bool
+    # Writability is independent of exclusive ownership: a borrowed Array
+    # view may be writable, while copy=False must respect a readonly view.
+    var readonly: Bool
 
     def __init__(out self, keep: PythonObject, var shape: List[Int], source: CastIn,
                  count: Int, dtype_number: Int, native_byte_order: Bool,
-                 c_order: Bool, is_array: Bool, owner: PythonObject, owned_writable: Bool):
+                 c_order: Bool, is_array: Bool, owner: PythonObject, owned_writable: Bool,
+                 readonly: Bool = False):
         self.keep = keep
         self.shape = shape^
         self.source = source
@@ -39,6 +43,7 @@ struct ArrayMetadata(Copyable, Movable):
         self.owner = owner
         self.copied = False
         self.owned_writable = owned_writable
+        self.readonly = readonly
 
     def python_shape(self) raises -> PythonObject:
         var result = Python.list()
@@ -57,6 +62,7 @@ struct ArrayMetadata(Copyable, Movable):
         # even if its mutable slots are later changed. `keep` owns this copy.
         self.copied = True
         self.owned_writable = True
+        self.readonly = False
         self.source = CastIn(address, CAST_KIND_FLOAT, 4, self.source.rows, self.source.cols,
                              self.source.cols * 4 if len(self.shape) > 0 else 0,
                              4 if len(self.shape) > 1 else 0)
@@ -70,6 +76,7 @@ struct ArrayMetadata(Copyable, Movable):
         # Same ownership rule as replace_f32; no metadata/owner recapture.
         self.copied = True
         self.owned_writable = True
+        self.readonly = False
         self.source = CastIn(address, CAST_KIND_FLOAT, 8, self.source.rows, self.source.cols,
                              self.source.cols * 8 if len(self.shape) > 0 else 0,
                              8 if len(self.shape) > 1 else 0)
@@ -104,9 +111,10 @@ def array_shape_once(value: PythonObject, context: PythonObject) raises -> List[
 
 
 def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
-                        context: PythonObject, allow_non_native: Bool = False) raises -> ArrayMetadata:
+                        context: PythonObject, allow_non_native: Bool = False,
+                        complex_error: String = "", f32_error: String = "") raises -> ArrayMetadata:
     var nd = len(shape)
-    if nd > 2:
+    if nd > 2 and complex_error.byte_length() == 0:
         raise Error(name + " metadata requires an admitted scalar/vector/matrix")
     var array = classical_is_array(value, context)
     var dtype = array_slot_once(value, "dtype", context) if array else value.dtype
@@ -117,6 +125,7 @@ def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
     var native_order = True
     var code = 0
     var contiguous = False
+    var readonly = False
     if array:
         if py_type(dtype) is not py_type(PythonObject("")):
             raise Error("TypeError: Array dtype must be an exact native string")
@@ -134,7 +143,18 @@ def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
         if not native_order and not allow_non_native:
             raise Error("TypeError: " + name + " must be in native byte order")
         code = Int(py=dtype.num)
-        contiguous = Bool(py=value.flags.c_contiguous)
+        var flags = value.flags
+        contiguous = Bool(py=flags.c_contiguous)
+        readonly = not Bool(py=flags.writeable)
+    # Preserve each owner's public dtype refusal without rereading dtype.
+    # Reject before cast_in_kind: complex128/longcomplex have wider items
+    # than CastIn supports and must never reach a numerical descriptor.
+    if complex_error.byte_length() > 0 and (code == 13 or code == 14 or code == 15):
+        raise Error(complex_error)
+    if nd > 2:
+        raise Error(name + " metadata requires an admitted scalar/vector/matrix")
+    if f32_error.byte_length() > 0 and (code != NPY_FLOAT or item != 4):
+        raise Error(f32_error)
     var kind = cast_in_kind(code, item, name)
     var strides = array_slot_once(value, "strides", context) if array else value.strides
     if py_type(strides) is not py_type(Python.tuple()) or len(strides) != nd:
@@ -153,8 +173,9 @@ def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
     var owner = array_owner_once(value, context)
     var owned_writable = False
     if array:
-        var readonly = array_slot_once(value, "_readonly", context)
-        if py_type(readonly) is not py_type(PythonObject(True)):
+        var readonly_value = array_slot_once(value, "_readonly", context)
+        if py_type(readonly_value) is not py_type(PythonObject(True)):
             raise Error("TypeError: Array readonly flag must be a native boolean")
-        owned_writable = owner[1] is None and not Bool(py=readonly)
-    return ArrayMetadata(value, shape^, source, rows * cols, code, native_order, contiguous, array, owner, owned_writable)
+        readonly = Bool(py=readonly_value)
+        owned_writable = owner[1] is None and not readonly
+    return ArrayMetadata(value, shape^, source, rows * cols, code, native_order, contiguous, array, owner, owned_writable, readonly)

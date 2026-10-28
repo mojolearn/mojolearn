@@ -1,0 +1,28 @@
+Shared ArrayMetadata additions (2026-10-27)
+
+Root explicitly ceded providers/python/array_metadata_pyapi.mojo to this lane
+for readonly capture and coordinated dtype-error support for decomposition.
+Root dependency e688891b588e16058ac74b7167308a24e71a4d94 is cherry-picked locally
+as 0ae63c427db0e80cb2170486cf23389ca285689a; its original-owner retention is
+preserved. Integrators already holding e688891b58 need only this lane's later
+commits, not duplicate ownership changes.
+
+readonly is independent of owned_writable: a writable borrowed Array view
+remains eligible for scaler copy=False. Capture reads the original readonly
+slot once. NumPy flags are retained once for contiguous/writeable metadata.
+replace_f32/replace_f64 mark their newly allocated current buffers writable
+without replacing original owners. Existing direct constructor callers retain
+a default readonly=False; their existing arguments remain valid.
+
+Optional complex_error and f32_error preserve public owner-specific dtype
+errors using the captured dtype number before cast_in_kind. With complex_error,
+complex64/complex128/longcomplex refuse before unsupported-rank or itemsize
+checks; default callers retain the old early rank check. No unsupported CastIn
+is returned. Decomposition owns its public operation controls. The scaler
+provider uses f32_error to preserve its strict float32 refusal without catching
+and rewriting unrelated shape/stride/readonly admission errors.
+
+Validation: source guards and Python shell forwarding tests passed; complete
+log ~/mojolearn-evidence/peer2-preprocessing-20261027/source-final.log. Native
+owner probe cases are SKIPPED because this lane does not compile. These are
+source checks only. Native compilation and public runtime checks stay pending.
