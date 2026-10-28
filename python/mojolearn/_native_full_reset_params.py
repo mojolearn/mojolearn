@@ -292,6 +292,8 @@ def _install(classes):
 def install():
     # glue: the NumPy-free classes; _DEFERRED_MODULES connect when they load
     _install(_CLASSES)
+    from ._native_mode_reconstruction import install as install_reconstruction
+    install_reconstruction(_CONTEXT, NativeFullResetParams.set_params)
 
 
 def _connect(classes, parameter_metadata):
@@ -329,6 +331,7 @@ def connect(parameter_metadata, linear, declared, estimator_context):
     # glue: final method/storage identities and already-supported native setters
     from ._native_public_attributes import _CONTEXT as attributes
     _connect(_CLASSES, parameter_metadata)
+    _connect(_CONTEXT.get('reconstruction_classes', ()), parameter_metadata)
     native_setters = {}
     # Export identity and ABI are connection metadata, not transitive runtime
     # qualification. The nested ownership/callback tests must pass before

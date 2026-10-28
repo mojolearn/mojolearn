@@ -9,6 +9,8 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_error_class import error_without_class
 from bindings.native_owner_lifetime import native_release_weakrefs
+from bindings.native_buffer_owner import native_storage_allocate
+from bindings.native_mode_recipe import mode_recipe_call
 from bindings.umap_parameters_native import umap_parameters_fields
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.params_metadata_native import _read, _connected_plan, _resolved
@@ -110,6 +112,36 @@ def _fresh_fields(model: PythonObject, values: PythonObject, plan: PythonObject,
     return fresh
 
 
+def _replacement(model: PythonObject, values: PythonObject, plan: PythonObject,
+                 context: PythonObject) raises -> PythonObject:
+    var b = native_loaded_module("builtins")
+    var recipe = plan["native_constructor"]
+    var entry = recipe["entry"]
+    if not Bool(py=plan["release_allowed"]):
+        raise Error("TypeError: parameter reconstruction cannot invoke a Python owner finalizer")
+    var owner = native_storage_allocate(py_type(model))
+    var packed = Python.list()
+    var selectors = recipe["arguments"]
+    var post_mode = Bool(py=recipe["post_mode"])
+    for i in range(len(selectors)):  # driver-loop: fixed native constructor argument recipe
+        var item = selectors[i]
+        var value = item[1]
+        if String(item[0]) == "parameter":
+            value = values[item[1]]
+            if post_mode and String(item[1]) == "numeric_mode":
+                value = PythonObject(None)
+        _ = py_call(packed.append, value)
+    var args = Python.tuple(owner, recipe["operation"], py_call(b.tuple, packed), recipe["context"])
+    var result = mode_recipe_call(entry, args)
+    if post_mode:
+        var fields = _fields(owner)
+        var mode = values["numeric_mode"]
+        if (mode is not None or (not py_contains(fields, "numeric_mode")
+                and _resolved(py_type(owner), PythonObject("numeric_mode"), context["missing"]) is context["missing"])):
+            py_setitem(fields, "numeric_mode", mode)
+    return owner
+
+
 def _reset(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = _fields(model)
@@ -136,7 +168,13 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
     var names = py_call(b.list, nested.keys())
     for i in range(len(names)):  # driver-loop: earlier successful nested changes remain if a later child refuses
         _ = _set(values[names[i]], nested[names[i]], context, depth + 1)
-    var fresh = _fresh_fields(model, values, plan, context)
+    var replacement = PythonObject(None)
+    var fresh: PythonObject
+    if py_contains(plan, "native_constructor"):
+        replacement = _replacement(model, values, plan, context)
+        fresh = _fields(replacement)
+    else:
+        fresh = _fresh_fields(model, values, plan, context)
     if py_get(plan, "validation_kind") is not None and String(plan["validation_kind"]) == "umap":
         # The original setter validates a replacement constructor before
         # clearing fitted state. Failed settings leave this model untouched.
@@ -148,6 +186,10 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
     # All removed references are retained in previous until admission completes.
     _ = py_call(fields.clear)
     _ = py_call(fields.update, fresh)
+    if replacement is not None:
+        # Move ownership into the live model before the temporary's native
+        # finalizer runs; do not leave it aliases of transferred handles.
+        _ = py_call(fresh.clear)
     return model
 
 
