@@ -256,6 +256,32 @@ def connect_gbdt_parameters(base, classes, metadata):
         context['trees_state_layouts'][cls] = {
             'classical_public_layouts': {cls: layout}, 'classical_public_installed': True}
     context['trees_gbdt_parameter_metadata'] = metadata
+    # glue: each adapter's public owner now performs validation, tracking and
+    # output conversion; remove only the former package-installed decorators.
+    from types import BuiltinFunctionType, MethodType
+    from .tokenizer import _binding
+    module = _binding()._module
+    attribute, factory = module.standard_scaler_attribute_call, module.classical_attribute_descriptor
+    if type(attribute) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
+        raise TypeError('native GBDT adapters require compiled attribute entries')
+    descriptor = factory(MethodType(attribute, context))
+    for cls in (base,) + tuple(classes):  # glue: fixed adapter public classes
+        for name in ('fit', 'predict', 'predict_proba', 'decision_function', 'score'):  # glue: public native doors
+            method = getattr(cls, name, None)
+            if inspect.isfunction(method):
+                setattr(cls, name, inspect.unwrap(method))
+        loader = inspect.getattr_static(cls, 'load', None)
+        if isinstance(loader, classmethod):
+            cls.load = classmethod(inspect.unwrap(loader.__func__))
+        cls.__getattribute__ = descriptor
+        cls._mojolearn_native_public = True
+        layout = _layout(cls, descriptor)
+        context.setdefault('classical_public_layouts', {})[cls] = layout
+        context['trees_state_layouts'][cls] = {
+            'classical_public_layouts': {cls: layout}, 'classical_public_installed': True}
+    context['classical_public_installed'] = True
+    context['classical_attribute_descriptor'] = descriptor
+    context['trees_gbdt_adapter_public_classes'] = {cls: cls._estimator_type for cls in classes}  # glue: fixed native classifier/regressor identity
 
 
 def _connect_public_forest(cls, context):

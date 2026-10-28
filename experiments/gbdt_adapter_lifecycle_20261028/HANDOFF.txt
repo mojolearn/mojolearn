@@ -1,0 +1,17 @@
+Peer5 GBDT adapter public lifecycle — 2026-10-28
+Branch lane/peer5-tree-aux-20261027 (continues 77ed135648); worktree mojolearn-peer5-trees.
+- bindings/trees_gbdt_adapter_lifecycle.mojo: GradientBoostingClassifier/
+  Regressor fit/predict/predict_proba/decision_function/score/is_fitted own
+  input admission, fitted checks, fit tracking, feature-name checks,
+  label/target validation and output conversion; save/load explicit refusals.
+- trees_public_gbdt(_fit).mojo: _field reads class members via the native MRO
+  reader and refuses descriptor hooks; get_params via the native parameter
+  reader; _loss read natively; _clear_fit admits displaced fitted owners.
+- trees_public_mixin_score.mojo: classes_ read through the native label list.
+- _native_trees_bridge.connect_gbdt_parameters unwraps the former Python
+  decorators once and installs the native attribute descriptor.
+- CPU review GBDT host files untouched; register_boost/Bagging region untouched.
+Compile: compile.json (complete tree public dispatcher root
+checks/tree_auxiliary_public_compile.mojo, CPU column, identical, O0, -j10).
+Not covered: GPU/AMD/Apple builds, runtime, identity, tests. Private test-only
+Python helpers (_new_learner, _regression_target) remain.
