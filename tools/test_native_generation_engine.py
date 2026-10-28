@@ -17,7 +17,7 @@ def test_native_engine_transitive_closure_has_no_provider_or_python():
 def test_token_loop_uses_native_state_and_original_sampling_policy():
     src = text('transformer/native_generation_engine.mojo')
     read = src.split('def native_generation_read(')[1]
-    assert 'model.forward(Int(progress.current.unsafe_ptr()), progress.length, progress.produced != 0)' in read
+    assert 'model.forward(Int(progress.current.unsafe_ptr()), progress.length)' in read
     assert 'causal_lm_pick_step(' in read
     for forbidden in ('PythonObject', 'py_call', 'py_get', '._addr', '.shape', 'getenv', 'GILReleased'):
         assert forbidden not in src
@@ -89,10 +89,16 @@ def test_delayed_foreign_copies_preserve_layer_order_and_alias_counters():
     assert 'var storage: List[List[Float32]]' in provider
 
 
-def test_mamba_engine_keeps_step_arity_report_and_counter_semantics():
+def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     native=text('transformer/native_generation_engine.mojo')
-    assert 'if kind != 0 and step:' in native
-    assert 'if index != 1:' in native
+    assert 'def forward(mut self, ids: Int, length: Int)' in native
+    assert 'operation += 1' not in native
+    assert 'parameters = decode' not in native
+    public=text('bindings/causal_lm_public.mojo')
+    assert 'return _run_engine(model, ids, state)' in public
+    assert 'logits = owner.native.forward(address, length)' in public
+    original=public.split('def _run_snapshot(')[1].split('\ndef ')[0]
+    assert 'x, state.layers[i], False)' in original
     assert 'addresses[self.layers[i].output_slot]' in native
     assert 'addresses[15] = Int(report.unsafe_ptr())' in native
     assert 'self.layers[i].cached + length if kind == 1 else result' in native
