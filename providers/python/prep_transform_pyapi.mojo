@@ -254,7 +254,9 @@ def _rows_snapshot(source: PythonObject, context: PythonObject) raises -> ArrayM
 
 
 def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
-                            scan: Bool, context: PythonObject) raises -> ArrayMetadata:
+                            scan: Bool, context: PythonObject,
+                            allow_sparse: Bool = False,
+                            check_sparse: Bool = True) raises -> ArrayMetadata:
     var b = native_loaded_module("builtins")
     if py_type(source) is context["maxabs_rows_class"]:
         # DeviceRows is a frame-like native handle in _sk_validate.describe;
@@ -263,12 +265,14 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
         if validate:
             prep_shape(snapshot.shape, True, name)
         return snapshot^
-    # Normalizer's sparse tag admits the wrapper, but its existing x_prep
-    # preparation refuses sparse with the shared dense-owner wording.
+    # Normalizer is absent from _ACCEPTS_SPARSE: its outer wrapper rejects
+    # sparse first unless an explicit static class tag enables it.
     # Match loaded native sparse class identities before general admission.
     # Reading an unadmitted class's __module__ could invoke metaclass or
     # descriptor hooks even on this refusal path.
     if host_sparse_format(source).byte_length() > 0:
+        if check_sparse and not allow_sparse:
+            raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + name + " takes dense X only.)")
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (MaxAbsScaler takes dense X only.)")
     classical_admit_value(source, context)
     if native_pandas_exact(source):

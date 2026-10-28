@@ -174,7 +174,8 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
     for key in ["metric", "kernel", "affinity", "dissimilarity"]:  # small-loop(metadata: existing width-check exemptions)
         var option = _setting(model, fields, key, PythonObject(None))
         precomputed = precomputed or (py_type(option) is b.str and String(option) == "precomputed")
-    var snapshot = prep_transform_snapshot(source, name, validate, scan, context)
+    var sparse = _truth(py_get(tags, "sparse", False))
+    var snapshot = prep_transform_snapshot(source, name, validate, scan, context, sparse, not nested)
     if validate and not precomputed and len(snapshot.shape) == 2:
         if py_type(fitted) is b.int and Int(py=fitted) != snapshot.source.cols:
             raise Error("X has " + String(snapshot.source.cols) + " features, but " + name + " is expecting " + String(Int(py=fitted)) + " features as input.")
