@@ -10,7 +10,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata
 
 def replace_binding(source: PythonObject, original_owner: PythonObject,
                     converted_f32: PythonObject, converted_f64: PythonObject, route: Int) raises -> PythonObject:
-    var metadata = ArrayMetadata(source, List[Int](2, 3),
+    var metadata = ArrayMetadata(source, List[Int]([2, 3]),
         CastIn(256, CAST_KIND_FLOAT, 2, 2, 3, 6, 2), 6, NPY_HALF,
         True, False, True, original_owner, False)
     if route == 32 or route == 3264:
