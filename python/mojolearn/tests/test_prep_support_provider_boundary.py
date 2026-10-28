@@ -93,21 +93,16 @@ def test_public_support_has_no_python_preparation_or_result_frames(public_classe
 def test_public_support_rejects_dictionary_property_before_hook(public_classes):
     calls = []
     for cls in public_classes:
-        model = _fitted(cls)
-        method = model.get_support
-        previous = vars(cls).get('__dict__')
-
         def dictionary(self):
             calls.append('__dict__')
             return {}
 
-        cls.__dict__ = property(dictionary)
-        try:
-            with pytest.raises(TypeError):
-                method()
-        finally:
-            if previous is None:
-                del cls.__dict__
-            else:
-                cls.__dict__ = previous
+        # A heap type's existing __dict__ slot is not assignable. Define the
+        # property on an ordinary subclass and bypass its constructor so the
+        # probe reaches support admission, rather than constructor admission.
+        changed = type('DictionaryHook', (cls,), {'__dict__': property(dictionary)})
+        model = object.__new__(changed)
+        method = cls.get_support.__get__(model, changed)
+        with pytest.raises(TypeError):
+            method()
         assert calls == []
