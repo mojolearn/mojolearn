@@ -29,6 +29,13 @@ generation; existing admission and source checks still decide which cells can
 enter `python/mojolearn/verify_reference/table.json`. Failed or partial evidence
 is never automatically promoted. Wheel builds still use the reference inputs
 committed in their selected MojoLearn source revision.
+The next step after committing collected columns is
+`tools/admit_identity_columns.sh --lanes <changed-lanes> <returned-record-dirs...>`.
+That command resolves external copies to their committed repository inputs,
+updates only the admitted lanes, and preserves unrelated table rows. Commit its
+updated table and receipts before the next wheel build. Collection and ordinary
+verification do not trigger this promotion themselves; see
+[the incremental release sequence](VERIFY.md#admitting-one-verified-group-without-rewriting-other-references).
 
 ## Size and provenance
 

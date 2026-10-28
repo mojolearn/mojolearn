@@ -10,6 +10,7 @@ from transformer.impl.llama.modeling_llama import (
     residual_rms_norm_kernel,
 )
 from mamba.impl.modeling.modeling_mamba import residual_add_kernel
+from transformer.experiments.norm_fixed_lanes import norm_row_threads
 
 comptime M = (
     32768 if is_defined["MOJOLEARN_RESNORM_BATCH16"]() else
@@ -50,7 +51,7 @@ def baseline(ctx: DeviceContext, mut r: DeviceBuffer[DType.float32], mut ss: Dev
 
 def fused(ctx: DeviceContext, mut r: DeviceBuffer[DType.float32], mut ss: DeviceBuffer[DType.float32], mut out: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32], mut b: DeviceBuffer[DType.float32], mut w: DeviceBuffer[DType.float32]) raises:
     for _ in range(LAYERS):
-        ctx.enqueue_function[residual_rms_norm_kernel](r.unsafe_ptr(), ss.unsafe_ptr(), out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(), w.unsafe_ptr(), Int32(M), Int32(DM), Float32(1e-6), grid_dim=((M + LLAMA_TPB - 1) // LLAMA_TPB, 1, 1), block_dim=(LLAMA_TPB, 1, 1))
+        ctx.enqueue_function[residual_rms_norm_kernel](r.unsafe_ptr(), ss.unsafe_ptr(), out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(), w.unsafe_ptr(), Int32(M), Int32(DM), Float32(1e-6), grid_dim=((norm_row_threads(M) + LLAMA_TPB - 1) // LLAMA_TPB, 1, 1), block_dim=(LLAMA_TPB, 1, 1))
 
 
 def main() raises:

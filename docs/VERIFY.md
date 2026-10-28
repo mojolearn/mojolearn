@@ -1053,12 +1053,16 @@ admissible alone). It refuses harness overrides, sabotage switches and a tree
 whose sources differ from its commit, and ends with the
 `tools/identity_columns.py check` verdict, which is `admit()` itself.
 `admit_identity_columns.sh` refuses any record `admit()` refuses or records of
-more than one commit, copies them under
-`bench/results/identity_break/<date>-<tag>/`, regenerates the table from every
-committed column, reports which routine reference parts still rest on an older
+incompatible source commits, resolves the selected incoming columns to their
+byte-identical committed copies under `bench/results/identity_break/`, regenerates the table from every
+committed column for the selected lanes, reports which routine reference parts still rest on an older
 commit (`reference-report.json`), and runs `verify --self-test` and
 `verify --coverage` against the new table on the host column. `--check-only`
 does the same on a scratch table and changes nothing.
+The recorder retains columns in the repository automatically; commit those raw
+records before admission. Admission receipts live under
+`bench/results/reference_admissions/<date>-<tag>/`, outside the raw-input tree.
+Admission does not copy the columns again or generate from uncommitted inputs.
 
 Four columns decide every admitted cell: Apple, NVIDIA, AMD and the cpu
 (host) column must all carry the same hash. Agreeing columns already in the
@@ -1181,6 +1185,25 @@ nine fixtures twice from an installed development wheel and join the default
 CPU set. This does not replace final release-wheel qualification.
 
 ### Admitting one verified group without rewriting other references
+
+The release update sequence is: rerun the changed or invalidated lanes, retain
+and commit their original columns, admit that selected group, commit the updated
+table and any changed model fixtures, then build the wheel from that commit.
+Unchanged valid references remain in the table. A normal `verify` execution
+compares with its existing references; it does not teach the table its own answers.
+Collection alone does not update the table, and an already published wheel
+keeps its bundled snapshot until a new wheel is built and released.
+
+With records committed, the guarded update command is:
+
+```sh
+bash tools/admit_identity_columns.sh --lanes lane-a,lane-b /path/to/returned-columns
+```
+
+This resolves the returned files to their committed MojoLearn copies, checks
+the candidate and replaces only the selected lanes after admission succeeds.
+Missing or conflicting required witnesses leave the existing table unchanged.
+Commit/push the resulting table and receipts before building the release wheel.
 
 To generate a scoped candidate while preserving every other lane, combine
 `--lanes`, `--reference-table` (the base) and `--emit-reference` (the output):

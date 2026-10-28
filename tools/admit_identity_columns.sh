@@ -8,13 +8,16 @@
 # `ols/base` lane on the HOST column (MOJOLEARN_VENDOR=cpu), so no Metal.
 #
 # Column mode (records from tools/record_identity_column.sh on each box):
+#   Incoming columns must already have byte-identical committed copies under
+#   bench/results/identity_break (the recorder retains them there). External
+#   run directories may select those copies; they are never generator inputs.
 #   1. every <records dir>/*.identical.json must pass
 #      tools/identity_columns.py check (the same _verify_reference.admit() the
 #      table builder applies, plus this harness's fixture bytes); all must name
 #      ONE commit, and that commit must be in this repository (its commit time
 #      decides "newest wins")
-#   2. copies them, with their provenance, to
-#      bench/results/identity_break/<UTC date>-<REF_TAG>/<vendor label>/
+#   2. resolves them to byte-identical committed records under
+#      bench/results/identity_break/; preserves their original paths and bytes
 #   3. regenerates python/mojolearn/verify_reference/table.json from every
 #      committed column for the selected lanes (`verify --all --emit-reference`
 #      with `--reference-table` and `--lanes`; newest commit wins per cell part
@@ -211,6 +214,10 @@ for d in "${dirs[@]}"; do
     for f in "$d"/*.identical.json; do [ -f "$f" ] && files+=("$f"); done
 done
 [ ${#files[@]} -gt 0 ] || die "no *.identical.json under ${dirs[*]}"
+"${PY[@]}" tools/identity_admission_guard.py inputs --source-root "$ROOT" "${files[@]}" \
+    > "$EVID/committed-records.txt" || die "retain and commit incoming identity records before admission; table unchanged"
+files=()
+while IFS= read -r -d '' f; do files+=("$f"); done < "$EVID/committed-records.txt"
 "${PY[@]}" tools/identity_columns.py check "${files[@]}" > "$EVID/check.txt" 2>&1
 crc=$?
 cut -c1-300 "$EVID/check.txt"
@@ -245,8 +252,6 @@ LANES=$("${PY[@]}" tools/identity_admission_guard.py lanes --lanes "$LANES" "${f
     || die "invalid admission scope"
 tmp=$(mktemp -d "$EVID/admission.XXXXXX")
 cp "$TABLE" "$tmp/base.json" || die "cannot retain base table"
-record_args=(--records "$ROOT/bench/results/identity_break")
-for f in "${files[@]}"; do record_args+=(--records "$f"); done
 candidate() {
     cli --all --emit-reference "$tmp/table.json" --reference-table "$tmp/base.json" \
         --lanes "$LANES" "$@" > "$tmp/emit.log" 2>&1 \
@@ -255,7 +260,7 @@ candidate() {
         --candidate "$tmp/table.json" --lanes "$LANES" > "$tmp/agreement.json" \
         || die "GPU and cpu reference agreement refused; table unchanged; see $tmp/agreement.json"
 }
-candidate "${record_args[@]}"
+candidate --records "$ROOT/bench/results/identity_break"
 if [ $CHECK_ONLY = 1 ]; then
     "${PY[@]}" tools/identity_columns.py report --table "$tmp/table.json" --commit "$C" --out "$tmp/report.json"
     checks "$tmp/table.json"
@@ -264,12 +269,14 @@ if [ $CHECK_ONLY = 1 ]; then
     exit $?
 fi
 
-DEST=bench/results/identity_break/$DATE-${REF_TAG:-0836}
+# Admission receipts are not raw columns. Keep them out of the generator's
+# input directory, so a new uncommitted receipt cannot block the next candidate.
+DEST=bench/results/reference_admissions/$DATE-${REF_TAG:-0836}
 mkdir -p "$DEST"
 {
     echo "# Reference columns at ${C:0:12} ($DATE)"
     echo
-    echo "Written by \`tools/record_identity_column.sh\` (identity_break.py --json, identical tier,"
+    echo "Columns recorded by \`tools/record_identity_column.sh\` (identity_break.py --json, identical tier,"
     echo "default fixture, one device, every part, every fixture, --repeats 1) and admitted by"
     echo "\`tools/admit_identity_columns.sh\`, which regenerated"
     echo "\`python/mojolearn/verify_reference/table.json\` for these lanes, preserving every other row:"
@@ -280,19 +287,12 @@ mkdir -p "$DEST"
     echo "|---|---|---|"
 } > "$DEST/README.md"
 for f in "${files[@]}"; do
-    label=$("${PY[@]}" -c "import json,sys; print(json.load(open(sys.argv[1]))['vendor'])" "$f")
-    sub="$DEST/$label"; mkdir -p "$sub"
-    base=$(basename "$f")
-    if [ -f "$sub/$base" ] && ! cmp -s "$f" "$sub/$base"; then die "$sub/$base exists with other bytes"; fi
-    cp "$f" "$sub/$base"
-    prov="${f%.identical.json}.provenance.txt"; [ -f "$prov" ] && cp "$prov" "$sub/"
     line=$(grep -F "$f " "$EVID/check.txt" | sed 's/^IDCOLUMN [^ ]* admissible=yes //' | cut -d' ' -f1-2,7-)
-    echo "| \`$label/$base\` | $line | \`$(shasum -a 256 "$f" | cut -c1-16)\` |" >> "$DEST/README.md"
+    echo "| \`${f#"$ROOT/"}\` | $line | \`$(shasum -a 256 "$f" | cut -c1-16)\` |" >> "$DEST/README.md"
 done
 
-# Rebuild with final committed record paths, then revalidate before publishing.
-# A failure can leave original raw records retained, but never a changed table.
-candidate --records "$ROOT/bench/results/identity_break"
+# The candidate already cites final committed paths. Never create an
+# uncommitted duplicate of its input and rebuild from that duplicate.
 tail -n 1 "$tmp/emit.log" > "$DEST/admission-summary.json"
 cp "$tmp/agreement.json" "$DEST/agreement-summary.json"
 cut -c1-400 "$DEST/admission-summary.json"
