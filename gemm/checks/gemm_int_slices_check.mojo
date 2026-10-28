@@ -25,10 +25,10 @@ from std.sys import has_accelerator
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from gemm.checks.gemm_int15_check import _digest, _download_cells, _first_diff, _poisoned, _upload
 from gemm.contract import OP_NN, OP_NT, OP_TN
-from gemm.host.gemm_int_slices_oracle import gemm_int_slices_oracle, int_slices_strides
+from gemm.host.gemm_int_slices_oracle import gemm_int_slices_oracle
 from gemm.host.identical_gemm import gemm_oracle
 from gemm.int_slices import INT_SLICES_SABOTAGE, identical_gemm_int_slices_into, int_slices_plan_name
-from gemm.int_slices_seams import INT_SLICES_MAX_K
+from gemm.int_slices_seams import INT_SLICES_MAX_K, int_slices_strides
 
 
 def _value(i: Int, salt: Int, wide: Bool) -> Float32:

@@ -25,25 +25,10 @@ from gemm.int_slices_seams import (
     int_slices_half_hi,
     int_slices_half_lo,
     int_slices_row_exponent,
+    int_slices_strides,
 )
 
 
-def int_slices_strides(op: Int, m: Int, n: Int, k: Int) -> Tuple[Int, Int, Int, Int]:
-    """`(a_row_stride, a_k_stride, b_row_stride, b_k_stride)`: element `(r, p)`
-    of a "row along k" of op(A) (r < m) or of op(B) (r < n) sits at
-    `r * row_stride + p * k_stride` of the stored row-major operand
-    (contract section 0.1's three orientations)."""
-    var ars = k
-    var aps = 1
-    if op == OP_TN:
-        ars = 1
-        aps = m
-    var brs = 1
-    var bps = n
-    if op == OP_NT:
-        brs = k
-        bps = 1
-    return (ars, aps, brs, bps)
 
 
 def _row_codes(

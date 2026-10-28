@@ -65,6 +65,7 @@ states the error bound and that the quality metric must be checked.
 from std.memory import bitcast
 
 from checks.numerics_int15 import i64_to_f32_pinned, int15_recombine
+from gemm.contract import OP_NT, OP_TN
 
 #: The row maximum lands in `[2^27, 2^28)` (clause S1).
 comptime INT_SLICES_TARGET_EXPONENT = 27
@@ -239,3 +240,20 @@ def int_slices_cell(p_hh: Int64, p_hl: Int64, p_lh: Int64, p_ll: Int64, e_sum: I
     float32. A zero `T` is `+0.0`."""
     var hl = int_slices_recombine(p_hh, p_hl, p_lh, p_ll)
     return int_slices_scale_pow2(int_slices_t_to_f32(hl[0], hl[1]), e_sum)
+
+def int_slices_strides(op: Int, m: Int, n: Int, k: Int) -> Tuple[Int, Int, Int, Int]:
+    """`(a_row_stride, a_k_stride, b_row_stride, b_k_stride)`: element `(r, p)`
+    of a "row along k" of op(A) (r < m) or of op(B) (r < n) sits at
+    `r * row_stride + p * k_stride` of the stored row-major operand
+    (contract section 0.1's three orientations)."""
+    var ars = k
+    var aps = 1
+    if op == OP_TN:
+        ars = 1
+        aps = m
+    var brs = 1
+    var bps = n
+    if op == OP_NT:
+        brs = k
+        bps = 1
+    return (ars, aps, brs, bps)

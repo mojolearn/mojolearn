@@ -37,7 +37,7 @@ THE PLANS (every one is the profile: same integers, same seams)
          cell, the four half products as Int64 sums `p` ascending. No bounded
          launch slicing on Apple yet (clause W-14's rule): OWED before Apple
          runs it at large shapes.
-  HOST   the CPU column: `gemm_int_slices_oracle` on the caller's memory.
+  HOST   the CPU column: the host oracle file named above, on the caller's memory.
 
 THE QUANTIZER is one launch per operand, one block per row along k: the
 absmax by a tree in threadgroup memory (a maximum is order-free), then the
@@ -70,7 +70,6 @@ from gemm.checks.gemm_int8_mma_tuned import (
     int8_pieces_dispatch_for,
     identical_gemm_int8_pieces_tuned_with_plan,
 )
-from gemm.host.gemm_int_slices_oracle import gemm_int_slices_oracle, int_slices_strides
 from gemm.int_slices_seams import (
     INT_SLICES_MAX_K,
     int_slices_abs_ftz,
@@ -83,6 +82,7 @@ from gemm.int_slices_seams import (
     int_slices_plane_l,
     int_slices_product_from_sums,
     int_slices_row_exponent,
+    int_slices_strides,
 )
 
 #: THE SWITCH. Default OFF.
@@ -297,7 +297,7 @@ def identical_gemm_int_slices_into(
     0.1's orientations). Asynchronous on the one in-order context; the
     workspace is released with the frees enqueued behind the launches.
     Refuses by name a shape outside `int_slices_admits` and the CPU column
-    (whose answer is `gemm_int_slices_oracle` on host memory)."""
+    (whose answer is `gemm/host/gemm_int_slices_oracle.mojo` on host memory)."""
     if not int_slices_admits(m, n, k):
         raise Error(
             "identical_gemm_int_slices_into: m, n, k must be positive and k at most "
@@ -382,15 +382,3 @@ def identical_gemm_int_slices_into(
         _ = ea^
         _ = eb^
 
-
-def identical_gemm_int_slices_host(
-    c: MutPointer[Float32, MutUntrackedOrigin],
-    a: MutPointer[Float32, MutUntrackedOrigin],
-    b: MutPointer[Float32, MutUntrackedOrigin],
-    m: Int,
-    n: Int,
-    k: Int,
-    op: Int,
-) raises:
-    """The CPU column's entry: the host oracle on the caller's memory."""
-    gemm_int_slices_oracle(c, a, b, m, n, k, op)
