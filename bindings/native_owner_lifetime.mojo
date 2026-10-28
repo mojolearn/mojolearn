@@ -12,7 +12,7 @@ from bindings.native_numpy_metadata import native_numpy_dtype
 
 def native_release_weakrefs(value: PythonObject, context: PythonObject) raises:
     var refs = py_call(context["owner_getweakrefs"],value)
-    for i in range(len(refs)):  # driver-loop: releasing an otherwise native owner must not dispatch application callbacks
+    for i in range(len(refs)):  # driver-loop: over retained weakrefs before releasing any application callback
         if py_type(refs[i]) is not context["owner_weakref_class"] or py_call(context["owner_weakref_callback"].__get__,refs[i]) is not None:
             raise Error("TypeError: native owner reinitialization cannot release weak-reference callbacks")
 
@@ -32,7 +32,7 @@ def _released_dtype(value: PythonObject, context: PythonObject, depth: Int) rais
                 _ = py_call(scalars.append,dtype.type)
         py_setitem(context,"owner_dtype_classes",classes)
         py_setitem(context,"owner_dtype_scalars",scalars)
-    for i in range(len(classes)):  # driver-loop: admit exact native dtype classes before inspecting their C descriptors
+    for i in range(len(classes)):  # driver-loop: over exact native dtype identities before inspecting their C descriptors
         if py_type(value) is classes[i]:
             # A structured/subarray dtype and its native metadata do not
             # imply a Python callback. Admit their actual retained owners,
@@ -102,13 +102,13 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
             raise Error("TypeError: native owner reinitialization cannot inherit Array lifecycle hooks")
         var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
         var keys = py_call(b["list"],mapping)
-        for i in range(len(keys)):  # driver-loop: reject key protocols before class-owner lookup
+        for i in range(len(keys)):  # driver-loop: over native Array class keys before class-owner lookup
             if py_type(keys[i]) is not b["str"]:
                 raise Error("TypeError: native owner reinitialization requires native Array class keys")
         if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
             raise Error("TypeError: native owner reinitialization cannot invoke Array lifecycle hooks")
         var owners = py_call(b["list"],context["owner_array_slots"])
-        for i in range(len(owners)):  # driver-loop: all Array slots own references, including otherwise unused metadata
+        for i in range(len(owners)):  # driver-loop: over all retained Array slot owners, including otherwise unused metadata
             var descriptor = context["owner_array_slots"][owners[i]]
             if py_get(mapping,owners[i]) is not descriptor:
                 raise Error("TypeError: native owner reinitialization requires native Array owner slots")
@@ -131,7 +131,7 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
         return
     var scalars = py_get(context,"owner_dtype_scalars")
     if scalars is not None:
-        for i in range(len(scalars)):  # driver-loop: exact primitive NumPy scalars own no application objects
+        for i in range(len(scalars)):  # driver-loop: over exact primitive NumPy scalar identities owning no application objects
             if cls is scalars[i]:
                 return
     raise Error("TypeError: native owner reinitialization cannot release Python-owned metadata; retain the same owner or release it in application code first")
