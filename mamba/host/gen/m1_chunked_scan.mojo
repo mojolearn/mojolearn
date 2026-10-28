@@ -449,10 +449,14 @@ def m1_chunked_scan[
     comptime kout = m1_chunk_output_kernel[DSTATE]
     if nch == 1:
         # One chunk: its entry state IS h_state (same layout); no scratch.
+        # The same buffer is read as `hin` and written as `h_ptr` by the SAME
+        # thread (read first), so the alias is intended; the origin cast says
+        # so to the argument-exclusivity check.
+        var h_entry = h_state.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var _l3_a0 = output.unsafe_ptr()
         var _l3_a1 = y.unsafe_ptr()
         var _l3_a2 = h_state.unsafe_ptr()
-        var _l3_a3 = h_state.unsafe_ptr()
+        var _l3_a3 = h_entry
         var _l3_a4 = u.unsafe_ptr()
         var _l3_a5 = delta.unsafe_ptr()
         var _l3_a6 = A.unsafe_ptr()
