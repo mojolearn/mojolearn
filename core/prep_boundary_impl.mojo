@@ -64,7 +64,7 @@ def prep_category_flags(codes: CastIn, count: Int, codes_native: Bool,
         for byte in range(codes.itemsize):  # native input marshaling: admitted signed index widths
             var offset = byte if codes_native else codes.itemsize - 1 - byte
             bits |= UInt64(pointer[i * codes.s0 + offset]) << UInt64(8 * byte)
-        var index = Int(bitcast[Int64](cast_w64_bits(bits, codes.kind, codes.itemsize)))
+        var index = Int(bitcast[DType.int64](cast_w64_bits(bits, codes.kind, codes.itemsize)))
         if index == -1:
             missing = True
             continue
@@ -91,7 +91,7 @@ def prep_arrow_finite(address: Int, length: Int, offset: Int, width: Int) -> Boo
 
 def _prep_export_word(raw: UInt64, source: CastIn, number: Int) -> UInt64:
     if number == 12 and (source.kind != 2 or source.itemsize != 8):
-        return bitcast[UInt64](_pd_double(raw, source.kind, source.itemsize))
+        return bitcast[DType.uint64](_pd_double(raw, source.kind, source.itemsize))
     return raw
 
 
@@ -120,7 +120,7 @@ def prep_category_export(codes: CastIn, rows: Int, codes_native: Bool,
                          output: CastIn, number: Int) raises:
     for row in range(rows):  # native input marshaling: native categorical take, preserving export width
         var raw = pd_raw_at(codes.addr, row * codes.s0, codes.itemsize, codes_native)
-        var index = Int(bitcast[Int64](cast_w64_bits(raw, codes.kind, codes.itemsize)))
+        var index = Int(bitcast[DType.int64](cast_w64_bits(raw, codes.kind, codes.itemsize)))
         if index < -1 or index >= label_count:
             raise Error("TypeError: pandas categorical code exceeds its category storage")
         var word = _prep_missing_word(output.itemsize)

@@ -42,7 +42,7 @@ def prep_fit_error(var error: Error, name: String, rows: Int, cols: Int) raises:
                 # Preserve the pending exception without invoking its args'
                 # repr hooks just to add small-fit context.
                 raise error^
-            text = String(py_call(b.BaseException.__str__, value))
+            text = String(py_call(b.BaseException.__dict__["__str__"], value))
             cause = value
         else:
             raise error^

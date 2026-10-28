@@ -71,7 +71,15 @@ def normalizer_fit(model: PythonObject, source: PythonObject, target: PythonObje
     var validate = not nested and _truth(py_get(tags, "two_d_array", True)) and not _truth(py_get(tags, "one_d_array", False))
     var scan = not _truth(py_get(tags, "allow_nan", False))
     var sparse = _truth(py_get(tags, "sparse", False))
-    var required = _truth(py_get(targets, "required", False))
+    # _sk_validate._check_y's required default follows _estimator_type.
+    # Only exact strings are compared natively; other values would run
+    # Python equality hooks.
+    var estimator_type = _setting(model, fields, "_estimator_type", PythonObject(None))
+    if estimator_type is not None and py_type(estimator_type) is not b.str:
+        raise Error("TypeError: native Normalizer fit requires an exact string estimator type")
+    var classifier = estimator_type is not None and String(estimator_type) == "classifier"
+    var regressor = estimator_type is not None and String(estimator_type) == "regressor"
+    var required = _truth(py_get(targets, "required", PythonObject(classifier or regressor)))
     var multi = _truth(py_get(targets, "multi_output", False))
     # Hooks are captured/admitted before any input conversion or native entry
     # can release the GIL. This operation has no dynamic Python metadata work.
@@ -90,6 +98,10 @@ def normalizer_fit(model: PythonObject, source: PythonObject, target: PythonObje
     var small_rows = rows if described and len(snapshot.shape) == 2 else -1
     var small_cols = snapshot.shape[1] if described and len(snapshot.shape) == 2 else -1
     var target_keep = target
+    if not nested and classifier and target is not None:
+        # The old classifier label path (integral float labels, classes_
+        # wrapping) is not part of this unsupervised operation.
+        raise Error("TypeError: native Normalizer fit does not run classifier label validation")
     if not nested:
         target_keep = prep_ignored_target(target, rows, required, multi, name, context)
     if py_type(previous) is not b.int and py_type(previous) is not b.bool and py_type(previous) is not b.float:
