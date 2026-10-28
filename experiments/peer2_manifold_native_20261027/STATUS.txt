@@ -133,3 +133,13 @@ Operation settings/admission increment
   Only dedicated manifold files changed. Compile target: runtime_manifold host.
 - settings-source-tests.log: exit 0, 10 passed (routing, snapshot contracts and
   connection fixtures). Source checks do not qualify public runtime behavior.
+
+Settings snapshot review follow-up
+- A shallow field dictionary retains mutable setting containers; it does not
+  make their contents immutable. The next increment owns copies of settings
+  lists/dicts, native ndarray scalar bytes, and admitted object references.
+  Scalar-array dtype/rank conversion semantics remain intact in private storage.
+  No caller copy/conversion protocol runs. Initialization arrays remain input
+  buffers pending dedicated typed capture before the algorithm executes.
+- settings-frozen-source-tests.log: exit 0, 10 passed. Compile and public
+  mutation/race controls remain pending; this does not freeze fitted buffers.
