@@ -8,6 +8,8 @@
 from std.math import isinf
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from std.python.bindings import PythonModuleBuilder
+from std.sys.compile import is_defined
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_setattr, py_type
 from bindings.native_loaded_module import native_loaded_module
@@ -517,7 +519,11 @@ struct LinAdmission(Movable):
 
 
 
-struct LinBufferPin(Movable, Writable):
+# One Python type per numeric mode: a process may load both builds of a binding.
+comptime LIN_PIN_MODE: Int = 1 if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]() else 0
+
+
+struct LinBufferPin[MODE: Int = LIN_PIN_MODE](Movable, Writable):
     var pin: Optional[AdmittedBorrowedBuffer]
 
     def __init__(out self, var pin: Optional[AdmittedBorrowedBuffer]):
@@ -530,6 +536,12 @@ struct LinBufferPin(Movable, Writable):
         self.write_to(writer)
 
 
+def register_lin_buffer_pin(mut module: PythonModuleBuilder) raises:
+    # The module that owns the linalg public operations registers the pin
+    # once; lin_borrow_array allocates it with PythonObject(alloc=...).
+    _ = module.add_type[LinBufferPin[]]("_LinBufferPin")
+
+
 def lin_borrow_array(var input: LinAdmission, typestr: String, context: PythonObject) raises -> LinBuf:
     # Array.from_buffer's zero-copy ownership semantics from metadata already
     # admitted once. The public CPython raw-memory view does not ask the exporter
@@ -538,7 +550,7 @@ def lin_borrow_array(var input: LinAdmission, typestr: String, context: PythonOb
     var array = native_storage_allocate(context["array_class"])
     var held_pin = Optional[AdmittedBorrowedBuffer]()
     swap(held_pin, input.pin)
-    var pin = PythonObject(alloc=LinBufferPin(held_pin^))
+    var pin = PythonObject(alloc=LinBufferPin[](held_pin^))
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromMemory")(
         MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=v.addr), v.nbytes,
