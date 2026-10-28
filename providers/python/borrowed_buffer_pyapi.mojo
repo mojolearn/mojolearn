@@ -5,9 +5,32 @@
 # Py_buffer is the public stable CPython structure, represented by ten native
 # words on supported 64-bit little-endian targets (same as optimizer tensor_view).
 from std.python import Python, PythonObject
+from std.ffi import _Global
 from core.borrowed_buffer import BorrowedBufferLayout
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get, py_fields, py_call, py_contains
+
+
+struct NativeMmapExporterConnection(Defaultable, Movable):
+    var cls: PythonObject
+
+    def __init__(out self):
+        self.cls = PythonObject(None)
+
+
+comptime NATIVE_MMAP_EXPORTER = _Global[StorageType=NativeMmapExporterConnection,
+    name="MojoNativeMmapExporter", init_fn=NativeMmapExporterConnection.__init__]
+
+
+def connect_native_mmap_exporter(cls: PythonObject) raises:
+    # Import-time only. The product path compares a retained identity without
+    # reading a mutable module namespace to decide whether admission applies.
+    if cls is not native_loaded_module("mmap").mmap:
+        raise Error("TypeError: native mmap connection requires its canonical extension type")
+    var state = NATIVE_MMAP_EXPORTER.get_or_create_ptr()
+    if state[].cls is not None and state[].cls is not cls:
+        raise Error("TypeError: native mmap connection cannot be replaced")
+    state[].cls = cls
 
 
 def admit_native_buffer_exporter(value: PythonObject, depth: Int = 0) raises:
@@ -31,6 +54,20 @@ def admit_native_buffer_exporter(value: PythonObject, depth: Int = 0) raises:
         array_module = native_loaded_module("array")
         if cls is py_get(py_fields(array_module), "array"):
             return
+    if cls is NATIVE_MMAP_EXPORTER.get_or_create_ptr()[].cls:
+        # Corpus batches retain their original native mmap owner. Import setup
+        # pins this exact extension type; subclasses or replaced buffer slots
+        # must not run Python before the operation captures its storage.
+        var fields = py_call(bi.type.__dict__["__dict__"].__get__, cls)
+        for name in ["__buffer__", "__release_buffer__"]:  # small-loop(native mmap buffer protocol slots)
+            var descriptor = py_get(fields, PythonObject(name))
+            if descriptor is not None:
+                if (py_type(descriptor) is not py_type(bi.object.__repr__)
+                        and py_type(descriptor) is not py_type(bi.bytes.decode)):
+                    raise Error("TypeError: replaced mmap buffer protocols are unsupported")
+                if descriptor.__objclass__ is not cls:
+                    raise Error("TypeError: mmap buffer protocols require their own native descriptors")
+        return
     var numpy_module = py_get(sys.modules, "numpy")
     if numpy_module is not None and py_type(numpy_module) is py_type(sys):
         # ndarray is a static extension type. A substituted Python class or
