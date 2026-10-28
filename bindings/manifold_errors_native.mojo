@@ -42,11 +42,13 @@ def manifold_error(error: Error, rows: Int, cols: Int, fitting: Bool, name: Stri
         var kind = 1  # the manifold C boundary maps an unprefixed Error to ValueError
         var cls = b.ValueError
         if text.startswith("ValueError: "):
-            text = String(text[byte=12:])
+            var stripped = String(text[byte=12:])
+            text = stripped^
         elif text.startswith("ZeroDivisionError: "):
             kind = 2
             cls = b.ZeroDivisionError
-            text = String(text[byte=19:])
+            var stripped = String(text[byte=19:])
+            text = stripped^
         else:
             for prefix in ["TypeError:", "RuntimeError:", "NotImplementedError:", "OverflowError:", "ImportError:", "AttributeError:", "NotFittedError:", "KeyError:", "IndexError:", "InterruptedError:"]:  # small-loop(non-validation exception categories)
                 if text.startswith(prefix):
