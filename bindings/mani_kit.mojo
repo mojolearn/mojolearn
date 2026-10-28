@@ -20,8 +20,9 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
+from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address, classical_wrap_array
-from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_as_f32, family_as_f32_dense
+from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_as_f32, family_f32_snapshot
 from core.family_cast_impl import family_all_finite_f32
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
 from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_entry as family_entry, spectral_umap_optional_entry
@@ -1309,23 +1310,28 @@ def mk_take_rows_list(m: PythonObject, idx: List[Int], mut hk: MKit, ctx: Python
     return out
 
 
-def mk_from_input(source: PythonObject, name: String, ctx: PythonObject) raises -> PythonObject:
-    """`_M.from_input(X, name)`: a scipy.sparse input densified exactly, the
-    `as_f32_c` cast and refusals, one copy into a host store, and the
-    finiteness refusal."""
-    var a = family_as_f32_dense(source, 2, name, ctx)
-    var r = Int(py=a.shape[0])
-    var c = Int(py=a.shape[1])
-    if Int(py=a.ndim) != 2 or r == 0 or c == 0:
+def mk_from_snapshot(value: ArrayMetadata, name: String, ctx: PythonObject) raises -> PythonObject:
+    # Conversion, shape, address and original owners were captured at the public
+    # boundary. Copies and finiteness checks consume that same immutable view.
+    var r = value.source.rows
+    var c = value.source.cols
+    if len(value.shape) != 2 or r == 0 or c == 0:
         raise Error(name + ": a nonempty two-dimensional input is required")
     var store = mk_store_zeros(r * c, ctx)
-    var src = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a)))
-    _ = a  # keep the Python object alive through the native call above
+    var src = FAMILY_F32P(unsafe_from_address=value.source.addr)
     memcpy(dest=mk_store_ptr(store), src=src, count=r * c)
-    _ = store  # keep the Python object alive through the native call above
-    _ = a  # keep the Python object alive through the native call above
+    _ = store
+    _ = value
     if not family_all_finite_f32(src, r * c):
         raise Error(name + ": input must be finite; NaN/inf are unsupported")
-    _ = a  # keep the Python object alive through the native calls above
-    _ = a^
+    _ = value
     return mk_new(store, r, c, ctx)
+
+
+def mk_from_input(source: PythonObject, name: String, ctx: PythonObject) raises -> PythonObject:
+    """Capture dense/sparse input once and copy its admitted float32 words."""
+    var snapshot = family_f32_snapshot(source, 2, name, ctx, True)
+    var result = mk_from_snapshot(snapshot, name, ctx)
+    _ = snapshot
+    _ = source
+    return result
