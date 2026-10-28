@@ -83,13 +83,13 @@ struct _SequentialValueTypes(Movable):
 def _value_types(values: PythonObject) raises -> List[PythonObject]:
     var result = List[PythonObject]()
     if values is not None:
-        for i in range(len(values)):  # driver-loop: capture fixed connected admission type identities once
+        for i in range(len(values)):  # driver-loop: over fixed connected admission type identities captured once
             result.append(values[i])
     return result^
 
 
 def _native_one_of(cls: PythonObject, types: List[PythonObject]) -> Bool:
-    for i in range(len(types)):  # driver-loop: compare native retained type identities
+    for i in range(len(types)):  # driver-loop: over native retained type identities
         if cls is types[i]:
             return True
     return False

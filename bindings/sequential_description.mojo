@@ -200,7 +200,7 @@ struct SequentialDescription(Movable, Writable):
         var int_type = b.int
         var float_type = b.float
         var bool_type = b.bool
-        for i in range(len(self.identities.objects)):  # driver-loop: establish immutable scalar ownership once on cache miss
+        for i in range(len(self.identities.objects)):  # driver-loop: over retained metadata identities to establish immutable scalar ownership
             var value = self.identities.objects[i]
             var cls = py_type(value)
             if value is not None and cls is not self.identities.list_type and cls is not self.identities.tuple_type and cls is not int_type and cls is not float_type and cls is not bool_type:
@@ -221,12 +221,12 @@ struct SequentialDescription(Movable, Writable):
             var rank = len(sample)
             self.program.append(2)
             self.program.append(rank)
-            for k in range(rank):  # driver-loop: capture sample dimensions in native ABI words
+            for k in range(rank):  # driver-loop: over sample dimensions captured as native ABI words
                 self.program.append(Int(py=sample[k]))
-            for k in range(rank, 8):  # driver-loop: fill unused native sample dimension slots
+            for k in range(rank, 8):  # driver-loop: over unused native sample dimension slots
                 self.program.append(1)
             self.program.append(count)
-        for k in range(count):  # driver-loop: capture admitted layer metadata once per changed description
+        for k in range(count):  # driver-loop: over admitted layers once per changed description
             var layer = layers[k]
             self.program.append(Int(py=layer[0]))
             if sample is None:
@@ -234,7 +234,7 @@ struct SequentialDescription(Movable, Writable):
                 self.program.append(Int(py=layer[2]))
             else:
                 var args = layer[4]
-                for j in range(len(args)):  # driver-loop: capture rank-aware native layer arguments
+                for j in range(len(args)):  # driver-loop: over rank-aware native layer arguments
                     self.program.append(Int(py=args[j]))
             self.program.append(0)
             self.scalars.append(Float64(py=layer[3]))
