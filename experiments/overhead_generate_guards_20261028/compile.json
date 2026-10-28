@@ -1,0 +1,48 @@
+{
+ "schema": "overhead-generate-guards-compile-v1",
+ "compiler": "Mojo 1.0.0 (ed45d567)",
+ "roots": [
+  "bindings/_mojolearn_tokenizer_host.mojo (entry bindings/entry/entry__mojolearn_tokenizer_host.mojo)",
+  "bindings/_mojolearn_runtime_model_selection_host.mojo"
+ ],
+ "closure_note": "causal_lm_public.mojo is imported only by the tokenizer host root; native_array_snapshot.mojo by the tokenizer and runtime_model_selection host roots. No GPU binding imports either file.",
+ "runs": [
+  {
+   "pod": "jxo0iq4ca8ep6s",
+   "source": "42cce65083",
+   "jobs": 32,
+   "flags": "--emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings",
+   "results": [
+    "tokenizer_head rc=0 secs=1925 94dcfd9ff0df698d5d5ebda884c583c23933322ae5e1f59ffcd895507158481a",
+    "tokenizer_base rc=0 secs=2024 28fdc7c6307c245ed6f7396e929231b776237c6c6d0f56fe794270833ca3c908",
+    "runtime_model_selection_head rc=0 secs=302 a83bf5b853b752c484a2ae786f864859ebb8db215afd0c888565a8cb0690ffd7",
+    "tokenizer_sm89_head rc=0 secs=2017 94dcfd9ff0df698d5d5ebda884c583c23933322ae5e1f59ffcd895507158481a"
+   ],
+   "log_dir": "/Users/andrewhendel/mojolearn-evidence/overhead-generate-guards-20261028/pod/remote/leg_out"
+  },
+  {
+   "pod": "6keduyfhl18z80",
+   "source": "c179e74b98 (merged origin/main 927e59c779)",
+   "jobs": 32,
+   "results": [
+    "tokenizer_sm89_head rc=0 secs=643 c9047f1c345e21863500dc200de423736c235b7741e93dc85551b3ef7f203b88",
+    "tokenizer_base rc=0 secs=612 7504694fd8ece3b4e52736f5726339260cfd2c5e6a4bb9b43f9944ce56c14823"
+   ],
+   "log_dir": "/Users/andrewhendel/mojolearn-evidence/overhead-generate-guards-20261028/pod2/remote/leg_out"
+  },
+  {
+   "pod": "imjfv5ooree230",
+   "source": "b06b0150b3",
+   "jobs": 32,
+   "host_smoke": "tokenizer rc=0 1244s; runtime_model_selection rc=0 138s; import+tier_dir rc=0",
+   "note": "sm_89 run killed (rc=137) while three compiles shared the pod; the sm_89 target is not reached by these host roots",
+   "log_dir": "/Users/andrewhendel/mojolearn-evidence/overhead-generate-guards-20261028/pod3/remote/leg_out"
+  }
+ ],
+ "mac": {
+  "note": "Mac -j 10 builds started before the remote-only rule; head build source was an intermediate lane commit",
+  "head_rc": "0",
+  "base_rc": "0"
+ },
+ "not_covered": "Runtime identity on GPUs; no GPU binding imports the changed files."
+}
