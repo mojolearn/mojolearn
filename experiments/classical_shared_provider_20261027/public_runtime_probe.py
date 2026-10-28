@@ -26,7 +26,7 @@ def qualify():
             yield
             return
         names = ('svc_fit', 'svc_predict', 'svc_pair_epilogue', 'svc_platt_train',
-                 'svc_splitmix_perm', 'svm_numeric_mode', 'svr_fit', 'svr_predict')
+                 'svc_splitmix_perm', 'scale_gamma_limbs', 'svc_ovo_layout', 'svc_dual_gemv', 'py2mojo_linear_flags', 'svm_numeric_mode', 'svr_fit', 'svr_predict')
         saved = {name: getattr(binding, name) for name in names}
         def refused(*args, **kwargs):
             raise AssertionError('candidate redispatched through a legacy Python-facing entry')
@@ -68,7 +68,7 @@ def qualify():
                 name, fit_counts = vars(model)['_native_svc_dispatch']
                 assert name == 'mojolearn.svm.binary.v1'
                 assert fit_counts[0] >= (1 if binary else 3)
-                assert len(fit_counts) == 8 and fit_counts[5] == 1
+                assert len(fit_counts) == 12 and fit_counts[5] == 1
                 assert fit_counts[2] > 0
                 if probability:
                     assert fit_counts[3] > 0 and fit_counts[4] > 0
@@ -111,7 +111,7 @@ def qualify():
         for attr in ('support_', 'support_vectors_', 'dual_coef_', 'intercept_', 'n_iter_'):
             equal(getattr(models[0], attr), getattr(models[1], attr), 'svr_' + attr)
         name, counts = vars(models[1])['_native_svc_dispatch']
-        assert len(counts) == 8 and counts[5] == 1 and counts[6] == 1 and counts[2] > 0
+        assert len(counts) == 12 and counts[5] == 1 and counts[6] == 1 and counts[2] > 0
         equal(call(0, models[0].predict, x), call(1, models[1].predict, x), 'svr_predict')
         name, counts = vars(models[1])['_native_svc_dispatch']
         assert counts[5] == 1 and counts[7] == 1

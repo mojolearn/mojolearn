@@ -3,8 +3,42 @@
 # Legacy compiled entries remain selectable for a bounded same-build A/B.
 from std.python import PythonObject
 from bindings.py_balanced import py_call
+from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
+from svm.operation_metadata import SVC_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute, neural_descriptor_entry
 
+
+
+def svc_descriptor_execute(snapshot: PythonObject, op: Int, a: List[Int], p: List[Int],
+                           f: List[Float64]) raises -> Int:
+    var owner = snapshot.downcast_value_ptr[CompiledBindingSnapshot]()
+    if owner[].abi != SVC_ABI_NAME:
+        raise Error("SVC requires its operation-local binding snapshot")
+    return neural_descriptor_execute(owner[].provider, op, a, p, f)
+
+
+def svc_descriptor_flags(snapshot: PythonObject) raises -> Int:
+    return snapshot.downcast_value_ptr[CompiledBindingSnapshot]()[].capabilities[0]
+
+
+def svc_ovo_execute(binding: PythonObject, native: PythonObject, supports: PythonObject,
+                    duals: PythonObject, metadata: PythonObject, outputs: PythonObject) raises -> PythonObject:
+    if native is None:
+        return py_call(neural_descriptor_entry(binding, "svc_ovo_layout"), supports, duals, metadata, outputs)
+    if len(metadata) < 3 or len(outputs) != 4:
+        raise Error("svc_ovo_layout: malformed pair or output descriptor")
+    var count = Int(py=metadata[2])
+    if len(supports) != count or len(duals) != count or len(metadata) != 3 + 3 * count:
+        raise Error("svc_ovo_layout: one support and one dual address per pair, meta [k, n, P, (i, j, m) * P]")
+    var a = List[Int](Int(py=outputs[0]), Int(py=outputs[1]), Int(py=outputs[2]))
+    var p = List[Int](Int(py=metadata[0]), Int(py=metadata[1]), count, Int(py=outputs[3]))
+    for i in range(count):  # driver-loop: one native descriptor per class pair
+        a.append(Int(py=supports[i]))
+        a.append(Int(py=duals[i]))
+        p.append(Int(py=metadata[3 + i * 3]))
+        p.append(Int(py=metadata[4 + i * 3]))
+        p.append(Int(py=metadata[5 + i * 3]))
+    return PythonObject(svc_descriptor_execute(native, 10, a, p, []))
 
 def svc_epilogue_execute(binding: PythonObject, native: PythonObject,
                          dec: PythonObject, pairs: PythonObject, ab: PythonObject,
@@ -22,7 +56,7 @@ def svc_epilogue_execute(binding: PythonObject, native: PythonObject,
             f[i] = Float64(py=params[i])
         else:
             p[i] = Int(py=params[i])
-    return PythonObject(neural_descriptor_execute(native, 2,
+    return PythonObject(svc_descriptor_execute(native, 2,
         [Int(py=dec), Int(py=pairs), Int(py=ab), Int(py=out)], p, f))
 
 
@@ -30,7 +64,7 @@ def svc_platt_execute(binding: PythonObject, native: PythonObject, dec: PythonOb
                        labels: PythonObject, out: PythonObject, n: PythonObject) raises -> PythonObject:
     if native is None:
         return py_call(neural_descriptor_entry(binding, "svc_platt_train"), dec, labels, out, n)
-    return PythonObject(neural_descriptor_execute(native, 3,
+    return PythonObject(svc_descriptor_execute(native, 3,
         [Int(py=dec), Int(py=labels), Int(py=out)], [Int(py=n)], []))
 
 
@@ -38,7 +72,7 @@ def svc_splitmix_execute(binding: PythonObject, native: PythonObject, out: Pytho
                           n: PythonObject, lo: PythonObject, hi: PythonObject) raises -> PythonObject:
     if native is None:
         return py_call(neural_descriptor_entry(binding, "svc_splitmix_perm"), out, n, lo, hi)
-    return PythonObject(neural_descriptor_execute(native, 4, [Int(py=out)], [Int(py=n), Int(py=lo), Int(py=hi)], []))
+    return PythonObject(svc_descriptor_execute(native, 4, [Int(py=out)], [Int(py=n), Int(py=lo), Int(py=hi)], []))
 
 
 def svr_execute(binding: PythonObject, native: PythonObject, fit: Bool,
@@ -67,4 +101,4 @@ def svr_execute(binding: PythonObject, native: PythonObject, fit: Bool,
             f[i] = Float64(py=params[i])
         else:
             p[i] = Int(py=params[i])
-    return PythonObject(neural_descriptor_execute(native, 6 if fit else 7, a, p, f))
+    return PythonObject(svc_descriptor_execute(native, 6 if fit else 7, a, p, f))

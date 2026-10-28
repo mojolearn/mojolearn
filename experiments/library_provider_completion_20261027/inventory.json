@@ -30,11 +30,12 @@
         "SVC shared provider now owns pair/fold/gather/weight epilogues, Platt calibration, splitmix, and mode readback",
         "SVR fit/predict typed descriptors using original native solver and output layout",
         "77-operation shared x_neighbors CPU/GPU tables; selected local/semi/graph/OneClassSVM frontdoors and packed calls admitted once",
-        "Operation-local shared binding metadata snapshot; native OneClass alpha/resident and PageRank unit normalization"
+        "Operation-local shared binding metadata snapshot; native OneClass alpha/resident and PageRank unit normalization",
+        "Shared operation-local provider snapshot now owns gamma, one-vs-one layout, coefficient GEMV and immutable capability words"
       ],
       "remaining": [
         "SVC/SVR Python-owned pair/fold/input/output orchestration and remaining metadata admission",
-        "gamma/class reductions/ovo-layout/coefficients CPython dispatch",
+        "class reductions and remaining base-helper CPython dispatch",
         "linear SVM typed numerical operation table and OneClass remaining base-helper dispatch",
         "CPU SVC/SVR/linear native tables",
         "public availability/property descriptors and non-frontdoor loader paths",
@@ -320,5 +321,14 @@
       ]
     }
   ],
-  "source_census_summary": "experiments/library_provider_completion_20261027/public_boundary_census_summary.json"
+  "source_census_summary": "experiments/library_provider_completion_20261027/public_boundary_census_summary.json",
+  "observed_public_wrapper_failures": {
+    "root_evidence": "runtime-provider-9929/runtime-3-test_xseq_native_provider.log and runtime-0-test_neural_metadata_snapshot.log",
+    "paths": [
+      "RNN/LSTM/GRU.fit via _mode._track_fit",
+      "MLPClassifier/Regressor predict via _mode._needs_fit"
+    ],
+    "status": "repair_in_progress",
+    "requirement": "Preserve shared fit tracking, native validation, NotFittedError, and output semantics; a native marker alone does not qualify the public path"
+  }
 }

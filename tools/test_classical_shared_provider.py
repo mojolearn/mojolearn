@@ -25,7 +25,7 @@ def test_repeated_binary_calls_do_not_reread_model_settings_or_query_shape():
         src = body(name)
         for forbidden in ('svc_field(', '_kernel_code(', 'q.shape', '_svc_provider(', '_svc_fit_settings(', '_svc_predict_settings('):
             assert forbidden not in src
-        assert 'neural_descriptor_execute(native,' in src
+        assert 'svc_descriptor_execute(native,' in src
     for name in ('_run', '_pair_decisions'):
         src = body(name)
         assert src.count('_svc_predict_settings(') == 1
@@ -39,11 +39,11 @@ def test_common_provider_is_selected_without_new_provider_type():
     src = body('_svc_provider')
     assert 'MOJOLEARN_CLASSICAL_NATIVE_DISPATCH' in src
     assert 'neural_descriptor_entry(binding, "svm_binary_api_v1", False)' in src
-    assert 'neural_descriptor_connect(factory, String(SVC_ABI_NAME), 8)' in src
+    assert 'neural_descriptor_connect(factory, String(SVC_ABI_NAME), 12)' in src
     assert 'return PythonObject(None)' in src
     assert 'unavailable for this binding' in src
     assert 'struct ' not in PUBLIC
-    assert 'neural_descriptor_info(native)' in body('_svc_publish_dispatch')
+    assert 'neural_descriptor_info(native.downcast_value_ptr[CompiledBindingSnapshot]()[].provider)' in body('_svc_publish_dispatch')
 
 
 def test_original_numerical_owners_and_output_layout_are_preserved():
@@ -102,3 +102,19 @@ def test_svr_uses_same_provider_and_retains_native_solver():
     assert 'ip.unsafe_store(2, Float64(res.n_iter))' in source
     assert 'if len(params) != 9 and len(params) != 10 and len(params) != 12:' in source
     assert 'if len(params) != 7 and len(params) != 9:' in source
+
+
+def test_svc_auxiliary_dispatch_retains_native_owners_and_operation_metadata():
+    aux=(ROOT/'svm/native_auxiliary_dispatch.mojo').read_text()
+    for name in ('scale_gamma_limbs_device','ovo_layout_device','ovo_dual_gemv_device','ovo_check_result'):
+        assert name+'(' in aux
+    assert 'svc_descriptor_flags(native)' in body('_resolve_gamma')
+    assert 'svc_descriptor_execute(native, 9,' in body('_resolve_gamma')
+    assert 'svc_descriptor_execute(native, 11,' in body('_linear_coef')
+    assert 'svc_ovo_execute(binding, native,' in body('_fit_ovo')
+    admit=body('_svc_provider')
+    assert admit.count('neural_descriptor_execute(native, 8,')==1
+    assert 'CompiledBindingSnapshot(native, binding' in admit
+    adapter=(ROOT/'providers/python/svc_descriptor_pyapi.mojo').read_text()
+    assert 'neural_descriptor_execute(owner[].provider, op, a, p, f)' in adapter
+    assert 'neural_descriptor_connect' not in adapter

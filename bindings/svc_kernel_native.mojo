@@ -58,7 +58,8 @@ comptime _MAX_POLY_DEGREE = 32
 comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 636: a NaN or inf cannot be fitted; a computed NaN carries a vendor-specific payload and cannot sit in a hashed stage)"
 
 
-from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svr_execute
+from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svr_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
+from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from std.os import getenv
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
 from providers.python.neural_descriptor_pyapi import (
@@ -74,17 +75,18 @@ def _svc_provider(binding: PythonObject) raises -> PythonObject:
     var factory = neural_descriptor_entry(binding, "svm_binary_api_v1", False)
     if factory is None:
         raise Error("SVC native dispatch candidate is unavailable for this binding")
-    var native = neural_descriptor_connect(factory, String(SVC_ABI_NAME), 8)
+    var native = neural_descriptor_connect(factory, String(SVC_ABI_NAME), 12)
     if neural_descriptor_execute(native, 5, [], [], []) != 1:
         raise Error("SVC native dispatch candidate requires identical mode")
-    return native
+    var flags = neural_descriptor_execute(native, 8, [], [], [])
+    return PythonObject(alloc=CompiledBindingSnapshot(native, binding, String(SVC_ABI_NAME), 1, [flags]))
 
 
 def _svc_publish_dispatch(fields: PythonObject, native: PythonObject) raises:
     if native is not None:
         # Plain diagnostic values only: never persist module/capsule owners or
         # make the native table part of a model's pickle/checkpoint state.
-        py_setitem(fields, "_native_svc_dispatch", neural_descriptor_info(native))
+        py_setitem(fields, "_native_svc_dispatch", neural_descriptor_info(native.downcast_value_ptr[CompiledBindingSnapshot]()[].provider))
 
 
 def _svc_fit_settings(fields: PythonObject, gamma: Float64, features: Int,
@@ -266,7 +268,7 @@ def _kernel_code(fields: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=context["family_svc_kernels"][svc_field(fields, "_hp_kernel")])
 
 
-def _resolve_gamma(fields: PythonObject, binding: PythonObject, x: PythonObject, context: PythonObject) raises -> Float64:
+def _resolve_gamma(fields: PythonObject, binding: PythonObject, x: PythonObject, context: PythonObject, native: PythonObject) raises -> Float64:
     """`SVC._resolve_gamma`: 'auto' 1 / n_cols; 'scale' the exact variance's
     once-rounded reciprocal (`_scale_gamma.scale_gamma_x`); else the float."""
     var g = svc_field(fields, "_hp_gamma")
@@ -275,8 +277,12 @@ def _resolve_gamma(fields: PythonObject, binding: PythonObject, x: PythonObject,
         if String(g) == "auto":
             return 1.0 / Float64(n_cols)
         if String(g) == "scale":
-            var flags = py_call(svc_builtins().getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
-            var bits = 0 if flags is None else svc_int(family_call(flags))
+            var bits = 0
+            if native is not None:
+                bits = svc_descriptor_flags(native)
+            else:
+                var flags = py_call(svc_builtins().getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
+                bits = 0 if flags is None else svc_int(family_call(flags))
             if (bits & _PY2MOJO_SCALE_GAMMA) == 0:
                 raise Error("RuntimeError: mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
                             + "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it")
@@ -284,8 +290,11 @@ def _resolve_gamma(fields: PythonObject, binding: PythonObject, x: PythonObject,
             if n == 0:
                 raise Error("gamma='scale' needs at least one cell of X")
             var words = family_array(Python.tuple(PythonObject(_SG_SLOTS)), "<i8", context)
-            _ = family_call(_entry(binding, "scale_gamma_limbs", context), classical_address(x), PythonObject(n),
-                            classical_address(words))
+            if native is not None:
+                _ = svc_descriptor_execute(native, 9, [_addr(x), _addr(words)], [n], [])
+            else:
+                _ = family_call(_entry(binding, "scale_gamma_limbs", context), classical_address(x), PythonObject(n),
+                                classical_address(words))
             _ = words  # keep the Python object alive through the native call above
             var limbs = List[Int64](length=_SG_SLOTS, fill=Int64(0))
             var wp = FAMILY_I64P(unsafe_from_address=_addr(words))
@@ -455,7 +464,7 @@ def _solve(fields: PythonObject, binding: PythonObject, x_addr: Int, n_rows: Int
     # coef0[, the per-row bounds' address]
     var n_support = PythonObject(None)
     if native is not None:
-        n_support = PythonObject(neural_descriptor_execute(native, 0,
+        n_support = PythonObject(svc_descriptor_execute(native, 0,
             [x_addr, labels_addr, _addr(dual), _addr(support), _addr(sv), _addr(info), c_rows_addr],
             settings.fit_ints(n_rows, n_cols), settings.fit_floats()))
     else:
@@ -494,7 +503,7 @@ def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual:
     # n_rows, n_features, n_support, b, classes[0], classes[1], kernel,
     # gamma, predict_class, cache_size_mib, degree, coef0
     if native is not None:
-        _ = neural_descriptor_execute(native, 1,
+        _ = svc_descriptor_execute(native, 1,
             [_addr(query), _addr(dual) if n_support > 0 else 0,
              _addr(vectors) if n_support > 0 else 0, out_addr],
             settings.predict_ints(n_rows, n_features, n_support, predict_class),
@@ -839,7 +848,7 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
     var support = family_array(Python.tuple(PythonObject(max(1, cap))), "<i4", context)
     var n_support = family_array(Python.tuple(PythonObject(k)), "<i4", context)
     var dual_all = family_array(Python.tuple(PythonObject(max(1, (k - 1) * cap))), "<f4", context)
-    var n_sv = svc_int(family_call(_entry(binding, "svc_ovo_layout", context), sup_addrs, dual_addrs, meta,
+    var n_sv = svc_int(svc_ovo_execute(binding, native, sup_addrs, dual_addrs, meta,
                                    Python.list(classical_address(support), classical_address(n_support),
                                                classical_address(dual_all), PythonObject(cap))))
     _ = n_support  # keep the Python object alive through the native call above
@@ -904,7 +913,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_cols != n_rows:
         raise Error("mojolearn SVC: kernel='precomputed' needs the square n x n "
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
-    var gamma = _resolve_gamma(fields, binding, x, context)
+    var gamma = _resolve_gamma(fields, binding, x, context, native)
     var c_rows = _c_rows(binding, svc_float(svc_field(fields, "_hp_C")), n_rows, args[3],
                          py_get(fields, PythonObject("class_weight"), PythonObject(None)), y, "SVC", context, native)
     var settings = _svc_fit_settings(fields, gamma, n_cols, context)
@@ -1171,7 +1180,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_cols != n_rows:
         raise Error("mojolearn SVR: kernel='precomputed' needs the square n x n "
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
-    var gamma = _resolve_gamma(fields, binding, x, context)
+    var gamma = _resolve_gamma(fields, binding, x, context, native)
     var c_rows = _c_rows(binding, svc_float(svc_field(fields, "_hp_C")), n_rows, args[3], PythonObject(None),
                          PythonObject(None), "SVR", context, native)
     # WORST-CASE OUTPUT BUFFERS: at most n_rows coefficients (DEVIATION 873)
@@ -1303,7 +1312,7 @@ def _svr_score(fields: PythonObject, binding: PythonObject, source: PythonObject
 
 
 def _linear_coef(fields: PythonObject, binding: PythonObject, classifier: Bool,
-                 context: PythonObject) raises -> PythonObject:
+                 context: PythonObject, native: PythonObject) raises -> PythonObject:
     # SVC/SVR.coef_ uses the same svc_dual_gemv operation as its former
     # Python property. RFE reaches it directly, never the property hook.
     var name = String("SVC" if classifier else "SVR")
@@ -1320,9 +1329,13 @@ def _linear_coef(fields: PythonObject, binding: PythonObject, classifier: Bool,
         var sv = pairs[row]["sv"] if pairs is not None else fields["support_vectors_"]
         var n = Int(py=sv.shape[0])
         if d > 0 and n > 0:
-            _ = family_call(_entry(binding, "svc_dual_gemv", context), classical_address(dual),
-                            classical_address(sv), Python.list(n, d, 1 if pairs is not None else 0),
-                            PythonObject(_addr(out) + 4 * row * d))
+            if native is not None:
+                _ = svc_descriptor_execute(native, 11, [_addr(dual), _addr(sv), _addr(out) + 4 * row * d],
+                    [n, d, 1 if pairs is not None else 0], [])
+            else:
+                _ = family_call(_entry(binding, "svc_dual_gemv", context), classical_address(dual),
+                                classical_address(sv), Python.list(n, d, 1 if pairs is not None else 0),
+                                PythonObject(_addr(out) + 4 * row * d))
         _ = dual
         _ = sv
         _ = out
@@ -1346,7 +1359,7 @@ def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObj
 def _svc_kernel_operation(model: PythonObject, operation: String, args: PythonObject,
                           context: PythonObject, fields: PythonObject, native: PythonObject) raises -> PythonObject:
     if operation == "family_svc_svc_coef" or operation == "family_svc_svr_coef":
-        return _linear_coef(fields, args[0], operation == "family_svc_svc_coef", context)
+        return _linear_coef(fields, args[0], operation == "family_svc_svc_coef", context, native)
     if operation == "family_svc_svc_fit":
         _svc_fit(model, args, context, native)
         return model
