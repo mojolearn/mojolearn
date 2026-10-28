@@ -102,3 +102,31 @@ def test_cluster_native_boundary_refuses_initializer_callbacks_before_array_conv
     assert 'pass explicit initial centers' in helper
     seed = source.split('def _seed(', 1)[1].split('def _weights(', 1)[0]
     assert 'py_type(random_state) is not b.int' in seed
+
+
+def test_cluster_classes_disable_python_decorators_and_keep_numeric_mode_signature():
+    module = ast.parse((ROOT / 'python/mojolearn/_expansion_cluster.py').read_text())
+    classes = {node.name: node for node in module.body if isinstance(node, ast.ClassDef)}
+    flags = [node for node in classes['_XCluster'].body if isinstance(node, ast.Assign)
+             and any(isinstance(target, ast.Name) and target.id == '_mojolearn_native_public'
+                     for target in node.targets)]
+    assert len(flags) == 1 and flags[0].value.value is True
+    for name in ('MiniBatchKMeans', 'BisectingKMeans', 'MeanShift', 'OPTICS',
+                 'AffinityPropagation', 'BayesianGaussianMixture'):
+        initializer = next(node for node in classes[name].body
+                           if isinstance(node, ast.FunctionDef) and node.name == '__init__')
+        assert 'numeric_mode' in [arg.arg for arg in initializer.args.kwonlyargs], name
+        for method in (node for node in classes[name].body if isinstance(node, ast.FunctionDef)
+                       and node.name in ('fit', 'partial_fit', 'fit_predict', 'fit_transform')):
+            call = next(node for node in ast.walk(method) if isinstance(node, ast.Call))
+            assert isinstance(call.args[2].elts[-1], ast.Name) and call.args[2].elts[-1].id == 'y'
+
+
+def test_cluster_lifecycle_keeps_required_checks_and_result_wrapping_native():
+    source = (ROOT / 'providers/python/cluster_public_lifecycle_pyapi.mojo').read_text()
+    for required in ('classical_check_x(', 'classical_require_fitted(', 'estimator_feature_check(',
+                     'estimator_fit_begin(', 'estimator_fit_end(', 'estimator_fit_complete(',
+                     'native_array_ndarray_view(', 'host_inference_scalar('):
+        assert required in source
+    assert 'finally:\n        if fitting:\n            estimator_fit_end(model, depth)' in source
+    assert 'Python init callbacks are not accepted' in source

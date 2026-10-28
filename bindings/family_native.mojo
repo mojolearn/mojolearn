@@ -6,6 +6,7 @@
 # maps their `<Class>: ` error prefixes and restores a stashed Python
 # exception unchanged.
 from providers.python.estimator_binding_pyapi import estimator_arguments
+from providers.python.cluster_public_lifecycle_pyapi import cluster_public_operation
 from std.python import PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.family_common import family_call
@@ -87,7 +88,8 @@ def family_operation(model: PythonObject, operation: String, var args: PythonObj
     if ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
             or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"
                 and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_")):
-        args = estimator_arguments(model, "_mojolearn_x_cluster", args, context)
+        if len(args) > 0 and args[0] is None:
+            return cluster_public_operation(model, operation, args, context)
     if operation == "family_par_public":
         return parallel_public_operation(model, args, context)
     if operation == "family_par_run":
