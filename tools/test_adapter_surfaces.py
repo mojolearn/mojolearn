@@ -20,7 +20,7 @@ def test_the_per_operation_surfaces_are_gone_from_the_docs():
     guide = (REPO / "docs-site/user_guide/framework_adapters.md").read_text()
     for name in ("mojolearn.operation", "mojolearn_matmul", "mojolearn_relu", "mojolearn_operation"):
         assert name not in guide, name
-    for name in ('backend="mojolearn"', "torch.ops.mojolearn.train", "mojolearn_train", "import_model"):
+    for name in ("run_torch", "torch.ops.mojolearn.train", "mojolearn_train", "import_model"):
         assert name in guide, name
     assert "In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs." in guide
 
@@ -58,5 +58,5 @@ def test_the_transfer_probe_parses_without_torch():
     import sys
     r = subprocess.run([sys.executable, str(REPO / "tools/adapter_transfer_probe.py"), "--help"],
                        capture_output=True, text=True)
-    assert r.returncode == 0 and "transfer_in_ms" in r.stdout
-    assert "measured:" in (REPO / "python/mojolearn/adapters/_torch_compile.py").read_text()
+    assert r.returncode == 0 and "call_ms" in r.stdout
+    assert "program.run_torch(x)" in (REPO / "tools/adapter_transfer_probe.py").read_text()

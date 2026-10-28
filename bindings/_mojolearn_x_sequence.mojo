@@ -66,6 +66,7 @@ from providers.python.autograd_import_reader_pyapi import onnx_read_py, onnx_inf
 from providers.python.autograd_import_resolve_pyapi import onnx_resolve_py
 # the lowering onto session operations (autograd/import_lower.mojo)
 from providers.python.autograd_import_frontend_pyapi import ops_import_model_c
+from providers.python.autograd_graph_metadata_pyapi import graph_record_c
 from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_import_file_py
 from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
@@ -852,6 +853,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[onnx_import_binding]("onnx_import")
         m.def_function[onnx_import_file_binding]("onnx_import_file")
         m.def_py_c_function(ops_import_model_c, "ops_import_model")
+        m.def_py_c_function(graph_record_c, "ops_graph_record")
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
         return m.finalize()

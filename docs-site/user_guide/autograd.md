@@ -509,9 +509,8 @@ with ops.Session() as s:
 ## Import a model
 
 `mojolearn.import_model` loads a whole trained model for inference: its operations and its weights.
-Pass a PyTorch module, the path of an ONNX file (opset 13 or later) or an `onnx.ModelProto`. A PyTorch
-module is exported to ONNX in this process, so no file is needed:
-`prog = mojolearn.import_model(model, example_inputs=torch.zeros(8, 3, 32, 32))`. The
+Pass the path of an exported ONNX file (opset 13 or later), or a graph returned by
+`mojolearn.importers.onnx.read`. Export a PyTorch model before importing its artifact. The
 import returns a `Program`: `run` takes new input arrays, runs every
 operation of the model on the device in one call and returns the outputs, with the same results on
 Apple, NVIDIA and AMD GPUs and on the CPU. The weights are copied to the device once, when the model is
@@ -553,11 +552,10 @@ its weights as in [Import weights](#import-weights).
 
 ## Import a pretrained model
 
-A pretrained PyTorch model imports in one call: pass the module and an example input of the shape you
-will run as `example_inputs`. mojolearn puts the module in evaluation mode and exports it to ONNX in this
-process with `torch.onnx.export`. The example below imports torchvision's ResNet-18 with its published
-ImageNet weights and classifies a batch of four images. PyTorch is only needed for the import; the saved
-program runs without it.
+Export a pretrained PyTorch model to ONNX, then import the artifact. The example
+below uses torchvision's ResNet-18 with its published ImageNet weights and
+classifies a batch of four images. PyTorch prepares the artifact; the imported
+program owns its graph and weights and runs without it.
 
 <!-- block: import-pretrained -->
 ```python
@@ -569,7 +567,9 @@ import mojolearn
 weights = torchvision.models.ResNet18_Weights.DEFAULT
 net = torchvision.models.resnet18(weights=weights)
 
-model = mojolearn.import_model(net, example_inputs=torch.zeros(4, 3, 224, 224))
+torch.onnx.export(net.eval(), (torch.zeros(4, 3, 224, 224),), "resnet18.onnx",
+                  input_names=["input"], opset_version=17, dynamo=False)
+model = mojolearn.import_model("resnet18.onnx")
 print(model.inputs)    # [('input', (4, 3, 224, 224), 'float32')]
 
 # four normalized 224 x 224 RGB images, as weights.transforms() prepares them
@@ -581,16 +581,12 @@ labels = [weights.meta["categories"][c] for c in classes]
 model.save("resnet18.program")
 ```
 
-The program takes inputs of the example's shape; to run another batch size, import again with an
-example of that size. A module with several inputs takes a tuple, such as
-`example_inputs=(torch.zeros(8, 128, dtype=torch.long), torch.ones(8, 128))`; an input the model reads as
-indices, such as token ids, needs an integer example.
-
-You can also export the module yourself and pass the file, for example to set export options of your
-own: `torch.onnx.export(net.eval(), (example,), "resnet18.onnx", input_names=["x"])`, then
-`mojolearn.import_model("resnet18.onnx")`. Mark the batch axis as open with
-`dynamic_axes={"x": {0: "batch"}}` and set it with `shapes` at import, such as
-`shapes={"x": (16, 3, 224, 224)}`.
+The program takes inputs of the exported shape. For multiple model inputs, pass
+an example tuple to the exporter; integer token IDs need integer example tensors.
+To support different batch sizes, export an open batch axis using
+`dynamic_axes={"input": {0: "batch"}}`, then supply a fixed shape at import, such as
+`shapes={"input": (16, 3, 224, 224)}`. Changed source weights take effect only after
+exporting and importing a new artifact.
 
 ## Verify a model on another GPU
 

@@ -32,18 +32,21 @@ def connect(graph, reader, node, tensor, resolved, unsupported, attrs_default, d
         containers += (np.ndarray,)
     _backend.default_mode()
     bindings, aliases, entry = {}, [], None
+    record_entry = None
     for mode in ('identical', 'fast'):  # glue: the two existing numeric mode connections
         try:
             binding = _backend.binding('_mojolearn_x_sequence', mode)
             native = binding.ops_import_model
+            record = binding.ops_graph_record
             factory = binding.onnx_native_api_v1
-            if type(native) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
+            if type(native) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType or type(record) is not BuiltinFunctionType:
                 raise TypeError('ONNX reader requires compiled provider entries')
             actual = factory.__self__
             aliases.append((binding, actual))
             bindings[mode] = actual
             if entry is None:
                 entry = native
+                record_entry = record
         except (ImportError, AttributeError, TypeError) as error:
             bindings[mode] = type(error).__name__ + ': ' + str(error)
     if entry is None:
@@ -69,7 +72,7 @@ def connect(graph, reader, node, tensor, resolved, unsupported, attrs_default, d
         for cls in (tensor, node, graph, resolved):  # glue: compiled native metadata protocols
             names = ('__repr__', '__eq__', '__hash__', '__setattr__', '__delattr__') if cls in (tensor, node) else ('__repr__', '__eq__')
             for name in names:  # glue: native hooks replace generated Python dataclass methods
-                bound = MethodType(entry, (name, context))
+                bound = MethodType(record_entry, (name, context))
                 setattr(cls, name, entry('record_descriptor', bound, None, context))
     context['layouts'] = {cls: _layout(cls) for cls in (graph, reader, node, tensor, resolved)}  # glue: pin final native record storage
     for cls in (graph, reader, node, tensor, resolved):  # glue: pin record protocols and fields after native hook setup

@@ -8,9 +8,9 @@
 # the release gate).
 """Optional PyTorch and MAX adapters.
 
-``mojolearn.adapters.torch`` registers the ``torch.compile`` backend
-``"mojolearn"``, which runs a whole PyTorch model as one mojolearn program,
-and ``torch.ops.mojolearn.train``, which fits a mojolearn Sequential model in
+``mojolearn.import_model(path).run_torch`` executes an exported graph with
+PyTorch tensors. ``mojolearn.adapters.torch`` registers
+``torch.ops.mojolearn.train``, which fits a mojolearn Sequential model in
 one call. ``mojolearn.adapters.max`` gives a MAX graph the same whole-model
 training as the ``mojolearn_train`` and ``mojolearn_train_resume``
 operations. The files ship in the mojolearn GPU wheels.

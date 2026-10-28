@@ -9,6 +9,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_json import native_path
 from providers.python.autograd_import_metadata_pyapi import _fields, _raise_object
+from providers.python.autograd_python_errors_pyapi import graph_python_error
+from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 
 
 def _admit(value: PythonObject, context: PythonObject, mut seen: List[Int]) raises:
@@ -54,7 +56,14 @@ def _record_values(value: PythonObject, context: PythonObject) raises -> PythonO
 
 def graph_record_bound(args: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
+    if len(args) < 2 or py_type(args[0]) is not b.tuple or len(args[0]) != 2:
+        raise Error("TypeError: graph protocol requires its bound native descriptor")
+    if py_type(args[0][0]) is not b.str or py_type(args[0][1]) is not b.dict:
+        raise Error("TypeError: graph protocol requires native operation and context metadata")
     var operation = String(py=args[0][0])
+    var arity = 4 if operation == "__setattr__" else (3 if operation == "__eq__" or operation == "__delattr__" else 2)
+    if len(args) != arity:
+        raise Error("TypeError: invalid graph protocol argument count")
     var context = args[0][1]
     var value = args[1]
     var cls = py_type(value)
@@ -100,6 +109,17 @@ def graph_record_bound(args: PythonObject) raises -> PythonObject:
             cpy.lib.get_function[NoneType]("Py_ReprLeave")(value._obj_ptr)
             raise
     raise Error("ValueError: unknown graph record protocol")
+
+
+def graph_record_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    # Separate entry prevents a public tuple source from masquerading as a
+    # bound graph record operation at the artifact-import door.
+    try:
+        return graph_record_bound(PythonObject(from_borrowed=packed)).steal_data()
+    except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error)
+        return graph_python_error(error)
 
 
 def _message(source: PythonObject, problems: PythonObject, context: PythonObject) raises -> PythonObject:
