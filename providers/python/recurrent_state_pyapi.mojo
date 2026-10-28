@@ -67,7 +67,7 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
     var dimensions = List[List[Int]]()
     var counts = List[Int]()
     var total = 0
-    for layer in range(layers):
+    for layer in range(layers):  # driver-loop: over recurrent parameter block layout
         var input_width = features if layer == 0 else hidden
         names.append("weight_ih_l" + String(layer))
         dimensions.append(List[Int](gates * hidden, input_width))
@@ -81,9 +81,9 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
     dimensions.append(List[Int](outputs, hidden))
     names.append("head.bias")
     dimensions.append(List[Int](outputs))
-    for i in range(len(names)):
+    for i in range(len(names)):  # driver-loop: over named parameter buffers
         var count = 1
-        for j in range(len(dimensions[i])):
+        for j in range(len(dimensions[i])):  # small-loop(parameter shape words)
             count *= dimensions[i][j]
         counts.append(count)
         total += count
@@ -109,7 +109,7 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
             raise Error("params_ size differs from the recurrent parameter layout")
     var base = xseq_f32p(packed)
     var offset = 0
-    for i in range(len(names)):
+    for i in range(len(names)):  # driver-loop: over named parameter buffers
         var shape = Python.list()
         for j in range(len(dimensions[i])):  # small-loop(parameter shape words)
             _ = py_call(shape.append, dimensions[i][j])

@@ -39,7 +39,7 @@ def test_common_feature_and_caller_boundary_are_reused():
 def test_finite_validation_walks_admitted_bytes_without_packed_dispatch():
     source = (ROOT/'providers/python/xseq_public_lifecycle_pyapi.mojo').read_text()
     finite = source.split('def _finite(', 1)[1].split('\n\n\nstruct ', 1)[0]
-    assert 'host_inference_raw_finite(' in finite
+    assert 'host_inference_nd_finite(' in finite
     assert 'xseq_base(' not in finite
     assert 'py_call(' not in finite
     assert 'byte_strides = view.strides' in finite
