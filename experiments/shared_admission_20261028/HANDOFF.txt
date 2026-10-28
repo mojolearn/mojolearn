@@ -1,0 +1,38 @@
+Shared admission overhead, 2026-10-28
+Branch: lane/shared-admission-20261028
+Source commit: 33bc4b818db63ced9d534f86386d83bc8251570e
+
+Repeated work removed:
+- Linear name walks through process and operation module connection lists.
+- Python ancestry-list indexing, per-recheck slots.keys()/list construction,
+  descriptor dictionary indexing, and namespace keys-view/list allocation.
+- A second type lookup per recursive identity container and per-item CPython
+  accessor resolution/container-kind selection in identity walks.
+
+Setup/reuse boundary:
+- Process admissions and operation connections use native name maps.
+- Array class admission retains native ancestry and descriptor vectors once;
+  each post-release recheck walks live namespace keys via native iteration.
+- Identity walkers select the container accessor once per container; Array
+  identity checks resolve native namespace accessors once per stamp.
+
+Invalidation/lifetimes:
+- Operation module maps clear after each GIL release; process hits still check
+  module identity/type/namespace keys/registered exports before reuse.
+- Array class/MRO/hooks/descriptors remain rechecked. ALL live namespace keys
+  are admitted before any keyed lookup. Native vectors strongly retain the
+  same descriptor/class owners; writable Array slots and released memoryviews
+  remain checked by NativeIdentityKey.
+- Global module registry layout name bumped V2 -> V3 for mixed extension safety.
+
+Compilation: compile.json records two successful focused Mac arm64 CPU builds,
+final exported entries cover module admission/reuse/release, Array snapshot and
+recheck, recursive identity/field capture and matching, Array invalidation.
+Source closure bytes/hashes, binary and complete logs retained under
+~/mojolearn-evidence/shared-admission-20261028/. No rented boxes.
+
+Limits: native metadata still retains Python owners. Mutable boundary scans,
+mappingproxy/iterator construction, descriptor reads and cold Python snapshots
+remain. Native name maps remove searches but no speedup is measured or claimed.
+No runtime, performance or cross-vendor identity execution; compile coverage
+must not be promoted to those claims. No numerical algorithms/defaults changed.
