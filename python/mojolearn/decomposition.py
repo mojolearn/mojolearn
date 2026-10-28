@@ -384,6 +384,9 @@ class TruncatedSVD(NumericModeMixin):
     tol : float, default 0.0
         Only 0.0 is accepted (it is ARPACK's tolerance); any other value
         raises ``NotImplementedError``.
+    numeric_mode : {'fast', 'identical'} or None, default None
+        Numeric mode for this estimator; None uses the package default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -417,8 +420,14 @@ class TruncatedSVD(NumericModeMixin):
     #: `PCA._SOLVERS`) and 'randomized'. 'arpack' is refused by name.
     _ALGORITHMS = ("covariance_eigh", "jacobi", "randomized")
 
+    #: Every public operation is one call into the native owner
+    #: (bindings/tsvd_native.mojo tsvd_c), which runs the whole lifecycle
+    #: (fitted check, X and width checks, fit bookkeeping, NumPy results);
+    #: the `_mode` class-creation wrappers leave this class unwrapped.
+    _mojolearn_native_public = True
+
     def __init__(self, n_components=2, *, algorithm="covariance_eigh", n_iter=5, n_oversamples=10,
-                 power_iteration_normalizer="auto", random_state=None, tol=0.0):
+                 power_iteration_normalizer="auto", random_state=None, tol=0.0, numeric_mode=None):
         self.n_components = n_components
         self.tol = tol
         self.algorithm = algorithm
@@ -426,6 +435,7 @@ class TruncatedSVD(NumericModeMixin):
         self.n_oversamples = n_oversamples
         self.power_iteration_normalizer = power_iteration_normalizer
         self.random_state = random_state
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y=None):
         """Fit the model to ``X``.
