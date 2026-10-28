@@ -329,10 +329,7 @@ class ForestProtocol:
         holder["forest"] = value
 
     def __getstate__(self):
-        state = self.__dict__.copy()
-        state.pop("_resident_holder", None)
-        state.pop("_resident_forest", None)
-        return state
+        return _TREES(self, "trees_forest_getstate", (), _TREES_CONTEXT)
 
     def __setstate__(self, state):
         self.__dict__.update(state)

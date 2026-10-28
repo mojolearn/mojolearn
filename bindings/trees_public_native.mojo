@@ -13,6 +13,7 @@ from bindings.trees_public_lifecycle_native import forest_public_operation
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_iforest import iforest_operation
 from bindings.trees_public_boost import boost_operation
+from bindings.trees_public_auxiliary import embedding_apply, tree_export_state
 from bindings.trees_public_meta import meta_operation
 from bindings.trees_public_meta_lifecycle import meta_public_operation
 from bindings.trees_public_mixin_score import boost_score, gbdt_adapter_score
@@ -33,6 +34,10 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
     # Connect a loaded NumPy's native types (ndarray inputs, pandas
     # storage); outputs stay mojolearn Arrays.
     classical_connect_numpy(context)
+    if operation == "trees_forest_getstate" or operation == "trees_iforest_getstate" or operation == "trees_gbdt_getstate":
+        return tree_export_state(model, operation)
+    if operation == "trees_embedding_apply":
+        return embedding_apply(model, args, context)
     if operation == "trees_forest_construct":
         return forest_construct(model, args, context)
     if operation.startswith("trees_public_forest_"):

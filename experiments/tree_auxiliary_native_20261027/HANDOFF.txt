@@ -1,0 +1,65 @@
+Peer5 tree auxiliary batch — 2026-10-27
+Branch: lane/peer5-tree-aux-20261027
+Worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer5-trees
+Base: current main when this isolated worktree was created (765a269fc4).
+
+Completed source changes
+- DecisionTreeClassifier/Regressor get_depth/get_n_leaves are one public native
+  call. The native owner performs fitted checks, mode/entry selection, buffer
+  admission, first-tree bounds checks, the existing x_trees_tree_shape call,
+  and finished Python-integer construction. No numerical kernel changed.
+- RandomTreesEmbedding.apply is one public native call. Input metadata is read
+  once into the existing TreesMatrix; native code validates model storage and
+  dimensions, owns the inputs through x_trees_apply, and returns the shaped
+  int32 Array. Existing requested/default numeric-mode selection is retained.
+- ForestProtocol, IsolationForest, and GradientBoosting __getstate__ each become
+  one public native call. Native ordinary-dictionary copies preserve metadata
+  object identities and omit the same process-local resident fields. Original
+  dictionaries retain omitted resident owners through the operation.
+- The compile-only fixture elaborates trees_public_operation and all its tree
+  owner branches. It does not load or execute the resulting extension.
+
+Compile and source checks
+See compile.json for the final frozen source passes and complete evidence paths.
+Python wrappers passed syntax compilation without importing product code.
+wrappers.json retains their hashes; retained source tar contains their bytes.
+No runtime tests, identity checks, vendor campaign or performance run occurred.
+CPU compilation does not establish runtime correctness or GPU support.
+No rented machine; no pod ownership or teardown action.
+
+Retained attempts (full logs/source/binaries on the Mac)
+/Users/andrewhendel/mojolearn-evidence/peer5-tree-auxiliary-20261027/
+- attempt1: compile fixture could not export the String/var signature directly.
+- attempt2: corrected PythonObject export passed, but mode-selection source was
+  changed while that compile was in flight. This is NOT accepted final evidence.
+- attempt3: compile rejected fields.copy due to PythonObject/Mojo overload
+  ambiguity; native dict(fields) uses the same shallow-copy contract.
+- attempt4: complete dispatcher compile passed (112 seconds, 10 workers).
+- attempt5: final auxiliary-owner compile after inherited embedding admission
+  adjustment; see result.json and compile.log.
+All failures retained; no filtered output is treated as proof of a full pass.
+
+Adjacent source inventory / remaining work
+- _forest_protocol.py: RF/ET/DT constructors, get/set_params and auxiliary
+  predict/apply methods already use native owners. __setstate__ and
+  __sklearn_is_fitted__ still have Python bodies. Private resident helpers also
+  retain Python code; public native inference already has TreesResident, but a
+  complete remaining-callgraph audit is still pending.
+- _iforest_impl.py and _expansion_trees.py: IsolationForest and
+  RandomTreesEmbedding constructors are replaced at import through
+  _native_full_reset_params.py. Their original constructor bodies alone do not
+  establish remaining runtime execution. Boost/embedding fit/transform wrappers
+  and their transitive native admission remain outside this auxiliary batch.
+- _gbdt_adapters.py: get_params is connected through _native_params_metadata.py;
+  _GBDTAdapter.__init__, set_params and __sklearn_is_fitted__ remain concrete
+  adjacent migration targets. Native fixed-owner CV paths exist and should be
+  reused, but do not alone migrate the public methods.
+- ensemble.py: GradientBoosting.__getstate__ is covered here; its constructor
+  and specialized subclasses remain outside this batch's migration claim.
+- RandomTreesEmbedding.apply identifies inherited embedding classes through
+  passive native MRO metadata. Python dictionary properties and input protocols
+  are refused before invocation. Model-buffer checks require native flat storage.
+
+Main integration is serialized by the root thread; this lane never mutates main.
+Keep logs out of context: full output belongs in files; inspect exit/status and
+bounded relevant diagnostics. Compilation is not runtime verification.
