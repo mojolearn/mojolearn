@@ -84,7 +84,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
         if rows < cols:
             raise Error("n_components='mle' is only supported if n_samples >= n_features")
         keep_mode = 2
-    elif not randomized and (py_type(requested) is b.float or py_type(requested) is py_get(context, "float64")):
+    elif not randomized and (py_type(requested) is b.float or py_type(requested) is context["float64"].type):
         requested = pca_fit_number(requested, operation, context, False)
         fraction = Float64(py=requested)
         if not (fraction > 0 and fraction < 1):
