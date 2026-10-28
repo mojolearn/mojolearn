@@ -3,6 +3,7 @@
 # to allocate returned ABI buffers; conversion and every computed value use
 # the executor. No user callbacks drive execution, epochs or batches.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
 from std.memory import memcpy
 from std.time import perf_counter_ns
@@ -154,7 +155,7 @@ def _dict() raises -> PythonObject:
 def _result(arrays: PythonObject) raises -> PythonObject:
     if len(arrays) == 1:
         return arrays[0]
-    return py_call(Python.import_module("builtins").tuple, arrays)
+    return py_call(native_loaded_module("builtins").tuple, arrays)
 
 
 def _optimization_object(plan: ProgramOptimization) raises -> PythonObject:
@@ -376,14 +377,14 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
 # (an 'int32' output keeps the device's words as int32 items).
 
 def _imported_repr(value: PythonObject) raises -> String:
-    return String(py_call(Python.import_module("builtins").repr, value))
+    return String(py_call(native_loaded_module("builtins").repr, value))
 
 
 def _imported_tuple(dims: List[Int]) raises -> PythonObject:
     var out = Python.list()
     for k in range(len(dims)):  # small-loop(dims: a value's rank, at most eight): shape metadata, never array elements
         _ = py_call(out.append, PythonObject(dims[k]))
-    return py_call(Python.import_module("builtins").tuple, out)
+    return py_call(native_loaded_module("builtins").tuple, out)
 
 
 def _imported_session_dims(dims: List[Int]) -> List[Int]:
@@ -446,7 +447,7 @@ def _imported_capture_input(value: PythonObject, integer: Bool, mut dims: List[I
 def ops_imported_run_py(
     program: PythonObject, arrays: PythonObject, named: PythonObject,
 ) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var metadata = imported_program_snapshot(program)
     var declared = metadata[2]
     var outputs = metadata[3]

@@ -61,6 +61,30 @@ class ModelMetadataSource(unittest.TestCase):
         widen = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "widen_f16")
         self.assertEqual(sum(isinstance(n, ast.Call) for n in ast.walk(widen)), 1)
 
+    def test_catalog_public_paths_use_exported_artifacts_and_native_inputs(self):
+        source = (ROOT / "python/mojolearn/models/_catalog.py").read_text()
+        tree = ast.parse(source)
+        for method in tree.body:
+            if not isinstance(method, ast.FunctionDef):
+                continue
+            body = method.body[1:]
+            self.assertEqual(len(body), 1, method.name)
+            self.assertIsInstance(body[0], ast.Return)
+            self.assertEqual(sum(isinstance(n, ast.Call) for n in ast.walk(body[0])), 1)
+        native = (ROOT / "bindings/model_catalog_native.mojo").read_text()
+        for old in ("torch.onnx", "default_rng", "urlopen", "Python.import_module", "prog.run", "hashlib"):
+            self.assertNotIn(old, native)
+        for expected in ("_import(source,", "ops_imported_run_py(program, inputs, Python.dict())",
+                         "input_hash.hexdigest()", "output_hash.hexdigest()", "neural_array_slots(context)",
+                         "admit_native_buffer_exporter(value)", "pin.release()"):
+            self.assertIn(expected, native)
+
+    def test_catalog_imported_output_and_error_helpers_use_connected_builtins(self):
+        source = (ROOT / "providers/python/autograd_program_pyapi.mojo").read_text()
+        for name in ("_result", "_imported_repr", "_imported_tuple", "ops_imported_run_py"):
+            body = source.split("def " + name + "(", 1)[1].split("\n\ndef ", 1)[0]
+            self.assertNotIn('Python.import_module("builtins")', body, name)
+
 
 if __name__ == "__main__":
     unittest.main()
