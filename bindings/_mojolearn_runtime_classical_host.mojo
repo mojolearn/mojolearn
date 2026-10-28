@@ -18,6 +18,7 @@ from bindings.pca_native import pca_c
 from bindings.scaler_native import scaler_fit_c
 from bindings.scaler_lifecycle_native import scaler_lifecycle_c, scaler_attribute_c
 from bindings.minmax_native import minmax_lifecycle_c
+from providers.python.preprocessing_input_pyapi import register_scaler_snapshot
 from bindings.maxabs_native import maxabs_lifecycle_c
 from bindings.prep_stateless_native import prep_stateless_c
 from bindings.qn_native import qn_c
@@ -95,6 +96,7 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")
         module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
         _ = module.add_type[TreesResident]("_TreesResident")
+        register_scaler_snapshot(module)
         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")
         module.def_function[runtime_classical_host_vendor_binding]("runtime_classical_host_vendor")
         module.def_function[runtime_classical_host_column_binding]("runtime_classical_host_column")
