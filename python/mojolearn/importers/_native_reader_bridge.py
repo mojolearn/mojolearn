@@ -47,7 +47,7 @@ def connect(graph, reader, node, tensor, resolved, unsupported, attrs_default, d
             if entry is None:
                 entry = native
                 record_entry = record
-        except (ImportError, AttributeError, TypeError) as error:
+        except (ImportError, AttributeError, TypeError, ValueError) as error:
             bindings[mode] = type(error).__name__ + ': ' + str(error)
     if entry is None:
         entry = _unavailable(ImportError('rebuild x_sequence with onnx_native_api_v1'))
