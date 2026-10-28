@@ -547,7 +547,7 @@ def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: Py
         raise Error("TypeError: CausalLM state layers require an ordinary sequence")
     var parallel = py_get(model._native_entries, "parallel_call")
     var captured = Python.list()
-    var seen = Dict[Int, PythonObject]()
+    var seen = Python.dict()
     for i in range(len(layers)):  # driver-loop: over capture each unique state identity once
         var identity = py_call(bi.id, layers[i])
         var layer = py_get(seen, identity)
@@ -615,7 +615,7 @@ def causal_state_publish(mut mods: NativeModules, state: PythonObject) raises:
             _ = py_call(published.append, causal_state_origin(mods, layers[i]))
         py_setitem(live, "layers", published)
         return
-    var seen = Dict[Int, PythonObject]()
+    var seen = Python.dict()
     for i in range(len(layers)):  # driver-loop: over publish one result per original aliased state
         var layer = causal_snapshot_fields(mods, layers[i])
         var identity = py_call(bi.id, layer["_causal_original"])
