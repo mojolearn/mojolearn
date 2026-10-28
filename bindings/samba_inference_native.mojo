@@ -99,12 +99,15 @@ def _samba_block_entries(block: PythonObject, context: PythonObject) raises -> P
         return _model_bindings(PythonObject("cpu"), "mamba3", nc, PythonObject("identical"))["mamba3"]
     return neural_training_entries(samba_fields(block), nc)
 
-def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, entries: PythonObject) raises -> PythonObject:
+def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, entries: PythonObject,
+                   captured_fields: PythonObject = PythonObject(None), captured_slots: PythonObject = PythonObject(None)) raises -> PythonObject:
     """One carried-state call: `(y, h_last, k_last, v_last, theta_last)`. The
     state's pieces, `buffered_tokens` and `pending` are updated; the caller
     assigns the four reports."""
-    var fields = samba_fields(block)
-    var slots = samba_fields(state)
+    # Standalone Mamba operations supply one retained metadata snapshot. Other
+    # native owners preserve their established admission and call contract.
+    var fields = samba_fields(block) if captured_fields is None else captured_fields
+    var slots = samba_fields(state) if captured_slots is None else captured_slots
     if py_get(slots, "_resident_session") is not None:
         raise Error("Mamba3: state belongs to an open resident decode session; synchronize or close it first")
     var b = Int(py=x.shape[0])

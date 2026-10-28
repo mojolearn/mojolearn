@@ -1,0 +1,90 @@
+Transformer state/tape public boundary — 2026-10-27
+
+Branch: lane/peer3-neural-tokenizer-20261027
+Base: local main 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027
+
+This chunk replaces Python TransformerState construction/capacity/cache packing
+and TransformerForwardTape construction/close/serialization refusal plus
+TransformerBlock.forward_with_tape/backward_from_tape with one native call per
+public operation. The dedicated native owner validates mutable metadata before
+conversion, retains admitted buffers and model/session owners, preserves live
+unwindowed views and chronological copied ring views, and seals tape metadata
+inside a typed native owner. Tape configuration, stale ticket, consumption,
+activation budget, replay cost, profile, shape, and original session semantics
+remain inside native execution. Weight shapes are rechecked against captured
+configuration before raw addresses reach the existing session entries.
+
+No kernels, arithmetic, decoding routes, performance defaults, or fast work
+changed. The budget-aware transformer_session_forward_tape/backward_tape and
+discard_tape compiled entries remain the execution route. The descriptor table
+currently exposes a different standalone retained-tape route; this chunk does
+not substitute it. Provider-only transport for the budget-aware session ticket
+still requires a future matching native descriptor operation, not a changed
+arithmetic route.
+
+Dependencies supplied by peer coordinator: neural_block_snapshot plus its
+_neural_live_fields and prepared _w snapshots, neural_block_f32, native scalar
+and Array admission; tokenizer-host transformer_public_c export and
+TransformerPublicTapeOwner class registration; import-time connection of
+transformer_session_discard_tape.
+
+Validation:
+- 3 source checks passed, exit 0, source-tests-direct.log. These assert thin
+  public wrappers, storage admission/view-copy split, and ticket ownership and
+  original budget-aware session route; they do not execute the product.
+- Python syntax check passed, exit 0, python-syntax.log.
+- Initial pytest invocation failed because system Python has no pytest;
+  original source-tests.log retained. A direct source-test runner executed all
+  three tests without requiring pytest.
+- New public runtime controls in test_transformer_public_boundary.py are
+  syntax checked only, UNRUN. State aliases/lifetimes/ring positions/checkpoint
+  roundtrip, scalar/dictionary/buffer hooks, tape consumption/close and model/
+  ndarray hooks are covered by their intended fixtures.
+- No lane compiles or runtime/cross-vendor validation were run. Small affected
+  build target: bindings/_mojolearn_tokenizer_host.mojo (new native boundary and
+  registration). Existing transformer host/GPU session arithmetic is reused.
+
+Pending: coordinator local compile before merge; public state/tape runtime
+controls after integration; shared provider session-ticket transport; dedicated
+Transformer decode admission review/repair in next chunk. This is source
+migration evidence, not a Python-free runtime or cross-vendor qualification.
+
+Decode admission followup
+-------------------------
+The next chunk repairs providers/python/transformer_decode_pyapi.mojo rather
+than leaving its raw py_fields path as coverage debt. Session and state owners,
+mutable metadata, scalar/profile/configuration words, weight/cache extents and
+Array/native exporters are admitted before access or conversion. Native owners
+retain original block/state references, immutable launch configuration, state
+capacity and compiled function dictionaries. Changed public owner pointers or
+incompatible dimensions are refused before dispatch. Foreign cache buffers keep
+the original copy-on-admission/writeback-after-success semantics; Array caches
+remain direct mutable storage. CPU-owned and GPU-resident routes and operation
+IDs are unchanged. Exact module dictionaries use PyModule_GetDict and exact
+SimpleNamespace entry records use their native member descriptor, so missing or
+replaced module hooks cannot run through getattr before native admission.
+
+Tape saved-binding close is likewise resolved through its connected native
+entry record. The general _fields helper intentionally accepts ordinary model
+getset dictionaries; SimpleNamespace/ModuleType use member dictionaries, so
+that helper is not used for those records in the new paths.
+
+TransformerDecodeSession.__del__ is a single native call; native drop absorbs
+cleanup errors. Source checks now cover all native decode wrappers plus native
+owner/configuration retention and module/exporter admission. New runtime tests
+cover decode/full-forward bytes, state sync/load, scalar hooks, and substituted
+session owners. They remain UNRUN.
+
+Followup source validation: seven checks passed, exit 0, source-tests-decode.log.
+Python syntax passed, exit 0, python-syntax-decode.log. Existing system pytest
+absence is unchanged. No lane compilation, runtime, benchmark, vendor or GPU
+qualification. Affected small compile target: tokenizer-host exported public
+Transformer boundary and transformer_decode_native_c, with the original
+Transformer arithmetic/provider images reused. Coordinator owns compilation.
+
+Remaining scope: budget-aware session-tape descriptor transport is not provided
+by the existing standalone-tape table; actual public runtime and cross-vendor
+qualification remain pending integration. No Python-free runtime claim follows
+from the seven source checks. Shared context/provider registry and Array owner
+helpers are coordinator-owned dependencies, not duplicated in this lane.

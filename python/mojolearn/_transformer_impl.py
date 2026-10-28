@@ -522,43 +522,17 @@ class TransformerState:
 
     def __init__(self, batch_size, n_kv_heads, head_dim, max_tokens,
                  k_cache, v_cache, cached_tokens=0, window=0):
-        self.batch_size = int(batch_size)
-        self.n_kv_heads = int(n_kv_heads)
-        self.head_dim = int(head_dim)
-        self.max_tokens = int(max_tokens)
-        self.window = int(window)
-        self.k_cache = k_cache
-        self.v_cache = v_cache
-        self.cached_tokens = int(cached_tokens)
+        return _native_neural_bridge.RUNTIME.transformer_public_call(
+            "state_init", (self, (batch_size, n_kv_heads, head_dim, max_tokens,
+                                  cached_tokens, window, k_cache, v_cache)),
+            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
 
     @property
     def capacity(self):
         """Slots per (batch, kv head) in each buffer: `max_tokens`, or `window` under a sliding window."""
-        return self.window if self.window > 0 else self.max_tokens
-
-    def _packed(self, buf):
-        b, kv, hd = self.batch_size, self.n_kv_heads, self.head_dim
-        source = _checks.flat_view(buf, 'f')
-        if self.window > 0:
-            w = self.window
-            s = self.cached_tokens
-            held = min(s, w)
-            out = _buffers.empty((b, kv, held, hd), '<f4')
-            dest = _checks.flat_view(out, 'f')
-            # Per (batch, kv head) the held positions in chronological order
-            # are at most two contiguous runs of the ring (before and after
-            # the wrap): two slice copies, no per-token loop.
-            start = (s - held) % w
-            first = min(held, w - start)
-            for head in range(b * kv):  # glue: two slice copies per head of the KV ring (kv-sized: batch by kv heads)
-                d0, s0 = head * held * hd, (head * w + start) * hd
-                dest[d0:d0 + first * hd] = source[s0:s0 + first * hd]
-                if held > first:
-                    s1, d1 = head * w * hd, d0 + first * hd
-                    dest[d1:d1 + (held - first) * hd] = source[s1:s1 + (held - first) * hd]
-            return out
-        n = b * kv * self.cached_tokens * hd
-        return _Array.from_buffer(source[:n]).reshape((b, kv, self.cached_tokens, hd))
+        return _native_neural_bridge.RUNTIME.transformer_public_call(
+            "state_capacity", (self,), _TRANSFORMER_PUBLIC_CONTEXT,
+            _native_neural_bridge.CONTEXT)
 
     def keys(self):
         """The used part of the key cache as a ``(B, n_kv_heads, cached_tokens, head_dim)`` array.
@@ -567,38 +541,36 @@ class TransformerState:
         the state. With a window it is a copy of the ``min(cached_tokens, window)`` most
         recent positions, in ascending position order.
         """
-        return self._packed(self.k_cache)
+        return _native_neural_bridge.RUNTIME.transformer_public_call(
+            "state_keys", (self,), _TRANSFORMER_PUBLIC_CONTEXT,
+            _native_neural_bridge.CONTEXT)
 
     def values(self):
         """The used part of the value cache, in the shape returned by `keys()` and with the same view/copy rule."""
-        return self._packed(self.v_cache)
+        return _native_neural_bridge.RUNTIME.transformer_public_call(
+            "state_values", (self,), _TRANSFORMER_PUBLIC_CONTEXT,
+            _native_neural_bridge.CONTEXT)
 
 
 class TransformerForwardTape:
     """Opaque, single-use native forward ticket returned by a transformer block."""
 
     def __init__(self, block, session, binding, token, shape, configuration, profile):
-        self._block = block
-        self._session = session
-        self._binding = binding
-        self._token = (int(token[0]), int(token[1]))
-        self.retained = bool(token[2])
-        self.stage_bytes = int(token[3])
-        self.shape = tuple(shape)
-        self.profile = profile
-        self._configuration = configuration
-        self._weight_shapes = tuple(a.shape for a in block._w)  # glue: tensor shape metadata
-        self._consumed = False
+        return _native_neural_bridge.RUNTIME.transformer_public_call(
+            "tape_init", (self, (block, session, binding, token, shape,
+                                 configuration, profile)),
+            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
 
     def __reduce__(self):
-        raise TypeError("TransformerForwardTape is a live native owner and cannot be serialized")
+        return _native_neural_bridge.RUNTIME.transformer_public_call(
+            "tape_reduce", (self,), _TRANSFORMER_PUBLIC_CONTEXT,
+            _native_neural_bridge.CONTEXT)
 
     def close(self):
         """Explicitly discard this ticket and its saved native buffers."""
-        with self._block._runtime_lock:
-            if not self._consumed and self._session is self._block._native_session:
-                self._binding.transformer_session_discard_tape(self._session, self._token)
-            self._consumed = True
+        return _native_neural_bridge.RUNTIME.transformer_public_call(
+            "tape_close", (self,), _TRANSFORMER_PUBLIC_CONTEXT,
+            _native_neural_bridge.CONTEXT)
 
 
 # Profile mojolearn.identical.transformer.fp32.v1 (transformer/IDENTICAL_TRANSFORMER_CONTRACT.md),
@@ -1124,12 +1096,6 @@ class TransformerBlock(NumericModeMixin):
         return _native_neural_bridge.RUNTIME.neural_block_forward(
             self, x, state, True, None, _native_neural_bridge.CONTEXT)
 
-    def _tape_configuration(self):
-        # API metadata only; no tensor data is read or compared in Python.
-        return (self.d_model, self.n_heads, self.n_kv_heads, self.head_dim,
-                self.intermediate, self.window, tuple(self._opts_tail),
-                self.numeric_profile)
-
     # NN32 retains native forward stages; NN31 uses the activation byte budget and optional
     # replay cost threshold. A budget miss or switches off selects native replay. The budget
     # covers retained forward stages, excluding input/weight snapshots and transient
@@ -1161,38 +1127,10 @@ class TransformerBlock(NumericModeMixin):
         tape : object
             Ticket for `backward_from_tape`.
         """
-        what = "TransformerBlock.forward_with_tape"
-        if getattr(self, "_int15", None) is not None or getattr(self, "_extended", False):
-            raise NotImplementedError(f"mojolearn {what}: default FP32 block options required")
-        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if mode != "identical":
-            raise NotImplementedError(f"mojolearn {what}: IDENTICAL required")
-        budget = int(activation_budget_bytes)
-        cost = int(minimum_replay_ops_per_byte)
-        if budget < 0 or cost < 0:
-            raise ValueError(f"mojolearn {what}: activation budget and replay cost must be nonnegative")
-        x = _batch_tokens(x, what, self.d_model, False)
-        b, l = int(x.shape[0]), int(x.shape[1])
-        y = _buffers.empty(x.shape, "<f4")
-        ext = self._extension()
-        if not _exports(ext, "transformer_session_forward_tape"):
-            raise NotImplementedError(f"mojolearn {what}: loaded binding lacks the native tape API")
-        addrs = [_addr_ro(x)] + [_addr_ro(a) for a in self._w] + [_addr(y)]  # glue: input, weight and output addresses
-        params = [b, l, self.d_model, self.n_heads, self.n_kv_heads,
-                  self.head_dim, self.intermediate, self.window, budget, cost]
-        with self._runtime_lock:
-            if self._native_session is not None and self._session_binding is not ext:
-                self._session_binding.transformer_session_close(self._native_session)
-                self._native_session = None
-                self._session_binding = None
-            if self._native_session is None:
-                self._native_session = ext.transformer_session_create()
-                self._session_binding = ext
-            token = ext.transformer_session_forward_tape(self._native_session, addrs, params)
-            tape = TransformerForwardTape(self, self._native_session, ext, token,
-                                          x.shape, self._tape_configuration(),
-                                          self._arithmetic_profile)
-        return y, tape
+        return _native_neural_bridge.RUNTIME.transformer_public_call(
+            "forward_tape", (self, x, activation_budget_bytes,
+                             minimum_replay_ops_per_byte),
+            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
 
     def backward_from_tape(self, tape, grad_output):
         """Gradients for the forward recorded in `tape`.
@@ -1213,23 +1151,10 @@ class TransformerBlock(NumericModeMixin):
             float32 gradients keyed ``"x"`` plus the nine weight names, each in its
             tensor's shape.
         """
-        what = "TransformerBlock.backward_from_tape"
-        if not isinstance(tape, TransformerForwardTape) or tape._block is not self:
-            raise ValueError(f"mojolearn {what}: tape belongs to another block")
-        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"), what,
-                         "grad_output", tape.shape)
-        ext = self._extension()
-        with self._runtime_lock:
-            if (tape._consumed or tape._session is not self._native_session
-                    or tape._binding is not ext or tape.profile != self._arithmetic_profile
-                    or tape._configuration != self._tape_configuration()):
-                raise ValueError(f"mojolearn {what}: stale, consumed or incompatible tape")
-            grads = [_buffers.empty(tape.shape, "<f4")] + [
-                _buffers.empty(shape, "<f4") for shape in tape._weight_shapes]  # glue: one gradient buffer per weight
-            addrs = [_addr_ro(dy)] + [_addr(g) for g in grads]  # glue: upstream and gradient buffer addresses
-            tape._consumed = True
-            ext.transformer_session_backward_tape(tape._session, addrs, tape._token)
-        return dict(zip(("x",) + self._W_NAMES, grads))
+        return _native_neural_bridge.RUNTIME.transformer_public_call(
+            "backward_tape", (self, tape, grad_output),
+            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
+
     def backward(self, x, grad_output):
         """Gradients of a zero-state prefill with respect to the input and the weights.
 
@@ -1421,11 +1346,8 @@ class TransformerDecodeSession:
             "exit", (self,), _native_neural_bridge.CONTEXT)
 
     def __del__(self):
-        try:
-            _native_neural_bridge.RUNTIME.transformer_decode_native_call(
-                "drop", (self,), _native_neural_bridge.CONTEXT)
-        except Exception:
-            pass
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "drop", (self,), _native_neural_bridge.CONTEXT)
 
     def __repr__(self):
         return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
@@ -1438,3 +1360,18 @@ from . import _native_neural_bridge
 TransformerBlock.__init__ = TransformerBlock.__init__.__wrapped__
 TransformerBlock.__getattribute__ = object.__getattribute__
 from .models import causal_lm as _causal_native_connection
+
+
+# Import-time native owner connection. Runtime checks compare these pinned
+# classes and slot descriptors before reading mutable fields or buffer metadata.
+_TRANSFORMER_PUBLIC_CONTEXT = {
+    "state_class": TransformerState,
+    "state_fields": ("batch_size", "n_kv_heads", "head_dim", "max_tokens",
+                     "cached_tokens", "window", "k_cache", "v_cache"),
+    "tape_class": TransformerForwardTape,
+    "tape_fields": ("_native_owner", "_block", "_session", "_binding", "_token",
+                    "retained", "stage_bytes", "shape", "profile", "_consumed"),
+    "weight_names": TransformerBlock._W_NAMES,
+    "array_class": _Array,
+    "array_slots": {name: vars(_Array)[name] for name in _Array.__slots__},
+}
