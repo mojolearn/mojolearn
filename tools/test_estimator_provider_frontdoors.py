@@ -77,7 +77,7 @@ def test_import_connection_unwraps_host_proxy_without_attribute_callback(monkeyp
 
 def test_native_admission_preserves_mode_check_and_live_host_replacement():
     source=(ROOT/'providers/python/estimator_binding_pyapi.mojo').read_text()
-    assert 'context["family_binding_offerings"][name][requested]' in source
+    assert 'context["family_binding_offerings"][name][selected_mode]' in source
     assert 'py_get(native_loaded_module("sys").modules, record[1])' in source
     assert 'neural_descriptor_entry(module, reader, False)' in source
     assert 'if got != expected:' in source
