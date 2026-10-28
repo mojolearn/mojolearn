@@ -48,7 +48,7 @@ from transformer.causal_lm_public_impl import (
 )
 
 
-from bindings.tokenizer_public_native import tokenizer_vocab_encode, tokenizer_vocab_decode, tokenizer_vocab_fingerprint
+from bindings.tokenizer_public_native import tokenizer_vocab_encode, tokenizer_vocab_decode, tokenizer_vocab_fingerprint, tokenizer_decode_utf8
 from bindings.mode_metadata_native import _fields as _native_record_fields, _truth
 from bindings.neural_block_admission import neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_block_weight_names, neural_metadata_snapshot, neural_block_fields
 from bindings.causal_model_config import model_record_fields, model_plan_snapshot
@@ -1498,23 +1498,31 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
     var prefix = s.pending_bytes[py_call(g[].bi.slice, PythonObject(0), PythonObject(cut))]
     var remaining = s.pending_bytes[py_call(g[].bi.slice, PythonObject(cut), PythonObject(None))]
     s.pending_bytes = remaining
-    return py_call(prefix.decode, "utf-8", "replace")
+    return tokenizer_decode_utf8(prefix, PythonObject("replace"))
 
 
 def _causal_stream_fields(stream: PythonObject) raises -> PythonObject:
     return model_record_fields(stream, _causal_context()["generation_classes"][3], Python.tuple("_native", "_runtime"))
 
 
-def causal_lm_read_binding(stream: PythonObject, count: PythonObject, native: PythonObject = PythonObject(None)) raises -> PythonObject:
-    var owner = (native if native is not None else _causal_stream_fields(stream)["_native"]).downcast_value_ptr[GenerationHandle]()
+def causal_lm_read_binding(stream: PythonObject, count: PythonObject) raises -> PythonObject:
+    return causal_lm_read_binding(stream, count, _causal_stream_fields(stream)["_native"])
+
+
+def causal_lm_read_binding(stream: PythonObject, count: PythonObject, native: PythonObject) raises -> PythonObject:
+    var owner = native.downcast_value_ptr[GenerationHandle]()
     var ids = _read(owner[], _public_int(count, "generation: max_tokens must be an integer"))
     if owner[].tokenizer is not None:
         return _decode_chunk(owner[], ids)
     return ids
 
 
-def causal_lm_info_binding(stream: PythonObject, native: PythonObject = PythonObject(None)) raises -> PythonObject:
-    var s = (native if native is not None else _causal_stream_fields(stream)["_native"]).downcast_value_ptr[GenerationHandle]()
+def causal_lm_info_binding(stream: PythonObject) raises -> PythonObject:
+    return causal_lm_info_binding(stream, _causal_stream_fields(stream)["_native"])
+
+
+def causal_lm_info_binding(stream: PythonObject, native: PythonObject) raises -> PythonObject:
+    var s = native.downcast_value_ptr[GenerationHandle]()
     var result = GENERATION_BOUNDARY.get_or_create_ptr()[].bi.dict()
     py_setitem(result, "done", PythonObject(s[].done()))
     py_setitem(result, "generated_tokens", PythonObject(s[].produced))
@@ -1695,8 +1703,12 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
     return PythonObject(h.hexdigest())
 
 
-def causal_lm_snapshot_binding(stream: PythonObject, native: PythonObject = PythonObject(None)) raises -> PythonObject:
-    var s = (native if native is not None else _causal_stream_fields(stream)["_native"]).downcast_value_ptr[GenerationHandle]()
+def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
+    return causal_lm_snapshot_binding(stream, _causal_stream_fields(stream)["_native"])
+
+
+def causal_lm_snapshot_binding(stream: PythonObject, native: PythonObject) raises -> PythonObject:
+    var s = native.downcast_value_ptr[GenerationHandle]()
     if s[].busy or not s[].usable:
         raise Error("generation: cannot checkpoint a busy or failed stream")
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
