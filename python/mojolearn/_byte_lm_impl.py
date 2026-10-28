@@ -1660,6 +1660,23 @@ def _connect_trainer():
                    byte_lm_store_getter=vars(_Array)["_store"].__get__)
     _PooledLogits.__del__ = module.classical_attribute_descriptor(
         MethodType(module.byte_lm_pooled_finalize_call, context))
+    # glue: pin the existing native slot and exact pooled storage hooks once.
+    # Native logits checks replacements before allocation, then reads this slot
+    # once; Array.__array_interface__ is never an output-address fallback.
+    from types import MemberDescriptorType
+    address_slot = vars(_Array)["_addr"]
+    if type(address_slot) is not MemberDescriptorType:
+        raise TypeError("Byte-LM pooled logits require the native Array address slot")
+    mro = _PooledLogits.__mro__
+    hooks = ('__getattribute__', '__getattr__', '__setattr__', '__del__', '__dict__',
+             '__array_interface__', '_pool', '_store', '_base', '_pin', '_mv', '_addr',
+             '_readonly', 'shape', 'dtype', 'ndim', 'size', 'nbytes', 'itemsize', 'strides', 'order')
+    layout = tuple((base, tuple((name, vars(base).get(name)) for name in hooks))  # glue: fixed native storage hooks
+                   for base in mro)  # glue: exact connected pooled Array ancestry
+    context.update(byte_lm_addr_getter=address_slot.__get__, byte_lm_pooled_mro=mro,
+                   byte_lm_pooled_layout=layout,
+                   byte_lm_type_mro_getter=type.__dict__['__mro__'].__get__,
+                   byte_lm_type_dict_getter=type.__dict__['__dict__'].__get__)
     return module.byte_lm_trainer_call, context
 
 
