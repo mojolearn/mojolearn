@@ -13,7 +13,7 @@ from providers.python.pca_input_pyapi import pca_input_snapshot, pca_state_snaps
 
 def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool,
                         context: PythonObject) raises -> PythonObject:
-    var fields = pca_query_fields(model, context)
+    var fields = pca_query_fields(model, context, String("inverse_transform") if inverse else String("transform"))
     if py_get(context, "ndarray") is None:
         raise Error("ImportError: mojolearn: PCA requires optional NumPy support. Install it with: "
                     + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')

@@ -90,3 +90,21 @@ owner or exported-name assumption narrows legitimate import-time bindings. Optio
 None/missing entries retain their existing later NotImplementedError behavior.
 Mutable native container truth (bytearray/list/tuple/dict) is frozen to Bool
 while original references remain in scalar_owners. No verification was run.
+
+
+2026-10-28 query truth compatibility companion
+Query lifecycle flags and whiten reuse the dedicated native PCA scalar truth
+snapshot introduced for fit. Temporal, text/object arrays, native scalar types,
+structured/raw void and builtin container truth retain supported behavior;
+unsupported Python truth hooks are refused. The existing strict integer/index
+contract for fitted dimensions is unchanged. Numeric/temporal/header snapshots
+and original owners remain local to the native query. Query warning source
+metadata is connected once at import for transform/inverse_transform.
+
+This companion depends on fit scalar source281742 +29ad490 and temporal helper
+7082db091c (local cherrye4fa50751b), plus the fit bridge scalar context. It needs
+the affected pca_query_compile.mojo target recompiled in the next coherent
+batch; previous query compile coverage does not qualify this changed closure.
+No tests/runtime or lane compile were run. The root-owned huge-decimal CPython
+_pylong callback repair remains explicit shared debt for native scalar parser
+closures; do not promote source review to full runtime compliance.
