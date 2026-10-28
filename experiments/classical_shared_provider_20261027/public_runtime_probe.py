@@ -132,6 +132,28 @@ def qualify():
             equal(getattr(reference, attr), getattr(candidate, attr), layout + '_' + attr)
         equal(call(1, reference.predict, contiguous), call(1, candidate.predict, data), layout)
         results.append(dict(estimator='SVR', layout=layout, status='passed'))
+    # Scalar and strided sample weights retain validation and broadcast rules.
+    y = (x[:, 0] - np.float32(.25) * x[:, 1]).astype('f4')
+    for label, weight in [('int_scalar', 2), ('float_scalar', 2.),
+                          ('zero_dim_f64', np.array(2., dtype='f8')),
+                          ('zero_dim_swapped', np.array(2., dtype='>f8')),
+                          ('strided', np.full(2 * len(x), 2., dtype='f8')[::2])]:
+        reference, candidate = SVR(**opts), SVR(**opts)
+        call(1, reference.fit, x, y, sample_weight=np.full(len(x), 2., dtype='f8'))
+        call(1, candidate.fit, x, y, sample_weight=weight)
+        equal(call(1, reference.predict, x), call(1, candidate.predict, x), label)
+        results.append(dict(estimator='SVR', weights=label, status='passed'))
+    for weight, expected in [(np.zeros(len(x)), 'non-zero'),
+                              (np.full(len(x), -1.), 'Negative'),
+                              (np.full(len(x), np.nan), 'NaN or infinity'),
+                              (np.ones((len(x), 1)), '1D'),
+                              (np.ones(len(x) + 1), 'expected')]:
+        try:
+            call(1, SVR(**opts).fit, x, y, sample_weight=weight)
+        except Exception as error:
+            assert expected in str(error), (expected, str(error))
+        else:
+            raise AssertionError('invalid sample weight accepted')
     return dict(status='passed', cases=results,
                 pending=['all kernels/label types/class weights', 'concurrent input mutation',
                          'CPU binding candidate', 'other SVM surfaces and families', 'performance', 'other targets'])

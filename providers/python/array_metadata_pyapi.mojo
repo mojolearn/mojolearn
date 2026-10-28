@@ -62,6 +62,19 @@ struct ArrayMetadata(Copyable, Movable):
         self.c_order = True
         self.is_array = True
 
+    def replace_f64(mut self, keep: PythonObject, address: Int):
+        self.keep = keep
+        self.owner = keep
+        self.copied = True
+        self.owned_writable = True
+        self.source = CastIn(address, CAST_KIND_FLOAT, 8, self.source.rows, self.source.cols,
+                             self.source.cols * 8 if len(self.shape) > 0 else 0,
+                             8 if len(self.shape) > 1 else 0)
+        self.dtype_number = NPY_DOUBLE
+        self.native_byte_order = True
+        self.c_order = True
+        self.is_array = True
+
 
 def array_slot_once(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     return py_call(context["array_fields"][name], value, context["array_class"])
@@ -88,7 +101,7 @@ def array_shape_once(value: PythonObject, context: PythonObject) raises -> List[
 
 
 def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
-                        context: PythonObject) raises -> ArrayMetadata:
+                        context: PythonObject, allow_non_native: Bool = False) raises -> ArrayMetadata:
     var nd = len(shape)
     if nd > 2:
         raise Error(name + " metadata requires an admitted scalar/vector/matrix")
@@ -115,7 +128,7 @@ def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
         contiguous = nd < 2 or String(order) == "C"
     else:
         native_order = Bool(py=dtype.isnative)
-        if not native_order:
+        if not native_order and not allow_non_native:
             raise Error("TypeError: " + name + " must be in native byte order")
         code = Int(py=dtype.num)
         contiguous = Bool(py=value.flags.c_contiguous)

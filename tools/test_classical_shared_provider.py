@@ -140,3 +140,21 @@ def test_svm_shared_inputs_are_snapshotted_outside_pair_and_fold_loops():
     owned=(ROOT/'bindings/family_common.mojo').read_text().split('def family_owned_snapshot(',1)[1].split('\ndef ',1)[0]
     assert 'value.owned_writable' in owned
     assert 'value.keep.' not in owned
+
+
+def test_shared_weight_snapshot_keeps_cast_order_and_reuses_admitted_address():
+    source=(ROOT/'bindings/family_common.mojo').read_text()
+    take=lambda name: re.search(rf'^def {name}\(.*?(?=^def |\Z)', source,re.M|re.S).group()
+    admission=take('_family_weight_buffer')
+    assert admission.count('array_shape_once(view, context)') == 1
+    for old in ('view.shape', 'view.ndim', 'view.size', 'b.hasattr', 'b.float'):
+        assert old not in admission
+    assert 'family_cast_rows_f64(raw.addr' in admission
+    assert 'family_cast_rows(raw.addr' in admission
+    validate=take('family_sample_weight_snapshot')
+    assert 'snapshot.source.addr' in validate
+    assert validate.index('FAMILY_WEIGHTS_NONFINITE') < validate.index('FAMILY_WEIGHTS_NEGATIVE') < validate.index('FAMILY_WEIGHTS_ALL_ZERO')
+    weights=body('_c_rows')
+    assert 'family_sample_weight_snapshot(' in weights
+    assert 'sw_owner = Python.tuple(weights.keep, weights.owner)' in weights
+    assert 'classical_address(sw)' not in weights
