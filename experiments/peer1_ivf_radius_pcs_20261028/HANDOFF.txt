@@ -1,0 +1,50 @@
+Peer1 IVF/Radius/PCS incremental batch — 2026-10-28
+
+Branch lane/peer1-native-next-20261027, original main start b3239afc49478f01ff338b35121ee749396417aa.
+Previous descriptor batch 33a63ba6ad is already compiled/pushed and queued at root.
+This batch is separate and its compile status is pending until provenance lands.
+
+Changes
+- IVF search retains one query snapshot and one snapshot per fitted buffer;
+  captured fitted scalar words feed cache keys, export, upload and execution.
+  Cache comparisons use native exact tuple/int/bool/string admission and comparison.
+  Export captures only its newly allocated output and preserves stale keys for
+  other buffers, so replaced public fitted arrays still invalidate old handles.
+- Radius fit and PolynomialCountSketch lifecycle/feature names move to native
+  public owners. PCS RNG uses public NumPy BitGenerator capsule ABI and one
+  masked uint32 draw under its exact native lock; no private object layout reads.
+  Retained capsule/string owners and preallocated lock cleanup address source
+  review findings. RandomState module registration is fixed.
+- Authorized shared family_common factor separates unchanged input snapshot
+  admission from unchanged float32 packing. Existing family_f32_snapshot composes
+  both. PCS validates original values before narrowing, preserving old buffer/
+  first-list-scalar/half/sparse/frame policy and finite float64 overflow acceptance.
+
+Focused compile entries
+- experiments/provider_radius_20261027/compile_radius.mojo exports actual
+  neighbors_operation and includes Radius/PCS native lifecycle/RNG.
+- checks/peer1_query_owner_compile.mojo exports actual neighbor_query_c and
+  neighbor_query_attribute_c, including IVF search/extend/attribute paths.
+
+Source review evidence
+- /Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/pcs-rng-review-20261028/REVIEW.txt
+- IVF independent source review retained by audit_tests lane.
+- /Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/
+- Family common split explicitly authorized by root; no other shared owner edits.
+
+Remaining Python/CPython-dispatched paths (not a completion claim)
+- IVF search/extend/build/resident prepare/export/release still call numerical
+  extension entries via family_call. ANN numerical/resident calls similarly remain.
+- IVF filter still revisits input metadata through labels_view/_i32_vector;
+  getstate/lazy materialization keep their older metadata helpers.
+- XN normal route remains packed CPython unless existing descriptor switch enabled;
+  PCS hash draw currently uses extension entry; typed draw follow-up owned by neighbor.
+- Radius shared archive loader, shared metric scoring, lifecycle warnings/features,
+  shared pandas/Torch/buffer admission retain documented transitive audit scope.
+- Kernel scoring and hierarchy general x_cluster/resident routes remain separately owned.
+- Search now adds fitted shape/dtype checks; malformed fitted arrays may fail after
+  query/settings/binding/filter admission rather than the old layout-only pre-scan.
+  Non-C fitted storage retains ValueError. Doubly-invalid error precedence is not
+  claimed identical. Ordinary supported buffer behavior was source reviewed only.
+- No runtime/identity/vendor verification or benchmark runs authorized/performed.
+  Compilation qualifies only the actual target/source closure recorded in provenance.
