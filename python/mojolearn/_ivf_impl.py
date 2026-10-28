@@ -404,6 +404,7 @@ class IVFIndex(NumericModeMixin):
     # because an arbitrary id would need a merge to keep every list ascending
     # in its carried ids (DEVIATION 1783). On a CPU-only install
     # `_mojolearn_ivf_search_host` carries it.
+    @_native_query_method
     def extend(self, X):
         """Add the rows of `X` to the built index.
 
@@ -433,44 +434,7 @@ class IVFIndex(NumericModeMixin):
             of features, or `metric` no longer names the metric the index was
             built under.
         """
-        if not self._is_built():
-            raise ValueError("mojolearn IVFIndex: call fit (or load) before extend")
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        m, dim = (int(v) for v in x.shape)  # glue: the two shape dims
-        if dim != self.n_features_in_:
-            raise ValueError(f"mojolearn IVFIndex: X has {dim} features, the index has {self.n_features_in_}")
-        if self._metric_code() != self.metric_code_:
-            raise ValueError(
-                f"mojolearn IVFIndex: metric {self.metric!r} does not name the metric this index was "
-                f"built under ({_METRIC_NAMES[self.metric_code_]!r}); a built index has one metric"
-            )
-        self._materialize_list_data()   # the extend reads the old vectors
-        self._release_resident()
-        n, n_lists = self.n_rows_, self.n_lists_
-        total = n + m
-        offsets = empty((n_lists + 1,), "<i4")
-        indices = empty((total,), "<i4")
-        data = empty((total * dim,), "<f4")
-        labels = empty((m,), "<i4")
-        centers = self.centers_.reshape((n_lists * dim,))
-        old_data = self.list_data_.reshape((n * dim,))
-        self._entry(self._extension(), "ivf_flat_extend")(
-            # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_extend).
-            # centers, center_norms, offsets, indices, list_data, new_x, offsets_out, indices_out, list_data_out, labels_out
-            [addr_ro(centers, name="centers_"), addr_ro(self.center_norms_, name="center_norms_"),
-             addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
-             addr_ro(old_data, name="list_data_"), addr_ro(x, name="X"),
-             addr(offsets, name="list_offsets_"), addr(indices, name="list_indices_"),
-             addr(data, name="list_data_"), addr(labels, name="extend_labels_")],
-            # n, dim, n_lists, metric, n_new
-            [n, dim, n_lists, self.metric_code_, m],
-        )
-        self.list_offsets_ = offsets
-        self.list_indices_ = indices
-        self.list_data_ = data.reshape((total, dim))
-        self.n_rows_ = total
-        self.extend_labels_ = labels
-        return self
+        return _NATIVE_QUERY(self, "extend", (X,), _QUERY_CONTEXT)
 
     def _clone(self):
         """A new instance holding copies of this index's arrays (cuVS
