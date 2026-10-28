@@ -6,23 +6,36 @@ from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
+from bindings.mode_metadata_native import _fields
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 
 
 def estimator_binding(model: PythonObject, name: String, context: PythonObject, check_mode: Bool = True) raises -> PythonObject:
+    # Read ordinary instance storage with exact dictionary/key admission.
+    # A Python __getattribute__ or __dict__ property is never a mode reader.
+    var requested = py_get(_fields(model), "numeric_mode") if model is not None else PythonObject(None)
+    return estimator_binding_mode(requested, name, context, check_mode)
+
+
+def estimator_binding_mode(requested: PythonObject, name: String, context: PythonObject,
+                           check_mode: Bool = True) raises -> PythonObject:
+    # Callers with retained numeric_mode_ pass that already captured scalar.
+    # Do not reread the current model setting: transforms must use the fitted
+    # mode when their public contract stores one. Validate exact str before
+    # any normalization protocol; None alone selects the current default.
     var bi = native_loaded_module("builtins")
     var backend = context["backend_fields"]
-    var mode = py_get(py_fields(model), "numeric_mode") if model is not None else PythonObject(None)
+    var mode = requested
     if mode is None:
         mode = backend["_DEFAULT_MODE"]
     if py_type(mode) is not bi.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     mode = mode.strip().lower()
-    var requested = String(mode)
-    if requested != "identical" and requested != "fast":
+    var selected_mode = String(mode)
+    if selected_mode != "identical" and selected_mode != "fast":
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    var record = context["family_binding_connections"][name][requested]
-    if not Bool(py=context["family_binding_offerings"][name][requested]):
+    var record = context["family_binding_connections"][name][selected_mode]
+    if not Bool(py=context["family_binding_offerings"][name][selected_mode]):
         raise Error(String(record[0]))
     if backend["_CPU_ONLY"] is not None:
         if py_type(record[0]) is bi.str:
@@ -34,11 +47,11 @@ def estimator_binding(model: PythonObject, name: String, context: PythonObject, 
             raise Error("ImportError: native host binding was removed after import-time connection: " + String(record[1]))
         if py_type(module) is not py_type(bi):
             raise Error("TypeError: native host binding must be an exact extension module")
-        return estimator_checked_mode(module, String(record[2]), name, requested) if check_mode else module
+        return estimator_checked_mode(module, String(record[2]), name, selected_mode) if check_mode else module
     var sets = backend["_SETS"]
     if py_type(sets) is not bi.dict:
         raise Error("TypeError: native binding registry must be an exact dictionary")
-    var selected = py_get(sets, requested)
+    var selected = py_get(sets, selected_mode)
     if selected is None:
         if py_type(record[0]) is bi.str:
             raise Error(String(record[0]))
@@ -61,7 +74,7 @@ def estimator_binding(model: PythonObject, name: String, context: PythonObject, 
     # Getter names are immutable import metadata, but the function is read
     # from the live replacement module at every public operation.
     var reader = String(record[2]) if len(record) > 2 else String(context["family_binding_readers"][name])
-    return estimator_checked_mode(module, reader, name, requested) if check_mode else module
+    return estimator_checked_mode(module, reader, name, selected_mode) if check_mode else module
 
 
 def estimator_checked_mode(module: PythonObject, reader: String, name: String,
