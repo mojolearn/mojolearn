@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ROOT / "python/mojolearn/lm_corpus.py"
 NATIVE = ROOT / "bindings/lm_corpus_public_native.mojo"
 METADATA = ROOT / "bindings/lm_corpus_metadata.mojo"
+SCALARS = ROOT / "bindings/lm_corpus_scalars.mojo"
 
 
 class CorpusPublicSource(unittest.TestCase):
@@ -99,11 +100,36 @@ class CorpusPublicSource(unittest.TestCase):
         self.assertIn("return lm_corpus_public_c(owner, arguments)", probe)
         self.assertIn("lm_corpus_public_call(String(args[0]), args[1])", NATIVE.read_text())
 
+    def test_native_scalar_admission_preserves_multiply_before_int(self):
+        source = METADATA.read_text()
+        self.assertIn('"admission_context", admission', source)
+        self.assertIn('"native_module_type", py_type(bi)', source)
+        self.assertIn('neural_native_scalar(value, corpus_context())', source)
+        base = SCALARS.read_text().split("def corpus_numeric_base(", 1)[1]
+        self.assertLess(base.index('step * PythonObject(batch) * PythonObject(length)'), base.index('py_call(bi.int, product)'))
+        self.assertNotIn('corpus_int(step,', base)
+
+    def test_numpy_step_arithmetic_is_typed_and_promotion_is_captured(self):
+        source = SCALARS.read_text()
+        self.assertIn('native_numpy_module_fields(owner)', source)
+        self.assertIn('py_type(getter) is not py_type(bi.len)', source)
+        self.assertIn('getter.__self__ is not owner', source)
+        self.assertIn('major == 2 and minor >= 2', source)
+        self.assertIn('var mode = py_call(getter)', source)
+        self.assertIn('Float16(Float32(left) * Float32(row_count))', source)
+        self.assertIn('var first = Float32(value) * Float32(batch)', source)
+        self.assertIn('kind == 0 and width == 8 and not weak', source)
+        self.assertIn('_integer_base(step, batch, length, 8 * width, kind == 0, True)', source)
+        numpy_path = source.split('if not neural_native_scalar(step, context):', 1)[1]
+        self.assertNotIn('step *', numpy_path)
+        self.assertNotIn('np.multiply', source)
+        self.assertNotIn('py_call(step.', source)
+
     def test_new_native_shells_have_no_untagged_compute_loops(self):
         spec = importlib.util.spec_from_file_location("corpus_shell_guard", ROOT / "tools/hooks/no_compute_in_shells.py")
         guard = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(guard)
-        for path in (NATIVE, METADATA):
+        for path in (NATIVE, METADATA, SCALARS):
             self.assertEqual(guard.scan(path.read_text()), [], str(path))
 
 

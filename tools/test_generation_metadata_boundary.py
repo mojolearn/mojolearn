@@ -65,11 +65,20 @@ def test_snapshot_is_lazy_and_scoped_to_one_public_operation():
 
 
 def test_exact_array_owners_pin_addresses_and_foreign_copies_still_refresh():
-    assert 'self.owners.append(value)' in PROVIDER
     assert 'elif py_type(value) is cls:' in PROVIDER
-    assert 'self.addresses.append(generation_address(value, keep))' in PROVIDER
-    assert 'result[index] = generation_address(self.owners[index], keep)' in PROVIDER
+    assert 'var captured = generation_array_snapshot(value)' in PROVIDER
+    assert 'self.owners.append(captured)' in PROVIDER
+    assert 'self.addresses.append(model_integer(captured._addr))' in PROVIDER
+    assert 'view = generation_buffer_view(value)' in PROVIDER
+    assert 'self.owners.append(view)' in PROVIDER
+    assert 'self.layouts.append(layout^)' in PROVIDER
+    assert 'self.formats.append(format)' in PROVIDER
     assert 'self.refresh.append(j)' in PROVIDER
+    resolve = PROVIDER.split('def resolve(', 1)[1].split('struct GenerationLayerSnapshot', 1)[0]
+    assert 'layout.copy_to(address)' in resolve
+    assert 'keep.append(packed)' in resolve
+    assert 'generation_address(' not in resolve and 'generation_buffer_view(' not in resolve
+    assert 'self.failures[k]' in resolve  # foreign refusals retain the original use position
     assert '_ = weights' in function('_causal_model_embedding_prepared')
     assert '_ = head' in function('_causal_model_head_prepared')
     assert '_ = snapshot' in function('_run_snapshot')

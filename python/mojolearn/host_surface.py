@@ -1672,7 +1672,7 @@ FAMILIES = (
             "array_native_call", "declared_params_native_call", "full_reset_constructor_native_call",
             "full_reset_params_native_call", "linear_constructor_native_call", "mode_metadata_native_call",
             "neighbor_query_attribute_call", "neighbor_query_call", "params_metadata_native_call",
-            "params_setter_native_call", "public_attribute_native_call",
+            "params_setter_native_call", "public_attribute_native_call", "public_attribute_generic_native_call",
             "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call",
             "cross_vendor_call", "generator_draw", "user_objects_native_call", "mamba_native_call",
             "native_codec_call", "native_process_call", "native_transport_call",
