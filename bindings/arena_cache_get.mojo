@@ -300,8 +300,10 @@ def _integer(value: PythonObject, context: PythonObject, depth: Int = 0) raises 
             if divisor > 1:
                 days = _floor_quotient(scaled,UInt64(divisor))
             if kind == "m":
-                var delta_days = Int32(days)
-                if delta_days < -999999999 or delta_days > 999999999:
+                # npy_timedeltastruct.day is int64. Check Python's timedelta
+                # range before narrowing; a large value must return the raw
+                # integer rather than wrap into an apparently valid date.
+                if days < -999999999 or days > 999999999:
                     return PythonObject(word)
                 name = "datetime.timedelta"
             else:
