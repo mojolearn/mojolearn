@@ -277,14 +277,10 @@ class Mamba1State:
 
     def __init__(self, conv_window, h, *, profile_id=1, absolute_position=0,
                  affine_boundary=None, affine_a=None, affine_b=None):
-        self.conv_window = conv_window
-        self.h = h
-        self.profile_id = int(profile_id)
-        self.absolute_position = int(absolute_position)
-        self.affine_boundary = affine_boundary
-        self.affine_a = affine_a
-        self.affine_b = affine_b
-        self._nn34_usable = True
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "state_init", (self, "mamba1", (conv_window, h, profile_id,
+                absolute_position, affine_boundary, affine_a, affine_b)),
+            _native_neural_bridge.CONTEXT)
 
 
 def _m1_profile(ext):
@@ -335,11 +331,9 @@ class Mamba2State:
 
     def __init__(self, conv_window, h, buffer_xbc, buffer_dtraw,
                  buffered_tokens=0):
-        self.conv_window = conv_window
-        self.h = h
-        self.buffer_xbc = buffer_xbc
-        self.buffer_dtraw = buffer_dtraw
-        self.buffered_tokens = int(buffered_tokens)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "state_init", (self, "mamba2", (conv_window, h, buffer_xbc,
+                buffer_dtraw, buffered_tokens)), _native_neural_bridge.CONTEXT)
 
 
 class _MambaBase(NumericModeMixin):
@@ -674,7 +668,8 @@ class Mamba1DecodeSession:
     @property
     def state(self):
         """The `Mamba1State` this session decodes from."""
-        return self._state
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_state", (self,), _native_neural_bridge.CONTEXT)
 
     @property
     def is_open(self):
@@ -718,19 +713,16 @@ class Mamba1DecodeSession:
             "session_close", (self,), _native_neural_bridge.CONTEXT)
 
     def __enter__(self):
-        return self
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_enter", (self,), _native_neural_bridge.CONTEXT)
 
     def __exit__(self, *exc):
-        _native_neural_bridge.RUNTIME.mamba_native_call(
-            "session_close", (self,), _native_neural_bridge.CONTEXT)
-        return False
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_exit", (self,), _native_neural_bridge.CONTEXT)
 
     def __del__(self):
-        try:
-            _native_neural_bridge.RUNTIME.mamba_native_call(
-                "session_drop", (self,), _native_neural_bridge.CONTEXT)
-        except Exception:
-            pass
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_drop", (self,), _native_neural_bridge.CONTEXT)
 
     def __repr__(self):
         return _native_neural_bridge.RUNTIME.mamba_native_call(
@@ -1003,15 +995,16 @@ _RESIDENT_SESSION_NOTE = "see the comment above"
 class _Mamba2DecodeSession:
     """Resident repeated decode for one ``Mamba2Block`` and state."""
 
-    # One native call per method (bindings/mamba_public_native.mojo); the
-    # step's report buffers are returned and assigned to the block here.
+    # One native call per method; the native boundary retains the step's
+    # finished report buffers on the block before returning the output.
     def __init__(self, block, state):
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_init", (self, block, state), _native_neural_bridge.CONTEXT)
 
     @property
     def state(self):
-        return self._state
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_state", (self,), _native_neural_bridge.CONTEXT)
 
     @property
     def is_open(self):
@@ -1024,9 +1017,8 @@ class _Mamba2DecodeSession:
             "session_device", (self,), _native_neural_bridge.CONTEXT)
 
     def step(self, x):
-        y, self._block.h_last_ = _native_neural_bridge.RUNTIME.mamba_native_call(
-            "session_step", (self, x), _native_neural_bridge.CONTEXT)
-        return y
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_step_public", (self, x), _native_neural_bridge.CONTEXT)
 
     def sync_state(self):
         return _native_neural_bridge.RUNTIME.mamba_native_call(
@@ -1041,19 +1033,16 @@ class _Mamba2DecodeSession:
             "session_close", (self,), _native_neural_bridge.CONTEXT)
 
     def __enter__(self):
-        return self
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_enter", (self,), _native_neural_bridge.CONTEXT)
 
     def __exit__(self, *exc):
-        _native_neural_bridge.RUNTIME.mamba_native_call(
-            "session_close", (self,), _native_neural_bridge.CONTEXT)
-        return False
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_exit", (self,), _native_neural_bridge.CONTEXT)
 
     def __del__(self):
-        try:
-            _native_neural_bridge.RUNTIME.mamba_native_call(
-                "session_drop", (self,), _native_neural_bridge.CONTEXT)
-        except Exception:
-            pass
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_drop", (self,), _native_neural_bridge.CONTEXT)
 
     def __repr__(self):
         return _native_neural_bridge.RUNTIME.mamba_native_call(
@@ -1096,18 +1085,10 @@ class Mamba3State:
     def __init__(self, theta, h, buffer_qrot, buffer_krot, buffer_v,
                  buffer_dt, buffer_sig, buffer_adt, pending_k, pending_v,
                  buffered_tokens=0, pending=False):
-        self.theta = theta
-        self.h = h
-        self.buffer_qrot = buffer_qrot
-        self.buffer_krot = buffer_krot
-        self.buffer_v = buffer_v
-        self.buffer_dt = buffer_dt
-        self.buffer_sig = buffer_sig
-        self.buffer_adt = buffer_adt
-        self.pending_k = pending_k
-        self.pending_v = pending_v
-        self.buffered_tokens = int(buffered_tokens)
-        self.pending = bool(pending)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "state_init", (self, "mamba3", (theta, h, buffer_qrot, buffer_krot,
+                buffer_v, buffer_dt, buffer_sig, buffer_adt, pending_k,
+                pending_v, buffered_tokens, pending)), _native_neural_bridge.CONTEXT)
 
     def set_input_states(self, theta, h, k, v):
         """Start from a reference `Input_States` continuation.
@@ -1503,15 +1484,16 @@ class _Mamba3DecodeSession:
         "buffer_dt", "buffer_sig", "buffer_adt", "pending_k", "pending_v",
     )
 
-    # One native call per method (bindings/mamba_public_native.mojo); the
-    # step's report buffers are returned and assigned to the block here.
+    # One native call per method; the native boundary retains the step's
+    # finished report buffers on the block before returning the output.
     def __init__(self, block, state):
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_init", (self, block, state), _native_neural_bridge.CONTEXT)
 
     @property
     def state(self):
-        return self._state
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_state", (self,), _native_neural_bridge.CONTEXT)
 
     @property
     def is_open(self):
@@ -1524,10 +1506,8 @@ class _Mamba3DecodeSession:
             "session_device", (self,), _native_neural_bridge.CONTEXT)
 
     def step(self, x):
-        (y, self._block.h_last_, self._block.k_last_, self._block.v_last_,
-         self._block.theta_last_) = _native_neural_bridge.RUNTIME.mamba_native_call(
-            "session_step", (self, x), _native_neural_bridge.CONTEXT)
-        return y
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_step_public", (self, x), _native_neural_bridge.CONTEXT)
 
     def sync_state(self):
         return _native_neural_bridge.RUNTIME.mamba_native_call(
@@ -1542,19 +1522,16 @@ class _Mamba3DecodeSession:
             "session_close", (self,), _native_neural_bridge.CONTEXT)
 
     def __enter__(self):
-        return self
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_enter", (self,), _native_neural_bridge.CONTEXT)
 
     def __exit__(self, *exc):
-        _native_neural_bridge.RUNTIME.mamba_native_call(
-            "session_close", (self,), _native_neural_bridge.CONTEXT)
-        return False
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_exit", (self,), _native_neural_bridge.CONTEXT)
 
     def __del__(self):
-        try:
-            _native_neural_bridge.RUNTIME.mamba_native_call(
-                "session_drop", (self,), _native_neural_bridge.CONTEXT)
-        except Exception:
-            pass
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_drop", (self,), _native_neural_bridge.CONTEXT)
 
     def __repr__(self):
         return _native_neural_bridge.RUNTIME.mamba_native_call(

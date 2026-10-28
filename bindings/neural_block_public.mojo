@@ -6,6 +6,13 @@ from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.neural_block_admission import (
+    neural_block_fields, neural_block_f32, neural_record_fields, neural_string_keys,
+    neural_plain_value, neural_array_snapshot, neural_array_slots, neural_admit_weights,
+    neural_native_scalar, neural_model_weights, neural_block_snapshot, neural_block_weight_names, neural_metadata_snapshot,
+)
+from bindings.mode_metadata_native import _fields
+from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -24,7 +31,8 @@ from providers.python.neural_descriptor_pyapi import (
 
 def neural_block_owner(block: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+    var fields = neural_block_snapshot(block, context)
+    var live = fields["_neural_live_fields"]
     var kind = String(fields["_native_kind"])
     var route = fields["_native_route"]
     var mode = py_get(fields, "numeric_mode")
@@ -39,6 +47,9 @@ def neural_block_owner(block: PythonObject, context: PythonObject) raises -> Pyt
         py_setitem(fields, "_arithmetic_profile_mode", want_mode)
         py_setitem(fields, "_arithmetic_profile_changed", _native_function(bindings[kind], "transformer_arithmetic_profile_changed")())
     var owner = py_call(bi.object.__new__, context["model_class"])
+    py_setattr(owner, "_native_block_fields", Python.list(fields))
+    py_setattr(owner, "_native_block_live", live)
+    py_setattr(owner, "_native_context", context)
     py_setattr(owner, "kind", PythonObject(kind))
     py_setattr(owner, "device", route)
     py_setattr(owner, "d_model", fields["d_model"])
@@ -53,6 +64,13 @@ def neural_block_owner(block: PythonObject, context: PythonObject) raises -> Pyt
 def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     _ = generation_initialize_binding(context["generation_classes"])
+    var admitted_weights = neural_model_weights(weights, context)
+    neural_plain_value(options, 0, context)
+    var captured_options = neural_metadata_snapshot(options)
+    if py_type(kind_value) is not bi.str:
+        raise Error("TypeError: neural block kind requires an exact string")
+    var fields = neural_block_fields(block, context, False)
+    _ = neural_block_weight_names(block)
     var kind = String(kind_value)
     var cpu = Bool(py=py_call(bi.isinstance, block, context["block_classes"]["cpu"][kind]))
     var route = PythonObject("cpu" if cpu else "gpu")
@@ -63,27 +81,26 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
     var plan = py_call(bi.object.__new__, context["config_context"]["plan_class"])
     py_setattr(plan, "kind", kind_value)
     var norm_name = "input_layernorm.weight" if kind == "transformer" else ("norm.weight" if kind == "mamba1" else "block_norm.weight")
-    var norm = _model_f32(weights[norm_name], norm_name, context)
+    var norm = _model_f32(admitted_weights[norm_name], norm_name, context)
     if len(norm.shape) != 1 or Int(py=norm.shape[0]) < 1:
         raise Error("neural block: norm weight requires positive d_model")
     py_setattr(plan, "d_model", norm.shape[0])
-    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
-    var mode = options[1]
+    var mode = captured_options[1]
     py_setitem(fields, "numeric_mode", mode)
     py_setattr(plan, "block_options", bi.dict())
     py_setattr(plan, "block_kwargs", bi.dict())
     var profile = PythonObject("fp32_v1")
     if kind == "transformer":
-        profile = _model_profile(options[2], "transformer_block", context)
-        py_setattr(plan, "n_heads", options[3])
+        profile = _model_profile(captured_options[2], "transformer_block", context)
+        py_setattr(plan, "n_heads", captured_options[3])
         var names = context["block_option_names"]
         for i in range(len(names)):  # driver-loop: over transformer option keyword metadata
-            py_setitem(plan.block_options, names[i], options[i + 4])
+            py_setitem(plan.block_options, names[i], captured_options[i + 4])
     elif kind == "mamba2":
-        py_setitem(plan.block_kwargs, "dt_limit", options[2])
+        py_setitem(plan.block_kwargs, "dt_limit", captured_options[2])
     var bindings = _model_bindings(route, kind, context, mode)
-    var created = _model_block(weights, plan, profile, route, bindings, context)
-    _ = py_call(fields.update, py_call(bi.object.__getattribute__, created, "__dict__"))
+    var created = _model_block(admitted_weights, plan, profile, route, bindings, context)
+    _ = py_call(fields.update, neural_block_fields(created, context))
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "_native_kind", kind_value)
     py_setitem(fields, "_native_route", route)
@@ -101,7 +118,7 @@ def neural_block_set_params_binding(block: PythonObject, updates: PythonObject, 
         raise Error("TypeError: block parameters require an ordinary dictionary")
     if len(updates) == 0:
         return block
-    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+    var fields = neural_block_fields(block, context)
     var kind = String(fields["_native_kind"])
     var names = Python.list("weights", "numeric_mode")
     if kind == "mamba2":
@@ -131,7 +148,7 @@ def neural_block_set_params_binding(block: PythonObject, updates: PythonObject, 
     _ = neural_block_init_binding(replacement, values["weights"], PythonObject(kind), options, context)
     # Preserve the established reset semantics and dictionary identity. A
     # rejected replacement leaves the live block's fields/session untouched.
-    var fresh = py_call(bi.object.__getattribute__, replacement, "__dict__")
+    var fresh = neural_block_fields(replacement, context)
     _ = py_call(fields.clear)
     _ = py_call(fields.update, fresh)
     return block
@@ -139,27 +156,21 @@ def neural_block_set_params_binding(block: PythonObject, updates: PythonObject, 
 
 def neural_block_allocate_binding(block: PythonObject, batch: PythonObject, capacity: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
-    # Integers only (anything with __index__): a str is not parsed and a
-    # bool is not counted as 0 or 1.
     var bi = Python.import_module("builtins")
-    if py_type(batch) is bi.bool or py_type(capacity) is bi.bool:
-        raise Error("TypeError: neural block: batch_size and max_tokens must be integers")
-    var b = 0
-    var cap = 1
-    try:
-        var operator = Python.import_module("operator")
-        b = Int(py=py_call(operator.index, batch))
-        if capacity is not None:
-            cap = Int(py=py_call(operator.index, capacity))
-    except error:
-        raise Error("TypeError: neural block: batch_size and max_tokens must be integers")
+    if not neural_native_scalar(batch, context, True) or (capacity is not None and not neural_native_scalar(capacity, context, True)):
+        raise Error("TypeError: neural block: batch_size and max_tokens require native integers")
+    var b = Int(py=batch)
+    var cap = 1 if capacity is None else Int(py=capacity)
     if b < 1 or cap < 1:
         raise Error("neural block: batch_size and max_tokens must be positive")
-    return causal_layer_allocate(neural_block_owner(block, context), 0, b, cap)
+    var owner = neural_block_owner(block, context)
+    var state = causal_layer_allocate(owner, 0, b, cap)
+    _neural_publish_block(owner)
+    return state
 
 
 def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: PythonObject) raises -> PythonObject:
-    var x = _model_f32(value, "x", context)
+    var x = neural_block_f32(value, "x", context)
     var bi = Python.import_module("builtins")
     if step and len(x.shape) == 2:
         var shaped = py_call(bi.object.__new__, context["array_class"])
@@ -187,9 +198,71 @@ def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: Python
     return x
 
 
+def _neural_state_capture(owner: PythonObject, state: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var context = owner._native_context
+    var kind = String(owner.kind)
+    var cls = context["generation_classes"][2][kind]
+    if py_type(state) is not cls:
+        raise Error("TypeError: neural state requires the exact connected state class")
+    var scalars = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "cached_tokens",
+        "arithmetic_profile", "_numeric_profile", "profile_id", "absolute_position", "_nn34_usable", "buffered_tokens")
+    var buffers = Python.tuple("k_cache", "v_cache", "conv_window", "h", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw")
+    var fields = neural_record_fields(state, scalars)
+    _ = neural_record_fields(state, buffers)
+    _ = neural_record_fields(state, Python.tuple("_resident_session"))
+    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    from bindings.mode_metadata_native import _class_fields
+    for i in range(len(ancestry)):  # small-loop(passive state access protocol)
+        var row = _class_fields(ancestry[i])
+        if py_contains(row, "__getattr__"):
+            raise Error("TypeError: neural state attribute hooks are not supported")
+        for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native admission metadata and retained owner registry
+            var hook = py_get(row, PythonObject(name))
+            if hook is not None and hook is not bi.object.__dict__[name]:
+                raise Error("TypeError: neural state attribute hooks are not supported")
+    var copied = py_call(bi.dict, fields)
+    for i in range(len(scalars)):  # small-loop(capture native state words before conversion)
+        if py_contains(fields, scalars[i]):
+            neural_plain_value(fields[scalars[i]], 0, context)
+    for i in range(len(buffers)):  # small-loop(retain state storage with stable metadata)
+        var value = py_get(fields, buffers[i])
+        if value is not None:
+            if py_type(value) is context["array_class"]:
+                py_setitem(copied, buffers[i], neural_array_snapshot(value, context))
+            else:
+                admit_native_buffer_exporter(value)
+    var snapshot = py_call(bi.object.__new__, cls)
+    _ = py_call(_fields(snapshot).update, copied)
+    return snapshot
+
+
+def _neural_publish_state(state: PythonObject, captured: PythonObject) raises:
+    if state is None:
+        return
+    var fields = _fields(state)
+    var source = _fields(captured)
+    for name in ["cached_tokens", "arithmetic_profile", "_numeric_profile", "absolute_position", "_nn34_usable", "buffered_tokens"]:  # driver-loop: native admission metadata and retained owner registry
+        if py_contains(source, name):
+            py_setitem(fields, name, source[name])
+
+
+def _neural_publish_fields(captured: PythonObject) raises:
+    var fields = captured["_neural_live_fields"]
+    for name in ["_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed",  # driver-loop: native admission metadata and retained owner registry
+                 "_native_session", "_session_binding", "_native_forward_owner", "h_last_",
+                 "_native_block_provider_cache", "_native_mamba_block_provider_cache", "_native_mamba_state"]:
+        if py_contains(captured, name):
+            py_setitem(fields, name, captured[name])
+
+
+def _neural_publish_block(owner: PythonObject) raises:
+    _neural_publish_fields(owner._native_block_fields[0])
+
+
 def _neural_state(owner: PythonObject, state: PythonObject, b: Int, l: Int) raises:
     var bi = Python.import_module("builtins")
-    var fields = py_call(bi.object.__getattribute__, owner._blocks[0], "__dict__")
+    var fields = owner._native_block_fields[0]
     if String(owner.kind) == "transformer":
         if Int(py=state.batch_size) != b or Int(py=state.n_kv_heads) != Int(py=fields["n_kv_heads"]) or Int(py=state.head_dim) != Int(py=fields["head_dim"]) or Int(py=state.window) != Int(py=fields["window"]):
             raise Error("neural block: transformer state dimensions differ")
@@ -201,7 +274,7 @@ def _neural_state(owner: PythonObject, state: PythonObject, b: Int, l: Int) rais
 
 def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var fields = py_call(bi.object.__getattribute__, owner._blocks[0], "__dict__")
+    var fields = owner._native_block_fields[0]
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var d = Int(py=x.shape[2])
@@ -285,10 +358,27 @@ def _neural_lengths(value: PythonObject, b: Int, l: Int, context: PythonObject) 
     var bi = Python.import_module("builtins")
     var values = value
     if py_type(value) is context["array_class"]:
-        values = value._mv
-        if len(value.shape) != 1:
+        var captured = neural_array_snapshot(value, context)
+        if len(captured.shape) != 1:
             raise Error("neural block: lengths must be one-dimensional")
+        if Int(py=captured.shape[0]) != b:
+            raise Error("neural block: one length is required per batch row")
+        var code = String(captured.dtype)
+        if code != "<i4" and code != "<i1" and code != "<u2":
+            raise Error("TypeError: neural block lengths entries must be integers, not bool or float")
+        var result = List[Int]()
+        var address = Int(py=captured._addr)
+        for i in range(b):  # small-loop(native integer length words from retained storage)
+            var n = Int(Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=address)[i]) if code == "<i4" else (
+                Int(Pointer[Int8, ImmUntrackedOrigin](unsafe_from_address=address)[i]) if code == "<i1" else
+                Int(Pointer[UInt16, ImmUntrackedOrigin](unsafe_from_address=address)[i]))
+            if n < 1 or n > l:
+                raise Error("neural block: lengths must be in [1, L]")
+            result.append(n)
+        _ = captured^
+        return result^
     elif py_type(value) is not bi.list and py_type(value) is not bi.tuple:
+        admit_native_buffer_exporter(value)
         values = py_call(bi.memoryview, value)
         if Int(py=values.ndim) != 1:
             raise Error("neural block: lengths must be one-dimensional")
@@ -311,6 +401,8 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
     var bi = Python.import_module("builtins")
     var owner = neural_block_owner(block, context)
     var d = Int(py=owner.d_model)
+    if py_type(step_value) is not bi.bool:
+        raise Error("TypeError: neural step flag requires a native Boolean")
     var step = Bool(py=step_value)
     if step and state_value is None:
         raise Error("neural block: state is required for step (a decode step continues a sequence; allocate_state(B) makes the fresh one)")
@@ -333,13 +425,24 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
         neural_copy_row_prefixes(Int(py=result._addr), Int(py=output._addr), sizes, b, l, d)
         _ = output^  # the copy reads `output` by address
         _ = padded^
+        _neural_publish_block(owner)
         return result
-    return _neural_plain(owner, x, state_value, step)
+    var captured = PythonObject(None) if state_value is None else _neural_state_capture(owner, state_value)
+    try:
+        var result = _neural_plain(owner, x, captured, step)
+        _neural_publish_state(state_value, captured)
+        _neural_publish_block(owner)
+        return result
+    except error:
+        _neural_publish_state(state_value, captured)
+        _neural_publish_block(owner)
+        raise error^
 
 
 def neural_training_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var mode = py_get(fields, "numeric_mode")
+    neural_plain_value(mode, 0, context)
     if mode is None:
         mode = context["backend"]._DEFAULT_MODE
     else:
@@ -437,8 +540,18 @@ def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: 
 
 def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
+    var fields = neural_block_snapshot(block, context)
+    try:
+        var result = _neural_backward_prepared(block, input, grad_output, fields, context)
+        _neural_publish_fields(fields)
+        return result
+    except error:
+        _neural_publish_fields(fields)
+        raise error^
+
+
+def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_output: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
     var kind = String(fields["_native_kind"])
     var transformer = kind == "transformer"
     if transformer and (fields["_int15"] is not None or Bool(py=fields["_extended"])):
@@ -456,7 +569,7 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
     var x = _neural_input(input, d, False, context)
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
-    var dy = _model_f32(grad_output, "grad_output", context)
+    var dy = neural_block_f32(grad_output, "grad_output", context)
     _model_shape(dy, [b, l, d], "grad_output")
     var weights = fields["_w"]
     if not transformer:
@@ -481,11 +594,11 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
         if kind == "mamba2":
             py_setitem(plan.block_kwargs, "dt_limit", fields["dt_limit"])
         var named = bi.dict()
-        var names = block._W_NAMES
+        var names = fields["_neural_weight_names"]
         for i in range(len(names)):  # driver-loop: over the fixed block weight registry
             py_setitem(named, names[i], weights[i])
         var checked = _model_block(named, plan, PythonObject("fp32_v1"), fields["_native_route"], _model_bindings(fields["_native_route"], kind, context, mode), context)
-        weights = py_call(bi.object.__getattribute__, checked, "__dict__")["_w"]
+        weights = neural_block_fields(checked, context)["_w"]
     var keep = List[PythonObject]()
     var addresses = py_ints([_addr(x, keep)])
     var gradients = bi.list()
@@ -581,7 +694,7 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
                 _ = py_call(_native_function(entries, name), addresses, params)
     var result = bi.dict()
     py_setitem(result, "x", gradients[0])
-    var names = block._W_NAMES
+    var names = fields["_neural_weight_names"]
     for i in range(len(names)):  # driver-loop: over named gradient slots
         py_setitem(result, names[i], gradients[i + 1])
     _ = keep^
@@ -594,8 +707,9 @@ def neural_block_getstate_binding(block: PythonObject, context: PythonObject) ra
     # admission uses the same binding contract as public forward, not the
     # Python _extension helper. Only ordinary model state crosses the boundary.
     var bi = Python.import_module("builtins")
-    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+    var fields = neural_block_fields(block, context)
     var mode = py_get(fields, "numeric_mode")
+    neural_plain_value(mode, 0, context)
     if mode is None:
         mode = context["backend"]._DEFAULT_MODE
     var bindings = _model_bindings(fields["_native_route"], "transformer", context, mode)
@@ -628,9 +742,15 @@ def neural_block_setstate_binding(block: PythonObject, state: PythonObject, cont
     var bi = Python.import_module("builtins")
     if py_type(state) is not bi.dict:
         raise Error("TypeError: neural block restore requires an exact state dictionary")
-    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+    neural_string_keys(state)
+    var fields = neural_block_fields(block, context, False)
+    var candidate = py_call(bi.object.__new__, py_type(block))
+    var fresh = neural_block_fields(candidate, context, False)
+    _ = py_call(fresh.update, state)
+    _ = neural_block_fields(candidate, context)
     _ = py_call(fields.update, state)
     var mode = py_get(fields, "numeric_mode")
+    neural_plain_value(mode, 0, context)
     if mode is None:
         mode = context["backend"]._DEFAULT_MODE
     if String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
@@ -665,6 +785,10 @@ def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = neural_block_getstate_binding(args[0], args[1])
         elif operation == 6:
             result = neural_block_setstate_binding(args[0], args[1], args[2])
+        elif operation == 7:
+            var bi = Python.import_module("builtins")
+            var name = String(py_call(bi.type.__dict__["__name__"].__get__, py_type(args[0])))
+            raise Error("NotImplementedError: mojolearn " + name + ".backward: inference is forward only; the backward pass runs on the GPU block class over a training binding")
         else:
             result = neural_block_backward_binding(args[0], args[1], args[2], args[3])
         return result.steal_data()
