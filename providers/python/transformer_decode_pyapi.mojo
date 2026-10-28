@@ -14,7 +14,7 @@ from bindings.causal_lm_construct import _model_bindings, _model_f32
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
 from bindings.neural_block_public import _neural_input
 from providers.python.generation_metadata_pyapi import GenerationLayerSnapshot
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
 from providers.python.transformer_resident_pyapi import transformer_resident_decode_call
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
@@ -134,12 +134,15 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
         handle.device = _native_function(binding, "transformer_decode_session_create")()
         if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1" and String(fields["numeric_mode"]) == "identical":
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
-                _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 33)
+                _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 35)
             cached = transformer_resident_decode_call(handle.provider, handle.device, 19 if packed else 18, a, open_p)
         else:
             cached = Int(py=py_call(_native_function(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open"),
                 handle.device, py_ints(a), py_ints(open_p)))
     else:
+        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
+                _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 35)
         var weights = fields["_w"]
         var optional = fields["_wopt"]
         for i in range(len(weights)):  # driver-loop: native session-owned weight copies
@@ -191,13 +194,16 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
         var p = _transformer_decode_params(fields, slots, batch, length)
         for i in range(len(h[].optional)):  # driver-loop: native optional-weight address slots
             a.append(0 if len(h[].optional[i]) == 0 else Int(h[].optional[i].unsafe_ptr()))
-        if step:
-            var shortened = List[Int]()
-            for i in range(len(p)):  # driver-loop: host decode shape words omit sequence length
-                if i != 1:
-                    shortened.append(p[i])
-            p = shortened^
-        cached = Int(py=py_call(_native_function(h[].binding, "transformer_decode_step" if step else "transformer_forward"), py_ints(a), py_ints(p)))
+        if h[].provider is not None:
+            cached = neural_descriptor_execute(h[].provider, 33, a, p, [])
+        else:
+            if step:
+                var shortened = List[Int]()
+                for i in range(len(p)):  # driver-loop: host decode shape words omit sequence length
+                    if i != 1:
+                        shortened.append(p[i])
+                p = shortened^
+            cached = Int(py=py_call(_native_function(h[].binding, "transformer_decode_step" if step else "transformer_forward"), py_ints(a), py_ints(p)))
     py_setitem(slots, "cached_tokens", PythonObject(cached))
     return y
 

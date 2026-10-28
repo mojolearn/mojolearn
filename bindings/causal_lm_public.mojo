@@ -142,7 +142,7 @@ def causal_lm_admit_binding(
             _native_function(block_binding, "transformer_native_session_handle_v1"))
         py_setitem(owner_fields, "_native_session_provider_cache", provider)
         py_setitem(entries, "native_session_provider", provider)
-    if requested_gpu and mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
+    if mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
         var owner_fields = py_call(g[].bi.object.__getattribute__, model._blocks[0], "__dict__")
         var primitive_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_primitives_provider_cache"),
             _native_function(primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
@@ -150,7 +150,7 @@ def causal_lm_admit_binding(
         py_setitem(entries, "native_primitives", primitive_provider)
         if kind == "transformer":
             var block_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_block_provider_cache"),
-                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 33)
+                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 35)
             py_setitem(owner_fields, "_native_block_provider_cache", block_provider)
             py_setitem(entries, "native_block_operations", block_provider)
         if kind == "mamba1" or kind == "mamba2":
@@ -452,7 +452,7 @@ def causal_transformer_admin(binding: PythonObject, session: PythonObject, opera
     # Administration intentionally holds the GIL, matching the raw public API.
     if String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
         var provider = neural_descriptor_reuse(PythonObject(None),
-            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 33)
+            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 35)
         var handle = neural_descriptor_handle(provider,
             _native_function(binding, "transformer_native_session_handle_v1"), session)
         _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)
@@ -508,7 +508,11 @@ def _causal_layer_run_prepared(
         a_words[10] = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
         a_words[11] = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
         var native_provider = py_get(e, "native_session_provider")
-        if native_provider is not None and not head_profile and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
+        var block_provider = py_get(e, "native_block_operations")
+        if String(model.device) == "cpu" and block_provider is not None:
+            py_setattr(st, "cached_tokens", PythonObject(neural_descriptor_execute(block_provider,
+                34 if head_profile else 33, a_words, p_words, [])))
+        elif native_provider is not None and not head_profile and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
             if blk["_native_session"] is None:
                 py_setitem(blk, "_native_session", e["create"]())
                 py_setitem(blk, "_session_binding", e["block_binding"])
