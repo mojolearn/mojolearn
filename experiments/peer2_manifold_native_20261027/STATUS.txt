@@ -198,3 +198,19 @@ Decomp-manifold/TSNE public lifecycle source increment
   metadata and mode helpers. Compile/runtime/cross-vendor results pending.
 - UMAP fit/transform still retain their existing Python lifecycle until native
   categorical/supervised target handling and remaining input captures are done.
+
+UMAP execution snapshot increment
+- UMAP fit/query, PCA/user initialization, continuous targets and retained
+  training/embedding state now carry captured shape/count/address/owners through
+  execution. Finite checks, copies, same-training fast return and native calls
+  consume captured words instead of rereading source attributes.
+- Initialization metadata is retained through optimization; continuous target
+  envelopes retain both prepared storage and the original captured owner.
+- Ordinary ndarray/Array input_copied_ uses the original cast/layout snapshot;
+  list/pandas/torch preserve their existing reported materialization flag.
+  Native memoryview/array.array/bytearray still require pca_copied metadata
+  because the shared provider lacks original materialization provenance.
+- This does NOT remove UMAP categorical tolist/set/sorted callbacks or its
+  inherited public decorators. Those remain explicit required work; no whole
+  UMAP operation is claimed native-complete. No new verification run.
+- Focused compile target: runtime_manifold host.
