@@ -46,7 +46,7 @@ def manifold_operation(model: PythonObject, operation: String, args: PythonObjec
         if tsne:
             result = tsne_operation(model, settings, operation, args, x, context)
         else:
-            result = mani_decomp_operation(model, settings, operation, args, Optional(x), context)
+            result = mani_decomp_operation(model, settings, operation, args, Optional(x.copy()), context)
     except error:
         var refined = manifold_error(error, x.source.rows, x.source.cols, method != "transform", name)
         raise refined^
