@@ -389,6 +389,73 @@ def _model_weights_snapshot(mut mods: NativeModules, weights: PythonObject, cont
     return result
 
 
+def _model_recurrent_shapes(mut mods: NativeModules, kind: String, dm: Int, plan: PythonObject, fields: PythonObject) raises -> PythonObject:
+    # Per-kind recurrent block configuration and current-weight shapes. Shared
+    # by block construction and the recurrent backward weight check so both
+    # admit exactly the same configuration, in the same order.
+    var bi = mods.module("builtins")
+    var shapes = bi.list()
+    var di = 2 * dm
+    py_setitem(fields, "d_model", PythonObject(dm))
+    py_setitem(fields, "d_inner", PythonObject(di))
+    if kind == "mamba1":
+        var rank = (dm + 15) // 16
+        py_setitem(fields, "dt_rank", PythonObject(rank))
+        _ = py_call(shapes.append, py_ints([dm]))
+        _ = py_call(shapes.append, py_ints([2 * di, dm]))
+        _ = py_call(shapes.append, py_ints([di, 1, 4]))
+        _ = py_call(shapes.append, py_ints([di]))
+        _ = py_call(shapes.append, py_ints([rank + 32, di]))
+        _ = py_call(shapes.append, py_ints([di, rank]))
+        _ = py_call(shapes.append, py_ints([di]))
+        _ = py_call(shapes.append, py_ints([di, 16]))
+        _ = py_call(shapes.append, py_ints([di]))
+        _ = py_call(shapes.append, py_ints([dm, di]))
+    elif kind == "mamba2":
+        if dm % 32 != 0:
+            raise Error("CausalLM: Mamba2 d_model must be a multiple of 32")
+        var nh = di // 64
+        var cd = di + 256
+        py_setitem(fields, "nheads", PythonObject(nh))
+        py_setitem(fields, "conv_dim", PythonObject(cd))
+        var defaults = bi.list()
+        _ = py_call(defaults.append, 0.0)
+        _ = py_call(defaults.append, py_call(bi.float, "inf"))
+        var limit = py_get(plan["block_kwargs"], "dt_limit", defaults)
+        var pair = bi.list()
+        _ = py_call(pair.append, py_call(bi.float, limit[0]))
+        _ = py_call(pair.append, py_call(bi.float, limit[1]))
+        py_setitem(fields, "dt_limit", py_call(bi.tuple, pair))
+        _ = py_call(shapes.append, py_ints([dm]))
+        _ = py_call(shapes.append, py_ints([2 * di + 256 + nh, dm]))
+        _ = py_call(shapes.append, py_ints([cd, 1, 4]))
+        _ = py_call(shapes.append, py_ints([cd]))
+        _ = py_call(shapes.append, py_ints([nh]))
+        _ = py_call(shapes.append, py_ints([nh]))
+        _ = py_call(shapes.append, py_ints([nh]))
+        _ = py_call(shapes.append, py_ints([di]))
+        _ = py_call(shapes.append, py_ints([dm, di]))
+    elif kind == "mamba3":
+        if dm % 32 != 0:
+            raise Error("Mamba3Block: d_model must be a multiple of 32")
+        var nh = di // 64
+        var dip = 2 * di + 256 + 3 * nh + 32
+        py_setitem(fields, "nheads", PythonObject(nh))
+        py_setitem(fields, "d_in_proj", PythonObject(dip))
+        _ = py_call(shapes.append, py_ints([dm]))
+        _ = py_call(shapes.append, py_ints([dip, dm]))
+        _ = py_call(shapes.append, py_ints([nh]))
+        _ = py_call(shapes.append, py_ints([128]))
+        _ = py_call(shapes.append, py_ints([128]))
+        _ = py_call(shapes.append, py_ints([nh, 128]))
+        _ = py_call(shapes.append, py_ints([nh, 128]))
+        _ = py_call(shapes.append, py_ints([nh]))
+        _ = py_call(shapes.append, py_ints([dm, di]))
+    else:
+        raise Error("neural block: unsupported block kind " + kind)
+    return shapes
+
+
 def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: PythonObject, profile: PythonObject, route: PythonObject, bindings: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = mods.module("builtins")
     var plan = _model_block_plan(mods, input_plan, context)
@@ -562,64 +629,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
         py_setitem(fields, "_opts_flags", flag_dict)
         py_setitem(fields, "_wopt", optional)
     else:
-        var di = 2 * dm
-        py_setitem(fields, "d_model", PythonObject(dm))
-        py_setitem(fields, "d_inner", PythonObject(di))
-        if kind == "mamba1":
-            var rank = (dm + 15) // 16
-            py_setitem(fields, "dt_rank", PythonObject(rank))
-            _ = py_call(shapes.append, py_ints([dm]))
-            _ = py_call(shapes.append, py_ints([2 * di, dm]))
-            _ = py_call(shapes.append, py_ints([di, 1, 4]))
-            _ = py_call(shapes.append, py_ints([di]))
-            _ = py_call(shapes.append, py_ints([rank + 32, di]))
-            _ = py_call(shapes.append, py_ints([di, rank]))
-            _ = py_call(shapes.append, py_ints([di]))
-            _ = py_call(shapes.append, py_ints([di, 16]))
-            _ = py_call(shapes.append, py_ints([di]))
-            _ = py_call(shapes.append, py_ints([dm, di]))
-        elif kind == "mamba2":
-            if dm % 32 != 0:
-                raise Error("CausalLM: Mamba2 d_model must be a multiple of 32")
-            var nh = di // 64
-            var cd = di + 256
-            py_setitem(fields, "nheads", PythonObject(nh))
-            py_setitem(fields, "conv_dim", PythonObject(cd))
-            var defaults = bi.list()
-            _ = py_call(defaults.append, 0.0)
-            _ = py_call(defaults.append, py_call(bi.float, "inf"))
-            var limit = py_get(plan["block_kwargs"], "dt_limit", defaults)
-            var pair = bi.list()
-            _ = py_call(pair.append, py_call(bi.float, limit[0]))
-            _ = py_call(pair.append, py_call(bi.float, limit[1]))
-            py_setitem(fields, "dt_limit", py_call(bi.tuple, pair))
-            _ = py_call(shapes.append, py_ints([dm]))
-            _ = py_call(shapes.append, py_ints([2 * di + 256 + nh, dm]))
-            _ = py_call(shapes.append, py_ints([cd, 1, 4]))
-            _ = py_call(shapes.append, py_ints([cd]))
-            _ = py_call(shapes.append, py_ints([nh]))
-            _ = py_call(shapes.append, py_ints([nh]))
-            _ = py_call(shapes.append, py_ints([nh]))
-            _ = py_call(shapes.append, py_ints([di]))
-            _ = py_call(shapes.append, py_ints([dm, di]))
-        elif kind == "mamba3":
-            if dm % 32 != 0:
-                raise Error("Mamba3Block: d_model must be a multiple of 32")
-            var nh = di // 64
-            var dip = 2 * di + 256 + 3 * nh + 32
-            py_setitem(fields, "nheads", PythonObject(nh))
-            py_setitem(fields, "d_in_proj", PythonObject(dip))
-            _ = py_call(shapes.append, py_ints([dm]))
-            _ = py_call(shapes.append, py_ints([dip, dm]))
-            _ = py_call(shapes.append, py_ints([nh]))
-            _ = py_call(shapes.append, py_ints([128]))
-            _ = py_call(shapes.append, py_ints([128]))
-            _ = py_call(shapes.append, py_ints([nh, 128]))
-            _ = py_call(shapes.append, py_ints([nh, 128]))
-            _ = py_call(shapes.append, py_ints([nh]))
-            _ = py_call(shapes.append, py_ints([dm, di]))
-        else:
-            raise Error("neural block: unsupported block kind " + kind)
+        shapes = _model_recurrent_shapes(mods, kind, dm, plan, fields)
     for i in range(len(names)):  # small-loop(block weight name words)
         if kind == "transformer" and i == 6 and not gated:
             continue
@@ -660,6 +670,72 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             String(MAMBA_STATE_ABI_NAME), String(route) == "gpu")
         mods.released()
     return block
+
+
+def _model_class_weight_names(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
+    # The weight registry a fresh instance of `cls` reports: the same lookup
+    # and checks as neural_block_weight_names, read from the class ancestry.
+    var bi = mods.module("builtins")
+    var names = PythonObject(None)
+    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    for i in range(len(ancestry)):  # driver-loop: native admission metadata and retained owner registry
+        names = py_get(_class_fields(ancestry[i]), "_W_NAMES")
+        if names is not None:
+            break
+    if py_type(names) is not bi.tuple and py_type(names) is not bi.list:
+        raise Error("TypeError: neural weight registry requires native names")
+    for i in range(len(names)):  # driver-loop: native admission metadata and retained owner registry
+        if py_type(names[i]) is not bi.str:
+            raise Error("TypeError: neural weight names require exact strings")
+    return py_call(bi.tuple, names)
+
+
+def model_recurrent_weights_check(mut mods: NativeModules, weights: PythonObject, kind: String, dm: Int, plan: PythonObject, route: PythonObject, bindings: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Current-weight admission for a recurrent (Mamba) block backward without
+    # constructing a block. It performs the admissions _model_block makes over
+    # the operation's weight snapshot, in the same order and with the same
+    # refusals: connected class registry, per-tensor float32 admission, the
+    # Array descriptor recheck after the caller's GIL release, per-kind
+    # configuration, exact key set and shapes. `weights` maps the block's
+    # weight names to its snapshot tensors; `plan` carries block_kwargs.
+    # Returns the admitted tensors in registry order.
+    var bi = mods.module("builtins")
+    neural_string_keys(mods, weights)
+    var names = _model_class_weight_names(mods, context["block_classes"][route][kind])
+    var w = bi.dict()
+    var keys = py_call(bi.list, weights)
+    for i in range(len(keys)):  # driver-loop: over the layer's named tensors
+        var v = weights[keys[i]]
+        # Snapshot tensors are already admitted float32 C Arrays owned by this
+        # operation; anything else takes the constructor's unpack admission.
+        if py_type(v) is not context["array_class"]:
+            v = _model_unpack(mods, v, bindings["linalg"], context, String(keys[i]))
+        py_setitem(w, keys[i], v)
+    # The one Array descriptor recheck after the grad_output finite scan
+    # released the GIL; kept exactly once for that release window.
+    _causal_array_guard()
+    var shapes = _model_recurrent_shapes(mods, kind, dm, plan, bi.dict())
+    for i in range(len(names)):  # small-loop(block weight name words)
+        if not Bool(py=w.__contains__(names[i])):
+            raise Error("CausalLM: weight dict mismatch; missing block tensor " + String(names[i]) + "; the exact key set is " + String(names))
+    var base = bi.list()
+    var expected = bi.set()
+    for i in range(len(names)):  # driver-loop: over fixed block weight slots
+        var name = names[i]
+        if not py_contains(w, name):
+            raise Error("CausalLM: missing block tensor " + String(name))
+        var value = w[name]
+        var shape = List[Int]()
+        for j in range(len(shapes[i])):  # driver-loop: over tensor shape metadata
+            shape.append(Int(py=shapes[i][j]))
+        if (kind == "mamba1" or kind == "mamba2") and i == 2 and len(value.shape) == 2:
+            shape = [shape[0], 4]
+        _model_shape(value, shape, String(name))
+        _ = py_call(base.append, value)
+        _ = py_call(expected.add, name)
+    if len(expected) != len(w):
+        raise Error("CausalLM: unexpected block tensor names")
+    return base
 
 
 def _model_block(weights: PythonObject, input_plan: PythonObject, profile: PythonObject, route: PythonObject, bindings: PythonObject, context: PythonObject) raises -> PythonObject:
