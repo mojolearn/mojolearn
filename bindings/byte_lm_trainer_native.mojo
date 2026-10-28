@@ -930,14 +930,14 @@ def _admit_pooled_logits_layout(context: PythonObject) raises:
                 raise Error("TypeError: Byte-LM pooled logits storage hook changed")
 
 
-def _logits_output_address(out: PythonObject, context: PythonObject) raises -> Int:
+def _logits_output_address(output: PythonObject, context: PythonObject) raises -> Int:
     # Both outputs are internally allocated, exact Array storage. The pooled
     # subclass was admitted before allocation above; no arbitrary subclasses or
     # array-interface/input protocols are accepted as output storage here.
-    var cls = py_type(out)
+    var cls = py_type(output)
     if cls is not context["array_class"] and cls is not context["byte_lm_pooled_class"]:
         raise Error("TypeError: Byte-LM logits output requires exact native Array storage")
-    var address = py_call(context["byte_lm_addr_getter"], out, cls)
+    var address = py_call(context["byte_lm_addr_getter"], output, cls)
     if py_type(address) is not _b().int or Int(py=address) == 0:
         raise Error("TypeError: Byte-LM logits output has an invalid native address slot")
     return Int(py=address)

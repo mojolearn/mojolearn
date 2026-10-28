@@ -11,7 +11,7 @@ def test_logits_captures_output_native_address_once():
     assert 'unsafe_from_address=output_address' in body
     assert 'neural_copy_row_prefixes(Int(py=classical_address(result)), output_address,' in body
     helper = source.split('def _logits_output_address(')[1].split('def _pooled_logits(')[0]
-    assert 'py_call(context["byte_lm_addr_getter"], out, cls)' in helper
+    assert 'py_call(context["byte_lm_addr_getter"], output, cls)' in helper
     assert 'cls is not context["array_class"] and cls is not context["byte_lm_pooled_class"]' in helper
     assert 'sequential_address' not in helper
 
