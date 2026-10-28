@@ -110,9 +110,16 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     mods.released()
     ref native_program = description[].program
     ref native_table = description[].scalars
-    var counts = model_counts_native(native_program, native_table)
-    var n_params = counts[0]
-    var n_out = counts[1]
+    # Counts depend only on this admitted native description. Keep their
+    # parse result across repeated fit/resume calls; perform the first parse
+    # here, after binding selection, to preserve validation/error ordering.
+    if not description[].counts_ready:
+        var counts = model_counts_native(native_program, native_table)
+        description[].parameter_count = counts[0]
+        description[].output_count = counts[1]
+        description[].counts_ready = True
+    var n_params = description[].parameter_count
+    var n_out = description[].output_count
     var target_data = sequential_targets(mods, model, args[1], n, n_out, String(options["loss"]), entries, context)
     var y = target_data[0]
     var yd = target_data[1]

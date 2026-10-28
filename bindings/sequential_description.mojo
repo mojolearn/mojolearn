@@ -183,6 +183,14 @@ struct SequentialDescription(Movable, Writable):
     var identities: NativeIdentityKey
     var input_width: Int
     var cacheable: Bool
+    var ranked: Bool
+    var sample_dims: List[Int]
+    var int_type: PythonObject
+    var float_type: PythonObject
+    var bool_type: PythonObject
+    var counts_ready: Bool
+    var parameter_count: Int
+    var output_count: Int
     var program: List[Int]
     var scalars: List[Float64]
 
@@ -192,24 +200,28 @@ struct SequentialDescription(Movable, Writable):
         self.cacheable = True
         try:
             self.identities.add(layers)
-            self.identities.add(sample)
         except:
             # Uncacheable extra metadata must not change ordinary execution.
             self.cacheable = False
         var b = mods.module("builtins")
-        var int_type = b.int
-        var float_type = b.float
-        var bool_type = b.bool
+        self.int_type = b.int
+        self.float_type = b.float
+        self.bool_type = b.bool
         for i in range(len(self.identities.objects)):  # driver-loop: over retained metadata identities to establish immutable scalar ownership
             var value = self.identities.objects[i]
             var cls = py_type(value)
-            if value is not None and cls is not self.identities.list_type and cls is not self.identities.tuple_type and cls is not int_type and cls is not float_type and cls is not bool_type:
+            if value is not None and cls is not self.identities.list_type and cls is not self.identities.tuple_type and cls is not self.int_type and cls is not self.float_type and cls is not self.bool_type:
                 # Writable native buffers can convert to scalars while retaining
                 # their identity. Preserve that behavior by rebuilding for those
                 # descriptions, rather than caching their converted contents.
                 self.cacheable = False
                 break
         self.input_width = width
+        self.ranked = sample is not None
+        self.sample_dims = List[Int]()
+        self.counts_ready = False
+        self.parameter_count = 0
+        self.output_count = 0
         self.program = List[Int]()
         self.scalars = List[Float64]()
         var count = len(layers)
@@ -218,11 +230,20 @@ struct SequentialDescription(Movable, Writable):
             self.program.append(width)
             self.program.append(count)
         else:
+            var cls = py_type(sample)
+            if cls is not self.identities.list_type and cls is not self.identities.tuple_type:
+                self.cacheable = False
             var rank = len(sample)
             self.program.append(2)
             self.program.append(rank)
             for k in range(rank):  # driver-loop: over sample dimensions captured as native ABI words
-                self.program.append(Int(py=sample[k]))
+                var value = sample[k]
+                var value_type = py_type(value)
+                if value_type is not self.int_type and value_type is not self.float_type and value_type is not self.bool_type:
+                    self.cacheable = False
+                var dim = Int(py=value)
+                self.sample_dims.append(dim)
+                self.program.append(dim)
             for k in range(rank, 8):  # driver-loop: over unused native sample dimension slots
                 self.program.append(1)
             self.program.append(count)
@@ -239,6 +260,29 @@ struct SequentialDescription(Movable, Writable):
             self.program.append(0)
             self.scalars.append(Float64(py=layer[3]))
 
+    def matches_sample(self, sample: PythonObject) raises -> Bool:
+        # Fit infers a fresh tuple even when the sample schema did not change.
+        # Compare the native ABI dimensions, not that temporary tuple's identity.
+        # Exact containers and immutable scalar types retain the existing buffer
+        # opt-out; mutable scalar conversions must rebuild on every operation.
+        if sample is None:
+            return not self.ranked
+        if not self.ranked:
+            return False
+        var cls = py_type(sample)
+        if cls is not self.identities.list_type and cls is not self.identities.tuple_type:
+            return False
+        if len(sample) != len(self.sample_dims):
+            return False
+        for k in range(len(self.sample_dims)):  # driver-loop: over retained native sample dimensions
+            var value = sample[k]
+            var value_type = py_type(value)
+            if value_type is not self.int_type and value_type is not self.float_type and value_type is not self.bool_type:
+                return False
+            if Int(py=value) != self.sample_dims[k]:
+                return False
+        return True
+
     def write_to(self, mut writer: Some[Writer]):
         writer.write("SequentialDescription(native)")
 
@@ -252,17 +296,17 @@ def sequential_native_description(mut mods: NativeModules, model: PythonObject,
     # Rank-aware programs do not consume n_features. This also preserves the
     # public description's behavior when sample is present and width is None.
     var width = 0 if sample is not None else Int(py=n_features)
-    var cached = prepared_get(mods, "sequential_description_v1", model)
+    var cached = prepared_get(mods, "sequential_description_v2", model)
     if cached is not None:
         var retained = cached.downcast_value_ptr[SequentialDescription]()
         var offset = 0
-        if retained[].input_width == width and retained[].identities.matches(layers, offset) and retained[].identities.matches(sample, offset) and retained[].identities.complete(offset):
+        if retained[].input_width == width and retained[].identities.matches(layers, offset) and retained[].identities.complete(offset) and retained[].matches_sample(sample):
             return cached
     var description = SequentialDescription(mods, layers, width, sample)
     var stable = description.cacheable and not description.identities.retains(model)
     var result = PythonObject(alloc=description^)
     if stable:
-        prepared_put(mods, "sequential_description_v1", model, result)
+        prepared_put(mods, "sequential_description_v2", model, result)
     return result
 
 
@@ -329,10 +373,20 @@ def sequential_sample_shape(mut mods: NativeModules, model: PythonObject, dims: 
     var nd = len(dims)
     var needed = shape is not None or nd > 2
     var layers = fields["_layers"]
-    for k in range(len(layers)):  # driver-loop: over shape-changing layer kinds
-        needed = needed or Int(py=layers[k][0]) >= 9
+    var count = len(layers)
+    if not needed:
+        for k in range(count):  # driver-loop: over shape-changing layer kinds until the schema is known
+            if Int(py=layers[k][0]) >= 9:
+                needed = True
+                break
     if not needed:
         return PythonObject(None)
+    # An explicit shape on a matrix input is returned directly. The old loop
+    # constructed an unused Python sample list in this branch. A known ranked
+    # schema also needs no layer-kind walk, while len(layers) above preserves
+    # the existing metadata validation before any early return.
+    if shape is not None and nd <= 2:
+        return shape
     var actual = Python.list()
     for k in range(1, nd):  # driver-loop: over the input sample rank
         _ = py_call(actual.append, PythonObject(dims[k]))
