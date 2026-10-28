@@ -145,6 +145,11 @@ class Mod:
         # module-level names bound to a compiled entry (`_NATIVE = _binding()._module.call`),
         # filled by Index._module_globals: name -> entry
         self.entry_globals = {}
+        # module-level names holding a connection namespace (`_session_connected =
+        # _SESSION_CONNECTIONS["identical"]`, filled by a package function that returns
+        # `SimpleNamespace(call=binding.entry, ...)`), filled by Index._module_globals:
+        # name -> {field: ("binding",) | ("entry", entry)}
+        self.namespace_globals = {}
         self.module_scope = None
         for node in self.tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -294,6 +299,7 @@ class Index:
         self.returns_tuple = {}
         self.returns_entry_tuple = {}   # a connect function returning (entry, context): per-element entry
         self.returns_module = {}
+        self.returns_namespace = {}   # a connect function returning SimpleNamespace(field=binding.entry, ...)
         self.binding_params = {}
         self.binding_attrs = set(NATIVE_ATTRS)
         self._mro = {}
@@ -495,11 +501,15 @@ class Index:
             before = (len(self.getters), len(self.entry_getters), len(self.binding_attrs), len(self.returns_class),
                       len(self.returns_tuple), len(self.returns_module), len(self.returns_entry_tuple),
                       sum(map(len, self.binding_params.values())),
-                      sum(len(m.entry_globals) + len(m.binding_globals) for m in modules))
+                      sum(len(m.entry_globals) + len(m.binding_globals) for m in modules),
+                      len(self.returns_namespace), sum(len(m.namespace_globals) for m in modules))
             for mod in modules:
                 self._module_globals(mod)
             for func in everything:
                 scope = Scope(self, func, func.cls)
+                fields = self._namespace_return(scope, func)
+                if fields:
+                    self.returns_namespace[func.key] = fields
                 for node in _own_nodes(func.node):
                     if isinstance(node, ast.Return) and node.value is not None:
                         made = scope.made_class(node.value)
@@ -539,8 +549,177 @@ class Index:
             if (len(self.getters), len(self.entry_getters), len(self.binding_attrs),
                     len(self.returns_class), len(self.returns_tuple), len(self.returns_module),
                     len(self.returns_entry_tuple), sum(map(len, self.binding_params.values())),
-                    sum(len(m.entry_globals) + len(m.binding_globals) for m in modules)) == before:
+                    sum(len(m.entry_globals) + len(m.binding_globals) for m in modules),
+                    len(self.returns_namespace), sum(len(m.namespace_globals) for m in modules)) == before:
                 break
+
+    def _namespace_return(self, scope, func):
+        """`result = SimpleNamespace(call=module.entry, binding=module, ...); return result`.
+
+        The fields a connect function returns, when every return is that one local, the local
+        is bound exactly once to a keyword-only SimpleNamespace, and nothing in the function
+        (or a package callee it is handed to) rebinds a field. Only fields whose value is
+        statically a binding or a compiled entry are kept; any other field stays unknown, so
+        reading it is never counted as native.
+        """
+        nodes = _own_nodes(func.node)
+        returns = [n for n in nodes if isinstance(n, ast.Return)]
+        if not returns or not all(isinstance(r.value, ast.Name) for r in returns):
+            return None
+        name = returns[0].value.id
+        if any(r.value.id != name for r in returns):
+            return None
+        made, stores = [], []
+        for node in nodes:
+            if isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+                if any(isinstance(t, ast.Name) and t.id == name for t in ast.walk(node.target)):
+                    return None
+            elif isinstance(node, ast.withitem) and node.optional_vars is not None:
+                if any(isinstance(t, ast.Name) and t.id == name for t in ast.walk(node.optional_vars)):
+                    return None
+            elif isinstance(node, ast.NamedExpr) and node.target.id == name:
+                return None
+            elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    if any(isinstance(t, ast.Name) and t.id == name for t in ast.walk(target)
+                           if not isinstance(target, ast.Attribute)):
+                        made.append(node)
+                    if (isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
+                            and target.value.id == name):
+                        stores.append((target.attr, node))
+            elif isinstance(node, ast.Call) and _final(node.func) in ("setattr", "delattr"):
+                if node.args and isinstance(node.args[0], ast.Name) and node.args[0].id == name:
+                    return None
+        if len(made) != 1 or not isinstance(made[0], ast.Assign) or len(made[0].targets) != 1:
+            return None
+        call = made[0].value
+        if (not isinstance(call, ast.Call) or _final(call.func) != "SimpleNamespace" or call.args
+                or any(k.arg is None for k in call.keywords)):
+            return None
+
+        def kind(expr):
+            if scope.is_binding(expr):
+                return ("binding",)
+            entry = scope.entry_of(expr)
+            if not entry and isinstance(expr, ast.Name):
+                entry = scope.entry_names.get(expr.id)
+            return ("entry", entry) if entry else None
+
+        fields = {k.arg: kind(k.value) for k in call.keywords}
+        for attr, node in stores:
+            if sum(a == attr for a, _ in stores) > 1:
+                fields[attr] = None
+            else:
+                fields[attr] = kind(node.value) if isinstance(node, ast.Assign) else None
+        # a package helper handed the namespace must not rebind its fields either
+        for node in nodes:
+            if not isinstance(node, ast.Call):
+                continue
+            for position, arg in enumerate(node.args):
+                if not (isinstance(arg, ast.Name) and arg.id == name):
+                    continue
+                target = scope.resolve_call(node.func) if not isinstance(node.func, ast.Call) else None
+                if not target or target[0] != "func":
+                    return None
+                params = _params(target[1].node)[0]
+                if position >= len(params):
+                    return None
+                param = params[position]
+                for inner in _own_nodes(target[1].node):
+                    if isinstance(inner, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Delete)):
+                        for t in (inner.targets if isinstance(inner, (ast.Assign, ast.Delete)) else [inner.target]):
+                            if (isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name)
+                                    and t.value.id == param):
+                                return None
+                    if (isinstance(inner, ast.Call) and _final(inner.func) in ("setattr", "delattr")
+                            and inner.args and isinstance(inner.args[0], ast.Name) and inner.args[0].id == param):
+                        return None
+        fields = {k: v for k, v in fields.items() if v}
+        return fields or None
+
+    def _namespace_globals(self, mod):
+        """Module-level names that can only hold one connection namespace.
+
+        `_C = {}`, then `_C[mode] = _connect(mode)` (a returns_namespace function) or a
+        refusal string, then `_c = _C["identical"]` (also when rebound under an `if`):
+        `_c` holds the namespace. Every module-level binding of the name (top level and inside
+        if/for/try/with blocks) must agree, and no function may store into the container.
+        """
+        assigned = defaultdict(list)   # name -> values bound by `name = value`
+        stored = defaultdict(list)     # container -> values stored by `name[k] = value`
+
+        def walk(body):
+            for node in body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    continue
+                if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                    for target in targets:
+                        if isinstance(target, ast.Name):
+                            assigned[target.id].append(node.value)
+                        elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                            stored[target.value.id].append(node.value)
+                        else:
+                            for t in ast.walk(target):
+                                if isinstance(t, ast.Name):
+                                    assigned[t.id].append(None)
+                elif isinstance(node, (ast.For, ast.AsyncFor)):
+                    for t in ast.walk(node.target):
+                        if isinstance(t, ast.Name):
+                            assigned[t.id].append(None)
+                for field in ("body", "orelse", "finalbody"):
+                    walk(getattr(node, field, []) or [])
+                for handler in getattr(node, "handlers", []) or []:
+                    if handler.name:
+                        assigned[handler.name].append(None)
+                    walk(handler.body)
+
+        walk(mod.tree.body)
+        inner_stores = set()
+        for node in ast.walk(mod.tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                for inner in ast.walk(node):
+                    if isinstance(inner, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Delete)):
+                        for t in (inner.targets if isinstance(inner, (ast.Assign, ast.Delete)) else [inner.target]):
+                            if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name):
+                                inner_stores.add(t.value.id)
+                    elif isinstance(inner, ast.Global):
+                        inner_stores.update(inner.names)
+        scope = Scope(self, mod.module_scope, None)
+
+        def inert(value):   # a refusal text kept in place of a connection
+            return (isinstance(value, ast.JoinedStr) or isinstance(value, ast.Constant) and isinstance(value.value, str)
+                    or isinstance(value, ast.Attribute) and value.attr == "__name__"
+                    or isinstance(value, ast.BinOp) and isinstance(value.op, ast.Add) and inert(value.left)
+                    or isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "str")
+
+        def fields_of(value, containers):
+            if isinstance(value, ast.Call) and not isinstance(value.func, ast.Call):
+                target = scope.resolve_call(value.func)
+                if target and target[0] == "func":
+                    return self.returns_namespace.get(target[1].key)
+            if isinstance(value, ast.Subscript) and isinstance(value.value, ast.Name):
+                return containers.get(value.value.id)
+            if isinstance(value, ast.Name):
+                return mod.namespace_globals.get(value.id)
+            return None
+
+        containers = {}
+        for name, values in stored.items():
+            if name in inner_stores:
+                continue
+            if not all(isinstance(v, ast.Dict) and not v.keys for v in assigned.get(name, [])):
+                continue
+            made = [fields_of(v, {}) for v in values if not inert(v)]
+            if made and made[0] and all(m == made[0] for m in made):
+                containers[name] = made[0]
+        for name, values in assigned.items():
+            if name in stored or name in inner_stores or name in mod.defs or name in mod.classes:
+                continue
+            made = [fields_of(v, containers) if v is not None else None for v in values]
+            if made and made[0] and all(m == made[0] for m in made):
+                mod.namespace_globals[name] = made[0]
 
     def _module_globals(self, mod):
         """Module-level names bound once at import to a binding or a compiled entry.
@@ -556,6 +735,7 @@ class Index:
                 body=[s for s in mod.tree.body if isinstance(s, (ast.Assign, ast.AnnAssign))],
                 decorator_list=[], returns=None, type_comment=None, lineno=1, col_offset=0)
             mod.module_scope = Func(mod, node)
+        self._namespace_globals(mod)
         scope = Scope(self, mod.module_scope, None)
         mod.binding_globals |= scope.binding_names
         for name, entry in scope.entry_names.items():
@@ -735,6 +915,8 @@ class Scope:
         if isinstance(expr, ast.Attribute):
             if expr.attr == "_module" and self.is_binding(expr.value):
                 return True
+            if self._namespace_field(expr) == ("binding",):
+                return True
             if isinstance(expr.value, (ast.Name, ast.Attribute)):
                 # an object a `_native_*` bridge module holds (`_native_neural_bridge.RUNTIME`)
                 base = self.index.resolve_expr(expr.value, self.modname, self.func)
@@ -753,8 +935,22 @@ class Scope:
             return bool(target and target[0] == "func" and target[1].key in self.index.getters)
         return False
 
+    def _namespace_field(self, expr):
+        """The field of a module-level connection namespace (`_session_connected.call`)."""
+        value = expr.value
+        if not isinstance(value, ast.Name):
+            return None
+        fields = self.func.mod.namespace_globals.get(value.id)
+        if not fields or value.id in self.rebound or self._shadowed(value.id) or value.id in self.binding_names:
+            return None
+        return fields.get(expr.attr)
+
     def entry_of(self, expr):
         """`b.entry` or getattr(b, "entry") on a binding: the entry name."""
+        if isinstance(expr, ast.Attribute):
+            field = self._namespace_field(expr)
+            if field and field[0] == "entry":
+                return field[1]
         if isinstance(expr, ast.Attribute) and self.is_binding(expr.value):
             return expr.attr
         if (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name) and expr.func.id == "getattr"
