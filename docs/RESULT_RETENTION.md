@@ -24,16 +24,17 @@ are historical copies and are not rewritten by these hooks.
 
 Identity columns retain exact JSON bytes at immutable paths, with provenance
 sidecars. Recollecting the same record reuses its path. A new receipt for the
-same bytes is retained separately. Commit the needed columns before reference
-generation; existing admission and source checks still decide which cells can
+same bytes is retained separately. Generate from those repository copies, then
+commit the records and updated table together. Existing admission and source checks decide which cells can
 enter `python/mojolearn/verify_reference/table.json`. Failed or partial evidence
 is never automatically promoted. Wheel builds still use the reference inputs
 committed in their selected MojoLearn source revision.
-The next step after committing collected columns is
+The next step after collecting columns is
 `tools/admit_identity_columns.sh --lanes <changed-lanes> <returned-record-dirs...>`.
-That command resolves external copies to their committed repository inputs,
-updates only the admitted lanes, and preserves unrelated table rows. Commit its
-updated table and receipts before the next wheel build. Collection and ordinary
+That command retains missing external columns in MojoLearn, reuses existing
+copies, updates only the admitted lanes, and preserves unrelated table rows.
+Commit the records, updated table and receipts together before the next wheel
+build; no preliminary evidence commit is required. Collection and ordinary
 verification do not trigger this promotion themselves; see
 [the incremental release sequence](VERIFY.md#admitting-one-verified-group-without-rewriting-other-references).
 
