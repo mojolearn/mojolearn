@@ -55,6 +55,15 @@ def _object_source(value: PythonObject, context: PythonObject) raises -> PythonO
     var dims = List[Int]()
     var leaf_depth = -1
     _leaves(value, 0, dims, leaf_depth, leaves)
+    if leaf_depth >= 0 and leaf_depth != len(dims):
+        raise Error("ValueError: ProphetForecaster input sequences must be rectangular")
+    var count = 1
+    for size in dims:  # driver-loop: prove shape capacity before native scalar storage writes
+        if size != 0 and count > 9223372036854775807 // size:
+            raise Error("OverflowError: ProphetForecaster input dimensions exceed native storage")
+        count *= size
+    if count != len(leaves):
+        raise Error("ValueError: ProphetForecaster input shape and scalar count disagree")
     var shape = Python.list()
     for size in dims:  # driver-loop: captured input shape into native ndarray constructor metadata
         _ = py_call(shape.append, size)

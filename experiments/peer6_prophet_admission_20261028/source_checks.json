@@ -1,0 +1,11 @@
+{
+  "manifest_matches": {
+    "bindings/xseq_prophet_native.mojo": true,
+    "providers/python/prophet_buffers_pyapi.mojo": true,
+    "providers/python/prophet_lifecycle_pyapi.mojo": true,
+    "core/prophet_input_marshal.mojo": true,
+    "python/mojolearn/_x_sequence_prophet.py": true
+  },
+  "python_ast": "pass",
+  "runtime_executed": false
+}

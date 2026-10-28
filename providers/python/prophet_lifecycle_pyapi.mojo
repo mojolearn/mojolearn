@@ -5,12 +5,17 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_pandas import classical_admit_value
+from bindings.classical_attributes import classical_connect_numpy
+from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _fields
 from providers.python.forecast_initialize_pyapi import _scalar
 from providers.python.forecast_owner_pyapi import forecast_commit
 
 
 def prophet_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    # shared_context begins NumPy-free; the first Prophet call must not rely
+    # on an unrelated public operation having populated native scalar types.
+    classical_connect_numpy(context["xseq_lifecycle_context"])
     var b = native_loaded_module("builtins")
     var cls = context["xseq_prophet_class"]
     if py_type(cls) is not b.type or py_type(model) is not cls:
@@ -31,7 +36,13 @@ def prophet_fields(model: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def prophet_scalar(value: PythonObject, context: PythonObject) raises:
+    if _one_of(py_type(value), context["xseq_prophet_scalar_inputs"]):
+        return
     _scalar(value, context["xseq_lifecycle_context"])
+
+
+def prophet_text(value: PythonObject, context: PythonObject) raises -> Bool:
+    return py_type(value) is py_type(PythonObject("")) or py_type(value) is context["xseq_prophet_string_type"]
 
 
 def prophet_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -42,9 +53,9 @@ def prophet_initialize(model: PythonObject, args: PythonObject, context: PythonO
             classical_admit_value(args[i], context["xseq_lifecycle_context"])
         else:
             prophet_scalar(args[i], context)
-    if py_type(args[0]) is not b.str or String(args[0]) != "linear":
+    if not prophet_text(args[0], context) or String(py=py_call(b.str, args[0])) != "linear":
         raise Error("NotImplementedError: ProphetForecaster: requested growth is not implemented ('linear')")
-    if py_type(args[7]) is not b.str or (String(args[7]) != "additive" and String(args[7]) != "multiplicative"):
+    if not prophet_text(args[7], context) or (String(py=py_call(b.str, args[7])) != "additive" and String(py=py_call(b.str, args[7])) != "multiplicative"):
         raise Error("ValueError: seasonality_mode must be 'additive' or 'multiplicative'")
     var names = Python.tuple("growth", "changepoints", "n_changepoints", "changepoint_range",
         "yearly_seasonality", "weekly_seasonality", "daily_seasonality", "seasonality_mode",
@@ -67,7 +78,7 @@ def prophet_add_seasonality(model: PythonObject, args: PythonObject, context: Py
     var b = native_loaded_module("builtins")
     for i in range(len(args)):  # driver-loop: custom seasonality settings before native conversion
         prophet_scalar(args[i], context)
-    if py_type(args[0]) is not b.str:
+    if not prophet_text(args[0], context):
         raise Error("TypeError: seasonality name requires a native string")
     var order = py_call(b.int, args[2])
     var period = py_call(b.float, args[1])
@@ -91,7 +102,7 @@ def prophet_add_seasonality(model: PythonObject, args: PythonObject, context: Py
     py_setitem(spec, "fourier_order", order)
     py_setitem(spec, "prior_scale", prior)
     var updates = Python.dict()
-    py_setitem(updates, args[0], spec)
+    py_setitem(updates, py_call(b.str, args[0]), spec)
     # Preserve the existing dictionary identity while admitting any old spec
     # before its replacement can release application-owned objects.
     forecast_commit(seasons, updates, context["xseq_forecast_ownership"])

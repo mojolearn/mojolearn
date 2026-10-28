@@ -1,0 +1,30 @@
+Peer6 Prophet admission correction — 2026-10-28
+Branch: lane/peer6-prophet-20261027.
+Required pair: b00f153308 followed by this correction; do not integrate b00 alone.
+Other dependencies: lifecycle70bf41dce3 and original pandas reader32276a868c.
+Local9999ad785d is only a copy of32276a868c, not another integration batch.
+
+Fallback shape inference now proves leaf depth and total native capacity before
+writing temporal or complex scalar storage. Mixed-depth sequences such as an
+empty child next to a scalar are rejected before allocation/writes. Common
+Prophet entry now calls classical_connect_numpy on its actual lifecycle context;
+its first invocation no longer depends on another operation having initialized
+NumPy admission. Native text/byte/extended-real settings retain scalar conversion
+support and NumPy string growth/mode/name values retain their documented string
+behavior. NumPy warning category metadata supports both import layouts.
+
+Full actual xseq dispatcher CPU/O0/identical/apple-m1 compile exit0 (attempt7,
+233.30s,-j10). Final changed native/Python source hashes match its retained
+manifest; AST/diff checks pass. No runtime, GPU, identity or benchmark execution.
+Attempt5 compiled the capacity change alone. Attempt6 then failed creating a
+shared Mojo transform-cache lock with ENOSPC and failed writing its result.json;
+no binary was produced and no pass is claimed. Its complete compiler log and
+failure-summary.json remain retained. Attempt7 qualifies final corrected source.
+Complete source, compiler hash, binary and logs retained under
+~/mojolearn-evidence/peer6-prophet-operations-20261028/attempt{1..7}/.
+Build environment: ~/mojolearn-evidence/peer6-cv-build-environment-20261027/.
+
+This correction clears the source hold on b00f153308 when integrated together.
+The shared pandas reader's explicit remaining extended-type implementation gaps
+remain owned by the resample lane; this pair does not claim those paths complete
+or runtime-qualified. No numerical Prophet kernel changed.
