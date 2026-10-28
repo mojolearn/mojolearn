@@ -1412,8 +1412,6 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[1], "causal_model_load")
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
-        # causal_pin_entries publishes this owner on every loaded CausalLM.
-        _ = module.add_type[CausalExecutionEntries]("_CausalExecutionEntries")
         _ = module.add_type[GenerationNativeProvider]("_GenerationNativeProvider")
         _ = module.add_type[GenerationNativeSession]("_GenerationNativeSession")
         _ = module.add_type[NeuralDescriptorProvider]("_NeuralDescriptorProvider")
