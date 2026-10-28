@@ -965,7 +965,7 @@ def _gmm_public_operation(model: PythonObject, operation: String, args: PythonOb
         known = known or ancestry[i] is context["gmm_public_class"]
     if not known:
         raise Error("TypeError: GaussianMixture requires its connected native class")
-    var method = String(operation[len("family_mix_gmm_public_"):])
+    var method = String(operation[byte=String("family_mix_gmm_public_").byte_length():])
     if method == "initialize":
         return _gmm_public_initialize(model, args, context)
     var fitting = method == "fit" or method == "fit_predict"
