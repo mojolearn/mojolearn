@@ -220,6 +220,7 @@ from bindings.generation_buffers import generation_initialize_binding, GENERATIO
 from providers.python.generation_session_pyapi import GenerationNativeProvider, GenerationNativeSession
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info
 from providers.python.operation_lock_pyapi import ProviderOperationLock, operation_lock_connect, operation_lock_c
+from bindings.causal_operation_owner import CausalExecutionEntries
 from bindings.causal_lm_public import (
     GenerationHandle, causal_public_c, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
@@ -1410,6 +1411,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[1], "causal_model_load")
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
+        # causal_pin_entries publishes this owner on every loaded CausalLM.
+        _ = module.add_type[CausalExecutionEntries]("_CausalExecutionEntries")
         _ = module.add_type[GenerationNativeProvider]("_GenerationNativeProvider")
         _ = module.add_type[GenerationNativeSession]("_GenerationNativeSession")
         _ = module.add_type[NeuralDescriptorProvider]("_NeuralDescriptorProvider")
