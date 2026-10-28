@@ -1,0 +1,106 @@
+{
+  "source_commit": "d9b2395cf9ce36d1c1687c73eee8794c73f00f5e",
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "host": "Mac arm64 (no rented box)",
+  "jobs": 10,
+  "command": "bash experiments/lm_resident_generate_20261028/compile.sh <ev> [--target-accelerator sm_89] via compile_slot.sh",
+  "flags": "mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings",
+  "overall_exit": 0,
+  "runtime_executed": false,
+  "sm89_ptx_check": "strings | grep -c sm_89 = 88 in compile_resident_session-on.so",
+  "not_covered": [
+    "AMD (gfx942) and Apple Metal targets",
+    "full binding/wheel assembly (_mojolearn_transformer, _mojolearn_transformer_host, _mojolearn_mamba, _mojolearn_mamba_host, _mojolearn_tokenizer_host)",
+    "any runtime, identity or timing run"
+  ],
+  "roots": [
+    {
+      "leg": "cpu-d9b2395c",
+      "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+      "entry": "experiments/lm_resident_generate_20261028/compile_causal_public.mojo",
+      "arm": "off",
+      "define": null,
+      "exit": 0,
+      "seconds": 5,
+      "artifact_sha256": "e5cc5a11c6ae2b39c37241a3ba46b07dc5217ed91145ceae9f038e49e88a9909",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/cpu-d9b2395c/compile_causal_public-off.log"
+    },
+    {
+      "leg": "cpu-d9b2395c",
+      "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+      "entry": "experiments/lm_resident_generate_20261028/compile_causal_public.mojo",
+      "arm": "on",
+      "define": "MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1",
+      "exit": 0,
+      "seconds": 4,
+      "artifact_sha256": "6a29502da9043c775171d41407b0619ca4202f4c67e68504eb9255aa347d2ecd",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/cpu-d9b2395c/compile_causal_public-on.log"
+    },
+    {
+      "leg": "cpu-d9b2395c",
+      "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+      "entry": "experiments/lm_resident_generate_20261028/compile_resident_session.mojo",
+      "arm": "off",
+      "define": null,
+      "exit": 0,
+      "seconds": 12,
+      "artifact_sha256": "aab1fd5c43df66087266939a04730b5af4a455f752055ed25bc49c465211d30f",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/cpu-d9b2395c/compile_resident_session-off.log"
+    },
+    {
+      "leg": "cpu-d9b2395c",
+      "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+      "entry": "experiments/lm_resident_generate_20261028/compile_resident_session.mojo",
+      "arm": "on",
+      "define": "MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1",
+      "exit": 0,
+      "seconds": 14,
+      "artifact_sha256": "b6858d1ef1703eb2c6e6c69f9cddb1444c4392e4de3631cb8ab12833de3e8939",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/cpu-d9b2395c/compile_resident_session-on.log"
+    },
+    {
+      "leg": "sm89-d9b2395c",
+      "target_flags": "--target-accelerator sm_89 (no COLUMN_CPU)",
+      "entry": "experiments/lm_resident_generate_20261028/compile_causal_public.mojo",
+      "arm": "off",
+      "define": null,
+      "exit": 0,
+      "seconds": 28,
+      "artifact_sha256": "db1b755f4c00f48a05c6dac1dc4a05e1238572095d71aeba1e7bb6b1c0c6d3a3",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/sm89-d9b2395c/compile_causal_public-off.log"
+    },
+    {
+      "leg": "sm89-d9b2395c",
+      "target_flags": "--target-accelerator sm_89 (no COLUMN_CPU)",
+      "entry": "experiments/lm_resident_generate_20261028/compile_causal_public.mojo",
+      "arm": "on",
+      "define": "MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1",
+      "exit": 0,
+      "seconds": 26,
+      "artifact_sha256": "a2c0bb3389c60ce162d3809629c91c377761064a3a360761bc997d9024f1e48e",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/sm89-d9b2395c/compile_causal_public-on.log"
+    },
+    {
+      "leg": "sm89-d9b2395c",
+      "target_flags": "--target-accelerator sm_89 (no COLUMN_CPU)",
+      "entry": "experiments/lm_resident_generate_20261028/compile_resident_session.mojo",
+      "arm": "off",
+      "define": null,
+      "exit": 0,
+      "seconds": 54,
+      "artifact_sha256": "ab7e884f7b5ff19e436961f4153f045ddea7655d42d86f85f64492dff8daf03b",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/sm89-d9b2395c/compile_resident_session-off.log"
+    },
+    {
+      "leg": "sm89-d9b2395c",
+      "target_flags": "--target-accelerator sm_89 (no COLUMN_CPU)",
+      "entry": "experiments/lm_resident_generate_20261028/compile_resident_session.mojo",
+      "arm": "on",
+      "define": "MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1",
+      "exit": 0,
+      "seconds": 48,
+      "artifact_sha256": "4bceeb69ade0e614c8b50ea647ddc6f42f873ae8d42c6487097ffe65d89ed6fd",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/sm89-d9b2395c/compile_resident_session-on.log"
+    }
+  ]
+}
