@@ -732,9 +732,16 @@ from ._native_backend_public import connect as _connect_backend_public
 import sys as _backend_public_sys
 _connect_backend_public(_backend_public_sys.modules[__name__])
 del _connect_backend_public, _backend_public_sys
+# The same one-call native functions connect() installed, named statically.
+from ._native_backend_public import (gpu_arch, gpu_arch_how, numeric_mode, vendor,
+                                     set_default_mode as set_numeric_mode)
 # Profile bootstrap defaults are already shared with the native providers.
 # Replace both public aliases and module functions after import connections.
 from ._native_numeric_profile import connect as _connect_numeric_profile_public
 import sys as _numeric_profile_public_sys
 _connect_numeric_profile_public(_numeric_profile_public_sys.modules[__name__])
 del _connect_numeric_profile_public, _numeric_profile_public_sys
+# The same one-call native functions connect() installed, named statically.
+from ._native_numeric_profile import (_profiles as numeric_profiles, _measured as numeric_profile_measured,
+                                      _default_profile as numeric_profile,
+                                      _set_default_profile as set_numeric_profile)

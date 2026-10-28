@@ -166,6 +166,9 @@ def connect_classes(package):
                        stl_connected=False, archive_finalizer_entry=finalizer)
         context['descriptor'] = factory(MethodType(entry, context))
         _CONTEXT = context
+        # The generic slot (_mode.PublicOutputsMixin.__getattribute__) uses
+        # the same Array/NumPy admission metadata.
+        _mode._GENERIC_ATTRIBUTE_CONTEXT['attributes'] = context
     context = _CONTEXT
     from ._native_mode_properties import connect as connect_mode_properties
     connect_mode_properties(context, package)

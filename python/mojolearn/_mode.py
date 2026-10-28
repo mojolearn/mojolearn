@@ -426,9 +426,6 @@ def install_public_outputs(cls, own_only=False):
             setattr(cls, name, _public_output(raw, name))
 
 
-_object_getattribute = object.__getattribute__
-
-
 class PublicOutputsMixin:
     """NumPy results for callers outside the package: the public result
     methods (`install_public_outputs`) and the fitted attributes. A public
@@ -444,12 +441,10 @@ class PublicOutputsMixin:
         install_public_outputs(cls)
 
     def __getattribute__(self, name):
-        value = _object_getattribute(self, name)
-        if type(value) is _Array and name[-1] == "_" and name[0] != "_":
-            np = sys.modules.get("numpy")
-            if np is not None and _caller_outside(sys._getframe(1)):
-                return value.__array__()
-        return value
+        # One native call (bindings/public_attributes_native.mojo
+        # public_attribute_generic_c): CPython's generic lookup, then the
+        # Array -> NumPy view rule for callers outside the package.
+        return _GENERIC_ATTRIBUTE(self, name, _GENERIC_ATTRIBUTE_CONTEXT)
 
 
 class SklearnTagsMixin(PublicOutputsMixin):
@@ -568,28 +563,21 @@ class ParamsMixin(SklearnTagsMixin):
     def set_params(self, **params):
         """Set constructor parameters. The estimator is rebuilt through its
         constructor, so every constructor check runs again and any fitted
-        state is dropped, as a new setting invalidates it."""
-        if not params:
-            return self
-        values = self.get_params(deep=False)
-        nested = {}
-        for key, value in params.items():  # glue: sklearn set_params keyword arguments
-            name, sep, sub = key.partition("__")  # glue: splits a parameter name string
-            if name not in values:
-                raise ValueError(
-                    f"Invalid parameter {name!r} for estimator {type(self).__name__}. "
-                    f"Valid parameters are: {sorted(values)!r}."
-                )
-            if sep:
-                nested.setdefault(name, {})[sub] = value
-            else:
-                values[name] = value
-        for name, sub in nested.items():  # glue: sklearn nested set_params plumbing
-            values[name].set_params(**sub)
-        replacement = type(self)(**values)
-        self.__dict__.clear()
-        self.__dict__.update(replacement.__dict__)
-        return self
+        state is dropped, as a new setting invalidates it.
+
+        Parameters
+        ----------
+        **params : keyword arguments
+            Constructor parameters; use ``name__parameter`` for nested values.
+
+        Returns
+        -------
+        self : object
+            This estimator with its updated parameters.
+        """
+        # One native call (bindings/full_reset_params_native.mojo): connected
+        # native schemas first, else the generic rebuild (_generic_reset).
+        return _GENERIC_PARAMS(self, params, _GENERIC_PARAMS_CONTEXT)
 
 
 def _connect_application_params(cls):
@@ -714,3 +702,10 @@ from ._native_mode_metadata import connect as _connect_mode_metadata
 _MODE_METADATA, _MODE_METADATA_CONTEXT = _connect_mode_metadata()
 from ._native_params_metadata import connect as _connect_params_metadata
 _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT = _connect_params_metadata()
+# The generic public attribute and parameter-setter slots of every class
+# without its own connected native slot. The setter context is the full-reset
+# owner's context (_native_full_reset_params._CONTEXT), connected later.
+from ._native_mode_metadata import connect_generic_attributes as _connect_generic_attributes
+_GENERIC_ATTRIBUTE, _GENERIC_ATTRIBUTE_CONTEXT = _connect_generic_attributes()
+from ._native_mode_metadata import connect_generic_params as _connect_generic_params
+_GENERIC_PARAMS, _GENERIC_PARAMS_CONTEXT = _connect_generic_params()

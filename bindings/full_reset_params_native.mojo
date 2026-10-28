@@ -142,11 +142,9 @@ def _replacement(model: PythonObject, values: PythonObject, plan: PythonObject,
     return owner
 
 
-def _reset(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int) raises -> PythonObject:
+def _merge(model: PythonObject, params: PythonObject, values: PythonObject,
+           context: PythonObject, depth: Int) raises:
     var b = native_loaded_module("builtins")
-    var fields = _fields(model)
-    var plan = _plan(model, fields, context)
-    var values = _read(model, False, context["parameter_metadata"], Python.list())
     var pairs = py_call(b.list, params.items())
     var nested = Python.dict()
     for i in range(len(pairs)):  # driver-loop: validate every root before any nested or parent mutation
@@ -168,6 +166,14 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
     var names = py_call(b.list, nested.keys())
     for i in range(len(names)):  # driver-loop: earlier successful nested changes remain if a later child refuses
         _ = _set(values[names[i]], nested[names[i]], context, depth + 1)
+
+
+def _reset(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int) raises -> PythonObject:
+    var b = native_loaded_module("builtins")
+    var fields = _fields(model)
+    var plan = _plan(model, fields, context)
+    var values = _read(model, False, context["parameter_metadata"], Python.list())
+    _merge(model, params, values, context, depth)
     var replacement = PythonObject(None)
     var fresh: PythonObject
     if py_contains(plan, "native_constructor"):
@@ -204,6 +210,12 @@ def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject, 
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native parameter reset cannot invoke Python metaclass hooks")
+    var generic = py_get(context, "generic_setter")
+    if generic is not None and _resolved(cls, "set_params", context["missing"]) is generic:
+        # The generic setter is explicitly kept for classes without a native
+        # schema; an inherited base plan must not stand in for their own
+        # constructor contract.
+        return _generic_reset(model, params, context, depth)
     if _connected_plan(cls, context) is not None:
         return _reset(model, params, context, depth)
     if _connected_plan(cls, context["linear"]) is not None:
@@ -244,6 +256,45 @@ def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject, 
     if _resolved(cls, "set_params", context["missing"]) is context["missing"]:
         raise Error("AttributeError: '" + String(cls.__name__) + "' object has no attribute 'set_params'")
     raise Error("TypeError: Python parameter callbacks are not accepted; use a connected native setter")
+
+
+def _generic_reset(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int) raises -> PythonObject:
+    # ParamsMixin.set_params for a package class without a connected native
+    # constructor schema: scikit-learn's rebuild, type(self)(**params), with the
+    # parameter read, key validation and nested routing above in native code.
+    # Only package classes are admitted (their raw __module__ is mojolearn.*);
+    # an application subclass is refused, as by every other native setter.
+    # The replacement is built by the class's own public constructor, which is
+    # its own audited endpoint: a pending Python constructor body (the
+    # explainers, DART, OrderedRMSE, ExperimentalTwoLevelFeatureFreq on
+    # 2026-10-28) remains that constructor's inventory row and owner's debt.
+    var b = native_loaded_module("builtins")
+    var cls = py_type(model)
+    var module = py_get(_class_fields(cls), PythonObject("__module__"))
+    if module is None or py_type(module) is not b.str:
+        raise Error("TypeError: native parameter reset requires a package class")
+    var owner = String(module)
+    if not owner.startswith("mojolearn.") or owner.startswith("mojolearn.tests"):
+        raise Error("TypeError: set_params of an application subclass requires a connected native estimator; "
+                    + "construct a new " + String(cls.__name__) + " instead")
+    var values = _read(model, False, context["parameter_metadata"], Python.list())
+    _merge(model, params, values, context, depth)
+    ref cpy = Python().cpython()
+    var empty = Python.tuple()
+    var raw = cpy.PyObject_Call(cls._obj_ptr, empty._obj_ptr, values._obj_ptr)
+    if not raw:
+        var failure = stash_python_error()
+        raise failure^
+    var replacement = PythonObject(from_owned=raw)
+    var fields = _fields(model)
+    var fresh = _fields(replacement)
+    # Old owners stay referenced until the public dictionary (whose identity
+    # is preserved) holds the replacement state.
+    var previous = py_call(b.list, fields.values())
+    _ = py_call(fields.clear)
+    _ = py_call(fields.update, fresh)
+    _ = previous
+    return model
 
 
 def _set(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
