@@ -644,7 +644,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     py_setitem(fields, "n_features_in_", _i(d))
 
 
-def _nc_uniform(fields: PythonObject) raises -> Bool:
+def _nc_uniform(fields: PythonObject, context: PythonObject) raises -> Bool:
     """`NearestCentroid._uniform`: every prior within isclose of 1/C."""
     var C = len(classifier_label_list(family_field(fields, "classes_"), context))
     var prior = family_field(fields, "class_prior_")
@@ -696,7 +696,7 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject) 
     var binding = args[0]
     var q = _f32(args[1], context)
     var classes = classifier_label_list(family_field(fields, "classes_"), context)
-    if _nc_uniform(fields):
+    if _nc_uniform(fields, context):
         var cent = family_field(fields, "centroids_")
         var dmat: PythonObject
         if _eq(family_field(fields, "metric"), PythonObject("euclidean")):
@@ -998,7 +998,8 @@ def neighbors_local_operation(model: PythonObject, operation: String, args: Pyth
     try:
         result = _neighbors_local_operation(model, operation, call.args, context)
     except error:
-        raise neighbors_public_refusal(error, call, model)
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
     finally:
         neighbors_public_end(model, call)
     return neighbors_public_finish(model, operation, result, call, context)
