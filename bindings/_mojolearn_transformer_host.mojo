@@ -28,6 +28,8 @@ The sabotage arm (`transformer_host_sabotage`) is
 (`-D MOJOLEARN_HOST_SABOTAGE=1`): every GEMM leaf walked descending.
 """
 from std.os import abort
+from transformer.host.native_block_dispatch import NATIVE_TRANSFORMER_HOST_BLOCK_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -430,9 +432,22 @@ def transformer_session_backward_tape_binding(session: PythonObject,addrs: Pytho
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_transformer_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+def transformer_block_api_binding() raises -> PythonObject:
+    var api = NATIVE_TRANSFORMER_HOST_BLOCK_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def transformer_native_session_handle_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[HostTransformerSession]()
+    return PythonObject(Int(owner))
+
+
 def build__mojolearn_transformer_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_transformer_host")
+        module.def_function[transformer_block_api_binding]("transformer_block_api_v1")
+        module.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
         _ = module.add_type[HostTransformerSession]("_TransformerSession")
         module.def_function[transformer_arithmetic_profile_changed_binding]("transformer_arithmetic_profile_changed")
         module.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
