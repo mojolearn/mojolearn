@@ -82,6 +82,8 @@ def __getattr__(name):
             from ._native_public_attributes import connect_classes as connect_attributes
             connect_attributes(sys.modules[__package__])
             connect_classes(_mode._PARAMS_METADATA_CONTEXT, sys.modules[__package__])
+            from ._native_family_layouts import connect as connect_family_layouts
+            connect_family_layouts(sys.modules[__package__])
         value = getattr(loaded, attribute)
     except ModuleNotFoundError as exc:
         if exc.name != "numpy":

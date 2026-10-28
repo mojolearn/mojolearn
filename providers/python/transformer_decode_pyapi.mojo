@@ -165,7 +165,7 @@ def _transformer_decode_weights(fields: PythonObject) raises:
                 var array = triplet[plane]
                 if array is None or String(array.order) != "C" or String(array.dtype) != ("<i4" if plane == 2 else "<i1"):
                     raise Error("TypeError: Transformer decode packed planes require contiguous integer storage")
-                _model_shape(array, [expected[i + 2][0]] if plane == 2 else expected[i + 2], "Transformer decode packed plane")
+                _model_shape(array, [expected[i + 2][0]] if plane == 2 else expected[i + 2].copy(), "Transformer decode packed plane")
 
 
 
