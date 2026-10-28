@@ -924,7 +924,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         _fit_ovo(fields, binding, x_meta, classes, pair, gamma, c_rows, context, settings, native)
         _svc_publish_dispatch(fields, native)
         _ = x^
-    _ = x_meta  # retain captured storage owners through the last native use
+        _ = x_meta  # retain captured storage owners through the last native use
         _ = c_rows^
         return
     if py_contains(fields, PythonObject("_pairs")):
