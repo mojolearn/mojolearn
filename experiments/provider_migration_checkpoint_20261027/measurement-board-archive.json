@@ -1,0 +1,55 @@
+{
+  "scope": "Historical stopped AMD and NVIDIA campaigns, not provider-migration measurements",
+  "reason": "Preserve complete board snapshot outside Git; AMD board exceeds repository 50 MiB limit",
+  "archive": {
+    "sha256": "dba4526626fa8679e5ea4d57e45fba556f4852c9dba1672422034e8bce9f8849",
+    "bytes": 27141831,
+    "local_path": "/Users/andrewhendel/mojolearn-evidence/provider-migration-checkpoint-20261027/stopped-measurement-boards.tar.gz",
+    "status": "verified",
+    "r2_key": "measurements/records/v1/dba4526626fa8679e5ea4d57e45fba556f4852c9dba1672422034e8bce9f8849.tar.gz",
+    "r2_bucket": "mojolearn-data",
+    "verification": "GET sha256"
+  },
+  "files": {
+    "bench/results/bench_board/main-amd-mi325x/BOARD.md": {
+      "sha256": "d968989230e9cbeb81679eab9b9d03b7e6a850ee8f89a410c2a4ce4f2f73b020",
+      "bytes": 1585220
+    },
+    "bench/results/bench_board/main-amd-mi325x/INGEST.json": {
+      "sha256": "a64e1a70eac9824490408c3e915cf56c358a9dfdfacf5440ca01758223c127c3",
+      "bytes": 2040
+    },
+    "bench/results/bench_board/main-amd-mi325x/LEDGER.json": {
+      "sha256": "368ceac39e72b963fe64a9a1e2c84959db42af756f29a4c63324c0175d8f2325",
+      "bytes": 799643
+    },
+    "bench/results/bench_board/main-amd-mi325x/LEDGER.md": {
+      "sha256": "14989f34183c90360f253ea173ac238d3554e2b5b0005e31eff2caa0ba836e1c",
+      "bytes": 257151
+    },
+    "bench/results/bench_board/main-amd-mi325x/board.json": {
+      "sha256": "d3b699b1aa8ef7dfe5bb7dc1ff972d7977ad2462b4c517d46b674b83ab8422c6",
+      "bytes": 71609693
+    },
+    "bench/results/bench_board/main-nvidia-rtx6000ada/BOARD.md": {
+      "sha256": "846c6fe089f2fd300735411858f95b883dacff05396ba9196995b92050cfb7c4",
+      "bytes": 648014
+    },
+    "bench/results/bench_board/main-nvidia-rtx6000ada/INGEST.json": {
+      "sha256": "46042e2c775fcfbb9761e90664ce0565cd00446b2f2506889e88806fb743becb",
+      "bytes": 1894
+    },
+    "bench/results/bench_board/main-nvidia-rtx6000ada/LEDGER.json": {
+      "sha256": "db9b66d11f34a28467e659dea042a76876ba791ddbeb01c2715dc63e14edd455",
+      "bytes": 123
+    },
+    "bench/results/bench_board/main-nvidia-rtx6000ada/LEDGER.md": {
+      "sha256": "e2b0c3292258257000a66956e0d249b4d1d66f48b6e0ec32a6eb76bbfe7cf71f",
+      "bytes": 491
+    },
+    "bench/results/bench_board/main-nvidia-rtx6000ada/board.json": {
+      "sha256": "e1b7e7431861eee87218ffac117ad0492258b1e1092c29a46a391fd169df0a6b",
+      "bytes": 49710776
+    }
+  }
+}
