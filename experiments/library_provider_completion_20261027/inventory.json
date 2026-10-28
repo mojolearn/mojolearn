@@ -368,5 +368,18 @@
       "compile/public validation and byte comparison",
       "remaining SVC class label admission and CPU native tables"
     ]
+  },
+  "cpu_svm_provider": {
+    "status": "source_candidate_uncompiled",
+    "changes": [
+      "CPU SVC/SVR same12-operation common provider ABI",
+      "host solver, Platt, pair/fold, gamma and OVO owners preserved",
+      "CPU and GPU span validation share one native schema"
+    ],
+    "remaining": [
+      "public CPU runtime qualification; authored common probe supports explicit CPU installs",
+      "SVC/SVR target/class label metadata and base-helper CPython dispatch",
+      "LinearSVM/OneClass and other family transitive completion"
+    ]
   }
 }

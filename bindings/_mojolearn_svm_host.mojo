@@ -52,6 +52,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from svm.host.native_descriptor_dispatch import SVC_HOST_NATIVE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from core.host_predict_threads import host_predict_task_count
@@ -536,6 +538,11 @@ def iforest_run_binding(
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_svm_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+def svm_native_api_binding() raises -> PythonObject:
+    var table = SVC_HOST_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def build__mojolearn_svm_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_svm_host")
@@ -546,6 +553,7 @@ def build__mojolearn_svm_host() -> PythonObject:
         module.def_function[svm_vendor_binding]("svm_vendor")
         module.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
         module.def_function[svc_fit_binding]("svc_fit")
+        module.def_function[svm_native_api_binding]("svm_binary_api_v1")
         module.def_function[svc_predict_binding]("svc_predict")
         module.def_function[svc_pair_epilogue_binding]("svc_pair_epilogue")
         module.def_function[svc_platt_train_binding]("svc_platt_train")

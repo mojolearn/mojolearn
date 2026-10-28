@@ -85,7 +85,9 @@ def test_epilogue_typed_bridge_retains_numerical_owners():
     assert re.findall(numerical, old) == re.findall(numerical, new)
     assert 'Python' not in new and 'py=' not in new
     abi = re.search(r'^def svc_binary_v1\(.*?(?=^struct )', NATIVE, re.M | re.S).group()
-    assert abi.index('na != expected_a') < abi.index('native_descriptor_words(aa, na)')
+    assert abi.index('svc_binary_spans(op, na, np, nf)') < abi.index('native_descriptor_words(aa, na)')
+    schema=(ROOT/'svm/native_descriptor_schema.mojo').read_text()
+    assert 'na != expected_a or np != expected_p or nf != expected_f' in schema
     for message in ('svc gather: an identity axis must keep its length', 'svc fold: bad fold range',
                     'svc_pair_epilogue: needs a pair and two classes', 'svc_splitmix_perm: n exceeds int32'):
         assert message in old and message in new
@@ -158,3 +160,22 @@ def test_shared_weight_snapshot_keeps_cast_order_and_reuses_admitted_address():
     assert 'family_sample_weight_snapshot(' in weights
     assert 'sw_owner = Python.tuple(weights.keep, weights.owner)' in weights
     assert 'classical_address(sw)' not in weights
+
+
+def test_cpu_svm_table_uses_same_schema_and_existing_host_owners():
+    host=(ROOT/'svm/host/native_descriptor_dispatch.mojo').read_text()
+    assert 'String(SVC_ABI_NAME)' in host
+    assert 'svc_binary_spans(op, na, np, nf)' in host
+    assert host.index('svc_binary_spans(op, na, np, nf)') < host.index('native_descriptor_words(aa, na)')
+    for name in ('svc_fit_host','svc_predict_host','svr_fit_host','svr_predict_host'):
+        assert name+'(' in host
+    assert 'svm.estimator' not in host
+    assert 'neural_descriptor_capsule(table[].name, table[].entries)' in (ROOT/'bindings/_mojolearn_svm_host.mojo').read_text()
+    native=(ROOT/'svm/host/native_epilogue_dispatch.mojo').read_text()
+    old=(ROOT/'providers/python/svm_host_svc_proba_pyapi.mojo').read_text()
+    calls=r'\bhost_(?:gather|select|fold_split|fold_finish|c_rows|check_pairs|pair_epilogue|platt_train|splitmix_perm)\('
+    assert re.findall(calls,native)==re.findall(calls,old)
+    assert 'dec_addr if nsr * nsc > 0 else dst' in native
+    assert 'pairs_addr if mode != EPI_BINARY_CODES else dst' in native
+    _,errors=audit(ROOT,('svm.host.native_descriptor_dispatch',))
+    assert not errors,errors
