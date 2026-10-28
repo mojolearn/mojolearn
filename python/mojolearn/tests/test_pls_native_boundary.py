@@ -123,7 +123,7 @@ def test_pls_public_sparse_admission_matches_family_contract(name):
 
 
 @pytest.mark.parametrize("argument", ["X", "y"])
-@pytest.mark.parametrize("dtype", [np.complex64, np.complex128])
+@pytest.mark.parametrize("dtype", [np.complex64, np.complex128, np.clongdouble])
 def test_pls_public_complex_error_before_numerical_execution(argument, dtype):
     x = np.arange(24, dtype=np.float32).reshape(8, 3)
     y = np.array([1, 3, 2, 5, 4, 8, 6, 9], dtype=np.float32)
@@ -191,3 +191,17 @@ def test_pls_accepts_native_numeric_scalar_storage_and_keeps_parameter_identity(
     assert vars(model)["tol"] is tolerance
     assert vars(model)["scale"] is scale
     np.testing.assert_array_equal(model.predict(x), baseline.predict(x))
+
+
+@pytest.mark.parametrize("argument", ["X", "y"])
+def test_pls_longdouble_refusal_is_distinct_from_complex(argument):
+    x = np.arange(24, dtype=np.float32).reshape(8, 3)
+    y = np.arange(8, dtype=np.float32)
+    if argument == "X":
+        x = x.astype(np.longdouble)
+    else:
+        y = y.astype(np.longdouble)
+    with pytest.raises((TypeError, ValueError)) as error:
+        ml.PLSRegression(n_components=1, numeric_mode="identical").fit(x, y)
+    assert "Complex data not supported" not in str(error.value)
+    assert "dtype" in str(error.value) or "item size" in str(error.value)
