@@ -1,0 +1,213 @@
+{
+  "scope": "lane gemm-fill-tiles-20261028: MOJOLEARN_IDN_GEMM_FILL_TILES (GEMM tile step-down fill rule); compile only, no runtime/identity/GPU execution",
+  "source_commit": "ca30294d98dcd55c226c95ea405b13ffc5b4590f (merge of origin/main 45b0630582 into code f375d706ab; dirty tracked files 0)",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "results": [
+    {
+      "name": "mamba_host_cpu_mac",
+      "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
+      "target": "cpu (Mac apple-m1), COLUMN_CPU, define ON",
+      "jobs": 10,
+      "command": "bash tools/compile_slot.sh bash ~/mojolearn-evidence/gemm-fill-tiles-20261028/mac-cpu/compile.sh (mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_GEMM_FILL_TILES=1 -I . -I bindings <entry>)",
+      "exit": 0,
+      "seconds": 1789,
+      "binary_sha256": "0643c7b1dc53bfce704ef09a943245af48774fba1b0dc058ceb9990b5b0a144c",
+      "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/mac-cpu/build.log"
+    },
+    {
+      "exit": 0,
+      "seconds": 339,
+      "jobs": 8,
+      "binary_sha256": "c4dd7149eff8a956a5f0f2583728e0acfc9218a109b4f0d4ee3aed2f7e9da136",
+      "name": "bytelm_sm89_armA",
+      "entry": "bindings/entry/entry__mojolearn_byte_lm.mojo",
+      "target": "x86-64-v3 + sm_89, COLUMN_NVIDIA, -O0",
+      "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 --target-accelerator sm_89 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_NVIDIA -I . -I bindings <entry>",
+      "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/pod-run1/remote/leg_out/bytelm_sm89_armA.log"
+    },
+    {
+      "exit": 0,
+      "seconds": 339,
+      "jobs": 8,
+      "binary_sha256": "27ff47b3e891dc7d639213f51fdf3ac97235f8a6bf20cd4c7ec35efd55fb53fe",
+      "name": "bytelm_sm89_armB",
+      "entry": "bindings/entry/entry__mojolearn_byte_lm.mojo",
+      "target": "x86-64-v3 + sm_89, COLUMN_NVIDIA, -O0",
+      "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 --target-accelerator sm_89 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_NVIDIA -D MOJOLEARN_IDN_GEMM_FILL_TILES=1 -I . -I bindings <entry>",
+      "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/pod-run1/remote/leg_out/bytelm_sm89_armB.log"
+    },
+    {
+      "exit": 0,
+      "seconds": 229,
+      "jobs": 16,
+      "binary_sha256": "795e2362ce2a7c6a871bdd22f168182e544728a7375d23fd2771ac183320c52f",
+      "name": "bytelm_gfx942_armA",
+      "entry": "bindings/entry/entry__mojolearn_byte_lm.mojo",
+      "target": "x86-64-v3 + gfx942, COLUMN_AMD, default optimization",
+      "command": "pixi run -e default mojo build -j 16 --emit shared-lib --target-cpu x86-64-v3 --target-accelerator gfx942 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD -I . -I bindings <entry>",
+      "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/pod-run2/remote/leg_out/bytelm_gfx942_armA.log"
+    },
+    {
+      "exit": 0,
+      "seconds": 227,
+      "jobs": 16,
+      "binary_sha256": "a69cda94eabfe32d36eef808eedec74a10b78c5003247b8f4d19c555812008e5",
+      "name": "bytelm_gfx942_armB",
+      "entry": "bindings/entry/entry__mojolearn_byte_lm.mojo",
+      "target": "x86-64-v3 + gfx942, COLUMN_AMD, default optimization",
+      "command": "pixi run -e default mojo build -j 16 --emit shared-lib --target-cpu x86-64-v3 --target-accelerator gfx942 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD -D MOJOLEARN_IDN_GEMM_FILL_TILES=1 -I . -I bindings <entry>",
+      "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/pod-run2/remote/leg_out/bytelm_gfx942_armB.log"
+    }
+  ],
+  "failed_attempts": [
+    "byte_lm host root on the Mac (cb4331141f): 6 errors in providers/python/byte_lm_host_compat_pyapi.mojo (pre-existing on main, not lane code); switched the CPU root to the mamba host root",
+    "gfx942 at -O0 (pod-run1): BOTH arms fail in the AMD backend (stack frame > 131056 in existing gemm_identical kernels, lld undefined symbol free); rerun at default optimization, green"
+  ],
+  "pods": [
+    {
+      "name": "mojolearn-cpu-gemm-fill-tiles-20261028-100554",
+      "vcpu": 32,
+      "affinity": 32,
+      "reaped_verified": true,
+      "spend_usd": 0.2133
+    },
+    {
+      "name": "mojolearn-cpu-gemm-fill-tiles-20261028-102159",
+      "vcpu": 32,
+      "affinity": 32,
+      "reaped_verified": true,
+      "spend_usd": 0.0837
+    }
+  ],
+  "not_covered": [
+    "Apple (metal) target (the define is inert there)",
+    "other bindings importing gemm_identical (33 per the rebuild fence; linalg used by the gemm recipe)",
+    "the byte_lm host CPU root (broken on main)",
+    "any runtime, identity or timing"
+  ],
+  "final": {
+    "source_commit": "6c362f1432 (merge of origin/main 4a10a3069e; dirty tracked files 0)",
+    "compiler": "Mojo 1.0.0 (ed45d567)",
+    "note": "same commands as results[] (CPU root define on; sm_89 -O0 and gfx942 default optimization, arms A/B)",
+    "results": [
+      {
+        "name": "mamba_host_cpu_mac",
+        "exit": 0,
+        "seconds": 63,
+        "jobs": 10,
+        "binary_sha256": "711b4262d17ff069fbaa5d4b193e66815bb7dd98c9d19fe6a9ea557a56f2ddd2",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/mac-cpu/build.log"
+      },
+      {
+        "name": "bytelm_gfx942_armA",
+        "exit": 0,
+        "seconds": 116,
+        "jobs": 8,
+        "binary_sha256": "3209e2e284b08544e05e3f97afacd7ec683abdccdab334c66e5435b6abfb319e",
+        "opt": "default",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/pod-run/remote/leg_out/bytelm_gfx942_armA.log"
+      },
+      {
+        "name": "bytelm_gfx942_armB",
+        "exit": 0,
+        "seconds": 117,
+        "jobs": 8,
+        "binary_sha256": "a69cda94eabfe32d36eef808eedec74a10b78c5003247b8f4d19c555812008e5",
+        "opt": "default",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/pod-run/remote/leg_out/bytelm_gfx942_armB.log"
+      },
+      {
+        "name": "bytelm_sm89_armA",
+        "exit": 0,
+        "seconds": 181,
+        "jobs": 8,
+        "binary_sha256": "c4dd7149eff8a956a5f0f2583728e0acfc9218a109b4f0d4ee3aed2f7e9da136",
+        "opt": "-O0",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/pod-run/remote/leg_out/bytelm_sm89_armA.log"
+      },
+      {
+        "name": "bytelm_sm89_armB",
+        "exit": 0,
+        "seconds": 186,
+        "jobs": 8,
+        "binary_sha256": "27ff47b3e891dc7d639213f51fdf3ac97235f8a6bf20cd4c7ec35efd55fb53fe",
+        "opt": "-O0",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/pod-run/remote/leg_out/bytelm_sm89_armB.log"
+      }
+    ],
+    "pod": {
+      "name": "mojolearn-cpu-gemm-fill-tiles-20261028-104010",
+      "vcpu": 32,
+      "reaped_verified": true,
+      "spend_usd": 0.0827
+    }
+  },
+  "final2_tile_and_groups": {
+    "source_commit": "code 0086885a1a (pod); Mac roots at efda083744 (adds only the EXPERIMENTS.md text); dirty tracked files 0",
+    "compiler": "Mojo 1.0.0 (ed45d567)",
+    "note": "CPU roots define ON; sm_89 -O0 and gfx942 default optimization, arms A (off) and B (on)",
+    "results": [
+      {
+        "name": "mamba_host_cpu_mac",
+        "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
+        "exit": 0,
+        "seconds": 663,
+        "jobs": 10,
+        "binary_sha256": "74e2a4dd55a73204a696da8aa619ae33b2d41f12de95d723b7b6791f064ebde4",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/mac-cpu/build.log"
+      },
+      {
+        "name": "byte_lm_host_cpu_mac",
+        "entry": "bindings/entry/entry__mojolearn_byte_lm_host.mojo",
+        "exit": 0,
+        "seconds": 640,
+        "jobs": 10,
+        "binary_sha256": "845f5e80453fd290354599efa20813537410d10fa68af207f7c5f0df1850f1cd",
+        "note": "green after origin/main 4a10a3069e (byte_lm_host_compat_pyapi fix)",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/mac-cpu-bytelm/build.log"
+      },
+      {
+        "name": "bytelm_gfx942_armA",
+        "exit": 0,
+        "seconds": 149,
+        "jobs": 8,
+        "binary_sha256": "3d0292a2df1c73f82f5b032f84b611b08f0ee743bd76da3d90fffe740fe8cea5",
+        "opt": "default",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/pod-run/remote/leg_out/bytelm_gfx942_armA.log"
+      },
+      {
+        "name": "bytelm_gfx942_armB",
+        "exit": 0,
+        "seconds": 151,
+        "jobs": 8,
+        "binary_sha256": "b0e4cd426a0c49f2ce636e8285417b20577c72c33eff2dd8c281309e5283629e",
+        "opt": "default",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/pod-run/remote/leg_out/bytelm_gfx942_armB.log"
+      },
+      {
+        "name": "bytelm_sm89_armB",
+        "exit": 0,
+        "seconds": 232,
+        "jobs": 8,
+        "binary_sha256": "43cda21c868a833c705f42a33a18118f2630e9f717f6ce1b725edce746b31158",
+        "opt": "-O0",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/pod-run/remote/leg_out/bytelm_sm89_armB.log"
+      },
+      {
+        "name": "bytelm_sm89_armA",
+        "exit": 0,
+        "seconds": 235,
+        "jobs": 8,
+        "binary_sha256": "f81a34a354ddb1f1fb6f5740b243a30d692f1d7551203f3357714be8c441ff2c",
+        "opt": "-O0",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final2/pod-run/remote/leg_out/bytelm_sm89_armA.log"
+      }
+    ],
+    "pod": {
+      "name": "mojolearn-cpu-gemm-fill-tiles-20261028-105110",
+      "vcpu": 32,
+      "reaped_verified": true,
+      "spend_usd": 0.0984
+    }
+  }
+}
