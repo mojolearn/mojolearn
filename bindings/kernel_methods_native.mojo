@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # KernelRidge `fit`/`predict` and Nystroem `fit`/`transform`/`fit_transform`,
-# one native call each (python/mojolearn/kernel_methods.py). The shell hands
-# over the binding `_bind` resolved; this owner makes the Python methods'
+# one native call each (python/mojolearn/kernel_methods.py). This owner selects
+# the import-connected binding and makes the public methods'
 # refusals in their wording and order (kernel, degree, gamma, coef0, alpha,
 # the chi2 kernels' negative input, the precomputed square), cross-checks the
 # binary's compile-time mode, allocates the outputs, runs the binding's
@@ -26,6 +26,8 @@ from bindings.classical_validate import classical_view
 from bindings.classical_warnings import classical_warning
 from core.cast_in import CAST_KIND_SIGNED
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
+from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
+from providers.python.kernel_public_lifecycle_pyapi import kernel_public_admit, kernel_public_finite, kernel_public_ignored_target, kernel_public_result, kernel_public_column_target, kernel_public_refusal
 from providers.python.kernel_method_descriptor_pyapi import kernel_method_provider, kernel_method_execute, kernel_method_metadata
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_close,
@@ -42,7 +44,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_call,
     family_entry, family_array,
-    family_owned_snapshot, family_f32_snapshot, family_snapshot_min, family_sample_weight, family_field, family_f32,
+    family_owned_snapshot, family_f32_snapshot, family_snapshot_min, family_sample_weight_snapshot, family_field, family_f32,
 )
 
 comptime _KERNEL_PRECOMPUTED = 4
@@ -204,23 +206,25 @@ def _km_degree(fields: PythonObject, where: String) raises -> Int:
     return _km_int(family_field(fields, "degree"), where + ".degree")
 
 
-def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata) raises:
     """`KernelRidge.fit(X, y, sample_weight)`."""
     classical_connect_numpy(context)
     var where = String("KernelRidge")
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
-    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
     var x = x_meta.keep
     var n = x_meta.source.rows
     var d = x_meta.source.cols
+    if args[2] is None:
+        raise Error("ValueError: KernelRidge requires y to be passed, but the target y is None.")
     var target = family_f32_snapshot(args[2], -1, "y", context)
+    kernel_public_finite(target, "y")
     var rank = len(target.shape)
     var t = 1
     var squeeze = True
     if rank == 2:
         t = target.source.cols
-        squeeze = False
+        squeeze = kernel_public_column_target(args[2], target, context)
     elif rank != 1:
         raise Error("mojolearn " + where + ": y must be 1-D or 2-D, got " + String(rank) + "-D")
     if target.source.rows != n:
@@ -239,8 +243,13 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var dual = family_array(Python.tuple(n) if squeeze else Python.tuple(n, t), "<f4", context)
     var scalars = family_array(Python.tuple(1), "<f8", context)
     var weights = PythonObject(None)
+    var weights_owner = PythonObject(None)
+    var weights_address = 0
     if args[3] is not None:
-        weights = family_sample_weight(args[3], n, False, context, wide=True)
+        var snapshot = family_sample_weight_snapshot(args[3], n, False, context, wide=True)
+        weights = snapshot.keep
+        weights_owner = snapshot.owner
+        weights_address = snapshot.source.addr
     var admission = _km_extension(fields, args[0], where, context)
     var binding = admission[0]
     var native = admission[1]
@@ -257,7 +266,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     _ = x  # keep the Python object alive through the native call above
     _ = scalars  # keep the Python object alive through the native call above
     if weights is not None:
-        _ = py_call(addresses.append, classical_address(weights))
+        _ = py_call(addresses.append, PythonObject(weights_address))
         _ = weights  # keep the Python object alive through the native call above
         _ = scalars  # keep the Python object alive through the native call above
         _ = dual  # keep the Python object alive through the native call above
@@ -274,6 +283,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var kept = family_owned_snapshot(x_meta, context)
     _ = y^
     _ = weights^
+    _ = weights_owner^
     _ = target^
     py_setitem(fields, "X_fit_", kept)
     py_setitem(fields, "n_features_in_", PythonObject(d))
@@ -287,11 +297,11 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # the new ones once (`_km_resident_krr`).
     _km_release(model, "kernel_ridge_resident_release")
     py_setitem(fields, _HOLDER, Python.dict())
-    _ = x_meta^
+    _ = x_meta
 
 
 def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
-                 resident: Bool = True) raises -> PythonObject:
+                 xq_meta: ArrayMetadata, resident: Bool = True) raises -> PythonObject:
     """`KernelRidge.predict(X)`: K(X, X_fit_) @ dual_coef_. `resident=False`
     (the multi-GPU driver) skips the device copy of the fit: a copy minted on
     a device plan's root would outlive the call on that device. The resident
@@ -302,7 +312,6 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("dual_coef_")):
         raise Error("mojolearn " + where + ": call fit before predict")
-    var xq_meta = family_f32_snapshot(args[1], 2, "X", context, True)
     var xq = xq_meta.keep
     var q = xq_meta.source.rows
     var d = xq_meta.source.cols
@@ -346,7 +355,7 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = x_fit^
         _ = dual^
         _ = xq^
-        _ = xq_meta^
+        _ = xq_meta
         _ = x_fit_meta^
         _ = dual_meta^
         return out
@@ -366,14 +375,14 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = x_fit^
     _ = dual^
     _ = xq^
-    _ = xq_meta^
+    _ = xq_meta
     _ = x_fit_meta^
     _ = dual_meta^
     return out
 
 
 def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
-             transform: Bool = False) raises -> PythonObject:
+             x_meta: ArrayMetadata, transform: Bool = False) raises -> PythonObject:
     """`Nystroem.fit(X)`: the basis rows and the normalization. With
     `transform` (`fit_transform`), returns the transform of X: one
     `nystroem_fit_transform_ptr` call (X uploaded once) where the binding
@@ -382,7 +391,6 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var where = String("Nystroem")
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
-    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
     var x = x_meta.keep
     var n = x_meta.source.rows
     var d = x_meta.source.cols
@@ -399,7 +407,7 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                           + "n_components was set to n_samples, which results"
                           + " in inefficient evaluation of the full kernel.",
                           native_loaded_module("builtins").UserWarning, context,
-                          _km_warning_location(), "UserWarning")
+                          _km_warning_location())
         q = n
     var gamma = _km_gamma(family_field(fields, "gamma"), d, where, kernel)
     _km_chi2_input(x_meta, kernel, where)
@@ -489,18 +497,17 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = eigenvectors
         _ = out
     _ = x^
-    _ = x_meta^
+    _ = x_meta
     return out
 
 
-def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata) raises -> PythonObject:
     """`Nystroem.transform(X)`: K(X, components_) @ normalization_.T."""
     classical_connect_numpy(context)
     var where = String("Nystroem")
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("components_")):
         raise Error("mojolearn " + where + ": call fit before transform")
-    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
     var x = x_meta.keep
     var m = x_meta.source.rows
     var d = x_meta.source.cols
@@ -568,18 +575,17 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     _ = normalization_meta^
     _ = eigenvalues_meta^
     _ = eigenvectors_meta^
-    _ = x_meta^
+    _ = x_meta
     return out
 
 
-def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata) raises -> PythonObject:
     """`RBFSampler.transform(X)`: scale_ * cos(X @ random_weights_ + random_offset_)."""
     classical_connect_numpy(context)
     var where = String("RBFSampler")
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("random_weights_")):
         raise Error("mojolearn " + where + ": call fit before transform")
-    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
     var x = x_meta.keep
     var m = x_meta.source.rows
     var d = x_meta.source.cols
@@ -617,7 +623,7 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     _ = x^
     _ = weights_meta^
     _ = offset_meta^
-    _ = x_meta^
+    _ = x_meta
     return out
 
 
@@ -736,7 +742,7 @@ def _km_scale_gamma(binding: PythonObject, x: ArrayMetadata, d: Int, context: Py
     return PythonObject(scale_gamma_from_limbs(limbs, n, d))
 
 
-def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: PythonObject) raises -> PythonObject:
+def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: PythonObject, x_meta: ArrayMetadata) raises -> PythonObject:
     """`RBFSampler.fit(X)` (returns the model) or, with `transform`,
     `fit_transform(X)`: one `rbf_sampler_fit_transform_resident` call where
     the binding registers it, else the fit and then the transform."""
@@ -744,7 +750,6 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     var where = String("RBFSampler")
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
-    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
     var x = x_meta.keep
     var m = x_meta.source.rows
     var d = x_meta.source.cols
@@ -819,7 +824,7 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     _ = scalars^
     if not transform:
         _ = x^
-        _ = x_meta^
+        _ = x_meta
         return model
     if out is None:
         out = family_array(Python.tuple(m, q), "<f4", context)
@@ -833,7 +838,7 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         _ = offset
         _ = out
     _ = x^
-    _ = x_meta^
+    _ = x_meta
     return out
 
 
@@ -879,14 +884,16 @@ def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("ValueError: KernelRidge fit requires y")
     var devices = plan_devices(args[3], "km_fit", True, context)
     var binding = args[0]
+    var x = family_f32_snapshot(args[1], 2, "X", context, True)
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
-            _krr_fit(model, Python.tuple(binding, args[1], args[2], PythonObject(None)), context)
+            _krr_fit(model, Python.tuple(binding, args[1], args[2], PythonObject(None)), context, x)
         else:
-            _ = _nys_fit(model, Python.tuple(binding, args[1]), context)
+            _ = _nys_fit(model, Python.tuple(binding, args[1]), context, x)
     finally:
         plan_exit(binding)
+    _ = x^
     return model
 
 
@@ -897,70 +904,33 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
     var ridge = _km_par_admit(model, context)
     var devices = plan_devices(args[2], "km_apply", True, context)
     var binding = args[0]
+    var x = family_f32_snapshot(args[1], 2, "X", context, True)
     var out = PythonObject(None)
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
-            out = _krr_predict(model, Python.tuple(binding, args[1]), context, False)
+            out = _krr_predict(model, Python.tuple(binding, args[1]), context, x, False)
         else:
-            out = _nys_transform(model, Python.tuple(binding, args[1]), context)
+            out = _nys_transform(model, Python.tuple(binding, args[1]), context, x)
     finally:
         plan_exit(binding)
+    _ = x^
     return out
 
 def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
-    """The kernel methods' public operations: admit an import-connected binding."""
-    var admitted_args = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
-    return _kernel_methods_operation(model, operation, admitted_args, context)
-
-
-def _kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
-                              context: PythonObject) raises -> PythonObject:
     if operation == "family_km_provider_info":
         var provider = py_get(py_fields(model), "_native_kernel_method_provider")
         if provider is None:
             raise Error("kernel methods provider was not admitted")
         return neural_descriptor_info(provider)
-    if operation == "family_km_par_fit":
-        return _km_par_fit(model, args, context)
-    if operation == "family_km_par_apply":
-        return _km_par_apply(model, args, context)
-    if operation == "family_km_krr_fit":
-        _krr_fit(model, args, context)
-        return model
-    if operation == "family_km_krr_predict":
-        return _krr_predict(model, args, context)
-    if operation == "family_km_krr_score":
-        # `RegressorScoreMixin.score`: y as float32 (`as_f32_c(y, ndim=None,
-        # name="y")`), the native predict, then `metrics.r2_score(y, pred,
-        # sample_weight=..., numeric_mode=...)` through the metrics owner;
-        # Resolve the metrics binding inside this same native public operation;
-        # no Python _bind/_get_binding callback runs before admission.
-        classical_connect_numpy(context)
-        var truth = family_f32(args[2], -1, "y", context)
-        var prediction = _krr_predict(model, args, context)
-        var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
-        var metrics = estimator_binding(model, "_mojolearn_metrics", context)
-        return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
-                                      PythonObject("uniform_average"), PythonObject(True), mode), context)
-    if operation == "family_km_nys_fit":
-        _ = _nys_fit(model, args, context)
-        return model
-    if operation == "family_km_nys_transform":
-        return _nys_transform(model, args, context)
-    if operation == "family_km_rbf_transform":
-        return _rbf_transform(model, args, context)
-    if operation == "family_km_nys_fit_transform":
-        return _nys_fit(model, args, context, True)
-    if operation == "family_km_rbf_fit":
-        return _rbf_fit(model, args, False, context)
-    if operation == "family_km_rbf_fit_transform":
-        return _rbf_fit(model, args, True, context)
+    if operation == "family_km_par_fit" or operation == "family_km_par_apply":
+        var admitted = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
+        if operation == "family_km_par_fit":
+            return _km_par_fit(model, admitted, context)
+        return _km_par_apply(model, admitted, context)
     if operation == "family_km_getstate":
-        # A pickle or a deepcopy carries no device handle (meaningful only
-        # in the minting process); the copy uploads its own at first use.
-        var state = py_call(Python.import_module("builtins").dict, py_fields(model))
+        var state = py_call(native_loaded_module("builtins").dict, py_fields(model))
         _ = py_call(state.pop, PythonObject(_HOLDER), PythonObject(None))
         _ = py_call(state.pop, "_native_kernel_method_provider", PythonObject(None))
         return state
@@ -969,4 +939,64 @@ def _kernel_methods_operation(model: PythonObject, operation: String, args: Pyth
         _ = py_call(fields.update, args[0])
         py_setitem(fields, _HOLDER, Python.dict())
         return PythonObject(None)
+    var fitting = operation.endswith("fit") or operation.endswith("fit_transform")
+    var method = String("transform")
+    if operation.endswith("fit_transform"):
+        method = "fit_transform"
+    elif fitting:
+        method = "fit"
+    elif operation.endswith("predict"):
+        method = "predict"
+    elif operation.endswith("score"):
+        method = "score"
+    var fields = kernel_public_admit(model, method, fitting, args[1], context)
+    var x = family_f32_snapshot(args[1], 2, "X", context, True)
+    if operation.startswith("family_km_rbf_"):
+        kernel_public_finite(x, "X")
+    if fitting and not operation.startswith("family_km_krr_"):
+        kernel_public_ignored_target(args[2] if len(args) > 2 else PythonObject(None), x.source.rows, context)
+    var admitted = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
+    var outside = estimator_outside()
+    var depth = estimator_fit_begin(fields) if fitting else 0
+    var result = PythonObject(None)
+    try:
+        result = _kernel_methods_operation(model, operation, admitted, context, x)
+    except error:
+        raise kernel_public_refusal(error, fitting, depth > 0, x.source.rows, x.source.cols, model)
+    finally:
+        if fitting:
+            estimator_fit_end(model, depth)
+    if fitting:
+        estimator_fit_complete(model, args[1], False, context)
+    _ = x^
+    return kernel_public_result(result, method == "predict", outside, context)
+
+
+def _kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
+                              context: PythonObject, x: ArrayMetadata) raises -> PythonObject:
+    if operation == "family_km_krr_fit":
+        _krr_fit(model, args, context, x)
+        return model
+    if operation == "family_km_krr_predict":
+        return _krr_predict(model, args, context, x)
+    if operation == "family_km_krr_score":
+        var truth = family_f32(args[2], -1, "y", context)
+        var prediction = _krr_predict(model, args, context, x)
+        var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
+        var metrics = estimator_binding(model, "_mojolearn_metrics", context)
+        return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
+                                      PythonObject("uniform_average"), PythonObject(True), mode), context)
+    if operation == "family_km_nys_fit":
+        _ = _nys_fit(model, args, context, x)
+        return model
+    if operation == "family_km_nys_transform":
+        return _nys_transform(model, args, context, x)
+    if operation == "family_km_rbf_transform":
+        return _rbf_transform(model, args, context, x)
+    if operation == "family_km_nys_fit_transform":
+        return _nys_fit(model, args, context, x, True)
+    if operation == "family_km_rbf_fit":
+        return _rbf_fit(model, args, False, context, x)
+    if operation == "family_km_rbf_fit_transform":
+        return _rbf_fit(model, args, True, context, x)
     raise Error("RuntimeError: unknown kernel methods operation " + operation)
