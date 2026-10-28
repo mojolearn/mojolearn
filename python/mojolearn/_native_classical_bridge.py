@@ -326,7 +326,7 @@ def _layout(cls, attribute_descriptor):
     bindings = {}
     native = (GetSetDescriptorType, MemberDescriptorType, MethodDescriptorType, WrapperDescriptorType)
     for name, value in names.items():  # glue: bindable descriptor origin
-        if type(value) in native or value is attribute_descriptor or type(value) is FunctionType:
+        if type(value) in native or (attribute_descriptor is not None and value is attribute_descriptor) or type(value) is FunctionType:
             bindings[name] = (value, value.__get__)
         elif type(value) in (classmethod, staticmethod) and type(value.__func__) is FunctionType:
             bindings[name] = (value, value.__get__)
