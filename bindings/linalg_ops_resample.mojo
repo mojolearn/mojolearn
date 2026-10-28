@@ -20,7 +20,7 @@ from bindings.mode_metadata_native import _fields
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
-from providers.python.resample_public_pyapi import resample_arguments
+from providers.python.resample_public_pyapi import resample_arguments, resample_result_initialize
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_buffer_owner import native_storage_allocate
@@ -736,6 +736,8 @@ def _rs_resample(args: PythonObject, context: PythonObject) raises -> PythonObje
 
 
 def rs_operation(operation: String, var args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == "family_rs_result_initialize":
+        return resample_result_initialize(args, context)
     classical_connect_numpy(context)
     # Row resampling still has its separately tracked generic container route.
     # Its migration must preserve pandas/object dtype and sequence semantics.

@@ -89,13 +89,7 @@ class BootstrapResult:
 
     def __init__(self, point_estimate, distribution, sorted_distribution,
                  standard_error, low, high, order_low, order_high):
-        self.point_estimate = point_estimate
-        self.distribution = distribution
-        self.sorted_distribution = sorted_distribution
-        self.standard_error = standard_error
-        self.confidence_interval = ConfidenceInterval(low, high)
-        self.order_low = order_low
-        self.order_high = order_high
+        return _NATIVE(None, "family_rs_result_initialize", (self, "bootstrap", point_estimate, distribution, sorted_distribution, standard_error, low, high, order_low, order_high), _NATIVE_CONTEXT)
 
 
 class PermutationTestResult:
@@ -115,11 +109,7 @@ class PermutationTestResult:
     """
 
     def __init__(self, statistic, null_distribution, pvalue, count_less, count_greater):
-        self.statistic = statistic
-        self.null_distribution = null_distribution
-        self.pvalue = pvalue
-        self.count_less = count_less
-        self.count_greater = count_greater
+        return _NATIVE(None, "family_rs_result_initialize", (self, "permutation", statistic, null_distribution, pvalue, count_less, count_greater), _NATIVE_CONTEXT)
 
 
 class MonteCarloResult:
@@ -139,10 +129,7 @@ class MonteCarloResult:
     """
 
     def __init__(self, integral, mean, volume, closed_form):
-        self.integral = integral
-        self.mean = mean
-        self.volume = volume
-        self.closed_form = closed_form
+        return _NATIVE(None, "family_rs_result_initialize", (self, "monte_carlo", integral, mean, volume, closed_form), _NATIVE_CONTEXT)
 
 
 def _extension(numeric_mode=None):
@@ -466,7 +453,8 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
 # function is one native call, handed the resample binding of its numeric mode.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
-_native_family_bridge.tables(family_rs_state=globals())
+_native_family_bridge.tables(family_rs_state=globals(),
+                             family_rs_result_classes=(BootstrapResult, PermutationTestResult, MonteCarloResult, ConfidenceInterval))
 _native_family_bridge.connect_bindings("_mojolearn_resample")
 
 __all__ = ["bootstrap", "permutation_test", "monte_carlo_integrate", "resample", "resample_indices",
