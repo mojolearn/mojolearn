@@ -12,7 +12,10 @@ kept every array built here, and the caller's buffers, alive for ever.
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_setattr, py_type
+from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem
+from bindings.native_array_snapshot import native_array_slots, native_array_snapshot
+from bindings.native_array_storage import native_array_zeros
+from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.generation_buffers_impl import generation_ids_into
 from std.memory import memcpy
 
@@ -43,12 +46,53 @@ comptime GENERATION_BOUNDARY = _Global[
 def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     g[].bi = native_loaded_module("builtins")
+    if py_type(classes) is not g[].bi.tuple or len(classes) != 4:
+        raise Error("TypeError: generation requires its import-connected class tuple")
+    for index in [0, 1, 3]:  # small-loop(generation owner class identities)
+        if py_type(classes[index]) is not g[].bi.type:
+            raise Error("TypeError: generation owner classes require native type metadata")
+    if g[].array_cls is not None and g[].array_cls is not classes[0]:
+        raise Error("TypeError: generation Array identity cannot be replaced")
+    if ((g[].state_cls is not None and g[].state_cls is not classes[1])
+            or (g[].stream_cls is not None and g[].stream_cls is not classes[3])):
+        raise Error("TypeError: generation state and stream identities cannot be replaced")
+    if py_type(classes[2]) is not g[].bi.dict:
+        raise Error("TypeError: generation layer classes require an exact dictionary")
+    var layer_names = py_call(g[].bi.list, classes[2].keys())
+    for i in range(len(layer_names)):  # small-loop(import-connected layer class registry)
+        if py_type(layer_names[i]) is not g[].bi.str:
+            raise Error("TypeError: generation layer class names require native strings")
+    var layer_classes = py_call(g[].bi.dict, classes[2])
+    for i in range(len(layer_names)):  # small-loop(capture generation layer class identities)
+        if py_type(layer_classes[layer_names[i]]) is not g[].bi.type:
+            raise Error("TypeError: generation layer classes require native type metadata")
+        if g[].layer_classes is not None:
+            if g[].layer_classes[layer_names[i]] is not layer_classes[layer_names[i]]:
+                raise Error("TypeError: generation layer class identities cannot be replaced")
     g[].arrays = native_loaded_module("array").array
     g[].array_cls = classes[0]
     g[].state_cls = classes[1]
-    g[].layer_classes = classes[2]
+    g[].layer_classes = layer_classes
     g[].stream_cls = classes[3]
     return PythonObject(None)
+
+
+def generation_array_context() raises -> PythonObject:
+    var cls = GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls
+    if cls is None:
+        raise Error("RuntimeError: generation requires its import-time Array connection")
+    return Python.dict(array_class=cls)
+
+
+def generation_array_snapshot(value: PythonObject) raises -> PythonObject:
+    return native_array_snapshot(value, generation_array_context(), True)
+
+
+def generation_buffer_view(value: PythonObject) raises -> PythonObject:
+    # A fresh native memoryview owns the admitted export and freezes metadata.
+    # Releasing a caller's original memoryview cannot invalidate this owner.
+    admit_native_buffer_exporter(value)
+    return py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.memoryview, value)
 
 
 def py_ints(values: List[Int]) raises -> PythonObject:
@@ -61,28 +105,22 @@ def py_ints(values: List[Int]) raises -> PythonObject:
 
 def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var slots = native_array_slots(generation_array_context())
+    if code != "f" and code != "i" and code != "b":
+        raise Error("generation: unsupported native allocation dtype")
     var n = 1
     var itemsize = 1 if code == "b" else 4
     for i in range(len(dims)):  # small-loop(array shape dimension words)
         if dims[i] < 0 or (dims[i] != 0 and n > 2147483647 // dims[i]):
             raise Error("generation: invalid shape or signed 32-bit kernel indexing overflow")
         n *= dims[i]
-    var store = py_call(g[].arrays, code)
-    _ = py_call(store.frombytes, py_call(g[].bi.bytes, n * itemsize))
+    var store = native_array_zeros(code, n)
     var result = py_call(g[].bi.object.__new__, g[].array_cls)
-    py_setattr(result, "_store", store)
-    py_setattr(result, "_base", PythonObject(None))
-    py_setattr(result, "_pin", PythonObject(None))
-    py_setattr(result, "_mv", py_call(g[].bi.memoryview, store))
-    py_setattr(result, "_addr", store.buffer_info()[0])
-    py_setattr(result, "_readonly", PythonObject(False))
-    py_setattr(result, "shape", py_call(g[].bi.tuple, py_ints(dims)))
-    py_setattr(result, "dtype", PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")))
-    py_setattr(result, "ndim", PythonObject(len(dims)))
-    py_setattr(result, "size", PythonObject(n))
-    py_setattr(result, "nbytes", PythonObject(n * itemsize))
-    py_setattr(result, "itemsize", PythonObject(itemsize))
-    py_setattr(result, "order", PythonObject("C"))
+    var values = Python.dict(_store=store, _base=PythonObject(None), _pin=PythonObject(None),
+        _mv=py_call(g[].bi.memoryview, store), _addr=store.buffer_info()[0], _readonly=False,
+        shape=py_call(g[].bi.tuple, py_ints(dims)),
+        dtype=PythonObject("<f4" if code == "f" else ("<i4" if code == "i" else "<i1")),
+        ndim=len(dims), size=n, nbytes=n * itemsize, itemsize=itemsize, order="C")
     var strides = g[].bi.list()
     var insert = strides.insert
     var stride = itemsize
@@ -90,7 +128,10 @@ def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject
         var axis = len(dims) - i - 1
         _ = py_call(insert, 0, stride)
         stride *= dims[axis]
-    py_setattr(result, "strides", py_call(g[].bi.tuple, strides))
+    py_setitem(values, "strides", py_call(g[].bi.tuple, strides))
+    var names = py_call(g[].bi.list, values.keys())
+    for i in range(len(names)):  # small-loop(publish generated Array through admitted native slots)
+        py_call(slots[names[i]].__set__, result, values[names[i]])
     return result
 
 
@@ -99,11 +140,12 @@ def generation_address(value: PythonObject, mut keep: List[PythonObject]) raises
         return 0
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     if py_type(value) is g[].array_cls:
-        if String(value.order) != "C":
+        var captured = generation_array_snapshot(value)
+        if String(captured.order) != "C":
             raise Error("generation: internal model and state arrays must be C-contiguous")
-        keep.append(value)
-        return Int(py=value._addr)
-    var view = py_call(g[].bi.memoryview, value)
+        keep.append(captured)
+        return Int(py=captured._addr)
+    var view = generation_buffer_view(value)
     if not Bool(py=view.c_contiguous):
         raise Error("generation: internal model and state buffers must be C-contiguous")
     # Copy read-only model weights to a native owner. Mutable state is created
@@ -111,8 +153,10 @@ def generation_address(value: PythonObject, mut keep: List[PythonObject]) raises
     var format = String(view.format)
     if format != "f" and format != "i" and format != "b":
         raise Error("generation: unsupported native model buffer format " + format)
-    var packed = py_call(g[].arrays, format)
-    _ = py_call(packed.frombytes, view.tobytes())
+    var packed = native_array_zeros(format, Int(py=view.nbytes) // Int(py=view.itemsize))
+    var destination = py_call(py_call(g[].bi.memoryview, packed).cast, "B")
+    py_setitem(destination, py_call(g[].bi.slice, PythonObject(None)), py_call(view.cast, "B"))
+    keep.append(view)
     keep.append(packed)
     return Int(py=packed.buffer_info()[0])
 
@@ -121,13 +165,18 @@ def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var shape = PythonObject(None)
     var view = PythonObject(None)
+    var captured_owner = PythonObject(None)
     var column_major = False
     if py_type(value) is g[].array_cls:
-        column_major = String(value.order) == "F"
-        shape = value.shape
-        view = value._mv
+        var captured = generation_array_snapshot(value)
+        column_major = String(captured.order) == "F"
+        shape = captured.shape
+        view = captured._mv
+        # Retain the captured base export alongside the typed view while IDs
+        # are copied, including ownerless physical views used by Array.
+        captured_owner = captured
     else:
-        view = py_call(g[].bi.memoryview, value)
+        view = generation_buffer_view(value)
         shape = view.shape
     var rank = len(shape)
     if (not step and rank != 2) or (step and rank != 1 and rank != 2):
@@ -141,25 +190,31 @@ def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -
         raise Error("TypeError: generation ids must be integer (a native-endian integer buffer)")
     # Pack strided buffer inputs with the CPython buffer implementation; all
     # validation and conversion below is a Mojo loop over native storage.
-    var packed = py_call(g[].arrays, fmt)
-    _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
+    var packed = native_array_zeros(fmt, Int(py=view.nbytes) // Int(py=view.itemsize))
+    var destination = py_call(py_call(g[].bi.memoryview, packed).cast, "B")
+    py_setitem(destination, py_call(g[].bi.slice, PythonObject(None)), py_call(view.tobytes, "C"))
     var out = generation_array([b, l], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
     generation_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, b, l, column_major, vocab, dst)
     _ = packed^
+    _ = captured_owner
     return out
 
 
 def generation_copy(value: PythonObject) raises -> PythonObject:
+    var captured = generation_array_snapshot(value)
     var dims = List[Int]()
-    for i in range(len(value.shape)):  # small-loop(array shape dimension words)
-        dims.append(Int(py=value.shape[i]))
-    var code = "f" if String(value.dtype) == "<f4" else "i"
+    for i in range(len(captured.shape)):  # small-loop(array shape dimension words)
+        dims.append(Int(py=captured.shape[i]))
+    var code = "f" if String(captured.dtype) == "<f4" else "i"
+    if String(captured.dtype) != "<f4" and String(captured.dtype) != "<i4":
+        raise Error("TypeError: generation state copy requires float32 or int32 storage")
     var out = generation_array(dims, code)
     var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
-    var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
-    memcpy(dest=dst, src=src, count=Int(py=value.nbytes))
+    var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=captured._addr))
+    memcpy(dest=dst, src=src, count=Int(py=captured.nbytes))
+    _ = captured
     return out
 
 
@@ -176,12 +231,14 @@ def generation_mutable(
     if value is None:
         raise Error("CausalLM: " + label + " is missing; allocate_state() makes a complete state")
     if py_type(value) is g[].array_cls:
-        if String(value.dtype) != "<f4" or String(value.order) != "C" or Bool(py=value._readonly):
+        var captured = generation_array_snapshot(value)
+        if String(captured.dtype) != "<f4" or String(captured.order) != "C" or Bool(py=captured._readonly):
             raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
-        view = value._mv
-        shape = value.shape
+        view = captured._mv
+        shape = captured.shape
+        keep.append(captured)
     else:
-        view = py_call(g[].bi.memoryview, value)
+        view = generation_buffer_view(value)
         shape = view.shape
         if Bool(py=view.readonly) or not Bool(py=view.c_contiguous) or String(view.format) != "f":
             raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
@@ -200,8 +257,12 @@ def generation_mutable(
         size *= expected[i]
     if Int(py=view.nbytes) != size * 4:
         raise Error("CausalLM: " + label + " span differs from its shape")
-    var address = generation_address(value, keep)
-    if py_type(value) is not g[].array_cls:
+    var address: Int
+    if py_type(value) is g[].array_cls:
+        address = Int(py=keep[len(keep) - 1]._addr)
+    else:
+        # The immutable internal view is the already-captured metadata owner.
+        address = generation_address(view, keep)
         var pair = g[].bi.list()
         _ = py_call(pair.append, view)
         _ = py_call(pair.append, keep[len(keep) - 1])

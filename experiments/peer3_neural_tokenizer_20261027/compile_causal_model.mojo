@@ -11,6 +11,8 @@ def peer3_causal_model_compile(op: Int, py_self: PyObjectPtr, args: PyObjectPtr)
         return causal_model_c[0](py_self, args)
     if op == 19:
         return causal_model_c[1](py_self, args)
+    if op == 20:
+        return causal_model_c[2](py_self, args)
     comptime for index in range(18):
         if op == index:
             return causal_public_c[index](py_self, args)
