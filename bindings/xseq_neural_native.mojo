@@ -33,7 +33,7 @@ from bindings.xseq_native_common import (
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
     XseqStream, xseq_neural_provider, xseq_output_provider,
 )
-from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels
+from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 
 
@@ -293,7 +293,7 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var steps_t = Int(py=x.shape[1])
     var out = xseq_zeros(Python.tuple(n, fields["n_outputs_"]), context)
     var seq = xseq_zeros(Python.tuple(n, steps_t, xseq_int(fields["hidden_size"])) if want_seq else Python.tuple(1), context)
-    var params = xseq_f32(xseq_input(fields["params_"], context), "params_", False, context)
+    var params = xseq_f32(xseq_private_input(fields["params_"], context, "params_"), "params_", False, context)
     var ip = _rnn_ints(model, fields)
     var network = net_of(py_ints(ip))
     if Int(py=params.size) != network.n_params():
@@ -552,8 +552,8 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
     var total = 0
     var input_width = columns
     for l in range(layers):  # driver-loop: capture each admitted fitted weight and its shape once
-        var weights = xseq_f32(xseq_input(coefs[l], context), "coefs_", False, context)
-        var bias = xseq_f32(xseq_input(intercepts[l], context), "intercepts_", False, context)
+        var weights = xseq_f32(xseq_private_input(coefs[l], context, "coefs_"), "coefs_", False, context)
+        var bias = xseq_f32(xseq_private_input(intercepts[l], context, "intercepts_"), "intercepts_", False, context)
         var weight_shape = weights.shape
         var bias_shape = bias.shape
         if len(weight_shape) != 2 or len(bias_shape) != 1:
