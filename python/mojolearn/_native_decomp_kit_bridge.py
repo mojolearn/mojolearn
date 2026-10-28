@@ -65,6 +65,13 @@ def connect(door, **classes):
     # The shared native label and accuracy steps (EllipticEnvelope.score).
     from ._native_labels_bridge import label_context
     context.update(label_context())
+    if door == "pls_native_call":
+        # glue: exact public layouts and fixed PLS family metadata, connected
+        # before runtime. Shared import completion refreshes native methods.
+        from ._native_classical_bridge import _layout
+        owners = (classes["pls_regression_class"], classes["pls_canonical_class"], classes["pls_cca_class"])
+        context["classical_public_layouts"] = {cls: _layout(cls, None) for cls in owners}  # glue: three native PLS owners
+        context["classical_public_installed"] = True
     entry = getattr(_binding()._module, door)
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError(f"the native decomposition owner requires a compiled {door}")

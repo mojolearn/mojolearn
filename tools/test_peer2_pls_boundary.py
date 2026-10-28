@@ -50,7 +50,7 @@ def test_native_target_uses_captured_metadata_without_array_or_reshape_protocol(
     assert not any(token in code for token in ('py_call(', 'getattr', 'hasattr', 'source.shape', 'source.reshape'))
     provider = (ROOT / "providers/python/decomp_input_pyapi.mojo").read_text()
     assert provider.count('array_shape_once(view, context)') == 1
-    assert provider.count('array_metadata_once(view, shape^, name, context)') == 1
+    assert provider.count('array_metadata_once(view, shape^, name, context, complex_error=complex_error)') == 1
     assert 'snapshot.owner = Python.tuple(original_owner, snapshot.owner)' in provider
     assert 'family_all_finite_f32(' in provider
 
@@ -61,3 +61,34 @@ def test_kit_retains_snapshot_owner_and_drops_address_when_device_writes():
     assert 'self.matrices[index].host_address = snapshot.source.addr' in kit
     invalidation = kit[kit.index('    def wrote_device('):kit.index('    def wrote_host(')]
     assert 'self.matrices[a].host_address = -1' in invalidation
+
+
+def test_public_lifecycle_replaces_decorators_only_for_pls_family():
+    tree = ast.parse(SHELL.read_text())
+    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+    flags = [node for node in classes["_PLS"].body if isinstance(node, ast.Assign)
+             and any(isinstance(target, ast.Name) and target.id == "_mojolearn_native_public" for target in node.targets)]
+    assert len(flags) == 1 and ast.literal_eval(flags[0].value) is True
+    assert not any(isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "_mojolearn_native_public" for target in node.targets) for node in classes["_Base"].body)
+    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    for step in ("classical_require_fitted(model, False, operation, context)",
+                 "classical_check_width(x.shape[1], Int(py=features), name)",
+                 "estimator_feature_check(model, fields, args[0], context)",
+                 "estimator_fit_begin(fields)", "estimator_fit_end(model, depth)",
+                 "estimator_fit_complete(model, args[0], False, context)",
+                 'parallel_public_result(result, operation, PythonObject("regressor"), context)'):
+        assert step in owner
+    assert 'var result = pls_public_operation(call[0]' in owner
+    assert 'classical_python_error(error^, args_ptr)' in owner
+
+
+def test_snapshot_addresses_survive_shared_host_views():
+    kit = (ROOT / "bindings/decomp_kit_native.mojo").read_text()
+    views = kit[kit.index("    def transpose("):kit.index("    def hstack(")]
+    for line in views.splitlines():
+        if "self.add(shared," in line or "self.add(store," in line:
+            assert "self.matrices[a].host_address" in line
+    assert 'Int(py=classical_address(source))' not in kit
+    score = (ROOT / "bindings/pls_native.mojo").read_text()
+    default = score[score.index('mode = context["backend_fields"]["_DEFAULT_MODE"]'):]
+    assert default.index('if py_type(mode) is not b.str:') < default.index('mode.strip')

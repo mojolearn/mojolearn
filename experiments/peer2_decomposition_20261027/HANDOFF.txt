@@ -35,8 +35,30 @@ native result publishing. The legacy tokenizer names are replaced at import by
 the exact runtime_classical entries; the placeholder declarations alone do not
 identify the executing owner.
 
+Chunk 3: complete PLS public lifecycle envelope
+PLSRegression/PLSCanonical/CCA now inherit _PLS._mojolearn_native_public only
+because their native door implements the former fit, fitted-state, validation,
+feature-name, fit completion and finished public output behavior. The base
+family remains wrapped; this flag does not exempt other decomposition classes.
+The PLS bridge registers exact class layouts using existing shared admission.
+Declared parameters and fitted scalar flags are admitted before conversions.
+Native fit depth is restored on errors; successful fits set the fitted flag and
+feature names. Native NotFittedError retains the optional sklearn relationship.
+Public predict widens to float64, projections remain float32, and completed
+arrays/tuples become NumPy outputs for outside callers using the existing native
+public-result owner. Input shape/sparse/width/finite/target-length checks stay
+inside the same call. PLSRegression accepts sparse X; PLSCanonical/CCA refuse
+it as before. Native warnings use metric_warn instead of _warnings.warn.
+
+The shared array_metadata_once complex_error argument (owned by preprocessing)
+preserves complex X/y refusals before numeric CastIn construction, without a
+second dtype read. Integration must include that shared-provider commit.
+Device/host vector views retain frozen host addresses across transpose/reshape;
+host rows/columns/stack/scalar reads use the same address cache. The process
+numeric-mode default is checked as an exact string before normalization.
+
 Validation completed:
-8 source tests passed, exit 0: tools/test_peer2_pls_boundary.py,
+10 source tests passed, exit 0: tools/test_peer2_pls_boundary.py,
 tools/test_peer2_manifold_frontdoors.py, tools/test_native_decomp_params_connection.py.
 Python syntax checked for the edited shell and new public runtime probes.
 git diff --check passed. The first source-test attempt failed because its text
@@ -49,31 +71,35 @@ Evidence root: ~/mojolearn-evidence/peer2-decomposition-20261027/
   manifold-shell-tests-direct.log (one source check / 11 shells; exit 0)
   pls-source-tests.log (one source assertion failed, seven passed)
   pls-source-tests-fixed.log (8 passed; exit 0)
+  pls-lifecycle-source-tests-final2.log (10 passed; exit 0)
 
 Pending, not claimed:
 - Native compile. No lane compilation was performed. Smallest supported host
   group is bindings/build_runtime_classical_host.sh. A focused native import
   probe covering bindings.pls_native.pls_c and its changed dependencies can
   establish the development compile before root's integration merge.
-- Runtime controls in python/mojolearn/tests/test_pls_native_boundary.py (16
+- Runtime controls in python/mojolearn/tests/test_pls_native_boundary.py (27
   parameterized cases): vector/column/strided/list targets across the three
   public estimators, protocol refusal without hook invocation, finite/length/
-  fitted checks. These are UNRUN against the changed native binary.
+  fitted checks, public lifecycle/dtypes, scalar hooks, sparse policy and complex
+  X/y errors. These are UNRUN against the changed native binary.
 - Cross-vendor/runtime identity and installed artifact verification after
   final integration. No broad benchmark, GPU campaign, publish or main merge.
 
 Remaining migration debt (family not declared complete):
-- PLS/decomposition model py_fields admission, mutable scalar conversion,
-  class constants and inherited attribute lifecycle remain shared dependencies.
-  py_fields currently reaches object.__getattribute__(model, '__dict__'). Root
-  owns the schema/admission repair; this lane did not edit those shared files.
+- Shared layout/ArrayMetadata repairs must be integrated with this work.
+  PLS now checks its registered class layout and parameter values before its
+  owner reads fields; root still owns fixes to shared pre-dispatch admission.
+  Other decomposition owners still need corresponding complete lifecycle work.
 - DecompKit uses packed CPython calls to existing compiled x_decomp entries.
   No raw native x_decomp descriptor table was added by this chunk. Existing
-  scalar conversions, iteration-result list construction and warning delivery
-  remain. Native warning delivery may transitively execute Python hooks.
+  scalar conversions and iteration-result list construction remain. Native
+  warning behavior now uses the existing metric_warn implementation; its
+  transitive behavior still needs the final public runtime audit.
 - Scoring still uses existing labels_f32 and native metrics preparation paths;
   their transitive metadata/callback audit remains required. The score wrapper
-  change alone does not qualify the whole score operation as Python-free.
+  and lifecycle source changes do not qualify the score operation as
+  Python-free without the final native/provider runtime evidence.
 - Other decomposition owners (PCA/TruncatedSVD/IncrementalPCA, ICA/NMF/FA/LDA,
   dictionary learning/sparse PCA, random projection, standalone decomp linalg)
   still need complete transitive provider/metadata/admission qualification.

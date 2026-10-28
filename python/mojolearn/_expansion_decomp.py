@@ -2834,6 +2834,9 @@ class _PLS(RegressorScoreMixin, _Base):
     `_get_first_singular_vectors_power_method`, `_center_scale_xy`,
     `_get_first_singular_vectors_svd` (PLSCanonical algorithm='svd'),
     `_svd_flip_1d`, `transform`, `inverse_transform`, `predict`."""
+    # The native PLS envelope preserves _mode/_sk_validate lifecycle and
+    # public result handling; no Python decorators surround these operations.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"
     _sklearn_target_tags = {"multi_output": True}
@@ -5099,7 +5102,7 @@ _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibat
 from . import _metrics_impl as _pls_metrics  # noqa: E402,F401
 _native_family_bridge.connect_bindings("_mojolearn_metrics")
 _PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_class=PLSRegression,
-                                              pls_canonical_class=PLSCanonical,
+                                              pls_canonical_class=PLSCanonical, pls_cca_class=CCA,
                                               pls_metric_owner=_native_family_bridge.connect())
 
 
