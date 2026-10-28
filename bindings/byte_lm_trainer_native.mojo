@@ -22,7 +22,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_info, neural_descriptor_construct, neural_descriptor_entry
-from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_array
+from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_array, classical_dtype_str
+from core.cast_in import CAST_KIND_SIGNED
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
@@ -75,18 +76,21 @@ def _ids(source: PythonObject, shape: _Shape, context: PythonObject) raises -> P
     if not buffer:
         raise Error(refusal)
     var value = classical_input(source, context, "ids")
-    var dtype = String(py=py_call(b.str, value.dtype))
+    # NumPy dtype.__str__ dispatches into Python. Read the admitted native
+    # typestr once; the strict int32 contract fixes the cast kind directly.
+    var dtype = classical_dtype_str(value, context)
     var item = Int(py=value.itemsize)
     if not ((dtype == "<i4" or dtype == "int32") and item == 4):
         raise Error(refusal)
     var rows = shape.batch()
     var cols = shape.length() + 1
-    if Int(py=value.ndim) != 2 or Int(py=value.shape[0]) != rows or Int(py=value.shape[1]) != cols:
+    var dimensions = value.shape
+    if len(dimensions) != 2 or Int(py=dimensions[0]) != rows or Int(py=dimensions[1]) != cols:
         raise Error("ValueError: Byte-LM ids requires finite shape (" + String(rows) + ", " + String(cols) + ")")
-    var kind = classical_cast_kind(value, item, "ids", context)
+    var strides = value.strides
     var tokens = tsa_array("i", "<i4", Python.tuple(rows, cols), rows * cols, 4, context)
-    neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=value.strides[0]), Int(py=value.strides[1]),
-                       rows, cols, item, kind, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
+    neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+                       rows, cols, item, CAST_KIND_SIGNED, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
     _ = value  # keep the Python object alive through the native call above
     _ = tokens  # keep the Python object alive through the native call above
     _ = value^
