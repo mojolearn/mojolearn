@@ -2,7 +2,8 @@
 # Focused public scaler entries; compile status is independent of PLS.
 from std.python._cpython import PyObjectPtr
 from std.python import PythonObject
-from std.python.bindings import PythonModuleBuilder, raise_python_exception
+from std.python.bindings import PythonModuleBuilder
+from std.os import abort
 from bindings.scaler_native import scaler_fit_c
 from bindings.scaler_lifecycle_native import scaler_lifecycle_c
 from bindings.minmax_native import minmax_lifecycle_c
@@ -36,5 +37,4 @@ def PyInit_peer2_scalers() abi("C") -> PythonObject:
         module.def_py_c_function(minmax_lifecycle_c, "minmax_scaler_native_call")
         return module.finalize()
     except error:
-        _ = raise_python_exception(error)
-        return PythonObject(None)
+        abort(String("failed to create peer2_scalers: ", error))
