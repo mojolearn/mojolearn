@@ -1,31 +1,54 @@
 PROVIDER MIGRATION HANDOFF — 2026-10-27
 
-LATEST PROGRESS CHECKPOINT — 2026-10-27 23:29 ET
+LATEST PROGRESS CHECKPOINT — 2026-10-27 23:47 EDT
 Root is serializing incremental main merges after focused compile evidence.
-Main before this checkpoint commit: 47a88274c747273ab783eb429d7dc3eb8a5984c0.
-Accepted source batches now include Session native dispatch; exact Program save
-metadata admission; metric binding selection; AutoARIMA constructor/forecast;
-CV constructors, public metadata and search replacement lifetime admission;
-Cholesky full public boundary plus constructor/fit owner-release repair;
-six-cluster constructors; numerical resampling; forecast convenience operations;
-PLS/manifold/UMAP/random projection admission; repaired scaler snapshots and
-registration; and corpus/tokenizer/configuration/Transformer session-tape work.
-Each accepted scope has a compile receipt under its experiments directory.
-No runtime, installed-wheel, GPU identity or benchmark verification was run.
-The scaler registration helper was compiled in a module-init probe; production
-received its same import/call without a full classical-module rebuild.
+Main before this checkpoint commit: 5bedbe70a3f0dd77756c8464819434be63fae438.
+The three named gaps now have compiled repairs in main: AgglomerativeClustering
+binding selection, MoE weight loading/backward, and Program.save exact metadata
+admission. Program public dispatch is also merged through its native Session
+owner, with construction/run/profile/control/fit/save/free covered by its
+HostExec compile. Program.partition/distribute, Session.run factory handling,
+distributed/partitioned execution and model-pool/offload training remain active
+separate work owned by root/program_dispatch_finish.
 
-Pending separate batches must remain separate: uncompiled newer manifold/PCA/
-Normalizer work; TSNE four-argument lifecycle companion until its native bridge
-compiles; CNN combined final source pending matching compile; resampling result
-constructor replacement-owner fix; AutoARIMA constructor replacement-owner fix;
-Program public dispatch/distributed execution; GP/tree and other owned work.
-The broad migration is incomplete. Current native arithmetic entry transports
-and older transitive helper paths remain explicit follow-up debt per lane.
+Additional accepted batches: native Session dispatch; metrics binding selection
+and report builders; AutoARIMA and forecast constructors/convenience operations
+with replacement-owner admission; CV constructors/public metadata/search owners,
+scalar flags and retained Array snapshots; Cholesky public lifecycle; six-cluster
+constructors; GaussianMixture public lifecycle; HDBSCAN lifecycle and membership
+operations; numerical resampling and result constructors with release admission;
+PLS/manifold/UMAP/random projection admission; repaired scaler snapshots and type
+registration; corpus/tokenizer/configuration/Transformer tape; neighbors/kernels/
+hierarchy; CNN tensor/layer public owners; tree auxiliary operations/state export.
+The shared fitted-error path now admits own/sklearn/cached exception classes and
+namespace keys before construction or reduction (Mac CPU compile41.040s).
+
+Receipts under the respective experiments directories state exact source, target,
+flags, workers, dependencies, binaries, failures and coverage. No runtime,
+installed-wheel, GPU identity or benchmark verification campaign was run. Scaler
+type-registration and HDBSCAN family-router wiring have focused helper compile
+coverage; their complete production modules were not rebuilt. Whitespace-only
+EOF cleanup in estimator_tabular_boundary_pyapi changes no executable source.
+
+Pending separate batches stay on their lanes: newer manifold/PCA/Normalizer and
+TSNE lifecycle companion; additional graph/classifier/neural paths; generation,
+model catalog and parallel CausalLM admission; GP/tree lifecycle; general row
+resampling and remaining time-series/CV paths; DBSCAN/KDE/QN/linear lifecycle;
+Program/distributed work above. GaussianMixture retained-provider admission has
+an identified follow-up assigned to the classical lane. The broad migration is
+incomplete; native arithmetic transports and older transitive helper paths remain
+explicit follow-up debt. Compiler success does not establish callback freedom.
+
 All59 source files marked prohibited in the historical audit have assigned
-owners. These are ownership records, not a current count of defects or proof
-that every transitive path is repaired. Six independent peer threads plus root
-repair lanes are active; peers report coherent green batches for root merging.
+owners. These are ownership records, not a current defect count or proof that
+every transitive path is repaired. Six peer threads plus root repair lanes are
+working independently. Andrew's separate CPU review thread owns GBDT host CPU
+coverage fixes and will also deliver compiled batches for serialized integration.
+
+RunPod CPU builds used32 allocated cores and32 configured compiler workers;
+small Mac builds used10 configured workers. Allocation is not CPU utilization.
+Completed root pods are retained and deleted, not idling without a lease. Peers
+may independently rent/reuse CPU pods with60-minute deadmen and Mac+R2 retention.
 
 CURRENT RESUME — 2026-10-27 22:51 ET
 This section supersedes the historical checkpoint/policy/status below. The

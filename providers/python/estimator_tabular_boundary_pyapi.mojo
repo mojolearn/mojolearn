@@ -62,5 +62,3 @@ def _refusal(error: Error, fitting: Bool, nested: Bool, rows: Int, columns: Int,
     if pending:
         _drop_pending()
     return Error("ValueError: " + message)
-
-

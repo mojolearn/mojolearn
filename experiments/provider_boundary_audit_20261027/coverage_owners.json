@@ -26,17 +26,24 @@
   },
   "additional_active_scope": {
     "root": [
-      "Session public descriptor compiled/merged90585148f8",
-      "Session scalar/container protocol admission review remains pending",
-      "shared array/backend/mode/native profile boundary"
+      "Serialized main integration; shared fitted-exception admission repair compiled and merged",
+      "Session scalar/container protocol admission remains pending",
+      "Shared array/backend/native metadata source review"
     ],
     "root/program_dispatch_finish": [
-      "Program serialization metadata admission",
-      "Program public dispatch",
+      "Program serialization metadata and public dispatch compiled and merged; GPU/runtime untested",
+      "Session.run and partition/distribute factory boundaries",
       "distributed and partitioned execution",
       "model-pool and offload training"
+    ],
+    "cpu_coverage": [
+      "GBDT host CPU coverage comments and weighted Logloss native entry support; separate Andrew-authorized thread"
     ]
   },
   "delivery": "small affected compile -> coherent main merge/push; no runtime verification campaign",
-  "program_lane_reassignment": "Previous Program agent hit model capacity after delivering compiled serialization repair; fresh program_dispatch_finish owns retained public-dispatch draft and pending distributed/training work."
+  "program_lane_reassignment": "Previous Program agent hit model capacity after delivering compiled serialization repair; fresh program_dispatch_finish owns retained public-dispatch draft and pending distributed/training work.",
+  "latest_checkpoint_source": "5bedbe70a3f0dd77756c8464819434be63fae438",
+  "additional_peer_threads": {
+    "cpu_coverage": "01a18061-a347-72a3-849f-5197e96ca16f"
+  }
 }
