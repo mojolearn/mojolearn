@@ -42,7 +42,7 @@ def _scalar_word(value: ArrayMetadata) -> UInt64:
     var raw = UInt64(0)
     for i in range(width):  # small-loop(itemsize: supported numeric scalar byte width): at most eight bytes
         var at = i if value.native_byte_order else width - i - 1
-        raw |= UInt64(pointer[at]) << (8 * i)
+        raw |= UInt64(pointer[at]) << UInt64(8 * i)
     return cast_w64_bits(raw, value.source.kind, width)
 
 
@@ -73,7 +73,7 @@ def umap_integer(value: PythonObject, name: String, minimum: Int, maximum: Int,
             raise Error("ValueError: UMAP " + name + " must be an integer")
         if not signed and word > UInt64(UMAP_I64_MAX):
             raise Error("ValueError: UMAP " + name + " must be in [" + String(minimum) + ", " + String(maximum) + "]")
-        var integer = Int(bitcast[Int64](word))
+        var integer = Int(bitcast[DType.int64](word))
         if integer < minimum or integer > maximum:
             raise Error("ValueError: UMAP " + name + " must be in [" + String(minimum) + ", " + String(maximum) + "]")
         _ = scalar
@@ -97,9 +97,9 @@ def umap_scalar(value: PythonObject, name: String, context: PythonObject) raises
         var scalar = _parameter_array(value, name, False, context)
         var word = _scalar_word(scalar)
         if scalar.source.kind == CAST_KIND_FLOAT:
-            result = bitcast[Float64](word)
+            result = bitcast[DType.float64](word)
         elif scalar.source.kind == CAST_KIND_SIGNED:
-            result = Float64(bitcast[Int64](word))
+            result = Float64(bitcast[DType.int64](word))
         else:
             result = Float64(word)
         _ = scalar
@@ -145,7 +145,7 @@ def umap_extras_fields(fields: PythonObject, context: PythonObject) raises -> Py
     if kind is py_get(context, "ndarray"):
         var scalar = _scalar_array(densmap, "densmap", context)
         var word = _scalar_word(scalar)
-        dense_flag = bitcast[Float64](word) != 0.0 if scalar.source.kind == CAST_KIND_FLOAT else word != 0
+        dense_flag = bitcast[DType.float64](word) != 0.0 if scalar.source.kind == CAST_KIND_FLOAT else word != 0
     elif (kind is not b.bool and kind is not b.int and kind is not b.float and kind is not b.str
             and kind is not b.list and kind is not b.tuple and kind is not b.dict
             and kind is not py_type(PythonObject(None)) and not _one_of(kind, context["scalar_types"])):
