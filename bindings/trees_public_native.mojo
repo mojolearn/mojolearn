@@ -19,7 +19,7 @@ from bindings.trees_public_boost import boost_operation
 from providers.python.tree_boost_public_lifecycle_pyapi import tree_boost_public_operation
 from bindings.trees_public_auxiliary import embedding_apply, tree_export_state
 from bindings.trees_public_state import tree_is_fitted
-from bindings.trees_gbdt_adapter_lifecycle import gbdt_adapter_public_operation
+from bindings.trees_gbdt_adapter_lifecycle import gbdt_adapter_public_operation, gbdt_model_public_operation
 from bindings.trees_gbdt_parameters import gbdt_adapter_construct, gbdt_adapter_set_params
 from bindings.trees_public_meta import meta_operation
 from bindings.trees_public_meta_lifecycle import meta_public_operation
@@ -63,6 +63,8 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return forest_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_gbdt_adapter_"):
         return gbdt_adapter_public_operation(model, operation, args, context)
+    if operation.startswith("trees_public_gbdt_model_"):
+        return gbdt_model_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_meta_"):
         return meta_public_operation(model, operation, args, context)
     if operation.startswith("trees_explainer_"):

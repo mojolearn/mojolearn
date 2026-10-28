@@ -19,6 +19,11 @@ class _Croston(ParamsMixin):
     `sequence/croston.mojo`)."""
     _VARIANT = 0
 
+    # Every public method is one native call whose owner does the whole
+    # lifecycle (fit bookkeeping and the NotFittedError of predict in
+    # bindings/xseq_forecast_native.mojo), so no `_mode` class-creation wrappers are installed.
+    _mojolearn_native_public = True
+
     def __init__(self, alias=None, numeric_mode=None):
         _XSEQ(self, "croston_initialize", (alias, numeric_mode), _XSEQ_CONTEXT)
 
