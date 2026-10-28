@@ -12,6 +12,7 @@
 # whose results it never read. Same kernels: the bits do not move.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_type, py_setitem
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_array, family_str, family_view, family_cast_view_f64,
@@ -137,7 +138,7 @@ def _auc_values(v: PythonObject, name: String, context: PythonObject) raises -> 
     `array('d')` (each number converted as float() does); a nested list, an
     integer buffer or a 2-D buffer is read in C order and cast to float64."""
     var b = mx_b()
-    var it = Python.import_module("itertools")
+    var it = native_loaded_module("itertools")
     var values = v
     var seq = Python.tuple(b.list, b.tuple)
     var is_buffer = classical_is_array(values, context) or _is_ndarray(values, context)

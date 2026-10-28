@@ -24,6 +24,7 @@ from bindings.metrics_native_support import metric_is_real, metric_float, metric
 from bindings.metrics_native_inputs import metric_shape, metric_flatten
 from bindings.classical_pandas import classical_admit_value
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
@@ -37,6 +38,7 @@ from bindings.family_common import (
 )
 from core.family_cast_impl import family_all_finite_f32
 from core.mcls_impl import mcls_read_i64, mcls_narrow_i32
+from providers.python.metrics_vector_input_pyapi import metric_vector_exact, metric_i32_vector, metric_f32_vector
 from bindings.metrics_reg_native import _reg_weights
 
 comptime MC_NONE = -1
@@ -48,7 +50,7 @@ comptime MC_INT32_MAX = 2147483647
 
 
 def mc_b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def mc_len(value: PythonObject) raises -> Int:
@@ -63,17 +65,17 @@ def mc_bool(value: PythonObject) raises -> Bool:
 
 def mc_eq(a: PythonObject, b: PythonObject) raises -> Bool:
     """`bool(a == b)`."""
-    return mc_bool(family_call(Python.import_module("operator").eq, a, b))
+    return mc_bool(family_call(native_loaded_module("operator").eq, a, b))
 
 
 def mc_ne(a: PythonObject, b: PythonObject) raises -> Bool:
     """`bool(a != b)`."""
-    return mc_bool(family_call(Python.import_module("operator").ne, a, b))
+    return mc_bool(family_call(native_loaded_module("operator").ne, a, b))
 
 
 def mc_in(value: PythonObject, container: PythonObject) raises -> Bool:
     """`value in container` (equality, as Python's `in`)."""
-    return mc_bool(family_call(Python.import_module("operator").contains, container, value))
+    return mc_bool(family_call(native_loaded_module("operator").contains, container, value))
 
 
 def mc_is_str(value: PythonObject) raises -> Bool:
@@ -162,13 +164,13 @@ def mc_base(name: String, context: PythonObject) raises -> PythonObject:
 def mc_i32_array(values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list(values, "<i4")` of a short Python int list (a class
     table): one `array.array` conversion."""
-    var store = family_call(Python.import_module("array").array, PythonObject("i"), values)
+    var store = family_call(native_loaded_module("array").array, PythonObject("i"), values)
     return classical_wrap_array(store, Python.tuple(mc_len(store)), "<i4", "C", context)
 
 
 def mc_f64_array(values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list(values, "<f8")` of a short Python float list."""
-    var store = family_call(Python.import_module("array").array, PythonObject("d"), values)
+    var store = family_call(native_loaded_module("array").array, PythonObject("d"), values)
     return classical_wrap_array(store, Python.tuple(mc_len(store)), "<f8", "C", context)
 
 
@@ -355,7 +357,7 @@ def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonOb
         return PythonObject(None)
     var item = Int(py=view.itemsize)
     var stride = Int(py=view.strides[0])
-    var store = family_call(Python.import_module("array").array, PythonObject("q"),
+    var store = family_call(native_loaded_module("array").array, PythonObject("q"),
                             py_call(b.bytes, PythonObject(8 * count)))
     var dst = FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
     if not mcls_read_i64(Int(py=classical_address(view)), stride, count, item, kind == 1, dst):
@@ -369,7 +371,7 @@ def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) rais
     binding's `prepare_targets` (the ORDER RULE: sorted distinct values,
     one dense int32 code per row): the classes as a Python int list."""
     var b = mc_b()
-    var array = Python.import_module("array").array
+    var array = native_loaded_module("array").array
     var classes = family_call(array, PythonObject("q"), py_call(b.bytes, PythonObject(8 * count)))
     var codes = family_array(Python.tuple(count), "<i4", context)
     var k = Int(py=family_call(mc_base("prepare_targets", context), py_call(store.buffer_info)[0], PythonObject(3),
@@ -401,7 +403,7 @@ def mc_fast_labels(values: PythonObject, context: PythonObject) raises -> Python
         if mc_len(types) != 1 or not py_contains(types, b.int):
             return PythonObject(None)
         try:
-            store = py_call(Python.import_module("array").array, PythonObject("q"), values)
+            store = py_call(native_loaded_module("array").array, PythonObject("q"), values)
         except:
             return PythonObject(None)   # an int outside int64: a class only Python holds
     else:
@@ -460,15 +462,15 @@ def mc_map_order(labels: McLabels, order: PythonObject, context: PythonObject) r
     var b = mc_b()
     var index = mc_index(order)
     var table = family_call(b.list, family_call(b.map, index.get, labels.classes,
-                                                family_call(Python.import_module("itertools").repeat, PythonObject(-1))))
+                                                family_call(native_loaded_module("itertools").repeat, PythonObject(-1))))
     return mc_gather(labels, table, context)
 
 
 def mc_map_equal(labels: McLabels, value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_label_map(labels, lambda v: int(v == value))`."""
     var b = mc_b()
-    var eq = family_call(b.map, Python.import_module("operator").eq, labels.classes,
-                         family_call(Python.import_module("itertools").repeat, value))
+    var eq = family_call(b.map, native_loaded_module("operator").eq, labels.classes,
+                         family_call(native_loaded_module("itertools").repeat, value))
     return mc_gather(labels, family_call(b.list, family_call(b.map, b.int, eq)), context)
 
 
@@ -529,6 +531,8 @@ def mc_vector_shape(x: PythonObject, name: String, context: PythonObject) raises
 def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_metrics_impl._as_i32_1d`: integer labels that fit in int32, as an
     int32 C-order Array of n entries."""
+    if metric_vector_exact(x, context):
+        return metric_i32_vector(x, name, context)
     var b = mc_b()
     _ = mc_vector_shape(x, name, context)
     if not mc_is_integer_labels(x, context):
@@ -539,7 +543,7 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
     if mc_is_list_like(x):
         # `as_i64_c` of a list: its exact Python ints (a column list flattened)
         var flat = mc_flatten(x, context)
-        store = family_call(Python.import_module("array").array, PythonObject("q"), flat)
+        store = family_call(native_loaded_module("array").array, PythonObject("q"), flat)
         count = mc_len(store)
     else:
         var packed = mc_int_store(x, context)
@@ -563,6 +567,8 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
 def mc_f32_1d(x: PythonObject, name: String, require_finite: Bool, context: PythonObject) raises -> PythonObject:
     """`_metrics_impl._as_f32_1d`: a float32 C-order array of n entries
     (an (n, 1) column is the same words)."""
+    if metric_vector_exact(x, context):
+        return metric_f32_vector(x, name, require_finite, False, context)
     var vs = mc_vector_shape(x, name, context)
     if mc_is_float64(x, context):
         raise Error("TypeError: mojolearn metrics: " + name + " is float64; the float64 overloads of "
@@ -601,6 +607,8 @@ def mc_f32_lists(source: PythonObject, name: String, context: PythonObject) rais
 
 def mc_regression_f32_1d(x: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_metrics_impl._as_regression_f32_1d`."""
+    if metric_vector_exact(x, context):
+        return metric_f32_vector(x, name, True, True, context)
     if mc_buffer_format(x, context) != "f" and not mc_is_list_like(x):
         raise Error("TypeError: mojolearn regression metrics: " + name
                     + " must have dtype float32; cast explicitly before scoring")

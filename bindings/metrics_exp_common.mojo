@@ -19,6 +19,7 @@
 # all the metrics read, so the programs below see the same words.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
 from bindings.classical_arrays import (
@@ -49,7 +50,7 @@ comptime MX_PARAMS = 14
 
 
 def mx_b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def mx_len(value: PythonObject) raises -> Int:
@@ -71,7 +72,7 @@ def mx_is_none(value: PythonObject) -> Bool:
 
 def mx_eq(a: PythonObject, b: PythonObject) raises -> Bool:
     """`bool(a == b)`."""
-    return Bool(py=py_call(mx_b().bool, py_call(Python.import_module("operator").eq, a, b)))
+    return Bool(py=py_call(mx_b().bool, py_call(native_loaded_module("operator").eq, a, b)))
 
 
 def mx_is_bool(value: PythonObject) raises -> Bool:
@@ -165,7 +166,7 @@ def mx_missing(present: PythonObject, classes: PythonObject) raises -> Bool:
 
 def mx_label_order(chosen: PythonObject, present: PythonObject) raises -> PythonObject:
     """`_label_order`: `chosen` then every present label not in it."""
-    var it = Python.import_module("itertools")
+    var it = native_loaded_module("itertools")
     var rest = mx_list(py_call(it.filterfalse, mx_attr(mx_set(chosen), "__contains__"), present))
     return mx_list(chosen) + rest
 
@@ -525,15 +526,15 @@ def mx_codes(lab: MxLab, order: PythonObject, strict: Bool, context: PythonObjec
     var b = mx_b()
     var index = mx_index(order)
     var table = py_call(context["array_type"], PythonObject("i"),
-                        py_call(b.map, index.get, lab.classes, py_call(Python.import_module("itertools").repeat, PythonObject(-1))))
+                        py_call(b.map, index.get, lab.classes, py_call(native_loaded_module("itertools").repeat, PythonObject(-1))))
     return _mx_gather(lab, table, strict, context)
 
 
 def mx_map_eq(lab: MxLab, pos: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_label_map(labels, lambda v: int(v == pos))`: the flag of each class, gathered per row."""
     var b = mx_b()
-    var hits = py_call(b.map, Python.import_module("operator").eq, lab.classes,
-                       py_call(Python.import_module("itertools").repeat, pos))
+    var hits = py_call(b.map, native_loaded_module("operator").eq, lab.classes,
+                       py_call(native_loaded_module("itertools").repeat, pos))
     var table = py_call(context["array_type"], PythonObject("i"), py_call(b.map, b.int, py_call(b.map, b.bool, hits)))
     return _mx_gather(lab, table, False, context)
 
