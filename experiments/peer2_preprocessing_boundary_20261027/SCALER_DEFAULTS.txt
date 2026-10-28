@@ -1,0 +1,17 @@
+Scaler compile repair (2026-10-27)
+
+CPU batch4 failed to instantiate the scaler group because PythonObject(None)
+function defaults require CPython global initialization during compile-time
+interpretation. Retained failure: ~/mojolearn-evidence/peer2-native-boundary-20261027/
+cpu-batch-4/remote/leg_out/scalers.log (KGEN_CompilerRT_GetOrCreateGlobalIndexed).
+
+Replace those defaults with native overloads constructing None at runtime and
+forwarding to the existing explicit cache/configuration implementations. Preserve
+both previous caller arities and the same operation-local cache identity; the
+MinMax partial-batch caller now explicitly passes its runtime None cache.
+No Python callback, fallback or compiler/toolchain workaround is introduced.
+
+Affected native target: compile_scalers.mojo, or production
+bindings/_mojolearn_runtime_classical_host.mojo. No lane compile/tests/runtime
+verification run; coordinator owns the focused recompile. This commit contains
+no new Normalizer lifecycle changes.

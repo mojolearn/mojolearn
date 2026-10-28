@@ -1,0 +1,58 @@
+Primary scaler input snapshot repair (2026-10-27)
+
+Base: local main 7de54456bde166c42fd0d9f7378e402bb0f3be91.
+Branch: lane/peer2-preprocessing-20261027.
+Dependencies: root e688891b58 original-owner fix (local equivalent 0ae63c427d),
+then d2f9c654cd readonly/dtype metadata additions. Root owns compilation/merges.
+
+Public paths: StandardScaler.fit -> standard_scaler_fit_native/scaler_fit_c;
+StandardScaler transform/inverse_transform/fit_transform/partial_fit ->
+standard_scaler_native_call/scaler_lifecycle_c; MinMaxScaler corresponding
+operations -> minmax_scaler_native_call/minmax_lifecycle_c. These classes
+already opt out of inherited _mode runtime wrappers. This batch changes the
+primary X snapshot and finished copy-back path; numerical kernels are unchanged.
+
+New providers/python/preprocessing_input_pyapi.mojo uses ArrayMetadata to
+capture primary matrix metadata and original storage owners. Exact Arrays
+bypass classical_input's ndarray conversion before capture. Frozen internal
+Array views carry captured shape/strides/address and independent owner tuples.
+Native memoryview identity/exporter admission precedes readonly/cast access.
+Each public fit_transform uses one lazy operation-local cache shared by its
+combined attempt and normal fallback fit/transform. No cache is stored on the
+model. Strict float32, rank, nonempty and Int32 bounds remain native refusals.
+
+Copy-back retains the original writable native memoryview before numerical
+execution. It preserves native contiguous buffer/Array-view write-back,
+readonly/strided/Fortran/non-native-byte-order copying, pandas/sequence copying,
+and original buffer identity. A NumPy-free memoryview can be copied during
+preparation; write-back still targets its original memoryview. Public ndarray
+publication of a copy=False Array uses the frozen view, avoiding a fresh read
+of the caller's mutable Array slots after execution. Metadata replacement
+retains original owners plus the converted/current buffer.
+
+Validation: source forwarding/metadata/owner guards 5 passed; 6 compiled owner
+probe cases skipped. Syntax check of modified/new Python test/source files
+passed. Full output is retained under
+~/mojolearn-evidence/peer2-preprocessing-20261027/{source-final.log,source-final.exit,
+syntax-final.log,syntax-final.exit}. No native compilation, product runtime,
+performance or GPU execution was performed in this lane.
+
+28 focused public runtime cases are UNRUN in
+python/mojolearn/tests/test_scaler_input_snapshot_provider.py: StandardScaler and
+MinMaxScaler, combined/direct-disabled fallback, NaN fallback, native/strided/
+big-endian/readonly/Array-view/mapped-arena storage, copy=False ownership, readonly Array
+views and mutated _mv protocol rejection. Reuse existing scaler fit/lifecycle,
+NumPy-free buffer, fitted-error and checkpoint tests at integration. Small
+native target: bindings/_mojolearn_runtime_classical_host.mojo via
+bindings/build_runtime_classical_host.sh; descriptor metadata is also shared
+with other owners and needs their affected compile closure.
+
+Remaining migration scope: numeric calls in scaler owners and x_prep transport
+still use py_call/py_call_typed into connected compiled functions rather than
+new typed provider descriptors. Model/settings and sample-weight/stored-statistic
+admission/capture are not comprehensively migrated by this primary-X change.
+The old _input remains for weights and other prep owners. Broader preprocessing
+stateless/encode operations retain _mode fit/fitted/output wrappers and their
+native owners retain mutable scalar/attribute and numeric-dispatch debt. They
+need full dedicated lifecycle migration preserving _sk_validate behavior.
+No whole-family or runtime-compliance claim follows from this source batch.

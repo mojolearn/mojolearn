@@ -15,6 +15,7 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_as_f32, family_min,
 )
 from bindings.metrics_reg_native import _mean_error, _r2_options
+from bindings.metrics_native_inputs import metric_shape
 from bindings.mcls_common import (
     mc_b, mc_len, mc_float, mc_int, mc_is_str, mc_entry, mc_base, mc_shape_of, mc_rank, mc_dim,
     mc_i32_1d, mc_f32_1d, mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store,
@@ -355,7 +356,12 @@ def mcls_cluster_operation(operation: String, args: PythonObject, context: Pytho
                             + "deprecated and ignores it, and this surface has no sparse arm")
         var empty = False
         try:
-            empty = (Int(py=py_call(b.len, args[1])) == 0 and Int(py=py_call(b.len, args[2])) == 0)
+            # len(Array) invokes its Python __len__. Capture the admitted
+            # native shape once for each target before the empty-input branch.
+            var true_shape = metric_shape(args[1], context)
+            var pred_shape = metric_shape(args[2], context)
+            empty = (len(true_shape) > 0 and len(pred_shape) > 0
+                     and Int(py=true_shape[0]) == 0 and Int(py=pred_shape[0]) == 0)
         except:
             empty = False
         if empty:

@@ -17,6 +17,8 @@ def _layout(cls):
 
 
 def connect(session, program, imported, graph, unsupported):
+    from .._native_program_save_bridge import connect_imported
+    connect_imported(imported)
     # glue: all functions retained here are compiled entries; no operation
     # calls this connector or asks a lazy module to resolve an attribute.
     import pathlib  # preload native_path's standard path storage metadata
@@ -41,6 +43,8 @@ def connect(session, program, imported, graph, unsupported):
     from .onnx import _Native
     modes = {}
     entry = None
+    run_entry = None
+    torch_entry = None
     for mode, connection in ops._SESSION_CONNECTIONS.items():  # glue: two fixed numeric modes
         if isinstance(connection, str):
             modes[mode] = connection
@@ -57,12 +61,15 @@ def connect(session, program, imported, graph, unsupported):
             modes[mode] = connected
             if entry is None:
                 entry = connected['ops_import_model']
+                run_entry = connected['ops_imported_run']
+                torch_entry = connected['ops_torch_program_run']
         except (ImportError, AttributeError, TypeError) as error:
             modes[mode] = type(error).__name__ + ': ' + str(error)
     if entry is None:
         from .._native_family_bridge import _unavailable
         entry = _unavailable(ImportError('rebuild x_sequence with ops_import_model'))
-    return entry, dict(shape_scalars=scalars, shape_names=scalars, shape_containers=containers,
+        run_entry = torch_entry = entry
+    return entry, dict(run_entry=run_entry, torch_entry=torch_entry, shape_scalars=scalars, shape_names=scalars, shape_containers=containers,
         shape_mappings=(dict, OrderedDict, defaultdict), modes=modes, connections=ops._SESSION_CONNECTIONS, backend=_backend,
         session=session, program=program, imported=imported, graph=graph, reader=_Native,
         unsupported=unsupported, layouts={cls: _layout(cls) for cls in  # glue: fixed native object layouts

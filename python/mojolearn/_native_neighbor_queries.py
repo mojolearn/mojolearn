@@ -10,7 +10,7 @@ _SYMBOLS = {
         "knn_index_release", "knn_search_resident", "radius_neighbors_count", "radius_neighbors_fill")),
     "sort": ("_mojolearn_x_neighbors", ("x_neighbors_numeric_mode", "xn_p2m_row_sort",)),
     "ivf": ("_mojolearn_ivf", ("ivf_numeric_mode", "ivf_flat_search", "ivf_flat_index_prepare",
-        "ivf_flat_index_search", "ivf_flat_index_release", "ivf_flat_index_export")),
+        "ivf_flat_index_search", "ivf_flat_index_release", "ivf_flat_index_export", "ivf_flat_extend")),
 }
 
 

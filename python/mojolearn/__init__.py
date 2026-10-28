@@ -709,6 +709,12 @@ from ._native_declared_params import CONTEXT as _declared_constructor_setters
 _connect_declared_constructors(_declared_constructor_setters)
 del _connect_declared_constructors, _declared_constructor_setters
 
+# Snapshot family storage after every native constructor/attribute installer.
+from ._native_family_layouts import connect as _connect_family_layouts
+import sys as _family_layout_sys
+_connect_family_layouts(_family_layout_sys.modules[__name__])
+del _connect_family_layouts, _family_layout_sys
+
 # Default member estimators are constructed only after every constructor above is connected.
 from ._native_msel_prep import connect_estimator_defaults as _connect_estimator_defaults
 _connect_estimator_defaults()

@@ -1,0 +1,26 @@
+BasicBlock native whole-operation follow-up — 2026-10-27
+Branch: lane/peer4-cnn-conv-20261027 (follows Conv commit 8a1a1ba72c)
+
+Changed: BasicBlock constructor, train/eval, backward, parameters and fit now
+make one native call. Constructor builds its Conv2d/BN/ReLU layers natively;
+train/eval composes native BN metadata changes. Backward preserves both the
+resident residual chain and host chain, routing convolution and BN gradients
+through native owners. Parameters builds the finished ownership tuples in
+native code. Fixed child-layer type and chain metadata admission refuses
+Python hooks before child operations. The existing forward chain now admits
+child fields and snapshots convolution weights natively.
+
+Compile-only result: attemptblock1, checks/peer4_cnn_conv_compile.mojo,
+Mac CPU/apple-m1/identical/O0/10 workers. Complete result and timing in
+basicblock_compile.json. No runtime/identity/GPU verification was run.
+Evidence and actual accepted binary/source bytes:
+/Users/andrewhendel/mojolearn-evidence/peer4-cnn-conv-20261027/attemptblock1/
+
+REQUIRED INTEGRATION DEPENDENCIES: Parent-owned xcnn_bn_native.mojo and
+xcnn_common.mojo were copied into this worktree uncommitted solely for this
+focused compile. Their exact SHA256 values are in basicblock_compile.json
+and their bytes in the archive. They are deliberately excluded from this
+commit. Parent integrates its versions and the shared xcnn dispatcher.
+The Python registration adds xcnn_bn_class and xcnn_block_class; preserve
+both in the parent's merged class table. A compile of the owner does not
+establish installed public behavior or transitive callback freedom elsewhere.

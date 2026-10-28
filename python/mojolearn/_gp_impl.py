@@ -477,6 +477,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # GaussianProcessRegressor's fit, predict, sample_y, log_marginal_likelihood
 # and score are one native call each (bindings/gp_regressor_native.mojo).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.connect_bindings("_mojolearn_gp")
 
 #: Each kernel class's postfix node layout, the fields its `_nodes()` reads:
 #: ("leaf", kind, param field or None for 0.0, length-scale field or None),
@@ -730,7 +731,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             The fitted model. Check ``info_ == 0``: a failed Cholesky
             factorization is reported there rather than raised.
         """
-        return _NATIVE(self, "family_gp_gpr_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_fit", (None, X, y), _NATIVE_CONTEXT)
 
     # -- the optimizer (DEVIATIONS 2880, 2881) -------------------------------
 
@@ -778,7 +779,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         ``normalize_y=True`` the mean, standard deviation and covariance are
         scaled back to the units of y.
         """
-        return _NATIVE(self, "family_gp_gpr_predict", (self._bind(), X, return_std, return_cov), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_predict", (None, X, return_std, return_cov), _NATIVE_CONTEXT)
 
     # -- saved models -----------------------------------------------------------
 
@@ -847,7 +848,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         gradient : list of float
             Only with ``eval_gradient=True``.
         """
-        return _NATIVE(self, "family_gp_gpr_lml", (self._bind(), theta, eval_gradient, clone_kernel), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_lml", (None, theta, eval_gradient, clone_kernel), _NATIVE_CONTEXT)
 
     # DEVIATION 2793 (`gaussian_process/checks/sample_y.mojo`) names the
     # stream, the jitter and the order: the covariance `k(X, X) - V^T V` is
@@ -886,7 +887,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             If the model is not fitted (sampling the unfitted prior is not
             supported).
         """
-        return _NATIVE(self, "family_gp_gpr_sample_y", (self._bind(), X, n_samples, random_state), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_sample_y", (None, X, n_samples, random_state), _NATIVE_CONTEXT)
 
     # Host float64 summary of float32 predictions, outside the identity
     # claim (the SVR.score rule).
@@ -907,7 +908,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         -------
         float
         """
-        return _NATIVE(self, "family_gp_gpr_score", (self._bind(), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_score", (None, X, y), _NATIVE_CONTEXT)
 
 
 # The file: see `_GP_FORMAT`. The kernel step comes first: `save` read the

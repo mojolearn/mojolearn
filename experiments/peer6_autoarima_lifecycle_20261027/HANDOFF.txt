@@ -1,0 +1,27 @@
+Peer6 time-series batch 1 — 2026-10-27
+Branch: lane/peer6-timeseries-20261027
+
+AutoARIMA.__init__ now enters native admission, one stable ArrayMetadata
+snapshot, float64/rank/empty refusal, float32 packing, and finished model state.
+AutoARIMA.forecast now enters native fitted-state and scalar admission,
+per-group captured buffers, compiled arima_forecast and compiled scatter.
+No Python lambda, ARIMA.forecast callback, NumPy conversion or Python loop
+executes in these two operations. Original input and storage owners stay live.
+
+Compile: Mac CPU identical, O0, all 10 logical cores configured as compiler
+workers. checks/peer6_autoarima_lifecycle_compile.mojo instantiates the actual
+TSA public dispatcher and reachable operations; nothing loaded or executed.
+Receipt: compile.json. Full logs, source bytes, manifest and binary:
+~/mojolearn-evidence/peer6-autoarima-lifecycle-20261027/
+Initial syntax failure retained in attempt1; repaired List initialization.
+Intermediate successful builds retained in attempt2/attempt3; final source
+uses the already connected target scatter instead of a host result-data loop.
+
+Pending: AutoARIMA.search, older fit/predict transitive state admission;
+_arima_impl.py public constructors/properties/forecast/save/load;
+_tsa_impl.py ExponentialSmoothing constructors/forecast/components;
+_x_sequence_{croston,ets,garch,prophet,stl,theta,var}.py constructors and
+forecast conveniences plus transitive existing native paths. No whole-family
+completion, runtime correctness, GPU build, bitwise identity or performance
+claim. No runtime/identity verification campaign was run (owner instruction).
+No rented box.

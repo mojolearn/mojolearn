@@ -26,7 +26,7 @@ def connect(context, package):
                  '__sklearn_clone__', 'get_params', 'set_params', 'fit', 'predict', 'predict_proba',
                  'decision_function', 'transform', 'score', 'split', 'get_n_splits', '_parameter_names',
                  '_has_constructor_parameters', '_BINDING', '_mojolearn_device_rows', '_estimator_type')
-    class_fields = ('coef_', 'feature_importances_', '_power', '_loss_name', '_nodes', '_hyper', '_replace')
+    class_fields = ('classes_', 'coef_', 'feature_importances_', '_power', '_loss_name', '_nodes', '_hyper', '_replace')
 
     def register(cls, entry, owner_context, parameters, init, methods, forest=None):
         # glue: fixed class layout, parameter names and native method ABIs
@@ -105,6 +105,8 @@ def connect(context, package):
     connect_extra(context, register, registry)
     from ._native_msel_prep import connect as connect_prep
     connect_prep(context, register, registry)
+    from .neighbors import KNeighborsClassifier
+    registry[KNeighborsClassifier]["classes_kind"] = "knn"  # glue: native form of the connected class-label property
     context.update(family_msel_estimators=registry,
                    family_msel_pending_estimators=tuple(value for value in vars(package).values()  # glue: distinguish known migration debt from external callbacks
                                                         if type(value) is type and value not in registry),

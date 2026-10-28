@@ -1,0 +1,29 @@
+Admission-only array metadata (next batch, 2026-10-27)
+
+The frozen scaler batch through 46bc97f4b8 is unchanged. Narrow dtype enum fix
+46061ae81e must precede this extension: NumPy longdouble is 13; complex64,
+complex128 and clongdouble are 14, 15 and 16 (confirmed against installed NumPy).
+
+array_metadata_once adds trailing allow_unsupported=False. Default callers
+still reject unsupported dtype/rank. Opted-in public owners may retain a
+higher-rank or unsupported-dtype snapshot only to preserve their own validation
+order and error text without rereading user metadata. Such snapshots set
+castable=False and source.kind=0 as a NON-EXECUTABLE placeholder. Kind 0 is also
+a valid unsigned kind, so checking kind alone is not admission. Every opt-in
+caller must explicitly reject !castable (after its class-specific rank/type
+checks) before any native cast or source pointer access. f32_c also requires
+castable. No original owner is replaced or discarded.
+
+All shape dimensions and strides are retained natively; count is the complete
+shape product. Existing direct ArrayMetadata constructor callers retain default
+castable=True and receive the known matrix/vector strides from their CastIn.
+The opt-in owners must not call replace_f32/replace_f64 on an unadmitted snapshot.
+
+Manifold owns the requested class-specific complex/rank/dtype error controls;
+its explicit guard must be reviewed before integration. MinMax range metadata
+will opt in only to handle exact object endpoint arrays natively or reject the
+original unsupported dtype with the established error before any typed read.
+
+Source guards: see ~/mojolearn-evidence/peer2-preprocessing-20261027/
+unsupported-metadata-source.log and .exit. Native compiled owner probes remain
+skipped; no native compilation or runtime verification by this lane.

@@ -1,0 +1,17 @@
+Peer6 metrics batch: public mode/binding admission
+
+All 24 _metrics_impl public metric wrappers that called _get_binding now pass
+a None binding slot to their single native operation. The native owner selects
+the current default or explicit mode with the import-connected shared provider.
+Numeric entry lookup now reads exact module dictionaries and refuses Python
+entry replacements/module getattr hooks. Label entries require compiled calls.
+Legacy _get_binding stays for other families/import setup; no claim they migrated.
+
+Mac CPU-column compile exited 0 with 10 configured workers. The fixture includes
+metrics_cls_operation and its transitive owners. It was never loaded or executed.
+Initial compile-only fixture signature failed; preserved in compile-attempt1.log.
+See compile.json for retained source, binary hashes and complete log paths.
+No rented machines. No runtime/identity/performance claims.
+
+Remaining: resampling public binding and callback routes; expanded metrics
+transitive audit; capture-once metadata across older metric helper layers.

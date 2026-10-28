@@ -112,7 +112,7 @@ class HFConfig:
         return _NATIVE.model_config_access(self, 5, None, None, UnsupportedModel)
 
     def __repr__(self):
-        return f"HFConfig(model_type={self._d.get('model_type')!r}, path={self.path!r})"
+        return _NATIVE.model_config_repr(self, False)
 
 
 class ModelPlan:
@@ -137,8 +137,7 @@ class ModelPlan:
         return _NATIVE.model_checkpoint_names(self)
 
     def __repr__(self):
-        return (f"ModelPlan({self.model_type!r}, kind={self.kind!r}, layers={self.n_layers}, "
-                f"d_model={self.d_model}, vocab={self.vocab_size})")
+        return _NATIVE.model_config_repr(self, True)
 
 
 # --------------------------------------------------------------- families
@@ -509,3 +508,5 @@ _NATIVE_CONTEXT = {
     "mamba2_layer": _MAMBA2_LAYER, "byte_row": BYTE_LM_ROW, "byte_layer": _BYTE_LM_LAYER,
     "byte_fixed": _BYTE_LM_FIXED,
 }
+
+_NATIVE.model_config_connect(_NATIVE_CONTEXT)

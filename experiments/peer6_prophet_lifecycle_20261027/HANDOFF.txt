@@ -1,0 +1,20 @@
+Peer6 Prophet lifecycle batch — 2026-10-27
+Branch: lane/peer6-prophet-20261027; base main 2daced353a.
+
+ProphetForecaster.__init__ and add_seasonality each hand the complete operation
+to native dispatch. The provider admits constructor and seasonality arguments,
+normalizes settings, checks the connected native class/storage descriptors,
+stages state, and admits overwritten owners before committing. add_seasonality
+preserves the seasonalities dictionary identity. Import-time metadata pins
+class inheritance and lifecycle/protocol descriptors; it runs only on connection.
+
+The complete actual xseq public dispatcher compiled CPU/O0/identical with
+10 workers, exit0 (189.9 seconds). No runtime, GPU, identity or performance run.
+Python AST parse and git diff --check pass. Source bytes, compiler hash, binary
+and complete log: ~/mojolearn-evidence/peer6-prophet-lifecycle-20261027/attempt1/.
+Build environment: ~/mojolearn-evidence/peer6-cv-build-environment-20261027/.
+
+Remaining: fit/predict still use old NumPy preparation and need whole-operation
+native conversion, captured inputs/fitted-state admission and staged publication.
+This is a completed constructor/add-seasonality batch, not a claim that Prophet
+fit/predict or the whole library is Python-free or runtime-validated.

@@ -831,6 +831,13 @@ TRAINING_LANE_NAMES = {
     # from the same binding.
     "gbdt-ranking-defaults": "gradient boosting ranking losses with default Bayesian bootstrap and score noise",
     "gbdt-query-rmse": "gradient boosting with the QueryRMSE ranking loss on query groups",
+    # Isolated CPU ranking draft: selection declared, compilation and actual
+    # CPU runtime/negative-control results pending. PairLogit/YetiRank reuse
+    # existing lanes; QueryRMSE pointwise gains its own configuration lane.
+    # No reference data is admitted by declaring these routes.
+    "gbdt-query-rmse-pointwise": "QueryRMSE with the doc-parallel pointwise tree searcher",
+    "gbdt-pair-logit-pointwise": "PairLogit with the doc-parallel pointwise tree searcher",
+    "gbdt-yeti-rank-pointwise": "YetiRank with the doc-parallel pointwise tree searcher",
     # lane/gbdt-learning-to-rank stage 3 (2026-09-15): the PairLogit ranking
     # loss on generated and explicit pairs trains through
     # gbdt/host/gbdt_oracle_losses.mojo with the pairwise target restated in
@@ -1391,61 +1398,48 @@ ADAPTED_MODULES = {
     "_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host"),
 }
 
-#: The lanes with NO CPU path of any kind, as the README states them. A
-#: lane leaves this list the day its host lane merges; docs_facts fails the
-#: README until the marked span is rewritten.
+#: Configuration groups that still lack a CPU training route. These are
+#: not six whole algorithms, nor a count of individual refusal sites.
+#: Cooperative multi-GPU operations are a separate capability and are not
+#: missing CPU algorithms. docs_facts generates the corresponding doc spans.
 #:
-#: EVERY ENTRY NAMES WHAT REFUSES AND WHY. Until lane/close-no-cpu-path-gbdt
-#: (2026-09-20) this list held ONE entry ending "among them", which hid an
-#: unknown count behind a phrase. The count is 6 and it is below; the
-#: guard-by-guard enumeration each entry summarizes (50 by-name training
-#: refusal sites) was checked against the exact refusal text and the line
-#: that raises it, and the refusals are reproduced by fitting each configuration on a CPU-only install rather than
-#: read off the source.
-#:
-#: WHAT IS NOT HERE, AND WAS. "eval sets ... outside the
-#: gbdt-pointwise-l2-bayesian-eval configuration" was already stale when this
-#: was rewritten: Ordered boosting took an eval set, the detector and
-#: use_best_model at 000dbd2cf (2026-09-19), and this lane added them to the
-#: Plain SymmetricTree Logloss fit through
-#: gbdt/host/gbdt_oracle_eval.mojo. What remains of that item is entry 4.
+#: Source review 2026-10-27: binary class weights and the dedicated weighted
+#: pointwise lane predate this review; CTR training with all permutations has
+#: existed since 2026-09-28. The former blanket weight/CTR refusals were stale.
+#: Plain numeric Logloss now admits sample weights through the existing
+#: weighted owners; CTR evaluation uses the shared final-table expander and
+#: held-out owner. Their runtime/identity evidence remains pending; this source
+#: inventory and the compile receipts do not supply that evidence.
 NO_CPU_PATH = (
-    "gradient boosting training with sample weights on any arm (`gbdt_fit` "
-    "refuses `sample_weight`, and `class_weights` outside MultiClass and "
-    "MultiClassOneVsAll, which reach the device through the same per-row "
-    "weight column): the device's weighted target, histogram and "
-    "partition-reduce kernels are a second launch arm (`has_weights`) and "
-    "the gbdt/host oracles restate the unit-weight arm only",
+    "gradient boosting training with sample weights outside Plain numeric "
+    "Logloss and the dedicated pointwise Logloss configuration; weighted "
+    "Depthwise and Lossguide Logloss additionally require Newton leaves "
+    "and no bootstrap. Class weights remain unsupported outside numeric "
+    "Logloss, MultiClass and MultiClassOneVsAll, and in Ordered boosting "
+    "or the pointwise searcher",
 
-    "gradient boosting training on a CTR categorical column, a "
-    "`cat_features` column with more than `one_hot_max_size` categories: "
-    "the CTR calcers build ordered target statistics over several "
-    "permutations, with their online counters, grids and tables joined back "
-    "into the compressed index, and the host path is pinned to one "
-    "permutation with no calcer. One-hot categorical columns DO train, "
-    "`ExperimentalTwoLevelFeatureFreq` has its own CPU route "
-    "(gbdt/host/gbdt_oracle_feature_freq.mojo) except on a tree whose level "
-    "winner is the tensor column itself, and CTR INFERENCE from a saved "
-    "model is closed; it is the calcer tables' training that is not",
+    "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
+    "tree's level winner is the tensor column itself: the separate CPU "
+    "feature-frequency route refuses that case",
 
     "gradient boosting training with a categorical or one-hot column "
-    "outside SymmetricTree with Logloss and Plain boosting: the one-hot "
-    "grid and the `take_bin` equality split are restated in the symmetric "
-    "searcher alone",
+    "outside SymmetricTree with Logloss and Plain boosting, or with "
+    "sample/class weights, bootstrap or nonzero random_strength: the "
+    "categorical owners do not implement those combinations",
 
     "gradient boosting training with an eval set or the overfitting "
-    "detector outside SymmetricTree with Logloss, Ordered boosting and the "
-    "pointwise searcher's own lane: the held-out curve runs THAT arm's loss "
-    "kernel (the multilogit and one-vs-all launches, `launch_approximate` at "
-    "each pointwise objective) and the non-symmetric shapes put a tree on "
-    "the cursor through a different apply, and neither is restated",
+    "detector outside the covered SymmetricTree Logloss, Ordered and "
+    "pointwise Logloss routes: RMSE, multiclass, the other loss owners and "
+    "the non-symmetric tree shapes lack the corresponding held-out loss "
+    "and model-application path",
 
     "gradient boosting training with the pointwise searcher outside the "
     "gbdt-pointwise-l2-bayesian-eval configuration (L2 scores, the Bayesian "
     "bootstrap, Newton leaves, sample weights, an eval set with the Iter "
     "detector, boost_from_average on, GreedyLogSum borders, numeric "
-    "columns): every other option selects a different launch shape of the "
-    "pointwise kernels and one shape is restated",
+    "columns, no class weights, random_strength zero and feature_fraction "
+    "one). This includes PairLogit and YetiRank with "
+    "use_pointwise_searcher=True; their greedy-searcher CPU routes exist",
 
     "gradient boosting training at a (loss, grow_policy, score_function, "
     "leaf_estimation_method, bootstrap_type) combination outside the ones "
@@ -1453,8 +1447,9 @@ NO_CPU_PATH = (
     "losses under Depthwise and Lossguide, score functions and leaf "
     "estimators outside each policy's covered pair, Depthwise's "
     "min_split_gain, min_child_hessian and min_data_in_leaf, feature_fraction "
-    "outside Logloss, "
-    "boost_from_average outside RMSE and the quantile family, and a NaN in X "
+    "outside Lossguide with Logloss, "
+    "boost_from_average outside RMSE, the quantile family and the dedicated "
+    "pointwise Logloss route, and a NaN in X "
     "outside SymmetricTree with Logloss -- each one its own device kernel or "
     "its own searcher gate order",
 )
@@ -2728,6 +2723,9 @@ FAMILIES = (
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank", "gbdt-ranking-defaults",
+            # Native route declared by the uncompiled ranking draft. The
+            # existing HOST_SABOTAGE arm reaches its grouped leaf estimator.
+            "gbdt-query-rmse-pointwise", "gbdt-pair-logit-pointwise", "gbdt-yeti-rank-pointwise",
             # lane/catboost-parity (2026-09-19): the non-default border
             # types run the device fit's own host function
             # (`select_borders`) on the CPU column
@@ -2770,6 +2768,7 @@ FAMILIES = (
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
             "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
             "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
+            "gbdt/host/gbdt_oracle_pointwise_rank.mojo",
             # lane/close-no-cpu-path-gbdt: the held-out cursor, curve,
             # detector and shrink of the Plain SymmetricTree Logloss fit
             "gbdt/host/gbdt_oracle_eval.mojo",
@@ -3642,33 +3641,17 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #:                     vocabulary and when the shipped table's cells have
 #:                     GAINED it on every part, so the hold cannot outlive the
 #:                     column that pays it.
-#:   no cpu route      THE ONE REASON A COVERED LANE CANNOT HAVE, and the
-#:                     only entry here that is not a covered lane
-#:                     (lane/unlaned-public-algorithms, 2026-09-20).
-#:                     IN USE BY NOTHING SINCE 2026-09-20
-#:                     (lane/cpu-routes-gpu-only-four). All four lanes that
-#:                     carried it now have CPU columns, and the reason they
-#:                     did not is worth keeping in the vocabulary rather
-#:                     than deleting: each of the four refusals was read as
-#:                     a statement about arithmetic when three were about
-#:                     RESIDENCY and one about a DEVICE INVENTORY. "Refuses
-#:                     by name on a CPU-only install" is what the entry
-#:                     requires and it was true of all four; what nobody
-#:                     had asked was whether the thing being refused was
-#:                     the thing being hashed. The next lane to reach for
-#:                     this reason should answer that question first, and
-#:                     `identity_break.GPU_ONLY_LANES` -- now empty --
-#:                     still holds the reason per lane. The rest of the
-#:                     original entry stands as written:
-#:
-#:                     The
-#:                     lane's public surface REFUSES BY NAME on a CPU-only
-#:                     install, so no CPU column can ever carry it and no
-#:                     host family can ever declare it: the reference it owes
-#:                     is owed on a GPU column and on no other. Every other
-#:                     reason here says "the evidence has not been taken
-#:                     yet"; this one says "this box is the wrong box, and
-#:                     always will be". It is CHECKED against
+#:   no cpu route      A lane with no current CPU implementation cannot be
+#:                     declared covered. The four original holds were removed
+#:                     in September 2026, but later lanes use this reason too.
+#:                     Inspect the fully registered GPU_ONLY_LANES: extensions
+#:                     in tools/identity_lanes add device-buffer/pool entries
+#:                     beyond the GBDT entries in identity_break.py's literal.
+#:                     A GPU-resource operation and missing CPU algorithm
+#:                     arithmetic are different reasons for a CPU refusal.
+#:                     Once a CPU implementation exists, missing execution or
+#:                     reference evidence belongs under a different hold.
+#:                     This reason is checked against
 #:                     `identity_break.GPU_ONLY_LANES`, which is what
 #:                     `tools/identity_break.py` uses to drop the lane from a
 #:                     full-column CPU run, so the reason cannot be used as
@@ -3976,13 +3959,15 @@ PUBLIC_PENDING_LANES = {
     # Weighted Extra Trees already has nine admitted fixtures with Apple,
     # NVIDIA and AMD train/infer/model columns in table.json (records 112,
     # 114, 116, 117). Keep those references comparable; no new admission here.
-    # f63ef2235 (2026-10-14): PairLogit and YetiRank on the pointwise searcher.
-    # The gbdt host binding's pointwise arm trains Logloss only and refuses
-    # every other loss by name (bindings/_mojolearn_gbdt_host.mojo,
-    # `_refuse_pointwise`), so the lane's fit has no CPU arithmetic
-    # (identity_break.GPU_ONLY_LANES).
-    "gbdt-pair-logit-pointwise": "no cpu route",
-    "gbdt-yeti-rank-pointwise": "no cpu route",
+    # The isolated CPU ranking draft declares a native pointwise route and
+    # registers these existing lanes with the gbdt host family. Compilation,
+    # CPU execution and caught negative controls are still pending; no hash or
+    # release admission is created here. Keep existing GPU references usable.
+    "gbdt-pair-logit-pointwise": "unwatched",
+    "gbdt-yeti-rank-pointwise": "unwatched",
+    # New configuration-specific lane. The existing gbdt-query-rmse lane
+    # remains the greedy-searcher reference and is unchanged.
+    "gbdt-query-rmse-pointwise": "no reference",
     # lane/verify-coverage-audit (2026-10-21): lanes for endpoints new or changed
     # since the last release that no lane reached
     # (docs/plans/VERIFY_COVERAGE_20261021.md); no release record yet.
@@ -4572,7 +4557,7 @@ def inference_sentence():
 
 
 def no_cpu_path_sentence():
-    """`NO_CPU_PATH` as the README states it, NUMBERED and semicolon-joined.
+    """`NO_CPU_PATH` for the generated support matrix, numbered and joined.
 
     `_join`'s comma-and is right for a list of short nouns and wrong here:
     every entry below carries its own commas and its own structural reason,

@@ -1,0 +1,36 @@
+GCNConv/SAGEConv native whole-operation migration — 2026-10-27
+Branch: lane/peer4-cnn-graph-20261027
+Base: b055613c8e BasicBlock, following 8a1a1ba72c Conv1d/2d batch.
+
+Changed: GCNConv/SAGEConv constructor and backward plus private Linear/ReLU
+constructor/forward/backward are one native call. Native graph forward no
+longer calls NumPy allocation/conversion functions or input shape/dtype/address
+protocols. It retains a real native buffer export and immutable edge layout
+words per operation. Native edge marshaling handles signed strides, byte order,
+empty lists and range validation before int32 CSR indexing. Cache identity
+retains original user input owners; graph records and cache comparisons use
+native dict/tuple data. Constructor initialization and host/resident backward
+paths preserve existing numerical binding calls; SAGE mean/sum/add/max,
+projection, root term and normalization remain represented in native dispatch.
+Numerical convolution/SpMM/GEMM kernel bodies are unchanged. Typed edge input
+conversion was added to the existing core/xcnn_graph_impl.mojo owner.
+
+Compile-only qualification: checks/peer4_cnn_graph_compile.mojo compiles
+xcnn_graph_layers and transitive owners, Mac CPU/apple-m1/identical/O0/10
+workers. Final attempt2 exit0 in34.15s. Attempt1 also passed its earlier source
+snapshot. No runtime, identity, GPU target or performance run was executed.
+Source guard and push logs live alongside the full build evidence below.
+
+Evidence: experiments/peer4_cnn_graph_20261027/compile.json;
+/Users/andrewhendel/mojolearn-evidence/peer4-cnn-graph-20261027/attempt2/ contains
+complete output, accepted binary, full Mojo source bytes and hash manifest.
+
+Integration: parent must import xcnn_graph_layers and route all gcn_*, sage_*,
+linear_* and relu_* operations to it. Parent-owned xcnn_common.mojo and
+xcnn_bn_native.mojo are uncommitted local compile dependencies, excluded from
+this branch's commits; exact dependency hashes and actual source bytes are
+retained in the receipt/archive. The standalone compile fixture does not
+qualify an installed public loader/dispatcher or runtime result.
+Legacy private Python _Graph/_GraphKey and *_backward_dev scaffolding remains
+on disk, but the migrated public operations no longer call it. This batch
+makes no claim about unrelated CNNClassifier or other public families.
