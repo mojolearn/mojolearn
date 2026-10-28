@@ -19,14 +19,14 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact
 from providers.python.metrics_matrix_input_pyapi import metric_reg_target, metric_sample_weights
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
-from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.metrics_native_support import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
 from bindings.classical_validate import classical_view
-from bindings.arena_prog_native import _metrics_run
+from bindings.arena_prog_native import _metrics_run_fields
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_isinstance, family_call, family_call_kw,
     family_array, family_shape_repr, family_cast_view, family_cast_view_f64, family_min,
@@ -269,17 +269,9 @@ def _reg_run(prog: _Prog, mode: PythonObject, context: PythonObject) raises -> P
     """`_run(prog, numeric_mode)`: one `_Prog` object handed to the shared
     runner (the call the Python `_run` made); returns the arena store."""
     var prog_context = context["family_metrics_prog_context"]
-    classical_connect_numpy(prog_context)
-    var program = native_storage_allocate(prog_context["prog_class"])
-    py_setattr(program, "size", PythonObject(prog.size))
-    py_setattr(program, "_inputs", prog.inputs)
-    py_setattr(program, "_stages", prog.stages)
-    py_setattr(program, "arena", PythonObject(None))
-    py_setattr(program, "_outs", prog.outs)
-    py_setattr(program, "_skip", prog.skip)
-    py_setattr(program, "rows", PythonObject(None))
-    _ = _metrics_run(program, mode, prog_context)
-    return py_fields(program)["arena"]
+    var fields = Python.dict(size=PythonObject(prog.size), _inputs=prog.inputs, _stages=prog.stages,
+        arena=PythonObject(None), _outs=prog.outs, _skip=prog.skip, rows=PythonObject(None))
+    return _metrics_run_fields(fields, mode, prog_context)
 
 
 def _arena_base(arena: PythonObject) raises -> Int:

@@ -22,15 +22,15 @@ from std.python import Python, PythonObject
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact
 from providers.python.metrics_matrix_input_pyapi import metric_score_matrix
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
-from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import (
     classical_address, classical_is_array, classical_dtype_str, classical_wrap_array, classical_cast_kind,
     classical_c_order,
 )
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
-from bindings.arena_prog_native import _metrics_run
+from bindings.arena_prog_native import _metrics_run_fields
 from bindings.optimizer_public_words import stash_python_error
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
@@ -319,17 +319,9 @@ struct MxArena(Copyable, Movable):
 def mx_run(prog: MxProg, mode: PythonObject, context: PythonObject) raises -> MxArena:
     """`_run(prog, numeric_mode)`: one program handed to the shared runner."""
     var prog_context = context["family_metrics_prog_context"]
-    classical_connect_numpy(prog_context)
-    var program = native_storage_allocate(prog_context["prog_class"])
-    py_setattr(program, "size", PythonObject(prog.size))
-    py_setattr(program, "_inputs", prog.inputs)
-    py_setattr(program, "_stages", prog.stages)
-    py_setattr(program, "arena", PythonObject(None))
-    py_setattr(program, "_outs", prog.outs)
-    py_setattr(program, "_skip", prog.skip)
-    py_setattr(program, "rows", PythonObject(None))
-    _ = _metrics_run(program, mode, prog_context)
-    return MxArena(py_fields(program)["arena"])
+    var fields = Python.dict(size=PythonObject(prog.size), _inputs=prog.inputs, _stages=prog.stages,
+        arena=PythonObject(None), _outs=prog.outs, _skip=prog.skip, rows=PythonObject(None))
+    return MxArena(_metrics_run_fields(fields, mode, prog_context))
 
 
 def mx_f64_scores(values: List[Float64], context: PythonObject) raises -> PythonObject:

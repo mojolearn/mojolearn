@@ -462,10 +462,24 @@ def _metrics_download(fields: PythonObject, size: Int, context: PythonObject, mu
 
 
 def _metrics_run(prog: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Direct native callers need the same buffer admission as arena_prog_c.
+    # Preserve the public Prog API and its identity-return contract. Native
+    # metric owners supply their already-built field dictionary directly.
+    _ = _metrics_run_fields(py_fields(prog), mode, context)
+    return prog
+
+
+def _metrics_run_fields(fields: PythonObject, mode: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    # Metric programs are native structural data, not Python class instances.
+    # Admit dictionary/key storage before any layout read can perform lookup.
+    if py_type(fields) is not py_type(Python.dict()):
+        raise Error("TypeError: native metric program fields require an exact dictionary")
+    var keys = py_call(py_type(Python.list()), fields)
+    for i in range(len(keys)):  # driver-loop: passive native program layout keys, before dictionary lookup
+        if py_type(keys[i]) is not py_type(PythonObject("")):
+            raise Error("TypeError: native metric program fields require exact string keys")
     classical_connect_numpy(context)
     var entries = _family_entries(mode, "x_metrics", context)
-    var fields = py_fields(prog)
     var size = _int(fields["size"], context)
     var arena = _store(size, "f", False, context)
     var base = Int(py=arena[1])
@@ -544,7 +558,7 @@ def _metrics_run(prog: PythonObject, mode: PythonObject, context: PythonObject) 
         raise Error("RuntimeError: x_metrics slot cleanup failed: " + cleanup)
     py_setitem(fields, "arena", arena[0])
     _ = stages^
-    return prog
+    return arena[0]
 
 
 # ---------------------------------------------------------------- the door
