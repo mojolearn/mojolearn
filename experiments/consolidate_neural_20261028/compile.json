@@ -1,0 +1,29 @@
+{
+ "lane": "consolidate-neural",
+ "branch": "integration/neural-consolidate-20261028",
+ "lanes_merged": {
+  "lane/attn-fold": "31f48aa100",
+  "lane/lm-resident-generate-20261028": "62626cc2aa",
+  "lane/gemm-fill-tiles-20261028": "8e138009e1",
+  "lane/gemm-int-slices": "cd4d32dfb7",
+  "lane/seq-predict-tiled": "afccc9aa33",
+  "lane/mamba-folds": "be49534c40",
+  "lane/overhead-mamba-bwd": "6354464fcf",
+  "lane/overhead-generate-guards": "aac17722b5",
+  "lane/overhead-sequential-admission": "380ac8ecc4 (local branch, never pushed)"
+ },
+ "origin_main_merged": "b4f8d8d9e6 (integrator tranche 5c + hotfix)",
+ "pods": {
+  "sm_89 roots": "cn-sm89b, 32 vCPU, commit 5e10c6c4ba, 16/16 rc=0, reaped (verified gone)",
+  "gfx942 roots (default opt)": "cn-gfx942b, 32 vCPU, commit 5e10c6c4ba, 16/16 rc=0, reaped",
+  "cpu roots + 46 host families (declared outputs) + import + tier_dir": "cn-cpu2 pod oxin7e7slnq742, 32 vCPU, commit afced61153 (after the main merge), families 46/46 rc=0 (42 hit, 4 built), 0 refused/exists, smoke_import rc=0, tier_dir rc=0, cpu roots 11/13 (resident_session both arms: device path, invalid on the CPU column), reaped",
+  "resident_session at sm_89": "cn-sm89x pod ztctoqi3jy0pmy, 16 vCPU, commit c1e8c7a16d, 2/2 rc=0, reaped",
+  "discarded": "cn-cpu/cn-sm89/cn-gfx942 first round: root plan bug (xargs -L joined define-off lines), results superseded; all reaped"
+ },
+ "gpu_roots_after_main_merge": "not recompiled: import closure of every GPU root contains none of the .mojo files main changed (changed-since-compile.txt)",
+ "compiler": "Mojo 1.0.0 (ed45d567)",
+ "allocation": "sched_getaffinity 32 (16 on sm89x); 4 parallel builds x cores/4 jobs",
+ "table": "experiments/consolidate_neural_20261028/root_rc_table.tsv",
+ "evidence": "/Users/andrewhendel/mojolearn-evidence/consolidate-neural-20261028",
+ "not_covered": "no runtime, identity, fixture or timing run; Apple/Metal not compiled"
+}

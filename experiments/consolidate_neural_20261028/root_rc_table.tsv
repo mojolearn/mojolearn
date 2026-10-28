@@ -1,0 +1,94 @@
+set	tag	entry	rc	seconds	jobs	opt	defines	sha256	commit	note
+sm_89	transformer-off	bindings/entry/entry__mojolearn_transformer.mojo	rc=0	141s	jobs=8	opt=--optimization-level 0	defines=	sha256=36293cc6735e28b6ad79481501186b3ed1c552b38c1cefeaf846c3653b8efc1f	5e10c6c4ba	-
+sm_89	transformer-resident	bindings/entry/entry__mojolearn_transformer.mojo	rc=0	143s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1	sha256=5667a096d9df59c0a6a694b37841e7192152a0f37508074f82c29b12bab5dc6f	5e10c6c4ba	-
+sm_89	transformer-attn_v2	bindings/entry/entry__mojolearn_transformer.mojo	rc=0	144s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_ATTN_FOLD_V2=1	sha256=4b6073a2e2e0efeabdb76e65d0ddc950b315ca46ec7a527435d8bd40c58b5b47	5e10c6c4ba	-
+sm_89	byte_lm-off	bindings/entry/entry__mojolearn_byte_lm.mojo	rc=0	183s	jobs=8	opt=--optimization-level 0	defines=	sha256=3d2775f55cb7eb915fb27afbb45fdb2d53efa461c7da1d0bc04457e54fab3cb4	5e10c6c4ba	-
+sm_89	linalg-off	bindings/entry/entry__mojolearn_linalg.mojo	rc=0	60s	jobs=8	opt=--optimization-level 0	defines=	sha256=40010d8349b5ed99caabea3c60970f736da9d460dd0af4f17b10b3c136092209	5e10c6c4ba	-
+sm_89	int_slices_check-off	gemm/checks/gemm_int_slices_check.mojo	rc=0	12s	jobs=8	opt=--optimization-level 0	defines=	sha256=5b5e5b6a21f134412ff289972eb9182a27c495448d47d5ec60d4282a95dcb9de	5e10c6c4ba	-
+sm_89	int_slices_check-on	gemm/checks/gemm_int_slices_check.mojo	rc=0	11s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_GEMM_INT_SLICES=1	sha256=5b5e5b6a21f134412ff289972eb9182a27c495448d47d5ec60d4282a95dcb9de	5e10c6c4ba	-
+sm_89	linalg-int_slices	bindings/entry/entry__mojolearn_linalg.mojo	rc=0	63s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_GEMM_INT_SLICES=1	sha256=fd7c2f5f4bb224c976d2cc480cd37cbafa934195d44c309babf67a1371e05164	5e10c6c4ba	-
+sm_89	byte_lm-attn_v2	bindings/entry/entry__mojolearn_byte_lm.mojo	rc=0	181s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_ATTN_FOLD_V2=1	sha256=f23723e587b83cb60fa8b2d118d44df27b8bdc8ae1ad9700efe1421ca9c45521	5e10c6c4ba	-
+sm_89	byte_lm-fill_tiles	bindings/entry/entry__mojolearn_byte_lm.mojo	rc=0	199s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_GEMM_FILL_TILES=1	sha256=ae018d882fd0fe7e74d959949aac4e6f5c4d2d388615c380dab279c00f0567d1	5e10c6c4ba	-
+sm_89	mamba-off	bindings/entry/entry__mojolearn_mamba.mojo	rc=0	138s	jobs=8	opt=--optimization-level 0	defines=	sha256=440ed69a769816449126be5972b032f5064045833b4897575fdeda5221bd96d7	5e10c6c4ba	-
+sm_89	mamba-bwd_folds	bindings/entry/entry__mojolearn_mamba.mojo	rc=0	126s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1	sha256=60fa76fc1df6d3e03c860e9357a4e801a6fabbe7b05d81de1bc8476a86c25043	5e10c6c4ba	-
+sm_89	x_sequence-off	bindings/entry/entry__mojolearn_x_sequence.mojo	rc=0	265s	jobs=8	opt=--optimization-level 0	defines=	sha256=71f38adc95b650113ff7746f71e71a7e110699d7ec0239e8bf974e94dc161045	5e10c6c4ba	-
+sm_89	x_sequence-seq_tiled	bindings/entry/entry__mojolearn_x_sequence.mojo	rc=0	250s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1	sha256=211f821c8f01b7db91be44dcd0dc5a9a212133452052e542fdab1e53b296b1e0	5e10c6c4ba	-
+sm_89	training-off	bindings/entry/entry__mojolearn_training.mojo	rc=0	194s	jobs=8	opt=--optimization-level 0	defines=	sha256=b56e035c670a3a8f4ecfd58a7b85c02cf417e2b1cd374d3a39f7293adcd88c67	5e10c6c4ba	-
+sm_89	training-bwd_folds	bindings/entry/entry__mojolearn_training.mojo	rc=0	193s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1	sha256=b766041028bb556894876a49b00b74e85899596d3042f158f5dba86ff0b3f15c	5e10c6c4ba	-
+gfx942	transformer-resident	bindings/entry/entry__mojolearn_transformer.mojo	rc=0	159s	jobs=8	opt=default	defines=-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1	sha256=600eba7eb1176cb37bf85fc79650ebd8b0a7e58ceca9735b930fa024f51df48d	5e10c6c4ba	-
+gfx942	transformer-off	bindings/entry/entry__mojolearn_transformer.mojo	rc=0	160s	jobs=8	opt=default	defines=	sha256=ad8e751bedf4d8992b3e41862973a77a00b56594b9e04ee01a970142874ccbbd	5e10c6c4ba	-
+gfx942	transformer-attn_v2	bindings/entry/entry__mojolearn_transformer.mojo	rc=0	161s	jobs=8	opt=default	defines=-D MOJOLEARN_IDN_ATTN_FOLD_V2=1	sha256=9905f34713c44e1f2cdcca1ca0589af0279f36b5376e18fad48cd58af1d5f8b2	5e10c6c4ba	-
+gfx942	byte_lm-off	bindings/entry/entry__mojolearn_byte_lm.mojo	rc=0	227s	jobs=8	opt=default	defines=	sha256=649df2e299a1a649c7a62403c41e179594e98ea17f0646f50a470302aa0fea8f	5e10c6c4ba	-
+gfx942	linalg-off	bindings/entry/entry__mojolearn_linalg.mojo	rc=0	72s	jobs=8	opt=default	defines=	sha256=6209892500e2f72791770abfb332e63deeecb00a90b162f774b85e9e68528b1e	5e10c6c4ba	-
+gfx942	int_slices_check-off	gemm/checks/gemm_int_slices_check.mojo	rc=0	12s	jobs=8	opt=default	defines=	sha256=92baea6de6528fa9508f449ac6faef2c6e4e40f19999c6673f4625c4aeb97aea	5e10c6c4ba	-
+gfx942	int_slices_check-on	gemm/checks/gemm_int_slices_check.mojo	rc=0	10s	jobs=8	opt=default	defines=-D MOJOLEARN_IDN_GEMM_INT_SLICES=1	sha256=92baea6de6528fa9508f449ac6faef2c6e4e40f19999c6673f4625c4aeb97aea	5e10c6c4ba	-
+gfx942	linalg-int_slices	bindings/entry/entry__mojolearn_linalg.mojo	rc=0	66s	jobs=8	opt=default	defines=-D MOJOLEARN_IDN_GEMM_INT_SLICES=1	sha256=be6fceb954ff042e059fa55d970a0c263778b0f2fc6f1e48bfd58ba078d79367	5e10c6c4ba	-
+gfx942	byte_lm-attn_v2	bindings/entry/entry__mojolearn_byte_lm.mojo	rc=0	208s	jobs=8	opt=default	defines=-D MOJOLEARN_IDN_ATTN_FOLD_V2=1	sha256=ad256b0fbf19645a195908f528d9d2533da4bd83ab5aa120bd090d9cf2b71a8f	5e10c6c4ba	-
+gfx942	byte_lm-fill_tiles	bindings/entry/entry__mojolearn_byte_lm.mojo	rc=0	216s	jobs=8	opt=default	defines=-D MOJOLEARN_IDN_GEMM_FILL_TILES=1	sha256=b1a696f2bc2195f6777e4ab440bd7fac6e1d2f9eb9c48fc4be86e6b02c7f3f32	5e10c6c4ba	-
+gfx942	mamba-off	bindings/entry/entry__mojolearn_mamba.mojo	rc=0	140s	jobs=8	opt=default	defines=	sha256=4f96507d194079883b80860231f0c8693cf41a42049994562b0fd7985468ef52	5e10c6c4ba	-
+gfx942	mamba-bwd_folds	bindings/entry/entry__mojolearn_mamba.mojo	rc=0	133s	jobs=8	opt=default	defines=-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1	sha256=096abfb977828b297dc0d0707f8374447bd3c9ee073ec9d915fae88fdf358750	5e10c6c4ba	-
+gfx942	x_sequence-off	bindings/entry/entry__mojolearn_x_sequence.mojo	rc=0	287s	jobs=8	opt=default	defines=	sha256=b33f3b599e09e6901e0260e22aaff718b4bf6d58f9b56e20c796c2c8c466c72e	5e10c6c4ba	-
+gfx942	x_sequence-seq_tiled	bindings/entry/entry__mojolearn_x_sequence.mojo	rc=0	272s	jobs=8	opt=default	defines=-D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1	sha256=e8d0977d8d91c9c148cc743af822a49302c177a8e525065cf1e714007f520aa4	5e10c6c4ba	-
+gfx942	training-off	bindings/entry/entry__mojolearn_training.mojo	rc=0	204s	jobs=8	opt=default	defines=	sha256=769697e7e16be915913328809b1e344a104535d0fc0f712b0a992566cc1e79e0	5e10c6c4ba	-
+gfx942	training-bwd_folds	bindings/entry/entry__mojolearn_training.mojo	rc=0	205s	jobs=8	opt=default	defines=-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1	sha256=7798300f38af0272ffaa7ee879e2483907bc10cd1d7435c1a6791afce496d309	5e10c6c4ba	-
+cpu	transformer_host-attn_v2	bindings/entry/entry__mojolearn_transformer_host.mojo	rc=0	23s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_ATTN_FOLD_V2=1	sha256=f69bda0e097c185e6e58465b85c66c39f4b18c0825ebc766ac22b5a342911ee4	afced61153	-
+cpu	causal_public-off	experiments/lm_resident_generate_20261028/compile_causal_public.mojo	rc=0	33s	jobs=8	opt=--optimization-level 0	defines=	sha256=900e04418008e88d408206e0dea8f6b73237e99387dfa810b0236c6c501f2424	afced61153	-
+cpu	byte_lm_host-fill_tiles	bindings/entry/entry__mojolearn_byte_lm_host.mojo	rc=0	36s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_GEMM_FILL_TILES=1	sha256=5804aa56e2ccb2113ecd48a91b4d2ab3e0526ff1a9bbc8f675d2ab9f9bfad074	afced61153	-
+cpu	byte_lm_host-attn_v2	bindings/entry/entry__mojolearn_byte_lm_host.mojo	rc=0	37s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_ATTN_FOLD_V2=1	sha256=317774d2606c209036e4a96ea9462f89e859c511380b2001a2f74a69d32252a1	afced61153	-
+cpu	resident_session-off	experiments/lm_resident_generate_20261028/compile_resident_session.mojo	rc=1	18s	jobs=8	opt=--optimization-level 0	defines=	sha256=-	afced61153	invalid CPU-column root: device path, Unknown GPU architecture in both arms; compiled at sm_89 below
+cpu	resident_session-resident	experiments/lm_resident_generate_20261028/compile_resident_session.mojo	rc=1	18s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1	sha256=-	afced61153	invalid CPU-column root: device path, Unknown GPU architecture in both arms; compiled at sm_89 below
+cpu	linalg_host-int_slices	bindings/entry/entry__mojolearn_linalg_host.mojo	rc=0	19s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_GEMM_INT_SLICES=1	sha256=8c81b0a900dc35843b627f371535b66ecdbbf298a1337d00a39db3cf4db80103	afced61153	-
+cpu	causal_public-resident	experiments/lm_resident_generate_20261028/compile_causal_public.mojo	rc=0	33s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1	sha256=7452ef8661c981d3ec3a993575b4728263afdecc6038f15e61f4a5af21122d37	afced61153	-
+cpu	int_slices_check-off	gemm/checks/gemm_int_slices_check.mojo	rc=0	5s	jobs=8	opt=--optimization-level 0	defines=	sha256=f0408cde068cf1e97ca9cb87ee2224177b7951f734b2ffdd493f3023c6f6799f	afced61153	-
+cpu	int_slices_check-on	gemm/checks/gemm_int_slices_check.mojo	rc=0	5s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_GEMM_INT_SLICES=1	sha256=f0408cde068cf1e97ca9cb87ee2224177b7951f734b2ffdd493f3023c6f6799f	afced61153	-
+cpu	training_host-bwd_folds	bindings/entry/entry__mojolearn_training_host.mojo	rc=0	25s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1	sha256=d6b67302e2c94d843fd4bb6426230cce0b708eefdb6697894bcb2a8c0eda115f	afced61153	-
+cpu	mamba_host-bwd_folds	bindings/entry/entry__mojolearn_mamba_host.mojo	rc=0	68s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1	sha256=417e23d6cb7b62702a08aa101a6dc1f742a6702910339c199e876337af1b8ca2	afced61153	-
+cpu	x_sequence_host-seq_tiled	bindings/entry/entry__mojolearn_x_sequence_host.mojo	rc=0	202s	jobs=8	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1	sha256=615d8e7e4b480e8fad8079a75cc240d26a1827e7d9844925c7fdcae0611b1383	afced61153	-
+sm_89	resident_session-resident	experiments/lm_resident_generate_20261028/compile_resident_session.mojo	rc=0	71s	jobs=4	opt=--optimization-level 0	defines=-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1	sha256=d53d0997e65687a5ca20f68466d4b07fc73a8812a8d4332a7a3c8c953b813520	c1e8c7a16d	-
+sm_89	resident_session-off	experiments/lm_resident_generate_20261028/compile_resident_session.mojo	rc=0	72s	jobs=4	opt=--optimization-level 0	defines=	sha256=c9e4ba2934241fa3a6bca4e7039c42cc403eae1c4c5e8959020aaa801c645e02	c1e8c7a16d	-
+family	arima	bindings/build_arima_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	byte_lm	bindings/build_byte_lm_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	core	bindings/build_core_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	embedding	bindings/build_embedding_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	embedding_infer	bindings/build_embedding_infer_host.sh	rc=0	0s	-	-	-	-	afced61153	bincache declared output
+family	forecast	bindings/build_forecast_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	estimators	bindings/build_estimators_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	forest	bindings/build_forest_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	gbdt	bindings/build_gbdt_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	gp	bindings/build_gp_host.sh	rc=0	0s	-	-	-	-	afced61153	bincache declared output
+family	gp_infer	bindings/build_gp_infer_host.sh	rc=0	0s	-	-	-	-	afced61153	bincache declared output
+family	hdbscan	bindings/build_hdbscan_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	hdbscan_infer	bindings/build_hdbscan_infer_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	ivf	bindings/build_ivf_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	ivf_search	bindings/build_ivf_search_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	kernel_methods	bindings/build_kernel_methods_host.sh	rc=0	0s	-	-	-	-	afced61153	bincache declared output
+family	linalg	bindings/build_linalg_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	metrics	bindings/build_metrics_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	mixture	bindings/build_mixture_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	mixture_infer	bindings/build_mixture_infer_host.sh	rc=0	0s	-	-	-	-	afced61153	bincache declared output
+family	neural	bindings/build_neural_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	preprocessing	bindings/build_preprocessing_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	resample	bindings/build_resample_host.sh	rc=0	0s	-	-	-	-	afced61153	bincache declared output
+family	rf	bindings/build_rf_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	mamba	bindings/build_mamba_host.sh	rc=0	39s	-	-	-	-	afced61153	bincache declared output
+family	runtime_model_selection	bindings/build_runtime_model_selection_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	runtime_sequential	bindings/build_runtime_sequential_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	solver	bindings/build_solver_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	svm	bindings/build_svm_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	training	bindings/build_training_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	transformer	bindings/build_transformer_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	trees	bindings/build_trees_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	tsa	bindings/build_tsa_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	x_ann	bindings/build_x_ann_host.sh	rc=0	0s	-	-	-	-	afced61153	bincache declared output
+family	x_cluster	bindings/build_x_cluster_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	x_cnn	bindings/build_x_cnn_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	x_decomp	bindings/build_x_decomp_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	x_linear	bindings/build_x_linear_host.sh	rc=0	0s	-	-	-	-	afced61153	bincache declared output
+family	x_metrics	bindings/build_x_metrics_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	x_neighbors	bindings/build_x_neighbors_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	x_prep	bindings/build_x_prep_host.sh	rc=0	0s	-	-	-	-	afced61153	bincache declared output
+family	x_sequence	bindings/build_x_sequence_host.sh	rc=0	2s	-	-	-	-	afced61153	bincache declared output
+family	x_trees	bindings/build_x_trees_host.sh	rc=0	1s	-	-	-	-	afced61153	bincache declared output
+family	runtime_manifold	bindings/build_runtime_manifold_host.sh	rc=0	54s	-	-	-	-	afced61153	bincache declared output
+family	tokenizer	bindings/build_tokenizer_host.sh	rc=0	669s	-	-	-	-	afced61153	bincache declared output
+family	runtime_classical	bindings/build_runtime_classical_host.sh	rc=0	748s	-	-	-	-	afced61153	bincache declared output

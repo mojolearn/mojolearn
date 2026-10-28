@@ -764,3 +764,14 @@ CompiledBindingSnapshot and TreeShapOwner (classical host), M3OwnedHostSession (
 Gates: test_no_python_runtime OK — prohibited_source 0, unresolved 229; test_tombstones_preserved OK.
 Receipt experiments/integration_provider_queue_20261028/compile_tranche5c.json: pod 2spgh1zrl6d4kr (32 cores,
 4x8) 46/46 host families, 7/7 roots, POD_SMOKE PASS. No identity or GPU execution.
+
+consolidate-neural (2026-10-28, Opus): one consolidated compile for nine neural/overhead lanes, merged to main together.
+- Merged: attn-fold 31f48aa100, lm-resident-generate 62626cc2aa, gemm-fill-tiles 8e138009e1, gemm-int-slices cd4d32dfb7, seq-predict-tiled afccc9aa33,
+  mamba-folds be49534c40 (MAMBA1_CHUNKED_SCAN tombstone kept), overhead-mamba-bwd 6354464fcf (its new recurrent weight check threaded through
+  NativeModules from main's module-lookup change), overhead-generate-guards aac17722b5 (duplicate CausalExecutionEntries add_type dropped; the
+  integrator's registration stays), overhead-sequential-admission 380ac8ecc4; origin/main b4f8d8d9e6 merged on top. Dropped: none.
+- Defines, all default off: MOJOLEARN_IDN_ATTN_FOLD_V2, _LM_RESIDENT_GENERATE, _GEMM_FILL_TILES, _GEMM_INT_SLICES, _SEQ_TILED_PREDICT, _MAMBA_BWD_FOLDS.
+- Compile (RunPod CPU pods, all reaped): sm_89 16/16 and gfx942 16/16 (every lane root off and on), CPU column 11/13 lane roots plus the
+  resident-session root 2/2 at sm_89 (it is a device path), 46/46 host families through the cache with declared outputs (0 refused),
+  import mojolearn + tier_dir('identical') rc=0. Table: experiments/consolidate_neural_20261028/root_rc_table.tsv; receipt compile.json beside it.
+- RUN OWED (A/B and same-bits fixtures, all lanes): ~/mojolearn-evidence/consolidate-neural-20261028/RUN_OWED.txt.
