@@ -158,6 +158,8 @@ def _state_context():
     # Both import orders use the same native admission setup. Do not copy
     # Sequential's cached context or install a Python first-call callback.
     context = _numpy_free_context()
+    from ._native_owner_lifetime import connect_owner_context
+    connect_owner_context(context)
     context["archive_npy_dtypes"] = _archive_npy_dtypes()
     context.update(not_fitted_class=NotFittedError, not_fitted_doc=NotFittedError.__doc__,
                    not_fitted_function_type=type(_reduce_not_fitted),
