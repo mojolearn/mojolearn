@@ -1153,7 +1153,10 @@ def _call(index, scope, node, facts):
                 facts.entries.add(value[1])
                 return
             if value and value[0] == "func":
-                kind, obj = value
+                kind, obj = value[0], value[1]
+                if value[2:] == ("raw",):
+                    facts.callees.append((obj, owner))
+                    return
             else:
                 facts.unresolved += 1
                 facts.unresolved_names.append(f"{node.lineno}:unresolved installed slot {name}")
@@ -1602,11 +1605,15 @@ class EndpointConnections:
                     return args[2]
                 return found
             if _final(expr.func) == "unwrap" and args:
+                # `inspect.unwrap(f)`: the undecorated source body (marked raw, so the
+                # source decorators are not applied to it again)
+                if args[0] and args[0][0] == "func":
+                    return ("func", args[0][1], "raw")
                 return args[0]
             factory = self.value(expr.func, mod, func, env, depth + 1)
             if (factory and factory[0] == "native" and factory[1] in NATIVE_DESCRIPTOR_FACTORIES
                     and len(expr.args) == 1 and isinstance(expr.args[0], ast.Call)
-                    and _final(expr.args[0].func) == "MethodType" and expr.args[0].args):
+                    and _is_method_type(mod, func, expr.args[0].func) and expr.args[0].args):
                 bound = self.value(expr.args[0].args[0], mod, func, env, depth + 1)
                 if bound and bound[0] == "native":
                     return bound
@@ -1860,6 +1867,21 @@ def _dataclass_methods(cls, decorator):
     return names
 
 
+def _is_method_type(mod, func, expr):
+    """`MethodType`, `types.MethodType` or a local alias of `types.MethodType`."""
+    if isinstance(expr, ast.Attribute):
+        return expr.attr == "MethodType" and isinstance(expr.value, ast.Name) and expr.value.id == "types"
+    if not isinstance(expr, ast.Name):
+        return False
+    scope = func
+    while scope is not None:
+        if expr.id in scope.imports:
+            return scope.imports[expr.id] == ("from", "types", "MethodType")
+        scope = scope.parent
+    imported = mod.imports.get(expr.id)
+    return imported == ("from", "types", "MethodType") if imported else expr.id == "MethodType"
+
+
 def _canonical(value):
     """A hashable form of a literal or a sequence of literals, for table keys."""
     if value and value[0] == "literal":
@@ -2051,9 +2073,11 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
             item["import_connections"] = [{k: v for k, v in r.items() if k != "value"} for r in replacement]
             item["declared_definition"] = _where(root, func) if func else None
             values = [r["value"] for r in replacement]
+            raw = False
             if values and values[0] and all(v == values[0] for v in values):
                 if values[0][0] == "func":
                     func = values[0][1]
+                    raw = values[0][2:] == ("raw",)
                 elif values[0][0] == "native":
                     func = None
                     item.update(static_verdict="native", native_entries=[values[0][1]],
@@ -2067,9 +2091,11 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                     func = None
             else:
                 func = None
-            if func is None and item["static_verdict"] != "native":
+            if func is None and item["static_verdict"] not in ("native", "python"):
                 item["qualification_debt"].append("import-time replacement requires installed-slot qualification")
-        if func:
+        else:
+            raw = False
+        if func and not raw:
             decorated = connections.decorated(func)
             if decorated and decorated[0] == "func":
                 func = decorated[1]
