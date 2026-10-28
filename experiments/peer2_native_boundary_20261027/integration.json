@@ -1,0 +1,20 @@
+{
+  "base_commit": "7de54456bde166c42fd0d9f7378e402bb0f3be91",
+  "branch": "lane/peer2-preprocessing-decomposition-manifold-20261027",
+  "worktree": "/Users/andrewhendel/mojolearn-wt/peer2-preprocessing-decomposition-manifold-20261027",
+  "scope": [
+    "preprocessing",
+    "decomposition/cross-decomposition",
+    "manifold"
+  ],
+  "shared_file_owner": {
+    "python/mojolearn/_expansion_decomp.py": "decomposition lane",
+    "python/mojolearn/_expansion_ann.py": "Peer 1 (TSNE patches coordinated)",
+    "shared dispatch/admission/attributes/lifecycle": "root coordinator"
+  },
+  "source_review_status": "in_progress",
+  "native_compile_status": "not_run_root_owned",
+  "public_runtime_status": "pending_final_integration",
+  "vendor_identity_status": "pending_final_integration",
+  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/peer2-native-boundary-20261027"
+}
