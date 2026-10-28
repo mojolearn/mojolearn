@@ -27,6 +27,12 @@
 # kernel launch (enqueue_function, DeviceContext(, parallelize, vectorize) beyond
 # tools/hooks/compute_in_shells_baseline.txt. Same main/--branch judging rule.
 #
+# The sixth fence (2026-10-28): tools/tests/test_no_python_runtime.py, when the pushed tree has
+# it, runs the public runtime endpoint ledger on an exported copy of the pushed commit and
+# refuses a prohibited_source endpoint that is neither an owner exception
+# (experiments/python_audit_20261028/allowed_exceptions.tsv) nor recorded debt (prohibited_debt.tsv),
+# or an unresolved count above the pin. Static source scan only; nothing is imported.
+#
 # Which refs the host-route fence judges (2026-10-09):
 #   refs/heads/main                       the whole tree
 #   refs/heads/<anything else>            --branch: only what it adds over its
@@ -85,6 +91,22 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     if [ -f "$here/no_python_in_kernels.py" ]; then python3 "$here/no_python_in_kernels.py" --tree "$local_sha" $mode || exit 4; fi
     # the no-compute-in-shells check (2026-10-21), same branch/main judging rule
     if [ -f "$here/no_compute_in_shells.py" ]; then python3 "$here/no_compute_in_shells.py" --tree "$local_sha" $mode || exit 4; fi
+    # the no-Python-in-runtime gate (2026-10-28), when the pushed tree carries it: the endpoint
+    # ledger of the pushed commit, run from an exported copy of that commit, must list every
+    # prohibited_source endpoint as an owner exception or recorded debt and keep the unresolved
+    # count within its pin (tools/tests/test_no_python_runtime.py; both modes judge the whole tree)
+    if git cat-file -e "$local_sha:tools/tests/test_no_python_runtime.py" 2>/dev/null; then
+        gate=$(mktemp -d "${TMPDIR:-/tmp}/no-python-runtime.XXXXXX") || exit 4
+        if ! git archive "$local_sha" python/mojolearn packaging/native_only tools/public_runtime_inventory.py \
+                tools/tests/test_no_python_runtime.py experiments/python_audit_20261028 | tar -x -C "$gate"; then
+            rm -rf "$gate"; exit 4
+        fi
+        python3 "$gate/tools/tests/test_no_python_runtime.py" >"$gate/gate.log" 2>&1
+        status=$?
+        grep -E '^no-python-runtime:|^  python/|^  mojolearn\.|Error|unresolved endpoints' "$gate/gate.log" | head -n 30 >&2
+        rm -rf "$gate"
+        [ $status -eq 0 ] || { echo "pre-push: REFUSED by the no-Python-in-runtime gate (tools/tests/test_no_python_runtime.py)" >&2; exit 4; }
+    fi
 done
 [ $? -eq 4 ] && bad=1
 echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do

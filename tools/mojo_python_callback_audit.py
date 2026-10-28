@@ -81,26 +81,28 @@ PY_SOURCE = re.compile(r"\bPythonObject\(|\bpy_\w+\(|\bPython\.|\bargs\b\s*\[|fr
 
 def admitted(name, text):
     n = re.escape(name)
-    return re.search(r"py_type\(\s*" + n + r"\s*\)\s+is\b|\btype\(\s*" + n + r"\s*\)\s+is\b|"
-                     r"\w*exact\w*\(\s*" + n + r"\b|\w*CheckExact\(\s*" + n + r"\b|\badmit\w*\(\s*" + n + r"\b|"
+    # `py_type(x)` taken natively (compared directly or through an alias such as
+    # `var cls = py_type(x); if cls is bi.list ...`), an *exact*/*CheckExact* or *admit* helper
+    return re.search(r"py_type\(\s*" + n + r"\s*\)|\btype\(\s*" + n + r"\s*\)\s+is\b|"
+                     r"\w*exact\w*\(\s*" + n + r"\b|\w*CheckExact\(\s*" + n + r"\b|\w*admit\w*\(\s*" + n + r"\b|"
                      r"\b" + n + r"\s+is\s+(?:None|True|False)\b", text) is not None
 
 
 def owner_of(path):
     name = path.name.lower()
     rules = (
+        (("token", "causal", "safetensor", "catalog", "model_import", "onnx", "importer", "byte_lm", "lm_",
+          "sequence", "x_sequence", "autograd", "program", "session", "neural", "mlp", "rnn",
+          "optim", "embedding", "samba", "mamba"), "peer3/peer4 (neural/sequence/ops)"),
         (("prep", "scaler", "encode", "impute", "spline", "lda", "minmax", "maxabs", "robust", "nb_", "_nb",
-          "decomp", "pca", "tsvd", "manifold", "umap", "tsne", "mds", "isomap", "lle", "sparse", "dict_learn",
-          "nmf", "ica", "factor"), "peer2 (prep/decomp/manifold)"),
+          "decomp", "pca", "tsvd", "manifold", "umap", "tsne", "mds", "isomap", "locally_linear", "sparse_pca", "dict_learn",
+          "nmf", "fastica", "factor_analysis"), "peer2 (prep/decomp/manifold)"),
         (("neighbor", "knn", "ann", "ivf", "cagra", "svm", "svc", "density", "dbscan", "hdbscan", "hierarchy",
           "agglom", "spectral", "kmeans", "cluster", "lof"), "peer1 (neighbors/svm/cluster)"),
         (("tree", "forest", "gbdt", "boost", "bagging", "iforest", "gp_", "gpc", "explain", "catboost"),
          "peer5 (trees/ensembles/gp)"),
         (("arima", "ets", "theta", "croston", "prophet", "stl", "var_", "tsa", "resample", "metrics", "mx_"),
          "peer6 (time series/metrics)"),
-        (("token", "causal", "safetensor", "catalog", "model_import", "onnx", "importer", "byte_lm", "lm_",
-          "sequence", "x_sequence", "autograd", "program", "session", "ops_", "neural", "mlp", "rnn",
-          "optim", "embedding", "samba", "mamba"), "peer3/peer4 (neural/sequence/ops)"),
         (("mode", "backend", "array", "numeric", "archive", "classical_attr", "public_attr", "params"),
          "peer4 (mode/backend/array/attributes)"),
         (("linear", "ridge", "lasso", "solver", "logistic", "sgd", "mcls"), "linear/classical owner (unassigned)"),

@@ -108,9 +108,10 @@ class NoPythonRuntime(unittest.TestCase):
         print(f"no-python-runtime: prohibited_source {len(prohibited)} endpoints "
               f"({in_debt} recorded debt, {len(prohibited) - in_debt - len(unlisted)} listed exceptions, "
               f"{len(unlisted)} unlisted)", file=sys.stderr)
-        self.assertFalse(unlisted, "prohibited_source endpoints outside the allowlist and the debt list:\n" + "\n".join(
+        if unlisted:
+            self.fail("prohibited_source endpoints outside the allowlist and the debt list:\n" + "\n".join(
             f"  {f}  {n}  ({e.get('class_creation_wrapper') and 'class-creation wrapper ' + e['class_creation_wrapper'] or e['static_verdict']})"
-            for e in unlisted[:SHOWN] for f, n in [_key(e)]) + (f"\n  ... {len(unlisted) - SHOWN} more" if len(unlisted) > SHOWN else ""))
+                for e in unlisted[:SHOWN] for f, n in [_key(e)]) + (f"\n  ... {len(unlisted) - SHOWN} more" if len(unlisted) > SHOWN else ""))
         if os.environ.get("MOJOLEARN_NO_PYTHON_STRICT") == "1":
             self.assertEqual(in_debt, 0, f"{in_debt} prohibited endpoints are recorded debt (strict mode)")
 
@@ -119,8 +120,9 @@ class NoPythonRuntime(unittest.TestCase):
         pin = _pin(self.comments)
         if len(unresolved) < pin:
             print(f"no-python-runtime: unresolved {len(unresolved)} < pin {pin} (run --prune)", file=sys.stderr)
-        self.assertLessEqual(len(unresolved), pin, "unresolved endpoints above the pin:\n" + "\n".join(
-            f"  {e['endpoint']}  {e.get('declared_definition') or e.get('definition')}" for e in unresolved[:SHOWN]))
+        if len(unresolved) > pin:
+            self.fail(f"{len(unresolved)} unresolved endpoints, above the pin {pin}:\n" + "\n".join(
+                f"  {e['endpoint']}  {e.get('declared_definition') or e.get('definition')}" for e in unresolved[:SHOWN]))
 
 
 def prune():
