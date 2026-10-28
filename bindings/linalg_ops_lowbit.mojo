@@ -206,11 +206,15 @@ def lin_require_identical(binding: PythonObject, context: PythonObject) raises:
 def lin_lowbit(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_lowbit_binding()`: the identical build with the low-bit profile version this owner expects."""
     lin_require_identical(binding, context)
-    var got = lin_attr(binding, "lowbit_profile_version")
-    if got is None:
-        raise Error("RuntimeError: mojolearn.linalg: the loaded linalg extension predates the "
-                    + "low-bit profiles; rebuild it with bindings/build_linalg.sh")
-    var v = Int(py=family_call(native_loaded_module("builtins").int, family_call(got)))
+    var v = 0
+    if py_get(lin_state(context), "_native_provider") is not None:
+        v = Int(py=lin_call(binding, context, "lowbit_profile_version"))
+    else:
+        var got = lin_attr(binding, "lowbit_profile_version")
+        if got is None:
+            raise Error("RuntimeError: mojolearn.linalg: the loaded linalg extension predates the "
+                        + "low-bit profiles; rebuild it with bindings/build_linalg.sh")
+        v = Int(py=family_call(native_loaded_module("builtins").int, family_call(got)))
     var want = Int(py=lin_state(context)["LOWBIT_PROFILE_VERSION"])
     if v != want:
         raise Error("RuntimeError: mojolearn.linalg: the loaded extension implements low-bit "
@@ -221,11 +225,15 @@ def lin_lowbit(binding: PythonObject, context: PythonObject) raises -> PythonObj
 def lin_int15(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_int15_binding()`."""
     lin_require_identical(binding, context)
-    var got = lin_attr(binding, "int15_profile_version")
-    if got is None:
-        raise Error("RuntimeError: mojolearn.linalg: the loaded linalg extension predates the "
-                    + "fifteen-bit profile; rebuild it with bindings/build_linalg.sh")
-    var v = Int(py=family_call(native_loaded_module("builtins").int, family_call(got)))
+    var v = 0
+    if py_get(lin_state(context), "_native_provider") is not None:
+        v = Int(py=lin_call(binding, context, "int15_profile_version"))
+    else:
+        var got = lin_attr(binding, "int15_profile_version")
+        if got is None:
+            raise Error("RuntimeError: mojolearn.linalg: the loaded linalg extension predates the "
+                        + "fifteen-bit profile; rebuild it with bindings/build_linalg.sh")
+        v = Int(py=family_call(native_loaded_module("builtins").int, family_call(got)))
     var want = Int(py=lin_state(context)["INT15_PROFILE_VERSION"])
     if v != want:
         raise Error("RuntimeError: mojolearn.linalg: the loaded extension implements fifteen-bit "
@@ -409,6 +417,19 @@ def _lin_from_bf16(args: PythonObject, context: PythonObject) raises -> PythonOb
         raise Error("mojolearn.linalg.from_bf16: bits has no elements")
     var out = lin_new(a.shape, "<f4", context)
     _ = lin_call(lin_lowbit(args[0], context), context, "from_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
+    _ = out  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
+    _ = a^
+    return out.keep
+
+
+def _lin_from_f16(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var a = lin_typed(args[1], "<u2", -1, "bits", context)
+    var n = a.count()
+    if n == 0:
+        raise Error("mojolearn.linalg.from_f16: bits has no elements")
+    var out = lin_new(a.shape, "<f4", context)
+    _ = lin_call(lin_lowbit(args[0], context), context, "from_f16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _ = a^
@@ -725,6 +746,8 @@ def lin_lowbit_operation(operation: String, var args: PythonObject, context: Pyt
         return _lin_to_bf16(args, context)
     if operation == "family_lin_from_bf16":
         return _lin_from_bf16(args, context)
+    if operation == "family_lin_from_f16":
+        return _lin_from_f16(args, context)
     if operation == "family_lin_quantize_int8":
         return _lin_quantize_int8(args, context)
     if operation == "family_lin_dequantize_int8":

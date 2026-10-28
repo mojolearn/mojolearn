@@ -35,8 +35,8 @@
       "remaining": [
         "SVC/SVR Python-owned pair/fold/input/output orchestration and remaining metadata admission",
         "gamma/class reductions/ovo-layout/coefficients CPython dispatch",
-        "OneClassSVM and linear SVM typed numerical operation tables",
-        "CPU native tables",
+        "linear SVM typed numerical operation table and OneClass remaining base-helper dispatch",
+        "CPU SVC/SVR/linear native tables",
         "public availability/property descriptors and non-frontdoor loader paths",
         "x_neighbors custom resident/capability entries, metadata snapshots and remaining frontdoors"
       ]
@@ -286,6 +286,37 @@
         "f64/finite-only/target/sample-weight admission and other family consumers; input admission before captured array may still read foreign metadata",
         "archive/type/protocol callbacks and generic resident lifetime migration",
         "legacy CPU adapters/other loaders and numerical tables still need migration; real host admission is not full CPU runtime qualification"
+      ]
+    },
+    {
+      "family": "linalg_provider",
+      "status": "partial_source_only",
+      "source_changes": [
+        "CPU host 15-operation common provider table preserving original host arithmetic and validation",
+        "from_f16 public wrapper now one native family call",
+        "lowbit/int15 profile words use existing native table when admitted"
+      ],
+      "remaining": [
+        "full linalg operation-local binding snapshot and all input/output metadata",
+        "decomposition native tables and legacy numerical dispatch",
+        "runtime qualification"
+      ]
+    },
+    {
+      "family": "lowbit_storage",
+      "status": "source_candidate_uncompiled",
+      "source_changes": [
+        "11 public constructor/function/repr bodies enter one compiled family owner",
+        "packing/unpacking/materialization use the existing shared linalg provider",
+        "same-format packing copies packed storage without widening/requantization",
+        "operation-local metadata and foreign buffer pins preserve zero-copy Array borrowing",
+        "Array slots admitted through import-pinned descriptors; original storage owners retained across execution",
+        "shared direct float32 sequence construction retains large-integer and double-rounding behavior"
+      ],
+      "remaining": [
+        "compile and focused public operation runtime/bit probe",
+        "other linalg callers still use old metadata helpers",
+        "whole-library transitive provider completion remains pending"
       ]
     }
   ],

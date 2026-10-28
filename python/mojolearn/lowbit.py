@@ -27,12 +27,6 @@ Examples
 >>> blk = mojolearn.TransformerBlock(packed, n_heads=8)
 >>> f32, fmt = mojolearn.lowbit.unpack(packed)
 """
-from ._array import Array
-from ._buffer import (
-    as_f32_c, as_i8_c, as_i32_c, as_u16_c,
-)
-from ._bufcheck import base_format, dtype_name, is_native_f32, probe
-
 FORMATS = ("float32", "bfloat16", "int8")
 
 __all__ = ["FORMATS", "BF16Weight", "Int8Weight", "pack", "unpack", "materialize",
@@ -61,18 +55,10 @@ class BF16Weight:
     format = "bfloat16"
 
     def __init__(self, bits):
-        try:
-            pb = probe(bits)
-        except TypeError:
-            raise TypeError("mojolearn.lowbit.BF16Weight: bits must be a 2-D uint16 array") from None
-        if base_format(pb.format) != "H" or pb.itemsize != 2 or pb.ndim != 2:
-            raise TypeError("mojolearn.lowbit.BF16Weight: bits must be a 2-D uint16 array")
-        b, _ = as_u16_c(bits, ndim=2, name="bits")  # layout only; zero-copy when C-contiguous
-        self.bits = b
-        self.shape = tuple(b.shape)
+        return _NATIVE(self, "family_low_bf16_init", (bits,), _NATIVE_CONTEXT)
 
     def __repr__(self):
-        return f"BF16Weight(shape={self.shape})"
+        return _NATIVE(self, "family_low_repr", (), _NATIVE_CONTEXT)
 
 
 class Int8Weight:
@@ -96,32 +82,15 @@ class Int8Weight:
     format = "int8"
 
     def __init__(self, codes, exponents):
-        try:
-            pq = probe(codes)
-        except TypeError:
-            raise TypeError("mojolearn.lowbit.Int8Weight: codes must be a 2-D int8 array") from None
-        if base_format(pq.format) != "b" or pq.itemsize != 1 or pq.ndim != 2:
-            raise TypeError("mojolearn.lowbit.Int8Weight: codes must be a 2-D int8 array")
-        try:
-            pe = probe(exponents)
-        except TypeError:
-            raise TypeError("mojolearn.lowbit.Int8Weight: exponents must be int32 of shape (rows,)") from None
-        if (base_format(pe.format) not in ("i", "l") or pe.itemsize != 4
-                or pe.shape != (pq.shape[0],)):
-            raise TypeError("mojolearn.lowbit.Int8Weight: exponents must be int32 of shape (rows,)")
-        q, _ = as_i8_c(codes, ndim=2, name="codes")
-        e, _ = as_i32_c(exponents, ndim=1, name="exponents")
-        self.codes = q
-        self.exponents = e
-        self.shape = tuple(q.shape)
+        return _NATIVE(self, "family_low_int8_init", (codes, exponents), _NATIVE_CONTEXT)
 
     def __repr__(self):
-        return f"Int8Weight(shape={self.shape})"
+        return _NATIVE(self, "family_low_repr", (), _NATIVE_CONTEXT)
 
 
 def is_packed(value):
     """Whether `value` is a packed weight (`BF16Weight` or `Int8Weight`)."""
-    return isinstance(value, (BF16Weight, Int8Weight))
+    return _NATIVE(None, "family_low_is_packed", (value,), _NATIVE_CONTEXT)
 
 
 def format_of(weights):
@@ -129,59 +98,19 @@ def format_of(weights):
 
     Raises `ValueError` when the dict mixes formats.
     """
-    fmts = set()
-    values = weights.values() if hasattr(weights, "values") else weights
-    for v in values:  # glue: format tag per named tensor
-        if is_packed(v):
-            fmts.add(v.format)
-    if not fmts:
-        return "float32"
-    if len(fmts) > 1:
-        raise ValueError(f"mojolearn.lowbit: weights mix formats {sorted(fmts)}; store a model one way")
-    return fmts.pop()
+    return _NATIVE(None, "family_low_format_of", (weights,), _NATIVE_CONTEXT)
 
 
 # ----------------------------------------------------------------- packing
 
 
-def _f32_2d(value, name):
-    try:
-        pb = probe(value)
-    except TypeError:
-        raise TypeError(f"mojolearn.lowbit: {name} does not support the buffer protocol") from None
-    if not is_native_f32(pb.format):
-        raise TypeError(f"mojolearn.lowbit: {name} has dtype {dtype_name(value, pb)}; pack takes float32")
-    a, _ = as_f32_c(value, ndim=None, name=name)
-    return a
 
 
-def _linalg():
-    """The linalg binding this install SELECTED: the GPU extension's kernels
-    on a GPU install, the linalg host binding installed under the same
-    canonical name on a CPU-only install. A GPU install never converts on
-    the host (cpu-gpu-cleanup n-pyneural, 2026-10-02): a GPU binding that
-    refuses, for instance a FAST tier, raises by name from `linalg`. An
-    install with no linalg binding refuses here: the conversion is Mojo
-    only (Python is glue only, pyglue-sweep 2026-10-03)."""
-    from . import _linalg_impl
-    try:
-        _linalg_impl._load()
-    except (ImportError, AttributeError) as e:
-        raise ImportError(
-            "mojolearn.lowbit: packing and materializing need the linalg binding "
-            f"(GPU extension or _mojolearn_linalg_host); none is loaded: {e}") from None
-    # `_linalg_impl` itself, not the public `linalg` door (lane/lazy-imports-2,
-    # 2026-10-11): the four functions used here (to_bf16, from_bf16,
-    # quantize_int8, dequantize_int8) are the same objects `linalg` re-exports,
-    # and the door also imports `Cholesky` (`_cholesky_impl`, the GP binding),
-    # which put the GP binding in every lowbit user's closure (mamba1 among them).
-    return _linalg_impl
 
 
 def widen_bf16(bits):
     """Convert bfloat16 bits of any rank (a uint16 buffer) to float32, exactly."""
-    b, _ = as_u16_c(bits, ndim=None, name="bits")
-    return _linalg().from_bf16(b)
+    return _NATIVE(None, "family_low_widen_bf16", (bits,), _NATIVE_CONTEXT)
 
 
 def pack_one(value, fmt, name="weight"):
@@ -200,38 +129,14 @@ def pack_one(value, fmt, name="weight"):
     -------
     BF16Weight, Int8Weight or mojolearn.Array
     """
-    if fmt not in FORMATS:
-        raise ValueError(f"mojolearn.lowbit: unknown format {fmt!r}; one of {FORMATS}")
-    a = _f32_2d(value, name)
-    if a.ndim != 2:
-        raise ValueError(f"mojolearn.lowbit: {name} must be 2-D to pack, got shape {a.shape}")
-    if fmt == "float32":
-        return a.copy()
-    linalg = _linalg()
-    if fmt == "bfloat16":
-        return BF16Weight(linalg.to_bf16(a))
-    q, e = linalg.quantize_int8(a)
-    return Int8Weight(q, e)
+    return _NATIVE(None, "family_low_pack_one", (value, fmt, name), _NATIVE_CONTEXT)
 
 
 def materialize_one(value, name="weight"):
     """A packed tensor converted to float32 exactly, or a float32 tensor returned as is."""
-    if isinstance(value, BF16Weight):
-        return _linalg().from_bf16(value.bits)
-    if isinstance(value, Int8Weight):
-        return _linalg().dequantize_int8(value.codes, value.exponents)
-    return value
+    return _NATIVE(None, "family_low_materialize_one", (value, name), _NATIVE_CONTEXT)
 
 
-def _as_given(value, name):
-    """A non-packed tensor as it was given when it has a buffer, else (a
-    nested list) as a float32 Array; `(array, ndim)`."""
-    try:
-        pb = probe(value)
-        return value, pb.ndim
-    except TypeError:
-        a = Array.from_list(value, "<f4")
-        return a, a.ndim
 
 
 def pack(weights, fmt):
@@ -249,31 +154,7 @@ def pack(weights, fmt):
     dict
         A new dict.
     """
-    if fmt not in FORMATS:
-        raise ValueError(f"mojolearn.lowbit: unknown format {fmt!r}; one of {FORMATS}")
-    if not hasattr(weights, "keys"):
-        raise TypeError("mojolearn.lowbit.pack: weights must be a dict keyed by name")
-    out = {}
-    for name, value in weights.items():  # glue: dispatches each named weight tensor
-        if is_packed(value):
-            # Repacking in the format it already has needs independent
-            # storage (as the float32 arm below provides), but not a full
-            # float32 expansion followed by the same quantizer. Besides
-            # wasting bandwidth, that old route briefly needed 4 bytes per
-            # weight for a model whose packed representation needs 1 or 2.
-            if value.format == fmt:
-                if isinstance(value, BF16Weight):
-                    out[name] = BF16Weight(value.bits.copy())
-                else:
-                    out[name] = Int8Weight(value.codes.copy(), value.exponents.copy())
-                continue
-            value = materialize_one(value, name)
-        a, ndim = _as_given(value, name)
-        if fmt != "float32" and ndim == 2:
-            out[name] = pack_one(a, fmt, name)
-        else:
-            out[name] = a
-    return out
+    return _NATIVE(None, "family_low_pack", (weights, fmt), _NATIVE_CONTEXT)
 
 
 def unpack(weights, what="weights"):
@@ -291,12 +172,15 @@ def unpack(weights, what="weights"):
     (dict, str)
         The float32 dict and the format the weights were stored in.
     """
-    if not hasattr(weights, "keys"):
-        return weights, "float32"
-    fmt = format_of(weights)
-    if fmt == "float32":
-        return weights, fmt
-    return {name: materialize_one(v, name) for name, v in weights.items()}, fmt  # glue: dispatches each named weight tensor
+    return _NATIVE(None, "family_low_unpack", (weights, what), _NATIVE_CONTEXT)
 
 
 materialize = unpack
+
+
+# Import-time connection only; every operation above enters the shared native
+# family owner and uses the existing linalg provider for numerical conversion.
+from . import _linalg_impl as _connected_linalg
+from . import _native_family_bridge
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_low_bf16=BF16Weight, family_low_int8=Int8Weight)

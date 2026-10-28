@@ -132,7 +132,8 @@ def _array_values(value: PythonObject, depth: Int, mut dims: List[Int], mut valu
 
 
 def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
-                     mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject) raises:
+                     mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject,
+                     float_target: Bool = False) raises:
     var b = native_loaded_module("builtins")
     # A NumPy-free context connects no ndarray: its sequences hold Python
     # numbers only, and an array leaf is refused below as a non-number.
@@ -161,7 +162,7 @@ def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut v
             raise Error("input sequences must be rectangular")
         # cpu-route: nested Python sequences are Python objects; walking them is the Python door's input step.
         for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-            _sequence_values(value[k], depth + 1, dims, values, kind, size, leaf_depth, context)
+            _sequence_values(value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
     else:
         _leaf_shape(Python.tuple(), depth, dims, leaf_depth)
         if Bool(py=py_call(b.isinstance, value, b.bool)):
@@ -169,9 +170,9 @@ def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut v
         elif Bool(py=py_call(b.isinstance, value, b.float)):
             _promote(kind, size, "f", 8)
         elif Bool(py=py_call(b.isinstance, value, b.int)):
-            if Bool(py=value < context["int64_min"]) or Bool(py=value > context["uint64_max"]):
+            if not float_target and (Bool(py=value < context["int64_min"]) or Bool(py=value > context["uint64_max"])):
                 raise Error("TypeError: input integers exceed the supported numeric array range")
-            _promote(kind, size, "u" if Bool(py=value > context["int64_max"]) else "i", 8)
+            _promote(kind, size, "f" if float_target else ("u" if Bool(py=value > context["int64_max"]) else "i"), 8)
         else:
             raise Error("TypeError: inputs must contain numeric scalars")
         py_call(values.append, value)
@@ -217,3 +218,20 @@ def sequential_sequence(value: PythonObject, context: PythonObject) raises -> Py
     else:
         storage = native_array_from_values(String(code), values)
     return Python.tuple(shape, kind, size, storage)
+
+
+def sequential_sequence_f32(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Array.from_list(..., '<f4') constructs array.array('f', flat) directly.
+    # Preserve its Python-number -> C double -> float conversion, including
+    # large integer inputs, without an int64 intermediate or a different cast.
+    var dims = List[Int]()
+    var values = Python.list()
+    var kind = String()
+    var size = 0
+    var leaf_depth = -1
+    _sequence_values(value, 0, dims, values, kind, size, leaf_depth, context, True)
+    var shape = Python.list()
+    for k in range(len(dims)):  # driver-loop: over admitted sequence shape
+        py_call(shape.append, dims[k])
+    var storage = native_array_from_values(String("f"), values)
+    return Python.tuple(shape, storage)
