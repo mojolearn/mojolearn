@@ -38,8 +38,17 @@ Remaining ownership (assigned is not the same as completed):
 - Peer2 lane/peer2-preprocessing-decomposition-manifold-20261027: preprocessing,
   decomposition, PLS, manifold, UMAP and random projection lifecycle/owners.
 - Peer3 lane/peer3-neural-tokenizer-20261027: corpus/tokenizer preparation and
-  Transformer tape descriptor transport; MoE weight load/backward whole public
-  operation repair queued behind those lanes.
+  Transformer tape descriptor transport and models/config/serialization.
+- Peer4: CNN/MoE/embedding/neural inference and adjacent RNN/MLP public paths.
+- Peer5: GP kernels/estimators and tree/ensemble public helpers.
+- Peer6: time-series, metrics/resampling and cross-validation.
+- Root cluster_density_linalg: remaining clustering/mixture/density/HDBSCAN,
+  Cholesky/linear algebra and linear-model public paths.
+The source ownership ledger is experiments/provider_boundary_audit_20261027/
+COVERAGE_OWNERS.tsv with scope/limitations in coverage_owners.json. All59 source
+files marked prohibited in the historical inventory have an owner; this does
+not mean all59 are currently defective or already repaired. Peer4 took MoE
+before any Peer3 edits; no duplicate MoE implementation was retained.
 The whole-library migration remains incomplete. Source markers, a zero baseline
 or native wrapper entry do not establish transitive callback freedom.
 

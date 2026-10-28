@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-27",
+  "based_on_main": "765a269fc4d0e256ddba8a1a8dbe8cf80f16d2a2",
+  "kind": "source ownership ledger; no runtime verification",
+  "historical_inventory": {
+    "path": "experiments/provider_boundary_audit_20261027/operations.tsv",
+    "all_groups": 1812,
+    "prohibited_groups": 386,
+    "prohibited_source_files": 59,
+    "unassigned_prohibited_source_files": 0
+  },
+  "limits": [
+    "The prior inventory is conservative and older than many repairs; counts are not a current defect total.",
+    "Assignment does not mean implementation has started or finished.",
+    "Unresolved source groups and transitive native callees still require owning-lane source review.",
+    "Every green compile qualifies only selected paths/target; no runtime or vendor identity result is claimed.",
+    "The audit agent returned confirmed findings then hit model capacity; root completed this ownership ledger."
+  ],
+  "threads": {
+    "peer1": "01a18031-31e2-72c1-bf74-64f2a4136f2c",
+    "peer2": "01a18031-8936-7040-9669-5f5e52352859",
+    "peer3": "01a18031-fa1c-77c0-aab5-7a7e614a9f74",
+    "peer4": "01a1806d-5b2c-76b0-816e-4d7bbb5cb3e4",
+    "peer5": "01a1806d-5b86-7141-87cb-b80336bc23ab",
+    "peer6": "01a1806d-5bf7-7b42-883f-7328db84f2e6"
+  },
+  "additional_active_scope": {
+    "root": [
+      "Session public descriptor compiled/merged90585148f8",
+      "Session scalar/container protocol admission review remains pending",
+      "shared array/backend/mode/native profile boundary"
+    ],
+    "root/public_wrapper_repairs": [
+      "Program serialization metadata admission",
+      "Program public dispatch",
+      "distributed and partitioned execution",
+      "model-pool and offload training"
+    ]
+  },
+  "delivery": "small affected compile -> coherent main merge/push; no runtime verification campaign"
+}
