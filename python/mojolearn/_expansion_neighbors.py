@@ -1257,6 +1257,7 @@ class PolynomialCountSketch(_XNeighbors):
         self.n_components = n_components
         self.random_state = random_state
 
+    @_native_local_method
     def fit(self, X, y=None):
         """Draw the hash tables.
 
@@ -1278,8 +1279,9 @@ class PolynomialCountSketch(_XNeighbors):
             If ``degree`` or ``n_components`` is below 1, or ``random_state`` is
             not an int, a numpy RandomState or None.
         """
-        return _NATIVE(self, "family_xn_pcs_fit", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_pcs_fit", (None, X, y), _NATIVE_CONTEXT)
 
+    @_native_local_method
     def transform(self, X):
         """Map X to the sketched feature space.
 
@@ -1295,6 +1297,7 @@ class PolynomialCountSketch(_XNeighbors):
         """
         return _NATIVE(self, "family_xn_pcs_transform", (None, X), _NATIVE_CONTEXT)
 
+    @_native_local_method
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
 
@@ -1309,7 +1312,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_pcs_fit_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_pcs_fit_transform", (None, X, y), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``polynomialcountsketch0``, ``polynomialcountsketch1``, ...
@@ -1323,7 +1326,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         names : list of str
         """
-        return _prefixed_names(self, int(self.n_components))
+        return _NATIVE(self, "family_xn_pcs_feature_names", (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== AdditiveChi2Sampler
