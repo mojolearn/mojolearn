@@ -2813,12 +2813,14 @@ struct LlamaDeferredChecks(Movable):
         if not self.read_queued:
             raise Error("deferred checks: readback not enqueued before the wait")
         var hi = self.host_i.unsafe_ptr()
-        for slot in range(self.nf_used):  # small-loop(nf_used: deferred refusal slots, at most DEFER_NF_SLOTS)
+        var n_slots = self.nf_used
+        for slot in range(n_slots):  # small-loop(n_slots: deferred refusal slots, at most DEFER_NF_SLOTS)
             if hi.unsafe_load(slot) != NONFINITE_NONE:
                 return False
         var hf = self.host_f.unsafe_ptr()
         var lo = 0
-        for a in range(self.attn_used):  # small-loop(attn_used: deferred fused forwards, one per layer)
+        var n_attn = self.attn_used
+        for a in range(n_attn):  # small-loop(n_attn: deferred fused forwards, one per layer, at most DEFER_ATTN_SLOTS)
             var maxima = StaticTuple[Float64, 3](0.0, 0.0, 0.0)
             for which in range(3):  # small-loop(3: q_rope, k_cache, v_cache partial slices)
                 var kb = self.attn_blocks[a * 3 + which]
