@@ -44,6 +44,10 @@ Compile targets pending under root coordination:
 bindings.jl_native.jl_c and its dedicated jl_scalar_pyapi dependency;
 bindings.rp_native import closure for the helper signature change. The supported
 host group is bindings/build_runtime_classical_host.sh. No lane compile.
+Minimal exported forwarding roots for the coordinator are in
+experiments/peer2_decomposition_20261027/jl_rp_compile.mojo: jl_c and rp_fit,
+without full decomp_c dispatch. Owner steering subsequently stopped further
+verification runs; retained results above precede that instruction.
 
 Remaining verification/debt:
 No source test or grep is runtime qualification. Native compile, focused public
