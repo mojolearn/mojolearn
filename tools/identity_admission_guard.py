@@ -241,35 +241,35 @@ def publish(candidate_path, base_path, destination, lanes):
     return report
 
 
-def committed_inputs(root, incoming):
-    """Resolve returned columns to their exact, already committed repo copies.
+def repository_inputs(root, incoming, preview_dir=None):
+    """Reuse repository copies or retain returned columns, without a Git commit.
 
-    Keep the filename: admission interprets sabotage/before-picture labels too.
-    No copy, commit, or reference mutation is performed here.
+    A check-only invocation owns a temporary preview directory in the record
+    tree and removes it on exit. Ordinary admission keeps immutable copies.
     """
+    from retain_run_summary import read_bytes, immutable_bytes, retain_identity, destination
     root = Path(root).resolve()
-    raw = subprocess.check_output(['git', '-C', str(root), 'ls-tree', '-r', '-z', 'HEAD'])
-    index = {}
-    for row in raw.split(b'\0'):
-        if not row:
-            continue
-        meta, name = row.split(b'\t', 1)
-        mode, kind, oid = meta.decode().split()
-        name = name.decode()
-        if (mode in ('100644', '100755') and kind == 'blob'
-                and name.startswith('bench/results/identity_break/') and name.endswith('.identical.json')):
-            index.setdefault((Path(name).name, oid), []).append(root / name)
+    base = root / 'bench/results/identity_break'
+    if preview_dir is not None:
+        preview_dir = Path(preview_dir).absolute()
+        if preview_dir.resolve() != preview_dir or not preview_dir.is_relative_to(base):
+            raise ValueError('preview records must be inside the repository record directory')
     resolved = []
     for filename in incoming:
-        path = Path(filename)
-        data = path.read_bytes()
-        oid = hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest()
-        matches = index.get((path.name, oid), [])
-        matches.sort(key=lambda p: (p != path.absolute(), p.as_posix()))
-        match = next((p for p in matches if p.resolve() == p and p.is_file() and p.read_bytes() == data), None)
+        path = Path(filename).absolute()
+        if path.resolve() != path or not path.name.endswith('.identical.json'):
+            raise ValueError('expected a regular *.identical.json record without symlinks: ' + str(path))
+        data = read_bytes(path)
+        matches = [path] if path.is_relative_to(base) else sorted(base.rglob(path.name))
+        match = next((p for p in matches if p.resolve() == p and p.is_file()
+                      and not any(part.startswith('.admission-preview-') for part in p.parts)
+                      and p.stat().st_size == len(data) and read_bytes(p) == data), None)
         if match is None:
-            raise ValueError(f'{path}: no unchanged committed copy under bench/results/identity_break; '
-                             'retain this column with tools/retain_run_summary.py identity and commit it first')
+            if preview_dir is None:
+                match = retain_identity(path, repo=root)
+            else:
+                match = destination(root, preview_dir.relative_to(root) / hashlib.sha256(data).hexdigest() / path.name)
+                immutable_bytes(match, data)
         resolved.append(match)
     return resolved
 
@@ -284,6 +284,7 @@ def main(argv=None):
     selection.add_argument("records", nargs="+")
     inputs = sub.add_parser('inputs')
     inputs.add_argument('--source-root', type=Path, default=HERE.parent)
+    inputs.add_argument('--preview-dir', type=Path)
     inputs.add_argument('records', nargs='+')
     for name in ("check", "publish"):
         check = sub.add_parser(name)
@@ -295,7 +296,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == 'inputs':
-            for path in committed_inputs(args.source_root, args.records):
+            for path in repository_inputs(args.source_root, args.records, args.preview_dir):
                 sys.stdout.buffer.write(str(path).encode() + b'\0')
             return 0
         if args.command == "host-only":

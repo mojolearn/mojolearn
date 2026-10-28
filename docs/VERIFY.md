@@ -1053,16 +1053,18 @@ admissible alone). It refuses harness overrides, sabotage switches and a tree
 whose sources differ from its commit, and ends with the
 `tools/identity_columns.py check` verdict, which is `admit()` itself.
 `admit_identity_columns.sh` refuses any record `admit()` refuses or records of
-incompatible source commits, resolves the selected incoming columns to their
-byte-identical committed copies under `bench/results/identity_break/`, regenerates the table from every
-committed column for the selected lanes, reports which routine reference parts still rest on an older
+incompatible source commits, retains byte-identical incoming columns under
+`bench/results/identity_break/` (reusing existing copies), regenerates the table from
+repository columns for the selected lanes, reports which routine reference parts still rest on an older
 commit (`reference-report.json`), and runs `verify --self-test` and
 `verify --coverage` against the new table on the host column. `--check-only`
 does the same on a scratch table and changes nothing.
-The recorder retains columns in the repository automatically; commit those raw
-records before admission. Admission receipts live under
+The recorder retains columns in the repository automatically; admission also
+imports missing returned columns. Commit the raw records and updated table
+together after the checks pass. Admission receipts live under
 `bench/results/reference_admissions/<date>-<tag>/`, outside the raw-input tree.
-Admission does not copy the columns again or generate from uncommitted inputs.
+No prerequisite record commit is required. Check-only imports use temporary
+repository copies that are removed on exit; the shipped table stays unchanged.
 
 Four columns decide every admitted cell: Apple, NVIDIA, AMD and the cpu
 (host) column must all carry the same hash. Agreeing columns already in the
@@ -1187,23 +1189,25 @@ CPU set. This does not replace final release-wheel qualification.
 ### Admitting one verified group without rewriting other references
 
 The release update sequence is: rerun the changed or invalidated lanes, retain
-and commit their original columns, admit that selected group, commit the updated
-table and any changed model fixtures, then build the wheel from that commit.
+their original columns in MojoLearn, admit that selected group, commit the records,
+updated table and any changed model fixtures together, then build the wheel from that commit.
 Unchanged valid references remain in the table. A normal `verify` execution
 compares with its existing references; it does not teach the table its own answers.
 Collection alone does not update the table, and an already published wheel
 keeps its bundled snapshot until a new wheel is built and released.
 
-With records committed, the guarded update command is:
+The guarded update command is:
 
 ```sh
 bash tools/admit_identity_columns.sh --lanes lane-a,lane-b /path/to/returned-columns
 ```
 
-This resolves the returned files to their committed MojoLearn copies, checks
+This retains or reuses the returned files inside MojoLearn, checks
 the candidate and replaces only the selected lanes after admission succeeds.
 Missing or conflicting required witnesses leave the existing table unchanged.
-Commit/push the resulting table and receipts before building the release wheel.
+Commit/push the records, resulting table and receipts together before building
+the release wheel. The recorded source revision still names the code actually
+tested; committing its evidence does not require rerunning unchanged code.
 
 To generate a scoped candidate while preserving every other lane, combine
 `--lanes`, `--reference-table` (the base) and `--emit-reference` (the output):
@@ -1299,11 +1303,12 @@ The table lives at `python/mojolearn/verify_reference/table.json` in Git and at
 `mojolearn/verify_reference/table.json` inside the wheel. Installed verification
 reads that packaged table; it does not fetch local evidence folders or GitHub.
 
-The maintainer `verify --all --emit-reference` path now requires a MojoLearn
-checkout and inputs committed under `bench/results/identity_break/`. Copy raw
-records there and commit them before generating a candidate table. Untracked,
-modified, external and symlink record inputs are refused. Generated citations
-include the input file's SHA-256. Existing fixture/revision, vendor, partial-run
+The maintainer `verify --all --emit-reference` path requires a MojoLearn checkout
+and regular files under `bench/results/identity_break/`. New records need not be
+committed before generation: retain the records, generate the candidate, then
+commit records and table together. Direct external and symlink record inputs
+are refused. Generated citations include the exact input file's SHA-256.
+Existing fixture/revision, vendor, partial-run
 and sabotage admission rules are unchanged; evidence may still be reused when
 those rules admit it. This adds no work to ordinary installed verification.
 
