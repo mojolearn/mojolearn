@@ -4105,7 +4105,7 @@ class Isomap(_Base):
         self
         """
         return _NATIVE(self, "family_mani_iso_fit",
-                       (None, None, X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the model and return ``embedding_``.
@@ -4120,7 +4120,7 @@ class Isomap(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_iso_fit_transform",
-                       (None, None, X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new points.
@@ -4217,7 +4217,7 @@ class ClassicalMDS(_Base):
         self
         """
         return _NATIVE(self, "family_mani_cmds_fit",
-                       (None, None, X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
@@ -4232,7 +4232,7 @@ class ClassicalMDS(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_cmds_fit_transform",
-                       (None, None, X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 # Reference: scikit-learn `manifold/_mds.py`, `_smacof_single`, `smacof`.
 # Random starts come from the Philox stream. init='random' is the default
 # sklearn's FutureWarning names. Non-metric: the disparities are the
@@ -4330,7 +4330,7 @@ class MDS(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_mds_fit_transform",
-                       (None, None, X, init), _NATIVE_CONTEXT)
+                       (None, None, X, init, y), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, init=None):
         """Compute the embedding.
@@ -4347,7 +4347,7 @@ class MDS(_Base):
         self
         """
         return _NATIVE(self, "family_mani_mds_fit",
-                       (None, None, X, init), _NATIVE_CONTEXT)
+                       (None, None, X, init, y), _NATIVE_CONTEXT)
 # LocallyLinearEmbedding's shift-invert route (`_lle_smallest`) and its
 # policy run in the compiled owner (bindings/mani_decomp_native.mojo).
 
@@ -4447,7 +4447,7 @@ class LocallyLinearEmbedding(_Base):
         self
         """
         return _NATIVE(self, "family_mani_lle_fit",
-                       (None, None, X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
@@ -4462,7 +4462,7 @@ class LocallyLinearEmbedding(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_lle_fit_transform",
-                       (None, None, X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new points.
