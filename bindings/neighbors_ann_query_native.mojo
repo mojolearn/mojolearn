@@ -99,14 +99,14 @@ def _mask(source: PythonObject, n: Int, owner: String, context: PythonObject) ra
     var b = native_loaded_module("builtins")
     var refusal = "ValueError: mojolearn " + owner + ": filter must be a boolean array of shape (" + String(n) + ",), one flag per indexed row"
     if source is None:
-        for i in range(n):  # cpu-route(explicit filter preparation, no numerical algorithm)
+        for i in range(n):  # cpu-route: explicit filter preparation, no numerical algorithm
             dest[i] = 1
         return result
     classical_admit_value(source, context)
     if py_type(source) is b.list or py_type(source) is b.tuple:
         if len(source) != n:
             raise Error(refusal)
-        for i in range(n):  # cpu-route(explicit boolean input admission and copy)
+        for i in range(n):  # cpu-route: explicit boolean input admission and copy
             if py_type(source[i]) is not b.bool:
                 raise Error(refusal)
             dest[i] = 1 if Bool(py=source[i]) else 0
@@ -119,7 +119,7 @@ def _mask(source: PythonObject, n: Int, owner: String, context: PythonObject) ra
     if snapshot.source.kind != CAST_KIND_BOOL or snapshot.source.itemsize != 1:
         raise Error(refusal)
     var source_bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
-    for i in range(n):  # cpu-route(explicit strided boolean-to-int32 filter preparation)
+    for i in range(n):  # cpu-route: explicit strided boolean-to-int32 filter preparation
         dest[i] = 1 if source_bytes[i * snapshot.source.s0] != 0 else 0
     _ = snapshot
     return result
@@ -177,6 +177,55 @@ def _addresses(arrays: List[_StoredArray]) raises -> PythonObject:
     return result
 
 
+def _export_codes(fields: PythonObject, cached: PythonObject, n: Int, pq_dim: Int,
+                  context: PythonObject) raises -> _StoredArray:
+    if cached is None:
+        raise Error("RuntimeError: mojolearn IVFPQIndex: the resident index was released before its codes were read")
+    var codes = family_array(Python.tuple(n, pq_dim), "<i4", context)
+    var address = Int(py=classical_address(codes))
+    _ = py_call(neural_descriptor_entry(cached[2], "x_ann_index_export_codes"),
+                cached[1], address, n * pq_dim)
+    py_setitem(fields, "codes_", codes)
+    _ = py_call(fields.pop, "_device_codes", PythonObject(None))
+    # Known allocation metadata; do not rediscover shape/dtype from output.
+    return _StoredArray(codes, codes, [n, pq_dim], address)
+
+
+def ann_pq_materialize(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Shared by the parent's native lazy attribute and pickle-state owners.
+    # This returns the stored native Array; the outer public owner supplies
+    # its usual completed ndarray view when this is an attribute read.
+    classical_connect_numpy(context)
+    var fields = _fields(model)
+    var current = py_get(fields, "codes_")
+    if current is not None:
+        return current
+    if py_get(fields, "_device_codes") is not PythonObject(True):
+        raise Error("AttributeError: 'IVFPQIndex' object has no attribute 'codes_'")
+    var n = _int(fields, "n_rows_", "IVFPQIndex")
+    var pq_dim = _int(fields, "pq_dim_", "IVFPQIndex")
+    if n < 1 or pq_dim < 1:
+        raise Error("ValueError: invalid fitted IVFPQIndex code dimensions")
+    var cached = _resident(fields)
+    if cached is None:
+        raise Error("RuntimeError: mojolearn IVFPQIndex: the resident index was released before its codes were read")
+    var key = cached[0]
+    var tuple_type = py_type(Python.tuple())
+    if py_type(key) is not tuple_type or len(key) != 2 or py_type(key[0]) is not tuple_type or len(key[0]) != 5:
+        raise Error("TypeError: resident IVFPQIndex requires its five-array native key")
+    var exported = _export_codes(fields, cached, n, pq_dim, context)
+    # Replace only the device-code marker. If the caller changed a different
+    # fitted array, retaining that array's old key makes the next search
+    # prepare a new handle; lazy export must not bless stale device arrays.
+    var arrays = Python.list()
+    for i in range(4):  # small-loop(PQ's four non-code array keys)
+        _ = py_call(arrays.append, key[0][i])
+    _ = py_call(arrays.append, exported.key())
+    var replacement = Python.tuple(py_call(native_loaded_module("builtins").tuple, arrays), key[1])
+    py_setitem(fields, "_resident", Python.tuple(replacement, cached[1], cached[2]))
+    return exported.value
+
+
 def _handle(fields: PythonObject, kind: Int, binding: PythonObject,
             mut arrays: List[_StoredArray], params: PythonObject, n: Int,
             pq_dim: Int, device_codes: Bool, context: PythonObject) raises -> PythonObject:
@@ -186,16 +235,7 @@ def _handle(fields: PythonObject, kind: Int, binding: PythonObject,
     if prepare is not None and cached is not None and _key_equal(cached[0], key):
         return cached[1]
     if device_codes:
-        if cached is None:
-            raise Error("RuntimeError: mojolearn IVFPQIndex: the resident index was released before its codes were read")
-        var codes = family_array(Python.tuple(n, pq_dim), "<i4", context)
-        _ = py_call(neural_descriptor_entry(cached[2], "x_ann_index_export_codes"),
-                    cached[1], classical_address(codes), n * pq_dim)
-        # Known allocation metadata; keep its owner without rereading source
-        # shape/dtype/strides through a public property or reshape operation.
-        arrays.append(_StoredArray(codes, codes, [n, pq_dim], Int(py=classical_address(codes))))
-        py_setitem(fields, "codes_", codes)
-        _ = py_call(fields.pop, "_device_codes", PythonObject(None))
+        arrays.append(_export_codes(fields, cached, n, pq_dim, context))
         key = _key(arrays, False, binding)
     if prepare is None:
         return PythonObject(None)
@@ -229,7 +269,7 @@ def _cagra_seed(fields: PythonObject) raises -> Int:
     if Int(py=bytes[0]) >= 128:
         raise Error("ValueError: mojolearn CagraIndex: random_state must be None or >= 0")
     var word = 0
-    for i in range(count):  # cpu-route(seed-word admission over exact integer bytes)
+    for i in range(count):  # cpu-route: seed-word admission over exact integer bytes
         word = (word * 256 + Int(py=bytes[i])) % 2147483646
     return word + 1
 
