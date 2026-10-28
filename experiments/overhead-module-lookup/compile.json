@@ -1,0 +1,106 @@
+{
+ "lane": "overhead-module-lookup",
+ "compiler": "Mojo 1.0.0 (ed45d567)",
+ "flags": "mojo build --optimization-level 0 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU (host families via bindings/build_host_family.sh); GPU root adds -D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
+ "define": "none (the change goes in directly)",
+ "runs": [
+  {
+   "pod": "t9ysrhsm5qmizy (oml-a, RunPod CPU cpu5c, 32 vCPU, reaped, verified gone)",
+   "source_commit": "c4ccdeedc9",
+   "jobs": "16 per build, 2 in parallel",
+   "log_dir": "~/mojolearn-evidence/overhead-module-lookup-20261028/podA/remote/leg_out",
+   "builds": [
+    {
+     "tag": "head",
+     "family": "tokenizer",
+     "rc": "0",
+     "seconds": "318",
+     "sha256": "2ab7cce105c46a4e04d89b4f128c68a0b57ad76bd21bc578d662c463fa55f608"
+    },
+    {
+     "tag": "before",
+     "family": "tokenizer",
+     "rc": "0",
+     "seconds": "322",
+     "sha256": "30fb0ea324ef0d8ddbd77ecb318379999ece323ae65e5f3ecb0da9c7b42bc7e7"
+    },
+    {
+     "tag": "before",
+     "family": "runtime_sequential",
+     "rc": "0",
+     "seconds": "15",
+     "sha256": "69c07e1789b318a6bd60d6f2aaf0e1d8811dbeacc28f8a8aea8e17016336f3d5"
+    },
+    {
+     "tag": "head",
+     "family": "runtime_sequential",
+     "rc": "0",
+     "seconds": "16",
+     "sha256": "07948f42c5121ba197c4b2b74f01e7e67cad72ae9a2d6eb87fca821cae0d5360"
+    },
+    {
+     "rc": "1"
+    },
+    {
+     "rc": "1"
+    }
+   ],
+   "note": "tag=before is origin/main 30928487f1 for the 21 changed .mojo files; the fixture rows failed at import (x_sequence host absent) and moved to pod D"
+  },
+  {
+   "pod": "nb0gksydltfktr (oml-b, 32 vCPU, reaped, verified gone)",
+   "source_commit": "c4ccdeedc9",
+   "jobs": "16 per build, 2 in parallel",
+   "log_dir": "~/mojolearn-evidence/overhead-module-lookup-20261028/podB/remote/leg_out",
+   "builds": [
+    {
+     "tag": "head",
+     "entry": "bindings/entry/entry__mojolearn_x_sequence.mojo",
+     "target": "sm_89",
+     "rc": "0",
+     "seconds": "296",
+     "sha256": "e774d52da680ca2c2d5728a3b3f25d67522445041b2e62ec28377f4028ef7636"
+    },
+    {
+     "tag": "head",
+     "family": "runtime_classical",
+     "rc": "0",
+     "seconds": "459",
+     "sha256": "0acb508cf546f5a813902dca8266a1ca2a6ef4f971a6b34f0e7fa987b758709d"
+    },
+    {
+     "tag": "head",
+     "family": "runtime_manifold",
+     "rc": "0",
+     "seconds": "36",
+     "sha256": "3c7d3d4f01161c4598bc266e86d9d40e670a920b4780b4c2d7a5481646268a79"
+    },
+    {
+     "tag": "head",
+     "family": "runtime_model_selection",
+     "rc": "0",
+     "seconds": "52",
+     "sha256": "9776c4d0ac139108231db4e1c47bbe66540f9aa645a5b6d270cd15cbb89dc818"
+    },
+    {
+     "tag": "head",
+     "family": "x_sequence",
+     "rc": "0",
+     "seconds": "225",
+     "sha256": "9c274c151600af3ef3ba5748962dc0c71193eb3261d8e5c9fdea656888acda5c"
+    }
+   ]
+  },
+  {
+   "pod": "2629xxt37pzzmo (oml-c, 32 vCPU, reaped, verified gone)",
+   "source_commit": "b89184cd87 (lane merged with origin/main ebcd7f9477)",
+   "jobs": "8 per family, 4 in parallel",
+   "log_dir": "~/mojolearn-evidence/overhead-module-lookup-20261028/podC/remote/leg_out",
+   "pod_smoke": "46/46 host families rc=0; import mojolearn + top-level modules rc=0 (missing_bindings 0); tier_dir('identical') rc=0",
+   "classical_fit_predict": "rc=0",
+   "gate_no_python_runtime": "rc=0",
+   "gate_tombstones_preserved": "rc=1 on the pod (shipped tarball has no git history); rc=0 on the full Mac checkout of the same merged tree"
+  }
+ ],
+ "not_covered": "dev entries bindings/entry/dev_neural_parameters.mojo and dev_verifier_repairs.mojo were not built separately (dev_neural_parameters registers the same neural_block_c functions the tokenizer host builds); AMD and Apple targets were not compiled; no runtime, identity or GPU verification was run"
+}

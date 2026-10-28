@@ -1,0 +1,11 @@
+{
+ "lane": "overhead-module-lookup",
+ "before_sha": "30928487f1",
+ "after_sha": "c4ccdeedc9",
+ "fixture": "tools/tests/overhead_module_lookup_fixture.py",
+ "ops": ["transformer forward (+ TransformerState forward)", "mamba2 forward (+ prefill/step)", "byte-LM train_step", "Sequential fit/predict", "CausalLM llama/mamba2 forward + generate"],
+ "refusals": ["float64/float ids", "wrong width / rank", "unfitted Sequential.predict", "bad class (unbound method on object())", "builtins export changed", "types export changed", "types module replaced", "native module registry missing", "builtins export changed while the transformer forward waits on its lock with the GIL released"],
+ "status": "RUN OWED",
+ "reason": "Andrew 2026-10-28: the self-merge gate is compile only; the orchestrator runs every lane fixture once at the end. Run with MOJOLEARN_VENDOR=cpu MOJOLEARN_HOST_DIR=<dir> against a base dir (tokenizer + runtime_sequential host built from before_sha) and a head dir, then compare the two JSON reports leaf by leaf; every leaf must be equal.",
+ "digests": {}
+}

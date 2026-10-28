@@ -42,3 +42,9 @@ def connect(package):
         LAYOUTS[cls] = dict(cls=cls, mro=mro, fields=fields, fields_get=fields.__get__, names=names,
                            descriptors=tuple((base, {name: value for name, value in row.items() if _descriptor(value)})  # glue: import-time descriptor identities
                                              for base, row in rows))  # glue: immutable descriptor identities
+
+
+from ._native_loaded_modules import connect_module  # noqa: E402
+
+# glue: import-time native module connection; LAYOUTS is filled in place, never reassigned.
+connect_module(__name__, sys.modules[__name__], ("LAYOUTS",))

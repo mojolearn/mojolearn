@@ -271,7 +271,10 @@ run_job() {
     trap 'on_sig TERM 143' TERM
     trap 'on_sig INT 130' INT
     trap 'on_exit' EXIT
-    export MOJOLEARN_RESULTS_DIR="$RES" MOJOLEARN_PERSIST_TAG="$TAG"
+    # MOJOLEARN_BOX_PERSIST=1: this command's results dir reaches R2 from the box (presigned PUTs minted on the Mac),
+    # so tools/bench_board.py may keep its evidence archives local under it (--evidence-local-only) with no
+    # credential on the box
+    export MOJOLEARN_RESULTS_DIR="$RES" MOJOLEARN_PERSIST_TAG="$TAG" MOJOLEARN_BOX_PERSIST=1
     command -v curl > /dev/null 2>&1 || plog "PERSIST-DISABLED no curl on this box: the command runs, nothing reaches R2"
     plog "START tag=$TAG prefix=$PREFIX pid=$$ every=${EVERY}s slots=$SLOTS expires=$EXPU cmd=$*"
     set -m

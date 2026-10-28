@@ -101,6 +101,7 @@ from transformer.checks.transformer_fixture import (
     unmasked_fill,
 )
 from transformer.checks.transformer_oracle import RopeTable, refuse_nonfinite
+from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
@@ -531,9 +532,15 @@ def rms_norm_fast(x: List[Float32], wnorm_flushed: List[Float32], m: Int, dm: In
     for t in range(m):
         var base = t * dm
         var acc = Float32(0.0)
-        for j in range(dm):
-            var xj = ftz(xp.unsafe_load(base + j))
-            acc = ftz(identical_mul_add(xj, xj, acc))
+        comptime if IDN_NORM_FIXED_LANES:
+            # MOJOLEARN_IDN_NORM_FIXED_LANES: S1 as the fixed 32-lane fold,
+            # the device cells' and the oracle's bits
+            var xr = rebind[MutPointer[Float32, MutAnyOrigin]](xp)
+            acc = nfl_dot(xr, xr, base, base, dm)
+        else:
+            for j in range(dm):
+                var xj = ftz(xp.unsafe_load(base + j))
+                acc = ftz(identical_mul_add(xj, xj, acc))
         var mean = ftz(identical_div(acc, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
         var rv = F32V(rstd)

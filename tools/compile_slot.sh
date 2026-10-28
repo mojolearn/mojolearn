@@ -8,11 +8,14 @@ if [ "${MOJOLEARN_NUMERIC_MODE:-}" = fast ] && [ "${MOJOLEARN_INTEG_BUILD:-0}" !
   exit 78
 fi
 # compile_slot.sh <command...>: (versioned copy; origin ~/mojolearn-evidence/compile_slot.sh, now a shim that execs this file)
-# compile_slot.sh <command...>: run a compile holding one of 4 machine-wide slots (mkdir locks).
-# Every lane subagent wraps its mojo builds in this so at most 4 compile at once on the M4.
+# compile_slot.sh <command...>: run a compile holding one of N machine-wide slots (mkdir locks),
+# N = MOJOLEARN_COMPILE_SLOTS (default 2; Andrew 2026-10-28: protect the Mac). Every lane subagent
+# wraps its mojo builds in this so at most N compile at once.
 S=$HOME/mojolearn-evidence/compile-slots; mkdir -p $S
+N=${MOJOLEARN_COMPILE_SLOTS:-2}
+case $N in ""|*[!0-9]*|0) echo "compile_slot: MOJOLEARN_COMPILE_SLOTS must be a positive integer" >&2; exit 2 ;; esac
 while :; do
-  for i in 1 2 3 4; do
+  for i in $(seq 1 "$N"); do
     if mkdir $S/slot$i 2>/dev/null; then
       echo $$ > $S/slot$i/pid
       trap "rm -rf $S/slot$i" EXIT INT TERM

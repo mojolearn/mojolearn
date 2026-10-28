@@ -94,3 +94,44 @@ def native_loaded_module(name: String) raises -> PythonObject:
                 raise Error("TypeError: native module connection export changed: " + name + "." + String(item[0]))
         return module
     raise Error("ImportError: native execution requires an import-time connection for " + name)
+
+
+struct NativeModules(Movable):
+    # Admit-once view of the import-time module connections for ONE public
+    # operation. The public C entry creates it, and the helpers of that
+    # operation receive it as `mut mods` instead of calling
+    # native_loaded_module() again. The first request for a module runs the
+    # complete native_loaded_module() check (registry record, module identity,
+    # namespace keys, export identities) and raises exactly what it raised
+    # before; later requests in the same operation reuse that admitted handle,
+    # so the namespace and export scans run once per module, not once per
+    # helper or per layer.
+    # GIL release windows: while the GIL is released (a GILReleased block, a
+    # lock wait, a call into another native entry that may release it),
+    # another thread can replace a module or an export. Every such window is
+    # followed by released(), so the next request after it repeats the full
+    # check: exactly one re-check per release window, never zero.
+    # A handle never outlives its operation and is never shared across
+    # threads. Callers outside the neural bindings keep native_loaded_module().
+    var _names: List[String]
+    var _modules: List[PythonObject]
+
+    def __init__(out self):
+        self._names = List[String]()
+        self._modules = List[PythonObject]()
+
+    def module(mut self, name: String) raises -> PythonObject:
+        # driver-loop: over the few modules this operation already admitted
+        for i in range(len(self._names)):  # small-loop(admitted: at most a handful of module names): reuses an admitted connection
+            if self._names[i] == name:
+                return self._modules[i]
+        var module = native_loaded_module(name)
+        self._names.append(name)
+        self._modules.append(module)
+        return module
+
+    def released(mut self):
+        # A GIL release window ended: forget every admission so the next
+        # request re-runs the full native_loaded_module() check.
+        self._names.clear()
+        self._modules.clear()

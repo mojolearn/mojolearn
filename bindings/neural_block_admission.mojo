@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.mode_metadata_native import _fields, _class_fields
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_array_snapshot import native_array_slots as neural_array_slots, native_array_snapshot as neural_array_snapshot
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.generation_buffers import generation_array, py_ints
@@ -13,8 +13,8 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import _one_of
 
 
-def neural_native_scalar(value: PythonObject, context: PythonObject, integer: Bool = False) raises -> Bool:
-    var b = native_loaded_module("builtins")
+def neural_native_scalar(mut mods: NativeModules, value: PythonObject, context: PythonObject, integer: Bool = False) raises -> Bool:
+    var b = mods.module("builtins")
     var cls = py_type(value)
     if cls is b.int or (not integer and (cls is b.float or cls is b.bool)):
         return True
@@ -25,8 +25,14 @@ def neural_native_scalar(value: PythonObject, context: PythonObject, integer: Bo
     return False
 
 
-def neural_string_keys(value: PythonObject) raises:
-    var b = native_loaded_module("builtins")
+def neural_native_scalar(value: PythonObject, context: PythonObject, integer: Bool = False) raises -> Bool:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_native_scalar(mods, value, context, integer)
+
+
+def neural_string_keys(mut mods: NativeModules, value: PythonObject) raises:
+    var b = mods.module("builtins")
     if py_type(value) is not b.dict:
         raise Error("TypeError: neural metadata requires an exact dictionary")
     var keys = py_call(b.list, value.keys())
@@ -35,33 +41,45 @@ def neural_string_keys(value: PythonObject) raises:
             raise Error("TypeError: neural metadata requires exact string keys")
 
 
-def neural_plain_value(value: PythonObject, depth: Int = 0, context: PythonObject = PythonObject(None)) raises:
+def neural_string_keys(value: PythonObject) raises:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    neural_string_keys(mods, value)
+
+
+def neural_plain_value(mut mods: NativeModules, value: PythonObject, depth: Int = 0, context: PythonObject = PythonObject(None)) raises:
     if depth > 32:
         raise Error("TypeError: neural metadata nesting exceeds the supported depth")
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     var cls = py_type(value)
     if value is None or cls is b.int or cls is b.float or cls is b.bool or cls is b.str:
         return
-    if context is not None and neural_native_scalar(value, context):
+    if context is not None and neural_native_scalar(mods, value, context):
         return
     if cls is b.list or cls is b.tuple:
         for i in range(len(value)):  # driver-loop: passive configuration and descriptor words
-            neural_plain_value(value[i], depth + 1, context)
+            neural_plain_value(mods, value[i], depth + 1, context)
         return
     if cls is b.dict:
-        neural_string_keys(value)
+        neural_string_keys(mods, value)
         var keys = py_call(b.list, value.keys())
         for i in range(len(keys)):  # driver-loop: passive option dictionaries only
-            neural_plain_value(value[keys[i]], depth + 1, context)
+            neural_plain_value(mods, value[keys[i]], depth + 1, context)
         return
     raise Error("TypeError: neural metadata requires native scalar/container values; Python conversion hooks are not supported")
 
 
-def neural_record_fields(value: PythonObject, names: PythonObject) raises -> PythonObject:
+def neural_plain_value(value: PythonObject, depth: Int = 0, context: PythonObject = PythonObject(None)) raises:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    neural_plain_value(mods, value, depth, context)
+
+
+def neural_record_fields(mut mods: NativeModules, value: PythonObject, names: PythonObject) raises -> PythonObject:
     # _fields rejects a replaced __dict__ descriptor before native dictionary
     # access, including on an otherwise ordinary subclass. No getattr is used.
     var fields = _fields(value)
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(value))
     for i in range(len(ancestry)):  # driver-loop: refuse field descriptors before later shared attribute access
         var namespace = _class_fields(ancestry[i])
@@ -75,9 +93,15 @@ def neural_record_fields(value: PythonObject, names: PythonObject) raises -> Pyt
     return fields
 
 
+def neural_record_fields(value: PythonObject, names: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_record_fields(mods, value, names)
 
-def neural_admit_weights(values: PythonObject, context: PythonObject) raises:
-    var b = native_loaded_module("builtins")
+
+
+def neural_admit_weights(mut mods: NativeModules, values: PythonObject, context: PythonObject) raises:
+    var b = mods.module("builtins")
     if py_type(values) is not b.list and py_type(values) is not b.tuple:
         raise Error("TypeError: neural weights require exact native slot lists")
     for i in range(len(values)):  # driver-loop: admit each tensor owner before numerical preparation
@@ -89,8 +113,8 @@ def neural_admit_weights(values: PythonObject, context: PythonObject) raises:
             admit_native_buffer_exporter(values[i])
 
 
-def neural_block_fields(block: PythonObject, context: PythonObject, initialized: Bool = True) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def neural_block_fields(mut mods: NativeModules, block: PythonObject, context: PythonObject, initialized: Bool = True) raises -> PythonObject:
+    var b = mods.module("builtins")
     if py_type(py_type(block)) is not b.type:
         raise Error("TypeError: neural blocks cannot invoke Python metaclass protocols")
     var names = Python.tuple("_native_kind", "_native_route", "numeric_mode", "numeric_profile", "weight_format",
@@ -99,7 +123,7 @@ def neural_block_fields(block: PythonObject, context: PythonObject, initialized:
         "_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed", "_W_NAMES",
         "norm", "mlp", "qkv_bias", "o_bias", "norm_bias", "mlp_bias", "qk_norm", "rope_scaling",
         "norm_eps", "rope_theta", "rope_dim", "attn_softcap")
-    var fields = neural_record_fields(block, names)
+    var fields = neural_record_fields(mods, block, names)
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(block))
     var admitted = False
     for i in range(len(ancestry)):  # driver-loop: passive subclasses of connected public block classes
@@ -113,7 +137,7 @@ def neural_block_fields(block: PythonObject, context: PythonObject, initialized:
     for i in range(len(names)):  # small-loop(admit mutable scalar words before conversion or comparisons)
         var name = String(names[i])
         if name != "_w" and name != "_wopt" and name != "_int15" and py_contains(fields, names[i]):
-            neural_plain_value(fields[names[i]], 0, context)
+            neural_plain_value(mods, fields[names[i]], 0, context)
     for name in ["_native_kind", "_native_route"]:  # driver-loop: native admission metadata and retained owner registry
         if py_type(fields[name]) is not b.str:
             raise Error("TypeError: neural route metadata requires exact strings")
@@ -122,8 +146,14 @@ def neural_block_fields(block: PythonObject, context: PythonObject, initialized:
     return fields
 
 
-def neural_block_weight_names(block: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def neural_block_fields(block: PythonObject, context: PythonObject, initialized: Bool = True) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_block_fields(mods, block, context, initialized)
+
+
+def neural_block_weight_names(mut mods: NativeModules, block: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     var fields = _fields(block)
     var names = py_get(fields, "_W_NAMES")
     if names is None:
@@ -140,8 +170,8 @@ def neural_block_weight_names(block: PythonObject) raises -> PythonObject:
     return py_call(b.tuple, names)
 
 
-def neural_weights_snapshot(values: PythonObject, context: PythonObject, f32: Bool = True) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def neural_weights_snapshot(mut mods: NativeModules, values: PythonObject, context: PythonObject, f32: Bool = True) raises -> PythonObject:
+    var b = mods.module("builtins")
     if py_type(values) is not b.list and py_type(values) is not b.tuple:
         raise Error("TypeError: neural weights require exact native slot lists")
     var result = Python.list()
@@ -158,31 +188,37 @@ def neural_weights_snapshot(values: PythonObject, context: PythonObject, f32: Bo
     return result
 
 
-def neural_metadata_snapshot(value: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def neural_metadata_snapshot(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     if py_type(value) is b.list or py_type(value) is b.tuple:
         var values = Python.list()
         for i in range(len(value)):  # small-loop(copy already admitted option words)
-            py_call(values.append, neural_metadata_snapshot(value[i]))
+            py_call(values.append, neural_metadata_snapshot(mods, value[i]))
         return py_call(b.tuple, values) if py_type(value) is b.tuple else values
     if py_type(value) is b.dict:
         var values = Python.dict()
         var keys = py_call(b.list, value.keys())
         for i in range(len(keys)):  # driver-loop: native admission metadata and retained owner registry
-            py_setitem(values, keys[i], neural_metadata_snapshot(value[keys[i]]))
+            py_setitem(values, keys[i], neural_metadata_snapshot(mods, value[keys[i]]))
         return values
     return value
 
 
-def neural_block_snapshot(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = neural_block_fields(block, context)
-    var b = native_loaded_module("builtins")
+def neural_metadata_snapshot(value: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_metadata_snapshot(mods, value)
+
+
+def neural_block_snapshot(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = neural_block_fields(mods, block, context)
+    var b = mods.module("builtins")
     var snapshot = py_call(b.dict, fields)
     py_setitem(snapshot, "_neural_live_fields", fields)
-    py_setitem(snapshot, "_neural_weight_names", neural_block_weight_names(block))
+    py_setitem(snapshot, "_neural_weight_names", neural_block_weight_names(mods, block))
     for name in ["dt_limit", "_opts_tail", "rope_scaling"]:  # driver-loop: native admission metadata and retained owner registry
         if py_contains(fields, name):
-            py_setitem(snapshot, name, neural_metadata_snapshot(fields[name]))
+            py_setitem(snapshot, name, neural_metadata_snapshot(mods, fields[name]))
     for name in ["_w", "_wopt"]:  # driver-loop: native admission metadata and retained owner registry
         if py_contains(fields, name):
             var values = fields[name]
@@ -192,31 +228,37 @@ def neural_block_snapshot(block: PythonObject, context: PythonObject) raises -> 
             # Public parameters expose the original live buffers. Retain those
             # identities now rather than rereading caller slots after kernels.
             py_setitem(snapshot, PythonObject("_neural_original" + name), originals)
-            py_setitem(snapshot, name, neural_weights_snapshot(originals, context))
+            py_setitem(snapshot, name, neural_weights_snapshot(mods, originals, context))
     var packed = py_get(fields, "_int15")
     if packed is not None:
         if py_type(packed) is not b.list and py_type(packed) is not b.tuple:
             raise Error("TypeError: neural packed weights require native plane lists")
         var planes = Python.list()
         for i in range(len(packed)):  # driver-loop: native admission metadata and retained owner registry
-            py_call(planes.append, PythonObject(None) if packed[i] is None else neural_weights_snapshot(packed[i], context, False))
+            py_call(planes.append, PythonObject(None) if packed[i] is None else neural_weights_snapshot(mods, packed[i], context, False))
         py_setitem(snapshot, "_int15", planes)
     return snapshot
 
 
-def neural_model_weights(values: PythonObject, context: PythonObject) raises -> PythonObject:
-    neural_string_keys(values)
-    var b = native_loaded_module("builtins")
+def neural_block_snapshot(block: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_block_snapshot(mods, block, context)
+
+
+def neural_model_weights(mut mods: NativeModules, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    neural_string_keys(mods, values)
+    var b = mods.module("builtins")
     var keys = py_call(b.list, values.keys())
     var result = Python.dict()
     for i in range(len(keys)):  # driver-loop: named constructor weights, before any unpacking/conversion
         var value = values[keys[i]]
         if py_type(value) is context["bf16_class"] or py_type(value) is context["int8_class"]:
-            var fields = neural_record_fields(value, Python.tuple("shape", "bits", "codes", "exponents"))
-            neural_plain_value(fields["shape"], 0, context)
+            var fields = neural_record_fields(mods, value, Python.tuple("shape", "bits", "codes", "exponents"))
+            neural_plain_value(mods, fields["shape"], 0, context)
             var captured = py_call(b.object.__new__, py_type(value))
             var saved = _fields(captured)
-            py_setitem(saved, "shape", neural_metadata_snapshot(fields["shape"]))
+            py_setitem(saved, "shape", neural_metadata_snapshot(mods, fields["shape"]))
             for name in ["bits", "codes", "exponents"]:  # small-loop(packed weight storage fields)
                 if py_contains(fields, name):
                     var storage = fields[name]

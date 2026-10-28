@@ -669,3 +669,87 @@ Receipt experiments/integration_provider_queue_20261028/compile_tranche5b.json: 
 x_sequence sm_89/gfx942, 3 roots); import smoke PASS (import mojolearn + 8 modules, missing_bindings 0) and
 tier_dir('identical') probe PASS on the x86 CPU-only host set. GPU-set import not exercised (no GPU box).
 Gates: test_no_python_runtime OK (196), test_tombstones_preserved OK, full-reset tests 110 passed.
+
+INTEGRATION 2026-10-28 (Claude integrator) — HOTFIX BATCH (LinBufferPin, grid planner, family layouts, compile slots)
+Also on main earlier: ebcd7f9477 bench_board race_data_sha git fallback for source-tree neural races.
+This batch: LinBufferPin registered in the classical host with a mode parameter (gemm crash on a0096);
+six_lane_grid_bb gives each neural lane its own bench_board call (+test); _native_family_layouts.py
+connect_module (every classical dispatch refused); tools/compile_slot.sh MOJOLEARN_COMPILE_SLOTS default 2.
+Receipt experiments/integration_provider_queue_20261028/compile_hotfix_linpin.json: x86 CPU-only host set,
+import smoke PASS, tier_dir PASS, runtime check PASS (matmul, Ridge, KMeans fit+predict); linalg sm_89/gfx942 rc=0.
+Pods vefpymixxwsth0, wz15xs7krsoh14 reaped.
+
+SELF-MERGE 2026-10-28 (lane nv-occupancy, Claude Opus 5.5) — MOJOLEARN_IDN_SSD_OCCUPANCY (default OFF)
+lane/nv-occupancy merged to main by fast-forward to 2d92b431d6 (lane code 87595704da; host copy regenerated, mamba_host_gen --check rc 0).
+The Mamba-2 SSD S10/S12/S18 device arms (coalesced discretize, 16x16 shared C.B tile, 32-row C.h_prev tile) are identical-safe by
+construction (same chains and operands), are behind the define and are off on main. RunPod CPU pod 0l6m0aa0i032lg (32 cores, 60-min
+dead-man, reaped and verified 404, $0.41) ran on the merged tree 0b32521b80 (= main ebcd7f9477 + lane):
+  - sm_89 entry__mojolearn_mamba arms A/B rc 0/0;
+  - CPU entry__mojolearn_mamba_host arms A/B rc 0/0;
+  - test_no_python_runtime rc 0;
+  - pod smoke rc 0 (46/46 host families, import smoke missing_bindings 0, tier_dir probe rc 0);
+  - tiny LinearRegression fit+predict on the CPU column rc 0.
+test_tombstones_preserved failed on the pod (rc 1) only because the lean sparse worktree ships no bench/results inline markers. On a
+full checkout it is rc 0 at ebcd7f9477 and rc 0 at the final 2d92b431d6, where test_no_python_runtime is also rc 0.
+Main moved (927e59c779, no lane input touched), so the lane re-merged it and the gates were re-run without a recompile.
+Receipt: experiments/nv_occupancy_20261028/compile.json; evidence ~/mojolearn-evidence/nv-occupancy-20261028/.
+RUN OWED: the mamba2-forward A/B on nv and amd (ARMS=A:,B:-DMOJOLEARN_IDN_SSD_OCCUPANCY=1); arm B's hash is expected to equal 0350b90b398bccbf.
+Not compiled: the AMD gfx942 and Apple targets with the define on.
+SELF-MERGE RECEIPT lane/grad-views (MOJOLEARN_IDN_PARAM_GRAD_VIEWS, default OFF, IDENTICAL byte LM train step parameter/gradient views; same bits): merged tree 870eb68017 on RunPod CPU pod oyrb87n73kc225 (32 vCPU, deleted and verified gone, $0.41): test_no_python_runtime rc=0; byte LM entry sm_89 arm off rc=0, arm on rc=0; pod_smoke_5b rc=0 (46/46 host families, smoke_after rc=0, probe_tier_dir rc=0); tiny classical fit+predict on the CPU column rc=0. Two pod results are not lane defects: test_tombstones_preserved rc=1 there because the shipped tree has no git metadata (the test calls git grep), and the Linux COLUMN_CPU build of the GPU byte LM entry fails identically for arm off and arm on (not a valid Linux target; the CPU column for byte LM is _mojolearn_byte_lm_host, green in the smoke; the Mac CPU root, apple-m1 COLUMN_CPU, was green for both arms at b1055551c1, receipt experiments/grad_views_20261028/compile.json). After main moved to 927e59c779 the lane merged it (2dd8cdecea; no byte LM closure file changed) and both gates were re-run in the git checkout: test_no_python_runtime rc=0, test_tombstones_preserved rc=0. GPU A/B owed (gview-A off / gview-B on, lm-train-step bytes, nv + amd). Evidence ~/mojolearn-evidence/grad-views-20261028/.
+SELF-MERGE RECEIPT lane/amd-mfma (MOJOLEARN_IDN_AMD_MFMA_KPACK, default OFF, IDENTICAL AMD stepped-down GEMM calls on a packed 64x32-a-wave v_mfma_f32_32x32x1f32 body; same K=1 fma_rn chain, leaves and fold tree, so same bits by construction): gate pod mojolearn-cpu-amd-mfma-merge (32 vCPU, 60-min lease, deleted and verified gone, $0.25) on tree 1dac30c3ea:
+  - gfx942 gemm_workspace_reuse_check define ON rc 0;
+  - pod smoke (pod_smoke_5b.sh) rc 0 (46/46 host families, import smoke missing_bindings 0, tier_dir probe rc 0); that script has no tiny classical fit+predict, so none ran;
+  - CPU root not applicable (GPU-only check program; coordinator ruling).
+Main moved (84e2bc7dda) and was merged at 53225682e5, EXPERIMENTS.md resolved additively; the scripted gates on that full checkout: test_no_python_runtime rc 0, test_tombstones_preserved rc 0; no lane input changed, so no recompile.
+Receipt: experiments/amd_mfma_kpack_20261028/compile.json; evidence ~/mojolearn-evidence/amd-mfma-20261028/.
+RUN OWED (ab-runner): the A/B on nv and amd, one run per arm, A = define off, B = define on (lines in experiments/amd_mfma_kpack_20261028/HANDOFF.txt); B's AMD hashes are expected to equal A's.
+Not compiled: any binding with the define on; NVIDIA/Metal targets (the arm is gated at compile time to the AMD column).
+
+SELF-MERGE 2026-10-28 (lane norm-folds) — MOJOLEARN_IDN_NORM_FIXED_LANES, default OFF on main
+- What it does: a fixed 32-lane fold (32 slots plus fold32's tree) for the transformer/LM RMSNorm S1 row sum, the variant LayerNorm sums and the
+  RMSNorm backward dot. Device rows run on 32-lane cells. The host oracles and the byte-LM host kernel run the same slots serially. With the define on,
+  bits change on every column together; with it off, behavior is unchanged (arm B).
+- Pod mnuuorpita3jxe (32 vCPU, 60-min lease) on lane head cab21edb35 = lane + main ebcd7f9477; reaped, terminated_verified=1:
+  - pod smoke: 46/46 host families, smoke_after rc=0, tier_dir probe rc=0.
+  - norm-folds roots 6/6 rc=0: CPU probe root on/off, transformer_host on, sm_89 transformer on/off, sm_89 training on.
+  - test_no_python_runtime rc=0.
+  - test_tombstones_preserved rc=1 on the pod only: the shipped tarball has no .git, and the test enumerates files through git.
+- Gates on the Mac git checkout: test_tombstones_preserved rc=0 at cab21edb35. Both gates rc=0 again at 299e36716f (re-merge of main 3159cadf5f;
+  that merge touches no lane file, so no recompile).
+- Receipts: experiments/norm_folds_20261028/compile.json and ~/mojolearn-evidence/norm-folds-20261028/pod/.
+- Not done: no GPU runtime, identity or timing. The A/B and ID runs owed are in ~/mojolearn-evidence/norm-folds-20261028/HANDOFF.md.
+
+SELF-MERGE 2026-10-28 (lane overhead-module-lookup, Claude Opus 5.5): admit native module connections once per neural operation. No define.
+- What it does: bindings/native_loaded_module.mojo gains NativeModules, an additive admit-once/reuse view. The first request for a module in an
+  operation runs the full native_loaded_module() check; later requests reuse the admitted handle. mods.released() follows every GIL release
+  window (GILReleased block, lock acquire, native-entry or provider call, file/process I/O) and every exception handler. The next request after
+  a window re-runs the full check: one re-check per window. The transformer, mamba, byte-LM, sequential and causal-LM helpers take `mut mods`
+  from their C entries. Helpers imported by classical/samba/provider code keep their old signatures as wrappers that admit afresh.
+  No arithmetic, fold-order or bit change.
+- Pods (RunPod CPU, 32 vCPU, 60-min lease, all reaped and verified gone): oml-a t9ysrhsm5qmizy, tokenizer + runtime_sequential head and base
+  rc=0; oml-b nb0gksydltfktr, runtime_classical/manifold/model_selection/x_sequence host + x_sequence sm_89 rc=0; oml-c 2629xxt37pzzmo on
+  lane + main ebcd7f9477 (b89184cd87), pod smoke 46/46 families, import smoke rc=0, tier_dir rc=0, classical fit+predict rc=0,
+  test_no_python_runtime rc=0. test_tombstones_preserved was rc=1 on the pod only (no .git) and rc=0 on the full Mac checkout.
+- The later merge of main 7a52a6b7cb touches no lane file. The only lane module it imports is native_loaded_module (native_loaded_module()
+  unchanged), so no recompile was run.
+- Receipts: experiments/overhead-module-lookup/compile.json, experiments/overhead-module-lookup/same_bits.json, and
+  ~/mojolearn-evidence/overhead-module-lookup-20261028/.
+- RUN OWED: the same-bits/same-refusals fixture tools/tests/overhead_module_lookup_fixture.py, base 30928487f1 against head, CPU column. The
+  orchestrator runs it with the end-of-round fixtures. No runtime, identity or GPU verification was run.
+
+SELF-MERGE RECEIPT lane/decode-resident-20261028 (MOJOLEARN_IDN_DECODE_RESIDENT_IO and MOJOLEARN_IDN_TRAIN_ONE_WAIT, both default OFF, IDENTICAL, same bits):
+- What it does: the transformer decode session step waits once (call refusals plus the fused attention regime scan and corner flag go into a
+  deferred window read back with y; the caches are snapshotted on the device, and any unclean check replays today's step); the Mamba-2 resident
+  session step copies y and h_last straight into the caller's arrays with one wait; the resident byte-LM train step takes the token range in one wait,
+  defers the layer refusals, drops the per-layer forward waits and checks loss, gradients and state in one status launch, rolling back and replaying
+  on any unclean check. With both defines off, behavior is unchanged.
+- Pod 8jy6vhu4bfpioh (32 vCPU, 60-min lease, --release-bincache) on lane head bd4738c9f9 = lane + main b94ea4e463; reaped, verified gone:
+  sm_89 roots 4/4 rc=0 (decode and train roots, define on and off); pod smoke smoke_after rc=0, tier_dir probe rc=0, all 46 host .so present
+  (byte_lm host built from source rc=0; 12 families refused "destination exists" because another family's cache restore had already written
+  their .so; no compile error); test_no_python_runtime rc=0; test_tombstones_preserved rc=0 (pod tree indexed with git init).
+- CPU column: the Mac receipt (both roots, both arms, rc=0). On a GPU-less Linux pod the device-binding roots stop in std's GPU info when
+  built for the CPU column, independent of this lane.
+- Main merged after that run: b94ea4e463 -> 1dd9c80c45, which touches no file these roots import; no recompile.
+- Receipts: experiments/decode_resident_20261028/compile.json; evidence ~/mojolearn-evidence/decode-resident-20261028/.
+- RUN OWED (ab-runner), one run per arm, A = define off, B = define on, NVIDIA and AMD: transformer-decode and mamba2-decode for
+  MOJOLEARN_IDN_DECODE_RESIDENT_IO, lm-train-step for MOJOLEARN_IDN_TRAIN_ONE_WAIT (lines in ~/mojolearn-evidence/decode-resident-20261028/HANDOFF.md).
