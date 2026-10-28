@@ -1,19 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential buffer admission and ndarray ABI ownership."""
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.sequential_inputs import sequential_input
 from core.cast_in import CastIn, CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 
 
-def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def sequential_array(mut mods: NativeModules, shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
     var storage = py_call(context["native_bytearray_type"], count * Int(py=dtype.itemsize))
     return py_call(context["ndarray"], shape, dtype=dtype, buffer=storage)
+
+
+def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return sequential_array(mods, shape, dtype, context)
 
 
 def sequential_address(value: PythonObject) raises -> PythonObject:
@@ -96,16 +102,16 @@ def sequential_descriptor(value: PythonObject, name: String, samples: Bool = Fal
     return snapshot.abi()
 
 
-def sequential_x_snapshot(value: PythonObject, name: String, context: PythonObject) raises -> SequentialInputSnapshot:
-    var owned = sequential_input(value, context, True)
+def sequential_x_snapshot(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> SequentialInputSnapshot:
+    var owned = sequential_input(mods, value, context, True)
     var nd = Int(py=owned.ndim)
     if nd < 2 or nd > 8:
         raise Error(name + " must have shape (n_samples, ...) with 2 to 8 dimensions")
     return _sequential_snapshot(owned, name, True, nd)
 
 
-def sequential_x(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var snapshot = sequential_x_snapshot(value, name, context)
+def sequential_x(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    var snapshot = sequential_x_snapshot(mods, value, name, context)
     return snapshot.keep
 
 

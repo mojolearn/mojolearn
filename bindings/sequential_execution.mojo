@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential orchestration of the existing model numerical ABI."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
 from core.cast_in import CastIn
 from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT
@@ -40,7 +41,7 @@ def sequential_entries(model: PythonObject, context: PythonObject) raises -> Pyt
     return entries
 
 
-def sequential_targets(model: PythonObject, source: PythonObject, n: Int, n_out: Int,
+def sequential_targets(mut mods: NativeModules, model: PythonObject, source: PythonObject, n: Int, n_out: Int,
                        loss: String, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var y = sequential_input(source, context)
     var nd = Int(py=y.ndim)
@@ -53,7 +54,7 @@ def sequential_targets(model: PythonObject, source: PythonObject, n: Int, n_out:
         # the labels as they are and a classes buffer of their dtype: the
         # fit entry sorts them and keeps the codes on the device
         # (`model_fit_labels`); the class-count refusals run there
-        var classes = sequential_array(Python.tuple(n), y.dtype, context)
+        var classes = sequential_array(mods, Python.tuple(n), y.dtype, context)
         return Python.tuple(y, descriptor, 1 if loss == "cross_entropy" else 2, classes)
     py_setitem(fields, "_y_1d", nd == 1)
     var width = 1 if nd == 1 else Int(py=y.shape[1])
@@ -62,7 +63,7 @@ def sequential_targets(model: PythonObject, source: PythonObject, n: Int, n_out:
     return Python.tuple(y, descriptor, 0, PythonObject(None))
 
 
-def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var fields = sequential_fields(model)
     if len(fields["_layers"]) == 0:
@@ -90,20 +91,20 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     var batch_size = Int(py=py_call(b.int, batch))
     if epochs < 1 or batch_size < 1:
         raise Error("epochs and batch_size must be >= 1")
-    var x_snapshot = sequential_x_snapshot(args[0], "X", context)
+    var x_snapshot = sequential_x_snapshot(mods, args[0], "X", context)
     var x = x_snapshot.keep
     var xd = x_snapshot.abi()
     var n = x_snapshot.source.rows
     var d = x_snapshot.source.cols
     if resume and d != Int(py=fields["n_features_in_"]):
         raise Error("X has a different feature count from the fitted model")
-    var sample = sequential_sample_shape(model, x_snapshot.shape)
+    var sample = sequential_sample_shape(mods, model, x_snapshot.shape)
     if resume and not Bool(py=sample == py_get(fields, "_sample_shape")):
         raise Error("resume=True takes inputs of the shape the model was fitted on")
     var warm = not resume and Bool(py=py_get(fields, "_imported", False))
     if warm and (d != Int(py=fields["n_features_in_"]) or not Bool(py=sample == py_get(fields, "_sample_shape"))):
         raise Error("X has a different feature count or sample shape from the imported weights")
-    var program = sequential_program(model, PythonObject(d), sample)
+    var program = sequential_program(mods, model, PythonObject(d), sample)
     var table = sequential_table(model)
     var entries = sequential_entries(model, context)
     var native_program = _ints(program)
@@ -111,7 +112,7 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     var counts = model_counts_native(native_program, native_table)
     var n_params = counts[0]
     var n_out = counts[1]
-    var target_data = sequential_targets(model, args[1], n, n_out, String(options["loss"]), entries, context)
+    var target_data = sequential_targets(mods, model, args[1], n, n_out, String(options["loss"]), entries, context)
     var y = target_data[0]
     var yd = target_data[1]
     var target = Int(py=target_data[2])
@@ -128,13 +129,13 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
         variance = fields["_opt_v"]
         state = fields["_fit_state"]
         previous = fields["_curve"]
-        curve = sequential_array(Python.tuple(Int(py=fields["n_iter_"]) + epochs), context["float32"], context)
+        curve = sequential_array(mods, Python.tuple(Int(py=fields["n_iter_"]) + epochs), context["float32"], context)
     else:
-        params = fields["params_"] if warm else sequential_array(Python.tuple(n_params), context["float32"], context)
-        moment = sequential_array(Python.tuple(n_params), context["float32"], context)
-        variance = sequential_array(Python.tuple(n_params), context["float32"], context)
-        state = sequential_array(Python.tuple(12), context["int64"], context)
-        curve = sequential_array(Python.tuple(epochs), context["float32"], context)
+        params = fields["params_"] if warm else sequential_array(mods, Python.tuple(n_params), context["float32"], context)
+        moment = sequential_array(mods, Python.tuple(n_params), context["float32"], context)
+        variance = sequential_array(mods, Python.tuple(n_params), context["float32"], context)
+        state = sequential_array(mods, Python.tuple(12), context["int64"], context)
+        curve = sequential_array(mods, Python.tuple(epochs), context["float32"], context)
     seed = py_call(b.int, seed)
     var ip = Python.list(n, context["loss_codes"][options["loss"]], target, options["opt"], options["flags"],
         options["sched"], options["step_size"], batch_size, epochs, 1 if Bool(py=shuffle) else 0,
@@ -158,12 +159,12 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     if validation is not None:
         if not (Bool(py=py_call(b.isinstance, validation, b.tuple)) or Bool(py=py_call(b.isinstance, validation, b.list))) or len(validation) != 2:
             raise Error("validation_data must be (X, y)")
-        var vx_snapshot = sequential_x_snapshot(validation[0], "validation X", context)
+        var vx_snapshot = sequential_x_snapshot(mods, validation[0], "validation X", context)
         vx = vx_snapshot.keep
         var vxd = vx_snapshot.abi()
         vy = sequential_input(validation[1], context)
         var vnd = Int(py=vy.ndim)
-        if not Bool(py=sequential_sample_shape(model, vx_snapshot.shape) == sample) or vx_snapshot.source.cols != d:
+        if not Bool(py=sequential_sample_shape(mods, model, vx_snapshot.shape) == sample) or vx_snapshot.source.cols != d:
             raise Error("validation inputs must have the training sample shape")
         if vnd < 1 or vnd > 2 or Int(py=vy.shape[0]) != vx_snapshot.source.rows:
             raise Error("validation targets must match the validation rows")
@@ -172,8 +173,8 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
         # the classes buffer as allocated (n slots); the fit entry cuts the
         # descriptor to the classes the sort found
         var classes = PythonObject(None) if target == 0 else sequential_descriptor(classes_full, "classes")
-        val_curve = sequential_array(Python.tuple(epochs), context["float32"], context)
-        val_info = sequential_array(Python.tuple(2), context["int64"], context)
+        val_curve = sequential_array(mods, Python.tuple(epochs), context["float32"], context)
+        val_info = sequential_array(mods, Python.tuple(2), context["int64"], context)
         _ = py_call(addresses.extend, Python.tuple(vxd, sequential_descriptor(vy, "validation y"), classes,
                     sequential_address(val_curve), sequential_address(val_info)))
         _ = curve  # keep the Python object alive through the native call above
@@ -250,22 +251,22 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     return model
 
 
-def sequential_forward(model: PythonObject, source: PythonObject, transform: Int,
+def sequential_forward(mut mods: NativeModules, model: PythonObject, source: PythonObject, transform: Int,
                        width: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     # An overload, not a `classes = PythonObject(None)` default: a non-raising
     # caller (the abi("C") door) compile-time evaluates a default, and a
     # PythonObject cannot be built at compile time.
-    return sequential_forward(model, source, transform, width, entries, context, PythonObject(None))
+    return sequential_forward(mods, model, source, transform, width, entries, context, PythonObject(None))
 
 
-def sequential_forward(model: PythonObject, source: PythonObject, transform: Int,
+def sequential_forward(mut mods: NativeModules, model: PythonObject, source: PythonObject, transform: Int,
                        width: PythonObject, entries: PythonObject, context: PythonObject,
                        classes: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     if not py_contains(fields, "params_"):
         raise Error("call fit before predict")
     var sample = py_get(fields, "_sample_shape")
-    var x_snapshot = sequential_x_snapshot(source, "X", context)
+    var x_snapshot = sequential_x_snapshot(mods, source, "X", context)
     var x = x_snapshot.keep
     var rank = len(x_snapshot.shape)
     if sample is None and rank != 2:
@@ -279,14 +280,14 @@ def sequential_forward(model: PythonObject, source: PythonObject, transform: Int
     if not Bool(py=PythonObject(x_snapshot.source.cols) == fields["n_features_in_"]):
         raise Error("X has a different feature count from the fitted model")
     var params = fields["params_"]
-    var native_program = _ints(sequential_program(model, fields["n_features_in_"], sample))
+    var native_program = _ints(sequential_program(mods, model, fields["n_features_in_"], sample))
     var native_table = model_float64_words(sequential_table(model))
     var sources: List[CastIn] = [x_snapshot.source]
     var provider = entries["native_model_provider"]
     var out: PythonObject
     if classes is not None:
         # the labels of a classifier, in classes_' dtype
-        out = sequential_array(Python.tuple(x_snapshot.source.rows), classes.dtype, context)
+        out = sequential_array(mods, Python.tuple(x_snapshot.source.rows), classes.dtype, context)
         var addresses: List[Int] = [0, Int(py=sequential_address(params)),
                                     Int(py=sequential_address(classes)), Int(py=sequential_address(out))]
         var options: List[Int] = [x_snapshot.source.rows, 4096, transform, Int(py=classes.shape[0]), Int(py=classes.dtype.itemsize)]
@@ -297,7 +298,7 @@ def sequential_forward(model: PythonObject, source: PythonObject, transform: Int
         _ = params^
         return out
     var output_width = fields["n_outputs_"] if width is None else width
-    out = sequential_array(Python.tuple(x_snapshot.source.rows, output_width), context["float32"], context)
+    out = sequential_array(mods, Python.tuple(x_snapshot.source.rows, output_width), context["float32"], context)
     var addresses: List[Int] = [0, Int(py=sequential_address(params)), Int(py=sequential_address(out))]
     var options: List[Int] = [x_snapshot.source.rows, 4096, transform]
     var words = model_descriptor_words(native_program, options, sources)
@@ -307,7 +308,7 @@ def sequential_forward(model: PythonObject, source: PythonObject, transform: Int
     return out
 
 
-def sequential_predict(model: PythonObject, source: PythonObject, probabilities: Bool,
+def sequential_predict(mut mods: NativeModules, model: PythonObject, source: PythonObject, probabilities: Bool,
                        context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     var saved_loss = py_get(fields, "_fit_loss")
@@ -316,16 +317,16 @@ def sequential_predict(model: PythonObject, source: PythonObject, probabilities:
     var classifier = loss == "cross_entropy" or loss == "bce_with_logits"
     if probabilities:
         if loss == "cross_entropy":
-            return sequential_forward(model, source, 1, PythonObject(None), entries, context)
+            return sequential_forward(mods, model, source, 1, PythonObject(None), entries, context)
         if loss == "bce_with_logits":
-            return sequential_forward(model, source, 3, PythonObject(2), entries, context)
+            return sequential_forward(mods, model, source, 3, PythonObject(2), entries, context)
         raise Error("predict_proba needs a model fitted with cross_entropy or bce_with_logits")
     if classifier:
         # one entry: the argmax (threshold) codes stay on the device and are
         # gathered there into the labels (`model_predict_labels`)
-        return sequential_forward(model, source, 4 if loss == "cross_entropy" else 5, PythonObject(1), entries,
+        return sequential_forward(mods, model, source, 4 if loss == "cross_entropy" else 5, PythonObject(1), entries,
                                   context, fields["classes_"])
-    var result = sequential_forward(model, source, 0, PythonObject(None), entries, context)
+    var result = sequential_forward(mods, model, source, 0, PythonObject(None), entries, context)
     if Bool(py=py_get(fields, "_y_1d", False)):
         # A one-output model is already contiguous. The native ndarray
         # constructor changes only its ABI rank, preserving the returned words.

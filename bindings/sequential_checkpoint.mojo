@@ -3,6 +3,7 @@
 # The existing model checkpoint format and native model ABI remain unchanged.
 from std.collections.string import chr
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.native_json import native_path
@@ -32,11 +33,11 @@ def _report_array(value: PythonObject, name: String, input: Bool, entries: Pytho
     return result + ",\"digest\":" + _quote(String(digest)) + "}"
 
 
-def _sidecar(model: PythonObject, path: PythonObject, entries: PythonObject, context: PythonObject) raises:
+def _sidecar(mut mods: NativeModules, model: PythonObject, path: PythonObject, entries: PythonObject, context: PythonObject) raises:
     var fields = sequential_fields(model)
-    var x = sequential_array(Python.tuple(16, fields["n_features_in_"]), context["float32"], context)
+    var x = sequential_array(mods, Python.tuple(16, fields["n_features_in_"]), context["float32"], context)
     _ = py_call_typed(entries["verify_fill"], sequential_address(x), x.size, PythonObject(0), PythonObject(0))
-    var output = sequential_forward(model, x, 0, PythonObject(None), entries, context)
+    var output = sequential_forward(mods, model, x, 0, PythonObject(None), entries, context)
     var input_json = _report_array(x, "X", True, entries)
     var output_json = _report_array(output, "output", False, entries)
     var sha = py_call_typed(entries["verify_file_sha256"], path)
@@ -58,7 +59,7 @@ def _sidecar(model: PythonObject, path: PythonObject, entries: PythonObject, con
         stream.write(report)
 
 
-def sequential_save(model: PythonObject, path: PythonObject, export: Bool, context: PythonObject) raises -> PythonObject:
+def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonObject, export: Bool, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     if not py_contains(fields, "params_") or not py_contains(fields, "_target"):
         raise Error("call fit before saving the model")
@@ -83,17 +84,17 @@ def sequential_save(model: PythonObject, path: PythonObject, export: Bool, conte
         py_setitem(addresses, 3, sequential_address(fields["_fit_state"]))
         py_setitem(addresses, 4, sequential_address(fields["_curve"]))
     var descriptor = PythonObject(None) if count == 0 else sequential_descriptor(classes, "classes")
-    var program = sequential_program(model, fields["n_features_in_"], PythonObject(None))
+    var program = sequential_program(mods, model, fields["n_features_in_"], PythonObject(None))
     var entries = sequential_entries(model, context)
     var normalized = native_path(path)
     _ = py_call_typed(entries["model_save_checkpoint"], normalized, addresses, program, ip, fp, descriptor)
-    _sidecar(model, normalized, entries, context)
+    _sidecar(mods, model, normalized, entries, context)
     _ = fields^
     _ = classes^
     return PythonObject(None)
 
 
-def sequential_load_checkpoint(cls: PythonObject, path: PythonObject, mode: PythonObject,
+def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path: PythonObject, mode: PythonObject,
                                context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var model = py_call(b.object.__new__, cls)
@@ -111,7 +112,7 @@ def sequential_load_checkpoint(cls: PythonObject, path: PythonObject, mode: Pyth
     var fp = description[3]
     for k in range(len(layers)):  # driver-loop: over checkpoint layer records
         var layer = layers[k]
-        sequential_append(model, layer[0], layer[1], layer[2], layer[3], PythonObject(None))
+        sequential_append(mods, model, layer[0], layer[1], layer[2], layer[3], PythonObject(None))
     var loss_name = context["loss_names"][ip[0]]
     var options = b.dict()
     py_setitem(options, "loss", loss_name)
@@ -129,10 +130,10 @@ def sequential_load_checkpoint(cls: PythonObject, path: PythonObject, mode: Pyth
     py_setitem(options, "gamma", fp[7])
     py_setitem(options, "huber_delta", fp[8])
     py_setitem(fields, "_options", options)
-    var params = sequential_array(Python.tuple(ip[16]), context["float32"], context)
+    var params = sequential_array(mods, Python.tuple(ip[16]), context["float32"], context)
     var classes = PythonObject(None)
     if Int(py=ip[13]) > 0:
-        classes = sequential_array(Python.tuple(ip[13]), context["class_dtypes"][Python.tuple(ip[14], ip[15])], context)
+        classes = sequential_array(mods, Python.tuple(ip[13]), context["class_dtypes"][Python.tuple(ip[14], ip[15])], context)
     var addresses = Python.list(sequential_address(params), 0, 0, 0, 0,
         PythonObject(0) if classes is None else sequential_address(classes))
     var m = PythonObject(None)
@@ -140,10 +141,10 @@ def sequential_load_checkpoint(cls: PythonObject, path: PythonObject, mode: Pyth
     var state = PythonObject(None)
     var curve = PythonObject(None)
     if not export:
-        m = sequential_array(Python.tuple(ip[16]), context["float32"], context)
-        v = sequential_array(Python.tuple(ip[16]), context["float32"], context)
-        state = sequential_array(Python.tuple(12), context["int64"], context)
-        curve = sequential_array(Python.tuple(ip[12]), context["float32"], context)
+        m = sequential_array(mods, Python.tuple(ip[16]), context["float32"], context)
+        v = sequential_array(mods, Python.tuple(ip[16]), context["float32"], context)
+        state = sequential_array(mods, Python.tuple(12), context["int64"], context)
+        curve = sequential_array(mods, Python.tuple(ip[12]), context["float32"], context)
         py_setitem(addresses, 1, sequential_address(m))
         py_setitem(addresses, 2, sequential_address(v))
         py_setitem(addresses, 3, sequential_address(state))

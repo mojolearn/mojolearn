@@ -18,7 +18,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_info, neural_descriptor_construct, neural_descriptor_entry
@@ -50,20 +50,20 @@ comptime _TOKEN_REFUSAL = "token ID outside configured vocabulary"
 comptime _MAX_STEP = 999999
 
 
-def _b() raises -> PythonObject:
-    return native_loaded_module("builtins")
+def _b(mut mods: NativeModules) raises -> PythonObject:
+    return mods.module("builtins")
 
 
-def _text(value: PythonObject) raises -> String:
-    return String(py=py_call(_b().str, value))
+def _text(mut mods: NativeModules, value: PythonObject) raises -> String:
+    return String(py=py_call(_b(mods).str, value))
 
 
 
 
-def _ids(source: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
+def _ids(mut mods: NativeModules, source: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
     """`_array(ids, (batch, length + 1), "ids", "<i4")`: an owned C-ordered
     int32 copy of an int32 buffer of exactly that shape."""
-    var b = _b()
+    var b = _b(mods)
     var refusal = String("TypeError: Byte-LM ids must be a int32 array (a NumPy array, an array.array or a mojolearn Array)")
     classical_admit_value(source, context)
     var buffer = classical_is_array(source, context)
@@ -105,10 +105,10 @@ def _i32(n: Int, context: PythonObject) raises -> PythonObject:
     return tsa_array("i", "<i4", Python.tuple(n), n, 4, context)
 
 
-def _gradient_outputs(shape: _Shape, named: Bool, context: PythonObject) raises -> PythonObject:
-    """`_gradient_outputs(shape, named)`: (flat, {name: Array})."""
+def _gradient_outputs(mut mods: NativeModules, shape: _Shape, named: Bool, context: PythonObject) raises -> PythonObject:
+    """`_gradient_outputs(mods, shape, named)`: (flat, {name: Array})."""
     var flat = _f32(shape.n_total(), context)
-    var by_name = _b().dict()
+    var by_name = _b(mods).dict()
     if named:
         var names = shape.names()
         var shapes = shape.shapes()
@@ -118,7 +118,7 @@ def _gradient_outputs(shape: _Shape, named: Bool, context: PythonObject) raises 
             for j in range(len(shapes[i])):  # small-loop(one tensor's shape words)
                 _ = py_call(dims.append, shapes[i][j])
                 count *= shapes[i][j]
-            py_setitem(by_name, names[i], tsa_array("f", "<f4", py_call(_b().tuple, dims), count, 4, context))
+            py_setitem(by_name, names[i], tsa_array("f", "<f4", py_call(_b(mods).tuple, dims), count, 4, context))
     return Python.tuple(flat, by_name)
 
 
@@ -138,8 +138,8 @@ def _copy_i32(source: PythonObject, n: Int, context: PythonObject) raises -> Pyt
 
 # ---------------------------------------------------------------- the binding and the session
 
-def _mode(context: PythonObject) raises -> PythonObject:
-    """`_mode()`: the process-selected tier."""
+def _mode(mut mods: NativeModules, context: PythonObject) raises -> PythonObject:
+    """`_mode(mods)`: the process-selected tier."""
     # the backend's own answers, as `_backend.default_mode()` /
     # `_backend.numeric_mode()` gave them (a setting changed after import
     # is seen; the bare `_DEFAULT_MODE` constant is not that answer)
@@ -147,7 +147,7 @@ def _mode(context: PythonObject) raises -> PythonObject:
     # Import-time connection resolves the initial default. Read its native
     # configuration once here; a product operation never invokes backend.py.
     var mode = backend["_DEFAULT_MODE"]
-    if mode is None or py_type(mode) is not _b().str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
+    if mode is None or py_type(mode) is not _b(mods).str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
         raise Error("RuntimeError: SmallByteLanguageModelTrainer requires process-selected IDENTICAL or FAST mode")
     return mode
 
@@ -162,23 +162,23 @@ def _has(binding: PythonObject, name: String) raises -> Bool:
     return _entry(binding, name, False) is not None
 
 
-def _load_snapshot(shape: _Shape, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, String, PythonObject]:
-    """`_load(shape)`: the byte LM binding of the process tier, its profile,
+def _load_snapshot(mut mods: NativeModules, shape: _Shape, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, String, PythonObject]:
+    """`_load(mods, shape)`: the byte LM binding of the process tier, its profile,
     mode and vendor read back."""
-    var mode = _mode(context)
+    var mode = _mode(mods, context)
     var binding = context["byte_lm_bindings"][mode]
-    if py_type(binding) is _b().str:
+    if py_type(binding) is _b(mods).str:
         raise Error(String(py=binding))
-    var suffix = String(py=py_call(_b().str, py_call(_entry(binding, "byte_lm_arithmetic_suffix"))))
+    var suffix = String(py=py_call(_b(mods).str, py_call(_entry(binding, "byte_lm_arithmetic_suffix"))))
     var code = Int(py=py_call(_entry(binding, "byte_lm_numeric_mode")))
     var expected = 1 if String(py=mode) == "identical" else 0
-    var vendor = String(py=py_call(_b().str, py_call(_entry(binding, "byte_lm_vendor"))))
+    var vendor = String(py=py_call(_b(mods).str, py_call(_entry(binding, "byte_lm_vendor"))))
     var vendors = context["byte_lm_vendors"]
     var vendor_ok = False
     for i in range(len(vendors)):  # small-loop(the admitted vendor names)
         vendor_ok = vendor_ok or String(py=vendors[i]) == vendor
     var profile = String(py=context["byte_lm_profile"])
-    if code != expected or String(py=py_call(_b().str, py_call(_entry(binding, "byte_lm_profile")))) != profile + suffix or not vendor_ok:
+    if code != expected or String(py=py_call(_b(mods).str, py_call(_entry(binding, "byte_lm_profile")))) != profile + suffix or not vendor_ok:
         raise Error("RuntimeError: Byte-LM requires the exact native profile, the selected IDENTICAL/FAST mode and "
                     + "CUDA/HIP/Metal vendor (or, on a CPU-only install, the CPU byte LM binding)")
     if not _has(binding, "byte_lm_run"):
@@ -187,17 +187,17 @@ def _load_snapshot(shape: _Shape, context: PythonObject) raises -> Tuple[PythonO
     if shape_profile != profile:
         if not _has(binding, "byte_lm_run_configured") or not _has(binding, "byte_lm_config_profile"):
             raise Error("ImportError: Byte-LM binding lacks runtime shapes; rebuild bindings/build_byte_lm.sh")
-        if String(py=py_call(_b().str, py_call(_entry(binding, "byte_lm_config_profile"), shape.native_shape()))) != shape_profile + suffix:
+        if String(py=py_call(_b(mods).str, py_call(_entry(binding, "byte_lm_config_profile"), shape.native_shape()))) != shape_profile + suffix:
             raise Error("RuntimeError: Byte-LM native runtime shape/profile mismatch")
-    var snapshot = _b().dict()
+    var snapshot = _b(mods).dict()
     py_setitem(snapshot, "native_profile", profile + suffix)
     py_setitem(snapshot, "native_vendor", vendor)
     py_setitem(snapshot, "native_numeric_mode", code)
     return (binding, mode, suffix, snapshot)
 
 
-def _load(shape: _Shape, context: PythonObject) raises -> PythonObject:
-    var snapshot = _load_snapshot(shape, context)
+def _load(mut mods: NativeModules, shape: _Shape, context: PythonObject) raises -> PythonObject:
+    var snapshot = _load_snapshot(mods, shape, context)
     return snapshot[0]
 
 
@@ -259,7 +259,7 @@ def _native_execute(fields: PythonObject, binding: PythonObject, provider: Pytho
     return result
 
 
-def _forget(fields: PythonObject, context: PythonObject) raises:
+def _forget(mut mods: NativeModules, fields: PythonObject, context: PythonObject) raises:
     """`_forget_session`."""
     py_setitem(fields, "_provider_session", PythonObject(None))
     py_setitem(fields, "_provider_handle_owner", PythonObject(None))
@@ -268,10 +268,10 @@ def _forget(fields: PythonObject, context: PythonObject) raises:
     py_setitem(fields, "_native_session", PythonObject(None))
     py_setitem(fields, "_session_binding", PythonObject(None))
     py_setitem(fields, "_session_open", False)
-    var pool = py_call(_b().object.__new__, context["byte_lm_logits_pool"])
+    var pool = py_call(_b(mods).object.__new__, context["byte_lm_logits_pool"])
     var pool_fields = py_fields(pool)
     py_setitem(pool_fields, "keep", 2)
-    py_setitem(pool_fields, "free", _b().list())
+    py_setitem(pool_fields, "free", _b(mods).list())
     py_setitem(fields, "_logits_pool", pool)
     py_setitem(fields, "_grad_step", -1)
 
@@ -281,7 +281,7 @@ def _mark_lost(fields: PythonObject) raises:
         py_setitem(fields, "_lost_at", Python.tuple(fields["_state"]["completed_steps"], fields["_last_export_step"]))
 
 
-def _export_release(fields: PythonObject, shape: _Shape, context: PythonObject, release: Bool = True) raises -> PythonObject:
+def _export_release(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject, release: Bool = True) raises -> PythonObject:
     """`_export_state_impl(release=True)`."""
     var state = fields["_state"]
     var binding = fields["_session_binding"]
@@ -304,10 +304,10 @@ def _export_release(fields: PythonObject, shape: _Shape, context: PythonObject, 
     _ = out_v  # keep the Python object alive through the native call above
     _ = out_m  # keep the Python object alive through the native call above
     _ = out_p  # keep the Python object alive through the native call above
-    if py_type(returned) is not _b().int or not Bool(py=returned == completed):
+    if py_type(returned) is not _b(mods).int or not Bool(py=returned == completed):
         raise Error("RuntimeError: Byte-LM state export returned a different completed step")
     py_setitem(fields, "_last_export_step", completed)
-    var exported = py_call(_b().dict, state)
+    var exported = py_call(_b(mods).dict, state)
     py_setitem(exported, "parameters", out_p)
     py_setitem(exported, "m", out_m)
     py_setitem(exported, "v", out_v)
@@ -315,25 +315,25 @@ def _export_release(fields: PythonObject, shape: _Shape, context: PythonObject, 
     return exported
 
 
-def _suspend(fields: PythonObject, shape: _Shape, context: PythonObject) raises:
+def _suspend(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject) raises:
     """`_suspend_session`."""
     if Bool(py=fields["_session_open"]) and fields["_lost_at"] is None:
         var exported = PythonObject(None)
         try:
-            exported = _export_release(fields, shape, context)
+            exported = _export_release(mods, fields, shape, context)
         except error:
             # the native export closed the session on its way out
             _mark_lost(fields)
-            _forget(fields, context)
+            _forget(mods, fields, context)
             raise error^
         py_setitem(fields, "_state", exported)
-        _forget(fields, context)
+        _forget(mods, fields, context)
         return
     var session = fields["_native_session"]
     var binding = fields["_session_binding"]
     var provider = _provider(fields, binding) if session is not None else PythonObject(None)
     var handle = _session_handle(fields, binding, provider) if provider is not None else 0
-    _forget(fields, context)
+    _forget(mods, fields, context)
     if session is not None:
         if provider is not None:
             _ = neural_descriptor_execute(provider, 4, [handle], List[Int](), List[Float64]())
@@ -342,14 +342,14 @@ def _suspend(fields: PythonObject, shape: _Shape, context: PythonObject) raises:
             _ = py_call(_entry(binding, "byte_lm_session_close"), session)
 
 
-def _binding(fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
-    """`_binding()`: a binding change suspends the open session first; the
+def _binding(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
+    """`_binding(mods)`: a binding change suspends the open session first; the
     run metadata is then computed on its next read (`run_metadata`)."""
-    var admitted = _load_snapshot(shape, context)
+    var admitted = _load_snapshot(mods, shape, context)
     var binding = admitted[0]
     py_setitem(fields, "_admitted_binding_metadata", admitted[3])
     if binding is not fields["_runtime_binding"]:
-        _suspend(fields, shape, context)
+        _suspend(mods, fields, shape, context)
         py_setitem(fields, "_runtime", PythonObject(None))
         py_setitem(fields, "_runtime_binding", binding)
     return binding
@@ -365,30 +365,30 @@ def _is_resident(fields: PythonObject, binding: PythonObject, context: PythonObj
     return Bool(py=fields["_resident"])
 
 
-def _parameters(state: PythonObject, train: Bool) raises -> PythonObject:
-    """`_parameters(train)`: the twelve scalars every native step reads."""
+def _parameters(mut mods: NativeModules, state: PythonObject, train: Bool) raises -> PythonObject:
+    """`_parameters(mods, train)`: the twelve scalars every native step reads."""
     var cfg = state["config"]
-    var b = _b()
+    var b = _b(mods)
     return Python.list(1 if train else 0, state["completed_steps"], cfg["kind"], cfg["lr"], cfg["beta1"], cfg["beta2"],
                        cfg["eps"], cfg["weight_decay"], cfg["momentum"], cfg["dampening"],
                        Int(py=py_call(b.int, cfg["nesterov"])), cfg["max_norm"])
 
 
-def _adopt_open(fields: PythonObject) raises:
+def _adopt_open(mut mods: NativeModules, fields: PythonObject) raises:
     """`_adopt_open_session`: the device holds the only copy now."""
     if not Bool(py=fields["_session_open"]):
         py_setitem(fields, "_session_open", True)
         py_setitem(fields, "_grad_step", -1)
         var state = fields["_state"]
         py_setitem(fields, "_last_export_step", state["completed_steps"])
-        var dropped = py_call(_b().dict, state)
+        var dropped = py_call(_b(mods).dict, state)
         py_setitem(dropped, "parameters", PythonObject(None))
         py_setitem(dropped, "m", PythonObject(None))
         py_setitem(dropped, "v", PythonObject(None))
         py_setitem(fields, "_state", dropped)
 
 
-def _after_failure(fields: PythonObject) raises:
+def _after_failure(mut mods: NativeModules, fields: PythonObject) raises:
     """`_after_native_failure`: the native call's verdict read back."""
     py_setitem(fields, "_grad_step", -1)
     var session = fields["_native_session"]
@@ -418,17 +418,17 @@ def _after_failure(fields: PythonObject) raises:
         usable = False
         completed = PythonObject(None)
     if is_open:
-        _adopt_open(fields)
+        _adopt_open(mods, fields)
     if Bool(py=fields["_session_open"]) and (not usable or not Bool(py=completed == fields["_state"]["completed_steps"])):
         _mark_lost(fields)
 
 
-def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool) raises -> PythonObject:
-    var b = _b()
+def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool) raises -> PythonObject:
+    var b = _b(mods)
     var lost = fields["_lost_at"]
     if lost is not None:
-        raise Error("RuntimeError: Byte-LM session lost at step " + _text(lost[0]) + "; last exported state is step "
-                    + _text(lost[1]))
+        raise Error("RuntimeError: Byte-LM session lost at step " + _text(mods, lost[0]) + "; last exported state is step "
+                    + _text(mods, lost[1]))
     var names = context["byte_lm_session_entries"]
     var missing = String("")
     for i in range(len(names)):  # small-loop(the session entry names)
@@ -450,7 +450,7 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, bin
     var full = train and String(py=fields["_step_result"]) == "full"
     var out_loss = _f32(1, context)
     var out_flags = _i32(shape.n_tensors(), context) if train else PythonObject(None)
-    var grads = _gradient_outputs(shape, True, context) if full else Python.tuple(PythonObject(None), b.dict())
+    var grads = _gradient_outputs(mods, shape, True, context) if full else Python.tuple(PythonObject(None), b.dict())
     var addresses = Python.list(classical_address(tokens), classical_address(state["flags"]))
     if Bool(py=fields["_session_open"]):
         for _ in range(3):  # small-loop(the three admission slots)
@@ -478,14 +478,14 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, bin
         if provider is not None:
             returned = PythonObject(_native_execute(fields, binding, provider, 1, addresses, shape, state, train))
         else:
-            returned = py_call_typed(_entry(binding, "byte_lm_trainer_step"), session, addresses, _parameters(state, train),
+            returned = py_call_typed(_entry(binding, "byte_lm_trainer_step"), session, addresses, _parameters(mods, state, train),
                                      shape.native_shape())
         _ = out_flags  # keep the Python object alive through the native call above
         _ = out_loss  # keep the Python object alive through the native call above
     except error:
-        _after_failure(fields)
+        _after_failure(mods, fields)
         raise error^
-    _adopt_open(fields)
+    _adopt_open(mods, fields)
     var expected = completed + Int(train)
     if py_type(returned) is not b.int or Int(py=returned) != expected:
         _mark_lost(fields)
@@ -510,8 +510,8 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, bin
     return result
 
 
-def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool) raises -> PythonObject:
-    var b = _b()
+def _run_stateless(mut mods: NativeModules, fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool) raises -> PythonObject:
+    var b = _b(mods)
     var state = fields["_state"]
     if train and Int(py=state["completed_steps"]) >= _MAX_STEP:
         raise Error("ValueError: Byte-LM native call step counter is exhausted")
@@ -524,7 +524,7 @@ def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, bi
     var out_v = _f32(n, context)
     var out_flags = _i32(shape.n_tensors(), context)
     var out_loss = _f32(1, context)
-    var grads = _gradient_outputs(shape, True, context) if train else Python.tuple(PythonObject(None), b.dict())
+    var grads = _gradient_outputs(mods, shape, True, context) if train else Python.tuple(PythonObject(None), b.dict())
     var flat = grads[0]
     var by_name = grads[1]
     var addresses = Python.list()
@@ -553,7 +553,7 @@ def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, bi
             _ = neural_descriptor_execute(provider, 9, [handle], List[Int](), List[Float64](), False)
         _ = session
     else:
-        completed = py_call_typed(_entry(binding, entry), addresses, named, _parameters(state, train),
+        completed = py_call_typed(_entry(binding, entry), addresses, named, _parameters(mods, state, train),
                                   shape.native_shape())
     var expected = Int(py=state["completed_steps"]) + Int(train)
     if py_type(completed) is not b.int or Int(py=completed) != expected:
@@ -578,9 +578,9 @@ def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, bi
     return result
 
 
-def _optimizer_configuration(lr: PythonObject, beta_values: PythonObject, eps: PythonObject,
+def _optimizer_configuration(mut mods: NativeModules, lr: PythonObject, beta_values: PythonObject, eps: PythonObject,
                              weight_decay: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = _b()
+    var bi = _b(mods)
     var betas: PythonObject
     try:
         # Only already-admitted native containers/buffers reach iteration.
@@ -608,15 +608,15 @@ def _optimizer_configuration(lr: PythonObject, beta_values: PythonObject, eps: P
     return config
 
 
-def _require_training_profile(context: PythonObject) raises:
-    var bi = _b()
+def _require_training_profile(mut mods: NativeModules, context: PythonObject) raises:
+    var bi = _b(mods)
     var profile = py_get(context["byte_lm_profile_defaults"], "training", PythonObject("fp32_v1"))
     if py_type(profile) is not bi.str or not Bool(py=context["byte_lm_profiles"][profile]["training"]):
         raise Error("NotImplementedError: the selected numeric profile is unavailable for Byte-LM training")
 
 
-def _construction_options(resident: PythonObject, var step_result: PythonObject) raises -> PythonObject:
-    var bi = _b()
+def _construction_options(mut mods: NativeModules, resident: PythonObject, var step_result: PythonObject) raises -> PythonObject:
+    var bi = _b(mods)
     if resident is not None and py_type(resident) is not bi.bool:
         raise Error("TypeError: resident must be a bool")
     if step_result is None:
@@ -628,8 +628,8 @@ def _construction_options(resident: PythonObject, var step_result: PythonObject)
     return step_result
 
 
-def _schedule_vocabulary(schedule: PythonObject, shape: _Shape) raises:
-    var bi = _b()
+def _schedule_vocabulary(mut mods: NativeModules, schedule: PythonObject, shape: _Shape) raises:
+    var bi = _b(mods)
     var vocabulary = py_get(schedule, "vocabulary")
     if vocabulary is not None:
         if py_type(vocabulary) is not bi.dict or py_type(py_get(vocabulary, "n_vocab")) is not bi.int or py_type(py_get(vocabulary, "sha256")) is not bi.str:
@@ -638,7 +638,7 @@ def _schedule_vocabulary(schedule: PythonObject, shape: _Shape) raises:
             raise Error("ValueError: Byte-LM data_schedule vocabulary does not match the configured vocabulary")
 
 
-def _initialize_state_fields(trainer: PythonObject, state: PythonObject, resident: PythonObject,
+def _initialize_state_fields(mut mods: NativeModules, trainer: PythonObject, state: PythonObject, resident: PythonObject,
                              step_result: PythonObject, context: PythonObject) raises:
     var fields = py_fields(trainer)
     py_setitem(fields, "_resident", resident)
@@ -649,20 +649,20 @@ def _initialize_state_fields(trainer: PythonObject, state: PythonObject, residen
     py_setitem(fields, "_last_export_step", state["completed_steps"])
     py_setitem(fields, "_lost_at", PythonObject(None))
     py_setitem(fields, "_state", state)
-    _forget(fields, context)
+    _forget(mods, fields, context)
 
 
-def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def byte_lm_construct(mut mods: NativeModules, trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
-    var bi = _b()
+    var bi = _b(mods)
     if py_type(trainer) is not context["byte_lm_trainer_class"]:
         raise Error("TypeError: Byte-LM requires its native trainer class without Python subclass hooks")
-    _require_training_profile(context)
+    _require_training_profile(mods, context)
     # Every external value is admitted before scalar, buffer or JSON protocols.
     for i in range(6):  # small-loop(parameter data, schedule and five optimizer arguments)
         classical_admit_value(args[i], context)
     var resident = args[7]
-    var step_result = _construction_options(resident, args[8])
+    var step_result = _construction_options(mods, resident, args[8])
     var config_value = args[6]
     var shape_state = bi.dict()
     if config_value is not None:
@@ -674,7 +674,7 @@ def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: Python
     var shape = _shape_of(shape_state)
     # The selected native binding validates configured dimensions before any
     # allocation; a host-only glue binary must not impose its own numeric mode.
-    var loaded = _load_snapshot(shape, context)
+    var loaded = _load_snapshot(mods, shape, context)
     var names = shape.names()
     var shapes = shape.shapes()
     var total = shape.n_total()
@@ -698,10 +698,10 @@ def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: Python
             offset += count
     else:
         flat = training_f32_owned(parameters, [total], "Byte-LM parameters", context)
-    var config = _optimizer_configuration(args[2], args[3], args[4], args[5], context)
+    var config = _optimizer_configuration(mods, args[2], args[3], args[4], args[5], context)
     var schedule_text = training_schedule_json(args[1], 256, 16384, "Byte-LM data_schedule", context)
     var schedule = native_json_parse(PythonObject(schedule_text))
-    _schedule_vocabulary(schedule, shape)
+    _schedule_vocabulary(mods, schedule, shape)
     var binding = loaded[0]
     var mode = loaded[1]
     var state = bi.dict()
@@ -735,18 +735,18 @@ def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: Python
     py_setitem(state, "data_schedule", schedule)
     if shape.profile(String(py=context["byte_lm_profile"])) != String(py=context["byte_lm_profile"]):
         py_setitem(state, "model_shape", py_call(bi.dict, shape_state["model_shape"]))
-    _initialize_state_fields(trainer, state, resident, step_result, context)
+    _initialize_state_fields(mods, trainer, state, resident, step_result, context)
     _ = binding
     return PythonObject(None)
 
 
-def _state_step(value: PythonObject) raises -> Int:
-    var bi = _b()
+def _state_step(mut mods: NativeModules, value: PythonObject) raises -> Int:
+    var bi = _b(mods)
     if py_type(value) is bi.bool or String(py=py_type(value).__name__) == "bool_":
         raise Error("ValueError: Byte-LM completed_steps must be an integer")
     var step = 0
     try:
-        step = Int(py=py_call(native_loaded_module("operator").index, value))
+        step = Int(py=py_call(mods.module("operator").index, value))
     except:
         raise Error("ValueError: Byte-LM completed_steps must be an integer")
     if step < 0 or step > _MAX_STEP:
@@ -754,11 +754,11 @@ def _state_step(value: PythonObject) raises -> Int:
     return step
 
 
-def _validated_state(source: PythonObject, context: PythonObject) raises -> PythonObject:
+def _validated_state(mut mods: NativeModules, source: PythonObject, context: PythonObject) raises -> PythonObject:
     # Admission and every copy complete before the current trainer/session is
     # touched. Stable metadata is captured once; native buffers validate values.
     classical_admit_value(source, context)
-    var bi = _b()
+    var bi = _b(mods)
     if py_type(source) is not bi.dict:
         raise Error("ValueError: Byte-LM state has missing or unknown fields")
     var keys = Python.list("schema", "profile", "numeric_mode", "parameter_names", "parameter_shapes",
@@ -778,7 +778,7 @@ def _validated_state(source: PythonObject, context: PythonObject) raises -> Pyth
         raise Error("ImportError: " + String(py=binding))
     var suffix = String(py=py_call(_entry(binding, "byte_lm_arithmetic_suffix")))
     var expected_profile = shape.profile(String(py=context["byte_lm_profile"])) + suffix
-    var registry = _registry(shape)
+    var registry = _registry(mods, shape)
     var names = Python.list()
     var shapes = Python.list()
     var offsets = Python.list(0)
@@ -798,15 +798,15 @@ def _validated_state(source: PythonObject, context: PythonObject) raises -> Pyth
         "momentum", "dampening", "nesterov", "max_norm")
     if py_type(cfg) is not bi.dict or not Bool(py=py_call(bi.set, cfg) == py_call(bi.set, config_keys)):
         raise Error("ValueError: Byte-LM state optimizer configuration mismatch")
-    var config = _optimizer_configuration(cfg["lr"], Python.tuple(cfg["beta1"], cfg["beta2"]),
+    var config = _optimizer_configuration(mods, cfg["lr"], Python.tuple(cfg["beta1"], cfg["beta2"]),
                                           cfg["eps"], cfg["weight_decay"], context)
     if py_type(cfg["kind"]) is not bi.int or Int(py=cfg["kind"]) != 2 or py_type(cfg["nesterov"]) is not bi.bool or Bool(py=cfg["nesterov"]):
         raise Error("ValueError: Byte-LM first profile supports AdamW without clipping or SGD options")
     for name in [String("momentum"), String("dampening"), String("max_norm")]:  # small-loop(the three unused optimizer slots)
         if training_f32_scalar(cfg[name], name, context, True) != 0:
             raise Error("ValueError: Byte-LM first profile supports AdamW without clipping or SGD options")
-    var completed = _state_step(source["completed_steps"])
-    if _state_step(source["next_batch_index"]) != completed:
+    var completed = _state_step(mods, source["completed_steps"])
+    if _state_step(mods, source["next_batch_index"]) != completed:
         raise Error("ValueError: Byte-LM schedule cursor must match completed_steps")
     var count = shape.n_total()
     var tensors = shape.n_tensors()
@@ -841,7 +841,7 @@ def _validated_state(source: PythonObject, context: PythonObject) raises -> Pyth
     return result
 
 
-def byte_lm_load_state(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def byte_lm_load_state(mut mods: NativeModules, trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     if py_type(trainer) is not context["byte_lm_trainer_class"]:
         raise Error("TypeError: Byte-LM requires its native trainer class without Python subclass hooks")
@@ -849,13 +849,13 @@ def byte_lm_load_state(trainer: PythonObject, args: PythonObject, context: Pytho
     var lock = fields["_lock"]
     _ = py_call(lock.acquire)
     try:
-        var replacement = _validated_state(args[0], context)
-        _ = _mode(context)
+        var replacement = _validated_state(mods, args[0], context)
+        _ = _mode(mods, context)
         var session = fields["_native_session"]
         var binding = fields["_session_binding"]
         var provider = _provider(fields, binding) if session is not None else PythonObject(None)
         var handle = _session_handle(fields, binding, provider) if provider is not None else 0
-        _forget(fields, context)
+        _forget(mods, fields, context)
         if session is not None:
             if provider is not None:
                 _ = neural_descriptor_execute(provider, 4, [handle], List[Int](), List[Float64]())
@@ -872,7 +872,7 @@ def byte_lm_load_state(trainer: PythonObject, args: PythonObject, context: Pytho
     return trainer
 
 
-def byte_lm_checkpoint(trainer: PythonObject, operation: String, args: PythonObject,
+def byte_lm_checkpoint(mut mods: NativeModules, trainer: PythonObject, operation: String, args: PythonObject,
                        context: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
     classical_connect_numpy(context)
     if operation == "from_checkpoint_binary" or operation == "from_checkpoint" or operation == "from_checkpoint_bytes":
@@ -887,17 +887,17 @@ def byte_lm_checkpoint(trainer: PythonObject, operation: String, args: PythonObj
             var described = _shape_of(source)
             training_byte_shape_validate(described.d, described.chunked)
             byte_json_arrays(source, described.n_total(), described.n_tensors())
-        var state = _validated_state(source, context)
+        var state = _validated_state(mods, source, context)
         var shape = _shape_of(state)
-        _require_training_profile(context)
+        _require_training_profile(mods, context)
         var resident = args[1]
-        var step_result = _construction_options(resident, PythonObject(None))
-        _schedule_vocabulary(state["data_schedule"], shape)
+        var step_result = _construction_options(mods, resident, PythonObject(None))
+        _schedule_vocabulary(mods, state["data_schedule"], shape)
         # Preserve constructor binding/profile admission without constructing
         # temporary parameter arrays or invoking a Python class constructor.
-        _ = _load_snapshot(shape, context)
+        _ = _load_snapshot(mods, shape, context)
         var restored = native_storage_allocate(trainer)
-        _initialize_state_fields(restored, state, resident, step_result, context)
+        _initialize_state_fields(mods, restored, state, resident, step_result, context)
         return restored
     if operation != "export_checkpoint_binary" and operation != "export_checkpoint":
         raise Error("RuntimeError: unknown Byte-LM checkpoint operation")
@@ -912,7 +912,7 @@ def byte_lm_checkpoint(trainer: PythonObject, operation: String, args: PythonObj
         var shape = _shape_of(fields["_state"])
         if operation == "export_checkpoint" and shape.n_total() * 24 + shape.n_tensors() * 8 > BYTE_JSON_LIMIT:
             raise Error("Byte-LM checkpoint exceeds 2 MiB; export state_dict arrays")
-        state = _export_snapshot(fields, shape, context)
+        state = _export_snapshot(mods, fields, shape, context)
     except problem:
         _ = py_call(lock.release)
         raise problem
@@ -925,7 +925,7 @@ def byte_lm_checkpoint(trainer: PythonObject, operation: String, args: PythonObj
     return byte_checkpoint_save(args[0], state, io_error)
 
 
-def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: PythonObject, train: Bool = True) raises -> PythonObject:
+def byte_lm_train_step(mut mods: NativeModules, trainer: PythonObject, args: PythonObject, context: PythonObject, train: Bool = True) raises -> PythonObject:
     """`train_step(ids)`: `with self._lock: return self._run(ids, True)`."""
     classical_connect_numpy(context)
     var fields = py_fields(trainer)
@@ -935,13 +935,13 @@ def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: Pytho
     try:
         classical_admit_value(fields["_state"], context)
         var shape = _shape_of(fields["_state"])
-        var tokens = _ids(args[0], shape, context)
-        var binding = _binding(fields, shape, context)
+        var tokens = _ids(mods, args[0], shape, context)
+        var binding = _binding(mods, fields, shape, context)
         try:
             if _is_resident(fields, binding, context):
-                result = _run_resident(fields, tokens, shape, binding, context, train)
+                result = _run_resident(mods, fields, tokens, shape, binding, context, train)
             else:
-                result = _run_stateless(fields, tokens, shape, binding, context, train)
+                result = _run_stateless(mods, fields, tokens, shape, binding, context, train)
         except error:
             var text = String(error)
             if not text.startswith("ValueError:") and text.find(_TOKEN_REFUSAL) >= 0:
@@ -954,7 +954,7 @@ def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: Pytho
     return result
 
 
-def _logits_input(source: PythonObject, lengths: PythonObject, shape: _Shape,
+def _logits_input(mut mods: NativeModules, source: PythonObject, lengths: PythonObject, shape: _Shape,
                   context: PythonObject) raises -> Tuple[PythonObject, Int, Int, List[Int]]:
     classical_admit_value(source, context)
     classical_admit_value(lengths, context)
@@ -977,7 +977,7 @@ def _logits_input(source: PythonObject, lengths: PythonObject, shape: _Shape,
     _ = value^
     var sizes = List[Int](length=batch, fill=length)
     if lengths is not None:
-        sizes = _neural_lengths(lengths, batch, length, context)
+        sizes = _neural_lengths(mods, lengths, batch, length, context)
         var padded = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
         neural_copy_row_prefixes(Int(py=classical_address(padded)), token_addr, sizes, batch, length, 1)
         _ = tokens^
@@ -985,12 +985,12 @@ def _logits_input(source: PythonObject, lengths: PythonObject, shape: _Shape,
     return (tokens, batch, length, sizes^)
 
 
-def _admit_pooled_logits_layout(context: PythonObject) raises:
+def _admit_pooled_logits_layout(mut mods: NativeModules, context: PythonObject) raises:
     # Only the exact connected pooled class is admitted. Read type dictionaries
     # through pinned native descriptors; do not trigger class/Python hooks while
     # checking whether a caller replaced one. This precedes slot writes too.
     var cls = context["byte_lm_pooled_class"]
-    if py_type(cls) is not _b().type:
+    if py_type(cls) is not _b(mods).type:
         raise Error("TypeError: Byte-LM pooled logits require the connected native storage class")
     var mro = py_call(context["byte_lm_type_mro_getter"], cls)
     var expected = context["byte_lm_pooled_mro"]
@@ -1007,7 +1007,7 @@ def _admit_pooled_logits_layout(context: PythonObject) raises:
                 raise Error("TypeError: Byte-LM pooled logits storage hook changed")
 
 
-def _logits_output_address(output: PythonObject, context: PythonObject) raises -> Int:
+def _logits_output_address(mut mods: NativeModules, output: PythonObject, context: PythonObject) raises -> Int:
     # Both outputs are internally allocated, exact Array storage. The pooled
     # subclass was admitted before allocation above; no arbitrary subclasses or
     # array-interface/input protocols are accepted as output storage here.
@@ -1015,14 +1015,14 @@ def _logits_output_address(output: PythonObject, context: PythonObject) raises -
     if cls is not context["array_class"] and cls is not context["byte_lm_pooled_class"]:
         raise Error("TypeError: Byte-LM logits output requires exact native Array storage")
     var address = py_call(context["byte_lm_addr_getter"], output, cls)
-    if py_type(address) is not _b().int or Int(py=address) == 0:
+    if py_type(address) is not _b(mods).int or Int(py=address) == 0:
         raise Error("TypeError: Byte-LM logits output has an invalid native address slot")
     return Int(py=address)
 
 
-def _pooled_logits(fields: PythonObject, batch: Int, length: Int, vocab: Int,
+def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, length: Int, vocab: Int,
                    context: PythonObject) raises -> PythonObject:
-    _admit_pooled_logits_layout(context)
+    _admit_pooled_logits_layout(mods, context)
     var pool = py_get(fields, "_logits_pool")
     if pool is None:
         pool = native_storage_allocate(context["byte_lm_logits_pool"])
@@ -1032,7 +1032,7 @@ def _pooled_logits(fields: PythonObject, batch: Int, length: Int, vocab: Int,
     if py_type(pool) is not context["byte_lm_logits_pool"]:
         raise Error("TypeError: Byte-LM logits requires its native output pool")
     var free = py_fields(pool)["free"]
-    if py_type(free) is not _b().list:
+    if py_type(free) is not _b(mods).list:
         raise Error("TypeError: Byte-LM logits pool requires a native list")
     var count = batch * length * vocab
     var store = PythonObject(None)
@@ -1049,7 +1049,7 @@ def _pooled_logits(fields: PythonObject, batch: Int, length: Int, vocab: Int,
     return out
 
 
-def byte_lm_pooled_finalize(owner: PythonObject, context: PythonObject) raises:
+def byte_lm_pooled_finalize(mut mods: NativeModules, owner: PythonObject, context: PythonObject) raises:
     # Installed as a compiled instance-method descriptor. A decref during a
     # native operation never invokes _PooledLogits.__del__ or pool.give Python.
     if py_type(owner) is not context["byte_lm_pooled_class"]:
@@ -1063,7 +1063,7 @@ def byte_lm_pooled_finalize(owner: PythonObject, context: PythonObject) raises:
     var pool_fields = py_fields(pool)
     var free = py_get(pool_fields, "free")
     var keep = py_get(pool_fields, "keep")
-    if py_type(free) is not _b().list or py_type(keep) is not _b().int or Int(py=keep) < 1:
+    if py_type(free) is not _b(mods).list or py_type(keep) is not _b(mods).int or Int(py=keep) < 1:
         return
     for i in range(len(free)):  # small-loop(the bounded reusable host-buffer pool)
         if free[i] is store:
@@ -1074,9 +1074,10 @@ def byte_lm_pooled_finalize(owner: PythonObject, context: PythonObject) raises:
 
 
 def byte_lm_pooled_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var mods = NativeModules()
     try:
         var args = PythonObject(from_borrowed=args_ptr)
-        byte_lm_pooled_finalize(args[1], args[0])
+        byte_lm_pooled_finalize(mods, args[1], args[0])
     except:
         # Finalization is best effort, as the previous Python __del__; a
         # malformed/expired pool must not lose the Array's owned storage.
@@ -1084,7 +1085,7 @@ def byte_lm_pooled_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("
     return PythonObject(None).steal_data()
 
 
-def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObject,
+def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonObject, context: PythonObject,
                    next_bytes: Bool = False) raises -> PythonObject:
     classical_connect_numpy(context)
     var fields = py_fields(trainer)
@@ -1094,22 +1095,22 @@ def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObj
     try:
         classical_admit_value(fields["_state"], context)
         var shape = _shape_of(fields["_state"])
-        var admitted = _logits_input(args[0], args[1], shape, context)
+        var admitted = _logits_input(mods, args[0], args[1], shape, context)
         var tokens = admitted[0]
         var batch = admitted[1]
         var length = admitted[2]
-        var binding = _binding(fields, shape, context)
+        var binding = _binding(mods, fields, shape, context)
         var provider = _provider(fields, binding)
         var resident = _is_resident(fields, binding, context)
         var direct_next = next_bytes and resident and args[1] is None
         var expected = batch if direct_next else batch * length * shape.vocab()
-        var out = _i32(batch, context) if direct_next else (_pooled_logits(fields, batch, length, shape.vocab(), context) if resident else tsa_array("f", "<f4", Python.tuple(batch, length, shape.vocab()), expected, 4, context))
-        var output_address = _logits_output_address(out, context)
+        var out = _i32(batch, context) if direct_next else (_pooled_logits(mods, fields, batch, length, shape.vocab(), context) if resident else tsa_array("f", "<f4", Python.tuple(batch, length, shape.vocab()), expected, 4, context))
+        var output_address = _logits_output_address(mods, out, context)
         var written = 0
         if resident:
             var lost = fields["_lost_at"]
             if lost is not None:
-                raise Error("RuntimeError: Byte-LM session lost at step " + _text(lost[0]) + "; last exported state is step " + _text(lost[1]))
+                raise Error("RuntimeError: Byte-LM session lost at step " + _text(mods, lost[0]) + "; last exported state is step " + _text(mods, lost[1]))
             if fields["_native_session"] is None:
                 py_setitem(fields, "_native_session", neural_descriptor_construct(provider, _entry(binding, "byte_lm_session_create")) if provider is not None else py_call(_entry(binding, "byte_lm_session_create")))
                 py_setitem(fields, "_session_binding", binding)
@@ -1124,11 +1125,11 @@ def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObj
                     written = _native_execute(fields, binding, provider, 6 if direct_next else 2, addresses, shape, state, False, batch, length)
                 else:
                     var entry = _entry(binding, "byte_lm_trainer_next_bytes") if direct_next else _entry(binding, "byte_lm_trainer_logits")
-                    written = Int(py=py_call_typed(entry, fields["_native_session"], addresses, Python.list(batch, length), _parameters(state, False), shape.native_shape()))
+                    written = Int(py=py_call_typed(entry, fields["_native_session"], addresses, Python.list(batch, length), _parameters(mods, state, False), shape.native_shape()))
             except problem:
-                _after_failure(fields)
+                _after_failure(mods, fields)
                 raise problem
-            _adopt_open(fields)
+            _adopt_open(mods, fields)
         else:
             var state = fields["_state"]
             var addresses: List[Int] = [Int(py=classical_address(state["parameters"])), Int(py=classical_address(tokens)), output_address]
@@ -1166,7 +1167,7 @@ def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObj
     return result
 
 
-def _registry(shape: _Shape) raises -> PythonObject:
+def _registry(mut mods: NativeModules, shape: _Shape) raises -> PythonObject:
     var names = shape.names()
     var shapes = shape.shapes()
     var result = Python.list()
@@ -1177,9 +1178,9 @@ def _registry(shape: _Shape) raises -> PythonObject:
         for width in shapes[i]:  # small-loop(parameter rank)
             _ = py_call(dims.append, width)
             count *= width
-        var record = _b().dict()
+        var record = _b(mods).dict()
         py_setitem(record, "name", names[i])
-        py_setitem(record, "shape", py_call(_b().tuple, dims))
+        py_setitem(record, "shape", py_call(_b(mods).tuple, dims))
         py_setitem(record, "offset", offset)
         py_setitem(record, "size", count)
         _ = py_call(result.append, record)
@@ -1187,20 +1188,20 @@ def _registry(shape: _Shape) raises -> PythonObject:
     return result
 
 
-def _snapshot_metadata(state: PythonObject, shape: _Shape) raises -> PythonObject:
-    var result = py_call(_b().dict, state)
-    py_setitem(result, "config", py_call(_b().dict, state["config"]))
+def _snapshot_metadata(mut mods: NativeModules, state: PythonObject, shape: _Shape) raises -> PythonObject:
+    var result = py_call(_b(mods).dict, state)
+    py_setitem(result, "config", py_call(_b(mods).dict, state["config"]))
     py_setitem(result, "data_schedule", native_json_parse(PythonObject(_transport_json(state["data_schedule"]))))
     if py_contains(state, "model_shape"):
-        py_setitem(result, "model_shape", py_call(_b().dict, state["model_shape"]))
-    var registry = _registry(shape)
+        py_setitem(result, "model_shape", py_call(_b(mods).dict, state["model_shape"]))
+    var registry = _registry(mods, shape)
     var names = Python.list()
     var shapes = Python.list()
     var offsets = Python.list(0)
     for i in range(len(registry)):  # driver-loop: detached parameter metadata
         var item = registry[i]
         _ = py_call(names.append, item["name"])
-        _ = py_call(shapes.append, py_call(_b().list, item["shape"]))
+        _ = py_call(shapes.append, py_call(_b(mods).list, item["shape"]))
         _ = py_call(offsets.append, Int(py=item["offset"]) + Int(py=item["size"]))
     py_setitem(result, "parameter_names", names)
     py_setitem(result, "parameter_shapes", shapes)
@@ -1208,28 +1209,28 @@ def _snapshot_metadata(state: PythonObject, shape: _Shape) raises -> PythonObjec
     return result
 
 
-def _export_snapshot(fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
+def _export_snapshot(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
     if fields["_lost_at"] is not None:
         var lost = fields["_lost_at"]
-        raise Error("RuntimeError: Byte-LM session lost at step " + _text(lost[0]) + "; last exported state is step " + _text(lost[1]))
+        raise Error("RuntimeError: Byte-LM session lost at step " + _text(mods, lost[0]) + "; last exported state is step " + _text(mods, lost[1]))
     var exported: PythonObject
     if Bool(py=fields["_session_open"]):
-        exported = _export_release(fields, shape, context, False)
+        exported = _export_release(mods, fields, shape, context, False)
     else:
-        exported = py_call(_b().dict, fields["_state"])
+        exported = py_call(_b(mods).dict, fields["_state"])
         var n = shape.n_total()
         for key in [String("parameters"), String("m"), String("v")]:  # small-loop(3 state buffers)
             py_setitem(exported, key, training_f32_owned(exported[key], [n], key, context))
         py_setitem(exported, "flags", _copy_i32(exported["flags"], shape.n_tensors(), context))
-    return _snapshot_metadata(exported, shape)
+    return _snapshot_metadata(mods, exported, shape)
 
 
-def _runtime_metadata(fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
-    var binding = _binding(fields, shape, context)
+def _runtime_metadata(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
+    var binding = _binding(mods, fields, shape, context)
     var runtime = fields["_runtime"]
     if runtime is None:
-        runtime = py_call(_b().dict, fields["_admitted_binding_metadata"])
-        var inventory = _b().dict()
+        runtime = py_call(_b(mods).dict, fields["_admitted_binding_metadata"])
+        var inventory = _b(mods).dict()
         var root = String(py=context["byte_lm_source_root"])
         var names = context["byte_lm_source_names"]
         for i in range(len(names)):  # small-loop(6 direct source paths)
@@ -1243,21 +1244,21 @@ def _runtime_metadata(fields: PythonObject, shape: _Shape, context: PythonObject
         var attention = PythonObject(None)
         if _has(binding, "byte_lm_attention_arm"):
             var arm = py_call(_entry(binding, "byte_lm_attention_arm"))
-            attention = _b().dict()
-            py_setitem(attention, "arm", _text(arm[0]))
-            py_setitem(attention, "default", _text(arm[1]))
+            attention = _b(mods).dict()
+            py_setitem(attention, "arm", _text(mods, arm[0]))
+            py_setitem(attention, "default", _text(mods, arm[1]))
             py_setitem(attention, "trial_build", Int(py=arm[2]) != 0)
-            py_setitem(attention, "resolved_hd64", _text(arm[3]))
+            py_setitem(attention, "resolved_hd64", _text(mods, arm[3]))
             if _has(binding, "byte_lm_attention_memory_profile"):
                 var memory = py_call(_entry(binding, "byte_lm_attention_memory_profile"), shape.native_shape())
-                py_setitem(attention, "memory_profile", _text(memory[0]))
+                py_setitem(attention, "memory_profile", _text(mods, memory[0]))
                 py_setitem(attention, "retained_exp_bytes_per_layer", Int(py=memory[1]))
         py_setitem(runtime, "native_attention_arm", attention)
         var glue = PythonObject(None)
         if _has(binding, "byte_lm_step_glue_arm"):
             var arm = py_call(_entry(binding, "byte_lm_step_glue_arm"))
-            glue = _b().dict()
-            py_setitem(glue, "arm", _text(arm[0]))
+            glue = _b(mods).dict()
+            py_setitem(glue, "arm", _text(mods, arm[0]))
             py_setitem(glue, "trial_build", Int(py=arm[1]) != 0)
         py_setitem(runtime, "native_step_glue_arm", glue)
         py_setitem(runtime, "source_sha256", inventory)
@@ -1271,14 +1272,14 @@ def _runtime_metadata(fields: PythonObject, shape: _Shape, context: PythonObject
     py_setitem(result, "device_state_lifetime", "resident" if _is_resident(fields, binding, context) else "call")
     py_setitem(result, "step_result", fields["_step_result"])
     py_setitem(result, "last_export_step", fields["_last_export_step"])
-    py_setitem(result, "config", py_call(_b().dict, state["config"]))
+    py_setitem(result, "config", py_call(_b(mods).dict, state["config"]))
     py_setitem(result, "data_schedule", native_json_parse(PythonObject(_transport_json(state["data_schedule"]))))
     py_setitem(result, "completed_steps", state["completed_steps"])
     py_setitem(result, "next_batch_index", state["completed_steps"])
     return result
 
 
-def _attention_stage_report(fields: PythonObject, shape: _Shape) raises -> PythonObject:
+def _attention_stage_report(mut mods: NativeModules, fields: PythonObject, shape: _Shape) raises -> PythonObject:
     if not Bool(py=fields["_session_open"]) or fields["_native_session"] is None:
         return PythonObject(None)
     var binding = fields["_session_binding"]
@@ -1302,7 +1303,7 @@ def _attention_stage_report(fields: PythonObject, shape: _Shape) raises -> Pytho
     var fwd = info[4]
     var aexp = info[5]
     var bwd = info[6]
-    var report = _b().dict()
+    var report = _b(mods).dict()
     py_setitem(report, "forward_eager_cells", fwd)
     py_setitem(report, "forward_aexp_cells", aexp)
     py_setitem(report, "backward_eager_cells", bwd)
@@ -1332,7 +1333,7 @@ def _attention_stage_report(fields: PythonObject, shape: _Shape) raises -> Pytho
                 _ = py_call(values.append, code)
                 if code >= -1 and code <= 3:
                     counts[code + 1] += 1
-            var mapped = _b().dict()
+            var mapped = _b(mods).dict()
             for i in range(5):  # driver-loop: over fixed status names
                 py_setitem(mapped, names[i], counts[i])
             var key = String("forward_status" if offset == 0 else "backward_status")
@@ -1362,18 +1363,18 @@ def _attention_stage_report(fields: PythonObject, shape: _Shape) raises -> Pytho
     return report
 
 
-def byte_lm_consume(trainer: PythonObject, operation: String, args: PythonObject,
+def byte_lm_consume(mut mods: NativeModules, trainer: PythonObject, operation: String, args: PythonObject,
                     context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     if operation == "parameter_registry":
-        var state = _b().dict()
+        var state = _b(mods).dict()
         if args[0] is not None:
             if py_type(args[0]) is not context["byte_lm_config_class"]:
                 raise Error("TypeError: shape must be a ByteLanguageModelConfig")
             var config = py_fields(args[0])
             classical_admit_value(config, context)
             py_setitem(state, "model_shape", config)
-        return _registry(_shape_of(state))
+        return _registry(mods, _shape_of(state))
     var fields = py_fields(trainer)
     var lock = fields["_lock"]
     _ = py_call(lock.acquire)
@@ -1384,20 +1385,20 @@ def byte_lm_consume(trainer: PythonObject, operation: String, args: PythonObject
         classical_admit_value(args, context)
         var shape = _shape_of(state)
         if operation == "close":
-            _suspend(fields, shape, context)
+            _suspend(mods, fields, shape, context)
         elif operation == "data_schedule":
             result = native_json_parse(PythonObject(_transport_json(state["data_schedule"])))
         elif operation == "step":
             result = state["completed_steps"]
         elif operation == "attention_stage_report":
-            result = _attention_stage_report(fields, shape)
+            result = _attention_stage_report(mods, fields, shape)
         elif operation == "run_metadata":
-            result = _runtime_metadata(fields, shape, context)
+            result = _runtime_metadata(mods, fields, shape, context)
         elif operation == "export_state":
-            result = _export_snapshot(fields, shape, context)
+            result = _export_snapshot(mods, fields, shape, context)
         elif operation == "parameters":
             if Bool(py=fields["_session_open"]):
-                result = _export_snapshot(fields, shape, context)["parameters"]
+                result = _export_snapshot(mods, fields, shape, context)["parameters"]
             else:
                 if fields["_lost_at"] is not None:
                     raise Error("RuntimeError: Byte-LM session lost; restore state before exporting parameters")
@@ -1411,9 +1412,9 @@ def byte_lm_consume(trainer: PythonObject, operation: String, args: PythonObject
             if Int(py=fields["_grad_step"]) != completed:
                 raise Error("RuntimeError: Byte-LM has no gradient to export: no step has completed since open, restore, import or rollback")
             var named = Bool(py=args[0])
-            var grads = _gradient_outputs(shape, named, context)
+            var grads = _gradient_outputs(mods, shape, named, context)
             var addresses = Python.list(classical_address(grads[0]))
-            var keys = py_call(_b().list, grads[1])
+            var keys = py_call(_b(mods).list, grads[1])
             for i in range(len(keys)):  # driver-loop: named parameter gradient descriptors
                 _ = py_call(addresses.append, classical_address(grads[1][keys[i]]))
             var binding = fields["_session_binding"]
@@ -1421,7 +1422,7 @@ def byte_lm_consume(trainer: PythonObject, operation: String, args: PythonObject
             var returned = _native_execute(fields, binding, provider, 10, addresses, shape, state, False) if provider is not None else Int(py=py_call(_entry(binding, "byte_lm_trainer_export_gradients"), fields["_native_session"], addresses, shape.native_shape(), completed))
             if returned != completed:
                 raise Error("RuntimeError: Byte-LM gradient export returned a different step")
-            result = _b().dict()
+            result = _b(mods).dict()
             py_setitem(result, "flat_gradients", grads[0])
             if named:
                 py_setitem(result, "gradients", grads[1])
@@ -1435,6 +1436,7 @@ def byte_lm_consume(trainer: PythonObject, operation: String, args: PythonObject
 
 
 def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var mods = NativeModules()
     var io_error = ByteCheckpointIOError()
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -1442,17 +1444,17 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
         if operation.startswith("config_"):
             return byte_lm_config_operation(call[0], operation, call[2], call[3]).steal_data()
         if operation == "from_checkpoint_binary" or operation == "from_checkpoint" or operation == "from_checkpoint_bytes" or operation == "export_checkpoint_binary" or operation == "export_checkpoint":
-            return byte_lm_checkpoint(call[0], operation, call[2], call[3], io_error).steal_data()
+            return byte_lm_checkpoint(mods, call[0], operation, call[2], call[3], io_error).steal_data()
         if operation == "load_state":
-            return byte_lm_load_state(call[0], call[2], call[3]).steal_data()
+            return byte_lm_load_state(mods, call[0], call[2], call[3]).steal_data()
         if operation == "construct":
-            return byte_lm_construct(call[0], call[2], call[3]).steal_data()
+            return byte_lm_construct(mods, call[0], call[2], call[3]).steal_data()
         if operation == "train_step" or operation == "evaluate":
-            return byte_lm_train_step(call[0], call[2], call[3], operation == "train_step").steal_data()
+            return byte_lm_train_step(mods, call[0], call[2], call[3], operation == "train_step").steal_data()
         if operation == "logits" or operation == "next_bytes":
-            return byte_lm_logits(call[0], call[2], call[3], operation == "next_bytes").steal_data()
+            return byte_lm_logits(mods, call[0], call[2], call[3], operation == "next_bytes").steal_data()
         if operation == "attention_stage_report" or operation == "parameter_registry" or operation == "run_metadata" or operation == "export_state" or operation == "export_gradients" or operation == "close" or operation == "parameters" or operation == "step" or operation == "data_schedule":
-            return byte_lm_consume(call[0], operation, call[2], call[3]).steal_data()
+            return byte_lm_consume(mods, call[0], operation, call[2], call[3]).steal_data()
         if operation == "native_provider_info":
             var fields = py_fields(call[0])
             return neural_descriptor_info(fields["_native_provider"]).steal_data()

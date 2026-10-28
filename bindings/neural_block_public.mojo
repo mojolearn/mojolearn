@@ -12,7 +12,7 @@ from bindings.neural_block_admission import (
     neural_native_scalar, neural_model_weights, neural_block_snapshot, neural_block_weight_names, neural_metadata_snapshot,
 )
 from bindings.mode_metadata_native import _fields
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from std.memory import memcpy
 from std.os import getenv
@@ -30,31 +30,31 @@ from providers.python.neural_descriptor_pyapi import (
 
 
 
-def _neural_default_mode(context: PythonObject) raises -> PythonObject:
-    var mode = _native_entry_fields(context["backend"])["_DEFAULT_MODE"]
-    if py_type(mode) is not native_loaded_module("builtins").str:
+def _neural_default_mode(mut mods: NativeModules, context: PythonObject) raises -> PythonObject:
+    var mode = _native_entry_fields(mods, context["backend"])["_DEFAULT_MODE"]
+    if py_type(mode) is not mods.module("builtins").str:
         raise Error("TypeError: neural default numeric mode requires an exact native string")
     return mode
 
 
-def neural_block_owner(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
-    var fields = neural_block_snapshot(block, context)
+def neural_block_owner(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = mods.module("builtins")
+    var fields = neural_block_snapshot(mods, block, context)
     var live = fields["_neural_live_fields"]
     var kind = String(fields["_native_kind"])
     var route = fields["_native_route"]
     var mode = py_get(fields, "numeric_mode")
-    var bindings = _model_bindings(route, kind, context, mode)
-    if kind == "transformer" and _native_has_entry(bindings[kind], "transformer_arithmetic_profile"):
-        var next_profile = _native_function(bindings[kind], "transformer_arithmetic_profile")()
-        var want_mode = _neural_default_mode(context) if mode is None else mode
+    var bindings = _model_bindings(mods, route, kind, context, mode)
+    if kind == "transformer" and _native_has_entry(mods, bindings[kind], "transformer_arithmetic_profile"):
+        var next_profile = _native_function(mods, bindings[kind], "transformer_arithmetic_profile")()
+        var want_mode = _neural_default_mode(mods, context) if mode is None else mode
         var saved = py_get(fields, "_arithmetic_profile")
         if saved is not None and Bool(py=py_get(fields, "_arithmetic_profile_mode") == want_mode) and not Bool(py=saved == next_profile):
             raise Error("neural block: saved arithmetic profile differs from binding")
         py_setitem(fields, "_arithmetic_profile", next_profile)
         py_setitem(fields, "_arithmetic_profile_mode", want_mode)
-        py_setitem(fields, "_arithmetic_profile_changed", _native_function(bindings[kind], "transformer_arithmetic_profile_changed")())
-    var owner = py_call(native_loaded_module("types").SimpleNamespace)
+        py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, bindings[kind], "transformer_arithmetic_profile_changed")())
+    var owner = py_call(mods.module("types").SimpleNamespace)
     py_setattr(owner, "_native_block_fields", Python.list(fields))
     py_setattr(owner, "_native_block_live", live)
     py_setattr(owner, "_native_context", context)
@@ -65,20 +65,20 @@ def neural_block_owner(block: PythonObject, context: PythonObject) raises -> Pyt
     py_setattr(owner, "_head_int15", py_get(fields, "_int15"))
     py_setattr(owner, "_blocks", bi.list())
     _ = py_call(owner._blocks.append, block)
-    _ = causal_lm_admit_binding(owner, bindings[kind], bindings["primitives"], bindings["linalg"] if owner._head_int15 is not None else PythonObject(None))
+    _ = causal_lm_admit_binding(mods, owner, bindings[kind], bindings["primitives"], bindings["linalg"] if owner._head_int15 is not None else PythonObject(None))
     return owner
 
 
-def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
+def neural_block_init_binding(mut mods: NativeModules, block: PythonObject, weights: PythonObject, kind_value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = mods.module("builtins")
     _ = generation_initialize_binding(context["generation_classes"])
-    var admitted_weights = neural_model_weights(weights, context)
-    neural_plain_value(options, 0, context)
-    var captured_options = neural_metadata_snapshot(options)
+    var admitted_weights = neural_model_weights(mods, weights, context)
+    neural_plain_value(mods, options, 0, context)
+    var captured_options = neural_metadata_snapshot(mods, options)
     if py_type(kind_value) is not bi.str:
         raise Error("TypeError: neural block kind requires an exact string")
-    var fields = neural_block_fields(block, context, False)
-    _ = neural_block_weight_names(block)
+    var fields = neural_block_fields(mods, block, context, False)
+    _ = neural_block_weight_names(mods, block)
     var kind = String(kind_value)
     ref cpy = Python().cpython()
     var cpu = cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(block)._obj_ptr, context["block_classes"]["cpu"][kind]._obj_ptr) != 0
@@ -87,7 +87,7 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
     # CPU-only installation, just as the package binding selector does.
     if context["selected_vendor"] is None or String(context["selected_vendor"]) == "cpu":
         route = PythonObject("cpu")
-    var plan = py_call(native_loaded_module("types").SimpleNamespace)
+    var plan = py_call(mods.module("types").SimpleNamespace)
     py_setattr(plan, "kind", kind_value)
     var norm_name = "input_layernorm.weight" if kind == "transformer" else ("norm.weight" if kind == "mamba1" else "block_norm.weight")
     var norm = _model_f32(admitted_weights[norm_name], norm_name, context)
@@ -100,22 +100,22 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
     py_setattr(plan, "block_kwargs", bi.dict())
     var profile = PythonObject("fp32_v1")
     if kind == "transformer":
-        profile = _model_profile(captured_options[2], "transformer_block", context)
+        profile = _model_profile(mods, captured_options[2], "transformer_block", context)
         py_setattr(plan, "n_heads", captured_options[3])
         var names = context["block_option_names"]
         for i in range(len(names)):  # driver-loop: over transformer option keyword metadata
             py_setitem(plan.block_options, names[i], captured_options[i + 4])
     elif kind == "mamba2":
         py_setitem(plan.block_kwargs, "dt_limit", captured_options[2])
-    var bindings = _model_bindings(route, kind, context, mode)
+    var bindings = _model_bindings(mods, route, kind, context, mode)
     # Preflight the selected storage class before shared construction can read
     # its dictionary or weight-name registry (CPU fallback may select a peer
     # class rather than the caller's class).
     var storage_probe = py_call(bi.object.__new__, context["block_classes"][route][kind])
-    _ = neural_block_fields(storage_probe, context, False)
-    _ = neural_block_weight_names(storage_probe)
-    var created = _model_block(admitted_weights, plan, profile, route, bindings, context)
-    _ = py_call(fields.update, neural_block_fields(created, context))
+    _ = neural_block_fields(mods, storage_probe, context, False)
+    _ = neural_block_weight_names(mods, storage_probe)
+    var created = _model_block(mods, admitted_weights, plan, profile, route, bindings, context)
+    _ = py_call(fields.update, neural_block_fields(mods, created, context))
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "_native_kind", kind_value)
     py_setitem(fields, "_native_route", route)
@@ -127,13 +127,13 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
     return PythonObject(None)
 
 
-def neural_block_set_params_binding(block: PythonObject, updates: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
+def neural_block_set_params_binding(mut mods: NativeModules, block: PythonObject, updates: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = mods.module("builtins")
     if py_type(updates) is not bi.dict:
         raise Error("TypeError: block parameters require an ordinary dictionary")
     if len(updates) == 0:
         return block
-    var fields = neural_block_fields(block, context)
+    var fields = neural_block_fields(mods, block, context)
     var kind = String(fields["_native_kind"])
     var names = Python.list("weights", "numeric_mode")
     if kind == "mamba2":
@@ -160,33 +160,39 @@ def neural_block_set_params_binding(block: PythonObject, updates: PythonObject, 
         for i in range(len(option_names)):  # driver-loop: native initializer's positional option schema
             _ = py_call(options.append, values[option_names[i]])
     var replacement = py_call(bi.object.__new__, py_type(block))
-    _ = neural_block_init_binding(replacement, values["weights"], PythonObject(kind), options, context)
+    _ = neural_block_init_binding(mods, replacement, values["weights"], PythonObject(kind), options, context)
     # Preserve the established reset semantics and dictionary identity. A
     # rejected replacement leaves the live block's fields/session untouched.
-    var fresh = neural_block_fields(replacement, context)
+    var fresh = neural_block_fields(mods, replacement, context)
     _ = py_call(fields.clear)
     _ = py_call(fields.update, fresh)
     return block
 
 
-def neural_block_allocate_binding(block: PythonObject, batch: PythonObject, capacity: PythonObject, context: PythonObject) raises -> PythonObject:
+def neural_block_allocate_binding(mut mods: NativeModules, block: PythonObject, batch: PythonObject, capacity: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
-    var bi = native_loaded_module("builtins")
-    if not neural_native_scalar(batch, context, True) or (capacity is not None and not neural_native_scalar(capacity, context, True)):
+    var bi = mods.module("builtins")
+    if not neural_native_scalar(mods, batch, context, True) or (capacity is not None and not neural_native_scalar(mods, capacity, context, True)):
         raise Error("TypeError: neural block: batch_size and max_tokens require native integers")
     var b = Int(py=batch)
     var cap = 1 if capacity is None else Int(py=capacity)
     if b < 1 or cap < 1:
         raise Error("neural block: batch_size and max_tokens must be positive")
-    var owner = neural_block_owner(block, context)
-    var state = causal_layer_allocate(owner, 0, b, cap)
+    var owner = neural_block_owner(mods, block, context)
+    var state = causal_layer_allocate(mods, owner, 0, b, cap)
     _neural_publish_block(owner)
     return state
 
 
-def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: PythonObject) raises -> PythonObject:
+def neural_block_allocate_binding(block: PythonObject, batch: PythonObject, capacity: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_block_allocate_binding(mods, block, batch, capacity, context)
+
+
+def _neural_input(mut mods: NativeModules, value: PythonObject, d_model: Int, step: Bool, context: PythonObject) raises -> PythonObject:
     var x = neural_block_f32(value, "x", context)
-    var bi = native_loaded_module("builtins")
+    var bi = mods.module("builtins")
     if step and len(x.shape) == 2:
         var shaped = py_call(bi.object.__new__, context["array_class"])
         # A metadata view retains its native buffer owner; no Array callback.
@@ -213,8 +219,14 @@ def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: Python
     return x
 
 
-def _neural_state_capture(owner: PythonObject, state: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
+def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return _neural_input(mods, value, d_model, step, context)
+
+
+def _neural_state_capture(mut mods: NativeModules, owner: PythonObject, state: PythonObject) raises -> PythonObject:
+    var bi = mods.module("builtins")
     var context = owner._native_context
     var kind = String(owner.kind)
     var cls = context["generation_classes"][2][kind]
@@ -223,9 +235,9 @@ def _neural_state_capture(owner: PythonObject, state: PythonObject) raises -> Py
     var scalars = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "cached_tokens",
         "arithmetic_profile", "_numeric_profile", "profile_id", "absolute_position", "_nn34_usable", "buffered_tokens")
     var buffers = Python.tuple("k_cache", "v_cache", "conv_window", "h", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw")
-    var fields = neural_record_fields(state, scalars)
-    _ = neural_record_fields(state, buffers)
-    _ = neural_record_fields(state, Python.tuple("_resident_session"))
+    var fields = neural_record_fields(mods, state, scalars)
+    _ = neural_record_fields(mods, state, buffers)
+    _ = neural_record_fields(mods, state, Python.tuple("_resident_session"))
     var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
     from bindings.mode_metadata_native import _class_fields
     for i in range(len(ancestry)):  # small-loop(passive state access protocol)
@@ -239,7 +251,7 @@ def _neural_state_capture(owner: PythonObject, state: PythonObject) raises -> Py
     var copied = py_call(bi.dict, fields)
     for i in range(len(scalars)):  # small-loop(capture native state words before conversion)
         if py_contains(fields, scalars[i]):
-            neural_plain_value(fields[scalars[i]], 0, context)
+            neural_plain_value(mods, fields[scalars[i]], 0, context)
     for i in range(len(buffers)):  # small-loop(retain state storage with stable metadata)
         var value = py_get(fields, buffers[i])
         if value is not None:
@@ -275,8 +287,8 @@ def _neural_publish_block(owner: PythonObject) raises:
     _neural_publish_fields(owner._native_block_fields[0])
 
 
-def _neural_state(owner: PythonObject, state: PythonObject, b: Int, l: Int) raises:
-    var bi = native_loaded_module("builtins")
+def _neural_state(mut mods: NativeModules, owner: PythonObject, state: PythonObject, b: Int, l: Int) raises:
+    var bi = mods.module("builtins")
     var fields = owner._native_block_fields[0]
     if String(owner.kind) == "transformer":
         if Int(py=state.batch_size) != b or Int(py=state.n_kv_heads) != Int(py=fields["n_kv_heads"]) or Int(py=state.head_dim) != Int(py=fields["head_dim"]) or Int(py=state.window) != Int(py=fields["window"]):
@@ -287,8 +299,8 @@ def _neural_state(owner: PythonObject, state: PythonObject, b: Int, l: Int) rais
 
 
 
-def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
+def _neural_plain(mut mods: NativeModules, owner: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool) raises -> PythonObject:
+    var bi = mods.module("builtins")
     var fields = owner._native_block_fields[0]
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
@@ -307,7 +319,7 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
         lock_lease.acquire()
     try:
         if transformer and fields["_native_session"] is not None and (not reuse or fields["_session_binding"] is not e["block_binding"]):
-            causal_transformer_admin(fields["_session_binding"], fields["_native_session"], 13)
+            causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)
             py_setitem(fields, "_native_session", PythonObject(None))
             py_setitem(fields, "_session_binding", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
@@ -355,9 +367,9 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
                 return y
         var state = supplied_state
         if state is None:
-            state = causal_layer_allocate(owner, 0, b, l)
-        _neural_state(owner, state, b, l)
-        var result = causal_layer_run(owner, 0, x, state, step)
+            state = causal_layer_allocate(mods, owner, 0, b, l)
+        _neural_state(mods, owner, state, b, l)
+        var result = causal_layer_run(mods, owner, 0, x, state, step)
         if locked:
             lock_lease.release()
         return result
@@ -369,8 +381,8 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
         raise error
 
 
-def _neural_lengths(value: PythonObject, b: Int, l: Int, context: PythonObject) raises -> List[Int]:
-    var bi = native_loaded_module("builtins")
+def _neural_lengths(mut mods: NativeModules, value: PythonObject, b: Int, l: Int, context: PythonObject) raises -> List[Int]:
+    var bi = mods.module("builtins")
     var values = value
     if py_type(value) is context["array_class"]:
         var captured = neural_array_snapshot(value, context)
@@ -411,23 +423,29 @@ def _neural_lengths(value: PythonObject, b: Int, l: Int, context: PythonObject) 
     return result^
 
 
-def neural_block_forward_binding(block: PythonObject, input: PythonObject, state_value: PythonObject, step_value: PythonObject, lengths: PythonObject, context: PythonObject) raises -> PythonObject:
+def _neural_lengths(value: PythonObject, b: Int, l: Int, context: PythonObject) raises -> List[Int]:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return _neural_lengths(mods, value, b, l, context)
+
+
+def neural_block_forward_binding(mut mods: NativeModules, block: PythonObject, input: PythonObject, state_value: PythonObject, step_value: PythonObject, lengths: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
-    var bi = native_loaded_module("builtins")
-    var owner = neural_block_owner(block, context)
+    var bi = mods.module("builtins")
+    var owner = neural_block_owner(mods, block, context)
     var d = Int(py=owner.d_model)
     if py_type(step_value) is not bi.bool:
         raise Error("TypeError: neural step flag requires a native Boolean")
     var step = Bool(py=step_value)
     if step and state_value is None:
         raise Error("neural block: state is required for step (a decode step continues a sequence; allocate_state(B) makes the fresh one)")
-    var x = _neural_input(input, d, step, context)
+    var x = _neural_input(mods, input, d, step, context)
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     if lengths is not None:
         if state_value is not None:
             raise Error("neural block: lengths= (a ragged, right-padded batch) cannot carry a state; run the ragged prefill with state=None, or continue each sequence as its own batch")
-        var sizes = _neural_lengths(lengths, b, l, context)
+        var sizes = _neural_lengths(mods, lengths, b, l, context)
         var padded = generation_array([b, l, d])
         neural_copy_row_prefixes(Int(py=padded._addr), Int(py=x._addr), sizes, b, l, d)
         # `x` may be the only reference to a fresh Array converted from a NumPy
@@ -435,16 +453,16 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
         # `_addr` read above, so without this the copy read freed memory and
         # row 0's first floats came back as allocator bookkeeping.
         _ = x^
-        var output = _neural_plain(owner, padded, PythonObject(None), False)
+        var output = _neural_plain(mods, owner, padded, PythonObject(None), False)
         var result = generation_array([b, l, d])
         neural_copy_row_prefixes(Int(py=result._addr), Int(py=output._addr), sizes, b, l, d)
         _ = output^  # the copy reads `output` by address
         _ = padded^
         _neural_publish_block(owner)
         return result
-    var captured = PythonObject(None) if state_value is None else _neural_state_capture(owner, state_value)
+    var captured = PythonObject(None) if state_value is None else _neural_state_capture(mods, owner, state_value)
     try:
-        var result = _neural_plain(owner, x, captured, step)
+        var result = _neural_plain(mods, owner, x, captured, step)
         _neural_publish_state(state_value, captured)
         _neural_publish_block(owner)
         return result
@@ -454,12 +472,18 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
         raise error^
 
 
-def neural_training_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
+def neural_block_forward_binding(block: PythonObject, input: PythonObject, state_value: PythonObject, step_value: PythonObject, lengths: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_block_forward_binding(mods, block, input, state_value, step_value, lengths, context)
+
+
+def neural_training_entries(mut mods: NativeModules, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = mods.module("builtins")
     var mode = py_get(fields, "numeric_mode")
-    neural_plain_value(mode, 0, context)
+    neural_plain_value(mods, mode, 0, context)
     if mode is None:
-        mode = _neural_default_mode(context)
+        mode = _neural_default_mode(mods, context)
     else:
         mode = mode.strip().lower()
     if String(mode) != "identical" and String(mode) != "fast":
@@ -472,8 +496,8 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
     var entries = selected[family]
     if py_type(entries) is bi.str:
         raise Error("RuntimeError: " + String(entries))
-    var vendor = String(_native_function(entries, family + "_vendor")())
-    var code = Int(py=_native_function(entries, family + "_numeric_mode")())
+    var vendor = String(_native_function(mods, entries, family + "_vendor")())
+    var code = Int(py=_native_function(mods, entries, family + "_numeric_mode")())
     if code != (1 if String(mode) == "identical" else 0):
         raise Error("RuntimeError: native training binding numeric mode differs from the block")
     if String(fields["_native_route"]) == "cpu":
@@ -481,32 +505,38 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
             raise Error("RuntimeError: CPU backward requires native CPU kernels")
     elif vendor != "metal" and vendor != "cuda" and vendor != "hip":
         raise Error("RuntimeError: GPU backward requires native GPU kernels")
-    if family == "transformer" and _native_has_entry(entries, "transformer_arithmetic_profile"):
-        var profile = _native_function(entries, "transformer_arithmetic_profile")()
+    if family == "transformer" and _native_has_entry(mods, entries, "transformer_arithmetic_profile"):
+        var profile = _native_function(mods, entries, "transformer_arithmetic_profile")()
         var saved = py_get(fields, "_arithmetic_profile")
         if saved is not None and Bool(py=py_get(fields, "_arithmetic_profile_mode") == mode) and not Bool(py=saved == profile):
             raise Error("RuntimeError: saved transformer arithmetic profile differs from training binding")
         py_setitem(fields, "_arithmetic_profile", profile)
         py_setitem(fields, "_arithmetic_profile_mode", mode)
-        py_setitem(fields, "_arithmetic_profile_changed", _native_function(entries, "transformer_arithmetic_profile_changed")())
+        py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, entries, "transformer_arithmetic_profile_changed")())
     if family == "transformer":
         var native = PythonObject(None)
         if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             native = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
-                _native_function(entries, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
+                _native_function(mods, entries, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
         py_setitem(fields, "_native_block_provider_cache", native)
     else:
         var native = PythonObject(None)
         if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             native = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
-                _native_function(entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
+                _native_function(mods, entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
         py_setitem(fields, "_native_mamba_block_provider_cache", native)
         var state_provider = PythonObject(None)
         if native is not None:
             state_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
-                _native_function(entries, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME), 6)
+                _native_function(mods, entries, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME), 6)
         py_setitem(fields, "_native_mamba_state", state_provider)
     return entries
+
+
+def neural_training_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_training_entries(mods, fields, context)
 
 
 def _neural_int_words(values: PythonObject) raises -> List[Int]:
@@ -517,35 +547,42 @@ def _neural_int_words(values: PythonObject) raises -> List[Int]:
     return result^
 
 
-def neural_mamba_session_call(native: PythonObject, fields: PythonObject, entries: PythonObject,
+def neural_mamba_session_call(mut mods: NativeModules, native: PythonObject, fields: PythonObject, entries: PythonObject,
                               operation: Int, addresses: List[Int], params: List[Int]) raises -> Int:
     # Operation admission only. The common provider pins this exact typed
     # session and compiled image and reserves/releases under the GIL.
     var session = fields["_prefill_session"]
     var handle = neural_descriptor_handle(native,
-        _native_function(entries, "mamba_prefill_native_handle_v1"), session)
+        _native_function(mods, entries, "mamba_prefill_native_handle_v1"), session)
     return neural_descriptor_reserved_execute(native, session, handle, 0, 1, operation,
         addresses, params, [])
 
 
-def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: PythonObject) raises:
-    var bi = native_loaded_module("builtins")
+def neural_mamba_session_call(native: PythonObject, fields: PythonObject, entries: PythonObject,
+                              operation: Int, addresses: List[Int], params: List[Int]) raises -> Int:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_mamba_session_call(mods, native, fields, entries, operation, addresses, params)
+
+
+def neural_mamba3_restore(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, weights: PythonObject) raises:
+    var bi = mods.module("builtins")
     if Bool(py=py_get(fields, "_owned_restore_pending", PythonObject(False))):
-        if not _native_has_entry(entries, "mamba3_owned_weights_enabled") or not Bool(py=_native_function(entries, "mamba3_owned_weights_enabled")()):
+        if not _native_has_entry(mods, entries, "mamba3_owned_weights_enabled") or not Bool(py=_native_function(mods, entries, "mamba3_owned_weights_enabled")()):
             raise Error("RuntimeError: Mamba3 owned weights require the compiled owned-weight entry")
         if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
-            py_setitem(fields, "_prefill_session", _native_function(entries, "mamba3_prefill_session_create")())
+            py_setitem(fields, "_prefill_session", _native_function(mods, entries, "mamba3_prefill_session_create")())
             py_setitem(fields, "_prefill_binding", entries.canonical)
         var addresses = bi.list()
         for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
             _ = py_call(addresses.append, weights[i]._addr)
         var native = py_get(fields, "_native_mamba_block_provider_cache")
         if native is not None:
-            var generation = neural_mamba_session_call(native, fields, entries, 15,
+            var generation = neural_mamba_session_call(mods, native, fields, entries, 15,
                 _neural_int_words(addresses), [Int(py=fields["d_model"])])
             py_setitem(fields, "_owned_generation", PythonObject(generation))
         else:
-            py_setitem(fields, "_owned_generation", py_call(_native_function(entries, "mamba3_prefill_session_install_weights"), fields["_prefill_session"], addresses, fields["d_model"]))
+            py_setitem(fields, "_owned_generation", py_call(_native_function(mods, entries, "mamba3_prefill_session_install_weights"), fields["_prefill_session"], addresses, fields["d_model"]))
         py_setitem(fields, "_owned_native_provider", native)
         py_setitem(fields, "_owned_restore_pending", False)
     if py_get(fields, "_owned_generation") is not None:
@@ -553,11 +590,17 @@ def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: 
             raise Error("RuntimeError: Mamba3 owned snapshot requires its installed binding/setup")
 
 
-def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
+def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: PythonObject) raises:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    neural_mamba3_restore(mods, fields, entries, weights)
+
+
+def neural_block_backward_binding(mut mods: NativeModules, block: PythonObject, input: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
-    var fields = neural_block_snapshot(block, context)
+    var fields = neural_block_snapshot(mods, block, context)
     try:
-        var result = _neural_backward_prepared(block, input, grad_output, fields, context)
+        var result = _neural_backward_prepared(mods, block, input, grad_output, fields, context)
         _neural_publish_fields(fields)
         return result
     except error:
@@ -565,8 +608,14 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
         raise error^
 
 
-def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_output: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
+def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_block_backward_binding(mods, block, input, grad_output, context)
+
+
+def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, input: PythonObject, grad_output: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = mods.module("builtins")
     var kind = String(fields["_native_kind"])
     var transformer = kind == "transformer"
     if transformer and (fields["_int15"] is not None or Bool(py=fields["_extended"])):
@@ -576,12 +625,12 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
                 named += ", " + key + "=" + String(py_call(bi.repr, fields[key]))
         raise Error("NotImplementedError: TransformerBlock.backward requires default float32 block options (the default block options only); numeric_profile="
                     + String(fields["numeric_profile"]) + named)
-    var entries = neural_training_entries(fields, context)
+    var entries = neural_training_entries(mods, fields, context)
     var name = ("transformer" if transformer else kind) + "_backward"
-    if not _native_has_entry(entries, name):
+    if not _native_has_entry(mods, entries, name):
         raise Error("RuntimeError: loaded native training binding lacks " + name)
     var d = Int(py=fields["d_model"])
-    var x = _neural_input(input, d, False, context)
+    var x = _neural_input(mods, input, d, False, context)
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var dy = neural_block_f32(grad_output, "grad_output", context)
@@ -590,7 +639,7 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
     if not transformer:
         var mode = py_get(fields, "numeric_mode")
         if mode is None:
-            mode = _neural_default_mode(context)
+            mode = _neural_default_mode(mods, context)
         else:
             mode = mode.strip().lower()
         var grad_pointer = f32_ptr(Int(py=dy._addr))
@@ -602,7 +651,7 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
             raise Error("neural backward: grad_output must be finite")
         # Preserve the existing current-weight shape validation without
         # calling a Python block constructor from the operation.
-        var plan = py_call(native_loaded_module("types").SimpleNamespace)
+        var plan = py_call(mods.module("types").SimpleNamespace)
         py_setattr(plan, "kind", PythonObject(kind))
         py_setattr(plan, "d_model", PythonObject(d))
         py_setattr(plan, "block_kwargs", bi.dict())
@@ -612,8 +661,8 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
         var names = fields["_neural_weight_names"]
         for i in range(len(names)):  # driver-loop: over the fixed block weight registry
             py_setitem(named, names[i], weights[i])
-        var checked = _model_block(named, plan, PythonObject("fp32_v1"), fields["_native_route"], _model_bindings(fields["_native_route"], kind, context, mode), context)
-        weights = neural_block_fields(checked, context)["_w"]
+        var checked = _model_block(mods, named, plan, PythonObject("fp32_v1"), fields["_native_route"], _model_bindings(mods, fields["_native_route"], kind, context, mode), context)
+        weights = neural_block_fields(mods, checked, context)["_w"]
     var keep = List[PythonObject]()
     var addresses = py_ints([_addr(x, keep)])
     var gradients = bi.list()
@@ -635,31 +684,31 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
         var lock_lease = OperationLockLease(lock)
         lock_lease.acquire()
         try:
-            var session = _native_has_entry(entries, "transformer_session_backward") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+            var session = _native_has_entry(mods, entries, "transformer_session_backward") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
             if session:
                 if fields["_native_session"] is not None and fields["_session_binding"] is not entries.canonical:
-                    causal_transformer_admin(fields["_session_binding"], fields["_native_session"], 13)
+                    causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)
                     py_setitem(fields, "_native_session", PythonObject(None))
                     py_setitem(fields, "_session_binding", PythonObject(None))
                 if fields["_native_session"] is None:
-                    py_setitem(fields, "_native_session", _native_function(entries, "transformer_session_create")())
+                    py_setitem(fields, "_native_session", _native_function(mods, entries, "transformer_session_create")())
                     py_setitem(fields, "_session_binding", entries.canonical)
                 var native = py_get(fields, "_native_block_provider_cache")
                 if native is not None:
                     var session_owner = fields["_native_session"]
-                    var handle = Int(py=py_call(_native_function(entries, "transformer_native_session_handle_v1"), session_owner))
+                    var handle = Int(py=py_call(_native_function(mods, entries, "transformer_native_session_handle_v1"), session_owner))
                     _ = neural_descriptor_reserved_execute(native, session_owner, handle, 0, 1, 3,
                         _neural_int_words(addresses), _neural_int_words(params), [])
                 else:
-                    _ = py_call(_native_function(entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
+                    _ = py_call(_native_function(mods, entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
             else:
-                if fields["_native_session"] is not None and _native_has_entry(entries, "transformer_session_invalidate_tape"):
-                    causal_transformer_admin(entries, fields["_native_session"], 12)
+                if fields["_native_session"] is not None and _native_has_entry(mods, entries, "transformer_session_invalidate_tape"):
+                    causal_transformer_admin(mods, entries, fields["_native_session"], 12)
                 var native = py_get(fields, "_native_block_provider_cache")
                 if native is not None:
                     _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])
                 else:
-                    _ = py_call(_native_function(entries, name), addresses, params)
+                    _ = py_call(_native_function(mods, entries, name), addresses, params)
             lock_lease.release()
         except error:
             lock_lease.release()
@@ -669,33 +718,33 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
         if kind == "mamba2":
             _ = py_call(params.extend, fields["dt_limit"])
         if kind == "mamba3":
-            neural_mamba3_restore(fields, entries, weights)
+            neural_mamba3_restore(mods, fields, entries, weights)
             var generation = py_get(fields, "_owned_generation")
-            var session = _native_has_entry(entries, "mamba3_prefill_session_backward") and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
+            var session = _native_has_entry(mods, entries, "mamba3_prefill_session_backward") and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
             if generation is not None:
                 var owned_addresses = py_ints([Int(py=addresses[0])])
                 for i in range(10, len(addresses)):  # driver-loop: over input-gradient and result address slots
                     _ = py_call(owned_addresses.append, addresses[i])
                 _ = py_call(params.append, generation)
                 if native is not None:
-                    _ = neural_mamba_session_call(native, fields, entries, 9,
+                    _ = neural_mamba_session_call(mods, native, fields, entries, 9,
                         _neural_int_words(owned_addresses), _neural_int_words(params))
                 else:
-                    _ = py_call(_native_function(entries, "mamba3_prefill_session_backward_owned"), fields["_prefill_session"], owned_addresses, params)
+                    _ = py_call(_native_function(mods, entries, "mamba3_prefill_session_backward_owned"), fields["_prefill_session"], owned_addresses, params)
             elif session:
                 if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
-                    py_setitem(fields, "_prefill_session", _native_function(entries, "mamba3_prefill_session_create")())
+                    py_setitem(fields, "_prefill_session", _native_function(mods, entries, "mamba3_prefill_session_create")())
                     py_setitem(fields, "_prefill_binding", entries.canonical)
                 if native is not None:
-                    _ = neural_mamba_session_call(native, fields, entries, 7,
+                    _ = neural_mamba_session_call(mods, native, fields, entries, 7,
                         _neural_int_words(addresses), _neural_int_words(params))
                 else:
-                    _ = py_call(_native_function(entries, "mamba3_prefill_session_backward"), fields["_prefill_session"], addresses, params)
+                    _ = py_call(_native_function(mods, entries, "mamba3_prefill_session_backward"), fields["_prefill_session"], addresses, params)
             else:
                 if native is not None:
                     _ = neural_descriptor_execute(native, 4, _neural_int_words(addresses), _neural_int_words(params), [])
                 else:
-                    _ = py_call(_native_function(entries, name), addresses, params)
+                    _ = py_call(_native_function(mods, entries, name), addresses, params)
         else:
             if native is not None:
                 var words: List[Int] = [Int(py=params[0]), Int(py=params[1]), Int(py=params[2])]
@@ -706,7 +755,7 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
                 _ = neural_descriptor_execute(native, 3 if kind == "mamba2" else 2,
                     _neural_int_words(addresses), words, floats)
             else:
-                _ = py_call(_native_function(entries, name), addresses, params)
+                _ = py_call(_native_function(mods, entries, name), addresses, params)
     var result = bi.dict()
     py_setitem(result, "x", gradients[0])
     var names = fields["_neural_weight_names"]
@@ -717,31 +766,31 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
 
 
 
-def neural_block_getstate_binding(block: PythonObject, context: PythonObject) raises -> PythonObject:
+def neural_block_getstate_binding(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
     # Preserve arithmetic-profile admission before serialization. This native
     # admission uses the same binding contract as public forward, not the
     # Python _extension helper. Only ordinary model state crosses the boundary.
-    var bi = native_loaded_module("builtins")
-    var fields = neural_block_fields(block, context)
+    var bi = mods.module("builtins")
+    var fields = neural_block_fields(mods, block, context)
     var mode = py_get(fields, "numeric_mode")
-    neural_plain_value(mode, 0, context)
+    neural_plain_value(mods, mode, 0, context)
     if mode is None:
-        mode = _native_entry_fields(context["backend"])["_DEFAULT_MODE"]
-    var bindings = _model_bindings(fields["_native_route"], "transformer", context, mode)
+        mode = _native_entry_fields(mods, context["backend"])["_DEFAULT_MODE"]
+    var bindings = _model_bindings(mods, fields["_native_route"], "transformer", context, mode)
     var entries = bindings["transformer"]
     var saved = py_get(fields, "_arithmetic_profile")
     var saved_mode = py_get(fields, "_arithmetic_profile_mode", PythonObject("identical") if saved is not None else PythonObject(None))
-    if _native_has_entry(entries, "transformer_numeric_mode"):
-        var code = Int(py=_native_function(entries, "transformer_numeric_mode")())
+    if _native_has_entry(mods, entries, "transformer_numeric_mode"):
+        var code = Int(py=_native_function(mods, entries, "transformer_numeric_mode")())
         if code != (1 if String(mode) == "identical" else 0):
             raise Error("RuntimeError: transformer serialized model numeric mode differs from binding")
-    if _native_has_entry(entries, "transformer_arithmetic_profile"):
-        var profile = _native_function(entries, "transformer_arithmetic_profile")()
+    if _native_has_entry(mods, entries, "transformer_arithmetic_profile"):
+        var profile = _native_function(mods, entries, "transformer_arithmetic_profile")()
         if saved is not None and Bool(py=saved_mode == mode) and not Bool(py=saved == profile):
             raise Error("transformer serialized model arithmetic profile differs from binding")
         py_setitem(fields, "_arithmetic_profile", profile)
         py_setitem(fields, "_arithmetic_profile_mode", mode)
-        py_setitem(fields, "_arithmetic_profile_changed", _native_function(entries, "transformer_arithmetic_profile_changed")())
+        py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, entries, "transformer_arithmetic_profile_changed")())
     elif saved is not None:
         raise Error("transformer: a tagged model requires a binding that reports its arithmetic profile")
     var result = py_call(bi.dict, fields)
@@ -753,21 +802,21 @@ def neural_block_getstate_binding(block: PythonObject, context: PythonObject) ra
     return result
 
 
-def neural_block_setstate_binding(block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
+def neural_block_setstate_binding(mut mods: NativeModules, block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = mods.module("builtins")
     if py_type(state) is not bi.dict:
         raise Error("TypeError: neural block restore requires an exact state dictionary")
-    neural_string_keys(state)
-    var fields = neural_block_fields(block, context, False)
+    neural_string_keys(mods, state)
+    var fields = neural_block_fields(mods, block, context, False)
     var candidate = py_call(bi.object.__new__, py_type(block))
-    var fresh = neural_block_fields(candidate, context, False)
+    var fresh = neural_block_fields(mods, candidate, context, False)
     _ = py_call(fresh.update, state)
-    _ = neural_block_fields(candidate, context)
+    _ = neural_block_fields(mods, candidate, context)
     _ = py_call(fields.update, state)
     var mode = py_get(fields, "numeric_mode")
-    neural_plain_value(mode, 0, context)
+    neural_plain_value(mods, mode, 0, context)
     if mode is None:
-        mode = _native_entry_fields(context["backend"])["_DEFAULT_MODE"]
+        mode = _native_entry_fields(mods, context["backend"])["_DEFAULT_MODE"]
     if String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
         py_setitem(fields, "_runtime_lock", operation_lock_create())
     else:
@@ -775,9 +824,9 @@ def neural_block_setstate_binding(block: PythonObject, state: PythonObject, cont
     var session = PythonObject(None)
     var binding = PythonObject(None)
     if String(fields["_native_route"]) == "gpu" and String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
-        var bindings = _model_bindings(fields["_native_route"], "transformer", context, mode)
+        var bindings = _model_bindings(mods, fields["_native_route"], "transformer", context, mode)
         binding = bindings["transformer"]
-        session = _native_function(binding, "transformer_session_create")()
+        session = _native_function(mods, binding, "transformer_session_create")()
     py_setitem(fields, "_native_session", session)
     py_setitem(fields, "_session_binding", binding)
     py_setitem(fields, "_native_forward_owner", PythonObject(None))
@@ -785,27 +834,28 @@ def neural_block_setstate_binding(block: PythonObject, state: PythonObject, cont
     return PythonObject(None)
 
 def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var mods = NativeModules()
     try:
         var args = PythonObject(from_borrowed=args_ptr)
         var result = PythonObject(None)
         comptime if operation == 0:
-            result = neural_block_init_binding(args[0], args[1], args[2], args[3], args[4])
+            result = neural_block_init_binding(mods, args[0], args[1], args[2], args[3], args[4])
         elif operation == 1:
-            result = neural_block_allocate_binding(args[0], args[1], args[2], args[3])
+            result = neural_block_allocate_binding(mods, args[0], args[1], args[2], args[3])
         elif operation == 2:
-            result = neural_block_forward_binding(args[0], args[1], args[2], args[3], args[4], args[5])
+            result = neural_block_forward_binding(mods, args[0], args[1], args[2], args[3], args[4], args[5])
         elif operation == 4:
-            result = neural_block_set_params_binding(args[0], args[1], args[2])
+            result = neural_block_set_params_binding(mods, args[0], args[1], args[2])
         elif operation == 5:
-            result = neural_block_getstate_binding(args[0], args[1])
+            result = neural_block_getstate_binding(mods, args[0], args[1])
         elif operation == 6:
-            result = neural_block_setstate_binding(args[0], args[1], args[2])
+            result = neural_block_setstate_binding(mods, args[0], args[1], args[2])
         elif operation == 7:
-            var bi = native_loaded_module("builtins")
+            var bi = mods.module("builtins")
             var name = String(py_call(bi.type.__dict__["__name__"].__get__, py_type(args[0])))
             raise Error("NotImplementedError: mojolearn " + name + ".backward: inference is forward only; the backward pass runs on the GPU block class over a training binding")
         else:
-            result = neural_block_backward_binding(args[0], args[1], args[2], args[3])
+            result = neural_block_backward_binding(mods, args[0], args[1], args[2], args[3])
         return result.steal_data()
     except error:
         if String(error).startswith("TypeError:"):
