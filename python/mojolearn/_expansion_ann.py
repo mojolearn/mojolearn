@@ -588,7 +588,7 @@ class TSNE(NumericModeMixin):
         TypeError
             If `max_iter` or `random_state` is not an int.
         """
-        return _NATIVE(self, "family_mani_tsne_fit", (self._bind(), self._bind("_mojolearn_estimators"), X),
+        return _NATIVE(self, "family_mani_tsne_fit", (None, None, X),
                        _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
@@ -607,7 +607,7 @@ class TSNE(NumericModeMixin):
             The embedding, also stored in `embedding_`.
         """
         return _NATIVE(self, "family_mani_tsne_fit_transform",
-                       (self._bind(), self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
+                       (None, None, X), _NATIVE_CONTEXT)
 
 
 # IDENTICAL by construction (x_ann/cagra_core.mojo). random_state r >= 0
