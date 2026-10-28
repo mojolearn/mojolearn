@@ -2,6 +2,7 @@
 # Public Transformer state and training-ticket ownership. These functions own
 # admission, buffer retention, native execution, and finished result creation.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
@@ -20,7 +21,7 @@ from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 
 
 def _transformer_fields(value: PythonObject, cls: PythonObject, names: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     # _fields checks the dictionary descriptor before the native storage read.
     # Also reject field descriptors before bypassing them: replacing a data
     # field with a property must never silently change descriptor precedence.
@@ -39,7 +40,7 @@ def _transformer_fields(value: PythonObject, cls: PythonObject, names: PythonObj
 
 
 def _transformer_int(value: PythonObject, name: String, neural: PythonObject) raises -> Int:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is not bi.str and not neural_native_scalar(value, neural):
         raise Error("TypeError: Transformer " + name + " requires an ordinary scalar; Python conversion hooks are unsupported")
@@ -48,7 +49,7 @@ def _transformer_int(value: PythonObject, name: String, neural: PythonObject) ra
 
 def _transformer_stored_int(fields: PythonObject, name: String) raises -> Int:
     var value = fields[name]
-    if py_type(value) is not Python.import_module("builtins").int:
+    if py_type(value) is not native_loaded_module("builtins").int:
         raise Error("TypeError: Transformer " + name + " must be an ordinary integer")
     return Int(py=value)
 
@@ -57,7 +58,7 @@ def _transformer_array_slots(context: PythonObject) raises -> PythonObject:
     _ = neural_array_slots(context)
     var namespace = _class_fields(context["array_class"])
     var slots = context["array_slots"]
-    var names = py_call(Python.import_module("builtins").list, slots.keys())
+    var names = py_call(native_loaded_module("builtins").list, slots.keys())
     for i in range(len(names)):  # driver-loop: pinned native Array storage layout
         if py_get(namespace, names[i]) is not slots[names[i]]:
             raise Error("TypeError: Transformer output requires unchanged native Array storage slots")
@@ -74,7 +75,7 @@ struct TransformerBuffer(Movable):
 
     def __init__(out self, value: PythonObject, context: PythonObject) raises:
         self.owner = value
-        var bi = Python.import_module("builtins")
+        var bi = native_loaded_module("builtins")
         var store = value
         var is_array = py_type(value) is context["array_class"]
         var saved_address = 0
@@ -179,7 +180,7 @@ def transformer_state_init(state: PythonObject, values: PythonObject, context: P
 
 
 def _transformer_cache_view(buffer: TransformerBuffer, dims: List[Int], context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var slots = _transformer_array_slots(context)
     var cls = context["array_class"]
     var result = py_call(bi.object.__new__, cls)
@@ -297,7 +298,7 @@ def _transformer_configuration(fields: PythonObject) raises -> List[Int]:
             or result[0] != result[1] * result[3] or result[1] % result[2] != 0 or result[3] % 2 != 0):
         raise Error("Transformer configuration has invalid attention/MLP dimensions")
     var tail = fields["_opts_tail"]
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(tail) is not bi.tuple and py_type(tail) is not bi.list:
         raise Error("TypeError: Transformer options require an ordinary integer vector")
     for i in range(len(tail)):  # driver-loop: checked fixed native block option words
@@ -323,7 +324,7 @@ def _transformer_block_snapshot(block: PythonObject, neural: PythonObject) raise
 
 
 def _transformer_entry_fields(entries: PythonObject) raises -> PythonObject:
-    var types = Python.import_module("types")
+    var types = native_loaded_module("types")
     if py_type(entries) is not types.SimpleNamespace:
         raise Error("TypeError: Transformer tape requires its connected native entry record")
     # Exact SimpleNamespace has native member storage, unlike ordinary model
@@ -337,7 +338,7 @@ def _transformer_entry_fields(entries: PythonObject) raises -> PythonObject:
 def _transformer_native_entry(entries: PythonObject, name: String) raises -> PythonObject:
     var fields = _transformer_entry_fields(entries)
     var entry = py_get(fields, name)
-    if py_type(entry) is not py_type(Python.import_module("builtins").len):
+    if py_type(entry) is not py_type(native_loaded_module("builtins").len):
         raise Error("NotImplementedError: Transformer tape lacks its connected compiled " + name + " entry")
     return entry
 
@@ -359,17 +360,17 @@ def _transformer_old_binding(binding: PythonObject, neural: PythonObject) raises
     # Session cache fields are mutable. A replaced binding must not reach
     # _native_function's attribute lookup before proving it is connected.
     var registered = neural["training_bindings"]
-    var keys = py_call(Python.import_module("builtins").list, registered.keys())
+    var keys = py_call(native_loaded_module("builtins").list, registered.keys())
     for i in range(len(keys)):  # driver-loop: import-time compiled binding identities
         var entries = registered[keys[i]]["transformer"]
-        if py_type(entries) is not Python.import_module("builtins").str:
+        if py_type(entries) is not native_loaded_module("builtins").str:
             if binding is _transformer_entry_fields(entries)["canonical"]:
                 return entries
     raise Error("TypeError: Transformer session binding is not an admitted native module")
 
 
 def _transformer_tape_entries(block: PythonObject, fields: PythonObject, neural: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, py_type(block))
     for i in range(len(ancestry)):  # driver-loop: preserve the existing inference-only refusal
         if ancestry[i] is neural["block_classes"]["cpu"]["transformer"]:
@@ -390,7 +391,7 @@ def _transformer_tape_publish(tape: PythonObject, block: PythonObject, fields: P
                                token_value: PythonObject, var shape: List[Int],
                                var weight_shapes: List[List[Int]], context: PythonObject) raises:
     var slots = _transformer_fields(tape, context["tape_class"], context["tape_fields"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if (py_type(token_value) is not bi.tuple and py_type(token_value) is not bi.list) or len(token_value) != 4:
         raise Error("TypeError: Transformer tape token requires four native integers")
     var token = List[Int]()
@@ -487,7 +488,7 @@ def transformer_forward_with_tape(block: PythonObject, input: PythonObject, budg
         py_setitem(fields, "_native_session", session)
         var handle = _transformer_tape_handle(provider, entries, session)
         var report = transformer_session_tape_forward(provider, session, handle, addresses, params)
-        tape = py_call(Python.import_module("builtins").object.__new__, context["tape_class"])
+        tape = py_call(native_loaded_module("builtins").object.__new__, context["tape_class"])
         _transformer_tape_publish(tape, block, fields, entries, provider, handle,
             py_ints(report), shape.copy(), weight_shapes^, context)
         lease.release()
@@ -505,7 +506,7 @@ def transformer_tape_init(tape: PythonObject, values: PythonObject, context: Pyt
     var entries = _transformer_tape_entries(block, fields, neural)
     if values[1] is not fields["_native_session"] or values[2] is not entries.canonical:
         raise Error("Transformer tape requires the block's current native session and binding")
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var shape_value = values[4]
     if py_type(shape_value) is not bi.tuple and py_type(shape_value) is not bi.list:
         raise Error("TypeError: Transformer tape shape requires an ordinary integer vector")
@@ -636,7 +637,7 @@ def transformer_public_call(operation: String, values: PythonObject, context: Py
 def transformer_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
-        if len(args) != 4 or py_type(args[0]) is not Python.import_module("builtins").str:
+        if len(args) != 4 or py_type(args[0]) is not native_loaded_module("builtins").str:
             raise Error("TypeError: Transformer public operation requires its connected arguments")
         var result = transformer_public_call(String(args[0]), args[1], args[2], args[3])
         return result.steal_data()

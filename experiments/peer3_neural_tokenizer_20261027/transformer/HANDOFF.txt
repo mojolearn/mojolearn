@@ -154,3 +154,22 @@ Original failure evidence retained at:
 Only the affected probe-path source control reran: 1 passed, exit0;
 source-test-session-tape-probe-path.log. Other unchanged source checks retain
 source-tests-session-tape.log. No lane compilation or runtime execution.
+
+
+Connected-module Transformer followup
+------------------------------------
+Transformer public state/tape operations now use native_loaded_module for
+builtins/types rather than runtime imports. The shared generation_buffers
+initializer also uses connected builtins/array metadata, closing the transitive
+import-hook path reached by every Transformer public call. Native loaded-module
+admission checks connected module/export identities without invoking imports.
+Mutable state scalars/Array slots and saved entry records continue through the
+existing admission before their reads; original execution routes are unchanged.
+
+Source checks: tools/test_transformer_public_native.py, 4 passed, 0 failed,
+exit0; source-tests-loaded-modules.log. Scoped git diff --check passed.
+Affected small root is compile_transformer.mojo (public boundary plus shared
+buffer initializer); host/GPU numeric dispatch probes are unchanged. Shared
+buffer initializer also reaches CausalLM and neural public owners, whose
+runtime/cross-vendor checks remain pending integration. Coordinator owns this
+new compile freeze; no lane compilation or runtime execution occurred.

@@ -57,3 +57,15 @@ def test_tape_owns_native_metadata_and_uses_original_budget_aware_session_route(
     assert "_transformer_same_words(owner[].configuration" in backward
     assert backward.count("lease.release()") == 2
     assert "_ = dy^" in backward and "_ = hobj" in backward
+
+
+def test_public_state_and_tape_use_connected_modules_without_import_callbacks():
+    assert 'Python.import_module(' not in NATIVE
+    assert 'from bindings.native_loaded_module import native_loaded_module' in NATIVE
+    assert 'native_loaded_module("builtins")' in NATIVE
+    assert 'native_loaded_module("types")' in NATIVE
+    allocation = (ROOT / "bindings/generation_buffers.mojo").read_text()
+    initialization = allocation.split("def generation_initialize_binding", 1)[1].split("def py_ints", 1)[0]
+    assert 'Python.import_module(' not in initialization
+    assert 'native_loaded_module("builtins")' in initialization
+    assert 'native_loaded_module("array")' in initialization
