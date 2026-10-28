@@ -149,6 +149,7 @@
 # ("noneflag", field) is 1 when field is None, ("setflag", field) 1 when it
 # is not. Messages may name the class as {cls}.
 from std.python import Python, PythonObject
+from bindings.gp_kernel_public_native import gp_kernel_nodes
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array, classical_input, classical_dtype_str, classical_c_bytes, _store_code
 from bindings.classical_pandas import classical_admit_value
@@ -683,43 +684,11 @@ def _schema_class_table(value: PythonObject, integral: PythonObject, real: Pytho
     raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
 
 
-def _schema_kernel_layout(kernel: PythonObject, table: PythonObject) raises -> PythonObject:
-    """The node layout of `kernel`'s class or its nearest connected ancestor;
-    a class that defines its own `_nodes` first has none."""
-    var b = Python.import_module("builtins")
-    var cls = py_type(kernel)
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for i in range(len(mro)):  # driver-loop: over the kernel class ancestry metadata
-        if py_contains(table, mro[i]):
-            return table[mro[i]]
-        if py_contains(py_call(b.type.__dict__["__dict__"].__get__, mro[i]), "_nodes"):
-            break
-    raise Error("TypeError: mojolearn: a " + String(cls.__name__) + " kernel has no saved node layout")
-
-
 def _schema_kernel_nodes(kernel: PythonObject, table: PythonObject, nodes: PythonObject) raises:
-    """Append `kernel._nodes()`: postfix (kind, param, length scales) tuples,
-    read from the kernels' instance fields."""
-    var b = Python.import_module("builtins")
-    var layout = _schema_kernel_layout(kernel, table)
-    var fields = py_fields(kernel)
-    var name = String(py_type(kernel).__name__)
-    var how = String(layout[0])
-    if how == "pair":
-        _schema_kernel_nodes(_schema_field(fields, layout[1], name), table, nodes)
-        _schema_kernel_nodes(_schema_field(fields, layout[2], name), table, nodes)
-        _ = py_call(nodes.append, Python.tuple(_schema_field(fields, layout[3], name), PythonObject(Float64(0.0)), Python.list()))
-    elif how == "leaf":
-        var param = PythonObject(Float64(0.0)) if layout[2] is None else _schema_field(fields, layout[2], name)
-        var scales = Python.list() if layout[3] is None else py_call(b.list, _schema_field(fields, layout[3], name))
-        _ = py_call(nodes.append, Python.tuple(layout[1], param, scales))
-    elif how == "nodes":
-        var saved = _schema_field(fields, layout[1], name)
-        for i in range(len(saved)):  # driver-loop: over a saved kernel's postfix nodes
-            var node = saved[i]
-            _ = py_call(nodes.append, Python.tuple(node[0], node[1], py_call(b.list, node[2])))
-    else:
-        raise Error("RuntimeError: unknown kernel node layout " + how)
+    # Shared strict node capture for GP public execution and saved models.
+    # No user _nodes/descriptor/sequence callback runs during serialization.
+    var captured = gp_kernel_nodes(kernel, table)
+    _ = py_call(nodes.extend, captured)
 
 
 def _schema_kernel(model_fields: PythonObject, step: PythonObject, values: PythonObject, name: String,

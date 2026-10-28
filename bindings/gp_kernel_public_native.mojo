@@ -165,8 +165,7 @@ def gp_kernel_operation(kernel: PythonObject, operation: String, args: PythonObj
     if operation == "family_gp_kernel_initialize":
         return _kernel_construct(kernel, operation, args, context)
     if operation == "family_gp_kernel_add" or operation == "family_gp_kernel_mul":
-        gp_admit_kernel(kernel, context)
-        gp_admit_kernel(args[0], context)
+        # The constructor below admits both operands with one owner snapshot.
         var combined = context["family_gp_classes"]["combined"]
         _kernel_allocation_class(combined)
         var out = native_storage_allocate(combined)
@@ -436,8 +435,11 @@ def _kernel_construct(kernel: PythonObject, operation: String, args: PythonObjec
                 py_setitem(updates, layout[2], PythonObject(nu.values[0]))
         py_setitem(updates, context["family_gp_kernel_bounds"][cls], _kernel_bounds_input(args[1], len(input.values), context))
     elif how == "pair":
-        gp_admit_kernel(args[0], context)
-        gp_admit_kernel(args[1], context)
+        # Shared leaves retain one dictionary capture across both operands.
+        var snapshot = GPKernelSnapshot()
+        var active = Python.list()
+        _kernel_walk(args[0], context, active, snapshot)
+        _kernel_walk(args[1], context, active, snapshot)
         var op = args[2]
         var sym = args[3]
         if py_type(op) is not py_type(PythonObject(0)) or (Int(py=op) != 4 and Int(py=op) != 5) or py_type(sym) is not py_type(PythonObject("")):

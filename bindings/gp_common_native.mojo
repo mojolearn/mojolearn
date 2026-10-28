@@ -8,6 +8,7 @@
 # `_replace` / `_with_free_values` built. No method of a kernel class runs.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.mode_metadata_native import _plan
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.family_common import family_repr, family_is_str, family_call, family_as_f32
@@ -17,9 +18,15 @@ from bindings.archive_schema_native import _schema_kernel_nodes, _schema_label_s
 def gp_mode_wanted(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """`getattr(self, "numeric_mode", None) or _backend.default_mode()`."""
     var b = native_loaded_module("builtins")
-    var want = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
+    var fields = py_fields(model)
+    var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     if want is None:
-        want = context["backend_fields"]["_DEFAULT_MODE"]
+        var metadata = py_fields(native_loaded_module("mojolearn._mode"))["_MODE_METADATA_CONTEXT"]
+        var plan = _plan(model, fields, metadata)
+        var route = String(plan["route"])
+        # cpu-route: explicit HostGP metadata always names identical, even
+        # when the process GPU default is fast. Never rewrite either setting.
+        want = PythonObject("identical") if route == "host" or route == "host_gp" else context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(want) is not b.str:
         raise Error("TypeError: GP numeric mode requires an exact native string")
     return want
