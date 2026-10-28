@@ -1,6 +1,6 @@
 #!/bin/bash
 # Copy of ~/mojolearn-evidence/integration-provider-queue-20261028/scripts/pod_smoke_5b.sh for lane mamba-folds: host .so
-# not retained, plus a tiny classical fit+predict on the CPU column (COMMON.md self-merge step 3).
+# not retained, no fit (owner 2026-10-28: the gate is compiles + host families through the cache + import + tier_dir).
 set -u
 OUT=${LEG_OUT:?}; mkdir -p "$OUT/logs" "$OUT/bin"
 CORES=$(python3 -c 'import os;print(len(os.sched_getaffinity(0)))'); PAR=4; JOBS=$(( CORES / PAR ))
@@ -36,12 +36,5 @@ smoke() { pixi run -e default python "$OUT/smoke.py" > "$OUT/smoke_$1.log" 2>&1;
 smoke after
 pixi run -e default python -c "import mojolearn._backend as b; print('tier_dir', b.tier_dir('identical'))" > "$OUT/probe_tier_dir.log" 2>&1; echo "probe_tier_dir rc=$?" >> "$OUT/summary.txt"
 : # host .so not retained (size); hashes in so_sha256.txt
-cat > "$OUT/fit.py" <<'EOF2'
-import numpy as np
-from mojolearn.linear_model import LinearRegression
-X = np.arange(40, dtype=np.float32).reshape(20, 2); y = X[:, 0] * 2.0 + 1.0
-m = LinearRegression().fit(X, y); p = m.predict(X[:3]); print("fit_predict", p.shape)
-EOF2
-pixi run -e default python "$OUT/fit.py" > "$OUT/fit.log" 2>&1; echo "fit_predict rc=$?" >> "$OUT/summary.txt"
 total=$(wc -l < "$OUT/plan.txt"); ok=$(grep -c 'rc=0' "$OUT/results.tsv"); echo "INTEG_BUILD total=$total ok=$ok" >> "$OUT/summary.txt"
-grep -q 'smoke_after rc=0' "$OUT/summary.txt" && grep -q 'fit_predict rc=0' "$OUT/summary.txt" && grep -q 'probe_tier_dir rc=0' "$OUT/summary.txt" && [ "$ok" = "$total" ]
+grep -q 'smoke_after rc=0' "$OUT/summary.txt" && grep -q 'probe_tier_dir rc=0' "$OUT/summary.txt" && [ "$ok" = "$total" ]
