@@ -19,7 +19,15 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_attr import py_attr
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
+from bindings.classical_pandas import classical_admit_value
+from bindings.classical_exceptions import classical_require_fitted
+from bindings.classical_error_boundary import classical_python_error
+from bindings.classical_validate import classical_check_width
+from bindings.parallel_public_result import parallel_public_result
+from bindings.metrics_native_support import metric_warn
+from providers.python.estimator_lifecycle_pyapi import estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
+from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address, classical_host_f32
 from bindings.classical_labels import labels_f32
 from bindings.metrics_cls_native import metrics_cls_operation
@@ -49,13 +57,14 @@ def _row(mut kit: DecompKit, source: PythonObject, name: String, context: Python
     return kit.input_snapshot(input, 1, input.shape[0])
 
 
-def _target(mut kit: DecompKit, source: PythonObject, context: PythonObject) raises -> Tuple[Int, Bool]:
+def _target(mut kit: DecompKit, source: PythonObject, context: PythonObject,
+            captured: Optional[ArrayMetadata] = None) raises -> Tuple[Int, Bool]:
     # Admit the exact supported input before reading any metadata. A vector
     # keeps the old row-then-transpose execution order, using captured shape
     # and address instead of source.shape, source.reshape or __array__ hooks.
     if source is None:
         return (Int(-1), False)
-    var input = decomp_input_snapshot(source, "Y", context, -1)
+    var input = captured.value().copy() if captured else decomp_input_snapshot(source, "Y", context, -1)
     if len(input.shape) == 2:
         return (kit.input_snapshot(input, input.shape[0], input.shape[1]), False)
     var row = kit.input_snapshot(input, 1, input.shape[0])
@@ -106,11 +115,12 @@ def _rotation(mut kit: DecompKit, weights: Int, loadings: Int) raises -> Int:
 
 
 def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject, mut kit: DecompKit,
-             context: PythonObject) raises -> Tuple[Int, Int]:
+             context: PythonObject, captured_x: Optional[ArrayMetadata] = None,
+             captured_y: Optional[ArrayMetadata] = None) raises -> Tuple[Int, Int]:
     # `_PLS.fit` after the parameter checks: (X, Y) as kit matrices.
     var fields = py_fields(model)
-    var x = _matrix(kit, x_source, "X", context)
-    var target = _target(kit, y_source, context)
+    var x = kit.input_snapshot(captured_x.value(), captured_x.value().shape[0], captured_x.value().shape[1]) if captured_x else _matrix(kit, x_source, "X", context)
+    var target = _target(kit, y_source, context, captured_y)
     var ym = target[0]
     if ym < 0:
         raise Error(_name(model) + " requires y to be passed, but the target y is None.")
@@ -124,7 +134,10 @@ def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject
         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(p)
                     + ")) while a minimum of 2 is required.")
     var nc = decomp_int(fields["n_components"])
-    var canonical = String(py=decomp_class_attr(model, "_deflation")) == "canonical"
+    var deflation = decomp_class_attr(model, "_deflation")
+    if py_type(deflation) is not py_type(PythonObject("")):
+        raise Error("TypeError: PLS deflation must remain a native string")
+    var canonical = String(py=deflation) == "canonical"
     var bound = min(n, min(p, q)) if canonical else p
     if not (1 <= nc and nc <= bound):
         raise Error("n_components == " + String(nc) + ", while 1 <= n_components <= " + String(bound) + " is required")
@@ -135,7 +148,10 @@ def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject
     var algorithm = py_get(fields, "algorithm", PythonObject("nipals"))
     var b = Python.import_module("builtins")
     var svd_algo = Bool(py=py_call(b.isinstance, algorithm, b.str)) and String(py=algorithm) == "svd"
-    var mode_b = String(py=decomp_class_attr(model, "_pmode")) == "B"
+    var pmode = decomp_class_attr(model, "_pmode")
+    if py_type(pmode) is not py_type(PythonObject("")):
+        raise Error("TypeError: PLS component mode must remain a native string")
+    var mode_b = String(py=pmode) == "B"
     # The component loop (NIPALS or the SVD pair, the flips, the deflations)
     # is ONE binding call writing six host blocks.
     var sizes = [p, q, n, n, p, q]
@@ -159,8 +175,7 @@ def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject
     for k in range(6):  # driver-loop: over the six fitted blocks
         kit.wrote_host(outs[k])
     if done < nc:
-        _ = py_call(Python.import_module("_warnings").warn,
-                    PythonObject("y residual is constant at iteration " + String(done)), b.UserWarning, 2)
+        metric_warn("y residual is constant at iteration " + String(done), b.UserWarning, context)
         for k in range(6):  # driver-loop: over the six fitted blocks
             outs[k] = kit.cols_of(outs[k], 0, done)
     var all_iterations = py_call(b.list, its)
@@ -243,6 +258,8 @@ def _score_binding(model: PythonObject, fields: PythonObject, context: PythonObj
             raise Error("numeric_mode must be 'fast' or 'identical'")
     else:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
+    if py_type(mode) is not b.str:
+        raise Error("numeric_mode must be 'fast' or 'identical'")
     var expected = String(py=py_call(py_call(mode.strip).lower))
     var module = estimator_binding(model, "_mojolearn_metrics", context, False)
     var reader = neural_descriptor_entry(module, "metrics_numeric_mode", False)
@@ -256,7 +273,8 @@ def _score_binding(model: PythonObject, fields: PythonObject, context: PythonObj
     return module
 
 
-def pls_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def pls_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject,
+                  captured_x: Optional[ArrayMetadata] = None, captured_y: Optional[ArrayMetadata] = None) raises -> PythonObject:
     var fields = py_fields(model)
     if operation == "fit" or operation == "fit_transform":
         # args: (X, y, Y); y wins over Y, as PLSRegression.fit chose.
@@ -271,7 +289,7 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         py_setitem(fields, "numeric_mode_", mode)
         var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
         try:
-            var held = _pls_fit(model, args[0], y, kit, context)
+            var held = _pls_fit(model, args[0], y, kit, context, captured_x, captured_y)
             if operation == "fit":
                 return model
             # transform(X, y): the X and Y the fit converted and uploaded.
@@ -290,7 +308,7 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
                         + "(family_mcls_r2); this install does not carry it")
         var binding = _score_binding(model, fields, owner[1])
         var truth = labels_f32(args[1], -1, "C", "y", context)
-        var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context)
+        var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context, captured_x)
         var mode = py_get(fields, "numeric_mode")
         var r2 = metrics_cls_operation(PythonObject(None), "family_mcls_r2",
                          Python.tuple(binding, truth.keep, prediction, args[2], PythonObject("uniform_average"),
@@ -303,11 +321,11 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         if operation == "transform":
             # args: (X, y, Y)
             var y = args[1] if args[1] is not None else args[2]
-            var x = _matrix(kit, args[0], "X", context)
+            var x = kit.input_snapshot(captured_x.value(), captured_x.value().shape[0], captured_x.value().shape[1]) if captured_x else _matrix(kit, args[0], "X", context)
             var target = _target(kit, y, context)
             return _transform(kit, x, target[0], fields, context)
         if operation == "inverse_transform":
-            var z = _matrix(kit, args[0], "X", context)
+            var z = kit.input_snapshot(captured_x.value(), captured_x.value().shape[0], captured_x.value().shape[1]) if captured_x else _matrix(kit, args[0], "X", context)
             var xr = _rebuild(kit, z, "x_loadings_", "_x_std", "_x_mean", fields, context)
             var y = args[1] if args[1] is not None else args[2]
             if y is None:
@@ -316,7 +334,7 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
             var yr = _rebuild(kit, w, "y_loadings_", "_y_std", "_y_mean", fields, context)
             return Python.tuple(kit.publish(xr), kit.publish(yr))
         if operation == "predict":
-            var x = _matrix(kit, args[0], "X", context)
+            var x = kit.input_snapshot(captured_x.value(), captured_x.value().shape[0], captured_x.value().shape[1]) if captured_x else _matrix(kit, args[0], "X", context)
             var mean = _row(kit, fields["_x_mean"], "_x_mean", context)
             var centered = kit.ew(XD_SUB, x, mean)
             var coef = _matrix(kit, fields["coef_"], "coef_", context)
@@ -331,6 +349,73 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         kit.close()
 
 
+
+def pls_public_operation(model: PythonObject, operation: String, args: PythonObject,
+                         context: PythonObject) raises -> PythonObject:
+    # Own the former _track_fit/_needs_fit/_public_output envelope. Import
+    # metadata and shared layout admission prevent Python descriptors before
+    # inspecting model settings; caller inputs are admitted before metadata.
+    classical_check_layout(model, context)
+    var fields = py_fields(model)
+    var b = Python.import_module("builtins")
+    if py_type(fields) is not b.dict:
+        raise Error("TypeError: native PLS state must be an exact dictionary")
+    var fitting = operation == "fit" or operation == "fit_transform"
+    var flags = Python.tuple("_mojolearn_fitted", "_mojolearn_fitting")
+    for index in range(len(flags)):  # driver-loop: native lifecycle flag admission
+        if py_contains(fields, flags[index]):
+            classical_admit_value(fields[flags[index]], context)
+    if not fitting:
+        classical_require_fitted(model, False, operation, context)
+    var names = Python.tuple("n_components", "scale", "max_iter", "tol", "copy", "numeric_mode", "algorithm", "_predict_1d")
+    for index in range(len(names)):  # driver-loop: declared native PLS settings
+        if py_contains(fields, names[index]):
+            classical_admit_value(fields[names[index]], context)
+    # X and target admission belongs to their snapshots: the shared dense
+    # admission helper intentionally does not accept exact SciPy containers.
+    var name = _name(model)
+    var sparse = decomp_is_a(model, context["pls_regression_class"])
+    var x = decomp_input_snapshot(args[0], "X", context, 2, name, False, sparse)
+    var y = Optional[ArrayMetadata]()
+    if fitting:
+        var target = args[1] if args[1] is not None else args[2]
+        if target is None:
+            raise Error(name + " requires y to be passed, but the target y is None.")
+        y = decomp_input_snapshot(target, "Y", context, -1, name, True)
+        if x.shape[0] != y.value().shape[0]:
+            raise Error("Found input variables with inconsistent numbers of samples: [" + String(x.shape[0]) + ", " + String(y.value().shape[0]) + "]")
+    elif operation != "inverse_transform":
+        var features = py_get(fields, "n_features_in_")
+        if features is not None:
+            if py_type(features) is not b.int:
+                raise Error("TypeError: native PLS feature count must be an exact integer")
+            classical_check_width(x.shape[1], Int(py=features), name)
+        estimator_feature_check(model, fields, args[0], context)
+    var result = PythonObject(None)
+    if fitting:
+        var depth = estimator_fit_begin(fields)
+        try:
+            result = pls_operation(model, operation, args, context, x, y)
+        except error:
+            # _sk_validate.reraise annotated failed one-row/one-feature fits.
+            var message = String(error)
+            var device_fault = message.find("device_context") >= 0 or message.find("CUDA") >= 0 or message.find("HIP") >= 0 or message.find("hipError") >= 0 or message.find("Metal") >= 0 or message.find("MTL") >= 0
+            if not device_fault and not message.startswith("TypeError:") and not message.startswith("RuntimeError:") and not message.startswith("NotImplementedError:") and not message.startswith("ImportError:") and message != PYTHON_ERROR_PENDING:
+                if x.shape[0] == 1:
+                    raise Error(name + " cannot be fit on n_samples=1: " + message)
+                if x.shape[1] == 1:
+                    raise Error(name + " cannot be fit on n_features=1: " + message)
+            raise error^
+        finally:
+            estimator_fit_end(model, depth)
+        estimator_fit_complete(model, args[0], False, context)
+        if operation == "fit":
+            return result
+    else:
+        result = pls_operation(model, operation, args, context, x)
+    return parallel_public_result(result, operation, PythonObject("regressor"), context)
+
+
 def pls_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -341,19 +426,7 @@ def pls_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             raise Error("TypeError: native PLS requires an operation, an argument tuple and its context")
         var context = call[3]
         classical_connect_numpy(context)
-        var result = pls_operation(call[0], String(py=call[1]), call[2], context)
+        var result = pls_public_operation(call[0], String(py=call[1]), call[2], context)
         return result.steal_data()
     except error:
-        if String(error) == PYTHON_ERROR_PENDING:
-            return optimizer_python_error(error^)
-        if String(error).startswith("TypeError:"):
-            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
-        if String(error).startswith("NotImplementedError:"):
-            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
-        if String(error).startswith("AttributeError:"):
-            return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
-        if String(error).startswith("ImportError:"):
-            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
-        if String(error).startswith("RuntimeError:"):
-            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
-        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
+        return classical_python_error(error^, args_ptr)
