@@ -19,6 +19,7 @@ from bindings.trees_public_forest import forest_fit, forest_predict, forest_pred
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast
 from bindings.trees_public_auxiliary import forest_auxiliary, forest_shape
+from bindings.trees_public_state import forest_restore_state, tree_is_fitted
 
 
 def _set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -50,6 +51,10 @@ def _set_params(model: PythonObject, values: PythonObject, context: PythonObject
 def forest_public_operation(model: PythonObject, operation: String, args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     classical_check_layout(model, context)
+    if operation == "trees_public_forest_setstate":
+        return forest_restore_state(model, args[0], context)
+    if operation == "trees_public_forest_is_fitted":
+        return tree_is_fitted(model, True)
     if operation == "trees_public_forest_depth" or operation == "trees_public_forest_n_leaves":
         return forest_shape(model, operation, context)
     if operation == "trees_public_forest_set_params":
