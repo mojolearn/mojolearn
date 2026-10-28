@@ -4,12 +4,22 @@ Native file: bindings/neighbors_ann_query_native.mojo
 Entry: neighbors_ann_search(model, kind: Int, args, context)
 Kinds: 0 IVFPQIndex, 1 IVFSQIndex, 2 IVFRaBitQIndex, 3 CagraIndex.
 Arguments: (already selected exact x_ann module, queries, filter).
+Lazy PQ materialization: ann_pq_materialize(model, context) returns the stored
+native Array for the parent's attribute/pickle result envelope. It admits
+instance storage and resident state, exports codes through the compiled owner,
+and updates only the code cell in the old resident key. Changing another fitted
+array before lazy export therefore still forces preparation on the next search.
 
 Parent owns Python wrappers and dispatch wiring. Route the four public search
 methods through family_xn_ann_pq_search/sq_search/rabitq_search/cagra_search;
 select _mojolearn_x_ann natively before calling this entry. Decorate wrappers
 only when they directly call the native operation, with native output ownership.
 This module imports neither neighbors_ann_native nor neighbor_query_native.
+
+Push validation initially stopped on four malformed cpu-route loop annotations
+in the new source. The follow-up corrects their spelling to the existing source
+checker's documented format; no numerical work was reclassified. Original full
+hook log: /tmp/peer1-ann-query-push.log. Native compilation remains UNRUN.
 
 Changes
 -------
