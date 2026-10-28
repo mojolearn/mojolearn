@@ -1448,6 +1448,7 @@ class EndpointConnections:
 
     def __init__(self, index):
         self.index, self.replacements, self.seen = index, {}, set()
+        self.native_flags = set()   # classes an installer marks `cls._mojolearn_native_public = True`
         self.scopes = {}
         for cls in list(index.classes.values()):
             for node in cls.node.body:
@@ -1627,6 +1628,8 @@ class EndpointConnections:
         elif isinstance(target, ast.Attribute):
             cls = self.value(target.value, mod, func, env)
             if cls and cls[0] == "class":
+                if target.attr == "_mojolearn_native_public":
+                    self.native_flags.add(cls[1].key)
                 self.record(cls[1], target.attr, value, mod, node)
 
     def call(self, func, args, keywords, parent_env):
@@ -1759,6 +1762,88 @@ def _tag_metadata_only(index, func, owner):
     return True
 
 
+class ClassHookWrappers:
+    """Python wrappers `_mode`'s class-creation hooks put around source methods.
+
+    `PublicOutputsMixin.__init_subclass__` (install_public_outputs) and
+    `SklearnTagsMixin.__init_subclass__` (install_fit_tracking) replace a class's plain
+    function methods with Python wrappers (`_public_output`, `_track_fit`, `_needs_fit`,
+    `_loader`) unless the class is `_mojolearn_native_public` when it is created. The
+    source body then is not the installed callable: the operation runs Python
+    validation and output conversion around it. Conservative in the reporting
+    direction: a decorated method (decorators can carry the skip markers), a class an
+    installer later marks native (or any of its bases), and a slot an installer
+    replaces are never reported.
+    """
+
+    def __init__(self, index, connections, package):
+        self.index, self.connections = index, connections
+        self.ready = False
+        mode = index.mod(package + "._mode")
+        if mode is None:
+            return
+        names = {}
+        for name in ("_OUTPUTS", "_FITS", "_NEEDS_FIT", "_LOADS"):
+            try:
+                names[name] = frozenset(ast.literal_eval(mode.aliases[name]))
+            except (KeyError, ValueError, TypeError, SyntaxError):
+                return
+        outputs = index.resolve_name(mode.name, "PublicOutputsMixin")
+        tags = index.resolve_name(mode.name, "SklearnTagsMixin")
+        if not outputs or not tags or outputs[0] != "class" or tags[0] != "class":
+            return
+        self.names, self.outputs, self.tags, self.ready = names, outputs[1], tags[1], True
+
+    def _flagged(self, cls):
+        for klass in self.index.mro(cls):
+            if klass.key in self.connections.native_flags:
+                return True
+            for node in klass.node.body:
+                if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_mojolearn_native_public"
+                                                        for t in node.targets):
+                    return not (isinstance(node.value, ast.Constant) and not node.value.value)
+        return False
+
+    def _reaches_hooks(self, klass):
+        """Creating `klass` runs the _mode hooks: every `__init_subclass__` before them on
+        the MRO hands on with `super().__init_subclass__(...)`."""
+        for base in self.index.mro(klass)[1:]:
+            if base in (self.outputs, self.tags):
+                return True
+            hook = next((n for n in base.node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                         and n.name == "__init_subclass__"), None)
+            if hook is None:
+                continue
+            if not any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                       and n.func.attr == "__init_subclass__" and isinstance(n.func.value, ast.Call)
+                       and _final(n.func.value.func) == "super" for n in ast.walk(hook)):
+                return False
+        return False
+
+    def wrapper(self, owner, name, func):
+        """The class whose creation wrapped `owner.name` (resolving to source `func`), or None."""
+        if not self.ready or owner is None or func is None or func.node.decorator_list:
+            return None
+        if self.connections.get(owner, name) or self._flagged(owner):
+            return None
+        names = self.names
+        for klass in self.index.mro(owner):
+            chain = self.index.mro(klass)
+            if klass in (self.outputs, self.tags) or self.outputs not in chain:
+                continue
+            if self._flagged(klass) or not self._reaches_hooks(klass):
+                continue
+            found = self.index.lookup(klass, name)
+            if not found or found[0] != "func" or found[1] is not func:
+                continue
+            own = func.cls is klass
+            if name in names["_OUTPUTS"]:
+                return klass
+            if self.tags in chain and (name in names["_NEEDS_FIT"] or name in names["_FITS"] and own):
+                return klass
+        return None
+
+
 def endpoint_inventory(root, package="mojolearn", installed_slots=None):
     """One static ledger for public operations and their omitted lifecycle surface.
 
@@ -1804,6 +1889,7 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
     connections = EndpointConnections(index)
     index.endpoint_connections = connections
     index.strict_endpoints = True
+    wrappers = ClassHookWrappers(index, connections, package)
 
     def add(group, method, kind, func=None, owner=None):
         names = sorted(group["names"])
@@ -1859,6 +1945,11 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                         unresolved_calls=facts.unresolved, shell_calls=facts.shell)
             item["runtime_status"] = ("native_boundary" if item["static_verdict"] == "native" else
                                       "unresolved" if item["static_verdict"] == "unresolved" else "prohibited_source")
+            wrapped = wrappers.wrapper(owner, method, func) if kind in ("method", "method_alias") and not replacement else None
+            if wrapped is not None:
+                # the installed callable is a _mode Python wrapper around this body
+                item.update(static_verdict="python", runtime_status="prohibited_source",
+                            class_creation_wrapper=".".join(wrapped.key))
         if method == "__sklearn_tags__" and func is not None and _tag_metadata_only(index, func, owner):
             item["runtime_status"] = "allowed_tag_metadata"
             item["exception"] = "Owner-authorized scikit-learn tag metadata only; native callbacks remain prohibited."
