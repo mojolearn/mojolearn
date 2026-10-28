@@ -1,0 +1,51 @@
+Peer 2 manifold native boundary work — 2026-10-27
+
+Base: local main 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Worktree: /Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027
+Branch: lane/peer2-manifold-20261027
+
+Routing source change
+- Isomap/ClassicalMDS/MDS/LLE resolve both binding slots in the native owner.
+  Fit/fit_transform use numeric_mode; transform/reconstruction_error use the
+  fitted numeric_mode_; helper kit selection uses the current process default.
+- TSNE resolves x_ann and estimator bindings after its native public entry.
+- Import-time connection retains native provider modules. MKit rejects proxy
+  bindings and selects compiled cells from exact module dictionaries.
+- Fitted-state checks no longer call hasattr(model, name).
+- Explicit module arguments remain supported by legacy native forwarding.
+
+Integration dependencies (coordinate, never edit other owners' files)
+- Shared estimator_binding_pyapi must export:
+  estimator_binding_mode(requested: PythonObject, name: String,
+                         context: PythonObject, check_mode: Bool = True)
+  with existing provider selection semantics. Root owns this extraction.
+- Decomposition lane commit a1b998d91563183f4887bcd75a459d7991dace3b
+  changes the 11 decomp manifold shells to (None, None, X[, init]) and removes
+  _manifold_binding. It must accompany this source change.
+- Peer 1 changes TSNE fit/fit_transform to (None, None, X). Pending peer commit.
+
+Validation
+- tools/test_peer2_manifold_routes.py: 4 source-only tests pass, exit 0.
+- Full source-test log:
+  ~/mojolearn-evidence/peer2-manifold-20261027/routes-source-tests.log
+- Native compilation NOT RUN by this lane. Smallest root compile target:
+  bindings/entry/entry__mojolearn_runtime_manifold_host.mojo,
+  through bindings/build_runtime_manifold_host.sh (development split host).
+- Installed public runtime and Apple/NVIDIA/AMD identity remain PENDING.
+- No benchmarks, GPU campaigns, production build, publication or main merge.
+
+Remaining transitive work (this routing chunk is NOT runtime compliance)
+- py_fields and raw family attribute reads still depend on root's shared model,
+  descriptor, exact dictionary/key and overwrite-lifetime admission repair.
+- UMAP constructor remains Python assignments plus _parameters; root was asked
+  for shared constructor/lifecycle validation-hook support.
+- UMAP categorical target preparation still uses tolist/list and set/sorted;
+  scalar settings and configuration comparisons still reach Python protocols.
+- MKit owns Python _M/_DevBuf objects; _DevBuf.__del__ remains Python cleanup.
+  Dedicated typed owner/state lifetime replacement is still required.
+- Several MKit/UMAP/TSNE paths recapture metadata or read mutable ndarray/Array
+  attributes after preparation. Shared snapshot provenance/copy reporting and
+  retained original owners were requested from root.
+- SpectralEmbedding constructor is replaced at import by the shared full-reset
+  owner; spectral operations reach shared cluster/spectral native owners, which
+  are reserved to root and have not been runtime-qualified here.

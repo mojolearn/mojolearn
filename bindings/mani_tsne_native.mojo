@@ -11,9 +11,11 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem
 from bindings.classical_arrays import classical_address, classical_word
 from bindings.classical_attributes import classical_connect_numpy
+from providers.python.estimator_binding_pyapi import estimator_binding
+from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call,
-    family_entry, family_array, family_f32, family_field, family_view, family_cast_view, family_shape_repr,
+    family_array, family_f32, family_field, family_view, family_cast_view, family_shape_repr,
 )
 
 comptime _TSNE_EXPLORATION_MAX_ITER = 250
@@ -34,7 +36,7 @@ def _tsne_pca_start(estimators: PythonObject, x: PythonObject, n: Int, d: Int, k
     if k < 1 or k > d:
         raise Error("mojolearn n_components must be in [1, " + String(d) + "], got " + String(k))
     var b = Python.import_module("builtins")
-    var fit_owned = py_call(b.getattr, estimators, PythonObject("pca_fit_owned"), PythonObject(None))
+    var fit_owned = spectral_umap_optional_entry(estimators, "pca_fit_owned", context)
     if fit_owned is None:
         raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not "
                     + "export pca_fit_owned; rebuild it with bindings/build_estimators.sh")
@@ -72,8 +74,8 @@ def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     classical_connect_numpy(context)
     var b = Python.import_module("builtins")
     var op = Python.import_module("operator")
-    var binding = args[0]
-    var estimators = args[1]
+    var binding = estimator_binding(model, "_mojolearn_x_ann", context) if args[0] is None else args[0]
+    var estimators = estimator_binding(model, "_mojolearn_estimators", context) if args[1] is None else args[1]
     var fields = py_fields(model)
     # Reject nonfinite coordinates before PCA initialization reaches its
     # eigensolver; preserve TSNE's public input refusal for every init mode.
