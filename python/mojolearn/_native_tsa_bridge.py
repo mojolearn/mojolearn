@@ -75,7 +75,7 @@ def connect():
     context["arima_entry_names"] = arima_names
     from ._buffer import _native
     for name in ("gather_rows_bytes", "scatter_rows_bytes", "cast_elements", "bincount_i64",  # glue: fixed compiled registration names
-                 "select_fold_i64", "ic_running_min_f32", "ic_running_min_f64"):  # glue: fixed compiled row moves, integer casts and IC/group helpers
+                 "select_fold_i64", "ic_running_min_f32", "ic_running_min_f64", "strided_copy_bytes"):  # glue: fixed compiled row moves, integer casts and IC/group helpers
         fn = _native(name)
         if not isinstance(fn, BuiltinFunctionType):
             raise TypeError(f"AutoARIMA requires the compiled {name} entry")
