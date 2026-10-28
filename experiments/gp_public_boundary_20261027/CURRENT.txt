@@ -1,0 +1,81 @@
+PEER5 CURRENT HANDOFF — 2026-10-28
+
+Owner/root delegation: thread01a18001-c4b5-7ba2-a735-6250b366b07e.
+Main integration remains root-only. No runtime/identity/vendor checks authorized.
+No pod rented. Do not touch other worktrees or disabled watchers.
+
+Worktree / branch:
+  /Users/andrewhendel/CascadeProjects/mojolearn-peer5
+  lane/peer5-gp-trees-20261027
+Latest source8443166119; parent compile attempt5 RUNNING at this checkpoint.
+DO NOT merge uncompiled current head until its successful receipt is recorded.
+The remote currently contains initial794f4004fc, already merged to main by root.
+
+Completed root-integrated batches:
+- tree auxiliary48cebc5fbd and lifecycle586ee57745, pushed in
+  lane/peer5-tree-aux-20261027. Root confirms both merged/pushed main.
+- GP initial boundary2a1b52376b + receipt794f4004fc, pushed, root merged.
+  That initial boundary was incomplete lifecycle work. Host inherited-method
+  compatibility was identified afterwards and repaired in the pending batch.
+
+Pending combined GP source (all on current local branch):
+- c56f9bd076: cherry-pick kernel metadata549fece273.
+- dc2ee2d487: native binding-entry checks, label admission and warning repair.
+- e1cf68f766: cherry-pick kernel constructors/operators/repr/node exportc9389f3f5b.
+- 1ec92cef40: cherry-pick lifecyclee595a0a269; c39ee09af8 receiptd7788fe640.
+- 87c62b4a0f: parent dispatcher/lifecycle route, strict kernel archive node
+  reader, host numeric_mode=None->identical without global/model mutation.
+- 03b15c0f5d: ClassLabels family/archive metadata e214778a6f (syntax passed).
+- 08be165adc: typed Array label snapshot3ae8472e55 (source-only on agent).
+- 8443166119: close reviewed covariance callable, score Array.__len__, native
+  likelihood state and archive label/state admission gaps. Shared GP scalar,
+  buffer and BinaryLaplace namespace checks factored into
+  bindings/gp_state_admission_native.mojo. Archive save now uses connected
+  family storage admission before reading fields. GP schema state checks
+  precede consumed scalar casts/submodel traversal. Non-GP archive arithmetic
+  is unchanged; shared archive class-table admission is stricter.
+
+Compilation record / limits:
+Full evidence retained under ~/mojolearn-evidence/peer5-gp-public-20261027/.
+- attempt1 failed fixture export signature; failure retained.
+- attempt2 passed275.65s: first GP binding/LML batch; initial receipt committed.
+- attempt3 passed208.36s: intermediate kernel/GP transitive repair bytes.
+- attempt4 passed61.36s: integrated87c62b4a0f GP dispatcher. Review subsequently
+  identified bugs; this receipt DOES NOT qualify latest review fixes.
+- attempt5 RUNNING on8443166119: actual full GP public dispatcher AND complete
+  archive_schema_save exported by checks/gp_public_boundary_compile.mojo.
+  Source snapshot, manifest, command and full compile.log retained per attempt.
+All are local Mac CPU column, apple-m1, identical, O0, configured10workers from
+sysctl hw.logicalcpu=10. Configured workers do not prove CPU saturation.
+No extension was loaded/executed. No runtime, bit identity, GPU or performance
+claim follows from this compilation. Final source push guards still required.
+
+Agent accepted evidence remains in:
+- experiments/gp_kernel_public_20261027/{HANDOFF.txt,CONSTRUCTORS_HANDOFF.txt,
+  compile.json,constructors_compile.json}
+- experiments/gp_public_lifecycle_20261027/{HANDOFF.txt,compile.json}
+- ~/mojolearn-evidence/gp-kernel-public-20261027/
+- ~/mojolearn-evidence/peer5-gp-lifecycle-20261027/
+Readonly review: ~/mojolearn-evidence/gp-peer5-source-review-20261028/findings.txt.
+All four reported findings are repaired in current source; compilation pending.
+
+Active sibling:
+/root/tree_auxiliary continuing _GBDTAdapter public constructor/get/set_params
+reuse. Its isolated worktree mojolearn-peer5-trees, branch
+lane/peer5-tree-aux-20261027. Green tree586ee57745 already integrated; next source
+batch is separate. Host CPU review files _mojolearn_gbdt_host.mojo and
+ gbdt_host_entries_impl.mojo remain excluded from this peer's ownership.
+
+Next steps:
+1. Inspect attempt5 result.json exit/status then bounded error diagnostics.
+2. Repair genuine compile errors, preserve failed logs/snapshots, compile only
+   affected source. Do not execute product/runtime checks.
+3. Record final scoped receipt and handoff, commit, push through all guards.
+4. Send root exact green combined head, coverage/evidence/remaining limits for
+   serialized main integration. Do not merge main from this worktree.
+5. Receive and forward next coherent tree batch; keep remaining scope explicit.
+
+Keep logs out of context: save complete output to files, use targeted rg/grep
+with bounded surrounding lines and short tails, and summarize exit status,
+coverage, failures, evidence paths. Expand only relevant diagnostic blocks;
+never hide failures or infer full success from filtered output.
