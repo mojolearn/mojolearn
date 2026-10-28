@@ -1,0 +1,4 @@
+kernel_methods/native_descriptor_dispatch.mojo repo_local_modules 91 python_mentions 0
+Note: module import closure, not symbol liveness; stdlib and dynamic external dependencies excluded.
+kernel_methods/descriptor_host.mojo repo_local_modules 50 python_mentions 0
+Note: module import closure, not symbol liveness; stdlib and dynamic external dependencies excluded.
