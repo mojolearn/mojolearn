@@ -111,7 +111,7 @@ def model_record_fields(mut mods: NativeModules, value: PythonObject, cls: Pytho
     var admitted = False
     for i in range(len(ancestry)):  # driver-loop: inspect model record descriptors before storage reads
         admitted = admitted or ancestry[i] is cls
-        var row = _class_fields(ancestry[i])
+        var row = _class_fields(mods, ancestry[i])
         if py_contains(row, "__getattr__"):
             raise Error("TypeError: model records cannot invoke Python attribute hooks")
         for hook in [String("__getattribute__"), String("__setattr__")]:  # small-loop(native record access hooks)
@@ -122,7 +122,7 @@ def model_record_fields(mut mods: NativeModules, value: PythonObject, cls: Pytho
                 raise Error("TypeError: model state fields cannot be replaced by class descriptors")
     if not admitted:
         raise Error("TypeError: model operation requires its connected record class")
-    var fields = _fields(value)
+    var fields = _fields(mods, value)
     model_dict(mods, fields)
     return fields
 
@@ -200,7 +200,7 @@ def _model_error_class(mut mods: NativeModules) raises -> PythonObject:
     var bases = py_call(bi.type.__dict__["__bases__"].__get__, cls)
     if len(bases) != 1 or bases[0] is not bi.ValueError:
         raise Error("TypeError: UnsupportedModel must retain native ValueError behavior")
-    var row = _class_fields(cls)
+    var row = _class_fields(mods, cls)
     for name in ["__new__", "__init__", "__str__", "__repr__", "__getattribute__", "__getattr__", "__setattr__"]:  # small-loop(exception normalization hooks)
         if py_contains(row, name):
             raise Error("TypeError: UnsupportedModel cannot invoke Python exception hooks")
