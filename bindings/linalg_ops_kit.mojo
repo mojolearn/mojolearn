@@ -11,7 +11,9 @@
 # (an unconverged Jacobi, a NaN order) keeps its Python class and words.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call
+from bindings.native_loaded_module import native_loaded_module
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call
 from bindings.linalg_ops_buffers import lin_array, lin_truth
@@ -59,26 +61,21 @@ struct LinKit(Movable):
     var resident: Bool
 
     def __init__(out self, binding: PythonObject, context: PythonObject) raises:
-        var bi = Python.import_module("builtins")
-        # `_Kit._raw`: through a profiler proxy's `_b`, never its __getattr__
-        var raw = binding
-        try:
-            raw = py_call(bi.object.__getattribute__, binding, "_b")
-        except:
-            raw = binding
-        self.b = raw
+        if py_type(binding) is not py_type(native_loaded_module("builtins")):
+            raise Error("TypeError: linalg decomposition requires an exact native provider module")
+        self.b = binding
         self.context = context
         self.matrices = List[KitMatrix]()
         self.allocations = List[Int]()
         # `_Kit._res`: the binding has the resident entries (a GPU binding)
-        self.resident = lin_truth(py_call(bi.hasattr, raw, "x_decomp_dev_ew"))
+        self.resident = neural_descriptor_entry(binding, "x_decomp_dev_ew", False) is not None
 
     def entry(self, name: String) raises -> PythonObject:
-        return family_call(Python.import_module("builtins").getattr, self.b, PythonObject(name))
+        return neural_descriptor_entry(self.b, name)
 
     def has(self, name: String) raises -> Bool:
         """`_Kit._opt_dev(name)`."""
-        return self.resident and lin_truth(py_call(Python.import_module("builtins").hasattr, self.b, name))
+        return self.resident and neural_descriptor_entry(self.b, name, False) is not None
 
     def close(mut self):
         """Return every device buffer this call allocated to the pool."""

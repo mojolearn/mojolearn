@@ -935,7 +935,7 @@ def _connect_native_linalg():
     # glue: connect selected-mode images once; all public admission and binding
     # replacement checks happen in the shared native provider boundary.
     _backend.default_mode()
-    _native_family_bridge.connect_bindings(_MODULE_NAME)
+    _native_family_bridge.connect_bindings(_MODULE_NAME, "_mojolearn_x_decomp")
     records = _native_family_bridge.shared_context()['family_binding_connections'][_MODULE_NAME]
     return {mode: record[0] for mode, record in records.items()}  # glue: fixed import-time mode records
 

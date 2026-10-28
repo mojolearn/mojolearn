@@ -10,11 +10,16 @@
 # the default mode, each only on the route that used it.
 from std.memory import memcpy, memset_zero
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
+from bindings.classical_pandas import classical_admit_value
+from bindings.host_inference_scalars import host_inference_scalar
+from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call, family_repr
 from bindings.linalg_ops_buffers import LinBuf, lin_truth, lin_new, lin_array
-from bindings.linalg_ops_lowbit import lin_operand, lin_state, lin_ints
+from bindings.linalg_ops_lowbit import lin_operand, lin_state, lin_ints, lin_connected_binding
 from bindings.linalg_ops_kit import LinKit, KIT_F32P, OP_MUL, OP_DIV, OP_ABS, OP_SCALE, OP_ADDS, OP_LE
 
 comptime TS_MAX_N = 512
@@ -23,30 +28,21 @@ comptime TS_MAX_N = 512
 def _lin_door(context: PythonObject) raises -> PythonObject:
     """`_door()` / `_load()`: the linalg binding of the selected tier, cached
     in the module's `_binding_cache` as the Python cached it."""
-    var state = lin_state(context)
-    var cached = state["_binding_cache"]
-    if cached is None:
-        cached = family_call(context["backend_fields"]["binding"], state["_MODULE_NAME"])
-        py_setitem(state, PythonObject("_binding_cache"), cached)
-    return cached
+    return lin_connected_binding(context)
 
 
 def _lin_xd(context: PythonObject) raises -> LinKit:
-    """`_xd_kit()`: the decomp lane's cells in the process's default mode."""
-    var bf = context["backend_fields"]
-    var mode = bf["_DEFAULT_MODE"]
-    if mode is None:
-        mode = family_call(bf["default_mode"])
-    return LinKit(family_call(bf["binding"], PythonObject("_mojolearn_x_decomp"), mode), context)
+    """The import-connected x_decomp provider selected natively for this call."""
+    return LinKit(estimator_binding(PythonObject(None), "_mojolearn_x_decomp", context), context)
 
 
 def _lin_eq(a: PythonObject, b: String) raises -> Bool:
-    return lin_truth(py_call(Python.import_module("operator").eq, a, PythonObject(b)))
+    return lin_truth(py_call(native_loaded_module("operator").eq, a, PythonObject(b)))
 
 
 def _lin_named(cls: String, items: PythonObject, context: PythonObject) raises -> PythonObject:
     """`QRResult(...)` / `SVDResult(...)`: the tuple subclass over `items`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return py_call(b.tuple.__new__, lin_state(context)[cls], items)
 
 
@@ -115,7 +111,7 @@ def _lin_svd_tall(mut kit: LinKit, a: Int, full: Bool, context: PythonObject, mu
     var r = 0
     if n:
         # the numerical rank, counted in Mojo (x_decomp/api.mojo rank_above_py)
-        r = Int(py=family_call(Python.import_module("builtins").int,
+        r = Int(py=family_call(native_loaded_module("builtins").int,
                                family_call(kit.entry("x_decomp_rank_above"), kit.address(s), lin_ints(n), PythonObject(rtol))))
         _ = s  # keep the Python object alive through the native call above
     var av = kit.mm(a, vt, tb=True)
@@ -170,7 +166,7 @@ def lin_svdvals_of(a: LinBuf, context: PythonObject) raises -> PythonObject:
         rows = cols
         cols = swap
     var out = lin_new([cols], "<f4", context)
-    _ = family_call(family_call(Python.import_module("builtins").getattr, _lin_door(context), PythonObject("svdvals")),
+    _ = family_call(neural_descriptor_entry(_lin_door(context), "svdvals"),
                     Python.list(PythonObject(buf.addr), PythonObject(out.addr)), lin_ints(rows, cols))
     _ = out  # keep the Python object alive through the native call above
     _ = buf  # keep the Python object alive through the native call above
@@ -297,7 +293,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var out = lin_new([cols, cols], "<f4", context)
     # ORDER MATCHES qr_r_binding IN BOTH BINDINGS: addrs (a, r_out), params
     # (n_rows, n_cols); swapping the addresses writes R over the caller's matrix
-    _ = family_call(family_call(Python.import_module("builtins").getattr, _lin_door(context), PythonObject("qr_r")),
+    _ = family_call(neural_descriptor_entry(_lin_door(context), "qr_r"),
                     Python.list(PythonObject(a.addr), PythonObject(out.addr)), lin_ints(rows, cols))
     _ = out  # keep the Python object alive through the native call above
     _ = a^
@@ -402,6 +398,11 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def lin_decomp_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Admit public scalar controls before equality/truth conversion; input
+    # exporters are captured by the shared native linalg buffer boundary.
+    classical_admit_value(args[0], context)
+    for i in range(1, len(args)):  # small-loop(public decomposition option metadata)
+        host_inference_scalar(args[i], context, True)
     if operation == "family_lin_qr":
         return _lin_qr(args, context)
     if operation == "family_lin_eigh":
