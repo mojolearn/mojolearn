@@ -1274,21 +1274,13 @@ class Dropout2d(_Layer):
     _device_io = True
 
     def __init__(self, p=0.5, random_state=0, input_shape=None, numeric_mode=None):
-        if not 0.0 <= float(p) <= 1.0:
-            raise ValueError(f"mojolearn: dropout probability has to be between 0 and 1, but got {p}")
-        self.p = float(p)
-        self.random_state = int(random_state or 0)
-        self.input_shape = input_shape
-        self.numeric_mode = numeric_mode
-        self.training = True
-        self.calls_ = 0
+        _XCNN(self, "dropout_init", (p, random_state, input_shape, numeric_mode), _XCNN_CONTEXT)
 
     def train(self, mode=True):
-        self.training = bool(mode)
-        return self
+        return _XCNN(self, "dropout_train", (mode,), _XCNN_CONTEXT)
 
     def eval(self):
-        return self.train(False)
+        return _XCNN(self, "dropout_train", (False,), _XCNN_CONTEXT)
 
     # lane gap-neural-overhead2 (2026-10-02): on the GPU binding the mask
     # stays on the device for the backward (it was downloaded by the forward
@@ -1297,57 +1289,23 @@ class Dropout2d(_Layer):
 
     @property
     def mask_(self):
-        d = self.__dict__
-        if d.get("_mask_host") is None and d.get("_mask_dev") is not None:
-            np = _np()
-            m = np.empty(d["_mask_shape"], np.float32)
-            self._dev.download(d["_mask_dev"], m)
-            d["_mask_host"] = m
-        return d.get("_mask_host")
+        return _XCNN(self, "dropout_mask_get", (), _XCNN_CONTEXT)
 
     @mask_.setter
     def mask_(self, v):
-        self.__dict__["_mask_host"] = v
-        self.__dict__["_mask_dev"] = None
+        _XCNN(self, "dropout_mask_set", (v,), _XCNN_CONTEXT)
 
     def forward(self, x):
         return _XCNN(self, "dropout_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
-        np = _np()
-        d = self.__dict__
-        if _is_t(grad_out):
-            bt = self._binding()
-            if _on_dev(bt, grad_out) and _idn(bt, _F_LAYER_IO):
-                ht = d.get("_mask_dev")
-                if d.get("_mask_host") is None and ht is None:
-                    return grad_out.reshape(grad_out.shape)
-                if ht is not None and d.get("_dev") is not None and self._dev.b is bt:
-                    if grad_out.size != _size(d["_mask_shape"]):
-                        raise ValueError("mojolearn: grad_out does not match the forward's input")
-                    dxt = DeviceTensor._new_out(bt, grad_out.shape)   # the product stores every word
-                    bt.x_cnn_map2_m([grad_out.h, ht, dxt.h], 0b111, [3, grad_out.size])
-                    return dxt
-        g = _f32(grad_out, "grad_out")
-        if d.get("_mask_host") is None and d.get("_mask_dev") is None:
-            return g.copy()
-        dx = np.empty_like(g)
-        b = self._binding()
-        h = d.get("_mask_dev")
-        if h is not None and _mixed(b) and self._dev.b is b:
-            if g.size != int(np.prod(d["_mask_shape"])):  # glue: product of the saved mask shape
-                raise ValueError("mojolearn: grad_out does not match the forward's input")
-            b.x_cnn_map2_m([g.ctypes.data, h, dx.ctypes.data], 0b010, [3, g.size])
-            return dx
-        mask = np.ascontiguousarray(self.mask_)
-        b.x_cnn_mul(g.ctypes.data, mask.ctypes.data, dx.ctypes.data, [g.size])
-        return dx
+        return _XCNN(self, "dropout_backward", (grad_out,), _XCNN_CONTEXT)
 
     def transform(self, X):
         return _XCNN(self, "dropout_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
-        return self
+        return _XCNN(self, "pool_fit", (X, y), _XCNN_CONTEXT)
 
 
 class _AdaptivePool(_Layer):
@@ -1359,9 +1317,7 @@ class _AdaptivePool(_Layer):
     _max = False
 
     def __init__(self, output_size=1, input_shape=None, numeric_mode=None):
-        self.output_size = _pair(output_size, "output_size")
-        self.input_shape = input_shape
-        self.numeric_mode = numeric_mode
+        _XCNN(self, "adaptive_init", (output_size, input_shape, numeric_mode), _XCNN_CONTEXT)
 
     def _divides(self, shape):
         return shape[2] % self.output_size[0] == 0 and shape[3] % self.output_size[1] == 0
@@ -1372,69 +1328,27 @@ class _AdaptivePool(_Layer):
     # reuses one pool layer (and its resident winner array) per kernel.
     @property
     def _device_io(self):
-        try:
-            return _resident(self._binding())
-        except Exception:  # noqa: BLE001  (no binding: the host arrays)
-            return False
+        return _XCNN(self, "adaptive_device_io", (), _XCNN_CONTEXT)
 
     @property
     def indices_(self):
-        d = self.__dict__
-        if d.get("_idx_host") is not None:
-            return d["_idx_host"]
-        lay = d.get("_layer")
-        if lay is not None:
-            return lay.indices_ if self._max else None
-        if d.get("_idx_dev") is not None:
-            idx = _np().empty(d["_idx_shape"], _np().int32)
-            self._dev.download(d["_idx_dev"], idx)
-            d["_idx_host"] = idx
-        return d.get("_idx_host")
+        return _XCNN(self, "adaptive_indices_get", (), _XCNN_CONTEXT)
 
     @indices_.setter
     def indices_(self, v):
-        self.__dict__["_idx_host"] = v
-        self.__dict__["_idx_dev"] = None
+        _XCNN(self, "pool_indices_set", (v,), _XCNN_CONTEXT)
 
     def forward(self, x):
         return _XCNN(self, "adaptive_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
-        np = _np()
-        if self._layer is not None:
-            return self._layer.backward(grad_out)
-        b = self._binding()
-        m = _idn(b, _F_ADAPT)
-        gt = _is_t(grad_out)
-        if gt and m and not _on_dev(b, grad_out):
-            return DeviceTensor._wrap(b, self.backward(grad_out.numpy()))
-        gt = gt and m
-        g = grad_out if gt else _f32(grad_out, "grad_out")
-        prm = [*self._xshape, *self.output_size, 3 if self._max else 1]
-        if m:
-            if g.size != self._xshape[0] * self._xshape[1] * self.output_size[0] * self.output_size[1]:
-                raise ValueError("mojolearn: grad_out does not match the forward's output")
-            d = self.__dict__
-            h, hbit = 0, 0
-            if self._max:
-                h, hbit = d.get("_idx_dev"), 0b100
-                if h is None or d.get("_dev") is None or self._dev.b is not b:
-                    idx = np.ascontiguousarray(self.indices_, np.int32)
-                    h, hbit = idx.ctypes.data, 0
-            dx = _out_new(b, self._xshape) if gt else np.empty(self._xshape, np.float32)
-            b.x_cnn_adaptive_pool_m([g.h if gt else g.ctypes.data, dx.h if gt else dx.ctypes.data, h],
-                                    (0b011 if gt else 0) | hbit, prm)
-            return dx
-        dx = np.empty(self._xshape, np.float32)
-        idx = self.indices_ if self._max else np.zeros(g.shape, np.int32)
-        b.x_cnn_adaptive_pool(g.ctypes.data, dx.ctypes.data, idx.ctypes.data, prm)
-        return dx
+        return _XCNN(self, "adaptive_backward", (grad_out,), _XCNN_CONTEXT)
 
     def transform(self, X):
         return _XCNN(self, "adaptive_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
-        return self
+        return _XCNN(self, "pool_fit", (X, y), _XCNN_CONTEXT)
 
 
 class AdaptiveAvgPool2d(_AdaptivePool):
