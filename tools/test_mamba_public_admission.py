@@ -70,3 +70,16 @@ def test_session_reports_are_retained_before_returning_output():
     assert body.index('py_setitem(block_fields, "h_last_", result[1])') < body.index("return result[0]")
     for name in ("k_last_", "v_last_", "theta_last_"):
         assert f'py_setitem(block_fields, "{name}"' in body
+
+
+def test_native_cpu_route_does_not_consult_instance_class_protocol():
+    body = NATIVE.split("def _m3_entries(")[1].split("def _m3_canonical(")[0]
+    assert "PyType_IsSubtype" in body
+    assert "py_call(bi.isinstance" not in body
+
+
+def test_session_release_survives_rejected_state_dictionary():
+    body = NATIVE.split("def _session_release(")[1].split("def mamba_session_close(")[0]
+    assert "try:" in body and body.count("finally:") == 2
+    assert body.index("_fields(state)") < body.index("finally:")
+    assert body.index("h[].weights.clear()") > body.rindex("finally:")

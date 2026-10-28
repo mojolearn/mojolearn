@@ -112,3 +112,17 @@ def test_decode_session_refuses_replaced_handle_descriptor(monkeypatch):
         assert calls == []
     finally:
         session.close()
+
+
+def test_mamba3_native_cpu_route_does_not_invoke_class_descriptor(monkeypatch):
+    block, dm = _block("mamba3")
+    calls = []
+
+    def forbidden(_):
+        calls.append("class")
+        raise AssertionError("__class__ descriptor was invoked")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(type(block), "__class__", property(forbidden), raising=False)
+        block.forward(_tokens(1, 1, dm))
+    assert calls == []

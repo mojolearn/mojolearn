@@ -48,3 +48,14 @@ Integration and pending work
   entry type validation; mutable _prefill_binding admission needs root review.
 - Public neural_inference Mamba backward refusal remains Python and outside this
   lane's files. No blanket transitive-runtime completion claim is made.
+
+Follow-up source review
+- Replaced _m3_entries isinstance(block, cpu_class) with native PyType_IsSubtype;
+  isinstance could otherwise consult a replaced instance __class__ descriptor.
+- Session release uses nested finally cleanup so refusing a mutated state's
+  dictionary still frees the owned native buffers and device session.
+- The initial branch push was rejected by the repository's shell-loop source
+  guard for three missing loop annotations. Those fixed metadata loops are now
+  annotated; no hook was bypassed. Original failure: push.log in evidence above.
+- Follow-up direct runner: 14 source tests passed, exit 0; 15 parameterized
+  public runtime controls syntax checked only. Log: source-tests-followup.log.

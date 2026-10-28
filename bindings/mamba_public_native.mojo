@@ -61,7 +61,7 @@ def _mamba_record_fields(value: PythonObject, expected: PythonObject, names: Lis
         var namespace = _class_fields(ancestry[i])
         if py_contains(namespace, "__getattr__"):
             raise Error("TypeError: Mamba native records cannot invoke Python attribute hooks")
-        for hook in [String("__getattribute__"), String("__setattr__")]:
+        for hook in [String("__getattribute__"), String("__setattr__")]:  # small-loop(two native record access hooks)
             if py_contains(namespace, hook) and namespace[hook] is not bi.object.__dict__[hook]:
                 raise Error("TypeError: Mamba native records cannot invoke Python attribute hooks")
         for name in names:  # driver-loop: fixed state/session fields cannot be replaced by descriptors
@@ -151,7 +151,7 @@ def _mamba_session_fields(session: PythonObject, context: PythonObject,
     var classes = context["mamba_session_classes"]
     var cls = py_type(session)
     var expected = PythonObject(None)
-    for name in [String("mamba1"), String("mamba2"), String("mamba3")]:
+    for name in [String("mamba1"), String("mamba2"), String("mamba3")]:  # small-loop(three connected Mamba session classes)
         if cls is classes[name]:
             expected = classes[name]
     var fields = _mamba_record_fields(session, expected, [String("_handle"), String("_block"), String("_state")])
@@ -169,7 +169,12 @@ def _m3_entries(block: PythonObject, fields: PythonObject, context: PythonObject
     # The binding the retired `Mamba3Block._extension()` returned: the shipped
     # host binding for the CPU inference class, the block's tier otherwise.
     var bi = Python.import_module("builtins")
-    if Bool(py=py_call(bi.isinstance, block, context["block_classes"]["cpu"]["mamba3"])):
+    # isinstance may consult a replaced block.__class__ descriptor even when
+    # field storage was admitted. Test the actual native type ancestry.
+    ref cpy = Python().cpython()
+    var cls = py_type(block)
+    if cpy.lib.get_function[Int32]("PyType_IsSubtype")(
+        cls._obj_ptr, context["block_classes"]["cpu"]["mamba3"]._obj_ptr) != 0:
         var entries = _model_bindings(PythonObject("cpu"), "mamba3", context, PythonObject("identical"))["mamba3"]
         var block_provider = PythonObject(None)
         var state_provider = PythonObject(None)
@@ -250,9 +255,10 @@ def _mamba3_forward_captured(
 
 def _mamba3_publish_runtime(fields: PythonObject, block: PythonObject) raises:
     var live = _fields(block)
-    for name in [String("_native_mamba_block_provider_cache"), String("_native_mamba_state"),
+    var names = [String("_native_mamba_block_provider_cache"), String("_native_mamba_state"),
                  String("_prefill_session"), String("_prefill_binding"), String("_owned_generation"),
-                 String("_owned_native_provider"), String("_owned_restore_pending")]:
+                 String("_owned_native_provider"), String("_owned_restore_pending")]
+    for name in names:  # driver-loop: over native session/cache state published after one operation
         if py_contains(fields, name):
             py_setitem(live, name, fields[name])
 
@@ -950,15 +956,22 @@ def _session_release(hobj: PythonObject, state: PythonObject) raises:
     if not h[].open:
         return
     h[].open = False
-    if state is not None:
-        py_setitem(_fields(state), "_resident_session", PythonObject(None))
-    if h[].device is not None:
-        if h[].provider is not None:
-            _ = neural_descriptor_execute(h[].provider, 27 + 8 * (h[].kind - 1), [], [h[].device_address], [], False)
-        else:
-            _ = py_call(_native_function(h[].binding, _kind_name(h[].kind) + "_session_close"), h[].device)
-    h[].weights.clear()
-    h[].parts.clear()
+    try:
+        if state is not None:
+            py_setitem(_fields(state), "_resident_session", PythonObject(None))
+    finally:
+        # The finalizer may encounter a record whose __dict__ descriptor was
+        # replaced after session creation. Refusing that record must still
+        # release the already owned native buffers and device session.
+        try:
+            if h[].device is not None:
+                if h[].provider is not None:
+                    _ = neural_descriptor_execute(h[].provider, 27 + 8 * (h[].kind - 1), [], [h[].device_address], [], False)
+                else:
+                    _ = py_call(_native_function(h[].binding, _kind_name(h[].kind) + "_session_close"), h[].device)
+        finally:
+            h[].weights.clear()
+            h[].parts.clear()
 
 
 def mamba_session_close(session: PythonObject, context: PythonObject) raises -> PythonObject:
