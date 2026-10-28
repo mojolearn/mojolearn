@@ -703,7 +703,7 @@ def _label_list(y: PythonObject, context: PythonObject) raises -> PythonObject:
     # Only connected C buffer exporters: a Python class's __buffer__ hook
     # would run inside PyMemoryView_FromObject.
     var owners = py_get(context, "buffer_owner_types")
-    if cls is not py_type(native_buffer_view(PythonObject(b""))) and (owners is None or not _labels_one_of(cls, owners)):
+    if cls is not b.memoryview and (owners is None or not _labels_one_of(cls, owners)):
         raise Error("TypeError: mojolearn: y must be a list, tuple, array or native buffer of labels, not "
                     + labels_type_name(cls))
     return py_call(native_buffer_view(y).tolist)
