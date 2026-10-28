@@ -8,8 +8,14 @@ OUT=${LEG_OUT:?}; mkdir -p "$OUT"
 S=$OUT/selfmerge.txt
 CORES=$(python3 -c 'import os;print(len(os.sched_getaffinity(0)))')
 echo "cores_affinity=$CORES cgroup=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null)" > "$S"
-MOJO=$(pixi run -e default which mojo 2>/dev/null | tail -n 1)
-export NO_PIXI=1 MOJO="$MOJO" JOBS=$CORES MAIN=$PWD
+export POD_PIXI=1 JOBS=$CORES MAIN=$PWD
+# The shipped tree has no .git; the tombstone gate reads markers with `git grep` over tracked files,
+# so index exactly the shipped (tracked) files.
+if [ ! -d .git ]; then
+  git init -q . && git -c user.email=pod@local -c user.name=pod add -A > /dev/null 2>&1 \
+    && git -c user.email=pod@local -c user.name=pod commit -q -m shipped-tree > /dev/null 2>&1
+  echo "git_index_rc=$?" >> "$S"
+fi
 bash experiments/decode_resident_20261028/compile.sh "$OUT/cpu" > "$OUT/compile_cpu.out" 2>&1; echo "compile_cpu rc=$?" >> "$S"
 COLUMN_DEFS="-D MOJOLEARN_COLUMN_NVIDIA" bash experiments/decode_resident_20261028/compile.sh "$OUT/sm89" --target-accelerator sm_89 > "$OUT/compile_sm89.out" 2>&1; echo "compile_sm89 rc=$?" >> "$S"
 pixi run -e default python tools/tests/test_no_python_runtime.py > "$OUT/gate_no_python_runtime.log" 2>&1; echo "gate_no_python_runtime rc=$?" >> "$S"

@@ -45,7 +45,7 @@ from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.neural_identical_experiments import (
     IDN_LM_PARAM_VIEWS, IDN_LM_OWNED_TOKENS, IDN_TRAIN_NO_DECODE_CACHE,
-    IDN_LM_VIEWS_ARM, IDN_LM_RESIDENT_TOKENS_ARM,
+    IDN_LM_VIEWS_ARM, IDN_LM_RESIDENT_TOKENS_ARM, IDN_PARAM_GRAD_VIEWS,
 )
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_afn import (
@@ -668,8 +668,15 @@ struct ByteBuffers(Movable):
         else:
             self.emb_w = _zeros(ctx, V * DM)
             self.lm_w = _zeros(ctx, V * DM)
-        self.dw_emb = _zeros(ctx, V * DM)
-        self.dw_lm = _zeros(ctx, V * DM)
+        comptime if BYTE_LM_EMB_HEAD_GRAD_VIEWS:
+            # Views of the flat gradient (see BYTE_LM_EMB_HEAD_GRAD_VIEWS).
+            self.dw_emb = self.grad.create_sub_buffer[DType.float32](0, V * DM)
+            self.dw_lm = self.grad.create_sub_buffer[DType.float32](
+                self.offsets[config.n_tensors() - 1], V * DM
+            )
+        else:
+            self.dw_emb = _zeros(ctx, V * DM)
+            self.dw_lm = _zeros(ctx, V * DM)
 
         self.ids = _zeros_i32(ctx, M)
         self.targets = _zeros_i32(ctx, M)
@@ -879,11 +886,25 @@ comptime NN60_BLOCK_VIEWS = (
     and IDN_LM_VIEWS_ARM == 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS
+comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS or IDN_PARAM_GRAD_VIEWS
 comptime BYTE_LM_EMB_HEAD_VIEWS = (
-    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS)
+    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS or IDN_PARAM_GRAD_VIEWS)
     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
 )
+# grad-views lane (MOJOLEARN_IDN_PARAM_GRAD_VIEWS, default OFF; same bits):
+# `dw_emb` and `dw_lm` are views of the flat `grad` at the offsets the two
+# per-step `_copy_into` calls in `_byte_backward_tape` copied them to (0 and
+# offsets[n_tensors - 1]). Why the bits hold: both are written WHOLE, once a
+# step, before anything reads that range of `grad`: the embedding backward
+# seeds every V x d cell (`emb_seed_kernel`, contract 5.5; EmbConfig.llama
+# has accumulate=False) and then folds the runs; the head dB is a GEMM
+# output (`identical_gemm_backward_b_into`) or, on the chunked v2 head,
+# zeroed then accumulated per chunk (`_chunk_dweight_kernel`). `grad` is
+# never swapped or reassigned (only `param`/m/v swap with their shadows),
+# so the views made once at construction stay bound to the current owner.
+# Nothing reads dw_emb / dw_lm after the old copy point, so the in-place
+# clip inside the update (which now also scales them) is unobservable.
+comptime BYTE_LM_EMB_HEAD_GRAD_VIEWS = IDN_PARAM_GRAD_VIEWS
 
 # TOMBSTONE: MOJOLEARN_IDN_LM_LEAN_STEP (noise: lm-train-step 0.982) deleted 2026-10-11 by 8cc78c8ae; code recoverable at 8cc78c8ae^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch
@@ -1930,10 +1951,15 @@ def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     timing_tick(ctx, ton, tk, "envelope.backward_tape")
     for layer in range(0 if BYTE_LM_BLOCK_VIEWS else config.n_layers):
         _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
+    comptime if not BYTE_LM_EMB_HEAD_GRAD_VIEWS:
+        # MOJOLEARN_IDN_PARAM_GRAD_VIEWS: the backward already wrote both
+        # ranges of `grad` through the views, so these copies go.
+        _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
+        _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
     timing_tick(ctx, ton, tk, "step.pack_grads")
     var packed_cells = 2 * config.vocab_size * config.d_model if BYTE_LM_BLOCK_VIEWS else config.n_total()
+    comptime if BYTE_LM_EMB_HEAD_GRAD_VIEWS:
+        packed_cells = 0
     timing_bytes(ton, "step.pack_grads_bytes", packed_cells * 4)
 
 

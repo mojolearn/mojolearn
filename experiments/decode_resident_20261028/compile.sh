@@ -10,7 +10,10 @@ EV=${1:?evidence dir}; shift
 MAIN=${MAIN:-/Users/andrewhendel/CascadeProjects/mojolearn}
 COMPILER=${MOJO:-$MAIN/.pixi/envs/default/bin/mojo}
 JOBS=${JOBS:-10}
-if [ -n "${NO_PIXI:-}" ]; then
+if [ -n "${POD_PIXI:-}" ]; then
+  # On a pod: the repo's own locked environment, entered through pixi so std resolves.
+  MOJO_RUN=(pixi run -e default mojo)
+elif [ -n "${NO_PIXI:-}" ]; then
   MOJO_RUN=("$COMPILER")
 else
   MOJO_RUN=(pixi run --manifest-path "$MAIN/pixi.toml" --environment default --locked --no-install --executable "$COMPILER")

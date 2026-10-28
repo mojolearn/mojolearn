@@ -51,8 +51,11 @@ def groups(races):
     out = {}
     for (fam, lane), dss in sorted(per.items()):
         board = tuple(sorted(d for d in dss if d in BOARD_DATASETS)) or BOARD_DATASETS[:1]
-        out.setdefault((fam, board), []).append(lane)
-    return [(fam, sorted(lanes), list(board)) for (fam, board), lanes in sorted(out.items())]
+        # A neural lane races its own data: bench_board plans one neural race per
+        # call (several lanes under one --datasets planned only the first), so
+        # each neural lane gets its own call.
+        out.setdefault((fam, board, lane if fam == 'neural' else ''), []).append(lane)
+    return [(fam, sorted(lanes), list(board)) for (fam, board, _), lanes in sorted(out.items())]
 
 
 DEFAULT_PIP = 'sklearn=scikit-learn==1.7.2'

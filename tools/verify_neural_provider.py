@@ -405,11 +405,20 @@ def main():
         return worker(args.worker)
     if args.output is None:
         parser.error('--output is required and must name a new directory')
+    if args.output.exists():
+        parser.error('--output must name a new directory; existing reports are preserved')
     if args.timeout <= 0:
         parser.error('--timeout must be positive')
     if args.mode == 'runtime' and (args.python is None or args.package is None or not args.build_record):
         parser.error('runtime requires --python, --package and at least one --build-record')
-    return verify(args)
+    try:
+        return verify(args)
+    finally:
+        from retain_run_summary import retain_verification, try_retain
+        report = args.output / 'result.json'
+        if report.exists():
+            try_retain(retain_verification, 'neural-provider-' + args.mode, [report],
+                       metadata=dict(mode=args.mode))
 
 
 if __name__ == '__main__':
