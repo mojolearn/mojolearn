@@ -43,6 +43,22 @@ struct NativeIdentityKey(Movable, Writable):
             raise Error("native identity snapshot: container nesting exceeds limit")
         return len(value)
 
+    def add_identity(mut self, value: PythonObject):
+        self.objects.append(value)
+        self.sizes.append(-1)
+
+    def matches_identity(self, value: PythonObject, mut offset: Int) -> Bool:
+        if offset >= len(self.objects) or self.objects[offset] is not value or self.sizes[offset] != -1:
+            return False
+        offset += 1
+        return True
+
+    def retains(self, value: PythonObject) -> Bool:
+        for i in range(len(self.objects)):  # driver-loop: retained identity references
+            if self.objects[i] is value:
+                return True
+        return False
+
     def add(mut self, value: PythonObject, depth: Int = 0, limit: Int = 64) raises:
         var size = self._size(value, depth, limit)
         self.objects.append(value)
@@ -55,7 +71,7 @@ struct NativeIdentityKey(Movable, Writable):
             var pos = Int(0)
             var key = PyObjectPtr()
             var item = PyObjectPtr()
-            while cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+            while cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: exact dictionary metadata
                 self.add(PythonObject(from_borrowed=key), depth + 1, limit)
                 self.add(PythonObject(from_borrowed=item), depth + 1, limit)
         else:
@@ -78,7 +94,7 @@ struct NativeIdentityKey(Movable, Writable):
             var pos = Int(0)
             var key = PyObjectPtr()
             var item = PyObjectPtr()
-            while cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+            while cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: exact dictionary metadata
                 if not self.matches(PythonObject(from_borrowed=key), offset, depth + 1, limit) or not self.matches(PythonObject(from_borrowed=item), offset, depth + 1, limit):
                     return False
         else:
@@ -103,7 +119,7 @@ struct NativeIdentityKey(Movable, Writable):
         var pos = Int(0)
         var key = PyObjectPtr()
         var item = PyObjectPtr()
-        while cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+        while cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: admitted instance fields
             var name = PythonObject(from_borrowed=key)
             if not self._skip(name, skip):
                 self.add(name)
@@ -120,7 +136,7 @@ struct NativeIdentityKey(Movable, Writable):
         var pos = Int(0)
         var key = PyObjectPtr()
         var item = PyObjectPtr()
-        while cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+        while cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: admitted instance fields
             var name = PythonObject(from_borrowed=key)
             if not self._skip(name, skip):
                 if not self.matches(name, offset) or not self.matches(PythonObject(from_borrowed=item), offset, 1):
