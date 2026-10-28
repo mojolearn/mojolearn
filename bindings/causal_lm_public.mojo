@@ -14,6 +14,7 @@ from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from checks.numerics import NUMERIC_IDENTICAL
@@ -146,6 +147,9 @@ def _causal_array_guard(mut mods: NativeModules) raises:
     _ = native_array_slots(mods, generation_array_context())
 
 
+comptime _NATIVE_ENTRY_KEYS_SLOT = "native_entry_keys_v1"
+
+
 def _native_entry_fields(mut mods: NativeModules, entries: PythonObject) raises -> PythonObject:
     # Exact connected modules/namespaces use native storage, never getattr or
     # module __getattr__. Check keys before any string dictionary lookup.
@@ -158,6 +162,19 @@ def _native_entry_fields(mut mods: NativeModules, entries: PythonObject) raises 
         if not raw:
             raise cpy.unsafe_get_error()
         fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
+        # A compiled binding module's namespace is admitted once: the key
+        # scan below reruns only when the namespace dictionary or its size
+        # changed since (an inserted key changes the size).
+        var admitted = prepared_get(mods, _NATIVE_ENTRY_KEYS_SLOT, entries)
+        var size = cpy.lib.get_function[Int]("PyDict_Size")(raw)
+        if admitted is not None and admitted[0] is fields and Int(py=admitted[1]) == size:
+            return fields
+        var module_keys = py_call(bi.list, fields.keys())
+        for i in range(len(module_keys)):  # small-loop(module_keys: native binding record field names): admitted once per namespace
+            if py_type(module_keys[i]) is not bi.str:
+                raise Error("TypeError: native binding entries require ordinary string keys")
+        prepared_put(mods, _NATIVE_ENTRY_KEYS_SLOT, entries, Python.list(fields, PythonObject(size)))
+        return fields
     elif py_type(entries) is types.SimpleNamespace:
         var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
         if not raw:
