@@ -23,6 +23,7 @@ from bindings.scaler_tags_native import scaler_tags
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
+from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input, scaler_snapshot_write_back
 from bindings.scaler_native import scaler_fit, _input, _ptr, _stage, _copy_row, _bool
 from core.scaler_fit_impl import scaler_fill, scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices, scaler_counts_f32, scaler_counts_i64, scaler_equal_f32, scaler_equal_i64, scaler_counts_f64, scaler_merge_count_only, scaler_narrow_counts
 
@@ -89,7 +90,10 @@ def scaler_initialize(model: PythonObject, args: PythonObject) raises -> PythonO
     return PythonObject(None)
 
 
-def _write_back(source: PythonObject, values: PythonObject, output: PythonObject, copy: Bool, context: PythonObject) raises -> PythonObject:
+def _write_back(source: PythonObject, values: PythonObject, output: PythonObject, copy: Bool, context: PythonObject,
+                snapshot: PythonObject = PythonObject(None)) raises -> PythonObject:
+    if snapshot is not None:
+        return scaler_snapshot_write_back(snapshot, output, copy)
     if copy or native_pandas_exact(source):
         return output
     var b = native_loaded_module("builtins")
@@ -152,7 +156,8 @@ def _nan_fill(values: PythonObject, entries: PythonObject, context: PythonObject
     return output
 
 
-def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, copy_option: PythonObject, context: PythonObject) raises -> PythonObject:
+def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, copy_option: PythonObject, context: PythonObject,
+                     input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
     var fields = py_fields(model)
     var copy = _bool(fields["copy"] if copy_option is None else copy_option, context)
     if not _fitted(fields):
@@ -160,9 +165,11 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         raise Error("NotFittedError: StandardScaler is not fitted")
     var entries = _entries(fields["numeric_mode_"], context)
     var direct = _direct(entries, "standard_transform_direct")
-    var values = _input(source, 2, True, context)
-    var n = Int(py=values.shape[0])
-    var d = Int(py=values.shape[1])
+    var snapshot = scaler_operation_input(source, context, input_cache)
+    var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
+    var values = captured[].values
+    var n = captured[].metadata.source.rows
+    var d = captured[].metadata.source.cols
     if d != _features(fields):
         raise Error("StandardScaler input feature count differs from fit")
     var with_mean = _bool(fields["with_mean_"], context)
@@ -252,7 +259,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     _ = arena^
     _ = mean^
     _ = scale^
-    return _write_back(source, values, output, copy, context)
+    return _write_back(source, values, output, copy, context, snapshot)
 
 
 def _counts(value: PythonObject, d: Int, dest: F32P, context: PythonObject) raises:
@@ -384,7 +391,10 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     return model
 
 
-def scaler_fit_transform(model: PythonObject, source: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+def scaler_fit_transform(model: PythonObject, source: PythonObject, options: PythonObject, context: PythonObject,
+                         var input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
+    if input_cache is None:
+        input_cache = Python.list()
     var b = native_loaded_module("builtins")
     var names = py_call(b.list, options)
     for k in range(len(names)):  # driver-loop: fit's keyword names, not data
@@ -409,9 +419,11 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
             for k in range(len(stale)):  # driver-loop: invalidate fitted attribute names on refit
                 if String(stale[k]).endswith("_"):
                     _ = py_call(fields.pop, stale[k])
-            var values = _input(source, 2, True, context)
-            var n = Int(py=values.shape[0])
-            var d = Int(py=values.shape[1])
+            var snapshot = scaler_operation_input(source, context, input_cache)
+            var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
+            var values = captured[].values
+            var n = captured[].metadata.source.rows
+            var d = captured[].metadata.source.cols
             var stats = classical_typed(Python.tuple(3,d), "<f4", context["output_context"])
             var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
             var wm = _bool(fields["with_mean"], context)
@@ -439,12 +451,12 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
                     raise Error("StandardScaler transform overflowed in Float32")
                 _ = output  # keep the Python object alive through the native calls above
                 _ = values  # keep the Python object alive through the native calls above
-                return _write_back(source, values, output, _bool(fields["copy"],context), context)
+                return _write_back(source, values, output, _bool(fields["copy"],context), context, snapshot)
             _ = output  # keep the Python object alive through the native calls above
             _ = stats  # keep the Python object alive through the native calls above
             _ = values  # keep the Python object alive through the native calls above
-    _ = scaler_fit(model, source, py_get(options,"sample_weight"), context)
-    return scaler_transform(model, source, False, PythonObject(None), context)
+    _ = scaler_fit(model, source, py_get(options,"sample_weight"), context, input_cache)
+    return scaler_transform(model, source, False, PythonObject(None), context, input_cache)
 
 
 def scaler_archive_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -573,8 +585,15 @@ def _outside(context: PythonObject, depth: Int) raises -> Bool:
     return outside
 
 
-def _public_result(result: PythonObject, context: PythonObject) raises -> PythonObject:
+def _public_result(result: PythonObject, context: PythonObject,
+                   input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
     if classical_is_array(result,context) and py_get(context,"ndarray") is not None and _outside(context,1):
+        if input_cache is not None and len(input_cache) > 0:
+            var captured = input_cache[0].downcast_value_ptr[ScalerInputSnapshot]()
+            if result is captured[].original:
+                # Publish the captured shape and owner after copy-back; the
+                # caller's mutable Array metadata is not read again.
+                return sequential_input(captured[].values,context)
         return sequential_input(result,context)
     return result
 
@@ -637,11 +656,13 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         elif op == "is_fitted":
             result = PythonObject(_fitted(py_fields(model)))
         elif op == "transform":
-            result = _public_result(scaler_transform(model,args[0],Bool(py=args[1]),args[2],context),context)
+            var input_cache = Python.list()
+            result = _public_result(scaler_transform(model,args[0],Bool(py=args[1]),args[2],context,input_cache),context,input_cache)
         elif op == "partial_fit":
             result = scaler_partial_fit(model,args[0],args[2],context)
         elif op == "fit_transform":
-            result = _public_result(scaler_fit_transform(model,args[0],args[2],context),context)
+            var input_cache = Python.list()
+            result = _public_result(scaler_fit_transform(model,args[0],args[2],context,input_cache),context,input_cache)
         elif op == "save":
             result = scaler_archive_save(model,args[0],context)
         elif op == "load":
