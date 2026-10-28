@@ -72,7 +72,9 @@ def main():
     for group in args.groups:
         source = Path("experiments/peer2_native_boundary_20261027") / f"compile_{group}.mojo"
         binary = args.out / f"{group}.so"
-        command = [str(compiler), "build", "-j", str(cores), "--emit", "shared-lib",
+        # Use the repository's supported activated toolchain, as build_host_family.sh
+        # does. Invoking the executable alone omits the installed std search path.
+        command = ["pixi", "run", "-e", "default", str(compiler), "build", "-j", str(cores), "--emit", "shared-lib",
                    "--target-cpu", "x86-64-v3", "-D", "MOJOLEARN_NUMERIC_IDENTICAL=1",
                    "-D", "MOJOLEARN_COLUMN_CPU", "-I", ".", "-I", "bindings",
                    str(source), "-o", str(binary)]
