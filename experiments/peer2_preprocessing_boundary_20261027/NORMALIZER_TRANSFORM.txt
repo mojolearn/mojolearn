@@ -1,0 +1,71 @@
+Normalizer.transform complete native envelope (2026-10-27; next freeze)
+
+Base: local main 7de54456bde166c42fd0d9f7378e402bb0f3be91.
+Branch: lane/peer2-preprocessing-20261027. No main/worktree sharing.
+
+Public Normalizer aliases resolve to _expansion_prep.Normalizer. Only its
+transform method receives native_method's import-time flags. Its method body
+remains one _STATELESS_CALL. Those flags prevent install_public_outputs and
+install_fit_tracking from adding their public/guarded wrappers to this method;
+fit, fit_transform, constructor and other preprocessing classes are unchanged.
+
+Execution path:
+  Normalizer.transform -> prep_stateless_c (_kind metaclass admission)
+  -> prep_normalizer_lifecycle.normalizer_transform
+  -> prep_transform_snapshot (native input validation/preparation)
+  -> retained compiled entry table -> existing xprep_run normalization stage47
+  -> xprep_take -> parallel_public_result (finished native Array/ndarray).
+
+The native envelope owns the inherited fitted check, nesting flag, static input
+tags, sparse/complex/rank/empty/finite/width checks, feature-name warning, norm
+validation, error publication and caller-sensitive float32 output. Optional copy
+is still ignored. The former pandas _array_like conversion discarded column
+labels before the wrapper's width/name check; the new path retains that behavior.
+Unsupported Python properties, input protocols, dynamic allow-NaN hooks, custom
+representations and numerical callbacks are refused before invocation.
+
+Input metadata is captured before narrowing. Raw float32/float64 finite checks
+use full captured strides; half retains the former no-scan behavior. Exact
+Arrays bypass ndarray conversion. Native pandas blocks are captured separately,
+including nullable masks and placements, then converted using existing promotion
+and scatter providers. Original float64 finite values are checked before f32
+narrowing, so narrowing overflow is not mislabeled as nonfinite source input.
+All original block/mask owners are independently pinned through execution.
+DeviceRows base/indices use captured native metadata and a bounds-checked raw
+row copy. Existing host snapshot reuse/publication is retained. GPU row handles
+materialize through this native row-copy boundary; no Python materializer runs.
+No performance claim is made for that preparation-route change.
+
+Packed native f32 inputs get an independent header retaining their memoryview
+and original owners. Other admitted primitive dtypes use scaler_cast into owned
+f32 storage. Admission-only descriptors cannot reach casts. The core finite
+scanner independently admits only matching f32/f64 dtype/item widths; it does
+not execute CastIn.kind for higher-rank descriptive snapshots.
+
+Transitive callback repairs in owned x_prep_native_owner: cache state must be
+an exact dictionary before iteration; arena-local storage must be an exact
+_thread._local with an exact dictionary and exact string keys before scope
+lookup. The operation copies its connected compiled entries into a private
+native dictionary and admits function/identity types before mode reads or
+numerical execution. Native warnings use the established warning provider,
+which refuses custom display/recording hooks.
+
+Compile target: a small exported wrapper instantiating normalizer_transform;
+also prep_stateless_c for the public dispatch branch, or production
+bindings/_mojolearn_runtime_classical_host.mojo. Include new
+providers/python/prep_transform_pyapi.mojo, core/prep_boundary_impl.mojo and
+changed x_prep_native_owner closure. Numerical normalization kernels unchanged.
+
+Validation: source review only. No new tests, runtime, GPU or benchmark runs,
+following the owner's current compile-and-merge direction. Root owns native
+compilation and merges; public runtime and cross-vendor coverage remain pending.
+Required commit/push hook logs are under
+~/mojolearn-evidence/peer2-preprocessing-20261027/normalizer-transform-*.log.
+
+Remaining callbacks/scope: Normalizer fit/fit_transform retain _mode Python
+tracking/validation/output wrappers; its constructor still assigns Python fields.
+Other stateless/selector methods retain their existing wrappers and owners.
+This operation still calls the established compiled x_prep functions through
+py_call_typed; it does not replace that ABI with a new numerical provider.
+Shared native admission, warning, attribute and output providers remain part of
+its source closure. No whole-family or runtime-compliance claim is made.
