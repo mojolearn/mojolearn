@@ -1,0 +1,273 @@
+{
+  "lane": "peer1-native-next-compile",
+  "branch": "lane/peer1-native-next-20261027",
+  "merged_base": "origin/integration/provider-queue-20261028 @ 3d95fa9dfc (contains origin/main 4771b55daa)",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+  "allocation": {
+    "machine": "Linux-6.8.0-147-generic-x86_64-with-glibc2.35",
+    "affinity_cpus": 32,
+    "cgroup_limits": {
+      "/sys/fs/cgroup/cpu.max": "max 100000"
+    },
+    "compiler_jobs": 32,
+    "root_concurrency": 3,
+    "runtime": "NOT_RUN",
+    "vendor_verification": "NOT_RUN"
+  },
+  "common_flags": "mojo build -j 32 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings",
+  "command_scripts": [
+    "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/compile-command.sh",
+    "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/device-builds.sh"
+  ],
+  "attempts": [
+    {
+      "name": "dev-cluster-device-amd-gfx942",
+      "entry": "experiments/peer1_hierarchy_cluster_descriptor_20261028/compile_cluster_device.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 x86-64-v3 identical, accelerator gfx942 COLUMN_AMD",
+      "exit_code": 0,
+      "binary_sha256": "1ec87b6981138f24857608d2a8eebf4ae9e76a61bfd5b04a87c546b85cf3050b",
+      "binary_bytes": 3831224,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/dev-cluster-device-amd-gfx942.log",
+      "log_sha256": "0f910710f2110f944190b432f9143615da9b05cef7b7d7a73d53bfa34c526629"
+    },
+    {
+      "name": "dev-cluster-device-cpucol-sm_89",
+      "entry": "experiments/peer1_hierarchy_cluster_descriptor_20261028/compile_cluster_device.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 x86-64-v3 identical, accelerator sm_89 COLUMN_CPU",
+      "exit_code": 0,
+      "binary_sha256": "fa95dd2b23d32015061e2a5ff068f40b0cfadc4ebdaf72b4ee0d7ffb5d0ca9dc",
+      "binary_bytes": 3722144,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/dev-cluster-device-cpucol-sm_89.log",
+      "log_sha256": "0f910710f2110f944190b432f9143615da9b05cef7b7d7a73d53bfa34c526629"
+    },
+    {
+      "name": "dev-cluster-device-nvidia-sm_89",
+      "entry": "experiments/peer1_hierarchy_cluster_descriptor_20261028/compile_cluster_device.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 x86-64-v3 identical, accelerator sm_89 COLUMN_NVIDIA",
+      "exit_code": 0,
+      "binary_sha256": "fa95dd2b23d32015061e2a5ff068f40b0cfadc4ebdaf72b4ee0d7ffb5d0ca9dc",
+      "binary_bytes": 3722144,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/dev-cluster-device-nvidia-sm_89.log",
+      "log_sha256": "0f910710f2110f944190b432f9143615da9b05cef7b7d7a73d53bfa34c526629"
+    },
+    {
+      "name": "dev-x-cluster-module-amd-gfx942-Odefault",
+      "entry": "bindings/entry/entry__mojolearn_x_cluster.mojo",
+      "source_commit": "b9af661618",
+      "flags": "default optimization x86-64-v3 identical, accelerator gfx942 COLUMN_AMD",
+      "exit_code": 0,
+      "binary_sha256": "22e5775443e8e61bf43e035e62fe67114ba71eb3ec81cdacf59628aeefca10c9",
+      "binary_bytes": 4574712,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/dev-x-cluster-module-amd-gfx942-Odefault.log",
+      "log_sha256": "9c018910442e9ad30212592a0f05223b1141d42b27327a5a1ea69be18e417925"
+    },
+    {
+      "name": "dev-x-cluster-module-amd-gfx942",
+      "entry": "bindings/entry/entry__mojolearn_x_cluster.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 x86-64-v3 identical, accelerator gfx942 COLUMN_AMD",
+      "exit_code": 1,
+      "binary_sha256": null,
+      "binary_bytes": null,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/dev-x-cluster-module-amd-gfx942.log",
+      "log_sha256": "188ed29abbd3a1aa05d35ffc1fd95462f8fad951a708753891a7599323e6d19b"
+    },
+    {
+      "name": "dev-x-cluster-module-cpucol-sm_89",
+      "entry": "bindings/entry/entry__mojolearn_x_cluster.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 x86-64-v3 identical, accelerator sm_89 COLUMN_CPU",
+      "exit_code": 0,
+      "binary_sha256": "e12ed1b458ab2bc1299971cb5e69199660f5edcfe9a9dea47701ea232cfb595a",
+      "binary_bytes": 31877320,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/dev-x-cluster-module-cpucol-sm_89.log",
+      "log_sha256": "9c018910442e9ad30212592a0f05223b1141d42b27327a5a1ea69be18e417925"
+    },
+    {
+      "name": "dev-x-cluster-module-nvidia-sm_89",
+      "entry": "bindings/entry/entry__mojolearn_x_cluster.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 x86-64-v3 identical, accelerator sm_89 COLUMN_NVIDIA",
+      "exit_code": 0,
+      "binary_sha256": "31559290376675f13f685a6a35fd403973b427ea83d653e688ce90b044b945a5",
+      "binary_bytes": 58721152,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/dev-x-cluster-module-nvidia-sm_89.log",
+      "log_sha256": "9c018910442e9ad30212592a0f05223b1141d42b27327a5a1ea69be18e417925"
+    },
+    {
+      "name": "round-1-cluster-device",
+      "entry": "experiments/peer1_hierarchy_cluster_descriptor_20261028/compile_cluster_device.mojo",
+      "source_commit": "03f47d500c",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 1,
+      "binary_sha256": null,
+      "binary_bytes": null,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-1-cluster-device.log",
+      "log_sha256": "c21eceb9c5a33cc48aaed0a4ffd615cd37db7eb0ee767e3366345c345bc017e5"
+    },
+    {
+      "name": "round-1-cluster-host",
+      "entry": "experiments/peer1_hierarchy_cluster_descriptor_20261028/compile_cluster_host.mojo",
+      "source_commit": "03f47d500c",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 1,
+      "binary_sha256": null,
+      "binary_bytes": null,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-1-cluster-host.log",
+      "log_sha256": "8e47afdf25d771facca026a0ef9d6d7a51d736daafd25015fb285416f9b5513a"
+    },
+    {
+      "name": "round-1-hierarchy-public",
+      "entry": "experiments/provider_hierarchy_20261027/compile_hierarchy.mojo",
+      "source_commit": "03f47d500c",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 1,
+      "binary_sha256": null,
+      "binary_bytes": null,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-1-hierarchy-public.log",
+      "log_sha256": "691c60c4430a77c7ce70004a1efaf42e3546d818db1127701b98ad6a5dff2420"
+    },
+    {
+      "name": "round-1-kernel-public",
+      "entry": "checks/peer1_kernel_owner_compile.mojo",
+      "source_commit": "03f47d500c",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 0,
+      "binary_sha256": "1965c897cb9a131cc790149b1a5f50b97c82d48ec13b4bf6bc5b8995d39a8b60",
+      "binary_bytes": 7000248,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-1-kernel-public.log",
+      "log_sha256": "b861cec39ba4acd6eafd614c5b37528a0d48e708ad33706591aeb0e06dd245fc"
+    },
+    {
+      "name": "round-1-pcs-draw-host",
+      "entry": "experiments/provider_radius_20261027/compile_pcs_draw_host.mojo",
+      "source_commit": "03f47d500c",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 0,
+      "binary_sha256": "eada10c076be19a87ebc3e3f750891f026f2ddff8ba342605e796c9a9f895858",
+      "binary_bytes": 243000,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-1-pcs-draw-host.log",
+      "log_sha256": "e20324799fed3cea0e60e5a3f278fd661bf6aad77e223100a2c43db688943291"
+    },
+    {
+      "name": "round-1-radius-public",
+      "entry": "experiments/provider_radius_20261027/compile_radius.mojo",
+      "source_commit": "03f47d500c",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 0,
+      "binary_sha256": "51138e2bc51a450eb8ebf6409c5150af1e8bfe6fedb8dc2c23b73370c076a021",
+      "binary_bytes": 9869616,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-1-radius-public.log",
+      "log_sha256": "11815b7d756e27a243fbb1007ce25bd3f3dcd81f361760ee7255e6d815ccffd7"
+    },
+    {
+      "name": "round-1-x-cluster-host-module",
+      "entry": "bindings/entry/entry__mojolearn_x_cluster_host.mojo",
+      "source_commit": "03f47d500c",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 1,
+      "binary_sha256": null,
+      "binary_bytes": null,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-1-x-cluster-host-module.log",
+      "log_sha256": "2269aff1f99d39d2306f248f752ee9381d690edcbc1df2797ce30d9365bad0da"
+    },
+    {
+      "name": "round-1-x-cluster-module",
+      "entry": "bindings/entry/entry__mojolearn_x_cluster.mojo",
+      "source_commit": "03f47d500c",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 1,
+      "binary_sha256": null,
+      "binary_bytes": null,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-1-x-cluster-module.log",
+      "log_sha256": "31a9992f6b577446b95f9339d5ac6138fc7830a0135652cf85e821f87af24799"
+    },
+    {
+      "name": "round-1-x-neighbors-host-module",
+      "entry": "bindings/entry/entry__mojolearn_x_neighbors_host.mojo",
+      "source_commit": "03f47d500c",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 0,
+      "binary_sha256": "27d76997e2cc59720b6347489d021ac189b478daf51210e8ed0475d1365d865e",
+      "binary_bytes": 8397224,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-1-x-neighbors-host-module.log",
+      "log_sha256": "6f60ea69968f76fa6f3b1a5f07005852459c9780d9dcbd3e4e2432d7ea8afc2e"
+    },
+    {
+      "name": "round-2-cluster-device",
+      "entry": "experiments/peer1_hierarchy_cluster_descriptor_20261028/compile_cluster_device.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 1,
+      "binary_sha256": null,
+      "binary_bytes": null,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-2-cluster-device.log",
+      "log_sha256": "f9220aac4d2654658a95e43e65229664cd566fa3c3264aa4c45414de0aa78583"
+    },
+    {
+      "name": "round-2-cluster-host",
+      "entry": "experiments/peer1_hierarchy_cluster_descriptor_20261028/compile_cluster_host.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 0,
+      "binary_sha256": "06fde8d6f7b82e72b4d4b98227c9d34a9d1df14d269067cead7f0e47ca386e90",
+      "binary_bytes": 1697832,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-2-cluster-host.log",
+      "log_sha256": "25a3be8780fa1709995f38eb9e22bf9190e04f59d03336458871377ec52e76f1"
+    },
+    {
+      "name": "round-2-hierarchy-public",
+      "entry": "experiments/provider_hierarchy_20261027/compile_hierarchy.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 0,
+      "binary_sha256": "5cd53ec3685afc7d35d2da9499e10e50661541d52c7d2467b991d84d64ed7075",
+      "binary_bytes": 4857064,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-2-hierarchy-public.log",
+      "log_sha256": "11be207054ccb05fa6c161f75fe7e33d8be0c3010de1c3df3e0d0f930622821f"
+    },
+    {
+      "name": "round-2-x-cluster-host-module",
+      "entry": "bindings/entry/entry__mojolearn_x_cluster_host.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 0,
+      "binary_sha256": "86dcc7b908a5e96c832fe123bab4b6a496ac01c4034bf51a182e0e4c67d2d075",
+      "binary_bytes": 8914576,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-2-x-cluster-host-module.log",
+      "log_sha256": "e661f38e34fd3f89b4f51d97a1005c583e9b99f3307c044206ee4ad8d9da7e45"
+    },
+    {
+      "name": "round-2-x-cluster-module",
+      "entry": "bindings/entry/entry__mojolearn_x_cluster.mojo",
+      "source_commit": "b9af661618",
+      "flags": "-O0 CPU column x86-64-v3 identical, no accelerator",
+      "exit_code": 1,
+      "binary_sha256": null,
+      "binary_bytes": null,
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/remote/leg_out/peer1-native-next-compile/round-2-x-cluster-module.log",
+      "log_sha256": "1aa32cc844ddeac539e8629660a1d00c820186dc5a85f7b7858c9f703da568ab"
+    }
+  ],
+  "status": "PASS: all 9 roots compile on the final source (CPU-target roots under CPU column -O0; device roots with an explicit accelerator target).",
+  "failure_repairs": [
+    "Round 1: Mojo 1.0 has no variadic List constructor: hierarchy/cluster_descriptor_impl.mojo:16 and bindings/cfb_agglo.mojo:250/254; fixed with typed list literals in b9af661618.",
+    "Round 2: cluster-device and x-cluster-module instantiate DeviceOps GPU kernels; the CPU-only flags have no accelerator (\"Unknown GPU architecture detected\"). Not a source bug: rebuilt with explicit --target-accelerator (dev-* attempts).",
+    "dev-x-cluster-module-amd-gfx942 at -O0 fails in unchanged gemm_checks (stack frame exceeds limit, lld undefined free); the same root at default optimization exits 0. Pre-existing -O0 AMD codegen limit outside this lane."
+  ],
+  "evidence_reuse": "radius-public, pcs-draw-host, kernel-public, x-neighbors-host-module passed at 03f47d500c; the only later change (round-2 fix) is in two files those roots did not fail on while still broken, so they do not instantiate them.",
+  "retained_archive": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-compile-20261028/cpu-compile/results-complete.tgz",
+  "archive_sha256": "d1e854437ebaa634e6c3d38127a96fc459f897722151251bb9934d76a9c8a058",
+  "r2_object": "measurements/runpod-cpu/mojolearn-cpu-peer1-native-next-compile-20261028-054956/results-complete.tgz",
+  "teardown": "pod=k9cftwtv1n544l\nname=mojolearn-cpu-peer1-native-next-compile-20261028-054956\nterminated_verified=1\nexit=1\nat=2026-10-28T06:01:18Z\n",
+  "controller_exit": 1,
+  "controller_exit_note": "box script exited 1 by the finish signal because the CPU-only device roots stayed in its pending list; device roots passed in the dev-* attempts on the same box.",
+  "runtime_verification": "NOT_RUN",
+  "identity_verification": "NOT_RUN",
+  "gpu_runtime": "NOT_RUN",
+  "not_covered": "Apple/metal targets, sm_90a/PTX, other x_cluster algorithms at runtime, any runtime/identity behavior."
+}

@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = (ROOT / "bindings/neural_block_public.mojo").read_text()
 ADMISSION = (ROOT / "bindings/neural_block_admission.mojo").read_text()
+ARRAY_ADMISSION = (ROOT / "bindings/native_array_snapshot.mojo").read_text()
 
 
 class NeuralAdmissionSource(unittest.TestCase):
@@ -15,11 +16,15 @@ class NeuralAdmissionSource(unittest.TestCase):
         self.assertIn('"_native_block_fields"', body)
 
     def test_array_metadata_uses_native_slots_and_retains_owner(self):
-        body = ADMISSION.split("def neural_array_snapshot(")[1].split("def neural_admit_weights(")[0]
+        body = ARRAY_ADMISSION.split("def native_array_snapshot(")[1]
+        self.assertIn("native_array_snapshot as neural_array_snapshot", ADMISSION)
         self.assertIn('slots[names[i]].__get__', body)
         self.assertIn('AdmittedBorrowedBuffer(store)', body)
         self.assertIn('slots["_base"].__set__, result, value', body)
         self.assertIn('offset + count * itemsize > layout.count * layout.itemsize', body)
+        self.assertIn('py_type(original_view) is not b.memoryview', body)
+        self.assertIn('view_layout.address != Int(py=values["_addr"])', body)
+        self.assertIn('slots["_mv"].__set__, result, retained_view', body)
 
     def test_public_input_protocols_guarded(self):
         self.assertNotIn("operator.index", PUBLIC)
@@ -29,7 +34,7 @@ class NeuralAdmissionSource(unittest.TestCase):
         self.assertIn("neural_block_f32(grad_output", PUBLIC)
 
     def test_native_dictionary_descriptor_guard_reused(self):
-        body = ADMISSION.split("def neural_record_fields(")[1].split("def neural_array_slots(")[0]
+        body = ADMISSION.split("def neural_record_fields(")[1].split("\ndef ", 1)[0]
         self.assertIn("var fields = _fields(value)", body)
         self.assertNotIn("getattr", body.split("var fields = _fields(value)", 1)[1])
         self.assertIn('"__get__"', body)
