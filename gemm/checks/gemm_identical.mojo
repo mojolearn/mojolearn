@@ -120,7 +120,7 @@ from std.gpu.primitives.warp import shuffle_xor
 from std.utils import StaticTuple
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceAttribute, DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -3727,7 +3727,7 @@ def gemm_mfma16_waves(m: Int, n: Int, k: Int, plan: Int, ws_floats: Int) -> Int:
     if split and (p_count < 2 or ws_floats < m * n * p_count):
         return 0
     var mult = p_count if split else 1
-    var min_blocks = gemm_tile_min_blocks()
+    var min_blocks = gemm_fill_min_blocks()
     var cols = (n + 63) // 64
     var nw = 1
     if min_blocks > 0:
@@ -3801,7 +3801,7 @@ def gemm_nv_step_kpack_rows(m: Int, n: Int, k: Int) -> Int:
     var plan = choose_gemm_plan(m, n, k)
     if plan != PLAN_TUNED_64_4X4 and plan != PLAN_TUNED_32_2X2:
         return 0
-    var min_blocks = gemm_tile_min_blocks()
+    var min_blocks = gemm_fill_min_blocks()
     if min_blocks <= 0:
         return 0
     comptime TR = TUNED_TPB // TUNED_TC
@@ -4293,7 +4293,16 @@ def gemm_tile_step_down(m: Int, n: Int, k: Int, plan: Int) -> Int:
     (the shipped dispatcher) AFTER the ksplit rule has read the tile
     chooser, so a call the long-k group rule takes keeps its group kernel
     and only the calls that would run a plain tuned tile step down. The
-    same leaves and folds either way."""
+    same leaves and folds either way. Under `-D MOJOLEARN_IDN_GEMM_FILL_TILES`
+    the continuous fill rule (`gemm_fill_step_down`) answers instead."""
+    comptime if IDN_GEMM_FILL_TILES:
+        return gemm_fill_step_down(m, n, k, plan)
+    return _gemm_tile_step_down_rules(m, n, k, plan)
+
+
+def _gemm_tile_step_down_rules(m: Int, n: Int, k: Int, plan: Int) -> Int:
+    """The shipped two-rule step-down (block floor, NVIDIA short-k and
+    min-k gates); the body `gemm_tile_step_down` ran before the fill rule."""
     var min_blocks = gemm_tile_min_blocks()
     if min_blocks <= 0:
         return plan
@@ -4305,6 +4314,155 @@ def gemm_tile_step_down(m: Int, n: Int, k: Int, plan: Int) -> Int:
         pick = PLAN_TUNED_64_4X4
     if pick == PLAN_TUNED_64_4X4 and _tuned_tile_blocks(m, n, TUNED_BM_WIDE) < min_blocks:
         pick = PLAN_TUNED_32_2X2
+    return pick
+
+
+#: lane/gemm-fill-tiles-20261028 (experiment, DEFAULT OFF):
+#: `-D MOJOLEARN_IDN_GEMM_FILL_TILES` replaces the two-rule step-down (the
+#: column's block floor, gated on NVIDIA by `gemm_tile_short_k` 512 and
+#: `gemm_tile_min_k` 4096) with one continuous fill rule on NVIDIA and AMD
+#: alike: the WIDEST tuned tile (128, 64, then 32) whose block count reaches
+#: `GEMM_FILL_WARPS_PER_SCHEDULER x GEMM_FILL_SCHEDULERS_PER_SM x warp size /
+#: TUNED_TPB` blocks per SM / CU times the device's SM / CU count, both read
+#: from the device at runtime (`MULTIPROCESSOR_COUNT`, `WARP_SIZE`, cached
+#: once per process). No k gate and no shape or board constant: the k gates
+#: made calls with 512 < k < 4096 (e.g. a 2048 x 384 x 768 projection, 48
+#: tiles of 128 x 128 on a 142-SM L40S) keep a tile that leaves most SMs
+#: idle. Today's rules answer until a device has been seen (the first call
+#: of a process) and on every other column (Apple, CPU), where the define is
+#: inert.
+#: OCCUPANCY REASONING for the multiple: a tuned block is TUNED_TPB threads;
+#: an NVIDIA SM has 4 warp schedulers and a CDNA CU 4 SIMDs. A scheduler
+#: needs at least two resident warps / waves so one can issue while the
+#: other waits on a shared-memory or global load, so one fill wave is
+#: 2 x 4 x warp_size threads per SM / CU: 256 threads (1 block of 256) on
+#: NVIDIA (warp 32), 512 (2 blocks) on CDNA (wave 64). On an L40S that is
+#: 142 blocks, on an MI325X 608 (the measured floors were 192 and 1024;
+#: the A/B decides).
+#: SAME BITS: the plan is an execution plan only (contract 6.1): every tuned
+#: plan computes the same leaves of `contract_partition(k)`, each one chain
+#: over k ascending from +0.0, folded by the same contract tree
+#: (`check_device_is_launch_invariant`). SPLIT DECISION HELD: the group
+#: (split-K) rules read `choose_gemm_plan_tiles`, which this does not touch,
+#: but the shipped body runs groups only on calls `choose_gemm_plan` leaves
+#: on TUNED 128x128. Where the column's TUNED 128 body would run groups at
+#: this shape (`_gemm_fill_tuned128_group_leaves > 0`), a move onto or off
+#: the 128 tile would change that decision, so the call keeps today's pick:
+#: the split decision is today's at every shape.
+comptime IDN_GEMM_FILL_TILES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
+    "MOJOLEARN_IDN_GEMM_FILL_TILES"
+]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime GEMM_FILL_WARPS_PER_SCHEDULER = 2
+comptime GEMM_FILL_SCHEDULERS_PER_SM = 4
+
+
+struct _FillDevice(Defaultable, Movable):
+    var sms: Int
+    var warp: Int
+
+    def __init__(out self):
+        self.sms = 0
+        self.warp = 0
+
+
+comptime _FILL_DEVICE_NAME = "MojoGemmFillDeviceIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmFillDeviceFast"
+comptime GEMM_FILL_DEVICE = _Global[StorageType=_FillDevice, name=_FILL_DEVICE_NAME, init_fn=_FillDevice.__init__]
+
+
+def gemm_fill_note_device(ctx: DeviceContext):
+    """Caches the device's SM / CU count and warp size for the fill rule,
+    once per process (a failed query is recorded as -1 and never retried).
+    NVIDIA and AMD columns only; elsewhere nothing is queried."""
+    comptime if TARGET_COLUMN != COLUMN_NVIDIA and TARGET_COLUMN != COLUMN_AMD:
+        return
+    try:
+        var p = GEMM_FILL_DEVICE.get_or_create_ptr()
+        if p[].sms != 0:
+            return
+        var sms = -1
+        var warp = 0
+        try:
+            sms = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+            warp = ctx.get_attribute(DeviceAttribute.WARP_SIZE)
+        except:
+            sms = -1
+        if sms <= 0 or warp <= 0:
+            sms = -1
+            warp = 0
+        p[].warp = warp
+        p[].sms = sms
+    except:
+        return
+
+
+def gemm_fill_target_blocks() -> Int:
+    """The fill rule's block target: SM / CU count x blocks per SM / CU for
+    one fill wave (see `IDN_GEMM_FILL_TILES`); 0 while no device is known
+    (today's rules answer then)."""
+    comptime if TARGET_COLUMN != COLUMN_NVIDIA and TARGET_COLUMN != COLUMN_AMD:
+        return 0
+    try:
+        var p = GEMM_FILL_DEVICE.get_or_create_ptr()
+        if p[].sms <= 0 or p[].warp <= 0:
+            return 0
+        var threads = GEMM_FILL_WARPS_PER_SCHEDULER * GEMM_FILL_SCHEDULERS_PER_SM * p[].warp
+        var per_sm = (threads + TUNED_TPB - 1) // TUNED_TPB
+        if per_sm < 1:
+            per_sm = 1
+        return p[].sms * per_sm
+    except:
+        return 0
+
+
+def gemm_fill_min_blocks() -> Int:
+    """The block floor the packed and small-tile fill selections read
+    (`gemm_nv_step_kpack_rows`, `gemm_mfma16_waves`): the fill target under
+    `IDN_GEMM_FILL_TILES` once a device is known, else
+    `gemm_tile_min_blocks()` (today)."""
+    comptime if IDN_GEMM_FILL_TILES:
+        var target = gemm_fill_target_blocks()
+        if target > 0:
+            return target
+    return gemm_tile_min_blocks()
+
+
+def _gemm_fill_tuned128_group_leaves(m: Int, n: Int, k: Int) -> Int:
+    """Leaves per group the column's shipped TUNED 128x128 body would run
+    at this shape (0 = all leaves in one launch), mirroring the branch order
+    of `_shipped_body_kpack_hg`: the AMD matrix-core body's group size, else
+    the leaf split's rule, else the kpack-hg / ksplit default's rule."""
+    comptime if GEMM_IDENTICAL_MFMA:
+        return _mfma_group_leaves(m, n, k)
+    comptime if GEMM_IDENTICAL_LEAF_SPLIT:
+        var lgl = gemm_step_ksplit_rule(m, n, k, 0, False)
+        if lgl > 0 and contract_partition(k)[1] > 0:
+            return lgl
+    comptime if GEMM_BODY_KPACK_HG or GEMM_KSPLIT_DEFAULT_ON:
+        return gemm_default_ksplit_leaves(m, n, k)
+    return 0
+
+
+def gemm_fill_step_down(m: Int, n: Int, k: Int, plan: Int) -> Int:
+    """The continuous fill rule (`IDN_GEMM_FILL_TILES`): from the tile
+    chooser's TUNED pick, the widest tuned tile whose block count reaches
+    `gemm_fill_target_blocks()`, else the 32x32 tile; today's
+    `_gemm_tile_step_down_rules` while no device is known. A call whose
+    TUNED 128 body would run groups keeps today's pick wherever the fill
+    pick would move it onto or off the 128 tile (split decision held)."""
+    var today = _gemm_tile_step_down_rules(m, n, k, plan)
+    if plan != PLAN_TUNED_128_8X8 and plan != PLAN_TUNED_64_4X4:
+        return today
+    var target = gemm_fill_target_blocks()
+    if target <= 0:
+        return today
+    var pick = plan
+    if pick == PLAN_TUNED_128_8X8 and _tuned_tile_blocks(m, n, 2 * TUNED_BM_WIDE) < target:
+        pick = PLAN_TUNED_64_4X4
+    if pick == PLAN_TUNED_64_4X4 and _tuned_tile_blocks(m, n, TUNED_BM_WIDE) < target:
+        pick = PLAN_TUNED_32_2X2
+    if (pick == PLAN_TUNED_128_8X8) != (today == PLAN_TUNED_128_8X8):
+        if _gemm_fill_tuned128_group_leaves(m, n, k) > 0:
+            return today
     return pick
 
 
@@ -5171,6 +5329,8 @@ def identical_gemm_with_plan(
     """
     if m <= 0 or n <= 0:
         return
+    comptime if IDN_GEMM_FILL_TILES:
+        gemm_fill_note_device(ctx)
     var part = contract_partition(k)
     var leaf = part[0]
     var p_count = part[1]
@@ -7337,6 +7497,10 @@ def identical_gemm_shipped_into(
     Row above 0 (NVIDIA): `identical_gemm_shipped_at_row_into[False]` at the
     row. Row 0 (AMD until the MI300X leg decides, Apple, every other column):
     the old line, and the ksplit path is not compiled at all."""
+    comptime if IDN_GEMM_FILL_TILES:
+        # Before the body's first `choose_gemm_plan`: the fill rule reads the
+        # SM / CU count this caches.
+        gemm_fill_note_device(ctx)
     # (NI02 stream_all dispatch deleted 2026-10-08, grid ge123e6f9 loser; recoverable at main bc10b8b56.)
     # A05 (MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE, halved per-thread row
     # accumulators) was deleted by lane/grid-prune (2026-10-07): OVN A05 was
