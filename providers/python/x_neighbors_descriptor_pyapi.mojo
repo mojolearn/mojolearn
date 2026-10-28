@@ -5,6 +5,7 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_loaded_module import native_loaded_module
+from bindings.family_common import family_call
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_entry, neural_descriptor_connect,
     neural_descriptor_execute,
@@ -45,6 +46,34 @@ def xn_admit(binding: PythonObject) raises -> PythonObject:
 
 def xn_capabilities(binding: PythonObject) raises -> Int:
     return binding.downcast_value_ptr[CompiledBindingSnapshot]()[].capabilities[0]
+
+
+def xn_pcs_draw_entry(binding: PythonObject) raises -> PythonObject:
+    # Capture the legacy entry only on that existing route; the native route
+    # reads its operation-local capability snapshot and never resolves it.
+    var legacy = PythonObject(None)
+    var available = False
+    if xn_is_module(binding):
+        legacy = neural_descriptor_entry(binding, "x_neighbors_kfeat_pcs_draw_idn", False)
+        available = legacy is not None
+    else:
+        available = (xn_capabilities(binding) & 8) != 0
+    if not available:
+        raise Error("NotImplementedError: mojolearn PolynomialCountSketch: this binary lacks "
+                    + "x_neighbors_kfeat_pcs_draw_idn (rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
+    return legacy
+
+
+def xn_pcs_draw(binding: PythonObject, legacy: PythonObject, seed: Int,
+                components: Int, total: Int, index_address: Int, sign_address: Int) raises:
+    if legacy is not None:
+        # Remaining normal-route migration debt, until shared mode admission
+        # promotes the native provider. This is still CPython numerical dispatch.
+        _ = family_call(legacy, Python.list(seed, components, total), index_address, sign_address)
+        return
+    var snapshot = binding.downcast_value_ptr[CompiledBindingSnapshot]()
+    _ = neural_descriptor_execute(snapshot[].provider, xn_operation_id("pcs_draw"),
+                                  [index_address, sign_address], [seed, components, total], [])
 
 
 def xn_admit_arguments(args: PythonObject, context: PythonObject) raises -> PythonObject:
