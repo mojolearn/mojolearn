@@ -6,7 +6,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_copy, generation_array, generation_array_snapshot, generation_address, py_ints
-from bindings.causal_lm_construct import causal_model_read_weights_binding, _causal_model_prepare_snapshot, _model_options_snapshot, _model_weights_snapshot, _model_block, _model_bindings, _model_profile, _model_quantize15
+from bindings.causal_lm_construct import causal_model_read_weights_binding, _causal_model_prepare_snapshot, _model_construction_set, _model_options_snapshot, _model_weights_snapshot, _model_block, _model_bindings, _model_profile, _model_quantize15
 from bindings.causal_lm_public import causal_model_embedding, causal_model_head, causal_lm_parameters_binding, _native_function
 from bindings.neural_block_public import neural_block_owner, neural_block_allocate_binding, neural_block_forward_binding
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_record_fields, model_dict, model_plain, model_sequence, model_string
@@ -90,7 +90,9 @@ def _parallel_flag(value: PythonObject) raises -> Bool:
 def _parallel_model_fields(owner: PythonObject) raises -> PythonObject:
     return model_record_fields(owner, PARALLEL_CAUSAL.get_or_create_ptr()[].classes["model"],
         Python.tuple("layer_devices", "_worker_index", "_pool", "_pools", "_closed", "_failed", "_blocks", "kind",
-            "weight_format", "_native_entries", "_native_vendor", "_native_numeric_mode", "route", "_head_int15", "_block_class", "_block_kwargs", "_prims"))
+            "weight_format", "_native_entries", "_native_vendor", "_native_numeric_mode", "route", "_head_int15", "_block_class", "_block_kwargs", "_prims",
+            "plan", "config", "d_model", "vocab_size", "n_layers", "norm_eps", "numeric_profile", "device", "max_positions",
+            "_embed", "_norm", "_head", "_runtime", "_parallel_entry", "unused_names", "_causal_entries_owner"))
 
 
 def _parallel_block_fields(block: PythonObject) raises -> PythonObject:
@@ -603,48 +605,54 @@ def _parallel_causal_init(owner: PythonObject, input_plan: PythonObject, input_w
     var p = PARALLEL_CAUSAL.get_or_create_ptr()
     var bi = p[].bi
     var live = _parallel_model_fields(owner)
+    var fields = Python.dict()
     var plan = model_plan_snapshot(input_plan)
     var devices = _parallel_causal_map(layer_devices, _parallel_word(plan["n_layers"]))
     var route = _parallel_causal_route(devices)
     model_sequence(options)
     var ordinary = _model_options_snapshot(Python.list(options[0], options[1], route, options[2]), p[].context)
     var weights = _model_weights_snapshot(input_weights, p[].context)
-    py_setitem(live, "_closed", False)
-    py_setitem(live, "_failed", False)
-    py_setitem(live, "_pool", PythonObject(None))
-    py_setitem(live, "_pools", Python.dict())
-    py_setitem(live, "layer_devices", devices)
-    py_setitem(live, "route", route)
-    _ = _causal_model_prepare_snapshot(owner, input_plan, plan, weights, ordinary, p[].context)
+    _model_construction_set(live, fields, "_closed", PythonObject(False))
+    _model_construction_set(live, fields, "_failed", PythonObject(False))
+    _model_construction_set(live, fields, "_pool", PythonObject(None))
+    _model_construction_set(live, fields, "_pools", Python.dict())
+    _model_construction_set(live, fields, "layer_devices", devices)
+    _model_construction_set(live, fields, "route", route)
+    # The shared preparer fills this schema-only private record directly;
+    # never reconstruct execution metadata from the published model fields.
+    _ = _causal_model_prepare_snapshot(owner, input_plan, plan, weights, ordinary, p[].context, live, fields)
     var entries = Python.dict()
     py_setitem(entries, "parallel_call", p[].entry)
-    py_setitem(live, "_native_entries", entries)
+    var entries_live = py_call(bi.dict, entries)
+    py_setitem(live, "_native_entries", entries_live)
+    py_setitem(fields, "_native_entries", entries)
     var blocks = Python.list()
-    py_setitem(live, "_blocks", blocks)
-    py_setitem(live, "_head_int15", PythonObject(None))
-    py_setitem(live, "_block_class", p[].classes["block"])
-    py_setitem(live, "_block_kwargs", py_call(bi.dict, plan["block_options"] if String(plan["kind"]) == "transformer" else plan["block_kwargs"]))
+    _model_construction_set(live, fields, "_blocks", blocks)
+    _model_construction_set(live, fields, "_head_int15", PythonObject(None))
+    _model_construction_set(live, fields, "_block_class", p[].classes["block"])
+    _model_construction_set(live, fields, "_block_kwargs", py_call(bi.dict, plan["block_options"] if String(plan["kind"]) == "transformer" else plan["block_kwargs"]))
     var prims = py_call(bi.object.__new__, p[].classes["primitives"])
     py_setitem(model_record_fields(prims, p[].classes["primitives"], Python.tuple("model")), "model", owner)
-    py_setitem(live, "_prims", prims)
+    _model_construction_set(live, fields, "_prims", prims)
     var unique = Python.list()
     var indices = Python.dict()
     for i in range(len(devices)):  # driver-loop: stable first-appearance physical worker ordering
         if not py_contains(indices, devices[i]):
             py_setitem(indices, devices[i], len(unique))
             _ = py_call(unique.append, devices[i])
-    py_setitem(live, "_worker_index", indices)
+    py_setitem(live, "_worker_index", py_call(bi.dict, indices))
+    py_setitem(fields, "_worker_index", indices)
     var pool = process_pool_create(py_call(bi.tuple, unique), False, child_module)
-    py_setitem(live, "_pool", pool)
+    _model_construction_set(live, fields, "_pool", pool)
     var pools = Python.dict()
     for i in range(len(unique)):  # driver-loop: selected process ownership aliases
         py_setitem(pools, unique[i], pool)
-    py_setitem(live, "_pools", pools)
-    var fields = py_call(bi.dict, live)
+    py_setitem(live, "_pools", py_call(bi.dict, pools))
+    py_setitem(fields, "_pools", pools)
     _ = py_call(fields.update, _parallel_capture_model_fields(owner, fields))
     py_setitem(fields, "_causal_original", owner)
     py_setitem(fields, "_causal_live_fields", live)
-    py_setitem(fields, "_native_parallel_entries_live", entries)
+    py_setitem(fields, "_native_parallel_entries_live", entries_live)
     var captured = _causal_namespace(fields)
     try:
         process_pool_start(fields["_pool"])
@@ -657,6 +665,7 @@ def _parallel_causal_init(owner: PythonObject, input_plan: PythonObject, input_w
             _ = _parallel_causal_rpc(owner, unique[i], "configure", Python.list(metadata, wire_plan), captured)
         for i in range(_parallel_word(plan["n_layers"])):  # driver-loop: each model layer is built only by its assigned worker
             _ = py_call(blocks.append, _parallel_causal_block(owner, i, weights["layers"][i], captured))
+            _model_construction_set(live, fields, "_blocks", blocks)
         var first = Python.dict()
         py_setitem(first, "embed", fields["_embed"])
         _ = _parallel_causal_rpc(owner, devices[0], "tensors", first, captured)
@@ -753,12 +762,12 @@ struct RemoteStateLifetime(Movable, Writable):
 
 
 def _parallel_causal_release_token(block: PythonObject, token: PythonObject) raises:
-    var source = _parallel_block_fields(block)
-    var captured = _parallel_owner_snapshot(source["model"])
+    var original = _parallel_block_fields(block)["model"]
+    var captured = _parallel_owner_snapshot(original)
     var fields = causal_snapshot_fields(captured)
     if not _parallel_flag(fields["_closed"]) and not _parallel_flag(fields["_failed"]):
-        var index = _parallel_word(source["index"])
-        _ = _parallel_causal_rpc(source["model"], fields["layer_devices"][index], "release", token, captured)
+        var layer = causal_snapshot_fields(_parallel_find_block(block, captured))
+        _ = _parallel_causal_rpc(fields["_causal_original"], fields["layer_devices"][layer["index"]], "release", token, captured)
 
 
 def _parallel_causal_attach_fields(fields: PythonObject, layer: PythonObject, token: PythonObject) raises:
@@ -942,10 +951,11 @@ def parallel_causal_call(operation: String, args: PythonObject) raises -> Python
     elif operation == "block_run":
         return _parallel_causal_block_run(args[0], args[1], args[2], args[3])
     elif operation == "block_call":
-        var block = _parallel_block_fields(args[0])
-        var captured = _parallel_owner_snapshot(block["model"])
+        var original = _parallel_block_fields(args[0])["model"]
+        var captured = _parallel_owner_snapshot(original)
         var fields = causal_snapshot_fields(captured)
-        return _parallel_causal_rpc(block["model"], fields["layer_devices"][_parallel_word(block["index"])], model_string(args[1]), args[2], captured)
+        var block = causal_snapshot_fields(_parallel_find_block(args[0], captured))
+        return _parallel_causal_rpc(fields["_causal_original"], fields["layer_devices"][block["index"]], model_string(args[1]), args[2], captured)
     elif operation == "block_init":
         var destination = _parallel_block_fields(args[0])
         var created = _parallel_causal_block(args[1], _parallel_word(args[2]), args[3])
