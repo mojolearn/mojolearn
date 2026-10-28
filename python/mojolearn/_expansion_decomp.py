@@ -4102,7 +4102,7 @@ class Isomap(_Base):
         self
         """
         return _NATIVE(self, "family_mani_iso_fit",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the model and return ``embedding_``.
@@ -4117,7 +4117,7 @@ class Isomap(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_iso_fit_transform",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new points.
@@ -4140,7 +4140,7 @@ class Isomap(_Base):
             With ``radius``, if a query has no training point within it.
         """
         return _NATIVE(self, "family_mani_iso_transform",
-                       (_manifold_binding(self, "numeric_mode_"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X), _NATIVE_CONTEXT)
 
     def reconstruction_error(self):
         """Return the reconstruction error of the embedding.
@@ -4154,7 +4154,7 @@ class Isomap(_Base):
         float
         """
         return _NATIVE(self, "family_mani_iso_reconstruction_error",
-                       (_manifold_binding(self, "numeric_mode_"), _backend.binding(_BINDING)), _NATIVE_CONTEXT)
+                       (None, None), _NATIVE_CONTEXT)
 # Reference: scikit-learn `manifold/_classical_mds.py`.
 class ClassicalMDS(_Base):
     """Classical (Torgerson) multidimensional scaling.
@@ -4214,7 +4214,7 @@ class ClassicalMDS(_Base):
         self
         """
         return _NATIVE(self, "family_mani_cmds_fit",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
@@ -4229,7 +4229,7 @@ class ClassicalMDS(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_cmds_fit_transform",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X), _NATIVE_CONTEXT)
 # Reference: scikit-learn `manifold/_mds.py`, `_smacof_single`, `smacof`.
 # Random starts come from the Philox stream. init='random' is the default
 # sklearn's FutureWarning names. Non-metric: the disparities are the
@@ -4327,7 +4327,7 @@ class MDS(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_mds_fit_transform",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X, init), _NATIVE_CONTEXT)
+                       (None, None, X, init), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, init=None):
         """Compute the embedding.
@@ -4344,7 +4344,7 @@ class MDS(_Base):
         self
         """
         return _NATIVE(self, "family_mani_mds_fit",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X, init), _NATIVE_CONTEXT)
+                       (None, None, X, init), _NATIVE_CONTEXT)
 # LocallyLinearEmbedding's shift-invert route (`_lle_smallest`) and its
 # policy run in the compiled owner (bindings/mani_decomp_native.mojo).
 
@@ -4444,7 +4444,7 @@ class LocallyLinearEmbedding(_Base):
         self
         """
         return _NATIVE(self, "family_mani_lle_fit",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
@@ -4459,7 +4459,7 @@ class LocallyLinearEmbedding(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_lle_fit_transform",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new points.
@@ -4477,14 +4477,7 @@ class LocallyLinearEmbedding(_Base):
         ndarray of shape (n_queries, n_components), float32
         """
         return _NATIVE(self, "family_mani_lle_transform",
-                       (_manifold_binding(self, "numeric_mode_"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
-
-
-def _manifold_binding(model, field):
-    """The decomp binding of a manifold estimator's numeric mode (`field`:
-    "numeric_mode" for a fit, the fitted "numeric_mode_" after one; None is
-    the default mode). Binding acquisition only."""
-    return _backend.binding(_BINDING, getattr(model, field, None))
+                       (None, None, X), _NATIVE_CONTEXT)
 
 
 # The compiled family owner, connected once at import: every public method
