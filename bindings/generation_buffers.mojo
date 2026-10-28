@@ -12,7 +12,7 @@ kept every array built here, and the caller's buffers, alive for ever.
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem
+from bindings.py_balanced import py_call, py_setattr, py_type, py_setitem, py_contains
 from bindings.native_array_snapshot import native_array_slots, native_array_snapshot
 from bindings.native_array_storage import native_array_zeros
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
@@ -63,11 +63,14 @@ def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:
         if py_type(layer_names[i]) is not g[].bi.str:
             raise Error("TypeError: generation layer class names require native strings")
     var layer_classes = py_call(g[].bi.dict, classes[2])
+    if g[].layer_classes is not None and len(g[].layer_classes) != len(layer_names):
+        raise Error("TypeError: generation layer class registry cannot be resized")
     for i in range(len(layer_names)):  # small-loop(capture generation layer class identities)
         if py_type(layer_classes[layer_names[i]]) is not g[].bi.type:
             raise Error("TypeError: generation layer classes require native type metadata")
         if g[].layer_classes is not None:
-            if g[].layer_classes[layer_names[i]] is not layer_classes[layer_names[i]]:
+            if (not py_contains(g[].layer_classes, layer_names[i])
+                    or g[].layer_classes[layer_names[i]] is not layer_classes[layer_names[i]]):
                 raise Error("TypeError: generation layer class identities cannot be replaced")
     g[].arrays = native_loaded_module("array").array
     g[].array_cls = classes[0]
