@@ -1351,6 +1351,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(model_config_c[4], "model_layer_weights")
         module.def_py_c_function(model_config_c[5], "model_checkpoint_names")
         module.def_py_c_function(model_config_c[6], "model_plan_for")
+        module.def_py_c_function(model_config_c[7], "model_config_connect")
+        module.def_py_c_function(model_config_c[8], "model_config_repr")
         module.def_py_c_function(checkpoint_c[0], "tensor_info_init")
         module.def_py_c_function(checkpoint_c[1], "tensor_info_size")
         module.def_py_c_function(checkpoint_c[2], "safetensors_init")
