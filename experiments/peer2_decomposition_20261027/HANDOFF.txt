@@ -89,11 +89,12 @@ Pending, not claimed:
   group is bindings/build_runtime_classical_host.sh. A focused native import
   probe covering bindings.pls_native.pls_c and its changed dependencies can
   establish the development compile before root's integration merge.
-- Runtime controls in python/mojolearn/tests/test_pls_native_boundary.py (38
+- Runtime controls in python/mojolearn/tests/test_pls_native_boundary.py (42
   parameterized cases): vector/column/strided/list targets across the three
   public estimators, protocol refusal without hook invocation, finite/length/
   fitted checks, public lifecycle/dtypes, scalar hooks, sparse policy and complex
-  X/y errors, scalar object-payload refusals, native scalar storage and original
+  X/y errors (including clongdouble), unsupported-real longdouble errors,
+  scalar object-payload refusals, native scalar storage and original
   setting object identities. These are UNRUN against the changed native binary.
 - Cross-vendor/runtime identity and installed artifact verification after
   final integration. No broad benchmark, GPU campaign, publish or main merge.
