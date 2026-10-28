@@ -101,7 +101,12 @@ def _pcs_fit(fields: PythonObject, binding: PythonObject, x: ArrayMetadata,
                         + "x_neighbors_kfeat_pcs_draw_idn (rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
         var ih = family_array(Python.tuple(degree, nf), "<i4", context)
         var bh = family_array(Python.tuple(degree, nf), "<i4", context)
-        var word = _pcs_int(seed, "random_state") & 0xFFFFFFFF
+        if py_type(seed) is not py_type(PythonObject(0)):
+            raise Error("TypeError: PolynomialCountSketch random_state must resolve to a native int")
+        ref cpy = Python().cpython()
+        # Preserve arbitrary-sized integer seeds without Python operator.and_.
+        var raw_seed = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLongMask")(seed._obj_ptr)
+        var word = Int(raw_seed & 0xFFFFFFFF)
         # Remaining provider work: PCS drawing is not yet in XN's table.
         # The numerical extension entry below is still CPython-dispatched.
         _ = family_call(draw, Python.list(word, components, degree * nf),
