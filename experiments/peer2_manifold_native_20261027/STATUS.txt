@@ -116,3 +116,20 @@ Constructor error-category review repair
   object-element protocol negative controls to the public runtime fixture.
 - Public runtime cases remain UNRUN. Focused source test/syntax evidence:
   umap-constructor-array-errors-source.log (exit 0, 2 passed, 102 deselected).
+
+Operation settings/admission increment
+- The manifold native dispatch now admits connected class/storage identities
+  before accessing fields, then retains one shallow dictionary snapshot for
+  settings and fitted-state reads. Writes target the original dictionary.
+- Requested, fitted and process-default mode objects are captured once. The
+  decomp, TSNE and UMAP owners receive that same snapshot through native helper
+  calls; LLE/UMAP helper kits use the captured default mode. No owner rereads
+  instance fields or process-default mode after the snapshot.
+- Numeric/metric configuration containers and object-array elements are admitted
+  before existing native scalar marshaling/comparison operations can invoke
+  user protocols. MKit fitted matrix admission/cleanup remains separate debt.
+- Depends on root's shared classical_family_admit API (346cb95a21b2), and prior
+  estimator_binding_mode/original-owner helpers (0af79a009e7e/e688891b588e).
+  Only dedicated manifold files changed. Compile target: runtime_manifold host.
+- settings-source-tests.log: exit 0, 10 passed (routing, snapshot contracts and
+  connection fixtures). Source checks do not qualify public runtime behavior.

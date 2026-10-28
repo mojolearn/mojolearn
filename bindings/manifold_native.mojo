@@ -8,12 +8,14 @@ from std.python import Python, PythonObject
 from bindings.mani_tsne_native import tsne_operation
 from bindings.mani_umap_native import umap_operation
 from bindings.mani_decomp_native import mani_decomp_operation
+from bindings.manifold_settings_native import ManifoldSettings
 
 
 def manifold_operation(model: PythonObject, operation: String, args: PythonObject,
          context: PythonObject) raises -> PythonObject:
+    var settings = ManifoldSettings(model, operation, context)
     if operation.startswith("family_mani_tsne_"):
-        return tsne_operation(model, operation, args, context)
+        return tsne_operation(model, settings, operation, args, context)
     if operation.startswith("family_mani_umap_"):
-        return umap_operation(model, operation, args, context)
-    return mani_decomp_operation(model, operation, args, context)
+        return umap_operation(model, settings, operation, args, context)
+    return mani_decomp_operation(model, settings, operation, args, context)
