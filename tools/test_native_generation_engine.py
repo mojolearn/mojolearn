@@ -37,7 +37,7 @@ def test_numerical_order_and_native_cached_token_publication_are_explicit():
 
 def test_reservations_and_outputs_remain_at_checked_boundary():
     provider = text('providers/python/generation_metadata_pyapi.mojo').split('struct GenerationEngineAdmission')[1]
-    assert 'generation_mutable(key, [cache_count]' in provider
+    assert '_generation_engine_state(key, cache_count' in provider
     assert 'self.owners.append(AdmittedNativeExecution(provider, session, handle,' in provider
     assert 'OperationLockLease(lock_owner)' in provider
     assert '-1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle)' in provider
@@ -60,8 +60,9 @@ def test_experiment_never_silently_relabels_unsupported_routes():
     assert 'does not replace the existing resident route' in setup
     assert 'MOJOLEARN_GENERATION_NATIVE_ENGINE' in public
     provider = text('providers/python/generation_metadata_pyapi.mojo')
-    assert 'foreign-weight descriptor admission is pending' in provider
-    assert 'foreign mutable-state descriptor admission is pending' in provider
+    assert '_generation_engine_weights(snapshot.embedding' in provider
+    assert 'AdmittedBorrowedBuffer(value, True)' in provider
+    assert 'foreign-weight descriptor admission is pending' not in provider
 
 
 def test_deferred_layer_refusals_keep_earlier_progress_and_profile_publication():
@@ -72,3 +73,17 @@ def test_deferred_layer_refusals_keep_earlier_progress_and_profile_publication()
     provider = text('providers/python/generation_metadata_pyapi.mojo')
     assert 'native_layer.failure = String(problem)' in provider
     assert 'self.native.layers[i].visited and self.native.layers[i].profile_admitted' in provider
+
+
+def test_delayed_foreign_copies_preserve_layer_order_and_alias_counters():
+    native=text('transformer/native_generation_engine.mojo')
+    body=native.split('def forward(mut self,')[1].split('struct NativeGenerationProgress')[0]
+    assert body.index('refresh_layouts[j].copy_to(') < body.index('self.layers[i].endpoint.call(')
+    assert body.index('self.layers[i].endpoint.call(') < body.index('writeback_layouts[j].copy_from(')
+    assert 'self.state_counters[self.layers[i].state_index] = self.layers[i].cached' in body
+    assert body.index('embedding_refresh[i].copy_to(') < body.index('self.primitive_call(0,')
+    assert body.index('head_refresh[i].copy_to(') < body.index('self.primitive_call(2,')
+    provider=text('providers/python/generation_metadata_pyapi.mojo')
+    assert 'self.state_keys[index] is st' in provider
+    assert 'var pins: List[AdmittedBorrowedBuffer]' in provider
+    assert 'var storage: List[List[Float32]]' in provider

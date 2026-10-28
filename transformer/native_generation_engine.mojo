@@ -3,6 +3,7 @@
 # use the existing sibling ABI entries in their original order. No provider,
 # Python state, Python allocator, or callback is reachable from this module.
 from core.native_execution import NativeExecutionEndpoint
+from core.borrowed_buffer import BorrowedBufferLayout
 from transformer.causal_lm_public_impl import causal_lm_pick_step, causal_lm_rows_done
 
 
@@ -16,6 +17,11 @@ struct NativeGenerationLayer(Movable):
     var visited: Bool
     var profile_admitted: Bool
     var failure: String
+    var refresh_layouts: List[BorrowedBufferLayout]
+    var refresh_addresses: List[Int]
+    var writeback_layouts: List[BorrowedBufferLayout]
+    var writeback_addresses: List[Int]
+    var state_index: Int
 
     def __init__(out self, endpoint: NativeExecutionEndpoint, operation: Int,
                  var addresses: List[Int], var parameters: List[Int], cached: Int):
@@ -28,6 +34,11 @@ struct NativeGenerationLayer(Movable):
         self.visited = False
         self.profile_admitted = False
         self.failure = String("")
+        self.refresh_layouts = List[BorrowedBufferLayout]()
+        self.refresh_addresses = List[Int]()
+        self.writeback_layouts = List[BorrowedBufferLayout]()
+        self.writeback_addresses = List[Int]()
+        self.state_index = -1
 
 
 struct NativeGenerationModel(Movable):
@@ -47,6 +58,13 @@ struct NativeGenerationModel(Movable):
     var calls: List[Int]
     var failed: Bool
     var forwards: Int
+    var embedding_refresh: List[BorrowedBufferLayout]
+    var embedding_targets: List[Int]
+    var head_refresh: List[BorrowedBufferLayout]
+    var head_targets: List[Int]
+    var state_counters: List[Int]
+    var embedding_failure: String
+    var head_failure: String
 
     def __init__(out self, primitive: NativeExecutionEndpoint, embedding: Int, norm: Int, head: Int,
                  norm_eps: Float64, batch: Int, width: Int, vocab: Int, position: Int,
@@ -67,6 +85,13 @@ struct NativeGenerationModel(Movable):
         self.calls = List[Int](length=6, fill=0)
         self.failed = False
         self.forwards = 0
+        self.embedding_refresh = List[BorrowedBufferLayout]()
+        self.embedding_targets = List[Int]()
+        self.head_refresh = List[BorrowedBufferLayout]()
+        self.head_targets = List[Int]()
+        self.state_counters = List[Int]()
+        self.embedding_failure = String("")
+        self.head_failure = String("")
 
     def primitive_call(mut self, op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises:
         self.calls[op] += 1
@@ -82,12 +107,18 @@ struct NativeGenerationModel(Movable):
             raise Error("CausalLM: sequence exceeds allocated state capacity")
         var rows = self.batch * length
         try:
+            if self.embedding_failure.byte_length() != 0:
+                raise Error(self.embedding_failure)
+            for i in range(len(self.embedding_refresh)):  # driver-loop: admitted embedding copy descriptors
+                self.embedding_refresh[i].copy_to(self.embedding_targets[i])
             var hidden = List[Float32](length=rows * self.width, fill=0)
             self.primitive_call(0, [Int(hidden.unsafe_ptr()), self.embedding, ids], [rows, self.vocab, self.width], [])
             for i in range(len(self.layers)):  # driver-loop: ordered native layer descriptors
                 self.layers[i].visited = True
                 if self.layers[i].failure.byte_length() != 0:
                     raise Error(self.layers[i].failure)
+                for j in range(len(self.layers[i].refresh_layouts)):  # driver-loop: ordered deferred weight/state byte copies
+                    self.layers[i].refresh_layouts[j].copy_to(self.layers[i].refresh_addresses[j])
                 var next = List[Float32](length=rows * self.width, fill=0)
                 var addresses = self.layers[i].addresses.copy()
                 addresses[0] = Int(hidden.unsafe_ptr())
@@ -95,11 +126,21 @@ struct NativeGenerationModel(Movable):
                 var parameters = self.layers[i].parameters.copy()
                 parameters[0] = self.batch
                 parameters[1] = length
+                if self.layers[i].state_index >= 0:
+                    self.layers[i].cached = self.state_counters[self.layers[i].state_index]
                 parameters[8] = self.layers[i].cached
                 self.layers[i].attempted = True
                 self.layers[i].cached = self.layers[i].endpoint.call(self.layers[i].operation, addresses, parameters, [])
+                for j in range(len(self.layers[i].writeback_layouts)):  # driver-loop: successful layer publication before the next alias reads
+                    self.layers[i].writeback_layouts[j].copy_from(self.layers[i].writeback_addresses[j])
+                if self.layers[i].state_index >= 0:
+                    self.state_counters[self.layers[i].state_index] = self.layers[i].cached
                 _ = hidden
                 hidden = next^
+            if self.head_failure.byte_length() != 0:
+                raise Error(self.head_failure)
+            for i in range(len(self.head_refresh)):  # driver-loop: preserve head snapshot copy before norm and projection
+                self.head_refresh[i].copy_to(self.head_targets[i])
             if self.norm != 0:
                 var normalized = List[Float32](length=rows * self.width, fill=0)
                 self.primitive_call(2, [Int(normalized.unsafe_ptr()), Int(hidden.unsafe_ptr()), self.norm],
