@@ -43,6 +43,12 @@ def connect():
     from types import BuiltinFunctionType
 
     if _ENTRY is None:
+        import _datetime
+        from . import _native_loaded_modules
+
+        if not any(record[0] == "_datetime" for record in _native_loaded_modules.CONNECTIONS):  # glue: one canonical native datetime type connection
+            _native_loaded_modules.connect_module(
+                "_datetime", _datetime, ("date", "datetime", "time", "timedelta", "timezone"))
         _native_family_bridge.connect_bindings(
             "_mojolearn_x_decomp", "_mojolearn_x_ann", "_mojolearn_estimators")
         try:

@@ -286,12 +286,15 @@ def manifold_check_width(settings: ManifoldSettings, x: ArrayMetadata, names: Py
 
 def manifold_finish(settings: ManifoldSettings, result: PythonObject, method: String,
                     names: PythonObject, context: PythonObject) raises -> PythonObject:
+    # _track_fit enclosed _public_output: a failed finished-result conversion
+    # did not publish the fitted flag or run after-fit feature metadata. Keep
+    # that ordering even though the numerical owner may already have stored
+    # its algorithm-specific state, just as the former method body did.
+    var finished = result if method == "fit" else parallel_public_result(result, method, PythonObject(None), context)
     if method == "fit" or method == "fit_transform":
+        py_setitem(settings.fields, "_mojolearn_fitted", PythonObject(True))
         if names is None:
             _ = py_call(settings.fields.pop, "feature_names_in_", PythonObject(None))
         else:
             py_setitem(settings.fields, "feature_names_in_", names)
-        py_setitem(settings.fields, "_mojolearn_fitted", PythonObject(True))
-    if method == "fit":
-        return result
-    return parallel_public_result(result, method, PythonObject(None), context)
+    return finished
