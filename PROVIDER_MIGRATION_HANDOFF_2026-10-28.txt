@@ -623,3 +623,13 @@ gfx942 x_sequence/solver fail only at O0 (stack frame limit, unchanged kernels) 
 tokenizer_host green on Mac apple-m1 O0 after fixes. Pods mzqcgz41frej3m, d2djgp821mpybd reaped (verified).
 NOT compiled: full host binding set; x86 tokenizer_host after fixes. No runtime/identity/GPU execution.
 Evidence: ~/mojolearn-evidence/integration-provider-queue-20261028/.
+
+INTEGRATION 2026-10-28 (Claude integrator) — TRANCHE 2
+Merged: 5b79a1b449 (peer4 mode), 1d4b51bec0 (spectral/SVM/expansion-linear), e667e684ee (iforest/boost; _property
+union SVM coef + bagging_estimators), 55f12e87bb, 8c03803f96 (tree aux/explainers), 2c746e42cd (prep incl 9608),
+213e36ec71 (PCA; main lines absent were rewritten by the lane's own 2387c6/697675), 03f202624c (repo-core docs/tools).
+Cherry-picked -x: b00f153308 2a63c7c545 d950eac50c (Prophet pair), ac2484736f 65d659a023, de7fea9506 e26b84da4a
+20089632e6, 4d6f90f829 a1cb276bf9. LEFT OUT: b395d0f541 (conflicts with spectral in classical_labels/svc_*; owner rebase).
+Compile: experiments/integration_provider_queue_20261028/compile_tranche2.json — 33/33 affected roots exit 0 on RunPod
+x86-64-v3 CPU identical O0 (incl. runtime_classical_host and tokenizer_host). Pods uwr13guyoqe3vm (and ready-timeout
+ad0h8odft6dxsl) reaped verified. No runtime/identity/GPU execution.
