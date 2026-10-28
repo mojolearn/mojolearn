@@ -188,3 +188,62 @@ def test_bound_public_execution_admits_layout_before_instance_lookup(artifact_pr
         assert calls == []
     finally:
         object.__setattr__(program, '__class__', original)
+
+
+@pytest.mark.parametrize('protocol', ['ndarray_shape', 'list_length', 'array_protocol', 'nested_scalar', 'keyword_key'])
+def test_public_array_execution_admits_inputs_before_protocols(artifact_program, protocol):
+    import numpy as np
+
+    calls = []
+
+    class ArrayHook(np.ndarray):
+        @property
+        def shape(self):
+            calls.append('shape')
+            return np.ndarray.shape.__get__(self)
+
+    class ListHook(list):
+        def __len__(self):
+            calls.append('len')
+            return list.__len__(self)
+
+    class ArrayProtocol:
+        def __getattribute__(self, name):
+            calls.append(name)
+            return object.__getattribute__(self, name)
+
+        def __array__(self, *args, **kwargs):
+            calls.append('array')
+            return np.ones((2, 3), dtype=np.float32)
+
+    class ScalarHook(int):
+        def __float__(self):
+            calls.append('float')
+            return 1.0
+
+    class KeywordHook(str):
+        __hash__ = str.__hash__
+
+        def __eq__(self, other):
+            calls.append('eq')
+            return str.__eq__(self, other)
+
+    value = np.ones((2, 3), dtype=np.float32)
+    named = None
+    if protocol == 'ndarray_shape':
+        value = value.view(ArrayHook)
+    elif protocol == 'list_length':
+        value = ListHook([[1., 1., 1.], [1., 1., 1.]])
+    elif protocol == 'array_protocol':
+        value = ArrayProtocol()
+    elif protocol == 'nested_scalar':
+        value = [[ScalarHook(1), 1., 1.], [1., 1., 1.]]
+    else:
+        named = {KeywordHook('x'): value}
+    calls.clear()  # Test-only fixture preparation is outside the public call.
+    with pytest.raises(TypeError):
+        if named is None:
+            artifact_program.run(value)
+        else:
+            artifact_program.run(**named)
+    assert calls == []

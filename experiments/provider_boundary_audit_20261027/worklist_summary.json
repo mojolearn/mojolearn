@@ -1,0 +1,35 @@
+{
+  "endpoints": 3808,
+  "groups_by_phase_hint": {
+    "argument_or_result_preparation": 107,
+    "binding_selection": 118,
+    "callee_resolution_pending": 394,
+    "fitted_state": 84,
+    "instance_method_dispatch": 363,
+    "loop_or_resource_orchestration": 50,
+    "post_native_result_work": 19,
+    "source_resolution_pending": 76,
+    "transitive_native_review_pending": 1342,
+    "validation_or_branch": 153
+  },
+  "groups_by_status_combination": {
+    "allowed_tag_metadata": 11,
+    "native_boundary": 1149,
+    "prohibited_source": 386,
+    "refusal_only": 7,
+    "unresolved": 259
+  },
+  "input_path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/endpoints-main-dcd2a307.json",
+  "input_sha256": "60a5f42d2ed7af814bbf9e3d6a7108587ea51f5414c992344c1b707af40082fa",
+  "limitations": [
+    "Source identity deduplicates aliases/inherited bodies, not algorithms or data-driven options.",
+    "Phase tags are heuristic triage hints and never qualification or proof of a defect.",
+    "Native-boundary wrappers still need transitive native review and installed runtime evidence.",
+    "Installed replacements may make retained source bodies unreachable; retain inventory qualification debt.",
+    "Tag metadata is an allowed category. Other approved exceptions require exact named operation evidence."
+  ],
+  "runtime_executed": false,
+  "schema": "mojolearn.provider-boundary-worklist.v1",
+  "source_implementation_groups": 1812,
+  "source_ref": "dcd2a307c1"
+}
