@@ -117,8 +117,9 @@ from autograd.kernels.transformer import (
 # autograd tape (autograd/rules_lm.mojo).
 from autograd.rules_lm import byte_backward_autograd, byte_lm_tape_eligible
 from transformer.impl.llama.fused_attention import (
-    ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY,
+    ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY, IDN_TRAIN_ONE_WAIT,
 )
+from training.byte_lm_one_wait import ByteOneWait, one_wait_require_tokens, one_wait_step_finish
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
     LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
@@ -1011,6 +1012,9 @@ struct ByteTrainer(Movable):
     # Diagnostic reach witness; counts successful live-status optimizer checks.
     var embedding_runs: List[OwnedEmbeddingRuns]
     var live_status_steps: Int
+    var one_wait: Optional[ByteOneWait]
+    """IDN_TRAIN_ONE_WAIT: the deferred-check scratch, created by the first
+    one-wait step; None on a build without the define."""
 
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
                  initial_m: List[Float32], initial_v: List[Float32],
@@ -1036,6 +1040,7 @@ struct ByteTrainer(Movable):
         self.grad_step = -1
         self.embedding_runs = List[OwnedEmbeddingRuns]()
         self.live_status_steps = 0
+        self.one_wait = Optional[ByteOneWait]()
         # lane/neural-pass43: the session's buffers carved from arena chunks
         # (core/device_arena.mojo) between here and `arena_end` below.
         self.arena_id = arena_begin()
@@ -1363,7 +1368,7 @@ def byte_train_step_resident(ctx: DeviceContext, mut trainer: ByteTrainer,
     var failed = False
     var message = String("")
     try:
-        loss = _byte_step_device(ctx, trainer, token_ids)
+        loss = _byte_step_device(ctx, trainer, token_ids, resident=True)
     except error:
         failed = True
         message = String(error)
@@ -1408,6 +1413,66 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
     return True
 
 
+def _byte_layer_forward_deferred(ctx: DeviceContext, mut tr: ByteTrainer, layer: Int,
+                                 mut trace: IdentityTrace, defer_addr: Int) raises:
+    """IDN_TRAIN_ONE_WAIT: one decoder layer of `_byte_forward_loss`, the
+    same call with the same arguments, its stages armed with the trainer's
+    deferred window for the call and disarmed after it. No completion wait
+    after the layer. A raise inside the call puts the stages back in their
+    slot before it propagates, so the replayed synchronous step finds the
+    trainer's layer list whole."""
+    var config = tr.config.copy()
+    var M = config.batch * config.length
+    var stages = tr.forward.pop(layer)
+    tr.prefill_cache.s = 0
+    var prefix = String("byte.block") + String(layer) + ".forward"
+    var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
+        M, config.d_model, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
+    )
+    var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
+        M, config.d_model, tr.weights[layer + 1].opts.norm_kind,
+        tr.weights[layer + 1].opts.norm_bias,
+    )
+    stages.defer_addr = defer_addr
+    try:
+        if layer == 0:
+            if fuse_next:
+                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
+                    norm1_ready=norm1_ready,
+                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
+                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+            else:
+                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
+                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+        else:
+            if fuse_next:
+                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
+                    norm1_ready=norm1_ready,
+                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
+                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+            else:
+                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
+                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+    except error:
+        stages.defer_addr = 0
+        tr.forward.insert(layer, stages^)
+        raise error^
+    stages.defer_addr = 0
+    comptime if BYTE_LM_RELEASE_EAGER:
+        tr.released_eager_cells += _byte_release_forward_scratch(ctx, stages)
+    tr.forward.insert(layer, stages^)
+
+
 def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer,
                        ids: List[Int32], mut trace: IdentityTrace) raises -> Float32:
     """Shared forward only. Authoritative params/m/v/flags/t are read-only.
@@ -1429,7 +1494,16 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     # Under AFN NOSYNC this adds the scan's wait to the step (the host walk
     # it replaces was data-sized CPU work on the GPU route).
     afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
-    byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
+    # IDN_TRAIN_ONE_WAIT: the same two range scans answered in ONE wait,
+    # still in front of the gather.
+    var tokens_checked = False
+    comptime if IDN_TRAIN_ONE_WAIT and deferred:
+        if tr.one_wait:
+            one_wait_require_tokens(ctx, tr.one_wait.value(), tr.buffers.ids, tr.buffers.targets,
+                M, config.vocab_size)
+            tokens_checked = True
+    if not tokens_checked:
+        byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
     timing_tick(ctx, ton, tk, "step.upload_inputs")
     timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
     for layer in range(config.n_layers):
@@ -1458,7 +1532,20 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     # No wait: the block forward loop below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_forward")
+    # IDN_TRAIN_ONE_WAIT: inside the one-wait step each layer call's
+    # refusal goes into the trainer's deferred window and the per-layer
+    # completion wait is dropped (the release below enqueues its frees).
+    var layer_wait = True
+    var defer_addr = 0
+    comptime if IDN_TRAIN_ONE_WAIT and deferred:
+        if tr.one_wait:
+            layer_wait = False
+            defer_addr = Int(MutPointer(to=tr.one_wait.value().window).unsafe_origin_cast[MutAnyOrigin]())
     for layer in range(config.n_layers):
+        comptime if IDN_TRAIN_ONE_WAIT and deferred:
+            if defer_addr != 0:
+                _byte_layer_forward_deferred(ctx, tr, layer, trace, defer_addr)
+                continue
         # Move the current stages out while borrowing the preceding residual.
         # No extra activation copy; restore canonical layer order after the call.
         var stages = tr.forward.pop(layer)
@@ -1504,7 +1591,7 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
                     norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
-        if _byte_layer_sync():
+        if layer_wait and _byte_layer_sync():
             step_count_sync()
             ctx.synchronize()
         comptime if BYTE_LM_RELEASE_EAGER:
@@ -1553,7 +1640,9 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
             tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce, targets_prerefused=NN51_RESIDENT_TOKEN_VALIDATION)
     # No wait: `download_f32` below waits for the loss itself.
     # A host round trip costs about a dozen kernel launches on Metal.
-    comptime if AFN_LM_NOSYNC and deferred:
+    comptime if (AFN_LM_NOSYNC or IDN_TRAIN_ONE_WAIT) and deferred:
+        # IDN_TRAIN_ONE_WAIT: the loss stays on the device; the step's one
+        # wait reads it with its finite check.
         _maybe_fault(ctx, tr.buffers.ce_loss, "loss_nonfinite", 0, _FAULT_NAN)
         return Float32(0.0)
     if ton:
@@ -1567,13 +1656,67 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
 
 
 def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
-                      ids: List[Int32]) raises -> Float32:
-    """Single-device composition; the numerical operation order is unchanged."""
+                      ids: List[Int32], resident: Bool = False) raises -> Float32:
+    """Single-device composition; the numerical operation order is unchanged.
+
+    `resident` (the resident step only): admits the IDN_TRAIN_ONE_WAIT step,
+    whose failure path rolls back and replays; the stateless capture keeps
+    the synchronous step."""
     comptime if AFN_LM_NOSYNC:
         return _afn_byte_step_nosync(ctx, tr, ids)
+    comptime if IDN_TRAIN_ONE_WAIT and not BYTE_LM_FAULT_INJECT:
+        if resident and not tr.buffers.optimizer_pooled:
+            return _byte_step_one_wait(ctx, tr, ids)
     var loss = byte_gradient_device(ctx, tr, ids)
     byte_update_device(ctx, tr)
     return loss
+
+
+def _byte_step_one_wait(ctx: DeviceContext, mut tr: ByteTrainer,
+                        ids: List[Int32]) raises -> Float32:
+    """IDN_TRAIN_ONE_WAIT (lane decode-resident, 2026-10-28): the resident
+    step with its deferred checks (training/byte_lm_one_wait.mojo). The same
+    forward, backward, shadow point and update as the synchronous step, in
+    the same order on the same buffers; the token range is one wait, the
+    layer refusals go into the trainer's window, the per-layer waits are
+    dropped, and the loss, gradient and state checks are one status launch
+    read with the window and the loss at the step's last wait.
+
+    Clean: the synchronous step's bytes, returned. Not clean, or any raise
+    inside: the update is rolled back from the shadow it took (when it got
+    that far; `byte_rollback` re-scans the restored state) and the step is
+    replayed synchronously, which raises today's message, or succeeds, as
+    today. The replay starts from the state the step started from, so every
+    message, flag and bit it leaves is the synchronous step's."""
+    if not tr.one_wait:
+        tr.one_wait = ByteOneWait(ctx)
+    var n = tr.config.n_total()
+    tr.one_wait.value().window.begin()
+    var clean = False
+    var loss = Float32(0.0)
+    try:
+        _ = byte_gradient_device[True](ctx, tr, ids)
+        byte_update_device[True](ctx, tr)
+        var r = one_wait_step_finish(ctx, tr.one_wait.value(), tr.buffers.ce_loss, tr.buffers.grad,
+            tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state, n)
+        clean = r[0]
+        loss = r[1]
+    except:
+        # Drain what the deferred step enqueued before anything is restored.
+        step_count_sync()
+        ctx.synchronize()
+        clean = False
+    if clean:
+        return loss
+    if tr.shadow_valid:
+        _ = byte_rollback(ctx, tr)
+    # The entry state `byte_train_step_resident` set for this step.
+    tr.healthy = False
+    tr.shadow_valid = False
+    tr.grad_step = -1
+    var sync_loss = byte_gradient_device(ctx, tr, ids)
+    byte_update_device(ctx, tr)
+    return sync_loss
 
 
 def _afn_byte_step_nosync(ctx: DeviceContext, mut tr: ByteTrainer,
@@ -1814,8 +1957,14 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     return loss
 
 
-def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
-    """Internal update half, including gradient scan, shadow and validation."""
+def byte_update_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer) raises:
+    """Internal update half, including gradient scan, shadow and validation.
+
+    `deferred` (IDN_TRAIN_ONE_WAIT only; False everywhere else): the
+    gradient scan and the post-update state scans are left to the one-wait
+    step's status launch (`one_wait_step_finish`), which checks the same
+    predicates over the same buffers at its one wait; the shadow point and
+    the update are the shipped ones."""
     if tr.buffers.optimizer_pooled:
         raise Error("byte LM: pooled optimizer requires its group update")
     var config = tr.config.copy()
@@ -1825,7 +1974,8 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     _maybe_fault(ctx, tr.buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
     # The pre-update gradient scan, on the device (was `_require_finite`
     # over a downloaded mirror): same message, same first index.
-    _require_device_finite(ctx, tr.scan, tr.buffers.grad, n, "gradients")
+    comptime if not (IDN_TRAIN_ONE_WAIT and deferred):
+        _require_device_finite(ctx, tr.scan, tr.buffers.grad, n, "gradients")
     timing_tick(ctx, ton, tk, "step.validate_grads_scan")
     timing_bytes(ton, "step.validate_grads_scan_bytes", n * 4)
     # Host arithmetic on a field nothing below writes before the update, so
@@ -1878,8 +2028,14 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     _maybe_fault(ctx, tr.buffers.v_state, "after_negative", 3, _FAULT_MINUS_ONE)
     # validate_after as device scans (design 2.3): finite param, m, v and
     # `v >= 0`, by name, with no download.
-    if not live_validated:
-        tr.validate_device_state(ctx, next_step)
+    comptime if IDN_TRAIN_ONE_WAIT and deferred:
+        # The host half of `validate_device_state` (no wait): the scans are
+        # the status launch's.
+        if next_step < 0 or next_step >= 1000000:
+            raise Error("byte LM: completed step must be in [0,1000000)")
+    else:
+        if not live_validated:
+            tr.validate_device_state(ctx, next_step)
     timing_tick(ctx, ton, tk, "step.validate_after_scan")
     timing_bytes(ton, "step.validate_after_scan_bytes", 16 if live_validated else 4 * n * 4)
     tr.completed_steps = next_step
