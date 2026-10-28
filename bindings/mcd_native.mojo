@@ -23,6 +23,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import classical_accuracy, labels_shape_of, labels_view, labels_check_rank
 from bindings.classical_arrays import classical_address, classical_host_f32, classical_wrap_array
+from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
+from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
     decomp_input, decomp_is_a, XD_SUB, XD_ADD, XD_MUL, XD_SCALE, XD_ABS, XD_RECIP, XD_SELECT, XD_LOGS,
@@ -457,7 +459,23 @@ def mcd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             raise Error("TypeError: native MinCovDet requires an operation, an argument tuple and its context")
         var context = call[3]
         classical_connect_numpy(context)
-        var result = elliptic_score(call[0], call[2], context) if String(py=call[1]) == "elliptic_score" else mcd_operation(call[0], String(py=call[1]), call[2], context)
+        var model = call[0]
+        var operation = String(py=call[1])
+        var args = call[2]
+        var kind = String("")
+        if decomp_is_a(model, context["elliptic_envelope_class"]):
+            kind = "outlier_detector"  # float64 scores for callers outside the package
+        var method = decomp_public_method(operation)
+        var depth = decomp_public_begin(model, method, args, True, True, context)
+        var result = PythonObject(None)
+        try:
+            if operation == "elliptic_score":
+                result = elliptic_score(model, args, context)
+            else:
+                result = mcd_operation(model, operation, args, context)
+        finally:
+            lifecycle_end(model, method, depth)
+        result = decomp_public_finish(model, method, args, result, kind, context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
