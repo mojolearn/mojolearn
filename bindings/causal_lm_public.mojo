@@ -49,6 +49,20 @@ from bindings.tokenizer_public_native import tokenizer_vocab_encode, tokenizer_v
 from bindings.mode_metadata_native import _fields as _native_record_fields
 
 
+def _standalone_record_fields(model: PythonObject) raises -> PythonObject:
+    # Standalone blocks use a private exact C namespace as their per-operation
+    # owner. Public models still use the ordinary class dictionary admission.
+    # SimpleNamespace.__dict__ is a native member descriptor, not the Python
+    # class getset descriptor expected by the public-record helper.
+    if py_type(model) is Python.import_module("types").SimpleNamespace:
+        ref cpy = Python().cpython()
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(model._obj_ptr, PyObjectPtr())
+        if not raw:
+            raise cpy.unsafe_get_error()
+        return PythonObject(from_owned=raw)
+    return _native_record_fields(model)
+
+
 def _native_function(module: PythonObject, name: String) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var entry = py_call(g[].bi.getattr, module, name)
@@ -86,7 +100,7 @@ def causal_lm_admit_binding(
             raise Error("CausalLM: native packed arithmetic differs in vendor or numeric mode")
     py_setattr(model, "_native_vendor", PythonObject(vendor))
     py_setattr(model, "_native_numeric_mode", PythonObject(mode))
-    var local_blocks = py_get(_native_record_fields(model), "_native_block_fields")
+    var local_blocks = py_get(_standalone_record_fields(model), "_native_block_fields")
     py_setitem(entries, "weight_names", local_blocks[0]["_neural_weight_names"] if local_blocks is not None else py_call(g[].bi.object.__getattribute__, model._blocks[0], "_W_NAMES"))
     for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:  # small-loop(primitive entry names)
         py_setitem(entries, name, _native_function(primitives, name))
@@ -173,7 +187,7 @@ def _block(model: PythonObject, index: Int) raises -> PythonObject:
     # Access the object's plain dictionary with CPython's base implementation,
     # bypassing that overridden getter; every field below is stored metadata.
     # Standalone blocks provide one operation-local admission snapshot.
-    var local = py_get(_native_record_fields(model), "_native_block_fields")
+    var local = py_get(_standalone_record_fields(model), "_native_block_fields")
     if local is not None:
         return local[index]
     var parallel = py_get(model._native_entries, "parallel_call")

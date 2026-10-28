@@ -192,6 +192,8 @@ def neural_admit_weights(values: PythonObject, context: PythonObject) raises:
 
 def neural_block_fields(block: PythonObject, context: PythonObject, initialized: Bool = True) raises -> PythonObject:
     var b = native_loaded_module("builtins")
+    if py_type(py_type(block)) is not b.type:
+        raise Error("TypeError: neural blocks cannot invoke Python metaclass protocols")
     var names = Python.tuple("_native_kind", "_native_route", "numeric_mode", "numeric_profile", "weight_format",
         "d_model", "d_inner", "nheads", "conv_dim", "d_in_proj", "dt_rank", "_owned_generation", "_owned_restore_pending", "_discard_reports", "dt_limit", "n_heads", "n_kv_heads", "head_dim",
         "intermediate", "window", "max_positions", "_opts_tail", "_extended", "_w", "_wopt", "_int15",
