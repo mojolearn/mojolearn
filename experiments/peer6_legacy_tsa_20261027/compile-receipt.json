@@ -1,0 +1,79 @@
+{
+  "exit_code": 0,
+  "seconds": 39.68587841594126,
+  "command": [
+    "pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/peer6-legacy-tsa-20261027",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/peer6-legacy-tsa-20261027/bindings",
+    "/Users/andrewhendel/mojolearn-wt/peer6-legacy-tsa-20261027/checks/peer6_legacy_tsa_compile.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/peer6-legacy-tsa-20261027/attempt5/_mojolearn_legacy_tsa_compile.so"
+  ],
+  "cores": 10,
+  "runtime_executed": false,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-legacy-tsa-20261027/attempt5/compile.log",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-legacy-tsa-20261027/attempt5/source-bytes.tgz",
+  "source_archive_sha256": "493ada9d185a36dd9b896c09a57fcee231ce155963e77b462aad1af16c4d7f33",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer6-legacy-tsa-20261027/attempt5/source-manifest.json",
+  "scope": "Actual tsa_c public dispatcher and reachable TSA owners, CPU column, O0; ExponentialSmoothing lifecycle and KPSS/select_d admission",
+  "pending": [
+    "Runtime behavior and cross-vendor identity not run by owner direction",
+    "GPU targets not compiled"
+  ],
+  "artifact_sha256": "292ab25392c638282215e9c205d6618384357dc47fc96dd0cf2e6567c4afdb60",
+  "branch": "lane/peer6-legacy-tsa-20261027",
+  "base": "77bc6eb90984523a5578c466f7fbe8d8bf5ccc6a",
+  "final_changed_sources": {
+    "bindings/tsa_admission.mojo": "8c0e278a30574cd8167f2a1926cd9b89f2ccf6e78f4da1075aaac9677b674ecd",
+    "bindings/tsa_hw_native.mojo": "a741de2677a842c9476e0ecda17c3a80ee0131f94fbe581088f07c036ff7a227",
+    "bindings/tsa_public_native.mojo": "6294697af219de7828b53ba57cf2ab77f41616561c7e50da52d946f7b39b64c1",
+    "checks/peer6_legacy_tsa_compile.mojo": "8109e020297eb5c770dd0e80c9f15ec94079c83409ed8c626720581ddeb21da4",
+    "python/mojolearn/_native_tsa_bridge.py": "0d87b9c9aa2e1e6f315c8b7add28dde7b3b66e8a4745099b1154ce0f420f4c7f",
+    "python/mojolearn/_tsa_impl.py": "0ea2999dbb32bea77aaa17dae16495161e7b530dda9f537d40e24fd8d61b3a60"
+  },
+  "logical_cpus": 10,
+  "prior_attempts": [
+    {
+      "attempt": 1,
+      "exit_code": 1
+    },
+    {
+      "attempt": 2,
+      "exit_code": 0
+    },
+    {
+      "attempt": 3,
+      "exit_code": 0
+    },
+    {
+      "attempt": 4,
+      "exit_code": 0
+    }
+  ],
+  "guards": "Required pre-push hooks pending at receipt creation; push result retained in evidence root and final handoff"
+}
