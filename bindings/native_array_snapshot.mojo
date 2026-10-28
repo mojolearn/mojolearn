@@ -144,3 +144,81 @@ def native_array_snapshot(value: PythonObject, context: PythonObject, all_dtypes
     return result
 
 
+
+
+struct NativeArrayAdmission(Copyable, Movable):
+    """Array class admission captured by one full `native_array_slots` guard.
+
+    `recheck()` is the post-release re-check for a long native operation such
+    as a generation loop: kernel/worker calls may release the GIL, so another
+    thread can mutate the Array class while they run. Re-check exactly once per
+    GIL-release window; it is not redundant. It reuses the admitted builtins,
+    getters and descriptors (no module-connection scan, no per-row module
+    lookup) and inspects only the mutable rows of the admitted ancestry
+    (immutable builtin rows such as `object` cannot acquire hooks). Any
+    difference from the admitted state reruns the full guard, so a refusal
+    raises the same error the full guard raises.
+    """
+
+    var cls: PythonObject
+    var mro: PythonObject
+    var slots: PythonObject
+    var rows: PythonObject
+    var type_cls: PythonObject
+    var str_cls: PythonObject
+    var list_fn: PythonObject
+    var mro_get: PythonObject
+    var dict_get: PythonObject
+    var object_getattribute: PythonObject
+    var object_setattr: PythonObject
+
+    def __init__(out self, context: PythonObject) raises:
+        self.slots = native_array_slots(context)
+        var b = native_loaded_module("builtins")
+        self.cls = context["array_class"]
+        self.type_cls = b.type
+        self.str_cls = b.str
+        self.list_fn = b.list
+        self.mro_get = b.type.__dict__["__mro__"].__get__
+        self.dict_get = b.type.__dict__["__dict__"].__get__
+        self.object_getattribute = b.object.__dict__["__getattribute__"]
+        self.object_setattr = b.object.__dict__["__setattr__"]
+        self.mro = py_call(self.mro_get, self.cls)
+        self.rows = Python.list()
+        ref cpy = Python().cpython()
+        for i in range(len(self.mro)):  # small-loop(mutable Array ancestry rows, admitted once)
+            # Py_TPFLAGS_IMMUTABLETYPE (1 << 8): attributes cannot be set.
+            var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(self.mro[i]._obj_ptr)
+            if (flags & UInt64(1 << 8)) == 0:
+                _ = py_call(self.rows.append, self.mro[i])
+
+    def _unchanged(self, context: PythonObject) raises -> Bool:
+        var cls = context["array_class"]
+        if cls is not self.cls or py_type(cls) is not self.type_cls:
+            return False
+        if py_call(self.mro_get, cls) is not self.mro:
+            return False
+        for i in range(len(self.rows)):  # small-loop(mutable admitted Array ancestry rows)
+            var row = py_call(self.dict_get, self.rows[i])
+            var keys = py_call(self.list_fn, row.keys())
+            for k in range(len(keys)):  # small-loop(class namespace keys before metadata reads)
+                if py_type(keys[k]) is not self.str_cls:
+                    return False
+            if py_contains(row, "__getattr__") or py_contains(row, "__del__"):
+                return False
+            var own = py_get(row, PythonObject("__getattribute__"))
+            if own is not None and own is not self.object_getattribute:
+                return False
+            own = py_get(row, PythonObject("__setattr__"))
+            if own is not None and own is not self.object_setattr:
+                return False
+            if self.rows[i] is self.cls:
+                var names = py_call(self.list_fn, self.slots.keys())
+                for j in range(len(names)):  # small-loop(Array native slot schema)
+                    if py_get(row, names[j]) is not self.slots[names[j]]:
+                        return False
+        return True
+
+    def recheck(self, context: PythonObject) raises:
+        if not self._unchanged(context):
+            _ = native_array_slots(context)
