@@ -11,14 +11,12 @@ real fit on a real host binding and prints the exception it raised, so a
 refusal that has moved shows up as a changed row and a refusal that has been
 closed shows up as OK.
 
-    MOJOLEARN_HOST_DIR=/path/to/host python3 tools/gbdt_cpu_refusal_probe.py
+    MOJOLEARN_VENDOR=cpu MOJOLEARN_HOST_DIR=/path/to/host python3 tools/gbdt_cpu_refusal_probe.py
 
-Needs a CPU-only load: the `identical` set must be absent (or
-MOJOLEARN_HOST_DIR must name a host set and the package carry no GPU
-binding), so that `mojolearn._backend._CPU_ONLY` is set and the host bindings
-serve. Fits run inside `mojolearn._cpu_reference.reference_training()`,
-which is the verifier's own scoped door; it is not a public CPU training API
-and this file is not one either.
+Select CPU before importing the package; installed GPU bindings may remain
+present. Public CPU training has been available since 2026-09-20. The retained
+`mojolearn._cpu_reference.reference_training()` context is a compatibility
+no-op, not an authorization gate for these fits. This file is a test probe.
 
 READ THE `## A` BLOCK FIRST. It is the control: those configurations must
 print OK. If any of them refuses, the probe is measuring a broken or stale
@@ -97,12 +95,25 @@ def _rows(D):
            dict(od_type="Iter", od_wait=2, **sym), dict(eval_set=(ex, ey)), X, yb),
           (A, "eval_set + use_best_model, SymmetricTree Logloss",
            dict(use_best_model=True, **sym), dict(eval_set=(ex, ey)), X, yb)]
+    # Regression coverage for the native row-weight admission extension.
+    # These controls are added with the source; their runtime execution is
+    # pending the next authorized CPU check, not implied by compilation.
+    for nm, kw in (("SymmetricTree", sym), ("Depthwise", dw), ("Lossguide", lg)):
+        R.append((A, "sample_weight, " + nm + " Logloss", kw,
+                  dict(sample_weight=w), X, yb))
+        R.append((A, "sample_weight + class_weights, " + nm + " Logloss",
+                  dict(class_weights=[1.0, 2.0], **kw), dict(sample_weight=w), X, yb))
+    R.append((A, "sample_weight + eval_set + Iter, SymmetricTree Logloss",
+              dict(od_type="Iter", od_wait=2, **sym),
+              dict(sample_weight=w, eval_set=(ex, ey)), X, yb))
     B = "B. sample weights (F1)"
-    for nm, kw, y in (("SymmetricTree Logloss", sym, yb), ("SymmetricTree RMSE", dict(loss="RMSE"), yr),
-                      ("Depthwise Logloss", dw, yb), ("Lossguide Logloss", lg, yb),
+    for nm, kw, y in (("SymmetricTree RMSE", dict(loss="RMSE"), yr),
                       ("MultiClass", mc, ym), ("MAE pointwise", mae, yr),
                       ("Ordered Logloss", ordered, yb)):
         R.append((B, "sample_weight, " + nm, kw, dict(sample_weight=w), X, y))
+    for nm, kw in (("Depthwise", dw), ("Lossguide", lg)):
+        R.append((B, "sample_weight + Bayesian bootstrap, " + nm,
+                  dict(bootstrap_type="Bayesian", **kw), dict(sample_weight=w), X, yb))
     C = "C. class weights (F2)"
     R += [(C, "class_weights, SymmetricTree Logloss", dict(class_weights=[1.0, 2.0], **sym), {}, X, yb),
           (C, "class_weights, MultiClass", dict(class_weights=[1.0, 2.0, 3.0], **mc), {}, X, ym),
@@ -211,7 +222,7 @@ def main():
     if _backend._CPU_ONLY is None and not args.allow_gpu:
         raise SystemExit(
             "REFUSING: a GPU backend loaded, so these refusals would be the "
-            "GPU binding's. Run where the `identical` set is absent, or pass "
+            "GPU binding's. Set MOJOLEARN_VENDOR=cpu before import, or pass "
             "--allow-gpu and read the output as a GPU answer."
         )
     print("# gbdt CPU refusal probe  vendor=%s  mode=%s" %

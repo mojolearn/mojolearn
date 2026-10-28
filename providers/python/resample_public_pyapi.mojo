@@ -19,6 +19,23 @@ def resample_arguments(operation: String, args: PythonObject,
     return py_call(py_type(Python.tuple()), values)
 
 
+def resample_result_layout(index: Int, context: PythonObject) raises -> PythonObject:
+    from bindings.mode_metadata_native import _class_fields
+    from bindings.py_balanced import py_get
+    from bindings.native_loaded_module import native_loaded_module
+    var b = native_loaded_module("builtins")
+    var cls = context["family_rs_result_classes"][index]
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: resampling result metadata requires the connected ordinary type")
+    var bases = py_call(b.type.__dict__["__bases__"].__get__, cls)
+    if len(bases) != 1 or bases[0] is not (b.tuple if index == 3 else b.object):
+        raise Error("TypeError: resampling result class ancestry changed")
+    var fields = _class_fields(cls)
+    if py_get(fields, "__del__") is not None:
+        raise Error("TypeError: resampling result storage cannot invoke Python finalizers")
+    return cls
+
+
 def resample_result_initialize(args: PythonObject, context: PythonObject) raises -> PythonObject:
     from bindings.mode_metadata_native import _fields, _class_fields
     from bindings.py_balanced import py_contains, py_setitem, py_get
@@ -41,6 +58,7 @@ def resample_result_initialize(args: PythonObject, context: PythonObject) raises
     var names = (Python.tuple("point_estimate", "distribution", "sorted_distribution", "standard_error", "confidence_interval", "order_low", "order_high")
                  if index == 0 else (Python.tuple("statistic", "null_distribution", "pvalue", "count_less", "count_greater")
                  if index == 1 else Python.tuple("integral", "mean", "volume", "closed_form")))
+    _ = resample_result_layout(index, context)
     var namespace = _class_fields(classes[index])
     for i in range(len(names)):  # driver-loop: fixed result fields cannot invoke replacement descriptors
         if py_contains(namespace, names[i]):
@@ -52,7 +70,7 @@ def resample_result_initialize(args: PythonObject, context: PythonObject) raises
     if index == 0:
         for i in range(4):  # driver-loop: fixed BootstrapResult fields
             py_call(replacements.append, args[i + 2])
-        var interval = py_call(b.tuple.__new__, classes[3], Python.tuple(args[6], args[7]))
+        var interval = py_call(b.tuple.__new__, resample_result_layout(3, context), Python.tuple(args[6], args[7]))
         py_call(replacements.append, interval)
         py_call(replacements.append, args[8])
         py_call(replacements.append, args[9])

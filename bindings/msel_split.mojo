@@ -98,6 +98,20 @@ def msel_field(model: PythonObject, name: String, context: PythonObject) raises 
             raise Error("TypeError: repeated model selection requires a native KFold or StratifiedKFold configuration")
     else:
         msel_admit(value, context)
+        var kind = py_type(value)
+        if name == "_pairs" and kind is not msel_b().list and kind is not msel_b().tuple:
+            raise Error("TypeError: stored fold pairs require a native list or tuple")
+        if name == "cvargs":
+            if kind is not msel_b().dict:
+                raise Error("TypeError: repeated splitter options require a native dictionary")
+            var keys = py_call(msel_b().list, value)
+            for i in range(len(keys)):  # driver-loop: option keys before native lookup or copying
+                if py_type(keys[i]) is not msel_b().str:
+                    raise Error("TypeError: repeated splitter option names require native strings")
+        if name != "_folds" and name != "_pairs" and name != "cvargs" and name != "test_fold":
+            var b = msel_b()
+            if value is not None and py_type(value) is not b.str and not msel_is_real(value, context) and not msel_is_bool(value, context):
+                raise Error("TypeError: splitter settings require native scalar values")
     return value
 
 
@@ -1035,13 +1049,25 @@ def msel_repeated_split(model: PythonObject, x: PythonObject, y: PythonObject, g
 # ---------------------------------------------------------------- dispatch
 
 
-def msel_split(model: PythonObject, x: PythonObject, y: PythonObject, groups: PythonObject,
+def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, var groups: PythonObject,
                context: PythonObject) raises -> PythonObject:
     """`<splitter>.split(X, y, groups)` of a mojolearn splitter: its splits
     (a list, or a lazy iterator for the per-row and per-combination
     splitters)."""
     _ = _splitter_fields(model, context)
     msel_admit(Python.tuple(x, y, groups), context)
+    var y_used = msel_is(model, "StratifiedKFold", context) or msel_is(model, "StratifiedGroupKFold", context) or msel_is(model, "StratifiedShuffleSplit", context) or msel_is(model, "RepeatedStratifiedKFold", context)
+    var groups_used = msel_is(model, "StratifiedGroupKFold", context) or msel_is(model, "GroupKFold", context) or msel_is(model, "GroupShuffleSplit", context) or msel_is(model, "LeaveOneGroupOut", context) or msel_is(model, "LeavePGroupsOut", context)
+    var x_used = not (msel_is(model, "StratifiedKFold", context) or msel_is(model, "StratifiedShuffleSplit", context) or msel_is(model, "RepeatedStratifiedKFold", context) or msel_is(model, "PredefinedSplit", context) or msel_is(model, "_IterableCV", context))
+    # Split algorithms consume only X's row count. A native range captures it
+    # once, including repeated folds, without reading caller buffer metadata
+    # again after any compiled helper executes. Label leaves are pinned once.
+    if x_used:
+        x = py_call(msel_b().range, msel_n_samples(x, context))
+    if y_used:
+        y = msel_labels_list(y, "y", context)
+    if groups_used:
+        groups = msel_labels_list(groups, "groups", context)
     if msel_is(model, "StratifiedGroupKFold", context):
         return msel_strat_group_split(x, y, groups, msel_int(msel_field(model, "n_splits", context)),
                                       msel_truth(msel_field(model, "shuffle", context)), msel_field(model, "random_state", context), context)
@@ -1240,11 +1266,19 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
     if len(arrays) == 0:
         raise Error("At least one array required as input")
     msel_admit(Python.tuple(arrays, test_size, train_size, random_state, shuffle, stratify), context)
-    var n = msel_n_samples(arrays[0], context)
+    var prepared = Python.list()
+    for i in range(len(arrays)):  # driver-loop: each caller input is prepared once before split execution
+        var value = arrays[i]
+        if py_type(value) is b.list or py_type(value) is b.tuple:
+            value = py_call(b.tuple, value)
+        else:
+            value = msel_materialize(value, "split data", context)
+        _ = py_call(prepared.append, value)
+    var n = msel_n_samples(prepared[0], context)
     var lengths = Python.list()
     var mismatch = False
-    for i in range(len(arrays)):  # driver-loop: over the input arrays
-        var m = msel_n_samples(arrays[i], context)
+    for i in range(len(prepared)):  # driver-loop: compare only stable prepared input metadata
+        var m = msel_n_samples(prepared[i], context)
         _ = py_call(lengths.append, PythonObject(m))
         mismatch = mismatch or m != n
     if mismatch:
@@ -1262,15 +1296,15 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
     else:
         var split: PythonObject
         if stratify is not None:
-            split = msel_strat_shuffle_split(stratify, 1, PythonObject(n_test), PythonObject(n_train), random_state,
+            split = msel_strat_shuffle_split(msel_labels_list(stratify, "stratify", context), 1, PythonObject(n_test), PythonObject(n_train), random_state,
                                              PythonObject(0.1), context)[0]
         else:
-            split = msel_shuffle_split(arrays[0], 1, PythonObject(n_test), PythonObject(n_train), random_state,
+            split = msel_shuffle_split(py_call(b.range, n), 1, PythonObject(n_test), PythonObject(n_train), random_state,
                                        PythonObject(0.1), context)[0]
         train = split[0]
         test = split[1]
     var out = Python.list()
-    for i in range(len(arrays)):  # driver-loop: over the input arrays
-        _ = py_call(out.append, msel_take_any(arrays[i], train, context))
-        _ = py_call(out.append, msel_take_any(arrays[i], test, context))
+    for i in range(len(prepared)):  # driver-loop: gather train/test from the same retained input snapshot
+        _ = py_call(out.append, msel_take_any(prepared[i], train, context))
+        _ = py_call(out.append, msel_take_any(prepared[i], test, context))
     return out

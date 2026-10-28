@@ -7,7 +7,8 @@ from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields
 from bindings.native_instance_item import native_instance_item
 from bindings.classical_pandas import classical_admit_value
-from bindings.trees_public_forest import forest_kind, forest_effective_mode
+from bindings.classical_attributes import classical_check_layout
+from bindings.trees_public_forest import forest_kind, forest_effective_mode, _check_mode
 from bindings.trees_public_inputs import (
     trees_builtins, trees_f32, trees_view, trees_empty, trees_address, trees_table, trees_need,
 )
@@ -17,6 +18,24 @@ def _field(fields: PythonObject, name: String) raises -> PythonObject:
     if not py_contains(fields, PythonObject(name)):
         raise Error("AttributeError: forest model has no attribute '" + name + "'")
     return native_instance_item(fields, PythonObject(name))
+
+
+def tree_export_state(model: PythonObject, operation: String) raises -> PythonObject:
+    # Shallow copies keep arbitrary application metadata by identity. Reading
+    # actual dictionary storage avoids __dict__/copy hooks, and the original
+    # dictionary retains removed resident owners throughout this operation.
+    var fields = _fields(model)
+    var state = py_call(trees_builtins().dict, fields)
+    if operation == "trees_forest_getstate":
+        _ = py_call(state.pop, "_resident_holder", PythonObject(None))
+        _ = py_call(state.pop, "_resident_forest", PythonObject(None))
+    elif operation == "trees_iforest_getstate":
+        _ = py_call(state.pop, "_if_token", PythonObject(None))
+        _ = py_call(state.pop, "_if_lifetime", PythonObject(None))
+    else:
+        _ = py_call(state.pop, "_resident", PythonObject(None))
+    _ = fields
+    return state
 
 
 def _dimension(fields: PythonObject, name: String, context: PythonObject) raises -> Int:
@@ -56,6 +75,105 @@ def _model_buffers(fields: PythonObject, trees: Int, outputs: Int,
             raise Error("forest auxiliary model buffers do not match tree offsets")
         previous = end
     return Python.tuple(addresses, owners)
+
+
+def forest_shape(model: PythonObject, operation: String,
+                 context: PythonObject) raises -> PythonObject:
+    """Finished scalar depth/leaf count from the existing native tree walk."""
+    var fields = _fields(model)
+    if not py_contains(fields, "_offsets"):
+        raise Error("RuntimeError: this estimator is not fitted yet")
+    classical_admit_value(py_get(fields, "numeric_mode"), context)
+    # Shape metadata historically selects the requested/default tier, without
+    # imposing prediction's fitted-tier mismatch check on this integer walk.
+    var requested = _check_mode(py_get(fields, "numeric_mode"))
+    if requested is None:
+        requested = context["backend_fields"]["_DEFAULT_MODE"]
+        classical_admit_value(requested, context)
+        requested = _check_mode(requested)
+    var mode = String(requested)
+    var entry = PythonObject(None)
+    try:
+        entry = py_get(trees_table(context, mode, "_mojolearn_x_trees"), "x_trees_tree_shape")
+    except error:
+        # Preserve the absent host-export refusal of the old public helper.
+        if not String(error).startswith("ImportError:"):
+            raise error^
+    if entry is None:
+        raise Error("NotImplementedError: mojolearn: get_depth/get_n_leaves need the x_trees binding's x_trees_tree_shape (rebuild without -D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF)")
+    var offsets_object = _field(fields, "_offsets")
+    var left_object = _field(fields, "_left_child")
+    classical_admit_value(offsets_object, context)
+    classical_admit_value(left_object, context)
+    var offsets = trees_view(offsets_object, "offsets", context)
+    var left = trees_view(left_object, "left", context)
+    if offsets.ndim() != 1 or offsets.typestr != "<i4" or not offsets.c_order() or offsets.size() < 2:
+        raise Error("TypeError: tree shape requires flat int32 offsets covering the first tree")
+    if left.ndim() != 1 or left.typestr != "<i4" or not left.c_order():
+        raise Error("TypeError: tree shape requires flat int32 child storage")
+    var offset_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=offsets.addr)
+    var lo = Int(offset_ptr[0])
+    var hi = Int(offset_ptr[1])
+    if lo < 0 or hi <= lo or hi > left.size():
+        raise Error("tree shape offsets exceed child storage")
+    var result = trees_empty(Python.tuple(2), "<i4", context)
+    var result_address = trees_address(result)
+    _ = py_call_typed(entry, PythonObject(left.addr + 4 * lo), PythonObject(result_address), Python.list(hi - lo))
+    var result_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=result_address)
+    var value = Int(result_ptr[0 if operation == "trees_public_forest_depth" else 1])
+    _ = result
+    _ = offsets
+    _ = left
+    return PythonObject(value)
+
+
+def embedding_apply(model: PythonObject, args: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
+    """RandomTreesEmbedding.apply admission, dispatch, allocation and output."""
+    var b = trees_builtins()
+    var cls = py_type(model)
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: tree embedding requires ordinary class metadata")
+    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var kind = PythonObject(None)
+    for i in range(len(ancestry)):  # driver-loop: passive class ancestry preserves inherited embedding interfaces
+        kind = py_get(context["trees_boost_classes"], ancestry[i])
+        if kind is not None:
+            break
+    if kind is None or String(kind) != "rte":
+        raise Error("TypeError: tree embedding requires its connected class")
+    var fields = _fields(model)
+    if not py_contains(fields, "forest_"):
+        raise Error("RuntimeError: this estimator is not fitted yet")
+    classical_admit_value(args, context)
+    var x = trees_f32(args[0], 2, "C", "X", context)
+    var features = _dimension(fields, "n_features_in_", context)
+    if x.cols != features:
+        raise Error("X has " + String(x.cols) + " features, fit saw " + String(features))
+    var trees = _dimension(fields, "n_trees_", context)
+    if features < 1 or trees < 1 or x.rows > 2147483647 or features > 2147483647 or trees > 2147483647:
+        raise Error("tree embedding requires positive Int32 dimensions")
+    if x.rows > 0 and trees > 2305843009213693951 // x.rows:
+        raise Error("tree embedding output exceeds addressable bytes")
+    var forest = _field(fields, "forest_")
+    classical_check_layout(forest, context)
+    var forest_fields = _fields(forest)
+    var buffers = _model_buffers(forest_fields, trees, 1, context)
+    classical_admit_value(py_get(fields, "numeric_mode"), context)
+    # The embedding's former _bind selected its requested/default mode.
+    var mode = py_get(fields, "numeric_mode")
+    if mode is None:
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    classical_admit_value(mode, context)
+    var native = trees_table(context, String(_check_mode(mode)), "_mojolearn_x_trees")
+    var entry = trees_need(native, "x_trees_apply", "mojolearn: the x_trees binding has no x_trees_apply", "ImportError")
+    var out = trees_empty(Python.tuple(x.rows, trees), "<i4", context)
+    _ = py_call_typed(entry, buffers[0][0], buffers[0][1], buffers[0][2], buffers[0][3],
+                     PythonObject(x.addr), PythonObject(trees_address(out)),
+                     Python.list(x.rows, features, 0, trees))
+    _ = x
+    _ = buffers^
+    return out
 
 
 def forest_auxiliary(model: PythonObject, operation: String, args: PythonObject,

@@ -1069,18 +1069,15 @@ class Session:
         natively. A captured reshape should use ``-1`` for an inferred
         dimension when its element count can change.
         """
-        return self._program_execute(self._id, program._id, program._s._id,
-                                           arrays, dynamic_shapes, optimize, False)
+        return _SESSION_CALL(self, "program_run", (program, arrays, dynamic_shapes, optimize))
 
     def load_partitioned(self, path, devices=(0,)):
         """Restore a complete partitioned program onto physical devices."""
-        return self._distributed_binding.ops_partitioned_load(
-            path, devices, _PartitionedProgram, self._distributed_binding)
+        return _SESSION_CALL(self, "load_partitioned", (path, devices))
 
     def load_distributed(self, path, devices=(0,)):
         """Restore a complete distributed program onto the given devices."""
-        return self._distributed_binding.ops_distributed_load(
-            path, devices, _DistributedProgram, self._distributed_binding)
+        return _SESSION_CALL(self, "load_distributed", (path, devices))
 
     def load_control(self, path):
         """Load control components and shared parameters from one checkpoint."""
@@ -1356,53 +1353,39 @@ class Program:
     """
 
     def __init__(self, session, info):
-        return session._session_native(session, "program_init", (self, info))
+        return _SESSION_CALL(session, "program_init", (self, info))
 
     def run(self, *arrays, dynamic_shapes=False, optimize=False):
         """Run the program on new input arrays (see :meth:`Session.run`)."""
-        return self._execute_native(self._s._id, self._id, self._s._id,
-                                             arrays, dynamic_shapes, optimize, False)
+        return _PROGRAM_CALL(self, "run", (arrays, dynamic_shapes, optimize, False))
 
     def inspect(self, *, optimize=False):
         """Return the graph's operations, references, attributes and shapes."""
-        return self._inspect_native(self._s._id, self._id, optimize)
+        return _PROGRAM_CALL(self, "inspect", (optimize,))
 
     def profile(self, *arrays, dynamic_shapes=False, optimize=False):
         """Run and return outputs with per-node timing and storage accounting."""
-        return self._execute_native(self._s._id, self._id, self._s._id,
-                                             arrays, dynamic_shapes, optimize, True)
+        return _PROGRAM_CALL(self, "profile", (arrays, dynamic_shapes, optimize, True))
 
     def run_if(self, condition, otherwise, *arrays, optimize=False):
         """Evaluate a scalar condition graph and execute its selected branch."""
-        return self._control_native(
-            self._s._id, self._id,
-            (condition._s._id, condition._id, otherwise._s._id, otherwise._id),
-            arrays, 0, optimize)
+        return _PROGRAM_CALL(self, "run_if", (condition, otherwise, arrays, 0, optimize, None, None))
 
     def run_dynamic(self, *arrays, optimize=False, profile=False):
         """Replay on compatible input ranks and dimensions, deriving every output shape."""
-        return self._execute_native(self._s._id, self._id, self._s._id,
-                                    arrays, 2, optimize, profile)
+        return _PROGRAM_CALL(self, "run_dynamic", (arrays, 2, optimize, profile))
 
     def vjp_if(self, condition, otherwise, *arrays, seeds, parameters=None):
         """Differentiate the selected branch against output seeds in one native call."""
-        return self._control_native(
-            self._s._id, self._id,
-            (condition._s._id, condition._id, otherwise._s._id, otherwise._id, seeds, parameters),
-            arrays, 0, False)
+        return _PROGRAM_CALL(self, "vjp_if", (condition, otherwise, arrays, 0, False, seeds, parameters))
 
     def vjp_while(self, *arrays, condition, max_iterations, seeds, parameters=None):
         """Differentiate the executed loop iterations against final output seeds."""
-        return self._control_native(
-            self._s._id, self._id,
-            (condition._s._id, condition._id, self._s._id, 0, seeds, parameters),
-            arrays, max_iterations, False)
+        return _PROGRAM_CALL(self, "vjp_while", (condition, None, arrays, max_iterations, False, seeds, parameters))
 
     def while_loop(self, *arrays, condition, max_iterations, optimize=False):
         """Apply this state graph while the scalar condition holds, up to a limit."""
-        return self._control_native(
-            self._s._id, self._id, (condition._s._id, condition._id, self._s._id, 0),
-            arrays, max_iterations, optimize)
+        return _PROGRAM_CALL(self, "while_loop", (condition, None, arrays, max_iterations, optimize, None, None))
 
     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
             epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):
@@ -1445,7 +1428,7 @@ class Program:
         >>> opt = session.optimizer("adam", lr=0.01)
         >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
         """
-        return self._session_native(self._s, "fit", (self, None, None, arrays, targets,
+        return _PROGRAM_CALL(self, "fit", (None, None, arrays, targets,
             (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
 
     def fit_if(self, condition, otherwise, *arrays, targets=None, optimizer,
@@ -1458,7 +1441,7 @@ class Program:
         state; parameters absent from the selected branch are unchanged.
         Returns this program with epoch losses and per-call branch counts.
         """
-        return self._session_native(self._s, "fit_if", (self, condition, otherwise, arrays, targets,
+        return _PROGRAM_CALL(self, "fit_if", (condition, otherwise, arrays, targets,
             (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
 
     def partition(self, devices=(0,), *, stages=2, tensor_shards=1,
@@ -1470,10 +1453,8 @@ class Program:
         when restoring a checkpoint. Eligible matrix products split independent
         output columns; stage-owned parameters and moments stay on one device.
         """
-        return self._s._distributed_binding.ops_partitioned_open(
-            self._s._id, self._id, devices,
-            (stages, tensor_shards, microbatches, optimizer, parameters, seed),
-            _PartitionedProgram, self._s._distributed_binding)
+        return _PROGRAM_CALL(self, "partition", (devices,
+            (stages, tensor_shards, microbatches, optimizer, parameters, seed)))
 
     def distribute(self, devices=(0,), *, logical_shards=2, optimizer,
                    parameters=(), seed=0):
@@ -1484,14 +1465,12 @@ class Program:
         ``parameters`` lists trainable handles, or is empty to train every
         floating-point parameter. ``seed`` controls native row permutations.
         """
-        return self._s._distributed_binding.ops_distributed_open(
-            self._s._id, self._id, devices, (logical_shards, optimizer, parameters, seed),
-            _DistributedProgram, self._s._distributed_binding)
+        return _PROGRAM_CALL(self, "distribute", (devices, (logical_shards, optimizer, parameters, seed)))
 
     def save_control(self, path, *, condition, otherwise=None, max_iterations=None,
                      optimizer=None, seed=0):
         """Save control components, shared parameters and optional optimizer state."""
-        return self._session_native(self._s, "save_control", (self, path, condition, otherwise, max_iterations, optimizer, seed))
+        return _PROGRAM_CALL(self, "save_control", (path, condition, otherwise, max_iterations, optimizer, seed))
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,
@@ -1503,16 +1482,16 @@ class Program:
         <path>`` runs the saved program on the same inputs and checks that
         every output has the same bits.
         """
-        return self._session_native(self._s, "save_program", (self, path))
+        return _PROGRAM_CALL(self, "save", (path,))
 
     def free(self):
         """Release the program (its parameters stay session tensors)."""
-        return self._session_native(self._s, "free_program", (self,))
+        return _PROGRAM_CALL(self, "free", ())
 
 
 # Import-time connection only; save never calls a Python layout/provenance helper.
 from ._native_program_save_bridge import connect_program as _connect_program_save
-_connect_program_save(Program)
+_connect_program_save(Program, Session)
 del _connect_program_save
 
 
@@ -1562,6 +1541,8 @@ def _connect_session_mode(mode):
     result.native_module = module.model_native_api_v1.__self__
     result.public_provider = module.ops_session_public_connect(result.native_module)
     result.native_provider = result.initialize(None, None, None, result.native_module, None, admission)
+    from ._native_program_save_bridge import connect_session
+    connect_session(result)
     return result
 
 
@@ -1582,3 +1563,9 @@ if isinstance(_session_connected, str):
 _SESSION_INITIALIZE = _session_connected.initialize
 
 _SESSION_CALL = _session_connected.call
+
+_PROGRAM_CALL = _session_connected.binding.ops_program_public_call
+
+from ._distributed_program import _connect_owned_programs
+_connect_owned_programs(_SESSION_CONNECTIONS)
+del _connect_owned_programs

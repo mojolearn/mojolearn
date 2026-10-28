@@ -113,12 +113,40 @@ def _hierarchy_availability(package):
     return {cls: {'predict': ((vars(member)['check'],), 'hierarchy_predict')}}
 
 
+def _density_availability(package):
+    # glue: the declared DBSCAN predicate is frozen import metadata only.
+    import sys
+    module = sys.modules.get(package.__name__ + '.density')
+    if type(module) is not ModuleType:
+        return {}
+    cls = vars(module).get('DBSCAN')
+    if type(cls) is not type:
+        return {}
+    member = vars(cls)['predict']
+    return {cls: {'predict': ((vars(member)['check'],), 'density_predict')}}
+
+
+def _linear_spectral_availability(package):
+    # glue: fixed availability declarations, captured once without calling predicates
+    import sys
+    result = {}
+    for module_name, class_name, member_name, condition in (  # glue: two native availability schemas
+            ('_expansion_linear', 'SGDClassifier', 'predict_proba', 'sgd_probability'),
+            ('_spectral_impl', 'SpectralClustering', 'predict', 'spectral_predict')):
+        module = sys.modules.get(package.__name__ + '.' + module_name)
+        if type(module) is ModuleType:
+            cls = vars(module)[class_name]
+            member = vars(cls)[member_name]
+            result[cls] = {member_name: ((vars(member)['check'],), condition)}
+    return result
+
+
 def connect_classes(package):
     # glue: establish native slots once, before dependent estimator/parameter
     # tables capture method identities; lazy imports admit only new classes.
     global _CONTEXT
     import sys
-    from . import _mode, _cholesky_impl
+    from . import _mode, _cholesky_impl, _svm_impl
     from ._native_classical_bridge import _layout, _numpy_free_context
     from .tokenizer import _binding
 
@@ -131,7 +159,10 @@ def connect_classes(package):
             raise TypeError('public attributes require compiled native entries')
         context = _numpy_free_context()
         context.update(native_module_type=ModuleType, plans={}, pending={}, missing=object(),
-                       property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet'},
+                       property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet',
+                                         vars(_svm_impl.SVC)['coef_']: 'svm_svc_coef',
+                                         vars(_svm_impl.SVR)['coef_']: 'svm_svr_coef'},
+                       svm_owner=(_svm_impl._NATIVE, _svm_impl._NATIVE_CONTEXT),
                        stl_connected=False, archive_finalizer_entry=finalizer)
         context['descriptor'] = factory(MethodType(entry, context))
         _CONTEXT = context
@@ -140,6 +171,12 @@ def connect_classes(package):
     prep_availability = _prep_availability(package, context['missing'])
     neighbor_availability = _neighbor_availability(package)
     neighbor_availability.update(_hierarchy_availability(package))
+    neighbor_availability.update(_density_availability(package))
+    neighbor_availability.update(_linear_spectral_availability(package))
+    neighbor_availability[_svm_impl.SVC] = {
+        name: ((vars(vars(_svm_impl.SVC)[name])['check'],), 'svm_probability')
+        for name in ('predict_proba', 'predict_log_proba')  # glue: two fixed native availability schemas
+    }
     stl_module = sys.modules.get(package.__name__ + '._x_sequence_stl')
     if not context['stl_connected'] and type(stl_module) is ModuleType:
         context['property_schemas'][vars(vars(stl_module)['STL'])['config']] = 'stl_config'

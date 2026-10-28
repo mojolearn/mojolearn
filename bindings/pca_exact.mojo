@@ -4,7 +4,6 @@
 # mutable at the Python ABI; native shape descriptors are rebuilt on admission
 # so replacing a supported public array preserves its documented semantics.
 from std.memory import memcpy, bitcast
-from core.pca_exact_impl import pca_check_state
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
@@ -54,20 +53,6 @@ def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
 def pca_whiten_entries(entries: PythonObject) raises:
     if py_get(entries, "pca_whiten_transform") is None or py_get(entries, "pca_whiten_inverse_transform") is None:
         raise Error("NotImplementedError: PCA whiten=True requires the compiled whitened transform pair")
-
-
-def pca_state_array(fields: PythonObject, name: String, shape: PythonObject,
-                    context: PythonObject, finite: Bool = False, nonnegative: Bool = False) raises -> PythonObject:
-    if not py_contains(fields, name):
-        raise Error("PCA fitted state is missing " + name)
-    var value = sequential_input(fields[name], context)
-    if not classical_dtype_is(value.dtype, context["float32"], "<f4") or value.shape != shape or not Bool(py=value.flags.c_contiguous):
-        raise Error("PCA requires C-order float32 " + name + " with the fitted shape")
-    if finite or nonnegative:
-        var ptr = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
-        _ = value  # keep the Python object alive through the native call above
-        pca_check_state(ptr, Int(py=value.size), name, finite, nonnegative)
-    return value
 
 
 def pca_prefix(value: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
@@ -265,72 +250,3 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, solver: String, proje
     _ = x  # keep the Python object alive through the native call above
     _ = x^
     return z if project else model
-
-
-def pca_transform(model: PythonObject, source: PythonObject, inverse: Bool,
-                   entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = sequential_fields(model)
-    if not py_contains(fields, "components_"):
-        raise Error("RuntimeError: this estimator is not fitted yet")
-    var dims = PCADimensions(Int(py=fields["n_samples_"]), Int(py=fields["n_features_in_"]), Int(py=fields["n_components_"]))
-    if dims.features < 1 or dims.components < 0:
-        raise Error("PCA fitted dimensions are invalid")
-    var x = pca_input(source, context)
-    var rows = Int(py=x.shape[0])
-    if Int(py=x.shape[1]) != (dims.components if inverse else dims.features):
-        if inverse:
-            raise Error("mojolearn PCA component count differs from fit")
-        classical_check_width(Int(py=x.shape[1]), dims.features, "PCA")
-    var whiten = Bool(py=fields["whiten"])
-    var components = pca_state_array(fields, "components_", Python.tuple(dims.components, dims.features), context, whiten)
-    var mean = pca_state_array(fields, "mean_", Python.tuple(dims.features), context, whiten)
-    var output = sequential_array(Python.tuple(rows, dims.features if inverse else dims.components), context["float32"], context)
-    if whiten:
-        pca_whiten_entries(entries)
-        if dims.rows < 2:
-            raise Error("PCA whitening requires fit rows >=2")
-        var singular = pca_state_array(fields, "singular_values_", Python.tuple(dims.components), context, True, True)
-        var variance = pca_state_array(fields, "explained_variance_", Python.tuple(dims.components), context, True, True)
-        # `n_samples_` and not this call's row count (DEVIATION 580), so
-        # transform(X[:k]) equals transform(X)[:k].
-        try:
-            if inverse:
-                _ = py_call_typed(entries["pca_whiten_inverse_transform"], sequential_address(x), sequential_address(components),
-                        sequential_address(singular), sequential_address(mean), sequential_address(output),
-                        Python.list(rows, dims.features, dims.components, dims.rows))
-                _ = components  # keep the Python object alive through the native call above
-                _ = x  # keep the Python object alive through the native call above
-                _ = singular  # keep the Python object alive through the native call above
-                _ = output  # keep the Python object alive through the native call above
-                _ = mean  # keep the Python object alive through the native call above
-            else:
-                _ = py_call_typed(entries["pca_whiten_transform"], sequential_address(x), sequential_address(mean),
-                        sequential_address(components), sequential_address(singular), sequential_address(output),
-                        Python.list(rows, dims.features, dims.components, dims.rows))
-                _ = mean  # keep the Python object alive through the native call above
-                _ = x  # keep the Python object alive through the native call above
-                _ = singular  # keep the Python object alive through the native call above
-                _ = output  # keep the Python object alive through the native call above
-                _ = components  # keep the Python object alive through the native call above
-        except error:
-            raise pca_refusal(error^)
-        _ = singular^
-        _ = variance^
-    elif inverse:
-        _ = py_call_typed(entries["inverse_transform"], sequential_address(x), sequential_address(components),
-                sequential_address(mean), sequential_address(output), Python.list(rows, dims.features, dims.components, 1))
-        _ = components  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = output  # keep the Python object alive through the native call above
-        _ = mean  # keep the Python object alive through the native call above
-    else:
-        _ = py_call_typed(entries["pca_transform"], sequential_address(x), sequential_address(mean), sequential_address(components),
-                                    sequential_address(output), Python.list(rows, dims.features, dims.components))
-        _ = mean  # keep the Python object alive through the native call above
-        _ = components  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = output  # keep the Python object alive through the native call above
-    _ = x^
-    _ = components^
-    _ = mean^
-    return output

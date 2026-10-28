@@ -10,21 +10,26 @@
 # x_decomp entries, operands, float32 scalars and order, every matrix where the
 # Python kit kept it (a GPU binding's results stay resident between steps), the
 # Lanczos batches, the shift-invert LLE solve and SMACOF in the same entries
-# with the same float64 stopping tests. The fitted `_M` state is the Python
-# kit's own objects, so transform reads it where fit left it. Bits unchanged.
+# with the same float64 stopping tests. Fitted matrices have typed native
+# owners, shared by fit and transform; the public lifecycle captures settings
+# and inputs before this execution. Runtime/vendor evidence is pending.
 from std.math import sqrt
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
+from bindings.manifold_storage_native import matrix_device, device_identifier
+from providers.python.array_metadata_pyapi import ArrayMetadata
+from bindings.metrics_native_support import metric_warn
 from bindings.family_common import (
-    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_call_kw,
+    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call,
     family_field,
 )
 from bindings.mani_kit import (
-    MKit, mk_from_input, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_desc_range, mk_out,
+    MKit, mk_from_input, mk_from_snapshot, mk_copy, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_desc_range, mk_out,
     mk_out2, mk_store, mk_store_ptr, mk_at, mk_of, mk_fill, mk_zeros, mk_reshape, mk_dev_view, mk_new,
     mk_on_dev, mk_take_rows_list, mk_ints, mk_addr, mk_store_addr, mk_store_len,
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_SQRT, OP_SQ, OP_SCALE, OP_FMA, OP_ADDS, OP_GTS, OP_MIN, OP_LE,
@@ -52,27 +57,27 @@ def _mani_finite(v: Float64) -> Bool:
 
 def _mani_eq(value: PythonObject, text: String) raises -> Bool:
     """`value == text`, as a truth value."""
-    var b = Python.import_module("builtins")
-    return Bool(py=py_call(b.bool, py_call(Python.import_module("operator").eq, value, PythonObject(text))))
+    var b = native_loaded_module("builtins")
+    return Bool(py=py_call(b.bool, py_call(native_loaded_module("operator").eq, value, PythonObject(text))))
 
 
 def _mani_in(value: PythonObject, choices: PythonObject) raises -> Bool:
     """`value in choices`."""
-    return Bool(py=py_call(Python.import_module("operator").contains, choices, value))
+    return Bool(py=py_call(native_loaded_module("operator").contains, choices, value))
 
 
 def _mani_truth(value: PythonObject) raises -> Bool:
-    return Bool(py=py_call(Python.import_module("builtins").bool, value))
+    return Bool(py=py_call(native_loaded_module("builtins").bool, value))
 
 
 def _mani_int(value: PythonObject) raises -> Int:
     """`int(value)`."""
-    return Int(py=family_call(Python.import_module("builtins").int, value))
+    return Int(py=family_call(native_loaded_module("builtins").int, value))
 
 
 def _mani_float(value: PythonObject) raises -> Float64:
     """`float(value)`."""
-    return Float64(py=family_call(Python.import_module("builtins").float, value))
+    return Float64(py=family_call(native_loaded_module("builtins").float, value))
 
 
 def _mani_f32(v: Float64) -> Float64:
@@ -83,7 +88,7 @@ def _mani_f32(v: Float64) -> Float64:
 def _mani_kit(mode: PythonObject, binding: PythonObject, context: PythonObject) raises -> MKit:
     """`_Kit(mode)`: `binding` is the decomp binding the shell resolved for
     `mode`."""
-    return MKit(String(py=py_call(Python.import_module("builtins").str, mode)), binding, context)
+    return MKit(String(py=py_call(native_loaded_module("builtins").str, mode)), binding, context)
 
 
 def _mani_host_kit(mode: PythonObject, binding: PythonObject, context: PythonObject) raises -> MKit:
@@ -119,10 +124,10 @@ def _mani_eigen_solver(name: PythonObject, who: String) raises:
 def _mani_metric_spec(metric: PythonObject, p_in: PythonObject, metric_params: PythonObject,
                       who: String, context: PythonObject) raises -> Tuple[Int, Float64]:
     """`_metric_spec(metric, p, metric_params, who)`: (kind, p)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var p = p_in
     if _mani_truth(metric_params):
-        var extra = py_call(Python.import_module("operator").sub, py_call(b.set, metric_params),
+        var extra = py_call(native_loaded_module("operator").sub, py_call(b.set, metric_params),
                             py_call(b.set, Python.list(PythonObject("p"))))
         if _mani_truth(extra):
             raise Error("NotImplementedError: " + who + ": metric_params " + family_repr(py_call(b.sorted, extra))
@@ -225,8 +230,8 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
             # `_lanczos_batch`: steps j .. m - 1, then their alphas and betas
             # up to the first breakdown
             if resident:
-                _ = family_call(k.fn("x_decomp_dev_lanczos"), aid, qd._d.id, abd._d.id, mk_ints([n, j, m, cap]))
-                _ = family_call(k.fn("x_decomp_dev_download"), abd._d.id, mk_store_addr(ab), PythonObject(2 * cap))
+                _ = family_call(k.fn("x_decomp_dev_lanczos"), aid, device_identifier(matrix_device(qd)), device_identifier(matrix_device(abd)), mk_ints([n, j, m, cap]))
+                _ = family_call(k.fn("x_decomp_dev_download"), device_identifier(matrix_device(abd)), mk_store_addr(ab), PythonObject(2 * cap))
                 _ = ab  # keep the Python object alive through the native call above
             else:
                 var pa = mk_addr(a, ctx)
@@ -281,10 +286,10 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
     var yt = mk_take_cols(yv, top, ctx)
     var qm: PythonObject
     if mk_on_dev(qd):
-        qm = mk_dev_view(qd._d, j, n, ctx)
+        qm = mk_dev_view(matrix_device(qd), j, n, ctx)
     else:
         var store = mk_store(qd, ctx)
-        qm = mk_new(py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice, PythonObject(0),
+        qm = mk_new(py_call(py_attr(store, "__getitem__"), py_call(native_loaded_module("builtins").slice, PythonObject(0),
                                                        PythonObject(j * n))), j, n, ctx)
     var v = k.mm(qm, yt, True, False)
     _ = ab^
@@ -314,11 +319,10 @@ def _mani_top_eig(mut k: MKit, a: PythonObject, nc: Int, topk: Bool) raises -> T
 
 
 # ---------------------------------------------------------------- ClassicalMDS
-def _cmds_core(mut k: MKit, source: PythonObject, metric: PythonObject, metric_params: PythonObject,
+def _cmds_core(mut k: MKit, m: PythonObject, metric: PythonObject, metric_params: PythonObject,
                nc_param: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, PythonObject, PythonObject]:
     """`ClassicalMDS.fit`'s steps: (dissimilarity_matrix_, eigenvalues_,
     embedding_m_, M)."""
-    var m = mk_from_input(source, "X", context)
     var d2: PythonObject
     var dissimilarity: PythonObject
     if _mani_eq(metric, "precomputed"):
@@ -341,14 +345,14 @@ def _cmds_core(mut k: MKit, source: PythonObject, metric: PythonObject, metric_p
     return (dissimilarity, values, embedding, m)
 
 
-def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`ClassicalMDS.fit(X)`; returns embedding_."""
     classical_connect_numpy(context)
     var fields = settings.values
     var mode = settings.mode
     py_setitem(settings.fields, "numeric_mode_", mode)
     var k = _mani_kit(mode, args[0], context)
-    var got = _cmds_core(k, args[2], family_field(fields, "metric"), family_field(fields, "metric_params"),
+    var got = _cmds_core(k, mk_from_snapshot(x, "X", context), family_field(fields, "metric"), family_field(fields, "metric_params"),
                          family_field(fields, "n_components"), context)
     py_setitem(settings.fields, "dissimilarity_matrix_", got[0])
     py_setitem(settings.fields, "eigenvalues_", got[1])
@@ -360,16 +364,16 @@ def _cmds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
 
 
 # ---------------------------------------------------------------- MDS
-def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`MDS.fit_transform(X, init=init)`; returns embedding_. args = (decomp
     binding, default-mode binding, X, init)."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = settings.values
     var mode = settings.mode
     py_setitem(settings.fields, "numeric_mode_", mode)
     var k = _mani_kit(mode, args[0], context)
-    var m = mk_from_input(args[2], "X", context)
+    var m = mk_from_snapshot(x, "X", context)
     var metric = family_field(fields, "metric")
     var dis: PythonObject
     if _mani_eq(metric, "precomputed"):
@@ -395,7 +399,7 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     elif _mani_eq(init, "classical_mds"):
         # ClassicalMDS(nc, metric="precomputed", numeric_mode=self.numeric_mode_).fit(Dis.out()).embedding_m_
         var inner = _mani_kit(mode, args[0], context)
-        var got = _cmds_core(inner, mk_out2(dis, context), PythonObject("precomputed"), PythonObject(None),
+        var got = _cmds_core(inner, mk_copy(dis, context), PythonObject("precomputed"), PythonObject(None),
                              PythonObject(nc), context)
         _ = mk_out2(got[2], context)  # the inner fit's embedding_ (it reads the start back to the host)
         starts.append(got[2])
@@ -458,17 +462,15 @@ def _iso_graph(settings: ManifoldSettings, fields: PythonObject, mut k: MKit, m:
     var count = comp[1]
     py_setitem(settings.fields, "n_connected_components_", PythonObject(count))
     if count > 1:
-        var keywords = Python.dict()
-        py_setitem(keywords, "stacklevel", PythonObject(2))
-        _ = family_call_kw(Python.import_module("warnings").warn, keywords,
-                           PythonObject("The number of connected components of the neighbors graph is "
-                                        + String(count) + " > 1. Completing the graph to fit Isomap might be slow."))
+        metric_warn("The number of connected components of the neighbors graph is "
+                    + String(count) + " > 1. Completing the graph to fit Isomap might be slow.",
+                    native_loaded_module("builtins").UserWarning, k.ctx)
         var d = _mani_dist(k, m, m, kind, pw, True)
         k.graph_join(wg, d, comp[0], count)
     return (wg, nn_out)
 
 
-def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`Isomap.fit(X)`; returns embedding_."""
     classical_connect_numpy(context)
     var fields = settings.values
@@ -495,7 +497,7 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     py_setitem(settings.fields, "_kind", PythonObject(kind))
     py_setitem(settings.fields, "_pw", PythonObject(pw))
     var k = _mani_kit(mode, args[0], context)
-    var m = mk_from_input(args[2], "X", context)
+    var m = mk_from_snapshot(x, "X", context)
     var n = mk_r(m)
     var graph = _iso_graph(settings, fields, k, m, n, kind, pw)
     var d = k.dijkstra(graph[0])
@@ -521,13 +523,13 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     return embedding
 
 
-def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`Isomap.transform(X)`."""
     _mani_check(model, settings.values, "embedding_m_")
     classical_connect_numpy(context)
     var fields = settings.values
     var k = _mani_kit(settings.mode, args[0], context)
-    var q = mk_from_input(args[2], "X", context)
+    var q = mk_from_snapshot(x, "X", context)
     var fit_x = family_field(fields, "_fit_X")
     var n = mk_r(fit_x)
     var d = family_field(fields, "dist_matrix_m_")
@@ -667,7 +669,7 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
     var xm = mk_zeros(n1, p, ctx)
     var ym = mk_zeros(n1, nc, ctx)
     var sm = mk_zeros(1, p, ctx)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var pf = mk_addr(f0, ctx)
     _ = f0  # keep the Python object alive through the native call above
     var pl = mk_addr(lu, ctx)
@@ -680,7 +682,7 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
     _ = ym  # keep the Python object alive through the native call above
     _ = xm  # keep the Python object alive through the native call above
     var params = mk_ints([n, n1, nc, p, max(1, max_iter)])
-    _ = py_call(params.append, py_call(Python.import_module("operator").and_, py_call(b.int, seed),
+    _ = py_call(params.append, py_call(native_loaded_module("operator").and_, py_call(b.int, seed),
                                        PythonObject(0xFFFFFFFF)))
     var tols = Python.list(PythonObject(floor), PythonObject(_LLE_SUBSPACE_TOL), PythonObject(_LLE_STALL_TOL))
     var status = family_call(k.fn("x_decomp_lle_iterate"), pf, pl, pp, pi, pz, outs, params, tols)
@@ -723,7 +725,7 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
     return (True, k.ew2(OP_MUL, v, signs), sv)
 
 
-def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`LocallyLinearEmbedding.fit(X)`; returns embedding_."""
     classical_connect_numpy(context)
     var fields = settings.values
@@ -737,7 +739,7 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     _mani_eigen_solver(solver, "LocallyLinearEmbedding")
     var k = _mani_kit(mode, args[0], context)
     var hk = _mani_host_kit(settings.default_mode, args[1], context)
-    var m = mk_from_input(args[2], "X", context)
+    var m = mk_from_snapshot(x, "X", context)
     var n = mk_r(m)
     var nn = _mani_int(family_field(fields, "n_neighbors"))
     var nc = _mani_int(family_field(fields, "n_components"))
@@ -786,13 +788,13 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     return embedding
 
 
-def _lle_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _lle_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`LocallyLinearEmbedding.transform(X)`."""
     _mani_check(model, settings.values, "embedding_m_")
     classical_connect_numpy(context)
     var fields = settings.values
     var k = _mani_kit(settings.mode, args[0], context)
-    var q = mk_from_input(args[2], "X", context)
+    var q = mk_from_snapshot(x, "X", context)
     var fit_x = family_field(fields, "_fit_X")
     var knn = _mani_knn(k, q, fit_x, _mani_int(family_field(fields, "_knn")), False, 0, 2.0)
     var idm = knn[0]
@@ -817,37 +819,37 @@ def _mani_arguments(settings: ManifoldSettings, operation: String, args: PythonO
     var resolved = Python.list(binding, default_binding)
     for i in range(2, len(args)):  # small-loop(args: fixed public operation argument envelope): bounded by the public signature
         _ = py_call(resolved.append, args[i])
-    return py_call(Python.import_module("builtins").tuple, resolved)
+    return py_call(native_loaded_module("builtins").tuple, resolved)
 
 
 def mani_decomp_operation(model: PythonObject, settings: ManifoldSettings, operation: String, var args: PythonObject,
-                          context: PythonObject) raises -> PythonObject:
+                          x: Optional[ArrayMetadata], context: PythonObject) raises -> PythonObject:
     """args = (optional decomp binding, optional default binding, X[, init])."""
     args = _mani_arguments(settings, operation, args, context)
     if operation == "family_mani_cmds_fit":
-        _ = _cmds_fit(model, settings, args, context)
+        _ = _cmds_fit(model, settings, args, x.value(), context)
         return model
     if operation == "family_mani_cmds_fit_transform":
-        return _cmds_fit(model, settings, args, context)
+        return _cmds_fit(model, settings, args, x.value(), context)
     if operation == "family_mani_mds_fit":
-        _ = _mds_fit(model, settings, args, context)
+        _ = _mds_fit(model, settings, args, x.value(), context)
         return model
     if operation == "family_mani_mds_fit_transform":
-        return _mds_fit(model, settings, args, context)
+        return _mds_fit(model, settings, args, x.value(), context)
     if operation == "family_mani_iso_fit":
-        _ = _iso_fit(model, settings, args, context)
+        _ = _iso_fit(model, settings, args, x.value(), context)
         return model
     if operation == "family_mani_iso_fit_transform":
-        return _iso_fit(model, settings, args, context)
+        return _iso_fit(model, settings, args, x.value(), context)
     if operation == "family_mani_iso_transform":
-        return _iso_transform(model, settings, args, context)
+        return _iso_transform(model, settings, args, x.value(), context)
     if operation == "family_mani_iso_reconstruction_error":
         return _iso_reconstruction_error(model, settings, args, context)
     if operation == "family_mani_lle_fit":
-        _ = _lle_fit(model, settings, args, context)
+        _ = _lle_fit(model, settings, args, x.value(), context)
         return model
     if operation == "family_mani_lle_fit_transform":
-        return _lle_fit(model, settings, args, context)
+        return _lle_fit(model, settings, args, x.value(), context)
     if operation == "family_mani_lle_transform":
-        return _lle_transform(model, settings, args, context)
+        return _lle_transform(model, settings, args, x.value(), context)
     raise Error("RuntimeError: unknown manifold operation " + operation)

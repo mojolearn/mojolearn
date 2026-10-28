@@ -8,6 +8,7 @@ from std.memory import memcpy
 from core.classical_ridge_impl import classical_widen_f32_f64
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_word, classical_address
 from bindings.sequential_description import sequential_fields
+from bindings.classical_metadata import classical_fit_replacements_admit
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_check_width, classical_estimator_name
 
 
@@ -56,6 +57,7 @@ def classical_ridge_parameters(fields: PythonObject) raises:
 def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var fields = sequential_fields(model)
+    classical_fit_replacements_admit(fields, True, context)
     var est = classical_estimator_name(model)
     var x = classical_check_x(args[0], est, context)
     var rows = Int(py=x.shape[0])

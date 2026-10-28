@@ -1,0 +1,77 @@
+GP public lifecycle migration — 2026-10-27
+
+Branch: lane/peer5-gp-lifecycle-20261027
+Source commit: e595a0a269f21124ff2f389a3ba808ee19378eb2
+Base dependencies already supplied by peer5: dispatch 2a1b52376b and kernel
+metadata/admission 549fece273d8ad39c4353f89e53e3887ff01ca7b (cherry-picked here).
+Do not replay those dependency commits a second time during integration.
+
+Changes
+- GPR/GPC set _mojolearn_native_public and explicitly expose numeric_mode in
+  their declared signatures. This prevents _mode from installing Python fit,
+  fitted-check and output decorators. The existing _native_full_reset_params
+  native constructor installer remains the constructor owner; its event schema
+  and native numeric_mode preservation rule are reused unchanged.
+- gp_public_operation owns fitted checks, X/y preparation, column target
+  handling, feature names/width, fit depth/flags, exception normalization,
+  binding preparation and finished public prediction conversion. Existing
+  numerical owners execute directly from this owner.
+- Standalone GPR public predict widens to float64 with NumPy loaded; prediction
+  tuples preserve float32 mean/std/cov arrays. GPC predict/proba use native
+  ndarray views. Internal callers keep existing explicit-module native ABIs.
+  sample_y/latent methods keep their existing output contract.
+- Admission covers scalar settings/options, retained buffers, fitted kernels
+  and GPC BinaryLaplace storage. BinaryLaplace's exact namespace is captured at
+  module import and compared before allocations and retained-state reads.
+- Classifier targets become a native primitive list before the numerical
+  encoder; native Array slot owners and Torch storage are retained without
+  Python conversion callbacks. Public input copying stays recorded in
+  input_copied_ after boundary conversion.
+- Explicit HostGaussianProcess* inherited methods use the import-connected
+  native mode metadata route and recover/check the host extension via its native
+  getter. No Python _bind runs, and process defaults cannot redirect a host
+  estimator to a GPU. GPC's base label binding keeps identical-mode semantics.
+- GPC random_state is stored untouched and is never read as a scalar: supported
+  RandomState objects remain accepted, as in the original unused parameter.
+- Archive load already marks GP models fitted natively; its owner is unchanged.
+
+Integration hook (parent owns bindings/gp_native.mojo)
+Import gp_public_operation from providers.python.gp_public_lifecycle_pyapi.
+Before estimator_arguments resolves sentinels, route family_gp_gpr_* and
+family_gp_gpc_* operations (except family_gp_gpc_lml) with args[0] is None to
+this owner. Kernel operations and explicit-module internal operations retain
+existing routes. This commit requires that parent dispatch hook before merge.
+The parent is also repairing transitive GP numerical/label helpers, including
+ClassLabels native unwrapping; integrate those source changes together.
+
+Compilation / evidence
+See compile.json for the final local CPU-only receipt. No compiled artifact was
+loaded or executed; no runtime, identity, GPU or benchmark checks were run.
+Full source snapshots, complete logs and binaries:
+  ~/mojolearn-evidence/peer5-gp-lifecycle-20261027/
+Attempt1: rejected fixture export signature; function String argument needed a
+PythonObject boundary adapter. Failure retained, no implementation result.
+Attempt2: CPU compilation passed (224.49 seconds), before additional native
+Array/Torch label retention and BinaryLaplace namespace admission.
+Attempt3: CPU compilation passed (103.59 seconds), including Array/Torch label
+retention and BinaryLaplace namespace admission.
+Attempt4: CPU compilation passed (76.21 seconds), including explicit-host
+binding dispatch and unused GPC RandomState compatibility.
+Attempt5: CPU compilation passed (61.41 seconds) for the final owner, preserving
+fitted-check precedence and admitting constructor settings only when fit consumes
+them; result retained in compile.json.
+Python source syntax compilation passed; neither Python module was imported.
+All local builds configured 10 workers from sysctl hw.logicalcpu; this records
+allocation/settings and does not claim full CPU saturation. No pod was rented.
+
+Remaining scope / limits
+- Parent fixes gp_mode_wanted for explicit host numeric_mode=None so the
+  downstream extension mode check also selects identical independent of the
+  process default. Its GP-common source owns that companion repair.
+- Parent must compile its combined final dispatcher and GP numerical/helper
+  bytes with this owner, then serialize the main merge.
+- This compilation is not evidence of runtime behavior, identity, cross-vendor
+  support or whole-library Python freedom. GPU paths remain uncompiled here.
+- Kernel constructors/operators and residual GP helper/label details are owned
+  by sibling/parent tasks. Shared metadata/warning/provider qualification is
+  not extended beyond the compiled source closure.

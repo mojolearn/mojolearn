@@ -136,13 +136,21 @@ def connect():
     context.update(
         trees_bindings=_bindings(), trees_helpers=_helpers(), trees_classes={}, trees_defaults={},
         trees_boost_classes={}, trees_meta_classes={},
-        trees_constructors={},
+        trees_constructors={}, trees_gbdt_adapter_constructors={}, trees_state_layouts={},
         trees_missing=object(), trees_namespace=types.SimpleNamespace,
         trees_real_type=numbers.Real, trees_integral_type=numbers.Integral,
         classifier_labels_class=ClassLabels,
         classifier_labels_namespace=dict(vars(ClassLabels)),
         classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
     )
+    from ._native_owner_lifetime import connect_owner_context
+    connect_owner_context(context)
+    tables = tuple(table for modes in context['trees_bindings'].values()  # glue: fixed native binding tables retained independently of model lifetime
+                   for table in modes.values() if type(table) is dict)  # glue: exclude import-time refusal strings
+    context['trees_state_retained'] = tables
+    context['trees_state_releases'] = tuple(table[name] for table in tables  # glue: native resident release identities, once at connection
+                                           for name in ('forest_release_gpu', 'gbdt_resident_release')  # glue: existing compiled release ABIs
+                                           if name in table)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
 
@@ -191,6 +199,48 @@ def register(cls, kind, **tables):
         context.setdefault(key, value)
     if public_forest:
         _connect_public_forest(cls, context)
+    elif kind == 'gbdt':
+        from ._native_classical_bridge import _layout
+        context['trees_state_layouts'][cls] = {
+            'classical_public_layouts': {cls: _layout(cls, None)}, 'classical_public_installed': True}
+
+
+def connect_gbdt_parameters(base, classes, metadata):
+    # glue: install the native public constructor only after both adapter classes
+    # exist, before shared parameter/attribute plans capture their final methods.
+    import functools
+    import inspect
+    from ._native_classical_bridge import _layout
+    entry, context = connect()
+    original = base.__init__
+    signature = inspect.signature(original)
+
+    @functools.wraps(original)
+    def initialize(self, *args, **kwargs):
+        return entry(self, 'trees_gbdt_adapter_construct', (base, args, kwargs), context)
+
+    initialize.__signature__ = signature
+    base.__init__ = initialize
+
+    if 'trees_unavailable' in context:
+        return
+    rows = tuple((p.name, int(p.kind), p.default is inspect.Parameter.empty,
+                  None if p.default is inspect.Parameter.empty else p.default)
+                 for p in signature.parameters.values() if p.name != 'self')  # glue: fixed constructor signature
+    if any(row[1] not in (0, 1, 3) for row in rows):  # glue: native binder's supported named-argument kinds
+        raise TypeError('native GBDT constructors require named parameters')
+    for cls in (base,) + tuple(classes):  # glue: built-in adapter storage plans
+        layout = _layout(cls, None)
+        namespaces = tuple(type.__dict__['__dict__'].__get__(parent)  # glue: raw native class namespaces
+                           for parent in type.__dict__['__mro__'].__get__(cls))  # glue: fixed class ancestry
+        # Native attribute slots install later; constructor writes never invoke
+        # __getattribute__. Setter/dictionary/finalizer protocols stay pinned.
+        hooks = tuple((name, next((row[name] for row in namespaces if name in row), None))  # glue: fixed inherited write/lifetime hooks
+                      for name in ('__setattr__', '__getattr__', '__del__'))  # glue: no user setter/finalizer callbacks
+        context['trees_gbdt_adapter_constructors'][cls] = (rows, layout['fields_get'], hooks)
+        context['trees_state_layouts'][cls] = {
+            'classical_public_layouts': {cls: layout}, 'classical_public_installed': True}
+    context['trees_gbdt_parameter_metadata'] = metadata
 
 
 def _connect_public_forest(cls, context):

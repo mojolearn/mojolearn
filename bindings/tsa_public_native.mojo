@@ -19,10 +19,14 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from core.xseq_marshal import xseq_cast_nd, tsa_flags_u8
-from bindings.tsa_hw_native import hw_fit, hw_predict, hw_score
-from bindings.tsa_arima_native import arima_fit, arima_predict
-from bindings.tsa_autoarima_native import autoarima_fit, autoarima_predict
-from providers.python.autoarima_lifecycle_pyapi import autoarima_initialize, autoarima_forecast
+from bindings.tsa_hw_native import tsa_array, hw_fit, hw_predict, hw_score, hw_initialize, hw_forecast, hw_component, hw_save
+from bindings.tsa_admission import tsa_buffer, tsa_scalar, tsa_truth
+from bindings.native_loaded_module import native_loaded_module
+from bindings.tsa_arima_native import arima_fit, arima_predict, arima_forecast
+from providers.python.arima_lifecycle_pyapi import arima_initialize, arima_parameter, arima_repr
+from bindings.tsa_autoarima_native import autoarima_fit
+from providers.python.autoarima_lifecycle_pyapi import autoarima_initialize, autoarima_forecast, autoarima_predict_native
+from providers.python.autoarima_search_pyapi import autoarima_search
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -30,58 +34,45 @@ comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
 
 
 def _b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def _array(code: String, typestr: String, count: Int, width: Int, context: PythonObject) raises -> PythonObject:
     """A zero-filled `(count,)` mojolearn Array of `typestr`."""
-    var store = py_call(context["array_type"], PythonObject(code), py_call(context["native_bytes_type"], width * count))
-    return classical_wrap_array(store, Python.tuple(count), typestr, "C", context)
+    return tsa_array(code, typestr, Python.tuple(count), count, width, context)
 
 
 def _entries(context: PythonObject) raises -> PythonObject:
     """The `_mojolearn_tsa` entries of the process default tier."""
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
     var entries = context["tsa_bindings"][mode]
-    if Bool(py=py_call(_b().isinstance, entries, _b().str)):
+    if py_type(entries) is _b().str:
         raise Error(String(py=entries))
     return entries
 
 
 def _series_major(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_series_major(y, name)`: (series-major float32 Array, n_obs, batch)."""
-    classical_admit_value(source, context)
-    var value = PythonObject(None)
-    try:
-        value = classical_input(source, context, "y")
-    except:
-        raise Error("mojolearn " + name + ": y must be 1-D or 2-D (n_obs, n_series) -- an array or a nested list "
-                    + "of numbers -- got " + String(py=py_type(source).__name__))
-    var rank = Int(py=value.ndim)
-    var shape_text = String(py=py_call(_b().str, py_call(_b().tuple, value.shape)))
+    var value = tsa_buffer(source, name + " y", context)
+    var rank = len(value.shape)
     if rank != 1 and rank != 2:
-        raise Error("mojolearn " + name + ": y must be 1-D or 2-D (n_obs, n_series), got " + String(rank)
-                    + "-D shape " + shape_text)
-    var rows = Int(py=value.shape[0])
-    var cols = 1 if rank == 1 else Int(py=value.shape[1])
+        raise Error("mojolearn " + name + ": y must be 1-D or 2-D (n_obs, n_series)")
+    var rows = value.shape[0]
+    var cols = 1 if rank == 1 else value.shape[1]
     if rows * cols == 0:
-        raise Error("mojolearn " + name + ": y is empty, shape " + shape_text)
-    var item = Int(py=value.itemsize)
-    var kind = classical_cast_kind(value, item, "y", context)
+        raise Error("mojolearn " + name + ": y is empty")
     var out = _array("f", "<f4", rows * cols, 4, context)
-    # series b at [b * n_obs, (b + 1) * n_obs): the C order of the transposed view
     var dims = List[Int]()
     var steps = List[Int]()
     if rank == 2:
         dims.append(cols)
-        steps.append(Int(py=value.strides[1]))
+        steps.append(value.strides[1])
     dims.append(rows)
-    steps.append(Int(py=value.strides[0]))
-    xseq_cast_nd(Int(py=classical_address(value)), dims, steps, item, kind, True,
+    steps.append(value.strides[0])
+    xseq_cast_nd(value.source.addr, dims, steps, value.source.itemsize, value.source.kind, True,
                  _F32P(unsafe_from_address=Int(py=classical_address(out))))
-    _ = value  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = value^
+    _ = value
+    _ = out
     return Python.tuple(out, rows, cols)
 
 
@@ -95,8 +86,8 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var flags = _array("i", "<i4", batch, 4, context)
     var stat = _array("f", "<f4", batch, 4, context)
     _ = py_call_typed(_entries(context)["kpss_test"], classical_address(flat), classical_address(flags), classical_address(stat),
-                      Python.list(batch, n_obs, py_call_typed(b.int, args[1]), py_call_typed(b.int, args[2]),
-                                  py_call_typed(b.int, args[3]), py_call_typed(b.float, args[4])))
+                      Python.list(batch, n_obs, py_call_typed(b.int, tsa_scalar(args[1], context, True)), py_call_typed(b.int, tsa_scalar(args[2], context, True)),
+                                  py_call_typed(b.int, tsa_scalar(args[3], context, True)), py_call_typed(b.float, tsa_scalar(args[4], context))))
     _ = stat  # keep the Python object alive through the native call above
     _ = flags  # keep the Python object alive through the native call above
     _ = flat  # keep the Python object alive through the native call above
@@ -107,7 +98,7 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = flags  # keep the Python object alive through the native call above
     _ = stationary  # keep the Python object alive through the native call above
     _ = flat^
-    if Bool(py=py_call(b.bool, args[5])):
+    if tsa_truth(args[5], context):
         return Python.tuple(stationary, stat)
     return stationary
 
@@ -115,8 +106,8 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
 def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """select_d(y, D, s, d_max, pval_threshold)."""
     var b = _b()
-    var seasonal = Int(py=py_call_typed(b.int, args[1]))
-    var limit_value = PythonObject(2 - seasonal) if args[3] is None else args[3]
+    var seasonal = Int(py=py_call_typed(b.int, tsa_scalar(args[1], context, True)))
+    var limit_value = PythonObject(2 - seasonal) if args[3] is None else py_call_typed(b.int, tsa_scalar(args[3], context, True))
     var prepared = _series_major(args[0], "select_d", context)
     var flat = prepared[0]
     var n_obs = Int(py=prepared[1])
@@ -130,8 +121,8 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
                         + String(seasonal) + "), refused by name")
     var out = _array("i", "<i4", batch, 4, context)
     _ = py_call_typed(_entries(context)["select_d"], classical_address(flat), classical_address(out),
-                      Python.list(batch, n_obs, seasonal, py_call_typed(b.int, args[2]), py_call_typed(b.int, limit_value),
-                                  py_call_typed(b.float, args[4])))
+                      Python.list(batch, n_obs, seasonal, py_call_typed(b.int, tsa_scalar(args[2], context, True)), py_call_typed(b.int, limit_value),
+                                  py_call_typed(b.float, tsa_scalar(args[4], context))))
     _ = out  # keep the Python object alive through the native call above
     _ = flat  # keep the Python object alive through the native call above
     _ = flat^
@@ -149,6 +140,16 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if operation == "select_d":
             return tsa_select_d(call[2], context).steal_data()
         # ExponentialSmoothing (bindings/tsa_hw_native.mojo)
+        if operation == "hw_initialize":
+            return hw_initialize(call[0], call[2], context).steal_data()
+        if operation == "hw_forecast":
+            return hw_forecast(call[0], call[2], context).steal_data()
+        if operation == "hw_attribute":
+            return hw_component(call[0], call[2], context, True).steal_data()
+        if operation == "hw_component":
+            return hw_component(call[0], call[2], context).steal_data()
+        if operation == "hw_save":
+            return hw_save(call[0], call[2], context).steal_data()
         if operation == "hw_fit":
             return hw_fit(call[0], context).steal_data()
         if operation == "hw_predict":
@@ -156,11 +157,21 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if operation == "hw_score":
             return hw_score(call[0], call[2], context).steal_data()
         # ARIMA (bindings/tsa_arima_native.mojo)
+        if operation == "arima_initialize":
+            return arima_initialize(call[0], call[2], context).steal_data()
+        if operation == "arima_parameter":
+            return arima_parameter(call[0], call[2], context).steal_data()
+        if operation == "arima_repr":
+            return arima_repr(call[0], context).steal_data()
         if operation == "arima_fit":
             return arima_fit(call[0], call[2], context).steal_data()
+        if operation == "arima_forecast":
+            return arima_forecast(call[0], call[2], context).steal_data()
         if operation == "arima_predict":
             return arima_predict(call[0], call[2], context).steal_data()
         # AutoARIMA (bindings/tsa_autoarima_native.mojo)
+        if operation == "autoarima_search":
+            return autoarima_search(call[0], call[2], context).steal_data()
         if operation == "autoarima_initialize":
             return autoarima_initialize(call[0], call[2], context).steal_data()
         if operation == "autoarima_forecast":
@@ -168,7 +179,7 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if operation == "autoarima_fit":
             return autoarima_fit(call[0], call[2], context).steal_data()
         if operation == "autoarima_predict":
-            return autoarima_predict(call[0], call[2], context).steal_data()
+            return autoarima_predict_native(call[0], call[2], context).steal_data()
         raise Error("RuntimeError: unknown tsa operation " + operation)
     except error:
         var text = String(error)
@@ -182,6 +193,8 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if text.startswith("IndexError:"):
             return raise_python_exception(error_without_class(error, "IndexError"), ExceptionType("PyExc_IndexError"))
+        if text.startswith("ZeroDivisionError:"):
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
         if text.startswith("AttributeError:"):
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

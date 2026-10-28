@@ -17,6 +17,8 @@
 from std.memory import memcpy, bitcast
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
+from providers.python.metrics_vector_input_pyapi import metric_vector_exact
+from providers.python.metrics_matrix_input_pyapi import metric_reg_target, metric_sample_weights
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
@@ -319,6 +321,8 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
     """One `_Reg` target: `materialize_f32_lists`, the float32 dtype rule,
     (n,) as (n, 1), the nonempty rank rule, C order, finite. Returns
     (array, n, n_outputs)."""
+    if metric_vector_exact(source, context):
+        return metric_reg_target(source, name, caller, context)
     var b = native_loaded_module("builtins")
     var view = classical_view(source, context, name)
     var typestr = classical_dtype_str(view, context)
@@ -356,6 +360,8 @@ def _reg_weights(source: PythonObject, n: Int, caller: String, context: PythonOb
     nonnegative, a positive total; None stays None."""
     if source is None:
         return PythonObject(None)
+    if metric_vector_exact(source, context):
+        return metric_sample_weights(source, n, caller, context)
     var view: PythonObject
     try:
         view = classical_view(source, context, "sample_weight")

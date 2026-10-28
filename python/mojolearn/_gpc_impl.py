@@ -96,6 +96,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # each (bindings/gp_classifier_native.mojo). fit and predict also hand over
 # the base binding, whose label entries encode and decode the classes.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.connect_bindings("_mojolearn_gp", "_mojolearn")
 
 
 def _ovr_combine(ext, cols, n_star):
@@ -258,6 +259,10 @@ class GaussianProcessClassifier(NumericModeMixin):
 
     _BINDING = "_mojolearn_gp"
 
+    # The native public owner replaces _mode lifecycle/output decorators.
+    # The shared full-reset installer still owns the field-only constructor.
+    _mojolearn_native_public = True
+
     def __init__(
         self,
         kernel=None,
@@ -270,6 +275,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         random_state=None,
         multi_class="one_vs_rest",
         n_jobs=None,
+        numeric_mode=None,
     ):
         # Stored verbatim, as scikit-learn requires; `_validate_params`
         # checks them when `fit` (or `load`) runs.
@@ -282,6 +288,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         self.random_state = random_state
         self.multi_class = multi_class
         self.n_jobs = n_jobs
+        self.numeric_mode = numeric_mode
 
     def _validate_params(self):
         """The constructor checks, run first in `fit` and `load`; the
@@ -395,7 +402,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         -------
         self : GaussianProcessClassifier
         """
-        return _NATIVE(self, "family_gp_gpc_fit", (self._bind(), _backend.binding("_mojolearn", "identical"), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpc_fit", (None, None, X, y), _NATIVE_CONTEXT)
 
     def _fit_binary(self, ext, x, y01, kinds, kparams, ls_len, ls, n_ls, k=None):
         """With `k`, `y01` is the int32 class codes and the targets are
@@ -532,7 +539,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         mean : Array of shape (n_query,), float32
         var : Array of shape (n_query,), float32
         """
-        return _NATIVE(self, "family_gp_gpc_latent", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpc_latent", (None, X), _NATIVE_CONTEXT)
 
     # Reference: sklearn `_gpc.py:292-329` and `multiclass.py:523-562`
     # (DEVIATIONS 2832 and 2833).
@@ -552,7 +559,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         Array of shape (n_query, n_classes), float64
             Columns follow ``classes_``.
         """
-        return _NATIVE(self, "family_gp_gpc_predict_proba", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpc_predict_proba", (None, X), _NATIVE_CONTEXT)
 
     # Reference: sklearn `_gpc.py:287-290`; multiclass argmax per DEVIATION 2833.
     def predict(self, X):
@@ -573,7 +580,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             Labels drawn from ``classes_``: an int64 or float64 Array for
             numeric classes, a list for string or bool classes.
         """
-        return _NATIVE(self, "family_gp_gpc_predict", (self._bind(), _backend.binding("_mojolearn", "identical"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpc_predict", (None, None, X), _NATIVE_CONTEXT)
 
     # Reference: sklearn `_gpc.py:279-353`, the `theta is None` arm only.
     def log_marginal_likelihood(self, theta=None, eval_gradient=False, clone_kernel=True):
@@ -595,17 +602,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         -------
         float
         """
-        if theta is not None:
-            raise NotImplementedError(
-                f"{_NAME}: log_marginal_likelihood(theta) at other "
-                "hyperparameters is refused; it serves the optimizer, which is "
-                "refused (DEVIATION 1761)"
-            )
-        if eval_gradient:
-            raise ValueError("Gradient can only be evaluated for theta!=None")
-        if not hasattr(self, "estimators_"):
-            raise ValueError(f"{_NAME}: call fit() first")
-        return self.log_marginal_likelihood_value_
+        return _NATIVE(self, "family_gp_gpc_lml", (theta, eval_gradient, clone_kernel), _NATIVE_CONTEXT)
 
     # A host summary outside the identity claim.
     def score(self, X, y):
@@ -622,7 +619,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         -------
         float
         """
-        return _NATIVE(self, "family_gp_gpc_score", (self._bind(), _backend.binding("_mojolearn", "identical"), X, y),
+        return _NATIVE(self, "family_gp_gpc_score", (None, None, X, y),
                        _NATIVE_CONTEXT)
 
     # -- save and load ----------------------------------------------------------
@@ -694,7 +691,22 @@ _native_archive_bridge.register(GaussianProcessClassifier, _GPC_FORMAT, (
 # this file's saved kernel), the binary fit class and the default bounds.
 _native_family_bridge.tables(family_gp_kernel_nodes=dict(_GPC_KERNEL_NODES),
                              family_gp_binary_laplace=_BinaryLaplace,
+                             family_gp_binary_namespace=dict(vars(_BinaryLaplace)),
                              family_gp_default_bounds=(1e-5, 1e5))
+
+
+# Import-time connections for native completed-fit labels and archive reads.
+# Family and archive owners have separate contexts; neither inherits the tree
+# or logistic owner's ClassLabels class/namespace metadata.
+from ._labels import ClassLabels as _ClassLabels
+_GP_LABELS_METADATA = dict(
+    classifier_labels_class=_ClassLabels,
+    classifier_labels_namespace=dict(vars(_ClassLabels)),
+    classifier_labels_mro=type.__dict__["__mro__"].__get__(_ClassLabels),
+)
+_native_family_bridge.tables(**_GP_LABELS_METADATA)
+_ARCHIVE_CONTEXT.update(_GP_LABELS_METADATA)
+del _ClassLabels, _GP_LABELS_METADATA
 
 
 __all__ = ["GaussianProcessClassifier"]

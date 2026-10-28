@@ -1,0 +1,420 @@
+{
+  "note": "Read-only head/branch snapshot; active peers may advance; dirty state not surveyed and no clean claim is made",
+  "worktrees": [
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn",
+      "HEAD": "20ab53ec02ff58a34146568a2105994a2b66605e",
+      "branch": "refs/heads/main"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-gp-kernels",
+      "HEAD": "c9389f3f5bd98c38fec63de6d6edb64b9f35bee4",
+      "branch": "refs/heads/lane/peer5-gp-kernels-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-gp-lifecycle",
+      "HEAD": "3ae8472e55a94439ff0612f6200fb3c7c2d71b75",
+      "branch": "refs/heads/lane/peer5-gp-lifecycle-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-light-verifier",
+      "HEAD": "7f458f1a159acb857259a5e775e97cad0353586a",
+      "branch": "refs/heads/fix/light-verifier-coverage"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027",
+      "HEAD": "22f3790f7c159b6f4d5d8bd96b9af0096b617c02",
+      "branch": "refs/heads/lane/peer3-neural-tokenizer-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer3-compile-20261027",
+      "HEAD": "551c553300e134c73f5bc66df9fa089ed400e220",
+      "detached": ""
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-backend-public",
+      "HEAD": "20ab53ec02ff58a34146568a2105994a2b66605e",
+      "branch": "refs/heads/lane/peer4-backend-public-20261028"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-conv",
+      "HEAD": "b055613c8e7be86269334be753e43ad7b19eeff4",
+      "branch": "refs/heads/lane/peer4-cnn-conv-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-graph",
+      "HEAD": "23a8ced6dbd0734b8140a0e4f4b43080f7d65811",
+      "branch": "refs/heads/lane/peer4-cnn-graph-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-optional",
+      "HEAD": "28e6868e56db54c30eca193815b3e3b7bdcc7654",
+      "branch": "refs/heads/lane/peer4-cnn-optional-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-pool",
+      "HEAD": "5859cd469c0f602633a708be213dcda113966175",
+      "branch": "refs/heads/lane/peer4-cnn-pool-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-embedding",
+      "HEAD": "2ee7273ffeb3a08484d8851cdc5d7b532c1d2675",
+      "branch": "refs/heads/lane/peer4-embedding-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-mode",
+      "HEAD": "20ab53ec02ff58a34146568a2105994a2b66605e",
+      "branch": "refs/heads/lane/peer4-mode-boundaries-20261028"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-neural",
+      "HEAD": "ffdc634271d10d0dc7f7461754e6be0838c65e5d",
+      "branch": "refs/heads/lane/peer4-neural-ops-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-numeric-profile",
+      "HEAD": "20ab53ec02ff58a34146568a2105994a2b66605e",
+      "branch": "refs/heads/lane/peer4-numeric-profile-20261028"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-public-boundaries",
+      "HEAD": "20ab53ec02ff58a34146568a2105994a2b66605e",
+      "branch": "refs/heads/lane/peer4-public-boundaries-20261028"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer5",
+      "HEAD": "07c8ce24c2ba81493253a7dbfd45838bf19d3f60",
+      "branch": "refs/heads/lane/peer5-gp-trees-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer5-trees",
+      "HEAD": "586ee57745e395d0a074c06b2f2c0c4981f7faea",
+      "branch": "refs/heads/lane/peer5-tree-aux-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer6-pandas",
+      "HEAD": "c6708e0648a9894cdfb2801104496a9e2113b181",
+      "branch": "refs/heads/lane/peer6-resample-pandas"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-verifier-integration",
+      "HEAD": "5891d958a7546a1ff8a7c309cdeffbce6c60b8b5",
+      "branch": "refs/heads/integrate/verifier-main-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/apple-release-0857",
+      "HEAD": "478846a140968cd203c6af1db9d2450cb6b7299d",
+      "detached": ""
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/array-metadata-owner-20261027",
+      "HEAD": "e688891b588e16058ac74b7167308a24e71a4d94",
+      "branch": "refs/heads/lane/array-metadata-owner-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/cholesky-lifetime-repair-20261027",
+      "HEAD": "68f51400020a40f2f0b310f7d3f6cd5b004bebf1",
+      "branch": "refs/heads/lane/archive-schema-admission-20261028"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/classical-boundary-repairs-20261027",
+      "HEAD": "c8c2726807b2a47a862263fc7ab0d1596a5424e0",
+      "branch": "refs/heads/lane/classical-boundary-repairs-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/classical-exception-admission-20261027",
+      "HEAD": "f0b80f60d0eb5150b2dff9ccc2b9b08b3aa63bf7",
+      "branch": "refs/heads/lane/classical-exception-admission-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/classical-frontdoor-admission-20261027",
+      "HEAD": "120816632d842145a37119c15297bd31ace7a151",
+      "branch": "refs/heads/lane/classical-frontdoor-admission-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/classical-owner-lifetime-20261027",
+      "HEAD": "9453128b9715f72df5c23226f644c614c03d9f43",
+      "branch": "refs/heads/lane/classical-owner-lifetime-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/cluster-density-linalg-20261027",
+      "HEAD": "0456ee3e6a19956ce6913e1ffc7c07e412c412c1",
+      "branch": "refs/heads/lane/cluster-refit-lifetime-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/cpu-coverage-comments-20261027",
+      "HEAD": "219497b0e41a62b9330d029be55d43882ad469b3",
+      "branch": "refs/heads/fix/cpu-coverage-comments-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/density-lifecycle-20261027",
+      "HEAD": "ea4714488b02a42f9ec2239871d69eca80c81ff5",
+      "branch": "refs/heads/lane/density-lifecycle-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/distributed-public-boundary-20261027",
+      "HEAD": "f8f1e59cd03facb168cc8ded984a4e2716313fda",
+      "branch": "refs/heads/lane/distributed-public-boundary-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/estimator-binding-mode-20261027",
+      "HEAD": "0af79a009e7e92a43fd1eae063f7eb0e720ba2e1",
+      "branch": "refs/heads/lane/estimator-binding-mode-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/framework-provider-completion-20261027",
+      "HEAD": "be0ebabac7c05937b1e98737d3ab0d5028b8c168",
+      "branch": "refs/heads/lane/framework-provider-completion-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/gbdt-cpu-ctr-eval-20261027",
+      "HEAD": "e40721e14343b434904f726c7d25f5c79664950b",
+      "branch": "refs/heads/lane/gbdt-cpu-ctr-eval-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/gbdt-cpu-ranking-20261027",
+      "HEAD": "8dc73e4c130425bc9a60a8004b9d9ef2e5343a04",
+      "branch": "refs/heads/lane/gbdt-cpu-ranking-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/hdbscan-public-lifecycle-20261027",
+      "HEAD": "20ab53ec02ff58a34146568a2105994a2b66605e",
+      "branch": "refs/heads/lane/svm-state-coef-20261028"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/imported-provider-dispatch-20261027",
+      "HEAD": "e51be0f7b0446264f065105ef5d8305d1d496b75",
+      "branch": "refs/heads/lane/imported-provider-dispatch-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/library-provider-completion-20261027",
+      "HEAD": "25207fdad896394472d73dba3b052db9b673ee7f",
+      "branch": "refs/heads/lane/library-provider-completion-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/linalg-buffer-boundary-20261028",
+      "HEAD": "080355888630264870f9e7d02f2f2485961dc1c1",
+      "branch": "refs/heads/lane/linalg-buffer-boundary-20261028"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/linalg-decomp-admission-20261027",
+      "HEAD": "7089f6067a5cd732a73a3bf1a0d42c62e086c37f",
+      "branch": "refs/heads/lane/linalg-decomp-admission-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/native-dispatch-20261027",
+      "HEAD": "b12b022062ea443725698486b7df5508ed25e91a",
+      "branch": "refs/heads/lane/classical-shared-provider-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027",
+      "HEAD": "16e2c052a7179f0bf70fdb20ecd6f8e26448c2dd",
+      "branch": "refs/heads/lane/session-native-provider-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/native-neural-integration-20261027",
+      "HEAD": "b9d325d0349b8462ffa103ea3897efdb3c760ddb",
+      "branch": "refs/heads/integration/native-neural-boundary-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/native-prep-attributes-20261025",
+      "HEAD": "286125a0d3c05e04a02024b7e74723c7c0cf1a7e",
+      "branch": "refs/heads/lane/native-prep-attributes-20261025"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/native-prep-params-read-20261025",
+      "HEAD": "76ba0f287099cf773a072bbdfe1f1066b204e4cf",
+      "branch": "refs/heads/lane/native-prep-params-read-20261025"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/native-provider-compile-fixes-20261027",
+      "HEAD": "fc376f61961d1cf1942549c7948d6c8bafb4180c",
+      "branch": "refs/heads/integration/native-provider-compile-fixes-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/native-public-attributes-20261025",
+      "HEAD": "3df71d38eca62e7162531efe665f0fa9ab0dc9ed",
+      "branch": "refs/heads/lane/native-public-attributes-20261025"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/native-shard-callbacks-20261025",
+      "HEAD": "71809d69178c395f3139fa74cce039f35c4c6105",
+      "branch": "refs/heads/lane/release-dependencies-20261025"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/native-trainer-boundary-20261027",
+      "HEAD": "d8968cd23de5ecf1f629a715b8a532efd9649087",
+      "branch": "refs/heads/lane/native-trainer-boundary-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/neural-provider-completion-20261027",
+      "HEAD": "cb2f78859838e22a9c651eaa1eefea0aa77b6088",
+      "branch": "refs/heads/lane/neural-provider-completion-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/parallel-neighbor-output-final-20261025",
+      "HEAD": "b90c89873425fb91600e64f48f07ecef9ff0a3cd",
+      "branch": "refs/heads/lane/parallel-neighbor-output-final-20261025"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-audit-tests-20261027",
+      "HEAD": "961c610a110e7f3fa8ce01251325a6be1cbd8d40",
+      "branch": "refs/heads/lane/peer1-audit-tests-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-compiled-integration-20261027",
+      "HEAD": "214ab9b005c44791b6b1a9b8ca117f45a779601e",
+      "branch": "refs/heads/integration/peer1-compiled-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-hierarchy-audit-20261027",
+      "HEAD": "bb8a62c3a74900be1970bd6eb33b7146556822b3",
+      "branch": "refs/heads/lane/peer1-hierarchy-audit-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-hierarchy-native-20261027",
+      "HEAD": "40f148a5ba87e4297fcbe5369d74a3e8c24d2cb4",
+      "branch": "refs/heads/lane/peer1-hierarchy-native-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-kernel-descriptor-default-20261027",
+      "HEAD": "cfd17fd9ab7333888285715924a902d65adb1e0a",
+      "branch": "refs/heads/lane/peer1-kernel-descriptor-default-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-kernels-20261027",
+      "HEAD": "d6b5fba6effbaeea7a7f4bd801c7f713266993d0",
+      "branch": "refs/heads/lane/peer1-kernels-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-native-next-20261027",
+      "HEAD": "33a63ba6ad9bce7cb3397d6ae1701252007ee8a8",
+      "branch": "refs/heads/lane/peer1-native-next-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-neighbors-core-20261027",
+      "HEAD": "aa44f358012e0a8224554939ff2656ed1b68facb",
+      "branch": "refs/heads/lane/peer1-neighbors-core-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-neighbors-kernels-20261027",
+      "HEAD": "7761eae03edae82d8b2a8521c85d6b2c60db1099",
+      "branch": "refs/heads/lane/peer1-neighbors-kernels-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-radius-native-20261027",
+      "HEAD": "87fb7fb60f398c2620b9a7061343567c7a1d1d71",
+      "branch": "refs/heads/lane/peer1-radius-native-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer2-decomposition-20261027",
+      "HEAD": "3733438ca64b9f0559bac0710c307d94d1b83f1e",
+      "branch": "refs/heads/lane/peer2-decomposition-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027",
+      "HEAD": "7082db091c59dc662ccc035af65724834f2115d4",
+      "branch": "refs/heads/lane/peer2-manifold-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer2-preprocessing-20261027",
+      "HEAD": "9608dee4e55afb6db612dd37179598168c8574c2",
+      "branch": "refs/heads/lane/peer2-preprocessing-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer2-preprocessing-decomposition-manifold-20261027",
+      "HEAD": "8b499806864cbd1b9abadf03064b9b7985815f7e",
+      "branch": "refs/heads/lane/peer2-preprocessing-decomposition-manifold-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer6-cv-search-lifetime-20261027",
+      "HEAD": "e7188f24f2e6215aa60bfe59e587163b0ecae373",
+      "branch": "refs/heads/lane/peer6-cv-search-lifetime-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer6-legacy-tsa-20261027",
+      "HEAD": "cc33f276f1d1e54a538cf909e41079ac0daa18d1",
+      "branch": "refs/heads/lane/peer6-legacy-tsa-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer6-metrics-20261027",
+      "HEAD": "6be526212ef9cdf4fbc891284a5e0ad2aa645106",
+      "branch": "refs/heads/lane/peer6-metrics-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer6-prophet-20261027",
+      "HEAD": "9999ad785d508b97d1ed5314f64554febe8a2c29",
+      "branch": "refs/heads/lane/peer6-prophet-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer6-timeseries-20261027",
+      "HEAD": "f160cd1283d9e1ca961effb1918f5b44e39d644d",
+      "branch": "refs/heads/lane/peer6-timeseries-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/peer6-timeseries-metrics-cv-20261027",
+      "HEAD": "4aa0b89a0e135e64d4335ed05e0b428b1c20167a",
+      "branch": "refs/heads/lane/peer6-timeseries-metrics-cv-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/program-distributed-boundary-20261027",
+      "HEAD": "0388451c5d081f805361c1c8620156184b069e22",
+      "branch": "refs/heads/lane/program-distributed-boundary-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/provider-boundary-audit-20261027",
+      "HEAD": "2318bc53af3e5722f395193be956f16d5d870dc8",
+      "branch": "refs/heads/lane/provider-boundary-audit-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/provider-coverage-inventory-20261027",
+      "HEAD": "f8f1e59cd03facb168cc8ded984a4e2716313fda",
+      "branch": "refs/heads/lane/provider-coverage-inventory-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/provider-library-integration-20261027",
+      "HEAD": "80621bc80d046064fa1c120c25d859757c0f457e",
+      "branch": "refs/heads/integration/provider-library-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/provider-peer2-compiled-20261027",
+      "HEAD": "0f27aa6b48b82a9ec9c997fcfeefab433ce344e0",
+      "branch": "refs/heads/integration/provider-peer2-compiled-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/provider-wrapper-batch-20261027",
+      "HEAD": "ddb21e9e52e8a577b9d5bbacf1bf38c0b41425d4",
+      "branch": "refs/heads/integration/provider-wrapper-batch-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/ptx-verify-0860",
+      "HEAD": "3b28bafc92b652bc72144bbc12a0d215f533b21f",
+      "branch": "refs/heads/fix/ptx-verify-0860"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/public-wrapper-repairs-20261027",
+      "HEAD": "2bf61322e22c07b33fc1b04494d5a2aadd4312f4",
+      "branch": "refs/heads/lane/public-wrapper-repairs-20261027"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/release0856-native",
+      "HEAD": "4272826dd4c6ed50369f260f0e2ed2f1ded27dee",
+      "detached": ""
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/release0857",
+      "HEAD": "f44f0d4ed0b81a3be008d299ff1dc3c8f17aa8d1",
+      "detached": ""
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/reviewer-verifier-offline",
+      "HEAD": "8d3409f692b7912ffe189855ca9e8d8146470c82",
+      "branch": "refs/heads/fix/reviewer-verifier-offline"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/session-public-dispatch-20261027",
+      "HEAD": "417648c8284f23832fcf7592af5bb980a9d1a06a",
+      "branch": "refs/heads/lane/session-public-dispatch-20261027"
+    }
+  ]
+}

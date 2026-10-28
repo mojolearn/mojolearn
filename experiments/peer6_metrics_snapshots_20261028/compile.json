@@ -1,0 +1,40 @@
+{
+  "base_commit": "cca559b8a01ed0b258867f7414c36c475187c5a5",
+  "exit_code": 0,
+  "target": "apple-m1 CPU column",
+  "workers": 10,
+  "cpu_allocation": 10,
+  "flags": [
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "fixture": "checks/metrics_boundaries_compile.mojo",
+  "scope": "Full classification, regression and expanded metric provider roots, including retained direct-array vector loaders and native loaded-module lookup replacements; Mac CPU compile only",
+  "runtime_executed": false,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-snapshots-20261028/metrics-boundaries.so",
+  "artifact_sha256": "f3540d3aa5be6a349600c710d3aee0db2d689d2ac5c2a71664df3563f6fd430e",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-snapshots-20261028/source-bytes.tgz",
+  "source_archive_sha256": "18d985a6ab89eab0b6648806eb2ec33960031131605e28acd3a6e04a33f47eae",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-snapshots-20261028/source-manifest.json",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-snapshots-20261028/compile.log",
+  "earlier_attempt_logs": [
+    "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-snapshots-20261028/compile-before-owner-copy.log"
+  ],
+  "pending": [
+    "Non-vector and materialized container metric capture-once review",
+    "Pandas resample remaining native dtype/layout coverage is owned by its continuing peer",
+    "Root-owned shared linalg_ops_buffers import/metadata fixes integration",
+    "GPU compilation and runtime/identity checks deliberately excluded by owner"
+  ]
+}

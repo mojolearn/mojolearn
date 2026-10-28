@@ -1,0 +1,34 @@
+Peer6 standalone ARIMA execution owner — 2026-10-28
+Branch lane/peer6-timeseries-20261027; follows cd0b477264 metadata batch.
+
+ARIMA.forecast is one native call for fitted-state checks, horizon/exog
+validation, preparation, execution and finished Array return. Existing native
+fit and predict now use passive scalar/order admission and capture original
+input/fitted-buffer metadata once. A narrow ArimaBuffer snapshot preserves
+1-D/2-D series and 1-D/2-D/3-D exog, including noncontiguous native ndarray
+inputs and existing Array owners; shape and strides are bounded metadata.
+Forecast/predict keep all original owners live through native execution and
+check fitted buffer sizes against model metadata before handing over pointers.
+The host inference route resolves class flags through native MRO dictionaries
+and requires exact native module namespaces and compiled function entries.
+Fit stages every learned field and admits all replaced old owners before any
+write, including AutoARIMA's calls into the same native fit/adopt owner.
+
+Obsolete Python preparation/adoption/forecast helpers are removed after the
+current package source showed no external references. The remaining public
+ARIMA methods/properties have one native entry each; save/load and inherited
+parameter/mode/archive operations retain their separately owned providers.
+This batch does not requalify those archival/inherited transitive owners.
+
+Compile: actual TSA dispatcher plus ARIMA fit/predict/forecast admission and
+staged state replacement, CPU identical O0, -j10 available Mac logical CPUs.
+Final exit0, 33.232 seconds; compile.json retains exact command/compiler/binary.
+The first failed matrix-only snapshot attempt is retained; the new rank-three
+snapshot repairs that failure. Subsequent edits remove unreachable Python
+helpers and update comments only; compiled native statements are unchanged.
+No runtime/identity/GPU campaigns; no rented box. Complete logs/source/manifest:
+~/mojolearn-evidence/peer6-arima-execution-20261028/
+
+Remaining owned family work: VAR/STL public lifecycle and transitive forecast
+owner review; parent owns Prophet and cv_review owns legacy TSA/Holt-Winters.
+Historical forecast fit/predict owners beyond these ARIMA paths remain pending.

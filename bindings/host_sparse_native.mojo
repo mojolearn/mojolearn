@@ -5,8 +5,9 @@ from std.memory import bitcast
 from std.math import isfinite
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.native_buffer_owner import native_buffer_view
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_setattr
 from bindings.classical_pandas import _pd_type_fields
 from bindings.classical_arrays import classical_address
 from bindings.sequential_admission import _one_of
@@ -68,19 +69,6 @@ def _sparse_fields(value: PythonObject) raises -> PythonObject:
     raise Error("TypeError: sparse storage has no native dictionary descriptor")
 
 
-def _sparse_array(value: PythonObject, rank: Int, context: PythonObject) raises -> PythonObject:
-    if py_type(value) is not context["ndarray"] or Int(py=value.ndim) != rank:
-        raise Error("TypeError: sparse storage requires an ordinary ndarray of the declared rank")
-    return value
-
-
-def _sparse_indices(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var array = _sparse_array(value, 1, context)
-    if String(array.dtype.kind) != "i" or (Int(py=array.itemsize) != 4 and Int(py=array.itemsize) != 8):
-        raise Error("TypeError: sparse indices require signed int32 or int64 buffers")
-    return array
-
-
 def _sparse_aliases(context: PythonObject) raises -> PythonObject:
     var aliases = py_get(context, "host_sparse_integer_aliases")
     if aliases is None:
@@ -92,20 +80,123 @@ def _sparse_aliases(context: PythonObject) raises -> PythonObject:
     return aliases
 
 
-def _sparse_dtype(dtype: PythonObject, context: PythonObject) raises -> Int:
+def _sparse_dtype_known(dtype: PythonObject, context: PythonObject) raises -> Bool:
     var types = py_call(native_loaded_module("builtins").list, context["numeric_dtypes"].values())
+    var cls = py_type(dtype)
     var known = False
     for i in range(len(types)):  # driver-loop: native numeric dtype identities before descriptor reads
-        known = known or py_type(dtype) is py_type(types[i])
+        known = known or cls is py_type(types[i])
     var aliases = _sparse_aliases(context)
-    known = known or py_type(dtype) is py_type(aliases[0]) or py_type(dtype) is py_type(aliases[1])
-    if not known:
+    return known or cls is py_type(aliases[0]) or cls is py_type(aliases[1])
+
+
+def _sparse_dtype(dtype: PythonObject, context: PythonObject) raises -> Tuple[Int, Int, Bool]:
+    if not _sparse_dtype_known(dtype, context):
         raise Error("TypeError: sparse input requires a native numeric dtype")
     var width = Int(py=dtype.itemsize)
     var kind = cast_in_kind(Int(py=dtype.num), width, "sparse data")
     if kind == 2 and width == 2:
         raise Error("sparse float16 storage is not supported by the sparse input interface")
-    return kind
+    return (kind, width, Bool(py=dtype.isnative))
+
+
+struct _SparseArraySnapshot(Copyable, Movable):
+    var keep: PythonObject
+    var owner: PythonObject
+    var dtype: PythonObject
+    var shape: List[Int]
+    var strides: List[Int]
+    var count: Int
+    var address: Int
+    var width: Int
+    var kind: Int
+    var native: Bool
+
+    def __init__(out self):
+        self.keep = PythonObject(None)
+        self.owner = PythonObject(None)
+        self.dtype = PythonObject(None)
+        self.shape = List[Int]()
+        self.strides = List[Int]()
+        self.count = 0
+        self.address = 0
+        self.width = 0
+        self.kind = 0
+        self.native = True
+
+
+def _sparse_array(value: PythonObject, rank: Int, context: PythonObject,
+                  role: Int = 0) raises -> _SparseArraySnapshot:
+    # role: 0 numeric data, 1 signed indices, 2 LIL object-row references.
+    if py_type(value) is not context["ndarray"]:
+        raise Error("TypeError: sparse storage requires an ordinary ndarray of the declared rank")
+    var captured = _SparseArraySnapshot()
+    captured.keep = value
+    # One exporter capture freezes layout and pins the original ndarray's
+    # storage. The temporary public Py_buffer below is exported from that
+    # native memoryview, never by rereading the original ndarray's metadata.
+    var lease = native_buffer_view(value)
+    var view = List[Int](length=10, fill=0)
+    var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    ref cpy = Python().cpython()
+    var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(lease._obj_ptr, pointer, Int32(0x118))
+    if status != 0:
+        raise cpy.unsafe_get_error()
+    try:
+        # Public Py_buffer on supported 64-bit little-endian CPython ABIs:
+        # buf,obj,len,itemsize, packed readonly/ndim,format,shape,strides,...
+        var nd = Int(UInt64(view[4]) >> 32)
+        if nd != rank:
+            raise Error("TypeError: sparse storage requires an ordinary ndarray of the declared rank")
+        # Rank refusal precedes dtype-role validation, as before, using the
+        # same pinned export that supplies every later layout word.
+        captured.dtype = value.dtype
+        if role == 0:
+            var info = _sparse_dtype(captured.dtype, context)
+            captured.kind = info[0]
+            captured.width = info[1]
+            captured.native = info[2]
+        elif role == 1:
+            if not _sparse_dtype_known(captured.dtype, context):
+                raise Error("TypeError: sparse indices require signed int32 or int64 buffers")
+            captured.width = Int(py=captured.dtype.itemsize)
+            if String(captured.dtype.kind) != "i" or (captured.width != 4 and captured.width != 8):
+                raise Error("TypeError: sparse indices require signed int32 or int64 buffers")
+            captured.kind = 1
+            captured.native = Bool(py=captured.dtype.isnative)
+        else:
+            var object_dtype = py_call(native_numpy_dtype(context), "O")
+            if py_type(captured.dtype) is not py_type(object_dtype):
+                raise Error("sparse LIL storage requires one native object row per sample")
+            captured.width = Int(py=captured.dtype.itemsize)
+            captured.kind = -1
+            captured.native = Bool(py=captured.dtype.isnative)
+        if view[3] != captured.width or view[6] == 0 or view[7] == 0:
+            raise Error("TypeError: sparse storage metadata changed during capture")
+        var shape = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=view[6])
+        var strides = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=view[7])
+        captured.count = 1
+        for axis in range(rank):  # small-loop(one frozen sparse storage shape and strides)
+            captured.shape.append(shape[axis])
+            captured.strides.append(strides[axis])
+            captured.count *= shape[axis]
+        captured.address = view[0]
+        captured.owner = Python.tuple(value, lease, captured.dtype)
+    finally:
+        cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    return captured^
+
+
+def _sparse_indices(value: PythonObject, context: PythonObject) raises -> _SparseArraySnapshot:
+    return _sparse_array(value, 1, context, 1)
+
+
+def _sparse_object_at(captured: _SparseArraySnapshot, index: Int) raises -> PythonObject:
+    # The exact object dtype and row bounds were admitted before this read.
+    # No ndarray indexing can reread mutable shape/stride metadata here.
+    var address = captured.address + index * captured.strides[0]
+    var item = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=address)[0]
+    return PythonObject(from_borrowed=item) if item else PythonObject(None)
 
 
 def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: PythonObject) raises -> UInt64:
@@ -135,11 +226,12 @@ def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: Pyt
         source_kind = 2
         word = bitcast[DType.uint64](Float64(py=value))
     elif _one_of(cls, context["scalar_types"]) or cls is _sparse_aliases(context)[0].type or cls is _sparse_aliases(context)[1].type:
-        source_width = Int(py=value.dtype.itemsize)
-        source_kind = cast_in_kind(Int(py=value.dtype.num), source_width, "sparse scalar")
+        var dtype = value.dtype
+        source_width = Int(py=dtype.itemsize)
+        source_kind = cast_in_kind(Int(py=dtype.num), source_width, "sparse scalar")
         var view = native_buffer_view(value)
         var bytes = py_call(view.tobytes)
-        var native = Bool(py=value.dtype.isnative)
+        var native = Bool(py=dtype.isnative)
         for i in range(source_width):  # driver-loop: bytes of one native scalar storage item
             word |= UInt64(py=bytes[i if native else source_width - i - 1]) << UInt64(8 * i)
     else:
@@ -166,7 +258,8 @@ def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: Pyt
 
 def _sparse_coordinate(value: PythonObject, limit: Int, context: PythonObject) raises -> Int:
     var b = native_loaded_module("builtins")
-    if py_type(value) is not b.int and not _one_of(py_type(value), context["integer_types"]) and py_type(value) is not _sparse_aliases(context)[0].type and py_type(value) is not _sparse_aliases(context)[1].type:
+    var cls = py_type(value)
+    if cls is not b.int and not _one_of(cls, context["integer_types"]) and cls is not _sparse_aliases(context)[0].type and cls is not _sparse_aliases(context)[1].type:
         raise Error("TypeError: sparse coordinates must be native integers")
     var index = Int(bitcast[DType.int64](_sparse_scalar_word(value, 1, 8, context)))
     if index < 0 or index >= limit:
@@ -182,7 +275,7 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
     for i in range(len(mro)):  # driver-loop: refuse sparse finalizers before acquiring storage owners
         if py_get(_pd_type_fields(mro[i]), "__del__") is not None:
             raise Error("TypeError: sparse storage cannot use Python finalizers")
-    var fields = _sparse_fields(source)
+    var fields = py_call(py_type(Python.dict()).__dict__["copy"], _sparse_fields(source))
     var shape = fields["_shape"]
     if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int or py_type(shape[1]) is not b.int:
         raise Error("sparse input must have a native two-dimensional shape")
@@ -192,35 +285,46 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
         raise Error("X is empty")
     if rows > 2147483647 // columns:
         raise Error("X exceeds the native Int32 indexing bound")
+    var owners = Python.list(source, shape)
     var objects = format == "dok" or format == "lil"
-    var data = PythonObject(None)
-    var dtype = PythonObject(None)
+    var data = _SparseArraySnapshot()
+    var kind = 0
+    var width = 0
+    var native = True
     if objects:
-        dtype = fields["dtype"]
+        var dtype = fields["dtype"]
+        var info = _sparse_dtype(dtype, context)
+        kind = info[0]
+        width = info[1]
+        native = info[2]
+        _ = py_call(owners.append, dtype)
     else:
         data = _sparse_array(fields["data"], 3 if format == "bsr" else (2 if format == "dia" else 1), context)
-        dtype = data.dtype
-    var kind = _sparse_dtype(dtype, context)
-    var width = Int(py=dtype.itemsize)
-    if (format == "bsr" or format == "dia") and not Bool(py=dtype.isnative):
+        kind = data.kind
+        width = data.width
+        native = data.native
+        _ = py_call(owners.append, data.owner)
+    if (format == "bsr" or format == "dia") and not native:
         raise Error("sparse BSR and DIA data requires native byte order")
     var store = host_archive_typed(Python.tuple(rows * columns * width), "<u1", context["output_context"])
     var destination = Int(py=classical_address(store))
     if format == "csr" or format == "csc" or format == "bsr":
         var pointers = _sparse_indices(fields["indptr"], context)
         var indices = _sparse_indices(fields["indices"], context)
-        var br = Int(py=data.shape[1]) if format == "bsr" else 1
-        var bc = Int(py=data.shape[2]) if format == "bsr" else 1
+        _ = py_call(owners.append, pointers.owner)
+        _ = py_call(owners.append, indices.owner)
+        var br = data.shape[1] if format == "bsr" else 1
+        var bc = data.shape[2] if format == "bsr" else 1
         if br < 1 or bc < 1 or rows % br != 0 or columns % bc != 0:
             raise Error("sparse blocks must evenly cover the declared dimensions")
-        if Int(py=pointers.size) != (columns if format == "csc" else rows // br) + 1:
+        if pointers.count != (columns if format == "csc" else rows // br) + 1:
             raise Error("sparse pointer count differs from its shape")
         host_sparse_compressed(destination, rows, columns, format == "csc",
-            Int(py=classical_address(pointers)), Int(py=pointers.strides[0]), Int(py=pointers.itemsize), Bool(py=pointers.dtype.isnative),
-            Int(py=classical_address(indices)), Int(py=indices.strides[0]), Int(py=indices.itemsize), Bool(py=indices.dtype.isnative),
-            Int(py=classical_address(data)), Int(py=data.strides[0]), Int(py=data.strides[1]) if format == "bsr" else 0,
-            Int(py=data.strides[2]) if format == "bsr" else 0, min(Int(py=indices.size), Int(py=data.shape[0])),
-            width, kind, Bool(py=dtype.isnative), br, bc)
+            pointers.address, pointers.strides[0], pointers.width, pointers.native,
+            indices.address, indices.strides[0], indices.width, indices.native,
+            data.address, data.strides[0], data.strides[1] if format == "bsr" else 0,
+            data.strides[2] if format == "bsr" else 0, min(indices.count, data.shape[0]),
+            width, kind, native, br, bc)
         _ = pointers^
         _ = indices^
     elif format == "coo":
@@ -229,29 +333,31 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
             raise Error("sparse coordinates must contain two native index arrays")
         var row = _sparse_indices(coords[0], context)
         var col = _sparse_indices(coords[1], context)
-        if Int(py=row.size) != Int(py=data.size) or Int(py=col.size) != Int(py=data.size):
+        _ = py_call(owners.append, Python.tuple(coords, row.owner, col.owner))
+        if row.count != data.count or col.count != data.count:
             raise Error("sparse coordinate counts differ from stored data")
         host_sparse_coo(destination, rows, columns,
-            Int(py=classical_address(row)), Int(py=row.strides[0]), Int(py=row.itemsize), Bool(py=row.dtype.isnative),
-            Int(py=classical_address(col)), Int(py=col.strides[0]), Int(py=col.itemsize), Bool(py=col.dtype.isnative),
-            Int(py=classical_address(data)), Int(py=data.strides[0]), Int(py=data.size), width, kind, Bool(py=dtype.isnative))
+            row.address, row.strides[0], row.width, row.native,
+            col.address, col.strides[0], col.width, col.native,
+            data.address, data.strides[0], data.count, width, kind, native)
         _ = row^
         _ = col^
         _ = coords^
     elif format == "dia":
         var offsets = _sparse_indices(fields["offsets"], context)
-        if Int(py=offsets.size) != Int(py=data.shape[0]):
+        _ = py_call(owners.append, offsets.owner)
+        if offsets.count != data.shape[0]:
             raise Error("sparse diagonal count differs from stored data")
         host_sparse_dia(destination, rows, columns,
-            Int(py=classical_address(offsets)), Int(py=offsets.strides[0]), Int(py=offsets.itemsize), Bool(py=offsets.dtype.isnative),
-            Int(py=classical_address(data)), Int(py=data.strides[0]), Int(py=data.strides[1]), Int(py=data.shape[0]),
-            Int(py=data.shape[1]), width, kind, Bool(py=dtype.isnative))
+            offsets.address, offsets.strides[0], offsets.width, offsets.native,
+            data.address, data.strides[0], data.strides[1], data.shape[0], data.shape[1], width, kind, native)
         _ = offsets^
     elif format == "dok":
         var dictionary = fields["_dict"]
         if py_type(dictionary) is not b.dict:
             raise Error("TypeError: sparse DOK storage requires a native dictionary")
         var pairs = py_call(b.list, dictionary.items())
+        _ = py_call(owners.append, Python.tuple(dictionary, pairs))
         for i in range(len(pairs)):  # driver-loop: native dictionary's sparse coordinate records
             var key = pairs[i][0]
             if py_type(key) is not b.tuple or len(key) != 2:
@@ -263,20 +369,26 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
         _ = pairs^
         _ = dictionary^
     elif format == "lil":
-        var indices = _sparse_array(fields["rows"], 1, context)
-        var values = _sparse_array(fields["data"], 1, context)
-        if Int(py=indices.size) != rows or Int(py=values.size) != rows or String(indices.dtype.kind) != "O" or String(values.dtype.kind) != "O":
+        var indices = _sparse_array(fields["rows"], 1, context, 2)
+        var values = _sparse_array(fields["data"], 1, context, 2)
+        _ = py_call(owners.append, Python.tuple(indices.owner, values.owner))
+        if indices.count != rows or values.count != rows:
             raise Error("sparse LIL storage requires one native object row per sample")
-        for row in range(rows):  # driver-loop: native sparse row-list storage
-            var row_indices = indices[row]
-            var row_values = values[row]
-            if py_type(row_indices) is not b.list or py_type(row_values) is not b.list or len(row_indices) != len(row_values):
+        for row in range(rows):  # driver-loop: captured sparse object-row storage
+            var row_indices = _sparse_object_at(indices, row)
+            var row_values = _sparse_object_at(values, row)
+            if py_type(row_indices) is not b.list or py_type(row_values) is not b.list:
                 raise Error("TypeError: sparse LIL rows require matching native lists")
-            for entry in range(len(row_indices)):  # driver-loop: native sparse row coordinate records
-                var col = _sparse_coordinate(row_indices[entry], columns, context)
-                var word = _sparse_scalar_word(row_values[entry], kind, width, context)
-                # LIL's dense representation assigns each item; a repeated
-                # column therefore keeps its last stored value rather than sums.
+            var saved_indices = py_call(b.list.__dict__["copy"], row_indices)
+            var saved_values = py_call(b.list.__dict__["copy"], row_values)
+            var entries = len(saved_indices)
+            if entries != len(saved_values):
+                raise Error("TypeError: sparse LIL rows require matching native lists")
+            _ = py_call(owners.append, Python.tuple(row_indices, row_values, saved_indices, saved_values))
+            for entry in range(entries):  # driver-loop: captured native sparse row coordinate records
+                var col = _sparse_coordinate(saved_indices[entry], columns, context)
+                var word = _sparse_scalar_word(saved_values[entry], kind, width, context)
+                # LIL assigns each item; repeated columns keep the last word.
                 host_sparse_place(destination + (row * columns + col) * width, word, width, kind, False)
         _ = indices^
         _ = values^
@@ -287,6 +399,12 @@ def host_sparse_dense(source: PythonObject, format: String, context: PythonObjec
     var result = host_archive_typed(shape, "<f4", context["output_context"])
     scaler_cast(destination, columns * width, width, rows, columns, width, kind, True,
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))))
+    # The dense Array's native owner slot carries original exporters through
+    # downstream conversion/execution even if callers replace sparse fields.
+    var previous_pin = result._pin
+    if previous_pin is not None:
+        _ = py_call(owners.append, previous_pin)
+    py_setattr(result, "_pin", py_call(py_type(Python.tuple()), owners))
     _ = store^
     _ = data^
     _ = fields^

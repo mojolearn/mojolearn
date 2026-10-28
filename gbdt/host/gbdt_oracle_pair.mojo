@@ -248,9 +248,10 @@ def _group_search_pass(
     mut stats: List[Float32],
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
+    second_order: Bool = False,
 ):
-    """`launch_pair_logit_group[False, False, ...]`: planes `[row pair
-    weight, der]` in row order, one value partial and two magnitudes per
+    """Fill grouped row-order pair-weight (or Hessian) and gradient planes.
+    One value partial and two magnitudes per
     GROUP (each thread's `|plane|` accumulated over its documents in chunk
     order, then the halving tree)."""
     var der = List[Float32](length=n_rows, fill=Float32(0.0))
@@ -266,7 +267,7 @@ def _group_search_pass(
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         for i in range(begin, end):
             var tid = (i - begin) % GBDT_MSE_BLOCK
-            var weight = pairs.group_row_weights[i]
+            var weight = der2[i] if second_order else pairs.group_row_weights[i]
             stats[i] = weight
             stats[n_rows + i] = der[i]
             s_w[tid] = s_w[tid] + abs(weight)
@@ -332,11 +333,16 @@ def pair_logit_search_pass(
     mut stats: List[Float32],
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
+    second_order: Bool = False,
 ):
-    """`launch_pair_logit_with[False, False]` with the value and the
-    magnitudes: planes `[row pair weight, der]` in row order."""
+    """Fill row-order PairLogit search planes, values and magnitudes."""
+    # The optional Newton plane serves the pointwise ranking draft. Compile
+    # both generated-group and explicit-pair arms before merging that draft;
+    # the default retains the existing greedy first-order behavior.
     if pairs.group_layout:
-        _group_search_pass(pairs, cursor, n_rows, stats, fv_partials, mag_partials)
+        _group_search_pass(
+            pairs, cursor, n_rows, stats, fv_partials, mag_partials, second_order
+        )
         return
     var pair_dir = List[Float32](length=pairs.n_pairs(), fill=Float32(0.0))
     var pair_scale = List[Float32](length=pairs.n_pairs(), fill=Float32(0.0))
@@ -350,7 +356,7 @@ def pair_logit_search_pass(
             if r >= n_rows:
                 continue
             var sums = _row_sums(pairs, r, pair_dir, pair_scale)
-            var weight = pairs.prep.row_weights[r]
+            var weight = sums[1] if second_order else pairs.prep.row_weights[r]
             stats[r] = weight
             stats[n_rows + r] = sums[0]
             s_w[t] = abs(weight)

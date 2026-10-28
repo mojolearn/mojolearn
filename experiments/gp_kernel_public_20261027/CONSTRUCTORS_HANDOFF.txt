@@ -1,0 +1,65 @@
+GP kernel constructors, composition and native node export — 2026-10-28
+
+Branch: lane/peer5-gp-kernels-20261027
+Depends on metadata batch 549fece273d8ad39c4353f89e53e3887ff01ca7b.
+This follow-up supersedes the constructors/operators/repr pending item in
+HANDOFF.txt. Main integration is owned by parent peer5/root.
+
+Public source changes:
+- ConstantKernel, WhiteKernel, RBF, Matern, _Combined and _SavedKernel
+  constructors each make one native family call.
+- Kernel add, multiply and repr each make one native call. The native owner
+  allocates a combined graph directly without invoking Python constructors.
+- Constructor conversion, length-scale flattening, bounds shape/admission and
+  bounds validation run natively. Primitive numbers and native NumPy scalar
+  aliases, ordinary containers and numeric buffers are decoded into finished
+  native scalar/list state. Native buffer shape/strides are captured for each
+  input. Saved postfix nodes are copied by native loops.
+- Native ndarray object/text indexing boxes scalar storage references; scalar
+  admission and conversion occur in Mojo. No ndarray.tolist or astype routine
+  runs in this owner. Callback-bearing scalar/sequence subclasses are refused.
+- Reinitialization admits every replaced owner before field mutation, including
+  nested kernel owners, weak-reference callbacks and finalizer refusal. Import
+  setup connects the existing shared lifetime-admission metadata.
+- gp_kernel_nodes(kernel, table) -> PythonObject is exported for native archive
+  and kernel-array consumers. It requires only the connected node-layout table,
+  no bounds. It preserves postfix order and saved nodes, captures each distinct
+  kernel owner's instance dictionary once, checks cycles and field descriptors,
+  and returns fresh tuples/lists of primitive values.
+
+Parent integration:
+- Existing family_gp_kernel_* dispatch covers the newly added operation names.
+- Parent owns bindings/gp_native.mojo and any narrow archive_schema_native
+  or gp_common_native wiring to gp_kernel_nodes. Those files are unchanged here.
+
+Validation scope:
+- Focused compile-only extension instantiates all kernel metadata, constructor,
+  operator, repr, input-decoder, lifetime and node-export branches.
+- Final receipt: constructors_compile.json; CPU Mac apple-m1, O0, identical,
+  10 configured compiler workers; PASS, exit 0, 36.35 seconds. This does not
+  claim CPU saturation.
+- No product runtime, identity, vendor or benchmark checks were run.
+- Earlier constructor compile failed on a Mojo String self-alias; retained as
+  constructors1. Corrected constructors2 compiled successfully in 93.69 seconds.
+  constructors_nodes compiled successfully in 34.64 seconds; a later input
+  preparation edit replaced ndarray.tolist boxing with native item reads.
+  Final evidence qualifies only the final receipt's retained source bytes.
+- Python AST and git diff checks are source-only; logs retained outside repo.
+
+Evidence on the Mac:
+  ~/mojolearn-evidence/gp-kernel-public-20261027/constructors_nodes2/
+    result.json, compile.log, source-manifest.json, source-bytes.tgz,
+    _mojolearn_gp_kernel_compile.so
+  Earlier failed/passing compiles: constructors1/, constructors2/,
+    constructors_nodes/, attempt1/, attempt2/
+  constructors-source-checks.log, constructors-commit.log, constructors-push.log
+  experiments/gp_kernel_public_20261027/constructors_compile.json
+No rented machine was used.
+
+Remaining scope:
+- Parent GP estimator/archive dispatcher integration and its required compile.
+- Existing private _nodes/_hyper/_replace/_name helpers remain in Python; the
+  migrated public operations do not call them. Parent owns the audit/migration
+  of remaining estimator and serialization callers.
+- No claim of whole-library callback freedom or runtime correctness follows
+  from this focused compile. Runtime/identity/vendor evidence remains pending.

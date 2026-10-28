@@ -12,7 +12,7 @@ from ._buffer import all_finite
 
 from . import _native_trees_bridge
 from .ensemble import GradientBoosting
-from ._mode import PublicOutputsMixin
+from ._mode import PublicOutputsMixin, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT, _connect_application_params
 
 
 # One NotFittedError for the package; an instance of scikit-learn's too when
@@ -35,6 +35,7 @@ class _GBDTAdapter(PublicOutputsMixin):
         super().__init_subclass__(**kw)
         from ._mode import install_fit_tracking
         install_fit_tracking(cls)
+        _connect_application_params(cls)
 
     # Every default is GradientBoosting's own, so a default adapter is the
     # default learner: None defers to CatBoost's GPU defaults under
@@ -78,31 +79,18 @@ class _GBDTAdapter(PublicOutputsMixin):
 
     def get_params(self, deep=True):
         """Return the constructor parameters as a dict."""
-        if type(self).__init__ is not _GBDTAdapter.__init__:
-            raise TypeError('GBDT adapter subclasses with custom constructors need their own parameter protocol')
-        names = inspect.signature(_GBDTAdapter.__init__).parameters
-        return {name: getattr(self, name) for name in names if name != 'self'}  # glue: returns constructor parameters by name
+        return _PARAMS_METADATA(self, False, _PARAMS_METADATA_CONTEXT)
 
     def set_params(self, **params):
         """Set constructor parameters and return ``self``; unknown names raise ``ValueError``."""
-        if not params:
-            return self
-        values = self.get_params()
-        unknown = sorted(set(params) - values.keys())  # glue: names unknown keyword parameters
-        if unknown:
-            raise ValueError(f'Invalid {type(self).__name__} parameters: {unknown}')
-        values.update(params)
-        replacement = type(self)(**values)
-        self.__dict__.clear()
-        self.__dict__.update(replacement.__dict__)
-        return self
+        return _TREES(self, "trees_gbdt_adapter_public_set_params", (params,), _TREES_CONTEXT)
 
     def _check_fitted(self):
         if not self.__sklearn_is_fitted__():
             raise not_fitted_error(f'{type(self).__name__} is not fitted')
 
     def __sklearn_is_fitted__(self):
-        return getattr(getattr(self, '_learner_', None), 'model_', None) is not None
+        return _TREES(self, "trees_gbdt_adapter_is_fitted", (), _TREES_CONTEXT)
 
     def __sklearn_tags__(self):
         """scikit-learn's tag protocol, read only by scikit-learn: the shared
@@ -341,3 +329,8 @@ _native_trees_bridge.register(GradientBoostingClassifier, "gbdt_adapter", trees_
     names=tuple(name for name in inspect.signature(_GBDTAdapter.__init__).parameters if name != "self"),  # glue: the adapter's constructor parameter names, once at import
 ))
 _native_trees_bridge.register(GradientBoostingRegressor, "gbdt_adapter")
+
+# Capture the explicit signature once; installed constructor execution is one
+# native call through the shared tree signature binder.
+_native_trees_bridge.connect_gbdt_parameters(
+    _GBDTAdapter, (GradientBoostingClassifier, GradientBoostingRegressor), _PARAMS_METADATA_CONTEXT)

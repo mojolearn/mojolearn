@@ -11,7 +11,7 @@ _CONTEXT = None
 
 #: the compiled `_mojolearn_x_sequence` entries the owner runs
 _SEQUENCE_ENTRIES = ("x_sequence_vendor", "x_sequence_numeric_mode", "model_native_api_v1", "model_labels", "rnn_fit", "rnn_predict",
-                     "mlp_fit", "mlp_predict", "theta", "croston", "croston_forecast", "ets", "garch", "var_fit",
+                     "mlp_fit", "mlp_predict", "theta", "croston", "croston_forecast", "ets", "garch", "var_fit", "var_forecast",
                      "stl", "prophet_days", "prophet_features", "prophet_changepoints", "prophet_fit",
                      "prophet_predict")
 #: the base-binding entries it runs (weight draws, row argmax, label thresholds, scans)

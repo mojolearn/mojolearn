@@ -26,17 +26,35 @@
   },
   "additional_active_scope": {
     "root": [
-      "Session public descriptor compiled/merged90585148f8",
-      "Session scalar/container protocol admission review remains pending",
-      "shared array/backend/mode/native profile boundary"
+      "Serialized main integration; shared fitted-exception admission repair compiled and merged",
+      "Session scalar/container protocol admission remains pending",
+      "Shared array/backend/native metadata source review"
     ],
     "root/program_dispatch_finish": [
-      "Program serialization metadata admission",
-      "Program public dispatch",
+      "Program serialization metadata and public dispatch compiled and merged; GPU/runtime untested",
+      "Session.run and partition/distribute factory boundaries",
       "distributed and partitioned execution",
       "model-pool and offload training"
+    ],
+    "cpu_coverage": [
+      "GBDT host CPU coverage comments and weighted Logloss native entry support; separate Andrew-authorized thread"
+    ],
+    "root/cluster_density_linalg": [
+      "Shared estimator archive scalar/path/key admission",
+      "Remaining cluster refit owner admission",
+      "Density child: shared linalg input/output metadata after compiled classical lifetime batch"
+    ],
+    "peer3_shared": [
+      "native_codec Array/packed-record metadata admission",
+      "neural_descriptor cached entries and flags admission"
     ]
   },
   "delivery": "small affected compile -> coherent main merge/push; no runtime verification campaign",
-  "program_lane_reassignment": "Previous Program agent hit model capacity after delivering compiled serialization repair; fresh program_dispatch_finish owns retained public-dispatch draft and pending distributed/training work."
+  "program_lane_reassignment": "Previous Program agent hit model capacity after delivering compiled serialization repair; fresh program_dispatch_finish owns retained public-dispatch draft and pending distributed/training work.",
+  "latest_checkpoint_source": "cf4c89dd1d2b29f85b1f1cdc4158ec2f0383d6ec",
+  "additional_peer_threads": {
+    "cpu_coverage": "01a18061-a347-72a3-849f-5197e96ca16f"
+  },
+  "current_ownership_record": "experiments/provider_boundary_audit_20261028/COVERAGE_OWNERS.tsv",
+  "current_root_handoff": "PROVIDER_MIGRATION_HANDOFF_2026-10-28.txt"
 }

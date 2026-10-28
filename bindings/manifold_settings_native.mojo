@@ -3,7 +3,8 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import classical_connect_numpy, _type_mro
+from bindings.mode_metadata_native import _class_fields
 from bindings.classical_pandas import classical_admit_value
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_array_storage import native_array_from_bytes
@@ -69,6 +70,13 @@ struct ManifoldSettings(Copyable, Movable):
         # still publish into the original admitted dictionary.
         self.fields = classical_family_admit(model)
         var b = native_loaded_module("builtins")
+        if operation.endswith("_fit") or operation.endswith("_fit_transform"):
+            if py_contains(self.fields, "_mojolearn_after_fit"):
+                raise Error("TypeError: native manifold fitting does not accept Python after-fit callbacks")
+            var ancestry = _type_mro(py_type(model))
+            for i in range(len(ancestry)):  # driver-loop: refuse application after-fit hooks before execution
+                if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
+                    raise Error("TypeError: native manifold fitting does not accept Python after-fit callbacks")
         self.values = py_call(b.dict, self.fields)
         self.default_mode = context["backend_fields"]["_DEFAULT_MODE"]
         self.requested = py_get(self.values, "numeric_mode")
@@ -83,5 +91,9 @@ struct ManifoldSettings(Copyable, Movable):
                 # Initialization arrays are input buffers, captured by the
                 # algorithm's input preparation rather than scalar settings.
                 py_setitem(self.values, name, _setting(self.values[name], context, 0, name != "init"))
+        if operation.startswith("family_mani_umap_"):
+            for name in ["n_epochs", "min_dist", "spread", "set_op_mix_ratio", "local_connectivity", "repulsion_strength", "negative_sample_rate", "densmap", "output_metric", "metric_kwds", "a", "b"]:  # small-loop(settings: UMAP-only scalar/configuration fields)
+                if py_contains(self.values, name):
+                    py_setitem(self.values, name, _setting(self.values[name], context))
         if py_type(self.default_mode) is not b.str:
             raise Error("TypeError: manifold default numeric mode requires an exact native string")

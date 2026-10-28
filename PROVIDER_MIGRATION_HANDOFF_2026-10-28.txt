@@ -1,0 +1,610 @@
+PROVIDER MIGRATION — ROOT HANDOFF FOR COMPACTION — 2026-10-28
+
+CPU GBDT INTEGRATION ADDENDUM (supersedes CTR/ranking READY entries below)
+The compiled CTR and ranking sets are integrated in this history:
+  CTR: 9d910269bf, ab0e2f3d2c, 9fe236a49f.
+  Ranking: f368c3c564, 3eb5489ff8, eb94eed000.
+Main checkpoint ed012ba767 is preserved through merge 9a89f43283.
+Only stale verifier-comment conflicts needed resolution; no arithmetic rewrite.
+Six source-only registration tests, docs_facts and lane_accounting pass on the
+combined tree. Existing per-batch compilation evidence is reused. Runtime,
+identity, negative-control execution and new QueryRMSE references remain pending.
+Do not cherry-pick these source sets again. Confirm origin/main and the CPU
+thread's completion notice before taking the next serialized main window.
+Full integration/push logs: ~/mojolearn-evidence/gbdt-cpu-ranking-compile-20261028/.
+
+READ THIS FIRST
+This is the current root handoff. PROVIDER_MIGRATION_HANDOFF_2026-10-27.txt
+contains retained earlier checkpoints/history and is not the current merge queue.
+Andrew explicitly requested this thorough handoff before compacting context.
+Do not restart the migration or repeat accepted builds after compaction.
+
+Repository: /Users/andrewhendel/CascadeProjects/mojolearn
+Root thread: 01a18001-c4b5-7ba2-a735-6250b366b07e
+Root source main at writing: 20ab53ec02ff58a34146568a2105994a2b66605e.
+Last confirmed pushed main before this handoff: 9ae87214e0.
+Local main was clean and six commits ahead (including merge ancestry), with
+compiled linalg decomposition, Prophet lifecycle, ARIMA metadata and legacy TSA
+batches already merged. The handoff commit will push those changes plus this
+record; read git log/status for the final handoff commit rather than expecting
+this file to contain its own hash.
+
+There is NO claim that every worktree is merged/clean, that every product path
+is Python-free, or that runtime/vendor identity verification passed. Active
+peers have isolated worktrees and unfinished drafts. Do not sweep branch tips.
+
+CURRENT OWNER DIRECTIONS — DO NOT REOPEN THESE QUESTIONS
+- Whole public operation belongs in Mojo/native providers: validation, fitted
+  checks, binding selection, preparation, execution/orchestration and finished
+  results. Moving kernels while leaving Python around/below them is incomplete.
+- Metadata is retained in native owners/snapshots and admitted at the boundary.
+  Stable input metadata is captured once per public operation, not cached for
+  an object's entire lifetime despite later user mutation. Import-time native
+  API/type connections are distinct from per-operation input snapshots.
+- Native calls must not invoke arbitrary Python hooks/protocols/callbacks.
+  Exact type/key/layout admission and replacement-owner/finalizer/weakref
+  admission matter. Ordinary supported native buffers retain their semantics.
+- Preserve current exported-graph admission. Do not reintroduce TorchDynamo or
+  run the user's Python forward/exporter as a hidden product step. Andrew
+  permits an API change to require an already captured/exported graph. Do not
+  claim support for arbitrary Torch graph objects beyond current native readers.
+- Bits may change ACROSS releases. Identical bits across Apple/NVIDIA/AMD within
+  the same release remain the contract. No Apple fast investment.
+- Small affected compile, then coherent main merge and push. NO runtime,
+  cross-vendor/identity, installed-wheel or benchmark verification campaigns in
+  this work. Required source/push guards still run. A compile is not runtime
+  success; GPU coverage cannot be inferred from a CPU compile.
+- Reuse existing compile evidence for unchanged code. Document exact roots,
+  source closures, compiler/flags/dependencies, target, binary hashes, failures
+  and partial coverage. No monolithic rebuild just to merge an already compiled
+  helper. Thin production registration wiring sometimes has helper/module-init
+  compile coverage only; the receipt must say so.
+- Any peer may rent RunPod CPU as warranted and fan out independently. Use all
+  ACTUALLY allocated cores (affinity/cgroup), not host-visible oversubscription.
+  A 32-core box uses32 compiler workers; Mac builds configure10. Concurrent build
+  count1 does not mean compiler worker count1. Do not claim full utilization.
+- 60-minute deadman; lease reuse is allowed within protection. Save complete
+  source/log/result/binary bytes on Mac AND R2 before deleting rented boxes.
+  No background watchers. Never tear down another session's machine.
+- Main mutations are serialized here. Peers send coherent green commits;
+  routine implementation choices and disjoint fan-out do not need approval.
+  Communicate blockers/collisions, green batches and machine ownership only.
+- Keep logs out of context: full files, targeted rg and short tails. Summarize
+  exit status, actual coverage, failures and evidence paths. Never read full
+  task/subagent transcripts. Propagate this reminder in every assignment.
+- AGENTS.md has newer compile-only/peer-autonomy sections that supersede its
+  older lane-never-compiles and end-of-session-verification instructions.
+  Existing narrow documented Mojo-bug Python exceptions and sklearn tag
+  metadata remain exceptions; do not label them Python-free or broaden them.
+
+QUICK RESUME ORDER
+1. Read AGENTS.md, this file, and current git status/log. Discover tools through
+   ALL_TOOLS if needed. Check live agents/threads before spawning duplicates.
+2. Confirm the handoff main push completed. Retain concurrent remote work;
+   fetch/merge origin/main normally if another thread advanced it. Never force.
+3. Read each peer's compact CURRENT/CHECKPOINT/HANDOFF, not its transcript.
+4. Work the READY/HOLD queue below using exact commits and compile receipts.
+   Confirm push/build completion when noted pending. Do not merge live worktree
+   bytes, uncompiled branch tips, failed prep code or uncompiled ranking code.
+5. Continue assigned remaining scopes. Source flags and an empty checker
+   baseline cannot prove transitive callback freedom. No runtime campaign.
+
+TOOLS / COORDINATION
+External peers use tools.mcp__codex_tui__send_message_to_thread({threadId,prompt})
+(max1000 UTF8 bytes) and mcp__codex_tui__create_thread. Discover metadata from
+ALL_TOOLS; do not assume tools are absent if not listed in the short catalog.
+Local collaboration agents use collaboration.* directly, never inside exec.
+User authorized peers, fan-out and rentals. Do not override models without an
+explicit instruction. Fresh fork_turns='none' with a self-contained same-model
+brief recovered prior inherited-context model-capacity failures.
+
+Git policy: normal push, with documented scope acknowledgement when needed:
+  MOJOLEARN_WIDE_REBUILD_OK=1 git push origin main > retained-log 2>&1
+This does not bypass hooks. Normal GitHub output sometimes says a required
+no-host-routes remote status is expected; retain actual exit status.
+Wait for each git mutation to finish before dependent operations. A transient
+'Unable to write index' occurred while a git-status refresh overlapped an active
+merge; no files were lost, and a sequential retry passed. Do not delete locks
+owned by active processes. Use sufficient exec wait or poll its session first.
+
+ROOT EVIDENCE / PUSH HISTORY
+Main root log directory:
+  /Users/andrewhendel/mojolearn-evidence/provider-migration-resume-20261027/
+- push-main-corpus-checkpoint.log: pushed4dbd1178ef.
+- push-main-hierarchy-moe-owners.log: pushedb3239afc49.
+- push-main-program-classical-density.log: both source guard sets passed;
+  exception branch pushed, main rejected due concurrent remote8d3409f692.
+  That external-verification-tooling commit was merged without conflict.
+- push-main-midnight-checkpoint.log: successful main9ae87214e0, all guards0.
+- The new handoff push log is push-main-handoff-20261028.log.
+Do not rerun product verification merely because verification tooling changed.
+
+LATEST STATIC INVENTORY — NOT RUNTIME VERIFICATION
+Source20ab53ec02, unchanged during the scan. Tools:
+  tools/public_runtime_inventory.py (AST/source scan, no product import)
+  tools/provider_boundary_worklist.py
+Results:3814 endpoints ->1834 implementation groups:
+  1452 native_boundary;74 prohibited_source;293 unresolved;
+  11 allowed_tag_metadata;4 refusal_only.
+74 source flags span24 files, all with assigned owners. Prior historical scan
+had386 prohibited groups across59 files. Neither count is a current runtime
+bug total. Old bodies may be replaced at import; native wrappers still need
+transitive review. Unresolved/source-less rows are not silently admitted.
+Current committed ownership and artifact hashes:
+  experiments/provider_boundary_audit_20261028/COVERAGE_OWNERS.tsv
+  experiments/provider_boundary_audit_20261028/summary.json
+  experiments/provider_boundary_audit_20261028/HANDOFF.txt
+  experiments/provider_boundary_audit_20261028/worktree_checkpoint.json
+Raw files/logs/controller retained:
+  ~/mojolearn-evidence/provider-boundary-refresh-20261028/
+The --summary mode did not emit inventory.tsv; endpoints.json, operations.tsv
+and inventory.log are retained instead. Old20261027 inventory stays intact.
+
+PEER / LOCAL OWNERSHIP DIRECTORY
+
+Peer1 — neighbors, kernels, hierarchy
+Thread01a18031-31e2-72c1-bf74-64f2a4136f2c.
+Main original lane: lane/peer1-neighbors-kernels-20261027, WT
+  ~/mojolearn-wt/peer1-neighbors-kernels-20261027
+Its raw7761eae03 tip was NOT merged wholesale: compiled integration214ab9b005
+excluded the then-uncompiled TSNE companion. That integration is already main.
+TSNE is NOW included through compiled Peer2 batch6; do not reapply old27bba.
+Current green next lane: lane/peer1-native-next-20261027, WT
+  ~/mojolearn-wt/peer1-native-next-20261027
+Green33a63ba6ad9bce7cb3397d6ae1701252007ee8a8, source8264f02f5315.
+Four real CPU roots passed on32-core RunPod: kernel registration20s/public30s,
+solver registration16s/hierarchy public22s. Full Mac+R2 retention, pod deleted.
+  experiments/peer1_native_next_20261027/{HANDOFF,provenance files}
+UNCOMMITTED neighbor_query_native.mojo next-IVF work in that WT is EXCLUDED.
+Radius/PCS separate drafts are uncompiled; PCS lacked mtrand module registration
+and its owner is fixing it. Peer1 also owns the narrow family_common.mojo split
+of family_f32_snapshot into admission-only family_input_snapshot plus captured-
+metadata family_snapshot_f32. Original wrapper composes both unchanged; PCS
+needs pre-cast finite admission without recapturing metadata. Await its compile. Peer1 owns narrow estimator_checked_mode kernel
+routing and new kernel/solver descriptor registration. Preserve existing fast
+code, without dedicated fast development. Remaining general x_cluster/resident
+transports and metadata-once audit stay explicit.
+
+Peer2 — preprocessing, decomposition/PCA/PLS, manifold/TSNE/UMAP/JL
+Thread01a18031-8936-7040-9669-5f5e52352859.
+Parent WT ~/mojolearn-wt/peer2-preprocessing-decomposition-manifold-20261027,
+branch lane/peer2-preprocessing-decomposition-manifold-20261027.
+Children: peer2-decomposition-20261027, peer2-manifold-20261027,
+peer2-preprocessing-20261027 under ~/mojolearn-wt/.
+Batch4, batch5 scalers and selected batch6 manifold/PCA are already main.
+  experiments/peer2_native_boundary_20261027/compiled_batch_{4,5,6}.json
+  main_integration_batch_{4,5,6}.json
+Batch6 selected20 commits matched19 product files exactly; shared ANN file
+kept Peer1 code and its TSNE AST exactly matched compiled sourcef6a83c3551.
+Actual runtime_manifold_host passed35.2s and PCA query/sparse18.1s,32 workers.
+Prep FAILED3 type errors and was excluded. PCA query body/transitive helper
+compiled; production dispatch source reviewed, full PCA fit/archive not rebuilt.
+Batch7 freeze71cba19d87: prep passed36.3s, serial GBDT CTR passed48.7s.
+But prep late semantic/error-order guard9608dee4e5 is NOT in that compile;
+HOLD Normalizer/prep until the corrected coherent freeze compiles.
+Parent8b49980686 records batch7; checkpoint/push may advance.
+Remaining PCA fit/fit_transform, manifold native scalar/categorical settings,
+UMAP lifecycle and other decomposition/prep paths active.
+Explicit shared ownership: host_sparse_native narrow sparse snapshot helpers,
+native_scalar_decode captured-dtype helper, FOUR training_scalar_native dtype
+reuse calls (fa442d9bf2 is for next caller compile, NOT batch6), and narrow
+arena_cache_get timedelta day-width repair (Int64 bounds before narrowing).
+The last was source-reviewed, not runtime reproduced. Own handoffs/receipts
+and temporal review live under experiments/peer2_* and ~/mojolearn-evidence/.
+Self-handoff pushedc21637d4073eff95019eb42557b6b16d38d7a4d7:
+  experiments/peer2_native_boundary_20261027/HANDOFF_20261028.txt
+All3 Peer2 lanes checkpointed; a later message says they RESUMED the pending
+Normalizer/PCA-fit/manifold scalar repairs in existing lanes. No active rental
+at that update. Inspect current keeper state rather than this old snapshot.
+
+Peer3 — Transformer/Mamba/tokenizer/corpus/model config/catalog/generation
+Thread01a18031-fa1c-77c0-aab5-7a7e614a9f74.
+WT /Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027,
+branch lane/peer3-neural-tokenizer-20261027.
+Compiled corpus/config/tape freeze3116bf923e (source309a184dbc) already main.
+  experiments/peer3_neural_tokenizer_20261027/FOLLOWUP_COMPILE.json
+  FOLLOWUP_HANDOFF and CORPUS_HANDOFF
+Latest product head22f3790f7c is UNCOMPILED. Local handoff69695b37cc
+was committed, but its ordinary push FAILED: no_compute_in_shells rejected
+25 metadata-loop comment formats (constructor2, operation owner16, parallel7).
+No bypass or successful push claim. Full failure log:
+  ~/mojolearn-evidence/peer3-corpus-tape-moe-20261027/compaction-handoff-push.log
+Read the saved exact next actions:
+  experiments/peer3_neural_tokenizer_20261027/COMPACTION_HANDOFF_20261028.txt
+Peer3 checkpointed with no active compiler/pod, then RESUMED atbb1f0f260e to
+finish constructor/UTF8 and guard-comment repairs before focused frozen builds.
+No pod; current source still NOT ready for merge. Parent one-line captured
+Session-handle diff is retained with an external backup patch. The remaining
+constructor post-GIL field publication, canonical UTF8 handler identity and
+final public/parallel/codec/tokenizer compiles are NOT complete.
+Compile WT mojolearn-peer3-compile-20261027
+was detached551c553300e. Those are snapshots, NOT a green merge authorization.
+Config/checkpoint/catalog/generation-buffer helper roots passed; coherent full
+operation/parallel caller closure still being completed. Await exact handoff.
+Owns native_array_snapshot extraction/reexports, generation_buffers and
+metadata snapshots, native model catalog exported-graph admission, Mamba stale
+alias-counter repair, and parallel CausalLM captured model/state transport.
+Explicit shared files: native_codec.mojo encode/array publication (Array slots,
+BF16/Int8 raw fields; preserve codec bytes), neural_descriptor_pyapi cached
+entry/module/dict-key/flag admission, _native_loaded_modules import-only
+SimpleNamespace connection, and existing ByteLM generation/catalog exports.
+Program lane owns a NEW private ByteLM schedule descriptor/factory; preserve
+both sets of exports and coordinate actual collisions only.
+Peer3 owns ops_imported_run_py's import cleanup in autograd_program_pyapi;
+Program lane owns other Program helpers. No native_codec duplication.
+
+Peer4 — completed neural batch, now SHARED PUBLIC BOUNDARIES
+Thread01a1806d-5b2c-76b0-816e-4d7bbb5cb3e4.
+Completed lane/peer4-neural-ops-20261027 throughffdc634271 is ALREADY MAIN,
+including MoE, LayerNorm, CNN tensor/layers/graph/classifier, MLPInference/trainer,
+Embedding, recurrent/MLP snapshots, labels and XseqStream seed initialization.
+  experiments/peer4_neural_labels_seed_20261027/HANDOFF.txt
+  experiments/peer4_neural_label_edges_20261027/compile.json
+  ~/mojolearn-evidence/peer4-neural-20261027/
+Combined CNN/shared-label compile398.413s; final labels/seed99.798s; other
+owners have individual receipts. Preserve optional NumPy semantics.
+NEW root WT /Users/andrewhendel/CascadeProjects/mojolearn-peer4-public-boundaries,
+branch lane/peer4-public-boundaries-20261028, starts20ab53ec02.
+  experiments/peer4_public_boundaries_20261028/CHECKPOINT.txt
+This checkpoint was uncommitted when reported; read it locally.
+Root Peer4 owns Array.from_buffer (confirmed live Python; native repair beginning).
+Children, all start20ab53ec02 with no compiled new product batch yet:
+- mojolearn-peer4-backend-public, lane/peer4-backend-public-20261028:
+  gpu_arch/gpu_arch_how/set_numeric_mode/numeric_mode/vendor; plans native bridge
+  plus narrow tokenizer/__init__ registration. CPU-review peer edits comments.
+- mojolearn-peer4-numeric-profile, lane/peer4-numeric-profile-20261028:
+  four public numeric-profile functions; own checkpoint under experiments/.
+- mojolearn-peer4-mode, lane/peer4-mode-boundaries-20261028:
+  _mode.__getattribute__/set_params only. Preserve Peer1 kernel route edits.
+  Static trace found deferred host set_params and pending-property old slots.
+Initial full checkouts hit disk pressure; peers switched to sparse worktrees and
+removed ONLY their own clean/pushed old worktrees. Evidence was retained.
+
+Peer5 — GP kernels/lifecycle and tree/ensemble public helpers
+Thread01a1806d-5b86-7141-87cb-b80336bc23ab.
+WT /Users/andrewhendel/CascadeProjects/mojolearn-peer5,
+branch lane/peer5-gp-trees-20261027.
+GP794f4004fc (source2a1b52376b) and tree48cebc5fbd/586ee57745 already MAIN.
+GP794 covers native binding selection and classifier likelihood (275.65s CPU).
+Tree batches cover auxiliary operations/state export, native forest restoration
+and fitted metadata; final full tree dispatcher427.94s, separate owner118.16s.
+LATEST COMBINED GP IS NOW GREEN/PUSHED5e7c530779, product8443166119.
+Attempt5 compiled complete gp_operation AND archive_schema_save,49.01s,
+CPU/identical/O0/apple-m1/-j10. Required push guards passed; worktree clean.
+Ready for main after the already integrated794; no runtime/GPU claim.
+Final COMBINED_HANDOFF.txt and combined_compile.json are beside CURRENT.txt.
+Earlier docs-only self-handoff07c8ce24c2:
+  experiments/gp_public_boundary_20261027/CURRENT.txt
+Do NOT merge older combined87c62b4a0f merely because attempt4 passed61.36s:
+review found additional covariance/score/archive-state/ClassLabels issues now
+fixed in844. Kernel549fe/c938 and lifecyclee595+d778 have individual compile
+receipts, but full integrated latest source needs its own declared scope.
+  experiments/gp_public_boundary_20261027/
+  experiments/gp_kernel_public_20261027/
+  experiments/gp_public_lifecycle_20261027/
+  ~/mojolearn-evidence/peer5-gp-public-20261027/attempt1..5
+Tree child WT mojolearn-peer5-trees/lane/peer5-tree-aux-20261027 continues
+_GBDTAdapter constructor/get_params/set_params and remaining ensemble lifecycle.
+Preserve CPU review's exact GBDT host implementation files. No rented machine.
+Two additional disjoint active tree subscopes: former GP lifecycle agent owns
+Bagging/Ada/DART/RandomTreesEmbedding and the exact register_boost region
+(currently still leaves Python lifecycle decorators); former kernel agent owns
+TreeExplainer/KernelExplainer/PermutationExplainer region of _expansion_trees.
+They are new unqualified repairs, not part of green5e7 GP or586 tree coverage.
+Boost agent also owns NEW Bagging estimators_ property schema/native dispatch
+in _native_public_attributes.py/public_attributes_native.mojo. This is additive
+and disjoint from classical SVC/SVR schemas and Peer4 general slot repair;
+all owners were notified. Do not replace whole shared files during integration.
+
+Peer6 — time series, metrics/resampling, CV
+Thread01a1806d-5bf7-7b42-883f-7328db84f2e6.
+Primary WTs under ~/mojolearn-wt/:
+  peer6-timeseries-metrics-cv-20261027, peer6-cv-search-lifetime-20261027,
+  peer6-timeseries-20261027, peer6-metrics-20261027,
+  peer6-legacy-tsa-20261027, peer6-prophet-20261027.
+Pandas WT /Users/andrewhendel/CascadeProjects/mojolearn-peer6-pandas.
+Integrated CV includes constructors, metadata/lifetimes,27f flags,377 Array
+snapshots,fcc split admission,e718 search scalars and4aa0b89a0e final scorer/
+check_cv/ParameterGrid boundaries. Do not duplicate local copied parent commits
+001140/e832 when cherry-picking4aa; root already picked4aa only.
+Integrated metric selection/reports/resample numeric/results and owner fixes:
+3e1defd,0061f44,726fae,d227+d20,20f03e empty Fowlkes-Mallows labels.
+Integrated time series: AutoARIMA e12e and b9d+e89 constructor/owner repairs,
+a175 full search/fit/predict; Prophet70bf construction/add_seasonality;
+ARIMA cd0b metadata; legacy TSA cc33f ExponentialSmoothing/KPSS/select_d.
+Ready ARIMA execution f160cd1283 follows cd0b; actual TSA dispatcher33.232s,
+CPU O0-j10, push guards0; whole forecast and passive fit/predict input owners.
+  experiments/peer6_arima_execution_20261028/
+Ready row resampling pair32276a868c42696c9ffd958b0e438ca6fcfead74 THEN
+cca559b8a01ed0b258867f7414c36c475187c5a5. HOLD until shared linalg helper
+builtins-import replacement is integrated (local density child finala3a8150111).
+Peer6 omitted those3 shared edits to avoid collision; its retained compiled
+helper SHA aa1c543ebb8361a94ba370ab4c2c2466215d644f5afc0327a0b39745c54eac7e,
+with compiled-linalg_ops_buffers.mojo and shared-imports.patch in evidence.
+  experiments/peer6_resample_rows_20261027/
+  ~/mojolearn-evidence/peer6-resample-complete-20261027/
+Pandas categories, sparse/interval/additional Arrow dtypes remain separate;
+Prophet fit/predict, VAR/STL and remaining TSA/ARIMA transitive/archive paths
+continue. No complete time-series/resample runtime claim.
+
+Additional Andrew-authorized CPU coverage peer
+Thread01a18061-a347-72a3-849f-5197e96ca16f.
+WT ~/mojolearn-wt/cpu-coverage-comments-20261027,
+branch fix/cpu-coverage-comments-20261027.
+Weighted Plain numeric Logloss567ec53f94 already MAIN as cf4c89dd1d, pushed
+in9ae87214e0. Full CPU GBDT binding compiled Mac O0-j10; no runtime claims.
+READY coherent CTR set, cherry-pick in order:
+  2d5c5081a83eab132a56a2ef0e199e23c9bf7ed6 (source)
+  e40721e14343b434904f726c7d25f5c79664950b (compile annotation/receipt)
+  219497b0e41a62b9330d029be55d43882ad469b3 (host/docs gap removal)
+All3 are now pushed with required guards0; coherent set ready for main. Full CPU GBDT binding passed
+x86-64-v3/O0/-j32,48.7s on Peer2's serial batch7 lease; source/binary verified.
+  docs/plans/gbdt-cpu-ctr-eval-20261027.md and20261028-compile.json
+  ~/mojolearn-evidence/peer2-native-boundary-20261027/cpu-batch-7/remote/leg_out/gbdt-ctr
+RANKING8dc73e4c13 now has a full local CPU binding compile pass
+(O0/apple-m1/-j10,137s). FINAL coherent set is now pushed and ready:
+8dc73e4c130425bc9a60a8004b9d9ef2e5343a04, then verifier
+b16c6374a03ad9739253c438fcab4998e7044b66 (or equivalent cherry972917b058),
+then receipt/comments/docs33fa14748f4ebd743f13e8c19febe0ce4630b37c.
+Apply after CTR; preserve weighted Logloss/CTR overlap, regenerate docs on the
+integrated tree. No duplicate native compilation merely for comment/docs merges.
+Evidence: ~/mojolearn-evidence/gbdt-cpu-ranking-compile-20261028/.
+Verifier followupb16c6374a03ad9739253c438fcab4998e7044b66 is pushed with6static
+checks; native source unchanged. Static census572lanes,0unaccounted,1OWED(newQuery).
+CPU peer self-handoff: ~/mojolearn-evidence/handoffs/gbdt-cpu-verifier-20261028.md.
+Andrew separately requested these CPU verifier additions. This is not authority
+for root to run a verification campaign; runtime/identity still pending.
+
+Local /root/program_dispatch_finish
+WT ~/mojolearn-wt/program-distributed-boundary-20261027,
+branch lane/program-distributed-boundary-20261027.
+Program serialization admission205/aa3 and public dispatch74486c8e65 already
+MAIN (merge5bedbe70a3). Actual Program C entry + Session HostExec root compiled
+396.630s; five later native_owner_lifetime comments changed only guard wording.
+  experiments/program_public_boundary_20261027/{compile.json,HANDOFF.txt}
+  ~/mojolearn-evidence/program-distributed-boundary-20261027/public-attempt3/
+Both source/log/binary archives and guard-refusal/comment patch are in R2 with
+byte readback recorded. Public methods no longer select instance callables.
+NEW distributed/partitioned/factory batch source/head0388451c5d compiled actual
+HostExec root248.282s,10 workers,250 retained source files unchanged; Mac+R2.
+  experiments/owned_program_boundary_20261028/
+FINAL GREEN/PUSHED654531acce7bd619de8d0331eaf63270ca5b06df includes the
+comment-only ops_owned_program_connect import-glue annotation and guard evidence.
+Origin matches; worktree clean; seven structural checks and push guards passed.
+No new pooled/offloaded source has started. Original guard refusal retained.
+Native binary SHA256:
+  0a21a5a79240784283fbe85ba735963388d280762d750bd138964cacee21b7de
+Evidence includes distributed/delivery.json,push-final.log,WIP.txt and
+final-retention-r2.json with complete-byte readback.
+Preserved earlier child draft remains in
+  ~/mojolearn-wt/distributed-public-boundary-20261027
+Do NOT reset/remove that draft or mistake it for the compiled new batch.
+Next pooled/offloaded training scope: bindings/parallel_byte_native.mojo,
+parallel_training/model_pool_training/offload_training import-time admission,
+NEW private native schedule descriptor/factory in _mojolearn_byte_lm.mojo.
+Only read-only design investigation existed when handoff requested. Peer3 owns
+existing ByteLM generation/catalog/codec exports; do not duplicate codec edits.
+Older public_wrapper_repairs/provider_boundary_audit agents hit model capacity;
+this fresh Program lane is the active owner, not those failed agents.
+
+Local /root/cluster_density_linalg and its density_lifecycle child
+Parent compact handoff:
+  ~/mojolearn-evidence/cluster-density-linalg-20261027/ROOT_COMPACTION_HANDOFF_20261028.txt
+Earlier12-batch index: delivery-index.json beside it.
+Integrated: corrected Cholesky7da644, six-cluster constructorse926fb,
+GMM3e6e1aca plus retained-provider11cf8cba, HDBSCANd6bdbdf,
+DBSCAN/KDEea4714488b, classical lifetime9453128b, QNe6b5189dbc,
+linalg metadata d6948a7cee and decomposition7089f6067a.
+Remaining READY unmerged:
+- 0456ee3e6a19956ce6913e1ffc7c07e412c412c1 cluster-refit lifetime/OPTICS
+  parameter admission; actual cluster_public_operation44.95s.
+  lane/cluster-refit-lifetime-20261027 in cluster-density-linalg-20261027 WT.
+- 68f51400020a40f2f0b310f7d3f6cd5b004bebf1 archive scalar/path/container-key
+  admission; actual archive_schema_save26.60s. Native codec untouched.
+  lane/archive-schema-admission-20261028 in cholesky-lifetime-repair-20261027 WT.
+  Remaining label/class-table/kernel-node schema iteration explicitly pending.
+Receipts/handoffs under experiments/cluster_density_linalg_20261027/.
+Child FINAL GREEN/PUSHED linalg helper/result batcha3a8150111ce9c8967b6ff35adcfad8fa36e30d2,
+source1091a9ee1e53b9d1771f0c30ab563b0694bad83b,
+lane/linalg-buffer-boundary-20261028: actual linalg_ops_operation24.65s,
+Apple CPU/O0/identical/-j10; required push guards0. Four final comment-only
+loop annotations are receipted; executable source unchanged. Earlier receipt
+head0803558886 is superseded by this final pushed head.
+Includes lin_truth/lin_array/lin_tuple native_loaded_module replacements needed
+by Peer6 row resampling, plus input/result snapshots and mmap-owner admission.
+  experiments/linalg_buffer_boundary_20261028/
+  ~/mojolearn-evidence/linalg-buffer-boundary-20261028/compile-storage-owners/
+Additional static finding: SVC/SVR, expansion-linear and spectral classes
+still retain _mode validation/output wrappers and lack native public slots.
+The targeted SVM batch is NOT their whole lifecycle repair; it also covers
+SGD predict_proba and spectral predict availability metadata. Parent continues
+spectral/SVM afterward; expansion linear is a large dedicated next scope.
+Parent new lane/svm-state-coef-20261028 has frozen the targeted SVC/SVR
+state/coef/property admission batch and started compilation; NO green claim.
+Its shared property additions were announced to Peer4.
+Public coef properties remain Python; composed _linear_coef alone does not
+repair them. Narrow NEW SVC/SVR coef and SVC probability-availability schemas
+in _native_public_attributes.py/public_attributes_native.mojo belong to parent;
+Peer4 general mode/slot work must preserve them. New native family_svc_public
+state route will precede binding selection. _expansion_linear/_spectral next.
+No parent-owned box. SVM compile started after the initial compact report.
+Child is now assigned remaining archive label/kernel iterations from68f5;
+that follow-up is separate from the green linalg helper batch.
+Its proposed _schema_kernel_nodes signature adds context and needs ONE
+gp_common_native.mojo call-site change. Peer5 was notified; preserve green5e7
+GP archive changes. Child plans actual gp_kernel_arrays+archive root compile.
+EXACT OVERLAP FOUND: green GP5e7 already rewrites _schema_kernel_nodes to
+delegate strict gp_kernel_public_native.gp_kernel_nodes(kernel,table), keeping
+the gp_common3arg call; _schema_class_table uses native classifier_label_list/
+gp_label_list and admission, and _schema_label_kind removes numeric ABC hooks.
+GP consumed-state checks are in gp_state_admission_native; archive_schema_save
+already calls classical_family_admit. Child must start from/preserve5e7,
+avoid restoring old traversals or unnecessary signature changes, and identify
+remaining generic schema gaps first. Peer5 will not edit these further.
+Resolve shared archive conflicts explicitly; independent old compiles do not
+qualify a newly combined implementation.
+
+ROOT'S COMPLETED SHARED EXCEPTION REPAIR
+lane/classical-exception-admission-20261027, WT of same name under~/mojolearn-wt/.
+Source9ef734f7fc plus comment-onlyf0b80f60d0, merged AND branch pushed.
+Own/sklearn/cached NotFittedError class metaclass/bases/hooks/key admission;
+native C error boundary rechecks actual exception class; reduction reads native
+BaseException.args descriptor. Tests added for changed hooks and malicious
+module keys, intentionally NOT RUN. Actual root compile41.040s,10 workers.
+  experiments/classical_exception_admission_20261027/
+  ~/mojolearn-evidence/classical-exception-admission-20261027/
+The15-file compiled closure matched main except the four documented loop-comment
+annotations at the time compared. Later independent dependency changes have
+separate scoped receipts. No full runtime callback-freedom claim.
+
+READY QUEUE SUMMARY — CONFIRM FINAL PUSH/ANNOTATION STATUS
+Already merged source20ab and earlier: do not redo them.
+1 Peer1 native descriptors33a63ba6ad — green/pushed, new IVF work excluded.
+2 Cluster refit0456ee3e6a — green/pushed.
+3 Archive schema68f5140002 — green/pushed, partial archive scope only.
+4 Linalg helpera3a8150111 — GREEN/PUSHED; needed before row resample.
+5 Resample32276a868c THEN cca559b8a0 — compiled/pushed, shared-helper dependency.
+6 ARIMA executionf160cd1283 — compiled/pushed; parentcd0b already local main.
+7 Program owned distributed654531acce — GREEN/PUSHED; source0388451c5d.
+8 CPU CTR2d5c5081 +e40721e143 +219497b0e4 — GREEN/PUSHED, ordered set.
+9 Combined GP5e7c530779 — GREEN/PUSHED, product8443166119, supersedes older
+  known-incomplete combined87 despite its earlier compile pass.
+10 Metrics snapshots6be526212ef9cdf4fbc891284a5e0ad2aa645106 — GREEN/PUSHED;
+  follows32276/cca559 on peer6 metrics lane. Classification/regression/expanded
+  roots passed; direct vector snapshots and4 module-import removals.
+  experiments/peer6_metrics_snapshots_20261028/; home evidence of same name.
+  Next matrix/weight snapshot74c1e58ebea71213f5880bc8f83d43fe09c1bdbe is
+  ALSO GREEN/PUSHED and follows6be on that metrics lane; full
+  metrics_boundaries_compile passed. Receipt experiments/peer6_metrics_matrices_20261028/.
+  Public-entry alias-memoized snapshots are compiling separately; pandas gaps
+  still pending. No runtime/GPU qualification.
+HOLD: prep late9608
+until corrected freeze passes; Peer3 coherent full closure until
+explicit green handoff; Peer4 new shared public drafts; all live uncommitted
+IVF/Radius/PCS and other unqualified branches. New messages may supersede this
+queue; exact peer brief and receipts take precedence over stale snapshot heads.
+
+MACHINE / RETENTION CHECKPOINT
+No root-owned active pod. Earlier root f9e0thol0ex6w4 and iwcaz97h1hp00f were
+retained/deleted; costs$0.6805 and$0.0424. Root archives at
+  measurements/provider-migration-20261027/f9e0thol0ex6w4/
+  initial-results-v2.tgz,batches23.tgz,batch4.tgz,batches56.tgz
+Old initial-results.tgz was symlink-only and is NOT retention proof; v2 fixed it.
+Peer1 latest57liouihqtep8q four-root descriptor build retained/deleted verified.
+Peer2 batch6 pod4oyi1zqe8aua2h retained/deleted($0.07);32-core manifold/PCA passed,
+prep failed and failure retained. Batch7b8o973bpjz3685 retained/deleted($0.0812),
+32-core prep and serial CTR compiles. R2 batch7 archive:
+  measurements/runpod-cpu/mojolearn-cpu-peer2-native-20261027-20261028-040353/results-complete.tgz
+New rentals may begin after this snapshot. Check ownership/state/lease before
+reuse/teardown; do not act on old pod IDs. CPU review coordinates serial reuse
+directly with Peer2, avoiding competing full-core builds and duplicate rentals.
+
+Disk pressure: a read during handoff showed13GiB available,99% APFS capacity;
+Peer4 hit checkout exhaustion and is cleaning only its own clean/pushed worktrees
+and using sparse checkouts. Do not remove another peer's worktree or evidence.
+All complete logs are files. Inspect status/summary and bounded diagnostic blocks;
+never paste full logs, raw giant JSON reports or subagent task transcripts.
+
+END OF ROOT HANDOFF. Final peer messages received while writing may be appended
+below before the handoff commit; check for an addendum and current git status.
+
+LAST QUEUE UPDATE BEFORE HANDOFF COMMIT
+Peer6 VAR/STL e456212ca7 was compiled/pushed but is NOW HELD (see final
+addendum): missing entry/lazy-context corrections must accompany it. It follows
+ARIMA executionf160 and initially covered full
+VAR/VARResults and STL/DecomposeResult lifecycle, actual xseq dispatcher70.575s,
+CPU/O0/identical/-j10. Receipt experiments/peer6_var_stl_20261028/HANDOFF.txt
+and public_source_inventory.json. Do NOT merge it alone afterf160.
+Croston/Theta/ETS/GARCH direct fit/predict ownership follow-up is reported
+compiled but handoff/push still pending; wait for exact accepted head.
+Peer1 owns next XN descriptor generator/schema/host+device tables and aux
+registrations for appended PCS draw, preserving existing IDs0..81 and existing
+algorithm owners. It is unqualified source work separate from green33a63.
+
+FINAL ADDENDUM — HANDOFF PUSH / LATE HOLDS / INTEGRATION WINDOW
+Root handoff commit780cd217d6 was successfully pushed, including the compiled
+source through20ab53ec02. This addendum is a documentation-only successor.
+Do not merge additional migration source just to make this checkpoint current.
+
+IMPORTANT MAIN MUTATION COORDINATION AFTER THIS FINAL PUSH
+After this addendum push, root will explicitly grant CPU coverage thread
+01a18061-a347-72a3-849f-5197e96ca16f the next serialized main window for its
+coherent compiled CTR+ranking sets ONLY. It has prepared branch
+integration/gbdt-main-ready-20261028 at eb94eed000 from origin/main780cd217,
+with six source/receipt/verifier/docs commits and only obsolete-comment conflict
+resolutions. It will incorporate this final checkpoint before pushing main.
+Root/resumed agents MUST CHECK that thread's completion/window status before
+other main mutations. After its completion notice, root owns the remaining
+provider queue again. CPU peer must not sweep other uncompiled work.
+
+Critical holds discovered after the initial handoff snapshot:
+- Prophet b00f153308 MUST NOT MERGE ALONE. Mixed-depth fallback data such as
+  [[], complex_scalar] could reserve zero capacity and write one scalar. The
+  companion adds exact leaf-depth/product-capacity admission plus lazy-context
+  correction. Its final compile was interrupted by ENOSPC and is retrying.
+- VAR/STL e456212ca7 MUST NOT MERGE ALONE. var_forecast is missing from imported
+  _SEQUENCE_ENTRIES and forecast ops need classical_connect_numpy on their
+  lifecycle context. Corrective companion awaits recovered-space compile.
+- No artifact/result from an ENOSPC-interrupted build counts as a compile pass.
+
+Late green/active source updates (separate from this main checkpoint):
+- SVM targeted state/coef7cacec39bafb8ae8c34b956ca75b5a0382f0b115 is GREEN and
+  remote ls-remote confirmed. Source03464a024afb5e865aafb44ea55c1702dd6be2ee;
+  actual state+svc_kernel_operation+provider+attribute root37.14s CPU/O0-j10.
+  Source guards passed; only local tracking writes failed ENOSPC and recovered.
+  experiments/cluster_density_linalg_20261027/SVM_STATE_COEF.txt. Whole SVM,
+  spectral and expansion-linear lifecycle still incomplete.
+- Peer4 backend4ce6e5c2e7 and numeric profiles82fde80801 are GREEN/PUSHED child
+  commits; focused compiles20.50s and22.276s,j10. Receipts under
+  experiments/peer4_backend_public_20261028 and peer4_numeric_profile_20261028.
+  Parent equivalents fcee3d4bfc+ff81abe394 retain adjacent tokenizer/__init__
+  additions from both. Parent Array final mmap/scalar source still unqualified:
+  its attempt4 hit ENOSPC and no binary/result was produced. Mode work active.
+- Peer2 batch8 at36a66a6885: manifold37.34s,umap_init16.30s,arena_rows24.57s
+  passed on32-core RunPod. Green PRODUCT commits c7694b3277 (timedelta Int64
+  range) and9a0f043190 (UMAP native scalar decode);36a66 compile root may accompany.
+  Receipt commit forthcoming. EXCLUDE prep e8a10 and temporal helper808a23
+  (no caller coverage yet). Normalizer/PCA fit and UMAP categorical/lifecycle
+  still pending. cpu-batch-8 full source/log/binaries retained Mac+R2; pod
+  z57soy9pyz7nhl deleted verified,$0.0628.
+- Peer1 new osk7s6ype0o51m rental is active in the latest report: frozen
+  0a98da2dca17, two actual IVF/Radius/PCS owner roots,32 requested CPUs with
+  actual allocation recorded,60-minute deadman. Controller recovered Mac
+  readiness-write ENOSPC, SSH/on-pod watchdog confirmed, source staging resumed.
+  ~/mojolearn-evidence/peer1-ivf-radius-pcs-20261028/ is the controller record.
+- Peer3 codec root passed at ed35e27cd9 after current-main merge; neural LLVM
+  compile failed ENOSPC, not a source diagnostic. It resumed after recovery.
+  Constructor60594f0c11/tokenizer7d435efeba source complete; parallel snapshot
+  reread correction/final coherent compile still needed. Do not sweep its tip.
+
+Additional exact shared ownership assigned during handoff:
+- Peer6 owns arena_prog_native._metrics_run_fields(fields,mode,context)
+  extraction for metrics; existing Prog wrapper must keep its API. This is
+  distinct from Program lane's parallel-byte trainer scope. Actual metrics
+  owner compile needed; avoid constructing mutable Python _Prog for these calls.
+- Peer2 owns narrow prep_stateless_c/_kind provider/context type/descriptor
+  admission. Do NOT assume shared _state_context ownership connection alone
+  provides this frontdoor validation. Existing numerical entry tables already
+  have identity checks. Call-scoped input metadata must stay captured once.
+- Classical parent owns shared classical_labels.mojo label-kind/sorted/flatten/
+  list protocol repair, plus SVM-local numbers.Real/Integral ABC callback
+  removal. Preserve Peer5's gp_label/classifier-label helpers; source findings
+  have no runtime proof. Dedicated compile and receipt required.
+
+Disk incident and retention:
+Mac reached ENOSPC, causing compiler crashes, controller JSON-write failures
+and Git tracking failures across lanes. Complete failures remain in their
+evidence roots; do not promote old passes to changed failed source.
+Root removed ONLY its clean fully merged/pushed classical-exception-admission
+worktree; branchf0b80 and full source/binary/log archives remain. Thus the old
+worktree path above is historical, not currently present. Peer6 removed ONLY
+its completed clean/pushed CV worktree at4aa; its branch/evidence remain.
+Other owners likewise remove only their own clean/retained duplicates or use
+sparse checkouts. Root observed16GiB free after recovery; that is a momentary
+reading, not a storage guarantee. Do not delete authoritative evidence or other
+agents' worktrees. Inspect space before new local compiles/large checkouts.
+
+Late-message scratch notes also live at:
+~/mojolearn-evidence/provider-migration-resume-20261027/ROOT_HANDOFF_LATE_UPDATES_20261028.txt
+The source/checkpoint/queue above is intentionally frozen at handoff time.
+Read current peer briefs and ownership status on resume for subsequent updates.

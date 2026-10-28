@@ -1,0 +1,26 @@
+Branch lane/peer4-numeric-profile-20261028
+Base 20ab53ec02 (lane/peer4-public-boundaries-20261028)
+Worktree /Users/andrewhendel/CascadeProjects/mojolearn-peer4-numeric-profile
+
+Static trace and installed ownership
+__init__.py originally aliases _numeric_profile.default_profile/set_default_profile/profiles/measured directly. No existing later installer replaces them. _native_optimizer_bridge initializes training defaults during import and retains the actual _defaults dictionary. The new final __init__ installer replaces both these module functions and the four package aliases with signature-preserving one-native-call functions in _native_numeric_profile.py. Earlier bodies remain inactive after import as bootstrap definitions; they are not live public operations. Their docstrings/signatures are preserved.
+
+Changes
+Dedicated native owner handles profile/use/name admission, unavailable/rejected profile errors, environment-selected inference defaults, training defaults, set-default state changes and previous-value return, metadata result copies and measured vendor lookup. Exact passive builtin metadata admission prevents custom Python protocols. POSIX environment reads use the connected os.environ backing dictionary and native filesystem decoding; no Python environ.get/decoder helper executes. Existing _defaults object identity remains shared with providers; public changes are observed by native consumers.
+Metadata outputs preserve original shallow-copy semantics, record order, default flags based on DEFAULT/TRAINING_DEFAULT constants, and vendor-specific row identity. No arithmetic or provider numerical routing changes.
+
+Files/coordination
+Own numeric_profile_native.mojo and _native_numeric_profile.py; two-line separate tokenizer-host import/export and independent final __init__ installer block. Conv/backend peer may conflict at these anchors; retain both entries and blocks. No edits to backend helpers, mode setters, Array, or other worktrees.
+
+Validation
+Affected owner compiled successfully: attempt-1 exit0,22.276s, apple-m1 CPU column, identical define, O0, actual allocation10 logical Mac CPUs and10 compiler workers. This compiles all four native routes and error boundary plus imported dependencies, using the same native registration as product. Full aggregate tokenizer-host is not compiled, and dynamic installed loading is not exercised. Python AST parse and diff whitespace checks passed. Final source bytes match retained compilation snapshot. No runtime, GPU or identity tests. No rented box.
+
+Evidence
+/Users/andrewhendel/mojolearn-evidence/peer4-numeric-profile-20261028/attempt-1 contains complete compile.log,result.json,source_manifest.json,source_bytes.tgz and numeric_profile_compile.so. Repository compile.json retains command/source/compiler/binary hashes and scope.
+The initial full worktree checkout failed resetting index (exit128) under disk pressure; isolated sparse source checkout succeeded. Retained worktree logs are in the evidence directory. No source or build failure was hidden.
+push.log retains required push-guard output/status.
+
+Remaining
+Parent serializes main integration and resolves adjacent import/installer anchor conflicts. Runtime and cross-vendor coverage remain unperformed under current compile-only authorization.
+
+Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status,coverage,failures,evidence paths. Expand relevant diagnostics only; never infer full success from filtered output. Propagate reminder.

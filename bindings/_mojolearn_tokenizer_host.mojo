@@ -100,7 +100,7 @@ from bindings.parallel_byte_native import parallel_byte_c
 from bindings.native_codec import codec_c
 from bindings.native_process_pool import process_c
 from bindings.parallel_mlp_native import parallel_mlp_c
-from bindings.small_mlp_native import small_mlp_c
+from bindings.small_mlp_native import small_mlp_c, small_mlp_finalize_c
 from bindings.parallel_neural_native import parallel_neural_c
 from bindings.parallel_forecast_native import parallel_forecast_c
 from bindings.parallel_shard_native import parallel_shard_c
@@ -120,6 +120,8 @@ from bindings.xcnn_native import xcnn_c
 from bindings.tsa_public_native import tsa_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.mode_metadata_native import mode_metadata_c
+from bindings.backend_public_native import backend_public_c
+from bindings.numeric_profile_native import numeric_profile_c
 from bindings.params_metadata_native import params_metadata_c
 from bindings.public_attributes_native import public_attribute_c
 from bindings.linear_constructor_native import linear_constructor_c
@@ -1245,6 +1247,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(process_c, "native_process_call")
         module.def_py_c_function(parallel_mlp_c, "parallel_mlp_call")
         module.def_py_c_function(small_mlp_c, "small_mlp_call")
+        module.def_py_c_function(small_mlp_finalize_c, "small_mlp_finalize")
         module.def_py_c_function(parallel_neural_c, "parallel_neural_call")
         module.def_py_c_function(parallel_forecast_c, "parallel_forecast_call")
         module.def_py_c_function(parallel_shard_c, "parallel_shard_call")
@@ -1269,6 +1272,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
         module.def_py_c_function(mode_metadata_c, "mode_metadata_native_call")
+        module.def_py_c_function(backend_public_c, "backend_public_native_call")
+        module.def_py_c_function(numeric_profile_c, "numeric_profile_native_call")
         module.def_py_c_function(params_metadata_c, "params_metadata_native_call")
         module.def_py_c_function(public_attribute_c, "public_attribute_native_call")
         module.def_py_c_function(linear_constructor_c, "linear_constructor_native_call")
