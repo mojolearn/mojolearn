@@ -1,0 +1,153 @@
+Peer 1 independent source audit and regression controls — 2026-10-27
+
+Starting commit: 7de54456bde166c42fd0d9f7378e402bb0f3be91 (local main)
+Branch: lane/peer1-audit-tests-20261027
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-audit-tests-20261027
+
+Scope and evidence
+------------------
+Read AGENTS.md, UNIVERSAL_AUDIT.txt and the neighbor/kernel entries of
+experiments/provider_boundary_audit_20261027/operations.tsv. The original
+worklist source is dcd2a307c1, not this lane's starting commit. Its rows are
+triage records; this review does not promote their labels to execution proof.
+
+operations-start.tsv retains the 147 implementation groups whose families
+include neighbors, kernel_methods, kernel_ridge or kernel_approximation:
+79 native_boundary, 45 prohibited_source, 21 unresolved, one allowed_tag_metadata
+and one refusal_only. audit-scope.json retains the scope and verification status.
+
+No product runtime, compiler, GPU, performance measurement or identity check was
+run by this lane. Source syntax checking is separate from all those claims.
+All runtime controls below remain UNRUN. No family is declared complete.
+
+Public source resolution at the starting commit
+----------------------------------------------
+- kernel_ridge.py re-exports kernel_methods.KernelRidge. kernel_approximation.py
+  re-exports Nystroem/RBFSampler and the expansion kernel feature classes.
+- neighbors.py uses _sklearn_modules.lazy_exports for KernelDensity,
+  LocalOutlierFactor and NearestCentroid; the actual owners are density.py and
+  _expansion_neighbors.py. The package root exports the same expansion classes.
+- KernelPCA methods already enter _KPCA_CALL. Its bridge is connected at the end
+  of _expansion_neighbors.py; private retained helpers are not sufficient proof
+  that a public operation uses them.
+- LocalOutlierFactor uses _mode.available_if. Its score_samples body still
+  performs Python validation, conversion, launches and output handling, while
+  fit/fit_predict/decision_function/predict bodies enter _NATIVE.
+- NearestCentroid.predict_log_proba still calls _decision_matrix, allocates an
+  output and dispatches log-softmax in Python.
+- IVFIndex is in _ivf_impl.py. IVFPQIndex, IVFSQIndex, IVFRaBitQIndex,
+  CagraIndex and refine live in _expansion_ann.py. TSNE shares that file but
+  belongs to the separate manifold lane; only its coordinated wrapper
+  placeholders are covered by this lane's one source-only regression.
+- The scoped constructors are in _native_full_reset_params._CLASSES. Package
+  import replaces their original __init__ bodies with _initializer's single
+  _INIT_ENTRY call before mode/parameter metadata snapshots. The native
+  full_reset_constructor_native._construct binds tuple/dict arguments, admits
+  the layout before _fields, then replays stored assignment events. The later
+  metadata connectors do not wrap those constructors again. Original Python
+  constructor bodies therefore are not active runtime debt on this inspected
+  route. Installed runtime remains UNRUN; this is source resolution only.
+
+Concrete findings sent to implementation owners
+-----------------------------------------------
+1. Python binding selection remains in KNN fit/predict/score, KernelDensity
+   fit/score_samples/score, KernelRidge.score, IVF and approximate-index fit,
+   and PolynomialCountSketch fit/transform/fit_transform. Moving the selection
+   into the native owner is required but does not qualify transitive execution.
+
+2. bindings/neighbors_local_native.mojo:_lof_check performs operator.eq/ne and
+   bool/float/int on mutable settings before exact scalar admission. _lof_fit
+   rereads n_neighbors. bindings/neighbors_kde_native.mojo:_kde_validate similarly
+   coerces bandwidth and knobs and invokes metric_params.values(). Kernel fitted
+   _kernel_params/_params tuples and n_features_in_ require admission before
+   comparisons/indexing/coercions. The tests mutate state after construction so
+   constructor validation cannot accidentally satisfy the operation controls.
+
+3. bindings/neighbors_semi_native.mojo:_semi_seed and
+   bindings/neighbors_native.mojo:_pcs_seed call random-state methods, including
+   NumPy's randint. AdditiveChi2Sampler sparse transform calls scipy.sparse's
+   csr_matrix and eliminate_zeros from native code. These are runtime work,
+   not buffer ownership. Exact seed/state admission and native equivalent
+   preparation are required; removing supported random-state/sparse behavior
+   would not complete the migration.
+
+4. bindings/neighbors_ann_native.mojo:_refine uses numpy.asarray for candidates.
+   ANN fit paths call compiled numerical entries through family_call. The
+   _ann_int and _ivf_metric helpers can coerce or compare mutable subclasses.
+   IVF extend was Python orchestration at the starting commit. The parent lane
+   is replacing it with a native operation retaining metadata and buffer owners;
+   the new operation still needs compilation and the included runtime controls.
+
+5. providers/python/x_neighbors_descriptor_pyapi.mojo switches to a typed
+   CompiledBindingSnapshot only when MOJOLEARN_CLASSICAL_NATIVE_DISPATCH=1;
+   the module path uses py_call to invoke numerical extension entries.
+   KNN base kernels, KDE and ANN retain packed CPython numerical calls without
+   a demonstrated descriptor ABI for those algorithms. Such calls do not meet
+   the provider migration contract even when their entry type is a native C
+   function. Default-route and transitive qualification remain pending.
+
+Shared root requirements (no edits here)
+----------------------------------------
+- The whole public lifecycle remains a separate boundary. At the starting
+  commit, _mode.install_fit_tracking wraps unmarked functions with input checks,
+  fitted tracking and public output handling; _install_numeric_mode adds a
+  training guard. A one-call method body therefore does not establish the
+  installed public slot is one call.
+- _native_public_attributes.connect_classes installs __getattribute__, not
+  replacements for those operation bodies. Its availability admission supports
+  the fixed prep/decomp fit_transform predicates, not LOF's novelty predicates.
+  LOF's available_if descriptors therefore remain an explicit unresolved path.
+- Scope requested from root: native lifecycle/admission/output envelope for the
+  affected fit/predict/transform/score methods, plus native LOF novelty
+  availability. Preserve sklearn fitted errors and public output dtype/shape
+  conversion. Only mark a dedicated method with native_method once that native
+  owner supplies all these semantics; marking alone would remove behavior.
+- Shared py_fields delegates object.__getattribute__(value, '__dict__'). Exact
+  layout admission must precede it; family_operation enters before the ordinary
+  Ridge/LinearRegression classical_check_layout path. Mutable descriptors and
+  model-layout changes need root's shared admission audit, not an assumption
+  that a C/native entry cannot call Python.
+- Shared metrics/score owners, archive/state handling, attribute
+  access, lifecycle cleanup and mode/metadata methods are not qualified by the
+  numerical wrapper changes. Continue their actual installed-slot and native
+  transitive review in the shared lane.
+
+Regression coverage
+-------------------
+python/mojolearn/tests/test_peer1_provider_boundary.py contains 72 runtime cases:
+- 11 public fits with a mutable Python _bind callback that must remain uncalled;
+- 33 public fits with ndarray-shape, array-protocol or list-subclass hooks;
+- 11 post-construction setting mutations, admitted before any scalar hook;
+- 6 kernel inference mutations of fitted tuple metadata or feature counts;
+- 5 ordinary result/re-export cases: KNN distances/labels/probabilities/score,
+  precomputed multioutput KernelRidge, LOF scores/offset, centroid log-probability,
+  and kernel aliases;
+- 2 public LOF/centroid operations with Python validation/output helpers
+  sabotaged, to expose installed compatibility wrappers;
+- 4 IVF extend cases: strided float64 rows with appended search ids/candidate
+  counts, wrong width, a fitted ndarray subclass, and a fitted scalar subclass.
+  Refusals preserve the original fitted arrays and row count.
+
+One additional source-only case checks TSNE fit/fit_transform pass both native
+binding placeholders. This check does not qualify TSNE lifecycle or execution.
+
+The file sets __mojolearn_user_boundary__ so output expectations represent an
+external caller even when pytest imports it as mojolearn.tests. No private
+helper is substituted for a public operation, and decorators are not unwrapped.
+The bounded numerical fixtures are not a new arithmetic identity lane.
+
+Suggested final integration execution: the root-owned matching installed
+bindings, identical mode, then pytest on this file. Missing bindings or earlier
+unrepaired lifecycle paths must remain failures or explicitly pending coverage;
+do not use a skip or filtered passing subset to declare the family complete.
+The final runtime may intentionally expose the unresolved shared paths above.
+
+No native entry or compile target is changed by this test/evidence commit.
+The implementation owners supply their affected entries and minimal native
+compile targets. The parent retains source changes and its own compilation
+handoff separately; this report records independent starting-source findings.
+
+Source validation retained in source-validation.log and test-manifest.json:
+exit 0; Python AST syntax pass; 13 test functions, 73 expanded cases. The single
+TSNE source check passed against the parent's edited _expansion_ann.py, whose
+exact path and SHA256 are recorded. The 72 runtime cases were not executed.
