@@ -23,41 +23,12 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.gp_kernel_public_native import gp_admit_kernel
 from bindings.gp_regressor_native import gp_regressor_operation
 from bindings.gp_classifier_native import gp_classifier_operation
+from bindings.gp_state_admission_native import _gp_scalar_fields, _gp_array_fields, _gp_admit_binary_class
 from bindings.optimizer_public_words import stash_python_error
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding_mode
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi import _refusal
-
-
-def _gp_scalar_fields(fields: PythonObject, names: PythonObject, context: PythonObject) raises:
-    for i in range(len(names)):  # driver-loop: fixed scalar-state field schema
-        if py_contains(fields, names[i]):
-            host_inference_scalar(fields[names[i]], context, True)
-
-
-def _gp_array_fields(fields: PythonObject, names: PythonObject, context: PythonObject) raises:
-    for i in range(len(names)):  # driver-loop: fixed retained-buffer schema
-        if py_contains(fields, names[i]):
-            classical_admit_value(fields[names[i]], context)
-
-
-def _gp_admit_binary_class(context: PythonObject) raises:
-    var b = native_loaded_module("builtins")
-    var cls = context["family_gp_binary_laplace"]
-    if py_type(cls) is not b.type:
-        raise Error("TypeError: GP binary state requires ordinary native class metadata")
-    var ancestry = _type_mro(cls)
-    if len(ancestry) != 2 or ancestry[1] is not b.object:
-        raise Error("TypeError: GP binary state ancestry changed after connection")
-    var names = _class_fields(cls)
-    var snapshot = context["family_gp_binary_namespace"]
-    if py_type(snapshot) is not b.dict or len(names) != len(snapshot):
-        raise Error("TypeError: GP binary state class changed after connection")
-    var keys = py_call(b.list, names)
-    for i in range(len(keys)):  # driver-loop: fixed binary-state namespace before allocation/release
-        if py_type(keys[i]) is not b.str or not py_contains(snapshot, keys[i]) or names[keys[i]] is not snapshot[keys[i]]:
-            raise Error("TypeError: GP binary state cannot invoke changed Python descriptors or lifecycle hooks")
 
 
 def _gp_admit_state(model: PythonObject, context: PythonObject, classifier: Bool, fitting: Bool) raises -> PythonObject:

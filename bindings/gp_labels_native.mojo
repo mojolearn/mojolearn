@@ -21,6 +21,7 @@ from bindings.family_common import (
 from bindings.archive_schema_native import _schema_label_store
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import _flatten_labels
+from bindings.gp_label_snapshot_native import gp_label_list
 from bindings.classifier_public_lifecycle import classifier_label_list
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 
@@ -172,7 +173,8 @@ def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject)
     var fast = _gp_buffer_labels(y, base, context)
     if fast is not None:
         return fast
-    var flat = _flatten_labels(y, context)
+    var source = gp_label_list(y, context) if py_type(y) is context["array_class"] else y
+    var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
     fast = _gp_list_labels(flat, base, context)
     if fast is not None:

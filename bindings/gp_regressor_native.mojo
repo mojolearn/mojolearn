@@ -14,6 +14,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_warn, metric_is_integral, metric_is_bool
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -484,9 +485,9 @@ def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObj
     var n_train = Int(py=xt.shape[0])
     var arrays = gp_kernel_arrays(gp_model_kernel(fields), context)
     var ext = _gpr_ext(model, args[0], context)
-    var entry = py_call(b.getattr, ext, PythonObject("gpr_predict_cov"), PythonObject(None))
-    if not Bool(py=py_call(b.callable, entry)):
-        raise Error("ImportError: " + String(_GPR) + ": " + String(py_call(b.getattr, ext, PythonObject("__name__")))
+    var entry = neural_descriptor_entry(ext, "gpr_predict_cov", False)
+    if entry is None:
+        raise Error("ImportError: " + String(_GPR) + ": " + String(py_fields(ext)["__name__"])
                     + " does not export gpr_predict_cov, so return_cov=True cannot run on it; rebuild the GP binding")
     # n_star >= 1 (as_f32_c refuses an empty X), so max(n, 1) is n.
     var mean = family_array(Python.tuple(n_star), "<f4", context)

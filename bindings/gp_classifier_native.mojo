@@ -12,6 +12,7 @@
 # the same inputs in the same order: the bits do not move.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
@@ -515,7 +516,7 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         host_inference_scalar(args[1], context, True)
         if Bool(py=args[1]):
             raise Error("Gradient can only be evaluated for theta!=None")
-        var fields = py_fields(model)
+        var fields = _fields(model)
         if not py_contains(fields, "estimators_"):
             raise Error(String(_NAME) + ": call fit() first")
         # Return the stored native scalar without calling a descriptor or
@@ -540,7 +541,7 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         var n_truth = 0
         if Int(py=py_call(native_loaded_module("builtins").len, shape)) > 0:
             n_truth = Int(py=py_call(native_loaded_module("builtins").int, shape[0]))
-        var n_pred = Int(py=py_call(native_loaded_module("builtins").len, pred))
+        var n_pred = Int(py=pred.shape[0]) if py_type(pred) is context["array_class"] else len(pred)
         if n_truth != n_pred:
             raise Error("mojolearn GaussianProcessClassifier: y has " + String(n_truth) + " entries for "
                         + String(n_pred) + " rows")
