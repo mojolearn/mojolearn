@@ -14,7 +14,7 @@ def test_dtype_overrides_are_optional_and_reject_before_cast_descriptor():
     assert signature.index('allow_non_native:') < signature.index('complex_error:') < signature.index('f32_error:')
     assert body.index('raise Error(complex_error)') < body.index('var kind = cast_in_kind(')
     assert body.index('raise Error(f32_error)') < body.index('var kind = cast_in_kind(')
-    for code in (13, 14, 15):
+    for code in (14, 15, 16):
         assert f'code == {code}' in body
     # A caller opting into the established complex error gets it before
     # rank refusal, while default callers retain the early rank check.
