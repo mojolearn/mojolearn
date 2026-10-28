@@ -17,6 +17,8 @@ def _layout(cls):
 
 
 def connect(session, program, imported, graph, unsupported):
+    from .._native_program_save_bridge import connect_imported
+    connect_imported(imported)
     # glue: all functions retained here are compiled entries; no operation
     # calls this connector or asks a lazy module to resolve an attribute.
     import pathlib  # preload native_path's standard path storage metadata
