@@ -24,6 +24,8 @@ from autograd.program_optimize import ProgramOptimization, program_optimize
 from autograd.program_runtime import replay_values, parameter_buffers, train_program_control
 from providers.python.autograd_pyapi import _dims_out
 from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
+from providers.python.autograd_host_provider_pyapi import imported_host_provider_request
+from autograd.program_host_request import NativeProgramHostRun
 
 
 def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
@@ -471,7 +473,7 @@ def _imported_input(a: PythonObject, dims: List[Int], integer: Bool, what: Strin
     return ProgramInput(src, shape, values^, ids^)
 
 
-def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
+def ops_imported_run_py(
     program: PythonObject, arrays: PythonObject, named: PythonObject,
 ) raises -> PythonObject:
     var b = Python.import_module("builtins")
@@ -514,7 +516,9 @@ def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
                         + _imported_repr(shape) + ", got " + _imported_repr(_imported_tuple(got)))
         dims.append(want^)
     var sid = Int(py=metadata[1]["_id"])
-    var plan = program_execute_prepare[E, KIND](sid, Int(py=metadata[0]["_id"]), sid, False, False)
+    var request = NativeProgramHostRun()
+    imported_host_provider_request(metadata, request, 0)
+    ref plan = request.plan
     if len(declared) != plan.program.n_in:
         raise Error("ValueError: this program takes " + String(plan.program.n_in) + " input arrays, got " + String(len(declared)))
     var inputs = List[ProgramInput]()
@@ -524,7 +528,9 @@ def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
             raise Error("ValueError: input " + String(k) + " must keep its captured shape "
                         + shape_text(plan.program.in_shapes[k]) + "; got " + shape_text(item.shape))
         inputs.append(item^)
-    var r = program_execute_run[E, KIND](sid, plan, inputs^, False)
+    request.inputs = inputs^
+    imported_host_provider_request(metadata, request, 1)
+    ref r = request.result
     var out = Python.list()
     for k in range(len(r.outputs)):  # driver-loop: over the program's outputs (result packing, no data)
         var want = List[Int]()
