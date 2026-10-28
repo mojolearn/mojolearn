@@ -27,7 +27,7 @@ def sha256(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--groups", nargs="+", choices=("scalers_pls", "scalers", "pls", "manifold", "umap_init", "jl_rp"),
+    parser.add_argument("--groups", nargs="+", choices=("scalers_pls", "scalers", "pls", "manifold", "umap_init", "jl_rp", "prep"),
                         default=["scalers", "pls", "manifold", "umap_init", "jl_rp"])
     parser.add_argument("--out", type=Path, default=Path(os.environ.get("LEG_OUT", "/root/results-peer2")))
     args = parser.parse_args()
