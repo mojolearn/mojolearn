@@ -42,7 +42,6 @@ def connect_classes(context, package):
     known = {
         _mode.NumericModeMixin._bind: 'standard',
         _forest_protocol.ForestProtocol._bind: 'forest',
-        _hierarchy_impl.AgglomerativeClustering._bind: 'standard',
         _tsa_impl.ExponentialSmoothing._bind: 'standard',
         _classical_host._HostBound._bind: 'host',
         _classical_host.HostGaussianProcessClassifier._bind: 'host_gp',
