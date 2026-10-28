@@ -64,6 +64,7 @@ ordered-shard reduction reaches no GEMM. Its independent oracle must catch
 the changed native result, including the cancellation fixture ending at three.
 """
 from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
+from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.host_lanes import all_finite
 from std.math import isfinite
@@ -188,6 +189,9 @@ def host_rms_row_sumsq(x: List[Float32], m: Int, dm: Int) -> List[Float32]:
                 acc = ftz(identical_mul_add(xj, xj, acc))
             comptime if NN24_NORM_LANES8:
                 acc = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](xp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
+            comptime if IDN_NORM_FIXED_LANES:
+                # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
+                acc = nfl_dot(rebind[MutPointer[Float32, MutAnyOrigin]](xp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             sp.unsafe_store(t, acc)
 
     if tasks == 1:
@@ -294,6 +298,9 @@ def host_samba_rms_norm_backward(
                 c = ftz(identical_mul_add(dhj, ftz(xp.unsafe_load(cell)), c))
             comptime if NN24_NORM_LANES8:
                 c = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](dhp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
+            comptime if IDN_NORM_FIXED_LANES:
+                # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
+                c = nfl_dot(rebind[MutPointer[Float32, MutAnyOrigin]](dhp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             c = ftz(c)
             var mean = ftz(identical_div(ftz(sp.unsafe_load(t)), Float32(dm)))
             var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
