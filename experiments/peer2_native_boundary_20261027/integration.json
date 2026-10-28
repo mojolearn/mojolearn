@@ -17,13 +17,12 @@
   },
   "source_review_status": "in_progress",
   "native_compile_status": {
-    "selector": "passed and merged by root; main receipt ae523b60fb",
-    "jl_rp": "passed frozen 81b018766f; exception-class correction recompile pending",
-    "scalers_pls": "failed frozen 81b018766f; PLS source type fixes committed; split recompile pending",
-    "manifold": "failed frozen 81b018766f; UMAP source type fixes committed; next freeze also adds typed ownership",
-    "umap_init": "failed frozen 81b018766f; UMAP source type fixes committed; recompile pending",
-    "next_freeze": "5bfbe8118e",
-    "next_run": "cpu-batch-4"
+    "selector": "compiled and merged by root, receipt ae523b60fb",
+    "pls": "PASS batch4 frozen5bfbe8118e; main merge requested",
+    "manifold": "PASS batch4 frozen5bfbe8118e including native type registration; complete lifecycle next batch",
+    "umap_init": "PASS batch4 frozen5bfbe8118e; main merge requested",
+    "jl_rp": "PASS batch4 frozen5bfbe8118e with typed exception correction; main merge requested",
+    "scalers": "FAIL batch4: PythonObject(None) default argument instantiated at compile time; narrow repair underway"
   },
   "public_runtime_status": "pending_final_integration",
   "vendor_identity_status": "pending_final_integration",
@@ -33,6 +32,6 @@
     "cpu-batch-1": "all three compiler launches failed missing std (launcher repaired); complete Mac/R2 retention; pod deleted verified",
     "cpu-batch-2": "unreachable SSH; no source staged; controller retained Mac/R2; pod deleted verified via reap after automatic retention refusal",
     "cpu-batch-3": "JL/RP passed; other roots failed; original logs plus successful binary/source retained Mac/R2; pod deleted verified",
-    "cpu-batch-4": "active; frozen 5bfbe8118e; no runtime verification"
+    "cpu-batch-4": "Four roots PASS, scalers FAIL; full logs/binaries/source Mac+R2 retained and pod deleted verified"
   }
 }
