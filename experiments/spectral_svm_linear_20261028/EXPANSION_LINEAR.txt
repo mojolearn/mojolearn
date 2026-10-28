@@ -1,0 +1,13 @@
+Expansion-linear public lifecycle (2026-10-28), lane/spectral-public-lifecycle-20261028, separate commit series.
+- _LinearClassifierMixin/_LinearRegressorMixin, SGDOneClassSVM and IsotonicRegression declare _mojolearn_native_public; all
+  21 constructors take numeric_mode=None themselves (same keyword-only signature the _mode wrapper produced).
+- bindings/x_linear_native.mojo: x_linear_c -> _xl_public_operation (fit bookkeeping admission, NotFittedError via
+  classical_python_error, feature-name check, fit depth, estimator_fit_complete with ClassLabels for the 5 classifier fits,
+  NumPy views for outside callers; regressor/isotonic predict and one-class decision/score_samples widened exactly to f8;
+  return_std tuples as views). cd_* (Lasso/ElasticNet door) untouched. IsotonicRegression.predict uses isotonic_predict.
+- numbers.Number (xl_number_type) and labels_integral_type ABC checks, and type(model).__name__, replaced by exact identity.
+Compile: actual x_linear_c entry, Apple CPU O0 identical -j10, exit 0, 15.9 s; receipt expansion_linear_public_lifecycle_compile.json;
+log/source/so under ~/mojolearn-evidence/spectral-svm-linear-20261028/xlinear-compile-1/.
+Not covered/pending: _sk_validate before_fit/reraise wording (_check_X/_check_y NaN text) is not replicated, native messages stand;
+remaining builtin isinstance calls on user values in x_linear_native (class_weight dict, batch_size, random_state, int checks);
+_coef_block Python byte-copy glue still used by _expansion_trees; runtime/identity/GPU never run.
