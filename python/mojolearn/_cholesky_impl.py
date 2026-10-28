@@ -55,8 +55,7 @@ from ._mode import NumericModeMixin
 _MODE_CODE = {"fast": 0, "identical": 1}
 
 # The compiled family owner (bindings/linalg_native.mojo), connected once at
-# import: `fit` is one native call, handed the binding `_door_binding`
-# resolves.
+# import: each public operation selects its binding inside the native owner.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_chol_mode_codes=dict(_MODE_CODE))
 
@@ -133,65 +132,34 @@ class Cholesky(NumericModeMixin):
     """
 
     #: This class's GPU binding: the GP's, which already links `cholesky/`.
+    _mojolearn_native_public = True
     _BINDING = _GPU_BINDING
 
     #: `fit` factors a given matrix; that is inference, so a CPU-only
     #: install runs it publicly (`_cpu_reference.require_training`).
     _CPU_FIT_IS_INFERENCE = True
 
-    def __init__(self, jitter=None):
-        if jitter is not None:
-            if isinstance(jitter, bool) or not isinstance(jitter, (int, float)):
-                raise TypeError(
-                    "mojolearn Cholesky: jitter must be a float, 0.0 or None "
-                    f"(the profile's ridge), got {type(jitter).__name__}"
-                )
-            jitter = float(jitter)
-        self.jitter = jitter
+    def __init__(self, jitter=None, *, numeric_mode=None):
+        return _NATIVE(self, "family_chol_initialize", (jitter, numeric_mode), _NATIVE_CONTEXT)
 
     # -- the binding, and the tier it really is -----------------------------
 
     def _door(self):
-        """(the module that serves the three door names for THIS object, the
-        name of its tier read-back). A CPU-only route answers attributes it
-        lacks with a by-name ImportError, so the read-back is chosen by
-        route, never probed."""
-        return self._door_binding(), ("linalg_numeric_mode" if _backend._CPU_ONLY is not None else "gp_numeric_mode")
+        return _NATIVE(self, "family_chol_door", (), _NATIVE_CONTEXT)
 
     def _door_binding(self):
-        """The module of `_door`: the CPU binding on a CPU-only install,
-        else this object's tier of the GPU binding. (The native fit reads
-        the read-back name from the same CPU-only state.)"""
-        if _backend._CPU_ONLY is not None:
-            return self._bind(_CPU_BINDING)
-        return self._bind()
+        return _NATIVE(self, "family_chol_binding", (), _NATIVE_CONTEXT)
 
     def _extension(self):
-        """The door's binding for THIS object's tier, with the binary's
-        compile-time answer cross-checked against it (the GP's
-        `_extension`, for its reason)."""
-        mod, readback = self._door()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, readback, None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    f"mojolearn Cholesky: numeric_mode={want!r} was requested "
-                    f"but {getattr(mod, '__name__', mod)} reports compile-time mode code {got}; "
-                    "the binary and the directory it sits in disagree, rebuild "
-                    "it with bash bindings/build_gp.sh (a GPU install) or "
-                    "bindings/build_linalg_host.sh (a CPU-only install)"
-                )
-        return mod
+        return _NATIVE(self, "family_chol_binding", (), _NATIVE_CONTEXT)
 
     def vendor_used(self):
         """Accelerator API of the loaded binary, read back from it; "cpu" on a CPU-only install."""
-        return _backend.read_vendor(self._door()[0])
+        return _NATIVE(self, "family_chol_vendor", (), _NATIVE_CONTEXT)
 
     def profile_jitter(self):
         """The profile's fixed ridge, used when ``jitter=None``."""
-        return float(self._extension().cholesky_profile_jitter())
+        return _NATIVE(self, "family_chol_profile_jitter", (), _NATIVE_CONTEXT)
 
     # -- fit ----------------------------------------------------------------
 
@@ -201,19 +169,12 @@ class Cholesky(NumericModeMixin):
         `A` is a square 2-D float32 matrix, otherwise `ValueError`. A failed factorization
         sets ``info_ != 0`` instead of raising.
         """
-        return _NATIVE(self, "family_chol_fit", (self._door_binding(), A), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_chol_fit", (None, A), _NATIVE_CONTEXT)
 
     @property
     def logdet_(self):
         """``log |A + jitter * I|``; raises `ValueError` after a failed fit."""
-        if not hasattr(self, "info_"):
-            raise AttributeError("mojolearn Cholesky: logdet_ is set by fit")
-        if self.info_ != 0:
-            raise ValueError(
-                f"mojolearn Cholesky: the factorization failed (info={self.info_}), "
-                "so there is no determinant to report (DEVIATION 1634)"
-            )
-        return self._logdet
+        return _NATIVE(self, "family_chol_logdet", (), _NATIVE_CONTEXT)
 
     # -- solve --------------------------------------------------------------
 
@@ -234,36 +195,7 @@ class Cholesky(NumericModeMixin):
             Before `fit`, or when `B` has the wrong row count or no columns. Solving
             against a failed factor is also refused.
         """
-        if not hasattr(self, "L_"):
-            raise ValueError("mojolearn Cholesky: call fit before solve")
-        b, _ = as_f32_c(B, ndim=None, name="B")
-        if b.ndim == 1:
-            rows, nrhs, squeeze = b.shape[0], 1, True
-        elif b.ndim == 2:
-            rows, nrhs, squeeze = b.shape[0], b.shape[1], False
-        else:
-            raise ValueError(
-                f"mojolearn Cholesky: B must be 1-D or 2-D, got {b.ndim}-D"
-            )
-        if rows != self.n_:
-            raise ValueError(
-                f"mojolearn Cholesky: B has {rows} rows, the factor is {self.n_} x {self.n_}"
-            )
-        if nrhs < 1:
-            raise ValueError("mojolearn Cholesky: B must have at least one column")
-        flat_l = self.L_.reshape((self.n_ * self.n_,))
-        flat_b = b.reshape((self.n_ * nrhs,))
-        x_out = empty((self.n_ * nrhs,), "<f4")
-        self._extension().cholesky_solve(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::cholesky_solve_binding.
-            # l, b, x_out
-            [addr_ro(flat_l, name="L_"), addr_ro(flat_b, name="B"), addr(x_out, name="X")],
-            # n, nrhs, info, nb, logdet, jitter
-            [self.n_, nrhs, self.info_, self.nb_, self._logdet, self.jitter_],
-        )
-        if squeeze:
-            return x_out
-        return x_out.reshape((self.n_, nrhs))
+        return _NATIVE(self, "family_chol_solve", (None, B), _NATIVE_CONTEXT)
 
     # -- save and load ------------------------------------------------------
 
@@ -311,3 +243,6 @@ __all__ = ["Cholesky"]
 # The class the multi-GPU Cholesky drivers admit (bindings/linalg_native.mojo
 # `family_chol_par_*`).
 _native_family_bridge.tables(family_chol_par_class=Cholesky)
+
+# Import-time connections; the native operation selects the current mode/route.
+_native_family_bridge.connect_bindings(_GPU_BINDING, _CPU_BINDING)

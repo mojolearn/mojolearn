@@ -18,30 +18,66 @@ from bindings.family_common import (
 from bindings.py_balanced import py_contains, py_type
 from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_require_identical
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
+from bindings.native_loaded_module import native_loaded_module
+from bindings.classical_pandas import classical_admit_value
+from bindings.host_inference_scalars import host_inference_scalar
+from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.estimator_lifecycle_pyapi import estimator_fit_begin, estimator_fit_end
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+
+
+def _chol_binding(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var name = "_mojolearn_gp" if context["backend_fields"]["_CPU_ONLY"] is None else "_mojolearn_linalg"
+    return estimator_binding(model, name, context, False)
+
+
+def _chol_admit_state(fields: PythonObject, context: PythonObject) raises:
+    # Exact owner storage is admitted by the shared family frontdoor. Its
+    # scalar fields still require admission before any native conversion slot.
+    for name in ["jitter", "numeric_mode", "n_", "info_", "nb_", "_logdet", "jitter_"]:  # driver-loop: fixed Cholesky metadata fields
+        if py_contains(fields, name):
+            host_inference_scalar(fields[name], context)
+    if py_contains(fields, "L_"):
+        classical_admit_value(fields["L_"], context)
+    if py_contains(fields, "_mojolearn_after_fit"):
+        raise Error("TypeError: Cholesky cannot invoke Python fit callbacks")
+
+
+def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = native_loaded_module("builtins")
+    var jitter = args[0]
+    classical_admit_value(jitter, context)
+    if jitter is not None:
+        if py_type(jitter) is b.bool or not Bool(py=py_call(b.isinstance, jitter, Python.tuple(b.int, b.float))):
+            raise Error("TypeError: mojolearn Cholesky: jitter must be a float, 0.0 or None")
+        jitter = PythonObject(Float64(py=jitter))
+    var mode = args[1]
+    if mode is not None and py_type(mode) is not b.str:
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    var fields = py_fields(model)
+    py_setitem(fields, "jitter", jitter)
+    py_setitem(fields, "numeric_mode", mode)
+    return PythonObject(None)
 
 
 def _chol_extension(model: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`Cholesky._extension`: the binary's own compile-time mode must be the
-    one requested."""
-    var b = Python.import_module("builtins")
+    # The public route is resolved from the connected registry. Legacy internal
+    # callers may still provide the exact module; read its dictionary directly,
+    # never an optional Python module __getattr__ hook.
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
-    if want is None or not Bool(py=py_call(b.bool, want)):
+    var want = py_get(fields, "numeric_mode")
+    if want is None:
         want = context["backend_fields"]["_DEFAULT_MODE"]
-    var readback = PythonObject("gp_numeric_mode")
-    if context["backend_fields"]["_CPU_ONLY"] is not None:
-        readback = PythonObject("linalg_numeric_mode")
-    var getter = py_call(b.getattr, binding, readback, PythonObject(None))
+    if py_type(want) is not b.str:
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    var reader = "gp_numeric_mode" if context["backend_fields"]["_CPU_ONLY"] is None else "linalg_numeric_mode"
+    var getter = neural_descriptor_entry(binding, reader, False)
     if getter is not None:
-        var got = Int(py=family_call(b.int, family_call(getter)))
+        var got = Int(py=family_call(getter))
         var wanted = py_get(context["family_chol_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
-            raise Error("RuntimeError: mojolearn Cholesky: numeric_mode=" + family_repr(want) + " was requested "
-                        + "but " + String(py_call(b.getattr, binding, PythonObject("__name__"), binding))
-                        + " reports compile-time mode code " + String(got)
-                        + "; the binary and the directory it sits in disagree, rebuild "
-                        + "it with bash bindings/build_gp.sh (a GPU install) or "
-                        + "bindings/build_linalg_host.sh (a CPU-only install)")
+            raise Error("RuntimeError: mojolearn Cholesky: requested numeric mode differs from the compiled binding")
     return binding
 
 
@@ -55,14 +91,15 @@ def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var m = Int(py=a.shape[1])
     if n != m:
         raise Error("mojolearn Cholesky: A must be square, got shape " + family_shape_repr(a))
+    var binding = _chol_extension(model, args[0], context)
     var jitter = family_field(fields, "jitter")
     if jitter is None:
-        var profile = family_entry(_chol_extension(model, args[0], context), "cholesky_profile_jitter", context)
+        var profile = neural_descriptor_entry(binding, "cholesky_profile_jitter")
         jitter = family_call(b.float, family_call(profile))
     var l_out = family_array(Python.tuple(n, n), "<f4", context)
     # info, nb, logdet, jitter -- in that order.
     var scalars = family_array(Python.tuple(4), "<f8", context)
-    var factor = family_entry(_chol_extension(model, args[0], context), "cholesky_factor", context)
+    var factor = neural_descriptor_entry(binding, "cholesky_factor")
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::cholesky_factor_binding:
     # a, l_out, scalars_out; n, jitter.
     var info = family_call(factor, Python.list(classical_address(a), classical_address(l_out), classical_address(scalars)),
@@ -113,8 +150,10 @@ def _chol_solve(model: PythonObject, args: PythonObject, context: PythonObject) 
     if nrhs < 1:
         raise Error("ValueError: mojolearn Cholesky: B must have at least one column")
     var l = family_as_f32(family_field(fields, "L_"), 2, "L_", context)
+    if Int(py=l.size) != n * n:
+        raise Error("ValueError: mojolearn Cholesky: L_ size differs from its fitted matrix dimensions")
     var x_out = family_array(Python.tuple(n) if rank == 1 else Python.tuple(n, nrhs), "<f4", context)
-    var solve = family_entry(_chol_extension(model, args[0], context), "cholesky_solve", context)
+    var solve = neural_descriptor_entry(_chol_extension(model, args[0], context), "cholesky_solve")
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::cholesky_solve_binding:
     # l, b, x_out; n, nrhs, info, nb, logdet, jitter.
     _ = family_call(solve, Python.list(classical_address(l), classical_address(b), classical_address(x_out)),
@@ -165,11 +204,47 @@ def _chol_par(model: PythonObject, args: PythonObject, solve: Bool, context: Pyt
     return out
 
 
-def linalg_operation(model: PythonObject, operation: String, args: PythonObject,
+def linalg_operation(model: PythonObject, operation: String, var args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
+    if operation == "family_chol_initialize":
+        return _chol_initialize(model, args, context)
+    var fields = py_fields(model)
+    _chol_admit_state(fields, context)
+    if operation == "family_chol_logdet":
+        if not py_contains(fields, "info_"):
+            raise Error("AttributeError: mojolearn Cholesky: logdet_ is set by fit")
+        var info = Int(py=fields["info_"])
+        if info != 0:
+            raise Error("ValueError: mojolearn Cholesky: the factorization failed (info=" + String(info)
+                        + "), so there is no determinant to report (DEVIATION 1634)")
+        return family_field(fields, "_logdet")
+    if operation == "family_chol_binding" or operation == "family_chol_door" or operation == "family_chol_vendor" or operation == "family_chol_profile_jitter":
+        var binding = _chol_extension(model, _chol_binding(model, context), context)
+        if operation == "family_chol_binding":
+            return binding
+        if operation == "family_chol_door":
+            return Python.tuple(binding, PythonObject("gp_numeric_mode" if context["backend_fields"]["_CPU_ONLY"] is None else "linalg_numeric_mode"))
+        if operation == "family_chol_vendor":
+            var name = "gp_vendor" if context["backend_fields"]["_CPU_ONLY"] is None else "linalg_host_vendor"
+            var getter = neural_descriptor_entry(binding, name, False)
+            return PythonObject(None) if getter is None else family_call(getter)
+        return PythonObject(Float64(py=family_call(neural_descriptor_entry(binding, "cholesky_profile_jitter"))))
+    if len(args) > 0 and args[0] is None:
+        var values = Python.list(_chol_binding(model, context))
+        for i in range(1, len(args)):  # driver-loop: fixed public Cholesky argument slots
+            _ = py_call(values.append, args[i])
+        args = py_call(native_loaded_module("builtins").tuple, values)
     if operation == "family_chol_fit":
-        _chol_fit(model, args, context)
+        var depth = estimator_fit_begin(fields)
+        try:
+            _chol_fit(model, args, context)
+        finally:
+            estimator_fit_end(model, depth)
+        py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
         return model
+    if operation == "family_chol_solve":
+        return _chol_solve(model, args, context)
     if operation == "family_chol_par_fit":
         return _chol_par(model, args, False, context)
     if operation == "family_chol_par_solve":
