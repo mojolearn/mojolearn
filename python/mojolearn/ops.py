@@ -1069,18 +1069,15 @@ class Session:
         natively. A captured reshape should use ``-1`` for an inferred
         dimension when its element count can change.
         """
-        return self._program_execute(self._id, program._id, program._s._id,
-                                           arrays, dynamic_shapes, optimize, False)
+        return _SESSION_CALL(self, "program_run", (program, arrays, dynamic_shapes, optimize))
 
     def load_partitioned(self, path, devices=(0,)):
         """Restore a complete partitioned program onto physical devices."""
-        return self._distributed_binding.ops_partitioned_load(
-            path, devices, _PartitionedProgram, self._distributed_binding)
+        return _SESSION_CALL(self, "load_partitioned", (path, devices))
 
     def load_distributed(self, path, devices=(0,)):
         """Restore a complete distributed program onto the given devices."""
-        return self._distributed_binding.ops_distributed_load(
-            path, devices, _DistributedProgram, self._distributed_binding)
+        return _SESSION_CALL(self, "load_distributed", (path, devices))
 
     def load_control(self, path):
         """Load control components and shared parameters from one checkpoint."""
@@ -1456,10 +1453,8 @@ class Program:
         when restoring a checkpoint. Eligible matrix products split independent
         output columns; stage-owned parameters and moments stay on one device.
         """
-        return self._s._distributed_binding.ops_partitioned_open(
-            self._s._id, self._id, devices,
-            (stages, tensor_shards, microbatches, optimizer, parameters, seed),
-            _PartitionedProgram, self._s._distributed_binding)
+        return _PROGRAM_CALL(self, "partition", (devices,
+            (stages, tensor_shards, microbatches, optimizer, parameters, seed)))
 
     def distribute(self, devices=(0,), *, logical_shards=2, optimizer,
                    parameters=(), seed=0):
@@ -1470,9 +1465,7 @@ class Program:
         ``parameters`` lists trainable handles, or is empty to train every
         floating-point parameter. ``seed`` controls native row permutations.
         """
-        return self._s._distributed_binding.ops_distributed_open(
-            self._s._id, self._id, devices, (logical_shards, optimizer, parameters, seed),
-            _DistributedProgram, self._s._distributed_binding)
+        return _PROGRAM_CALL(self, "distribute", (devices, (logical_shards, optimizer, parameters, seed)))
 
     def save_control(self, path, *, condition, otherwise=None, max_iterations=None,
                      optimizer=None, seed=0):
@@ -1572,3 +1565,7 @@ _SESSION_INITIALIZE = _session_connected.initialize
 _SESSION_CALL = _session_connected.call
 
 _PROGRAM_CALL = _session_connected.binding.ops_program_public_call
+
+from ._distributed_program import _connect_owned_programs
+_connect_owned_programs(_SESSION_CONNECTIONS)
+del _connect_owned_programs

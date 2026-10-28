@@ -1,0 +1,45 @@
+Owned distributed/partitioned Program boundary, 2026-10-28.
+
+Branch: lane/program-distributed-boundary-20261027. Main integration belongs to
+root. Prior Program public batch through 74486c8e65 was already merged by root
+as 5bedbe70a3; this is a separate follow-on.
+
+Changes: DistributedProgram and PartitionedProgram public methods hand off once
+through a retained native provider and registry resource, without selecting
+instance callables. Exact native dictionary storage, classes, finalizers,
+metadata, flags and old field owners are admitted before use or replacement.
+New worker handles acquire native lifetime ownership before result allocation.
+Reinitializing an unchanged resource retains the same owner; replacing one
+admits its native lifetime and weak references before releasing it.
+
+Program.partition/distribute and Session.load_partitioned/load_distributed now
+select creation/loading through the exact source Session registry image.
+Worker construction stays in that image's HostExec/DeviceExec factory. Session.run
+also no longer reads Program attributes or an instance callable in Python.
+Native input preparation captures typed descriptors and retains native sequence
+backing stores plus caller arguments through each complete fit/run. The new
+entries are present in both binding images and the CPU export manifest.
+
+Validation: checks/owned_program_public_dispatch_compile.mojo compiled the actual
+C doors, native provider/factory and all HostExec owned-program handlers on the
+Mac, Mojo 1.0.0 (ed45d567), O0, -j 10, CPU identical, exit 0 in 248.282 seconds.
+All 250 retained source-manifest files matched at completion. Seven source-only
+structural checks passed. No product runtime, identity, installed-wheel, vendor
+or performance execution was run. GPU exports/factory code were edited, but
+this build qualifies only the HostExec instantiations.
+
+The original child draft remains unchanged in
+/Users/andrewhendel/mojolearn-wt/distributed-public-boundary-20261027.
+Its exact copied source bytes are preserved alongside all failed compile
+attempts, final source bytes, compiler/dependency hashes, command/flags, full
+logs and the 21,944,344-byte final binary under:
+~/mojolearn-evidence/program-distributed-boundary-20261027/distributed/
+compile.json records the R2 archive key, hashes and successful complete-byte
+readback. No boxes were rented and no watchers were changed.
+
+Remaining separate scope: model_pool_training.py / offload_training.py and
+bindings/parallel_byte_native.mojo. Their remaining Python super/alias wrappers
+are only part of the work: the shared native implementation still selects
+mutable owner._entries callables and reads owner/buffer protocols. Do not call
+that migration finished after wrapper edits alone. Existing GPU numerical
+engines and the deliberate CPU unsupported-driver refusal must be preserved.
