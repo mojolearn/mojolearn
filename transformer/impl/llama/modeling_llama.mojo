@@ -370,6 +370,13 @@ from transformer.impl.llama.fused_attention import (
     fused_forward_launch,
     fused_forward_launch_estash_ran,
     fused_supported_head_dim,
+    _row_range,
+)
+# idea 10 (lane/attn-fold, 2026-10-28): the v2 key-axis fold, default OFF.
+from transformer.impl.llama.attn_fold_v2 import (
+    ATTN_FOLD_V2,
+    attn_v2_context_cell,
+    attn_v2_denom_row,
 )
 from core.device_scan import DeviceNonfiniteBatch
 # lane afn-attn (2026-10-03): the Apple FAST forward candidates; every name
@@ -3578,6 +3585,77 @@ def attn_context_kernel(
     ctxv.unsafe_store(i, acc)
 
 
+def attn_denom_v2_kernel(
+    denom: MutPointer[Float32, MutAnyOrigin],
+    aexp: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    nh_in: Int32,
+    l_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+):
+    """S17 under `MOJOLEARN_IDN_ATTN_FOLD_V2` (attn_fold_v2.mojo): leaves of
+    128 keys at absolute positions, each v1's serial chain over the row's
+    visible keys, combined by the GEMM contract's carry tree. One thread per
+    `(batch, head, query)` row, as v1; the fused kernels are the fast path
+    and this is their exact fallback. Keys past the row's last visible key
+    are not part of the fold; keys before a window's first are exactly
+    `+0.0` and inert in a `+0.0`-seeded leaf chain."""
+    var b = Int(b_in)
+    var nh = Int(nh_in)
+    var l = Int(l_in)
+    var s = Int(s_in)
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if r >= b * nh * l:
+        return
+    var rr = _row_range(r % l, Int(pos0_in), Int(key_lo_in), Int(window_in), s)
+    denom.unsafe_store(r, attn_v2_denom_row(aexp, r * s, rr[0], rr[1]))
+
+
+def attn_context_v2_kernel(
+    ctxv: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+):
+    """S19 under `MOJOLEARN_IDN_ATTN_FOLD_V2`: `attn_context_kernel`'s cell
+    and seam (`ftz(fma(ftz(w), ftz(v), acc))`), folded as 128-key leaves at
+    absolute positions plus the carry tree (attn_fold_v2.mojo). One thread
+    per output cell of `[M, n_heads*head_dim]`; `kvh = h // n_rep`."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var s = Int(s_in)
+    var n_rep = nh // nkv
+    var width = nh * hd
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * l * width:
+        return
+    var tok = i // width
+    var rem = i - tok * width
+    var h = rem // hd
+    var d = rem - h * hd
+    var bb = tok // l
+    var t = tok - bb * l
+    var kvh = h // n_rep
+    var wbase = ((bb * nh + h) * l + t) * s
+    var vbase = (bb * nkv + kvh) * s * hd
+    var rr = _row_range(t, Int(pos0_in), Int(key_lo_in), Int(window_in), s)
+    ctxv.unsafe_store(i, attn_v2_context_cell(weights, wbase, v_cache, vbase, hd, d, rr[0], rr[1]))
+
+
 # ===========================================================================
 # `LlamaMLP.forward` (:174-176). Seams S20 and S21.
 #
@@ -4581,18 +4659,35 @@ def attention_eager_core(
     )
 
     # ---- S17 (:208's denominator). SERIAL ASCENDING, ABSOLUTE index.
-    step_count_launch()
-    ctx.enqueue_function[attn_denom_kernel](
-        stages.denom.unsafe_ptr(),
-        stages.aexp.unsafe_ptr(),
-        stages.weights.unsafe_ptr(),  # DEVIATION 1023, sabotage scratch
-        Int32(b),
-        Int32(nh),
-        Int32(l),
-        Int32(s),
-        grid_dim=(_grid(b * nh * l), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
+    #      Under MOJOLEARN_IDN_ATTN_FOLD_V2: 128-key leaves + carry tree.
+    comptime if ATTN_FOLD_V2:
+        step_count_launch()
+        ctx.enqueue_function[attn_denom_v2_kernel](
+            stages.denom.unsafe_ptr(),
+            stages.aexp.unsafe_ptr(),
+            Int32(b),
+            Int32(nh),
+            Int32(l),
+            Int32(s),
+            Int32(pos0),
+            Int32(key_lo),
+            Int32(window),
+            grid_dim=(_grid(b * nh * l), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        step_count_launch()
+        ctx.enqueue_function[attn_denom_kernel](
+            stages.denom.unsafe_ptr(),
+            stages.aexp.unsafe_ptr(),
+            stages.weights.unsafe_ptr(),  # DEVIATION 1023, sabotage scratch
+            Int32(b),
+            Int32(nh),
+            Int32(l),
+            Int32(s),
+            grid_dim=(_grid(b * nh * l), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -4682,6 +4777,27 @@ def attention_eager_core(
                 )
                 step_count_sync()
                 ctx.synchronize()
+    elif ATTN_FOLD_V2:
+        step_count_launch()
+        ctx.enqueue_function[attn_context_v2_kernel](
+            stages.ctxv.unsafe_ptr(),
+            stages.weights.unsafe_ptr(),
+            stages.v_cache.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nh),
+            Int32(nkv),
+            Int32(hd),
+            Int32(s),
+            Int32(pos0),
+            Int32(key_lo),
+            Int32(window),
+            grid_dim=(_grid(b * l * nh * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        if fence:
+            step_count_sync()
+            ctx.synchronize()
     else:
         step_count_launch()
         ctx.enqueue_function[attn_context_kernel](

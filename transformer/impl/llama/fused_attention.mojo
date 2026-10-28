@@ -154,6 +154,14 @@ from gemm.checks.gemm_identical import (
     _amma_load_t,
     _amma_mma,
 )
+# idea 10 (lane/attn-fold, 2026-10-28): the v2 key-axis fold, default OFF.
+from transformer.impl.llama.attn_fold_v2 import (
+    ATTN_FOLD_V2,
+    ATTN_V2_LEAF,
+    AttnFoldV2Tree,
+    attn_v2_leaf_count,
+    attn_v2_leaf_visible,
+)
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -8187,6 +8195,11 @@ def fused_forward_launch_ran(
     ran = ATTN_ARM_BASELINE
     if not fused_forward_supported_head_dim(hd):
         return FUSED_REFUSED_REGIME
+    comptime if ATTN_FOLD_V2:
+        # v2 (attn_fold_v2.mojo): the leaf-parallel kernels exist at hd64 and
+        # hd128; any other head dim takes the eager v2 kernels (same bits).
+        if hd != 64 and hd != 128:
+            return FUSED_REFUSED_REGIME
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
     var speculative = _attn_speculative()
@@ -8211,7 +8224,21 @@ def fused_forward_launch_ran(
     var blocks = b * nh * ((l + tq - 1) // tq)
     var nt = hd * tq
     var ran_arm = False
-    comptime if ATTN_ARM_COMPILED:
+    comptime if ATTN_FOLD_V2:
+        # Every arm word resolves to the v2 kernels (no v1 arm computes the
+        # v2 fold); `ran` stays ATTN_ARM_BASELINE.
+        if hd == 64:
+            _launch_fwd_v2[64](
+                ctx, ton, tk, ctxv, amax, denom, q_rope, k_cache, v_cache,
+                b, l, nh, nkv, s, pos0, key_lo, window, scale,
+            )
+        else:
+            _launch_fwd_v2[128](
+                ctx, ton, tk, ctxv, amax, denom, q_rope, k_cache, v_cache,
+                b, l, nh, nkv, s, pos0, key_lo, window, scale,
+            )
+        ran_arm = True
+    comptime if ATTN_ARM_COMPILED and not ATTN_FOLD_V2:
         var sabotage = (arm & ATTN_ARM_SABOTAGE) != 0
         var want_sstash = (arm & ATTN_ARM_FWD_SSTASH) != 0 and hd == ATTN_STASH_HD
         comptime if ATTN_ARM_TRIAL:
@@ -10940,7 +10967,9 @@ def fused_forward_launch_estash_ran(
     a valid kept stash from a stale or absent one. The regime scan, the
     corner flag and `ran` are the plain launcher's."""
     kept_cells = 0
-    comptime if ATTN_V1_RECOMPUTE_BACKWARD:
+    comptime if ATTN_V1_RECOMPUTE_BACKWARD or ATTN_FOLD_V2:
+        # Under v2 nothing is kept (kept_cells 0): the backward takes the
+        # shipped launcher, which recomputes the exponents from amax/denom.
         return fused_forward_launch_ran(
             ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv,
             hd, s, pos0, key_lo, window, scale, arm, ran,
@@ -11368,3 +11397,329 @@ def fused_backward_launch_erecomp_report(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
     )
+
+
+# ===========================================================================
+# IDEA 10 (lane/attn-fold, 2026-10-28): THE V2 KEY-AXIS FOLD, FUSED.
+# `-D MOJOLEARN_IDN_ATTN_FOLD_V2=1`, default OFF. The fold is defined once in
+# attn_fold_v2.mojo (128-key leaves at absolute positions, v1's chain inside
+# a leaf, the GEMM contract's carry tree across leaves) and computed the same
+# way by the eager kernels (modeling_llama.mojo `attn_denom_v2_kernel`,
+# `attn_context_v2_kernel`), the host oracle and the byte-LM host kernels.
+#
+# THE SCHEDULE. A block owns TQ query rows of one (batch, head) and ONE leaf
+# of 128 keys; the grid is (row tiles) x (leaves), so a 2048-key row is
+# worked by 16 blocks at once instead of one block walking 2048 keys. Blocks
+# whose leaf holds no key of the tile's visible union return before any
+# barrier (block-uniform). Three passes, each its own launch (the row max,
+# then the denominator, are cross-leaf facts the next pass needs):
+#   pass 0  scores, the leaf's row maximum            -> scratch m[row, leaf]
+#   pass 1  m = fmax over the row's leaves (contract 5.1: order free);
+#           exponents, the leaf's S17 chain           -> scratch d[row, leaf]
+#   pass 2  denominator = carry tree over d[row, 0 .. P-1] (+0.0 for a leaf
+#           with no visible key); weights; the leaf's S19 chain per column
+#                                                     -> scratch c[row, leaf, col]
+#   combine one thread per output cell: carry tree over c[row, 0 .. P-1, col]
+# The score, mask, exponent, division and per-term seams are
+# `fused_attn_forward_regblocked_kernel`'s lines; only the key axis is cut.
+# There is no corner flag: v2 has no masked tail (attn_fold_v2.mojo).
+# Head dims 64 and 128 (the register-blocked forward's); 16 and 24 take the
+# eager v2 kernels, which are the same bits.
+# Shared page: hd64 (TQ 32) 2048 + 4128 + 64 floats = 24,960 B; hd128
+# (TQ 16) 4096 + 2064 + 32 = 24,768 B; under every column's 32 KB.
+# ===========================================================================
+
+
+@always_inline
+def _attn_v2_rows(hd: Int) -> Int:
+    """Query rows per v2 block: 32 at hd64, 16 at hd128 (the register tile
+    of 256 threads holds RPT * HD / 16 context chains per thread: 8 either
+    way)."""
+    return 16 if hd == 128 else 32
+
+
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(FUSED_THREADS)))
+def fused_attn_v2_leaf_kernel[HD: Int, PHASE: Int](
+    scr: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, nkv_in: Int32,
+    s_in: Int32, pos0_in: Int32, key_lo_in: Int32, window_in: Int32,
+    scale_in: Float32, pmax_in: Int32,
+):
+    """One pass of the v2 fused forward (see the section comment). `scr`
+    holds `m [R * pmax]`, then `d [R * pmax]`, then `c [R * pmax * HD]`,
+    `R = B * n_heads * L`, row `rg = (b * n_heads + h) * L + t`. 256 threads
+    per block; grid `B * n_heads * ceil(L / TQ) * pmax`."""
+    comptime assert HD == 64 or HD == 128, "attention fold v2: hd64 and hd128 only"
+    comptime TQ = 16 if HD == 128 else 32
+    comptime RPT = TQ // 16
+    comptime CPT = HD // 16
+    comptime BK = 32
+    comptime NKB = ATTN_V2_LEAF // BK
+    comptime KS = 16
+    comptime STRIDE = KS + 4
+    comptime SPG_A = (TQ + BK) * STRIDE
+    comptime SPG = SPG_A if SPG_A >= BK * HD else BK * HD
+    comptime TSTR = ATTN_V2_LEAF + 1
+    var stg = stack_allocation[SPG, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tile = stack_allocation[TQ * TSTR, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var stats = stack_allocation[2 * TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var tr = tid // 16
+    var tc = tid % 16
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var pmax = Int(pmax_in)
+    var nrows = b * nh * l
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var leaf = raw % pmax
+    var rest = raw // pmax
+    var t0 = (rest % ntb) * TQ
+    var h = (rest // ntb) % nh
+    var bb = rest // ntb // nh
+    var t1 = min(t0 + TQ - 1, l - 1)
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var k0 = leaf * ATTN_V2_LEAF
+    # Block-uniform, before every barrier: the leaf holds no key any row of
+    # this tile sees (row ranges are monotone in t, so the union is
+    # [r0.lo, r1.hi]).
+    if k0 > r1[1] or k0 + ATTN_V2_LEAF - 1 < r0[0]:
+        return
+    var kvbase = (bb * nkv + h // (nh // nkv)) * s * HD
+    var rbase = (bb * nh + h) * l
+    var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
+    var rlo = SIMD[DType.int32, RPT](0)
+    var rhi = SIMD[DType.int32, RPT](-1)
+    comptime for u in range(RPT):
+        var t = t0 + tr + u * 16
+        if t < l:
+            var rr = _row_range(t, pos0, key_lo, window, s)
+            rlo[u] = Int32(rr[0])
+            rhi[u] = Int32(rr[1])
+    comptime if PHASE >= 1:
+        # The row's maximum over its leaves (contract 5.1: any order), and
+        # in pass 2 its denominator, the carry tree over the leaf partials.
+        if tid < TQ:
+            var t = t0 + tid
+            if t < l:
+                var rr = _row_range(t, pos0, key_lo, window, s)
+                var rg = rbase + t
+                var np = attn_v2_leaf_count(rr[1])
+                var m = negmax
+                for i in range(np):
+                    if attn_v2_leaf_visible(i, rr[0], rr[1]):
+                        m = identical_fmax(m, scr.unsafe_load(rg * pmax + i))
+                stats.unsafe_store(tid, m)
+                comptime if PHASE == 2:
+                    var tree = AttnFoldV2Tree()
+                    for i in range(np):
+                        var x = Float32(0.0)
+                        if attn_v2_leaf_visible(i, rr[0], rr[1]):
+                            x = scr.unsafe_load(nrows * pmax + rg * pmax + i)
+                        tree.push(x)
+                    var dn = tree.result()
+                    stats.unsafe_store(TQ + tid, dn)
+                    if leaf == rr[1] // ATTN_V2_LEAF:
+                        amax.unsafe_store(rg, m)
+                        denom.unsafe_store(rg, dn)
+        barrier()
+    var mpart = SIMD[DType.float32, RPT](negmax)
+    for kb in range(NKB):
+        var kbase = k0 + kb * BK
+        if kbase > r1[1] or kbase + BK - 1 < r0[0]:
+            continue  # block-uniform
+        var dots = SIMD[DType.float32, RPT * 2](0.0)
+        comptime for pw in range(HD // KS):
+            comptime for si in range((TQ + BK) * KS // 256):
+                var i = tid + si * 256
+                var r = i // KS
+                var p = i % KS
+                var x = Float32(0.0)
+                if r < TQ:
+                    var t = t0 + r
+                    if t < l:
+                        x = ftz(q_rope.unsafe_load((bb * l + t) * nh * HD + h * HD + pw * KS + p))
+                else:
+                    var j = kbase + r - TQ
+                    if j < s:
+                        x = ftz(k_cache.unsafe_load(kvbase + j * HD + pw * KS + p))
+                stg.unsafe_store(r * STRIDE + p, x)
+            barrier()
+            comptime for p in range(KS):
+                var qa = SIMD[DType.float32, RPT](0.0)
+                var ka = SIMD[DType.float32, 2](0.0)
+                comptime for u in range(RPT):
+                    qa[u] = stg.unsafe_load((tr + u * 16) * STRIDE + p)
+                comptime for v in range(2):
+                    ka[v] = stg.unsafe_load((TQ + tc + v * 16) * STRIDE + p)
+                comptime for u in range(RPT):
+                    comptime for v in range(2):
+                        dots[u * 2 + v] = _step_preflushed(qa[u], ka[v], dots[u * 2 + v])
+            barrier()
+        comptime for u in range(RPT):
+            var r = tr + u * 16
+            comptime for v in range(2):
+                var jj = tc + v * 16
+                var j = kbase + jj
+                if Int32(j) >= rlo[u] and Int32(j) <= rhi[u]:
+                    var masked = ftz(_pmul(dots[u * 2 + v], scale_in) + Float32(0.0))
+                    comptime if PHASE == 0:
+                        mpart[u] = identical_fmax(mpart[u], masked)
+                    else:
+                        var e = ftz(identical_exp(ftz(ftz(masked) - ftz(stats.unsafe_load(r)))))
+                        comptime if PHASE == 2:
+                            e = ftz(identical_div(ftz(e), ftz(stats.unsafe_load(TQ + r))))
+                        tile.unsafe_store(r * TSTR + kb * BK + jj, e)
+    comptime if PHASE == 0:
+        comptime for u in range(RPT):
+            tile.unsafe_store((tr + u * 16) * 16 + tc, mpart[u])
+        barrier()
+        if tid < TQ and t0 + tid < l:
+            var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+            if attn_v2_leaf_visible(leaf, rr[0], rr[1]):
+                var m = negmax
+                comptime for c in range(16):
+                    m = identical_fmax(m, tile.unsafe_load(tid * 16 + c))
+                scr.unsafe_store((rbase + t0 + tid) * pmax + leaf, m)
+    elif PHASE == 1:
+        barrier()
+        if tid < TQ and t0 + tid < l:
+            var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+            if attn_v2_leaf_visible(leaf, rr[0], rr[1]):
+                # S17 inside the leaf: v1's chain, ascending, from +0.0.
+                var dacc = Float32(0.0)
+                for jj in range(ATTN_V2_LEAF):
+                    var j = k0 + jj
+                    if j >= rr[0] and j <= rr[1]:
+                        dacc = ftz(ftz(dacc) + ftz(tile.unsafe_load(tid * TSTR + jj)))
+                scr.unsafe_store(nrows * pmax + (rbase + t0 + tid) * pmax + leaf, ftz(dacc))
+    else:
+        barrier()
+        # S19 inside the leaf: each (row, column) chain over the leaf's
+        # visible keys ascending from +0.0, `_step` (v1's seam).
+        var cacc = SIMD[DType.float32, RPT * CPT](0.0)
+        for kb in range(NKB):
+            var kbase = k0 + kb * BK
+            if kbase > r1[1] or kbase + BK - 1 < r0[0]:
+                continue  # block-uniform
+            comptime for si in range(BK * HD // 256):
+                var i = tid + si * 256
+                var j = kbase + i // HD
+                var x = Float32(0.0)
+                if j < s:
+                    x = ftz(v_cache.unsafe_load(kvbase + j * HD + i % HD))
+                stg.unsafe_store(i, x)
+            barrier()
+            comptime for jj in range(BK):
+                var j = kbase + jj
+                var va = SIMD[DType.float32, CPT](0.0)
+                comptime for v in range(CPT):
+                    va[v] = stg.unsafe_load(jj * HD + tc + v * 16)
+                comptime for u in range(RPT):
+                    var r = tr + u * 16
+                    if Int32(j) >= rlo[u] and Int32(j) <= rhi[u]:
+                        var w = tile.unsafe_load(r * TSTR + kb * BK + jj)
+                        comptime for v in range(CPT):
+                            cacc[u * CPT + v] = _step(w, va[v], cacc[u * CPT + v])
+            barrier()
+        comptime for u in range(RPT):
+            var t = t0 + tr + u * 16
+            if t < l and attn_v2_leaf_visible(leaf, Int(rlo[u]), Int(rhi[u])):
+                var cb = 2 * nrows * pmax + ((rbase + t) * pmax + leaf) * HD
+                comptime for v in range(CPT):
+                    scr.unsafe_store(cb + tc + v * 16, cacc[u * CPT + v])
+
+
+def fused_attn_v2_combine_kernel(
+    ctxv: MutPointer[Float32, MutAnyOrigin],
+    scr: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, hd_in: Int32,
+    s_in: Int32, pos0_in: Int32, key_lo_in: Int32, window_in: Int32,
+    pmax_in: Int32,
+):
+    """The v2 context: one thread per output cell of `[M, n_heads*head_dim]`,
+    the carry tree over the cell's leaf partials (`+0.0` for a leaf with no
+    visible key)."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var hd = Int(hd_in)
+    var s = Int(s_in)
+    var pmax = Int(pmax_in)
+    var width = nh * hd
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * l * width:
+        return
+    var tok = i // width
+    var rem = i - tok * width
+    var h = rem // hd
+    var d = rem - h * hd
+    var bb = tok // l
+    var t = tok - bb * l
+    var rg = (bb * nh + h) * l + t
+    var rr = _row_range(t, Int(pos0_in), Int(key_lo_in), Int(window_in), s)
+    var cb = 2 * b * nh * l * pmax + rg * pmax * hd + d
+    var tree = AttnFoldV2Tree()
+    for leaf in range(attn_v2_leaf_count(rr[1])):
+        var x = Float32(0.0)
+        if attn_v2_leaf_visible(leaf, rr[0], rr[1]):
+            x = scr.unsafe_load(cb + leaf * hd)
+        tree.push(x)
+    ctxv.unsafe_store(i, tree.result())
+
+
+def _launch_fwd_v2[HD: Int](
+    ctx: DeviceContext,
+    on: Bool,
+    mut tk: Int,
+    mut ctxv: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
+    window: Int, scale: Float32,
+) raises:
+    """The v2 fused forward: three leaf passes and the combine, on the
+    forward scratch slot (`R * pmax * (2 + HD)` floats)."""
+    comptime TQ = 16 if HD == 128 else 32
+    var pmax = (s + ATTN_V2_LEAF - 1) // ATTN_V2_LEAF
+    var scr = _attn_scratch(ctx, 0, b * nh * l * pmax * (2 + HD))
+    var blocks = b * nh * ((l + TQ - 1) // TQ) * pmax
+    comptime for ph in range(3):
+        comptime kf = fused_attn_v2_leaf_kernel[HD, ph]
+        step_count_launch()
+        ctx.enqueue_function[kf](
+            scr.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            q_rope.unsafe_ptr(), k_cache.unsafe_ptr(), v_cache.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0),
+            Int32(key_lo), Int32(window), scale, Int32(pmax),
+            grid_dim=(blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        )
+    var cells = b * l * nh * HD
+    step_count_launch()
+    ctx.enqueue_function[fused_attn_v2_combine_kernel](
+        ctxv.unsafe_ptr(), scr.unsafe_ptr(), Int32(b), Int32(l), Int32(nh),
+        Int32(HD), Int32(s), Int32(pos0), Int32(key_lo), Int32(window),
+        Int32(pmax),
+        grid_dim=((cells + FUSED_THREADS - 1) // FUSED_THREADS, 1, 1),
+        block_dim=(FUSED_THREADS, 1, 1),
+    )
+    # The scratch must outlive the enqueued kernels (`_launch_fwd_r2`'s rule).
+    step_count_sync()
+    ctx.synchronize()
+    _attn_tick(ctx, on, tk, "fwd_v2_kernels")
+    _ = scr^
