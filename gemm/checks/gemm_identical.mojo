@@ -4014,11 +4014,11 @@ def identical_gemm_mfma_kpack_kernel[
         var bare = False
         comptime if ADMIT:
             var sr = _urem[2](w) * (2 * NW)
-            var ma = adm_s[sr]
-            var mb = adm_s[sr + NW]
+            var ma = adm_s[unsafe_offset=sr]
+            var mb = adm_s[unsafe_offset=sr + NW]
             comptime for wi in range(1, NW):
-                ma = min(ma, adm_s[sr + wi])
-                mb = min(mb, adm_s[sr + NW + wi])
+                ma = min(ma, adm_s[unsafe_offset=sr + wi])
+                mb = min(mb, adm_s[unsafe_offset=sr + NW + wi])
             if ma + mb < UInt32(_ADMIT_EXP_SUM):
                 adm_leaf = False
             bare = adm_leaf
