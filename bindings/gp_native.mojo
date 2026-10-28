@@ -9,10 +9,16 @@ from bindings.native_loaded_module import native_loaded_module
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding_mode
 from bindings.gp_regressor_native import gp_regressor_operation
 from bindings.gp_classifier_native import gp_classifier_operation
+from bindings.gp_kernel_public_native import gp_kernel_operation
+from providers.python.gp_public_lifecycle_pyapi import gp_public_operation
 
 
 def gp_operation(model: PythonObject, operation: String, var args: PythonObject,
          context: PythonObject) raises -> PythonObject:
+    if operation.startswith("family_gp_kernel_"):
+        return gp_kernel_operation(model, operation, args, context)
+    if (operation.startswith("family_gp_gpr_") or operation.startswith("family_gp_gpc_")) and operation != "family_gp_gpc_lml" and len(args) > 0 and args[0] is None:
+        return gp_public_operation(model, operation, args, context)
     # Thin public wrappers reserve None for native binding admission. Internal
     # host/archive/parallel owners retain their explicitly admitted modules.
     if operation != "family_gp_gpc_lml":
