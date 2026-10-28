@@ -1,0 +1,61 @@
+{
+ "scope": "hotfix batch: LinBufferPin registration, per-neural-lane grid calls, family layouts connect_module, compile_slot slots; compile + import smoke + CPU runtime check",
+ "runs": {
+  "first": {
+   "pod": "vefpymixxwsth0",
+   "summary": [
+    "smoke_after rc=1",
+    "probe_tier_dir rc=1",
+    "runtime_check rc=1",
+    "INTEG_BUILD total=48 ok=47"
+   ],
+   "resources": [
+    "cores_affinity=32",
+    "cgroup_cpu_max=",
+    "parallel=4",
+    "jobs=8",
+    "mojo_version=Mojo 1.0.0 (ed45d567)",
+    "gen_unicode_rc=0"
+   ],
+   "failed": [
+    "host\truntime_classical\trc=1\t85s"
+   ],
+   "logs": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-hotfix3/remote/leg_out"
+  },
+  "final": {
+   "pod": "wz15xs7krsoh14",
+   "summary": [
+    "smoke_after rc=0",
+    "probe_tier_dir rc=0",
+    "runtime_check rc=0",
+    "INTEG_BUILD total=48 ok=45"
+   ],
+   "resources": [
+    "cores_affinity=32",
+    "cgroup_cpu_max=max 100000",
+    "parallel=4",
+    "jobs=8",
+    "mojo_version=Mojo 1.0.0 (ed45d567)",
+    "gen_unicode_rc=0"
+   ],
+   "failed": [
+    "host\tivf\trc=1\t17s",
+    "host\truntime_sequential\trc=1\t83s",
+    "host\ttraining\trc=1\t34s"
+   ],
+   "logs": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-hotfix3b/remote/leg_out"
+  }
+ },
+ "final_checks": {
+  "import_smoke": "rc=0 missing_bindings 0",
+  "tier_dir": "rc=0",
+  "runtime_check": "matmul Array (4,2) correct; Ridge fit/predict (50,); KMeans fit/predict labels [0,1,2]; RUNTIME-OK"
+ },
+ "notes": [
+  "first run: classical host failed LinBufferPin[_] not concrete -> fixed (LinBufferPin[])",
+  "final run: ivf, runtime_sequential, training host steps report bincache bypass-destination-exists (binary already present from cache restore); their closures do not include the changed files; all 46 host .so present",
+  "linalg device entry sm_89 O0 and gfx942 default: rc=0",
+  "pod parallel 4 x jobs 8 = 32 affinity cores"
+ ],
+ "gates": "test_no_python_runtime OK (196), test_tombstones_preserved OK; tool tests: race_data_sha 5, grid groups 2 + 38 related"
+}
