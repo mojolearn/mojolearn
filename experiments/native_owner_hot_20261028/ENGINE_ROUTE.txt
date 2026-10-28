@@ -1,0 +1,35 @@
+Native generation route, 2026-10-28
+
+Purpose: move repeated token/layer control flow, mutable counters and argument
+vectors into the existing Mojo NativeGenerationModel/native_generation_read.
+This is an architecture migration, not a measured performance promotion.
+
+Native descriptor admission is now the default for identical CausalLM/block
+bindings. MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 keeps the explicit compatibility
+route. NativeGenerationModel endpoints retain native table/lease fields; the
+inner layer/token loops do not read Python dictionaries, allocate Python
+arrays, scan model identities or dispatch Python callable objects. GIL release
+and native lock/session leases remain at the native execution boundary.
+
+MOJOLEARN_GENERATION_NATIVE_ENGINE defaults to auto. Public forward and each
+stream read select once before execution. Auto selects local nonresident fp32
+Transformer, Mamba1 profile 1 and Mamba2 when both primitive and model native
+descriptors are connected. Selection does not catch exceptions from admission
+or execution and never retries failed native work through the object route.
+Explicit 1 preserves the existing forced-route/refusal behavior; explicit 0
+preserves the compatibility route.
+
+Remaining scopes: distributed execution, packed/int15, legacy transformer setup,
+Mamba1 profile 2, and resident routes are preserved through their existing
+supported execution paths. Their Python-object orchestration is not declared
+migrated by this commit. Existing resident whole-generation kernels remain
+available. Boundary model/state capture, output construction and native image
+owner references are still partly Python-backed. No whole-library Python-free
+claim is made.
+
+Validation: public forward + generate CPU source closure compiled successfully
+with optimization-level 0, MOJOLEARN_NUMERIC_IDENTICAL=1, MOJOLEARN_COLUMN_CPU.
+The source uses existing numerical operations/order; no runtime/identity proof
+or speedup measurement was performed. GPU execution remains unqualified here.
+Retained evidence: ~/mojolearn-evidence/native-owner-hot-20261028/engine.log,
+engine.rc and compile_engine. compile_engine.mojo is retained beside this file.

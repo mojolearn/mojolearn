@@ -294,10 +294,11 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         py_setitem(entries, "decode", _native_function(mods, block_binding, "mamba2_decode_step"))
     else:
         raise Error("CausalLM: unsupported model kind " + kind)
-    # Private candidate: resolve its native table once at admission. Keep
-    # the qualified default until whole-workload NVIDIA/AMD A/B and required
-    # public runtime/identity checks are complete. No Apple fast campaign.
-    if requested_gpu and kind == "transformer" and mode == NUMERIC_IDENTICAL and (String(getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")) == "1" or String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1"):
+    # Native ownership migration: resolve descriptor tables at admission by
+    # default, so supported local operations enter the native execution engine.
+    # Explicit MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 retains the compatibility route.
+    # This is an orchestration change, not a measured speedup/default tuning claim.
+    if requested_gpu and kind == "transformer" and mode == NUMERIC_IDENTICAL and (String(getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")) == "1" or String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1")) == "1"):
         if not py_contains(entries, "forward_session"):
             raise Error("CausalLM: native session candidate requires transformer_session_forward")
         var owner_fields = neural_block_fields(mods, model._blocks[0], _causal_context_for(mods, model))
@@ -307,7 +308,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         mods.released()
         py_setitem(owner_fields, "_native_session_provider_cache", provider)
         py_setitem(entries, "native_session_provider", provider)
-    if mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
+    if mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1")) == "1":
         var owner_fields = neural_block_fields(mods, model._blocks[0], _causal_context_for(mods, model))
         var primitive_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_primitives_provider_cache"),
             _native_function(mods, primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
@@ -672,7 +673,7 @@ def _transformer_params(blk: PythonObject, st: PythonObject, b: Int, l: Int) rai
 def causal_transformer_admin(mut mods: NativeModules, binding: PythonObject, session: PythonObject, operation: Int) raises:
     # Boundary-only lifetime admission against the session's original image.
     # Administration intentionally holds the GIL, matching the raw public API.
-    if String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
+    if String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1")) == "1":
         var provider = neural_descriptor_reuse(PythonObject(None),
             _native_function(mods, binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
         mods.released()
@@ -1153,10 +1154,36 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
     return out
 
 
+def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
+    # Select once at a public operation boundary, never in the token/layer
+    # loop. No failed native admission/execution is caught and retried through
+    # the object route: a selected engine keeps its original refusal semantics.
+    var setting = String(getenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "auto"))
+    if setting == "1":
+        return True
+    if setting != "auto":
+        return False
+    var entries = model._native_entries
+    if py_get(entries, "parallel_call") is not None or model._head_int15 is not None:
+        return False
+    if String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) == "1":
+        return False
+    var kind = String(model.kind)
+    if kind != "transformer" and kind != "mamba1" and kind != "mamba2":
+        return False
+    if py_get(entries, "native_primitives") is None or py_get(entries, "native_block_operations" if kind == "transformer" else "native_mamba") is None:
+        return False
+    if kind == "mamba1" and Int(py=entries["mamba1_profile"]) != 1:
+        return False
+    # Existing resident execution already owns a separate supported native
+    # program. Its route, distributed execution and packed arithmetic remain
+    # supported; they are explicit remaining migration scopes, not refusals.
+    return not _resident_forward_ok(mods, model, state)
+
+
 def _engine_admission(mut mods: NativeModules, model: PythonObject, state: PythonObject, batch: Int, length: Int) raises -> GenerationEngineAdmission:
-    # Explicit experimental route: unsupported branches refuse clearly rather
-    # than silently executing mixed orchestration in a qualifying measurement.
-    # The default public routes remain available with this experiment off.
+    # Once selected, admission failures propagate. The boundary selector
+    # handles unsupported routes before execution, without exception fallback.
     _state(mods, model, state, batch, length)
     try:
         var entries = model._native_entries
@@ -1209,7 +1236,7 @@ def _run_engine(mut mods: NativeModules, model: PythonObject, ids: PythonObject,
 
 
 def _run(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
-    if getenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0") == "1":
+    if _use_native_generation_engine(mods, model, state):
         return _run_engine(mods, model, ids, state)
     var snapshot: Optional[GenerationOperationSnapshot] = None
     return _run_prepared(mods, model, ids, state, snapshot, remote_step)
@@ -1691,7 +1718,7 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
     var wrote = 0
     s.busy = True
     try:
-        if capacity > 0 and not s.done() and getenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0") == "1":
+        if capacity > 0 and not s.done() and _use_native_generation_engine(mods, s.model, s.state):
             var result = _read_engine(mods, s, capacity)
             s.busy = False
             return result

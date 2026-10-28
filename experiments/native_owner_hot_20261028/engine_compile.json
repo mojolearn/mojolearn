@@ -1,0 +1,14 @@
+{
+  "compile_exit": 0,
+  "runtime_executed": false,
+  "scope": "public CausalLM forward and generate CPU source closure; native default route preflight",
+  "source_sha256": {
+    "bindings/causal_lm_public.mojo": "00b4073b8cd7704dd234ae0a4a2b447ed5053eeb64b42c58a3015cc7c91233ec",
+    "transformer/native_generation_engine.mojo": "08d6f5b9a38a6c5916d71f9fd5e06b9b67a13a623525a5235489e8e640ffa6a9",
+    "providers/python/generation_metadata_pyapi.mojo": "32fc88f151900b0fe93ff77cbd84f6527d7576563913ed0ca845e592cab9615a",
+    "providers/python/native_execution_pyapi.mojo": "b25ecfee40c7e19d708c5069f786960083fe5529d9ca03d5cd6a661631ac9e0f"
+  },
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/native_owner_hot_20261028/compile_engine.mojo -o <evidence>/compile_engine",
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/engine.log",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/compile_engine"
+}
