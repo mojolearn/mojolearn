@@ -160,6 +160,7 @@ def _state_context():
     context = _numpy_free_context()
     context["archive_npy_dtypes"] = _archive_npy_dtypes()
     context.update(not_fitted_class=NotFittedError, not_fitted_doc=NotFittedError.__doc__,
+                   not_fitted_function_type=type(_reduce_not_fitted),
                    native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
                    active_not_fitted_class=NotFittedError)
