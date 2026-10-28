@@ -1,5 +1,7 @@
 # Apple FAST experiments: every A/B, kept and dropped
 
+> **PERMANENT RECORD (Andrew, 2026-10-28): `docs/TOMBSTONES.md` entries, their patches under experiments/removed/ and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED to `docs/TOMBSTONES.md`. The DROPPED / DELETED rows of this file are part of that record and are kept the same way.**
+
 The record of every Apple FAST (M3 Ultra) experiment from Oct 2 to Oct 3, 2026: the winners that became defaults, the losers, and the A/Bs still owed.
 Sources: `~/mojolearn-evidence/apple-fast/LEDGER.md` (every KEEP / DROP / MERGED / CANDIDATE line) and the queue lines (`docs/apple-fast/ab/*.txt`) and notes (`docs/apple-fast/notes/*.md`) on each lane branch.
 

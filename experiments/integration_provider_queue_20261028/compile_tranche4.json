@@ -1,0 +1,119 @@
+{
+ "scope": "tranche 4 (a46aa9f011 native public marks + audit gate, 3a6da76aa tombstone guard) + GPU-target fixes; compile only",
+ "mac_apple_m1": {
+  "source_commit": "merge of a46aa9f011+3a6da76aa on 45b0630582 (before fixes)",
+  "results": [
+   {
+    "name": "sequential_weights_admission_compile",
+    "entry": "checks/sequential_weights_admission_compile.mojo",
+    "exit": 0,
+    "seconds": 239,
+    "binary_sha256": "65fc00ced6c76e1267514503d3874b3b056975d0cba3a59117ef2e0a9cc8a7a2",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/t4-mac/sequential_weights_admission_compile.log",
+    "command": "bash ~/mojolearn-evidence/compile_slot.sh pixi run -e default mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/sequential_weights_admission_compile.mojo"
+   },
+   {
+    "name": "expansion_linear_public_lifecycle_compile",
+    "entry": "checks/expansion_linear_public_lifecycle_compile.mojo",
+    "exit": 0,
+    "seconds": 43,
+    "binary_sha256": "3607a175b1d6722920d6ffcae12541e039976c030f6cfd6ff064da4909328cb8",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/t4-mac/expansion_linear_public_lifecycle_compile.log",
+    "command": "bash ~/mojolearn-evidence/compile_slot.sh pixi run -e default mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/expansion_linear_public_lifecycle_compile.mojo"
+   },
+   {
+    "name": "entry__mojolearn_runtime_sequential_host",
+    "entry": "bindings/entry/entry__mojolearn_runtime_sequential_host.mojo",
+    "exit": 0,
+    "seconds": 40,
+    "binary_sha256": "120ee8679bc369faaf951c5a7c13182c6b781647e19ec72d26f0ab4eb0cfaafb",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/t4-mac/entry__mojolearn_runtime_sequential_host.log",
+    "command": "bash ~/mojolearn-evidence/compile_slot.sh pixi run -e default mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_runtime_sequential_host.mojo"
+   },
+   {
+    "name": "entry__mojolearn_runtime_classical_host",
+    "entry": "bindings/entry/entry__mojolearn_runtime_classical_host.mojo",
+    "exit": 0,
+    "seconds": 1044,
+    "binary_sha256": "b405e02803326e4050f0f04c8794ba1ea2076af8ba9bcab7347ac8ef1d30293f",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/t4-mac/entry__mojolearn_runtime_classical_host.log",
+    "command": "bash ~/mojolearn-evidence/compile_slot.sh pixi run -e default mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_runtime_classical_host.mojo"
+   }
+  ]
+ },
+ "pod": {
+  "pod": "422ypcrzb2foqk",
+  "source_commit": "263937471b",
+  "reaped_verified": true,
+  "results": [
+   {
+    "name": "byte_lm_host_sm89",
+    "entry": "bindings/entry/entry__mojolearn_byte_lm_host.mojo",
+    "target": "sm_89",
+    "exit": 1,
+    "seconds": 16.4,
+    "binary_sha256": "-",
+    "command": "pixi run -e default mojo build --optimization-level 0 -j 5 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 --target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA -I . -I bindings bindings/entry/entry__mojolearn_byte_lm_host.mojo",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t4/remote/leg_out/logs/byte_lm_host_sm89.log"
+   },
+   {
+    "name": "byte_lm_host_gfx942_Odef",
+    "entry": "bindings/entry/entry__mojolearn_byte_lm_host.mojo",
+    "target": "gfx942",
+    "exit": 1,
+    "seconds": 16.8,
+    "binary_sha256": "-",
+    "command": "pixi run -e default mojo build  -j 5 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 --target-accelerator gfx942 -D MOJOLEARN_COLUMN_AMD -I . -I bindings bindings/entry/entry__mojolearn_byte_lm_host.mojo",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t4/remote/leg_out/logs/byte_lm_host_gfx942_Odef.log"
+   },
+   {
+    "name": "kernel_methods_host",
+    "entry": "bindings/entry/entry__mojolearn_kernel_methods_host.mojo",
+    "target": "cpu",
+    "exit": 0,
+    "seconds": 24.9,
+    "binary_sha256": "82712936763dc76767b955d5eeb07adbbc088ea06bf37c9e39e2446c71469ed1",
+    "command": "pixi run -e default mojo build --optimization-level 0 -j 5 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_kernel_methods_host.mojo",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t4/remote/leg_out/logs/kernel_methods_host.log"
+   },
+   {
+    "name": "byte_lm_host",
+    "entry": "bindings/entry/entry__mojolearn_byte_lm_host.mojo",
+    "target": "cpu",
+    "exit": 0,
+    "seconds": 61.2,
+    "binary_sha256": "9cc4e99bf70003f3b70c88954e373c0b4bfa353f309d3f4a3353188732046205",
+    "command": "pixi run -e default mojo build --optimization-level 0 -j 5 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_byte_lm_host.mojo",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t4/remote/leg_out/logs/byte_lm_host.log"
+   },
+   {
+    "name": "kernel_methods_gfx942_Odef",
+    "entry": "bindings/entry/entry__mojolearn_kernel_methods.mojo",
+    "target": "gfx942",
+    "exit": 0,
+    "seconds": 82.0,
+    "binary_sha256": "6b4d5f77be0027da77673cd91b47f936cabc47da6ee9f61a972d2da76f71572f",
+    "command": "pixi run -e default mojo build  -j 5 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 --target-accelerator gfx942 -D MOJOLEARN_COLUMN_AMD -I . -I bindings bindings/entry/entry__mojolearn_kernel_methods.mojo",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t4/remote/leg_out/logs/kernel_methods_gfx942_Odef.log"
+   },
+   {
+    "name": "kernel_methods_sm89",
+    "entry": "bindings/entry/entry__mojolearn_kernel_methods.mojo",
+    "target": "sm_89",
+    "exit": 0,
+    "seconds": 135.6,
+    "binary_sha256": "7bcf5faf9df61c858d9f0761ce648b7e11306e8d10aa2349541487c45a6d5a34",
+    "command": "pixi run -e default mojo build --optimization-level 0 -j 5 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 --target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA -I . -I bindings bindings/entry/entry__mojolearn_kernel_methods.mojo",
+    "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t4/remote/leg_out/logs/kernel_methods_sm89.log"
+   }
+  ]
+ },
+ "gates": {
+  "test_no_python_runtime": "OK after --prune (16 fixed rows removed); prohibited_source 235, unresolved 229 (pin 229)",
+  "test_tombstones_preserved": "OK (13 tests)"
+ },
+ "notes": [
+  "byte_lm_host with --target-accelerator and -D MOJOLEARN_COLUMN_NVIDIA/AMD hits the binding's own constraint (CPU column only); CPU-column x86 build passes with the compat fixes",
+  "tools/test_native_full_reset_params_connection.py: 84 failed / 20 passed on merged tree (stale source line bindings, missing full_reset_fixture._native_mode_reconstruction); not fixed"
+ ]
+}
