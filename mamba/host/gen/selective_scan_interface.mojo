@@ -595,6 +595,11 @@ def selective_scan_fn(
 
     var total = batch * dim
     if total > 0:
+        # TOMBSTONE: MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN (REJECTED: breaks decode==prefill at 64-token chunk boundaries) deleted 2026-10-28 by lane/mamba-folds; code recoverable at lane/mamba-folds@db803a1337 (never reached main).
+        # Restore: no patch (code never reached main); git show db803a1337 for m1_chunked_scan.mojo and its wiring; see docs/TOMBSTONES.md.
+        # The refusal lives here, in the area's own module (the pre-push rebuild fence refuses edits to
+        # core/six_lane_experiment_guards.mojo, which 81 bindings import).
+        comptime assert not is_defined["MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN"](), "removed: MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN REJECTED 2026-10-28 (breaks decode==prefill at 64-token chunk boundaries; never on main, lane/mamba-folds@db803a1337); see docs/TOMBSTONES.md"
         comptime if IDN_M1_PERSISTENT_SCAN:
             comptime assert not IDN_M1_STATE_WINDOW, (
                 "MOJOLEARN_IDN_M1_SCAN persistent and state_window are two"

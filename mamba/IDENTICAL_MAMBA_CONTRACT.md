@@ -218,9 +218,17 @@ tools/identity_break.py and python/mojolearn/tests/test_ragged_lengths.py.
 
 ## 9. Not claimed
 
-No chunked or tree scan (MAX's serial-over-L shape only; the cub
+No chunked or tree scan (MAX's serial-over-L shape only; section 10 records a rejected chunked attempt; the cub
 BlockScan tree is the priced follow-on and out of scope). No Mamba-2, no
 SSD. No BF16 or FP16. No training, no backward. No multi-block model, no
 tokenizer, no cache manager beyond one block's state. No performance
 number (`tools/lanes_price.sh` carries the wiring; the number is blank
 until measured). Nothing cross-vendor until the leg runs.
+
+## 10. Rejected: chunked v2 scan fold (`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`, 2026-10-28)
+
+A chunked scan, with chunks of 64 tokens anchored at each call's first token, was built on lane/mamba-folds@db803a1337 and
+REJECTED before measurement. It broke section 5's decode == prefill at every chunk boundary of a multi-token prefill, so a
+generation's bits depended on how its tokens were fed. The define is refused and the record is in docs/TOMBSTONES.md. A future
+chunked scan must anchor its chunks at absolute positions and carry the open chunk's state across decode calls, so that
+decode == prefill stays a theorem.

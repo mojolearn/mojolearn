@@ -42,6 +42,17 @@ from autograd.kernels.mamba2_proj import (
 )
 from mamba.checks.mamba2_fixture import Mamba2Dims
 from mamba.impl.modeling.modeling_mamba import mamba_scratch
+#: lane mamba-folds (2026-10-28): MOJOLEARN_IDN_MAMBA_BWD_FOLDS, the row dot of
+#: the norm backward as lanes then a fixed tree (mamba_bwd_folds.mojo).
+from autograd.kernels.mamba_bwd_folds import (
+    IDN_MAMBA_BWD_FOLDS,
+    mamba_bwd_fold_dot_offset,
+    mamba_bwd_fold_floats,
+    mamba_bwd_fold_grid,
+    mamba_bwd_rowdot_lane_kernel,
+    mamba_bwd_rowdot_tree_kernel,
+    MAMBA_BWD_FOLD_TPB,
+)
 
 
 comptime M2_BWD_TPB = 128
@@ -114,6 +125,118 @@ def mamba2_gnorm_backward_kernel(
         d_gate.unsafe_store(cell, ftz(ftz(first) - ftz(second)))
         var normalized = ftz(identical_mul(gj, rstd))
         weight_product.unsafe_store(cell, ftz(identical_mul(dj, normalized)))
+
+
+def mamba2_gnorm_backward_cell_kernel(
+    d_gate: MutPointer[Float32, MutAnyOrigin],
+    weight_product: MutPointer[Float32, MutAnyOrigin],
+    d_gnorm: MutPointer[Float32, MutAnyOrigin],
+    gate: MutPointer[Float32, MutAnyOrigin],
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    fold: MutPointer[Float32, MutAnyOrigin],
+    dot_off_in: Int32,
+    m_in: Int32,
+    width_in: Int32,
+):
+    """MOJOLEARN_IDN_MAMBA_BWD_FOLDS: `mamba2_gnorm_backward_kernel`'s per-cell
+    half, one thread per cell, reading the row dot the lane + tree fold left
+    in `fold[dot_off + row]`. `rstd`, `r2` and `scale` are the v1 expressions
+    on the same operands (recomputed per cell; same bits); the cell
+    arithmetic is v1's line for line."""
+    var m = Int(m_in)
+    var width = Int(width_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= m * width:
+        return
+    var t = cell // width
+    var j = cell - t * width
+    var rstd = ftz(
+        identical_rsqrt(
+            ftz(
+                ftz(identical_div(sumsq.unsafe_load(t), Float32(width)))
+                + Float32(0.00001)
+            )
+        )
+    )
+    var inner_dot = fold.unsafe_load(Int(dot_off_in) + t)
+    var r2 = ftz(identical_mul(rstd, rstd))
+    var scale = ftz(
+        identical_div(ftz(identical_mul(r2, rstd)), Float32(width))
+    )
+    var dj = ftz(d_gnorm.unsafe_load(cell))
+    var gj = ftz(gate.unsafe_load(cell))
+    var dinner = ftz(identical_mul(dj, ftz(weight.unsafe_load(j))))
+    var first = ftz(identical_mul(rstd, dinner))
+    var second = ftz(
+        identical_mul(ftz(identical_mul(scale, gj)), inner_dot)
+    )
+    d_gate.unsafe_store(cell, ftz(ftz(first) - ftz(second)))
+    var normalized = ftz(identical_mul(gj, rstd))
+    weight_product.unsafe_store(cell, ftz(identical_mul(dj, normalized)))
+
+
+def _m2_gnorm_backward_launch(
+    ctx: DeviceContext,
+    mut d_gate: DeviceBuffer[DType.float32],
+    mut weight_product: DeviceBuffer[DType.float32],
+    mut d_gnorm: DeviceBuffer[DType.float32],
+    mut gate: DeviceBuffer[DType.float32],
+    mut sumsq: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    mut fold: DeviceBuffer[DType.float32],
+    m: Int,
+    width: Int,
+) raises:
+    """The norm backward, v1 (one serial thread per row) or, under
+    MOJOLEARN_IDN_MAMBA_BWD_FOLDS, v2 (lanes, tree, cells). ASYNCHRONOUS;
+    `fold` is caller-owned (`Mamba2BackwardTail.norm_fold`)."""
+    comptime if IDN_MAMBA_BWD_FOLDS:
+        var off = mamba_bwd_fold_dot_offset(m)
+        ctx.enqueue_function[mamba_bwd_rowdot_lane_kernel](
+            fold.unsafe_ptr(),
+            d_gnorm.unsafe_ptr(),
+            weight.unsafe_ptr(),
+            gate.unsafe_ptr(),
+            Int32(m),
+            Int32(width),
+            grid_dim=(mamba_bwd_fold_grid(off), 1, 1),
+            block_dim=(MAMBA_BWD_FOLD_TPB, 1, 1),
+        )
+        ctx.enqueue_function[mamba_bwd_rowdot_tree_kernel](
+            fold.unsafe_ptr(),
+            Int32(m),
+            Int32(off),
+            grid_dim=(mamba_bwd_fold_grid(m), 1, 1),
+            block_dim=(MAMBA_BWD_FOLD_TPB, 1, 1),
+        )
+        ctx.enqueue_function[mamba2_gnorm_backward_cell_kernel](
+            d_gate.unsafe_ptr(),
+            weight_product.unsafe_ptr(),
+            d_gnorm.unsafe_ptr(),
+            gate.unsafe_ptr(),
+            sumsq.unsafe_ptr(),
+            weight.unsafe_ptr(),
+            fold.unsafe_ptr(),
+            Int32(off),
+            Int32(m),
+            Int32(width),
+            grid_dim=(mamba_bwd_fold_grid(m * width), 1, 1),
+            block_dim=(MAMBA_BWD_FOLD_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[mamba2_gnorm_backward_kernel](
+            d_gate.unsafe_ptr(),
+            weight_product.unsafe_ptr(),
+            d_gnorm.unsafe_ptr(),
+            gate.unsafe_ptr(),
+            sumsq.unsafe_ptr(),
+            weight.unsafe_ptr(),
+            Int32(m),
+            Int32(width),
+            grid_dim=(_grid(m), 1, 1),
+            block_dim=(M2_BWD_TPB, 1, 1),
+        )
 
 
 def mamba2_silu_gate_backward_kernel(
@@ -209,6 +332,8 @@ struct Mamba2BackwardTail(Movable):
     var ones: DeviceBuffer[DType.float32]  # [M]
     var reduction_workspace: DeviceBuffer[DType.float32]
     var workspace: DeviceBuffer[DType.float32]
+    #: MOJOLEARN_IDN_MAMBA_BWD_FOLDS row-dot scratch (1 float when off).
+    var norm_fold: DeviceBuffer[DType.float32]
 
     def __init__(
         out self, ctx: DeviceContext, dims: Mamba2Dims, m: Int
@@ -274,6 +399,7 @@ struct Mamba2BackwardTail(Movable):
         if rws < 1:
             rws = 1
         self.reduction_workspace = mamba_scratch(ctx, rws)
+        self.norm_fold = mamba_scratch(ctx, mamba_bwd_fold_floats(m))
 
 
 def mamba2_backward_tail_into(
@@ -330,17 +456,17 @@ def mamba2_backward_gnorm_into(
     """
     if m < 1:
         return
-    ctx.enqueue_function[mamba2_gnorm_backward_kernel](
-        out.d_gate.unsafe_ptr(),
-        out.gnorm_weight_product.unsafe_ptr(),
-        out.d_gnorm.unsafe_ptr(),
-        gate.unsafe_ptr(),
-        sumsq.unsafe_ptr(),
-        weight.unsafe_ptr(),
-        Int32(m),
-        Int32(dims.d_inner),
-        grid_dim=(_grid(m), 1, 1),
-        block_dim=(M2_BWD_TPB, 1, 1),
+    _m2_gnorm_backward_launch(
+        ctx,
+        out.d_gate,
+        out.gnorm_weight_product,
+        out.d_gnorm,
+        gate,
+        sumsq,
+        weight,
+        out.norm_fold,
+        m,
+        dims.d_inner,
     )
     mamba2_backward_reduce_into(
         ctx,
@@ -450,6 +576,6 @@ def mamba2_residual_join_kernel(dst: MutPointer[Float32,MutAnyOrigin], b: MutPoi
 
 
 def mamba2_backward_block_norm_into(ctx: DeviceContext, mut out: Mamba2BackwardTail, mut residual: DeviceBuffer[DType.float32], mut x: DeviceBuffer[DType.float32], mut sumsq: DeviceBuffer[DType.float32], mut weight: DeviceBuffer[DType.float32], dims: Mamba2Dims, m: Int) raises:
-    ctx.enqueue_function[mamba2_gnorm_backward_kernel](out.d_block_x.unsafe_ptr(),out.block_product.unsafe_ptr(),out.d_norm.unsafe_ptr(),x.unsafe_ptr(),sumsq.unsafe_ptr(),weight.unsafe_ptr(),Int32(m),Int32(dims.d_model),grid_dim=(_grid(m),1,1),block_dim=(M2_BWD_TPB,1,1))
+    _m2_gnorm_backward_launch(ctx,out.d_block_x,out.block_product,out.d_norm,x,sumsq,weight,out.norm_fold,m,dims.d_model)
     mamba2_backward_reduce_into(ctx,out.d_block_w,out.block_product,out.ones,out.reduction_workspace,RED2_NORM_W,dims,m)
     ctx.enqueue_function[mamba2_residual_join_kernel](out.d_block_x.unsafe_ptr(),residual.unsafe_ptr(),Int32(m*dims.d_model),grid_dim=(_grid(m*dims.d_model),1,1),block_dim=(M2_BWD_TPB,1,1))

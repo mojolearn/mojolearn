@@ -1,0 +1,33 @@
+{
+ "schema": "mojolearn.grid-controls/1",
+ "lane": "mamba-folds",
+ "branch": "lane/mamba-folds",
+ "head": "db803a1337",
+ "controls": {
+  "mamba_bwd_folds": {
+   "define": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS",
+   "kind": "switch",
+   "arms": {
+    "off": [],
+    "on": [
+     "MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1"
+    ]
+   },
+   "default": "off",
+   "source": [
+    "autograd/kernels/mamba_bwd_folds.mojo"
+   ],
+   "binding": "_mojolearn_training",
+   "bits_change": true,
+   "status": "new",
+   "notes": "Mamba-2/3 norm-backward row dot as 32 strided lanes + the forward S1 pairwise tree, then one thread per cell; A/B owed on samba-train-step (lane mamba-folds)"
+  }
+ },
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN",
+   "control": "mamba1_chunked_scan",
+   "reason": "REJECTED 2026-10-28: breaks decode==prefill at 64-token chunk boundaries; never on main, recoverable at lane/mamba-folds@db803a1337; define refused in mamba/impl/ops/selective_scan_interface.mojo (selective_scan_fn); docs/TOMBSTONES.md"
+  }
+ ]
+}

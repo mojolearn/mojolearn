@@ -204,6 +204,8 @@ def selective_scan_oracle(
                     )
                     var db = ftz(identical_mul(dl, ftz(bmat[t * D_STATE + n])))
                     var dbu = ftz(identical_mul(db, uv))
+                    # TOMBSTONE: MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN (REJECTED: breaks decode==prefill at 64-token chunk boundaries) deleted 2026-10-28 by lane/mamba-folds; code recoverable at lane/mamba-folds@db803a1337 (never reached main).
+                    # Restore: no patch (code never reached main); git show db803a1337 for m1_chunked_scan.mojo and its wiring; see docs/TOMBSTONES.md.
                     h[n] = ftz(identical_mul_add(da, h[n], dbu))
                 var acc = Float32(0.0)
                 for n in range(D_STATE):

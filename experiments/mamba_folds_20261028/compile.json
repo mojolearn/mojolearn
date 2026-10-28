@@ -1,0 +1,70 @@
+{
+ "lane": "mamba-folds",
+ "source_commit": "b8ffe32a62038d8d8bb5440c4eab85de8c132641",
+ "compiler_version": "Mojo 1.0.0 (ed45d567)",
+ "host": "Mac arm64 via tools/compile_slot.sh (started before the owner moved compiles to RunPod; no pod used)",
+ "jobs": 10,
+ "command": "DEFSETS=\"off bwd\" compile.sh <ev> host | (COLUMN_DEFS=\"-D MOJOLEARN_COLUMN_NVIDIA\" EXTRA=\"--target-accelerator sm_89\") device",
+ "flags": "mojo build --optimization-level 0 -j 10 [--emit shared-lib] -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings",
+ "overall_exit": 0,
+ "runtime_executed": false,
+ "sm89_check": "strings | grep -c sm_89: device-bwd.so 248",
+ "covered": "after deleting MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN: _mojolearn_mamba_host (CPU) and _mojolearn_mamba (sm_89), arms off and MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
+ "not_covered": [
+  "AMD (gfx942) and Apple Metal targets",
+  "_mojolearn_training after the deletion (last compiled green at 139c65a5dc with BWD_FOLDS on and off; the deletion touches no file it imports beyond the Mamba-1 scan/oracle restored to main)",
+  "any runtime, identity or timing run"
+ ],
+ "roots": [
+  {
+   "leg": "cpu-b8ffe32a62",
+   "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+   "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
+   "arm": "off",
+   "defines": null,
+   "exit": 0,
+   "seconds": 125,
+   "artifact_sha256": "f97698822ebd794f5538958a5e0eb315a93330964cf87c458011ff0d661d98dc",
+   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-b8ffe32a62/host-off.log"
+  },
+  {
+   "leg": "cpu-b8ffe32a62",
+   "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+   "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
+   "arm": "bwd",
+   "defines": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
+   "exit": 0,
+   "seconds": 172,
+   "artifact_sha256": "e7981081d13707d10fec6eb9cb903a38bb9db88e261db42a4c5664768729c886",
+   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-b8ffe32a62/host-bwd.log"
+  },
+  {
+   "leg": "sm89-b8ffe32a62",
+   "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
+   "entry": "bindings/entry/entry__mojolearn_mamba.mojo",
+   "arm": "off",
+   "defines": null,
+   "exit": 0,
+   "seconds": 181,
+   "artifact_sha256": "e488d7f9902d71aca541b8f0b17eaf9ba7ded3413b1e66ec8b8f4fddd5f3baba",
+   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-b8ffe32a62/device-off.log"
+  },
+  {
+   "leg": "sm89-b8ffe32a62",
+   "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
+   "entry": "bindings/entry/entry__mojolearn_mamba.mojo",
+   "arm": "bwd",
+   "defines": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
+   "exit": 0,
+   "seconds": 361,
+   "artifact_sha256": "90419ad3c414ae92e7a68efb17d9ae08ddf389e77795efd356dc0ca38fdf0d46",
+   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-b8ffe32a62/device-bwd.log"
+  }
+ ],
+ "prior_receipt": {
+  "source_commit": "139c65a5dc144b2513052b0328d4cc6e14a8c23f",
+  "overall_exit": 0,
+  "roots": 16,
+  "note": "16 roots incl. the since-deleted chunked-scan arms; training binding sm_89 included"
+ }
+}

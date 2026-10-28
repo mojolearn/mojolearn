@@ -63,10 +63,14 @@ SOURCES = {
     "gemm/checks/gemm_backward.mojo": "gemm_backward",
     "gemm/neural_backward.mojo": "neural_backward",
     # neural_scan_profile / neural_mamba_scan (MOJOLEARN_IDN_M1_SCAN=1) deleted 2026-10-11 (docs/TOMBSTONES.md)
+    # m1_chunked_scan (MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN) REJECTED 2026-10-28, never reached main (docs/TOMBSTONES.md)
     "mamba/impl/ops/selective_scan_interface.mojo": "selective_scan_interface",
     "mamba/impl/modeling/modeling_mamba.mojo": "modeling_mamba",
     "mamba/impl/modules/ssd_minimal.mojo": "ssd_minimal",
     "mamba/impl/modules/mamba2.mojo": "mamba2",
+    # lane mamba-folds (2026-10-28): the v2 backward row folds
+    # (MOJOLEARN_IDN_MAMBA_BWD_FOLDS) shared by the Mamba-2 and Mamba-3 backward
+    "autograd/kernels/mamba_bwd_folds.mojo": "mamba_bwd_folds",
     "autograd/kernels/mamba2_proj.mojo": "mamba2_backward_checks",
     "autograd/kernels/mamba2.mojo": "mamba2_backward",
     "autograd/kernels/mamba2_ssd.mojo": "mamba2_ssd_backward",
