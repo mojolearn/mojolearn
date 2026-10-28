@@ -47,7 +47,7 @@ def connect(graph, reader, node, tensor, resolved, unsupported, attrs_default, d
             if entry is None:
                 entry = native
                 record_entry = record
-        except (ImportError, AttributeError, TypeError) as error:
+        except (ImportError, AttributeError, TypeError, ValueError) as error:
             bindings[mode] = type(error).__name__ + ': ' + str(error)
     if entry is None:
         entry = _unavailable(ImportError('rebuild x_sequence with onnx_native_api_v1'))
@@ -62,7 +62,7 @@ def connect(graph, reader, node, tensor, resolved, unsupported, attrs_default, d
                           graph: ('opset', 'inputs', 'outputs', 'nodes', 'initializers', 'source'),
                           resolved: ('shapes', 'dtypes', 'folded', 'no_rule', 'problems')},
                       attrs_default=attrs_default, dtype_names=dtype_names, refused_names=refused_names,
-                      method_type=MethodType, native_entry=entry,
+                      method_type=MethodType, native_entry=entry, record_native_entry=record_entry,
                       supported_ops=SUPPORTED_OPS, numpy=np, frozen_error=FrozenInstanceError, array_type=array,
                       record_names={cls: cls.__qualname__ for cls in (tensor, node, graph, resolved)},  # glue: native record names
                       numpy_array_interface=None if np is None else vars(np.ndarray)["__array_interface__"].__get__,
