@@ -238,11 +238,11 @@ class DecisionTreeClassifier(RandomForestClassifier):
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
-        return _trees_depth(self)
+        return _TREES(self, "trees_public_forest_depth", (), _TREES_CONTEXT)
 
     def get_n_leaves(self):
         """Return the number of leaves of the fitted tree."""
-        return _trees_n_leaves(self)
+        return _TREES(self, "trees_public_forest_n_leaves", (), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities: the class distribution of each row's leaf.
@@ -399,11 +399,11 @@ class DecisionTreeRegressor(RandomForestRegressor):
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
-        return _trees_depth(self)
+        return _TREES(self, "trees_public_forest_depth", (), _TREES_CONTEXT)
 
     def get_n_leaves(self):
         """Return the number of leaves of the fitted tree."""
-        return _trees_n_leaves(self)
+        return _TREES(self, "trees_public_forest_n_leaves", (), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the target of each row of ``X``."""
@@ -430,38 +430,6 @@ _native_archive_bridge.register(DecisionTreeClassifier, _RF_MODEL_FORMATS, _TREE
 _native_archive_bridge.register(DecisionTreeRegressor, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
 _native_trees_bridge.register(DecisionTreeClassifier, "dt_classifier")
 _native_trees_bridge.register(DecisionTreeRegressor, "dt_regressor")
-
-
-def _trees_shape_native(est):
-    """[depth, leaf count] of the (first) fitted tree from the x_trees binding
-    (lane fam2-forests, `x_trees_tree_shape`). A binary without the export
-    (-D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF) refuses get_depth/get_n_leaves:
-    lane py-runtime-b deleted the Python node walk it fell back to."""
-    if not hasattr(est, "_offsets"):
-        raise RuntimeError("this estimator is not fitted yet")
-    try:
-        entry = getattr(_trees_x_bind(est), "x_trees_tree_shape", None)  # cpu-route: fitted tree handle read once by x_trees_tree_shape (get_depth/get_n_leaves)
-    except ImportError:    # a host facade refuses an absent export with ImportError
-        entry = None
-    if not callable(entry):
-        raise NotImplementedError(
-            "mojolearn: get_depth/get_n_leaves need the x_trees binding's x_trees_tree_shape "
-            "(rebuild without -D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF)")
-    lo, hi = int(est._offsets[0]), int(est._offsets[1])
-    left = as_i32_c(est._left_child, ndim=1, name="left")[0]
-    res = empty((2,), "<i4")
-    entry(addr_ro(left, name="left") + 4 * lo, addr(res, name="shape"), [hi - lo])
-    return res.tolist()
-
-
-def _trees_depth(est):
-    """Depth of the (first) fitted tree."""
-    return int(_trees_shape_native(est)[0])
-
-
-def _trees_n_leaves(est):
-    """Leaf count of the (first) fitted tree."""
-    return int(_trees_shape_native(est)[1])
 
 
 # ------------------------------------------------------------- shared glue
@@ -1686,18 +1654,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         Returns an int32 array of shape (n_samples, n_trees) of node ids,
         numbered within each tree.
         """
-        if not hasattr(self, "forest_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = Xa.shape
-        if d != self.n_features_in_:
-            raise ValueError(f"X has {d} features, fit saw {self.n_features_in_}")
-        f = self.forest_
-        out = empty((n * self.n_trees_,), "<i4")
-        self._bind().x_trees_apply(addr_ro(f._offsets, name="offsets"), addr_ro(f._colid, name="colid"),
-                                   addr_ro(f._quesval, name="quesval"), addr_ro(f._left_child, name="left"),
-                                   addr_ro(Xa, name="X"), addr(out, name="nodes"), [n, d, 0, self.n_trees_])
-        return out.reshape((n, self.n_trees_))
+        return _TREES(self, "trees_embedding_apply", (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """One-hot encode the leaves of ``X``.
