@@ -1,0 +1,81 @@
+{
+  "exit_code": 0,
+  "seconds": 100.2382242679596,
+  "command": [
+    "pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer6-pandas",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer6-pandas/bindings",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer6-pandas/checks/peer6_resample_pandas_compile.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/peer6-resample-pandas-20261027/attempt7/_peer6_resample_pandas_compile.so"
+  ],
+  "cores": 10,
+  "allocation_source": "sysctl hw.logicalcpu: Mac allocation; concurrent peers may compile",
+  "runtime_executed": false,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-pandas-20261027/attempt7/compile.log",
+  "scope": "Compile-only native pandas ndarray materialization helper and all reachable implementations on Mac apple-m1 CPU identical; no public row operation or GPU target qualification",
+  "pending": [
+    "Parent-owned composed resample row operation integration and compile",
+    "Runtime and identity deliberately not executed under owner instructions",
+    "Distinct categorical dictionaries in a multi-block frame",
+    "SparseArray and IntervalArray",
+    "Arrow temporal/date/time/decimal/nested and other nonprimitive families",
+    "Mixed extended precision and extended-precision object boxing",
+    "Raw void object boxing; structured, managed string and custom dtype layouts"
+  ],
+  "binary_sha256": "b0d89766faeee3eee963d72c188dd898c0b5fb1a98c60c9dbe5714aeecb88caa",
+  "schema": "mojolearn.focused-provider-compile.v1",
+  "base_commit": "47a88274c747273ab783eb429d7dc3eb8a5984c0",
+  "branch": "lane/peer6-resample-pandas",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-pandas-20261027/source-bytes.tgz",
+  "source_archive_sha256": "7d82eb482cbe4885429f269228a577ddb0672ba00258a8c4f801d93e4d72a7e1",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-pandas-20261027/source-manifest.json",
+  "source_manifest_sha256": "42f75a887ec76d40a21c14b117ec79e10a3bf6a8db2643a5be73a081e75c4768",
+  "archive_scope": "3639 Mojo/build source files: superset of fixture import closure; archive is not compiled coverage",
+  "source_hashes": {
+    "providers/python/resample_pandas_pyapi.mojo": "eb2427037f2d5149d088d04a1ae148c405506146f8048bf729964245ed3115dd",
+    "checks/peer6_resample_pandas_compile.mojo": "1228b91d9fe30e4b1aa97d91ebcfb41c978252ca8044eb059baaa36779ac54db"
+  },
+  "public_operation_integrated": false,
+  "rented_machine": false,
+  "identity_executed": false,
+  "intentional_refusals": [
+    "Python-backed/custom timezone callbacks; native datetime.timezone and zoneinfo.ZoneInfo alternatives"
+  ],
+  "failed_compile_attempts": [
+    {
+      "attempt": 1,
+      "cause": "memcpy keyword-only arguments"
+    },
+    {
+      "attempt": 2,
+      "cause": "null pointer argument syntax"
+    }
+  ],
+  "handoff": "/Users/andrewhendel/mojolearn-evidence/peer6-row-pandas-handoff.txt"
+}
