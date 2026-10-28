@@ -1,0 +1,49 @@
+{
+ "scope": "overhead-sequential-admission: narrow read-only admission in bindings/sequential_admission.mojo",
+ "source_commit": "e489d2b957 (head); before arm = head with the admission patch reversed (= origin/main 30928487f1 for that file)",
+ "machine": "RunPod CPU pod gkdo7vqf35y0uw (cpu, 32 vCPU, affinity 32, cgroup cpu.max unlimited), reaped and verified gone (HTTP 404); run 1 pod yhbuaqbwny6ci7 also reaped",
+ "compiler": "Mojo 1.0.0 (ed45d567)",
+ "jobs": 32,
+ "command": "pixi run -e default mojo build --optimization-level 0 -j 32 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry_<name>.mojo",
+ "compiles": [
+  {
+   "entry": "bindings/entry/entry__mojolearn_runtime_sequential_host.mojo",
+   "arm": "before",
+   "exit": 0,
+   "seconds": 14,
+   "binary_sha256": "25577dd72657b21fb910fb49650e9a05ab75e0de9c83b3efd3a6c905c0134d60",
+   "sequential_admission_sha256": "7ef4209edf732624299611ffc3aa84de69299f80117bf4f9d510164b6322c51e",
+   "log": "~/mojolearn-evidence/overhead-sequential-admission-20261028/pod/remote/leg_out/compile-before-_mojolearn_runtime_sequential_host.log"
+  },
+  {
+   "entry": "bindings/entry/entry__mojolearn_runtime_sequential_host.mojo",
+   "arm": "after",
+   "exit": 0,
+   "seconds": 20,
+   "binary_sha256": "35a5d6c2424f99c1cbec6e3472f57f1375a2d39b5ab87bc791875560bff35c03",
+   "sequential_admission_sha256": "381ee48b1b86263dc61603e976d5d134bfd2f4c7c0aa297326f5b78aa0fc6d6b",
+   "log": "~/mojolearn-evidence/overhead-sequential-admission-20261028/pod/remote/leg_out/compile-after-_mojolearn_runtime_sequential_host.log"
+  },
+  {
+   "entry": "bindings/entry/entry__mojolearn_x_sequence_host.mojo",
+   "arm": "shared",
+   "exit": 0,
+   "seconds": 167,
+   "binary_sha256": "998dedfff1af5ed2c6cd378d1cfcd7971a0aeec95ea2574d610fa8b530abd69c",
+   "sequential_admission_sha256": "7ef4209edf732624299611ffc3aa84de69299f80117bf4f9d510164b6322c51e",
+   "log": "~/mojolearn-evidence/overhead-sequential-admission-20261028/pod/remote/leg_out/compile-shared-_mojolearn_x_sequence_host.log"
+  },
+  {
+   "entry": "bindings/entry/entry__mojolearn_tokenizer_host.mojo",
+   "arm": "shared",
+   "exit": 0,
+   "seconds": 367,
+   "binary_sha256": "edef60ad1e85e0a5fb84f73eeae2d1f58d1ee24448eb992f87a065456853fb91",
+   "sequential_admission_sha256": "7ef4209edf732624299611ffc3aa84de69299f80117bf4f9d510164b6322c51e",
+   "log": "~/mojolearn-evidence/overhead-sequential-admission-20261028/pod/remote/leg_out/compile-shared-_mojolearn_tokenizer_host.log"
+  }
+ ],
+ "closure": "sequential_admit has one caller (bindings/sequential_native.mojo -> _mojolearn_runtime_sequential_host, a CPU host binding). No GPU binding calls it, so no sm_89/gfx target is affected.",
+ "not_covered": "No GPU/vendor runtime or identity run; x_sequence_host and tokenizer_host were built once from the before tree (they import sequential_admission.mojo but never call sequential_admit).",
+ "pod_cmd": "~/mojolearn-evidence/overhead-sequential-admission-20261028/pod_cmd.sh"
+}

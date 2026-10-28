@@ -1,0 +1,328 @@
+{
+ "before_sha": "30928487f1 (origin/main sequential_admission.mojo; runtime binary 25577dd7)",
+ "after_sha": "e489d2b957 (runtime binary 35a5d6c2)",
+ "fixture": "tools/tests/sequential_admission_fixture.py (CPU column, identical mode, scikit-learn-sized 32x4 inputs)",
+ "result": "RESULT PASS",
+ "note": "Sequential has no score, get_params or set_params operation; the fixture covers every Sequential read operation and fit/save/load/resume.",
+ "digests": {
+  "bce_with_logits.fit.params": {
+   "before": "5fe289497a937ffd20400d8ca5e4477ad1c02aaa3e7f2e7f1fa95b43be842a71",
+   "after": "5fe289497a937ffd20400d8ca5e4477ad1c02aaa3e7f2e7f1fa95b43be842a71",
+   "same": true
+  },
+  "bce_with_logits.predict": {
+   "before": "70ed9351b4569e5992fed2035ab998410215148628ec9dda67d3c678815eda00",
+   "after": "70ed9351b4569e5992fed2035ab998410215148628ec9dda67d3c678815eda00",
+   "same": true
+  },
+  "bce_with_logits.predict_proba": {
+   "before": "6389f8f233e3a351f1290a669de0b4bd63c97e79853a3e7325d3c04c53833a36",
+   "after": "6389f8f233e3a351f1290a669de0b4bd63c97e79853a3e7325d3c04c53833a36",
+   "same": true
+  },
+  "cross_entropy.fit.params": {
+   "before": "c8b149b319952d8e5455f89777a0fd9a022e83572707d0d1b010f2d4ef5f7bf4",
+   "after": "c8b149b319952d8e5455f89777a0fd9a022e83572707d0d1b010f2d4ef5f7bf4",
+   "same": true
+  },
+  "cross_entropy.predict": {
+   "before": "a0276ca60a3ba77d16937bf057c44d9e13a0babd4fe507a4ce0e63b347a5a799",
+   "after": "a0276ca60a3ba77d16937bf057c44d9e13a0babd4fe507a4ce0e63b347a5a799",
+   "same": true
+  },
+  "cross_entropy.predict_proba": {
+   "before": "3d26a57e4957f77e5ce6cf62ce2352349474184ffb9f77d70c96e9d75bf91078",
+   "after": "3d26a57e4957f77e5ce6cf62ce2352349474184ffb9f77d70c96e9d75bf91078",
+   "same": true
+  },
+  "mse_adam.export": {
+   "before": "c3b6a4d01197b1a2fd9d49cbdf729e3b99b6c4e86c8699059d11f7242a64b967",
+   "after": "c3b6a4d01197b1a2fd9d49cbdf729e3b99b6c4e86c8699059d11f7242a64b967",
+   "same": true
+  },
+  "mse_adam.fit.loss_curve": {
+   "before": "cb3b642525843e1f7ed38c118b0feffb0e3c894bd4f231beb7ee99cd231ada61",
+   "after": "cb3b642525843e1f7ed38c118b0feffb0e3c894bd4f231beb7ee99cd231ada61",
+   "same": true
+  },
+  "mse_adam.fit.params": {
+   "before": "5709e4662e9ce1e81b46c5f4107dbc6b28bf8d36921f1e35e2a72c84a96984c2",
+   "after": "5709e4662e9ce1e81b46c5f4107dbc6b28bf8d36921f1e35e2a72c84a96984c2",
+   "same": true
+  },
+  "mse_adam.forward": {
+   "before": "d90b8a08571562fa6a65d7f1c4412e4a47ec523b0156370ccf224b242da1ac8e",
+   "after": "d90b8a08571562fa6a65d7f1c4412e4a47ec523b0156370ccf224b242da1ac8e",
+   "same": true
+  },
+  "mse_adam.layers": {
+   "before": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "after": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "same": true
+  },
+  "mse_adam.loaded_export.layers": {
+   "before": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "after": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "same": true
+  },
+  "mse_adam.loaded_export.predict": {
+   "before": "fb9db711ea432302c784ce9df03c9c48237b9620d7fc54362efe32ebbb9f4590",
+   "after": "fb9db711ea432302c784ce9df03c9c48237b9620d7fc54362efe32ebbb9f4590",
+   "same": true
+  },
+  "mse_adam.parameter_layers": {
+   "before": "5e55ea5d8ede8b0fffcc947ed7aee0533725a702b5f67cd16f52bf8b6528d7a6",
+   "after": "5e55ea5d8ede8b0fffcc947ed7aee0533725a702b5f67cd16f52bf8b6528d7a6",
+   "same": true
+  },
+  "mse_adam.predict": {
+   "before": "fb9db711ea432302c784ce9df03c9c48237b9620d7fc54362efe32ebbb9f4590",
+   "after": "fb9db711ea432302c784ce9df03c9c48237b9620d7fc54362efe32ebbb9f4590",
+   "same": true
+  },
+  "mse_adam.program": {
+   "before": "7584e03b0f901d2ed86499b2652c8a7db04f4fe32e4e4660dda9ba06dc6b7724",
+   "after": "7584e03b0f901d2ed86499b2652c8a7db04f4fe32e4e4660dda9ba06dc6b7724",
+   "same": true
+  },
+  "mse_adam.resume.params": {
+   "before": "3db8309069b1cbfe876d01d0b31434b31743199cc7b4e53b4a34783e85777840",
+   "after": "3db8309069b1cbfe876d01d0b31434b31743199cc7b4e53b4a34783e85777840",
+   "same": true
+  },
+  "mse_adam.save_checkpoint": {
+   "before": "8c746cdffca3f2c3ac6faf3f9961c1e6f763e58b197ca7ea646ded09f8b7126c",
+   "after": "8c746cdffca3f2c3ac6faf3f9961c1e6f763e58b197ca7ea646ded09f8b7126c",
+   "same": true
+  },
+  "mse_adam.table": {
+   "before": "71f014c3a308ffa4e9324f311632b29cf7a3b455b0227601f9c745f230acb5c7",
+   "after": "71f014c3a308ffa4e9324f311632b29cf7a3b455b0227601f9c745f230acb5c7",
+   "same": true
+  },
+  "mse_sgd.export": {
+   "before": "225e48a950ee1f5ddb336aac0517acd2ef6f875623e10c1127457dae4230b5d9",
+   "after": "225e48a950ee1f5ddb336aac0517acd2ef6f875623e10c1127457dae4230b5d9",
+   "same": true
+  },
+  "mse_sgd.fit.loss_curve": {
+   "before": "1ed99a6dbf65fa8b1bda1e7237b38aa68f1e696d10b8ba1b35e5029f683934fe",
+   "after": "1ed99a6dbf65fa8b1bda1e7237b38aa68f1e696d10b8ba1b35e5029f683934fe",
+   "same": true
+  },
+  "mse_sgd.fit.params": {
+   "before": "33e6e1111afcdc6f10e91d439b508e86fa28ad22d6bb3e9669be83f8052f8309",
+   "after": "33e6e1111afcdc6f10e91d439b508e86fa28ad22d6bb3e9669be83f8052f8309",
+   "same": true
+  },
+  "mse_sgd.forward": {
+   "before": "65f66039a51c0bec2cbecddc138243f497627e9f5edfa27be0925d9e6fe1bca5",
+   "after": "65f66039a51c0bec2cbecddc138243f497627e9f5edfa27be0925d9e6fe1bca5",
+   "same": true
+  },
+  "mse_sgd.layers": {
+   "before": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "after": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "same": true
+  },
+  "mse_sgd.loaded_export.layers": {
+   "before": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "after": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "same": true
+  },
+  "mse_sgd.loaded_export.predict": {
+   "before": "ff275a923c6419cfd8878011fe511e816bbcf094bfc63cb66255bdf6e59ba1f6",
+   "after": "ff275a923c6419cfd8878011fe511e816bbcf094bfc63cb66255bdf6e59ba1f6",
+   "same": true
+  },
+  "mse_sgd.parameter_layers": {
+   "before": "5e55ea5d8ede8b0fffcc947ed7aee0533725a702b5f67cd16f52bf8b6528d7a6",
+   "after": "5e55ea5d8ede8b0fffcc947ed7aee0533725a702b5f67cd16f52bf8b6528d7a6",
+   "same": true
+  },
+  "mse_sgd.predict": {
+   "before": "ff275a923c6419cfd8878011fe511e816bbcf094bfc63cb66255bdf6e59ba1f6",
+   "after": "ff275a923c6419cfd8878011fe511e816bbcf094bfc63cb66255bdf6e59ba1f6",
+   "same": true
+  },
+  "mse_sgd.program": {
+   "before": "7584e03b0f901d2ed86499b2652c8a7db04f4fe32e4e4660dda9ba06dc6b7724",
+   "after": "7584e03b0f901d2ed86499b2652c8a7db04f4fe32e4e4660dda9ba06dc6b7724",
+   "same": true
+  },
+  "mse_sgd.resume.params": {
+   "before": "d2a10852e962f61d2429d6ee99c06d879a7b6036ecbbd97a8404b6cd35377144",
+   "after": "d2a10852e962f61d2429d6ee99c06d879a7b6036ecbbd97a8404b6cd35377144",
+   "same": true
+  },
+  "mse_sgd.save_checkpoint": {
+   "before": "41b8405c6e7271a9771655ac8fbecb285d374fe75d134750e7b3be078315de6f",
+   "after": "41b8405c6e7271a9771655ac8fbecb285d374fe75d134750e7b3be078315de6f",
+   "same": true
+  },
+  "mse_sgd.table": {
+   "before": "71f014c3a308ffa4e9324f311632b29cf7a3b455b0227601f9c745f230acb5c7",
+   "after": "71f014c3a308ffa4e9324f311632b29cf7a3b455b0227601f9c745f230acb5c7",
+   "same": true
+  },
+  "unfitted.layers": {
+   "before": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "after": "0be8e3156585157baf3716d182c47ffd7ad30b37b07054aeced943570ccd6b36",
+   "same": true
+  },
+  "unfitted.parameter_layers": {
+   "before": "5e55ea5d8ede8b0fffcc947ed7aee0533725a702b5f67cd16f52bf8b6528d7a6",
+   "after": "5e55ea5d8ede8b0fffcc947ed7aee0533725a702b5f67cd16f52bf8b6528d7a6",
+   "same": true
+  },
+  "unfitted.program": {
+   "before": "7584e03b0f901d2ed86499b2652c8a7db04f4fe32e4e4660dda9ba06dc6b7724",
+   "after": "7584e03b0f901d2ed86499b2652c8a7db04f4fe32e4e4660dda9ba06dc6b7724",
+   "same": true
+  },
+  "unfitted.sample": {
+   "before": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+   "after": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+   "same": true
+  },
+  "unfitted.table": {
+   "before": "71f014c3a308ffa4e9324f311632b29cf7a3b455b0227601f9c745f230acb5c7",
+   "after": "71f014c3a308ffa4e9324f311632b29cf7a3b455b0227601f9c745f230acb5c7",
+   "same": true
+  }
+ },
+ "refusals": {
+  "construct.subclass_model": {
+   "before": "TypeError: Sequential requires its native public class, without Python subclass hooks",
+   "after": "TypeError: Sequential requires its native public class, without Python subclass hooks"
+  },
+  "fit._opt_m_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "fit._options_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "fit.loss_curve__python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "fit.subclass_model": {
+   "before": "TypeError: Sequential requires its native public class, without Python subclass hooks",
+   "after": "TypeError: Sequential requires its native public class, without Python subclass hooks"
+  },
+  "layers._opt_m_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "no refusal"
+  },
+  "layers._options_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "no refusal"
+  },
+  "layers.layers_python_list": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "layers.loss_curve__python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "no refusal"
+  },
+  "layers.subclass_model": {
+   "before": "TypeError: Sequential requires its native public class, without Python subclass hooks",
+   "after": "TypeError: Sequential requires its native public class, without Python subclass hooks"
+  },
+  "parameter_layers.layers_python_list": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict._opt_m_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "no refusal"
+  },
+  "predict._options_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "no refusal"
+  },
+  "predict.bad_dtype": {
+   "before": "TypeError: X must be a numeric array",
+   "after": "TypeError: X must be a numeric array"
+  },
+  "predict.classes_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict.fit_loss_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict.layers_python_list": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict.loss_curve__python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "no refusal"
+  },
+  "predict.n_features_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict.numeric_mode_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict.params_ndarray_subclass": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict.python_list_subclass_X": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict.python_object_X": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict.subclass_model": {
+   "before": "TypeError: Sequential requires its native public class, without Python subclass hooks",
+   "after": "TypeError: Sequential requires its native public class, without Python subclass hooks"
+  },
+  "predict.unfitted": {
+   "before": "ValueError: call fit before predict",
+   "after": "ValueError: call fit before predict"
+  },
+  "predict.wrong_features": {
+   "before": "ValueError: X has a different feature count from the fitted model",
+   "after": "ValueError: X has a different feature count from the fitted model"
+  },
+  "predict.y_1d_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "predict_proba.mse_model": {
+   "before": "ValueError: predict_proba needs a model fitted with cross_entropy or bce_with_logits",
+   "after": "ValueError: predict_proba needs a model fitted with cross_entropy or bce_with_logits"
+  },
+  "predict_proba.unfitted": {
+   "before": "ValueError: predict_proba needs a model fitted with cross_entropy or bce_with_logits",
+   "after": "ValueError: predict_proba needs a model fitted with cross_entropy or bce_with_logits"
+  },
+  "save_checkpoint._opt_m_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "save_checkpoint._options_python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "save_checkpoint.loss_curve__python_object": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  },
+  "table.layers_python_list": {
+   "before": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+   "after": "TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+  }
+ }
+}
