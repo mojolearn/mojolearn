@@ -1,5 +1,9 @@
 # Latest full-measurement summaries (copied 2026-10-28)
 
+New maintainer runs automatically write compact snapshots to `auto/`; see
+[automatic result retention](../../RESULT_RETENTION.md). The dated copies below
+remain historical snapshots. Collection and GitHub commit/push are separate steps.
+
 Retention: the repo holds only the latest run's small summary; it is overwritten on each new run. The full history
 of every run is retained in `~/mojolearn-evidence/<run dir>` (here `full-measurement-nvidia-20261027/` and
 `full-measurement-amd-20261027-r3/`; earlier runs in their own `full-measurement-*` dirs) and in R2

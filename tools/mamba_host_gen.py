@@ -143,6 +143,12 @@ SUBSTITUTIONS = (
     ("mamba/impl/modules/ssd_minimal.mojo",
      r'comptime NN36_SHARED_DECAY = [^\n]+',
      "comptime NN36_SHARED_DECAY = False"),
+    # lane nv-occupancy (2026-10-28): MOJOLEARN_IDN_SSD_OCCUPANCY's coalesced
+    # and shared-tile S10/S12/S18 arms are device-only; the host column keeps
+    # the cell kernels (the same chains, the same bits).
+    ("mamba/impl/modules/ssd_minimal.mojo",
+     r"comptime IDN_SSD_OCCUPANCY = \([\s\S]*?\n\)",
+     "comptime IDN_SSD_OCCUPANCY = False"),
     ("mamba/impl/ops/selective_scan_interface.mojo",
      r"comptime IDN_M1_STATE_WINDOW = \([\s\S]*?\n\)",
      "comptime IDN_M1_STATE_WINDOW = False"),
