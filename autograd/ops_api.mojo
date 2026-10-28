@@ -316,6 +316,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     #: the session's optimizers (id = index + 1) and their per-parameter state
     var opts: List[_OpsOptimizer]
     var opt_states: List[_OpsOptState]
+    #: native (optimizer, generation-bearing handle) -> retained state index
+    var opt_state_indices: List[Dict[Int, Int]]
     #: lane ag-program (autograd/program.mojo): the operation calls of an
     #: inference session since its last reset, the captured programs (id =
     #: index + 1) and the scratch tape their replays run on (its storage
@@ -344,6 +346,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.retired = List[Int]()
         self.opts = List[_OpsOptimizer]()
         self.opt_states = List[_OpsOptState]()
+        self.opt_state_indices = List[Dict[Int, Int]]()
         self.oplog = OpsLog()
         self.programs = List[OpsProgram]()
         self.prog_tape = Tape()
@@ -576,6 +579,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.ex.free(r.parts)
             self.ex.free(r.cell)
         self.opt_states.clear()
+        for i in range(len(self.opt_state_indices)):  # driver-loop: over optimizer index metadata at close
+            self.opt_state_indices[i].clear()
         self.prog_tape.release(self.ex)
         self.programs.clear()
         self.oplog.clear()
@@ -846,6 +851,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, Float32(0), lr)
         var sched_step = ints[3] if sched == SCHED_STEP else 1
         self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
+        self.opt_state_indices.append(Dict[Int, Int]())
         return len(self.opts)
 
     def _opt_index(self, o: Int) raises -> Int:
@@ -872,16 +878,20 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def _state_of(mut self, oi: Int, h: Int, n: Int) raises -> Int:
         """The index of (optimizer oi, parameter h)'s state, allocated (zero
         moment buffers, step 0) on first use."""
-        for i in range(len(self.opt_states)):  # driver-loop: over optimizer states
-            if self.opt_states[i].opt == oi and self.opt_states[i].param == h:
-                return i
+        # Training revisits the same pairs every step. Resolve directly rather
+        # than walking all states for every parameter. h includes its handle
+        # generation, so a reused tensor slot cannot inherit retired moments.
+        if h in self.opt_state_indices[oi]:
+            return self.opt_state_indices[oi][h]
         var cfg = self.opts[oi].cfg
         var st = OptimizerState(self.ex, cfg, n)
         self.opt_states.append(_OpsOptState(
             oi, h, st.s1, st.s2, st.s3, st.parts, st.cell, st.n, st.block, st.nparts, 0,
             st.pw1, st.pw2, st.mu_prod,
         ))
-        return len(self.opt_states) - 1
+        var index = len(self.opt_states) - 1
+        self.opt_state_indices[oi][h] = index
+        return index
 
     def _state_view(self, i: Int) -> OptimizerState:
         """An OptimizerState over state i's buffers and running scalars (it
@@ -903,7 +913,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def _drop_states(mut self, h: Int):
         """Retire every optimizer state of parameter handle h."""
-        var i = len(self.opt_states) - 1
+        var previous_count = len(self.opt_states)
+        var i = previous_count - 1
         while i >= 0:  # driver-loop: over optimizer states
             if self.opt_states[i].param == h:
                 var r = self.opt_states[i]
@@ -914,6 +925,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 self.retired.append(Int(r.cell))
                 _ = self.opt_states.pop(i)
             i -= 1
+        if len(self.opt_states) != previous_count:
+            # Removal compacts the vector. Reindex only at this retirement
+            # boundary, never on ordinary optimizer steps or tape resets.
+            for j in range(len(self.opt_state_indices)):  # driver-loop: over optimizer index metadata after retirement
+                self.opt_state_indices[j].clear()
+            for j in range(len(self.opt_states)):  # driver-loop: over surviving optimizer state metadata after retirement
+                var oi = self.opt_states[j].opt
+                self.opt_state_indices[oi][self.opt_states[j].param] = j
 
     def step(mut self, o: Int, hs: List[Int]) raises:
         """One update of each parameter in `hs` by optimizer `o`, in place,
@@ -928,11 +947,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: step takes at least one parameter")
         var slots = List[Int](capacity=len(hs))
         var grads = List[FP](capacity=len(hs))
+        var seen = Dict[Int, Int]()
         for i in range(len(hs)):  # driver-loop: over the step's parameters
             var slot = self._param_slot(hs[i], "step")
-            for j in range(len(slots)):  # driver-loop: over the step's parameters
-                if slots[j] == slot:
-                    raise Error("ops: step lists a parameter twice")
+            if slot in seen:
+                raise Error("ops: step lists a parameter twice")
+            seen[slot] = i
             slots.append(slot)
             grads.append(self.tape.gradient(self.tensors[slot]))
         var cfg = self.opts[oi].cfg
