@@ -84,6 +84,8 @@ from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
+from bindings.transformer_public_native import transformer_public_c, TransformerPublicTapeOwner
+from bindings.tokenizer_public_native import tokenizer_public_c
 from providers.python.transformer_decode_pyapi import transformer_decode_native_c, TransformerDecodeHandle
 from bindings.mamba_public_native import mamba_native_c, MambaDecodeHandle
 from bindings.samba_config_native import samba_config_c
@@ -1433,6 +1435,9 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(checkpoint_c[16], "safetensors_contains")
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
         module.def_function[sha256_hex_binding]("sha256_hex")
+        module.def_py_c_function(transformer_public_c, "transformer_public_call")
+        _ = module.add_type[TransformerPublicTapeOwner]("_TransformerPublicTapeOwner")
+        module.def_py_c_function(tokenizer_public_c, "tokenizer_public_call")
         module.def_py_c_function(neural_block_c[0], "neural_block_init")
         module.def_py_c_function(neural_block_c[4], "neural_block_set_params")
         module.def_py_c_function(neural_block_c[5], "neural_block_getstate")
@@ -1440,6 +1445,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
+        module.def_py_c_function(neural_block_c[7], "neural_block_inference_backward")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_py_c_function(transformer_decode_native_c, "transformer_decode_native_call")

@@ -216,7 +216,7 @@ def _neural_state_capture(owner: PythonObject, state: PythonObject) raises -> Py
         var row = _class_fields(ancestry[i])
         if py_contains(row, "__getattr__"):
             raise Error("TypeError: neural state attribute hooks are not supported")
-        for name in ["__getattribute__", "__setattr__"]:
+        for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native admission metadata and retained owner registry
             var hook = py_get(row, PythonObject(name))
             if hook is not None and hook is not bi.object.__dict__[name]:
                 raise Error("TypeError: neural state attribute hooks are not supported")
@@ -241,14 +241,14 @@ def _neural_publish_state(state: PythonObject, captured: PythonObject) raises:
         return
     var fields = _fields(state)
     var source = _fields(captured)
-    for name in ["cached_tokens", "arithmetic_profile", "_numeric_profile", "absolute_position", "_nn34_usable", "buffered_tokens"]:
+    for name in ["cached_tokens", "arithmetic_profile", "_numeric_profile", "absolute_position", "_nn34_usable", "buffered_tokens"]:  # driver-loop: native admission metadata and retained owner registry
         if py_contains(source, name):
             py_setitem(fields, name, source[name])
 
 
 def _neural_publish_fields(captured: PythonObject) raises:
     var fields = captured["_neural_live_fields"]
-    for name in ["_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed",
+    for name in ["_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed",  # driver-loop: native admission metadata and retained owner registry
                  "_native_session", "_session_binding", "_native_forward_owner", "h_last_",
                  "_native_block_provider_cache", "_native_mamba_block_provider_cache", "_native_mamba_state"]:
         if py_contains(captured, name):
@@ -784,6 +784,10 @@ def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = neural_block_getstate_binding(args[0], args[1])
         elif operation == 6:
             result = neural_block_setstate_binding(args[0], args[1], args[2])
+        elif operation == 7:
+            var bi = Python.import_module("builtins")
+            var name = String(py_call(bi.type.__dict__["__name__"].__get__, py_type(args[0])))
+            raise Error("NotImplementedError: mojolearn " + name + ".backward: inference is forward only; the backward pass runs on the GPU block class over a training binding")
         else:
             result = neural_block_backward_binding(args[0], args[1], args[2], args[3])
         return result.steal_data()

@@ -51,6 +51,7 @@ from pathlib import Path
 
 from . import _backend
 from . import _native_samba_bridge
+from . import _native_neural_bridge
 from . import _ragged
 from . import lowbit as _lowbit
 from ._buffer import addr, addr_ro, all_finite, empty
@@ -214,9 +215,7 @@ class TransformerBlockInference(TransformerBlock):
         """Not available: inference is forward only. Always raises `NotImplementedError`;
         train with the GPU block class.
         """
-        raise NotImplementedError(
-            "mojolearn TransformerBlockInference.backward: inference is forward only; "
-            "the backward pass runs on TransformerBlock over a training binding")
+        return _native_neural_bridge.RUNTIME.neural_block_inference_backward(self)
 
 
 # ---------------------------------------------------------------- Mamba (lane/inference-neural-forward, 2026-09-15)
@@ -245,9 +244,7 @@ class _RecurrentBlockInference:
         return _binding()
 
     def backward(self, x, grad_output):
-        raise NotImplementedError(
-            f"mojolearn {type(self).__name__}.backward: inference is forward only; "
-            "the backward pass runs on the GPU block class over a training binding")
+        return _native_neural_bridge.RUNTIME.neural_block_inference_backward(self)
 
 
 # Shared base _RecurrentBlockInference: only the binding and backward are overridden; the

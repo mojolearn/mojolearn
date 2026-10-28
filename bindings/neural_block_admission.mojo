@@ -93,7 +93,7 @@ def neural_array_slots(context: PythonObject) raises -> PythonObject:
         var row = _class_fields(mro[i])
         if py_contains(row, "__getattr__"):
             raise Error("TypeError: neural Array metadata hooks are not supported")
-        for name in ["__getattribute__", "__setattr__"]:
+        for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native admission metadata and retained owner registry
             var own = py_get(row, PythonObject(name))
             if own is not None and own is not b.object.__dict__[name]:
                 raise Error("TypeError: neural Array metadata hooks are not supported")
@@ -193,7 +193,7 @@ def neural_admit_weights(values: PythonObject, context: PythonObject) raises:
 def neural_block_fields(block: PythonObject, context: PythonObject, initialized: Bool = True) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var names = Python.tuple("_native_kind", "_native_route", "numeric_mode", "numeric_profile", "weight_format",
-        "d_model", "d_inner", "nheads", "conv_dim", "d_in_proj", "dt_rank", "_owned_generation", "_owned_restore_pending", "dt_limit", "n_heads", "n_kv_heads", "head_dim",
+        "d_model", "d_inner", "nheads", "conv_dim", "d_in_proj", "dt_rank", "_owned_generation", "_owned_restore_pending", "_discard_reports", "dt_limit", "n_heads", "n_kv_heads", "head_dim",
         "intermediate", "window", "max_positions", "_opts_tail", "_extended", "_w", "_wopt", "_int15",
         "_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed", "_W_NAMES",
         "norm", "mlp", "qkv_bias", "o_bias", "norm_bias", "mlp_bias", "qk_norm", "rope_scaling",
@@ -202,8 +202,8 @@ def neural_block_fields(block: PythonObject, context: PythonObject, initialized:
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(block))
     var admitted = False
     for i in range(len(ancestry)):  # driver-loop: passive subclasses of connected public block classes
-        for route in ["cpu", "gpu"]:
-            for kind in ["transformer", "mamba1", "mamba2", "mamba3"]:
+        for route in ["cpu", "gpu"]:  # driver-loop: native admission metadata and retained owner registry
+            for kind in ["transformer", "mamba1", "mamba2", "mamba3"]:  # driver-loop: native admission metadata and retained owner registry
                 admitted = admitted or ancestry[i] is context["block_classes"][route][kind]
     if not admitted:
         raise Error("TypeError: neural operation requires a connected native block")
@@ -213,7 +213,7 @@ def neural_block_fields(block: PythonObject, context: PythonObject, initialized:
         var name = String(names[i])
         if name != "_w" and name != "_wopt" and name != "_int15" and py_contains(fields, names[i]):
             neural_plain_value(fields[names[i]], 0, context)
-    for name in ["_native_kind", "_native_route"]:
+    for name in ["_native_kind", "_native_route"]:  # driver-loop: native admission metadata and retained owner registry
         if py_type(fields[name]) is not b.str:
             raise Error("TypeError: neural route metadata requires exact strings")
     if py_type(fields["d_model"]) is not b.int or Int(py=fields["d_model"]) < 1:
@@ -227,13 +227,13 @@ def neural_block_weight_names(block: PythonObject) raises -> PythonObject:
     var names = py_get(fields, "_W_NAMES")
     if names is None:
         var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(block))
-        for i in range(len(ancestry)):
+        for i in range(len(ancestry)):  # driver-loop: native admission metadata and retained owner registry
             names = py_get(_class_fields(ancestry[i]), "_W_NAMES")
             if names is not None:
                 break
     if py_type(names) is not b.tuple and py_type(names) is not b.list:
         raise Error("TypeError: neural weight registry requires native names")
-    for i in range(len(names)):
+    for i in range(len(names)):  # driver-loop: native admission metadata and retained owner registry
         if py_type(names[i]) is not b.str:
             raise Error("TypeError: neural weight names require exact strings")
     return py_call(b.tuple, names)
@@ -267,7 +267,7 @@ def neural_metadata_snapshot(value: PythonObject) raises -> PythonObject:
     if py_type(value) is b.dict:
         var values = Python.dict()
         var keys = py_call(b.list, value.keys())
-        for i in range(len(keys)):
+        for i in range(len(keys)):  # driver-loop: native admission metadata and retained owner registry
             py_setitem(values, keys[i], neural_metadata_snapshot(value[keys[i]]))
         return values
     return value
@@ -279,10 +279,10 @@ def neural_block_snapshot(block: PythonObject, context: PythonObject) raises -> 
     var snapshot = py_call(b.dict, fields)
     py_setitem(snapshot, "_neural_live_fields", fields)
     py_setitem(snapshot, "_neural_weight_names", neural_block_weight_names(block))
-    for name in ["dt_limit", "_opts_tail", "rope_scaling"]:
+    for name in ["dt_limit", "_opts_tail", "rope_scaling"]:  # driver-loop: native admission metadata and retained owner registry
         if py_contains(fields, name):
             py_setitem(snapshot, name, neural_metadata_snapshot(fields[name]))
-    for name in ["_w", "_wopt"]:
+    for name in ["_w", "_wopt"]:  # driver-loop: native admission metadata and retained owner registry
         if py_contains(fields, name):
             py_setitem(snapshot, name, neural_weights_snapshot(fields[name], context))
     var packed = py_get(fields, "_int15")
@@ -290,7 +290,7 @@ def neural_block_snapshot(block: PythonObject, context: PythonObject) raises -> 
         if py_type(packed) is not b.list and py_type(packed) is not b.tuple:
             raise Error("TypeError: neural packed weights require native plane lists")
         var planes = Python.list()
-        for i in range(len(packed)):
+        for i in range(len(packed)):  # driver-loop: native admission metadata and retained owner registry
             py_call(planes.append, PythonObject(None) if packed[i] is None else neural_weights_snapshot(packed[i], context, False))
         py_setitem(snapshot, "_int15", planes)
     return snapshot
@@ -307,7 +307,7 @@ def neural_model_weights(values: PythonObject, context: PythonObject) raises:
         elif py_type(value) is context["bf16_class"] or py_type(value) is context["int8_class"]:
             var fields = neural_record_fields(value, Python.tuple("shape", "bits", "codes", "exponents"))
             neural_plain_value(fields["shape"], 0, context)
-            for name in ["bits", "codes", "exponents"]:
+            for name in ["bits", "codes", "exponents"]:  # driver-loop: native admission metadata and retained owner registry
                 if py_contains(fields, name):
                     neural_admit_weights(Python.list(fields[name]), context)
         else:
@@ -327,7 +327,7 @@ def neural_block_f32(value: PythonObject, name: String, context: PythonObject) r
         from core.hostptr import f32_ptr
         var dims = List[Int]()
         var steps = List[Int]()
-        for i in range(len(captured.shape)):
+        for i in range(len(captured.shape)):  # driver-loop: native admission metadata and retained owner registry
             dims.append(Int(py=captured.shape[i]))
             steps.append(Int(py=captured.strides[i]))
         var result = generation_array(dims)
