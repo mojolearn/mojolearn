@@ -42,11 +42,9 @@ import os as _os
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_norm')
 
-from . import _backend
-from ._x_sequence_device import SequenceDeviceTensor, is_seq_tensor, resident_binding, to_device as _seq_to_device
+from . import _x_sequence_device as _sequence_device  # glue: connect native tensor storage
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
-_SEQ_BINDING = "_mojolearn_x_sequence"
 _ALL_OFF = _os.environ.get("MOJOLEARN_IDN_ALL_OFF", "") == "1"
 #: the before arm of the class device-I/O switch (see the module docstring)
 _CLASS_DEVICE_IO_OFF = (_os.environ.get("MOJOLEARN_LN_CLASS_DEVICE_IO_OFF", "") == "1"
@@ -56,95 +54,7 @@ _KEEP_STATS_OFF = _os.environ.get("MOJOLEARN_LN_KEEP_STATS_OFF", "") == "1" or _
 _SEQ_CONTEXT["seqln_keep_stats_off"] = _KEEP_STATS_OFF  # glue: the native forward reads the before-arm switch
 
 
-def _f32(a, name):
-    a = np.asarray(a)
-    if a.dtype == np.float64:
-        raise TypeError(f"{name}: float64 is refused; pass float32")
-    return np.ascontiguousarray(a, dtype=np.float32)
-
-
-def _run_dev(x, D, weight, bias, eps, dy, stats=None):
-    """`_run` on a resident x (and dy): y (forward) or dx (backward) as a
-    `SequenceDeviceTensor`, dweight / dbias as host arrays. `stats` = (mean,
-    rstd), two M-float resident tensors: a forward writes them, a backward
-    reads them instead of recomputing the forward (kept stats)."""
-    b = x.b
-    if not callable(getattr(b, "layer_norm_dev", None)):
-        raise RuntimeError("layer_norm: this binding has no device LayerNorm; pass a NumPy x")
-    if x.size % D or x.shape[-1] == 0:
-        raise ValueError("layer_norm: the trailing dimensions must match normalized_shape")
-    M = x.size // D
-    w = None if weight is None else _f32(weight, "weight").reshape(-1)
-    bb = None if bias is None else _f32(bias, "bias").reshape(-1)
-    for name, v in (("weight", w), ("bias", bb)):  # glue: the two named parameter arrays
-        if v is not None and v.size != D:
-            raise ValueError(f"layer_norm: {name} must hold {D} values")
-    addr = lambda a: 0 if a is None else a.ctypes.data   # noqa: E731
-    flags = [M, D, int(w is not None), int(bb is not None)]
-    hs, sflag = [], []
-    if stats is not None:
-        if not (is_seq_tensor(stats[0]) and is_seq_tensor(stats[1]) and stats[0].b is b and stats[1].b is b
-                and stats[0].size == M and stats[1].size == M):
-            raise ValueError("layer_norm: stats must be two resident tensors of M floats on x's binding")
-        hs, sflag = [stats[0].h, stats[1].h], [1]
-    if dy is None:
-        y = SequenceDeviceTensor._new(b, x.shape)
-        b.layer_norm_dev([x.h, y.h, 0, 0] + hs, [addr(w), addr(bb), 0, 0], flags + [0] + sflag, [float(eps)])
-        return y, None, None, None
-    if is_seq_tensor(dy):
-        if dy.b is not b or tuple(dy.shape) != tuple(x.shape):
-            raise ValueError("layer_norm_backward: dy must have x's shape (on x's binding)")
-        dyt = dy
-    else:
-        dyv = _f32(dy, "dy")
-        if dyv.shape != tuple(x.shape):
-            raise ValueError("layer_norm_backward: dy must have x's shape")
-        dyt = SequenceDeviceTensor._wrap(b, dyv)
-    dx = SequenceDeviceTensor._new(b, x.shape)
-    dw = np.empty(D, dtype=np.float32)   # written by the binding when weight is given
-    db = np.empty(D, dtype=np.float32)   # written by the binding when bias is given
-    b.layer_norm_dev([x.h, 0, dyt.h, dx.h] + hs, [addr(w), addr(bb), dw.ctypes.data, db.ctypes.data],
-                     flags + [1] + sflag, [float(eps)])
-    return None, dx, dw, db
-
-
-def _run(x, D, weight, bias, eps, dy, numeric_mode, stats=None):
-    if is_seq_tensor(x):
-        return _run_dev(x, D, weight, bias, eps, dy, stats)
-    x = _f32(x, "x")
-    if x.size % D or x.shape[-1] == 0:
-        raise ValueError("layer_norm: the trailing dimensions must match normalized_shape")
-    M = x.size // D
-    w = None if weight is None else _f32(weight, "weight").reshape(-1)
-    b = None if bias is None else _f32(bias, "bias").reshape(-1)
-    for name, v in (("weight", w), ("bias", b)):  # glue: the two named parameter arrays
-        if v is not None and v.size != D:
-            raise ValueError(f"layer_norm: {name} must hold {D} values")
-    bwd = dy is not None
-    # backward never reads y: the binding skips its download (lane py-sequence).
-    # y and dx are downloaded whole by the binding (every element written), so
-    # they are not zero-filled (lane layernorm-idn: two M x D fills fewer per fit)
-    y = None if bwd else np.empty(x.shape, dtype=np.float32)
-    dyv = _f32(dy, "dy") if bwd else None
-    if bwd and dyv.shape != x.shape:
-        raise ValueError("layer_norm_backward: dy must have x's shape")
-    dx = np.empty(x.shape, dtype=np.float32) if bwd else np.zeros(1, dtype=np.float32)
-    dw = np.zeros(D, dtype=np.float32)
-    db = np.zeros(D, dtype=np.float32)
-    addr = lambda a: 0 if a is None else a.ctypes.data   # noqa: E731
-    _backend.binding("_mojolearn_x_sequence", numeric_mode).layer_norm(
-        [x.ctypes.data, addr(w), addr(b), addr(y), addr(dyv), dx.ctypes.data, dw.ctypes.data, db.ctypes.data],
-        [M, D, int(w is not None), int(b is not None), int(bwd)], [float(eps)])
-    return y, dx, dw, db
-
-
-def _D(normalized_shape):
-    shape = (normalized_shape,) if isinstance(normalized_shape, (int, np.integer)) else tuple(normalized_shape)
-    if not shape or any(int(s) < 1 for s in shape):  # glue: shape dims of the argument
-        raise ValueError("normalized_shape must be positive")
-    return shape, int(np.prod(shape))  # glue: product of the shape dims
-
-
+# The former private NumPy runners are superseded by the native owner.
 def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-5, numeric_mode=None):
     """Layer normalization over the trailing dimensions, as `torch.nn.functional.layer_norm`.
 

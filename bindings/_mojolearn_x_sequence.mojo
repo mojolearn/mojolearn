@@ -11,7 +11,10 @@ from std.python._cpython import PyObjectPtr
 from sequence.model_device_dispatch import NATIVE_MODEL_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from providers.python.autograd_python_errors_pyapi import graph_python_error
-from providers.python.autograd_ops_frontend_pyapi import ops_session_call_py
+from std.ffi import _Global
+from providers.python.autograd_session_public_request_pyapi import ops_session_public_call_py, ops_session_public_connect_py
+from providers.python.autograd_program_public_request_pyapi import ops_program_public_call_py
+from providers.python.autograd_session_public_dispatch_pyapi import NativeSessionPublicAPI
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
 from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
@@ -207,6 +210,15 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
     return mlp_predict_py(ex, addrs, ip)
 
 
+comptime SESSION_PUBLIC_API = _Global[StorageType=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE],
+    name="MojoSessionPublicOPS_DEVICEAPIv1", init_fn=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE].__init__]
+
+
+def session_public_api_binding() raises -> PythonObject:
+    var api = SESSION_PUBLIC_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def model_native_api_binding() raises -> PythonObject:
     var api = NATIVE_MODEL_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -391,12 +403,23 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
     return distributed_close_py[DeviceExec, OPS_DEVICE](id)
 
 
+def ops_program_public_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 3:
+            raise Error("TypeError: ops_program_public_call expects three arguments")
+        var result = ops_program_public_call_py(args[0], args[1], args[2])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
 def ops_session_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_session_call expects three arguments")
-        var result = ops_session_call_py[DeviceExec, OPS_DEVICE](args[0], args[1], args[2])
+        var result = ops_session_public_call_py(args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -732,6 +755,9 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)
         m.def_function[model_native_api_binding]("model_native_api_v1")
+        m.def_function[session_public_api_binding]("session_public_api_v1")
+        m.def_function[ops_session_public_connect_py]("ops_session_public_connect")
+        m.def_py_c_function(ops_program_public_call_c_binding, "ops_program_public_call")
         m.def_function[model_fit_binding]("model_fit")
         m.def_function[model_predict_binding]("model_predict")
         m.def_function[model_n_params_binding]("model_n_params")

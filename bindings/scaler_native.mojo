@@ -12,6 +12,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays import classical_input, classical_address, classical_typed, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order
+from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input
 from core.scaler_fit_impl import scaler_cast, scaler_all_finite, scaler_check_stats, scaler_fill, scaler_check_missing, scaler_counts
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.sequential_admission import _ordinary_torch, _one_of
@@ -88,6 +89,11 @@ def _bool(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject) raises -> PythonObject:
+    return scaler_fit(model, source, weight_source, context, PythonObject(None))
+
+
+def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject,
+               input_cache: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
@@ -118,9 +124,11 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     var expected = 1 if String(mode) == "identical" else 0
     if Int(py=py_call_typed(entries["preprocessing_numeric_mode"])) != expected or Int(py=py_call_typed(entries["x_prep_numeric_mode"])) != expected:
         raise Error("RuntimeError: Scaler native numeric mode disagrees with requested mode")
-    var x = _input(source, 2, True, context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
+    var snapshot = scaler_operation_input(source, context, input_cache)
+    var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
+    var x = captured[].values
+    var n = captured[].metadata.source.rows
+    var d = captured[].metadata.source.cols
     var xp = _ptr(x)
     var output = classical_typed(Python.tuple(3, d), "<f4", context["output_context"])
     var stats = _ptr(output)

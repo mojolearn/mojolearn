@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native sequence tensor ownership, buffer IO and consumed float32 outputs.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.optimizer_public_words import optimizer_python_error
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_scalar, opt_value
@@ -101,6 +103,21 @@ def sequence_device_finalize(owner: PythonObject, values: PythonObject,
         return PythonObject(None)
     _ = py_call(context["sequence_device_setters"]["b"], owner, PythonObject(None))
     return PythonObject(None)
+
+
+
+def sequence_tensor_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    # The installed native descriptor supplies (context, owner). In particular,
+    # releasing temporary resident tensors inside another native operation must
+    # not enter the former Python __del__ wrapper. The retained release path
+    # remains usable during interpreter shutdown without module imports.
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        if len(args) != 2:
+            raise Error("TypeError: sequence tensor finalizer requires context and owner")
+        return sequence_device_finalize(args[1], Python.tuple(), args[0]).steal_data()
+    except error:
+        return optimizer_python_error(error)
 
 
 def sequence_device_operation(operation: String, owner: PythonObject, values: PythonObject,

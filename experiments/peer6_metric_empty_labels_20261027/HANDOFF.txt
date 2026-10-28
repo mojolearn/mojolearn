@@ -1,0 +1,1 @@
+Fowlkes-Mallows empty-input branch now uses native shape admission instead of invoking Array.__len__. Full classification provider CPU fixture compiled exit 0, 10 workers. No runtime/identity execution. General row resample and broader transitive metadata review remain pending. Full evidence: /Users/andrewhendel/mojolearn-evidence/peer6-metric-empty-labels-20261027

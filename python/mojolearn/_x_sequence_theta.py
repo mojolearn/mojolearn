@@ -82,15 +82,7 @@ class AutoTheta(ParamsMixin):
 
     def __init__(self, season_length=1, decomposition_type="multiplicative", model=None,
                  initial_smoothed=None, alpha=None, theta=None, numeric_mode=None):
-        if decomposition_type not in ("multiplicative", "additive"):
-            raise ValueError("decomposition_type must be 'multiplicative' or 'additive'")
-        if model is not None and model not in _MODELS:
-            raise ValueError(f"model must be one of {sorted(_MODELS)} or None")
-        self.season_length = int(season_length)
-        self.decomposition_type = decomposition_type
-        self.model = self._MODEL if self._MODEL is not None else model
-        self.initial_smoothed, self.alpha, self.theta = initial_smoothed, alpha, theta
-        self.numeric_mode = numeric_mode
+        _XSEQ(self, "theta_initialize", (season_length, decomposition_type, model, initial_smoothed, alpha, theta, numeric_mode), _XSEQ_CONTEXT)
 
     def fit(self, y, X=None):
         """Store one series or a batch of series for forecasting.
@@ -151,9 +143,7 @@ class AutoTheta(ParamsMixin):
         dict
             ``{"mean": forecasts}``, as returned by :meth:`predict`.
         """
-        if fitted:
-            raise NotImplementedError("Theta: fitted values are not implemented")
-        return self.fit(y, X).predict(h, level=level)
+        return _XSEQ(self, "theta_forecast", (y, h, X, X_future, level, fitted), _XSEQ_CONTEXT)
 
 
 class Theta(AutoTheta):
@@ -376,3 +366,5 @@ class DynamicOptimizedTheta(AutoTheta):
 
 
 _native_xseq_bridge.register(xseq_theta_codes=_MODELS, xseq_theta_models=tuple(_MODELS))
+
+_native_xseq_bridge.register(xseq_theta_classes=((AutoTheta, None), (Theta, "STM"), (OptimizedTheta, "OTM"), (DynamicTheta, "DSTM"), (DynamicOptimizedTheta, "DOTM")))

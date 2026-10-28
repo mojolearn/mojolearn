@@ -1539,38 +1539,15 @@ class QNRegressor(NumericModeMixin):
     #: classifier's default folds, as scikit-learn's does.
     _estimator_type = "regressor"
 
+    _mojolearn_native_public = True
     _BINDING = "_mojolearn_estimators"
     _LOSSES = {"squared_error": _QN_LOSS_SQUARED, "absolute_error": _QN_LOSS_ABS}
 
     def __init__(self, *, loss="squared_error", fit_intercept=True,
                  l1_strength=0.0, l2_strength=0.0, max_iter=1000, tol=1e-4,
                  delta=None, linesearch_max_iter=50, lbfgs_memory=5,
-                 warm_start=False, penalty_normalized=True):
-        if loss not in self._LOSSES:
-            raise ValueError(
-                f"Expected loss to be one of {list(self._LOSSES)}, got {loss!r}")
-        if warm_start:
-            raise NotImplementedError(
-                "mojolearn QNRegressor: warm_start is not implemented (the "
-                "solver starts from w0 = 0)")
-        if l1_strength < 0 or l2_strength < 0:
-            raise ValueError(
-                "mojolearn QNRegressor: l1_strength and l2_strength must be "
-                f"non-negative, got {l1_strength} and {l2_strength}")
-        if delta is not None and delta < 0:
-            raise ValueError(f"mojolearn QNRegressor: delta must be non-negative, got {delta}")
-        _check_qn_solver_fields("QNRegressor", tol, max_iter, linesearch_max_iter, lbfgs_memory)
-        self.loss = loss
-        self.fit_intercept = fit_intercept
-        self.l1_strength = l1_strength
-        self.l2_strength = l2_strength
-        self.max_iter = max_iter
-        self.tol = tol
-        self.delta = delta
-        self.linesearch_max_iter = linesearch_max_iter
-        self.lbfgs_memory = lbfgs_memory
-        self.warm_start = False
-        self.penalty_normalized = penalty_normalized
+                 warm_start=False, penalty_normalized=True, numeric_mode=None):
+        return _QN_CALL(self, "initialize", (loss, fit_intercept, l1_strength, l2_strength, max_iter, tol, delta, linesearch_max_iter, lbfgs_memory, warm_start, penalty_normalized, numeric_mode,), _QN_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model.
@@ -1650,6 +1627,7 @@ _native_classical, _CLASSICAL = _native_classical_bridge.connect_public(Ridge, L
 # score are one call each into it (bindings/qn_native.mojo).
 from ._native_qn_bridge import connect as _connect_qn  # noqa: E402
 _QN_CALL, _QN_CONTEXT = _connect_qn(QNRegressor._LOSSES)
+_QN_CONTEXT.update(qn_public_class=QNRegressor, qn_parameters=('loss', 'fit_intercept', 'l1_strength', 'l2_strength', 'max_iter', 'tol', 'delta', 'linesearch_max_iter', 'lbfgs_memory', 'warm_start', 'penalty_normalized', 'numeric_mode'))
 
 
 # The compiled LogisticRegression owner, connected once at import: fit,

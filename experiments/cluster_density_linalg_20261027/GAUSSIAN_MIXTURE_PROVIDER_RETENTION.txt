@@ -1,0 +1,16 @@
+GaussianMixture provider replacement — 2026-10-27
+
+Frozen source c57dd16a3b20ba97d45c087647d0efb470f6e7f1.
+Retain every admitted extended-solver module at shared context lifetime before
+fit. Fitted-state admission accepts those retained exact module identities as
+well as the original import connections. This preserves legitimate compiled
+provider replacement for predict/warm refit, and avoids releasing the old module
+inside refit when its extension-state dictionary is replaced. Exact compiled
+x_cluster_call ownership is checked before retention. Module references remain
+held until import context teardown; replacement modules are pinned once each.
+Constructor numeric_mode=None also preserves an admitted inherited mode.
+
+Compile PASS actual GMM owner, Mac CPU O0 -j10, 214.52s. No runtime/identity/GPU
+qualification. Receipt mixture_provider_retention_compile.json, full retained
+source/log/binary in ~/mojolearn-evidence/cluster-density-linalg-20261027/
+mixture-provider-retention-compile/. Earlier GMM receipts remain historical.

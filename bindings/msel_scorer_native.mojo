@@ -9,6 +9,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.metrics_native_support import metric_is_real, metric_float
 from bindings.msel_inputs import msel_input, msel_admit
+from bindings.native_buffer_owner import native_storage_allocate
 from bindings.msel_estimator_native import msel_estimator_call, msel_estimator_plan
 
 
@@ -23,16 +24,45 @@ def msel_metric_plan(function: PythonObject, context: PythonObject) raises -> Py
     return plan
 
 
-def msel_scorer_fields(scorer: PythonObject, context: PythonObject) raises -> PythonObject:
+def _scorer_class(context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var cls = context["family_msel_scorer_class"]
-    if py_type(scorer) is not cls:
-        raise Error("TypeError: Python scorer callbacks are not accepted; use get_scorer or make_scorer with a native metric")
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: native scorer metadata refuses metaclass hooks")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    if len(mro) != 2 or mro[1] is not b.object:
+        raise Error("TypeError: native scorer metadata refuses inherited lifecycle hooks")
     var source = py_call(b.type.__dict__["__dict__"].__get__, cls)
     var hooks = context["family_msel_scorer_hooks"]
-    for k in range(len(hooks)):  # driver-loop: connected scorer storage and method identities
+    for k in range(len(hooks)):  # driver-loop: connected scorer storage and method identities before allocation or access
         if py_get(source, hooks[k][0]) is not hooks[k][1]:
             raise Error("TypeError: native scorer methods or storage hooks changed")
+    return cls
+
+
+def msel_scorer_create(function: PythonObject, response: PythonObject, sign: Int,
+                       keywords: PythonObject, context: PythonObject) raises -> PythonObject:
+    _ = msel_metric_plan(function, context)
+    msel_admit(response, context)
+    msel_admit(keywords, context)
+    var cls = _scorer_class(context)
+    var scorer = native_storage_allocate(cls)
+    var fields = py_call(context["family_msel_scorer_fields"], scorer, cls)
+    # Fresh admitted native storage; Python __setattr__ and property setters
+    # are never involved and no pre-existing owner can be released here.
+    py_setitem(fields, "_score_func", function)
+    py_setitem(fields, "_sign", PythonObject(sign))
+    py_setitem(fields, "_kwargs", keywords)
+    py_setitem(fields, "_response_method", response)
+    py_setitem(fields, "_name", PythonObject(None))
+    return scorer
+
+
+def msel_scorer_fields(scorer: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = native_loaded_module("builtins")
+    var cls = _scorer_class(context)
+    if py_type(scorer) is not cls:
+        raise Error("TypeError: Python scorer callbacks are not accepted; use get_scorer or make_scorer with a native metric")
     var fields = py_call(context["family_msel_scorer_fields"], scorer, cls)
     var keys = py_call(b.list, fields.keys())
     for k in range(len(keys)):  # driver-loop: exact scorer keys before metadata lookup

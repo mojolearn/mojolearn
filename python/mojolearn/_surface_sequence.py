@@ -86,11 +86,11 @@ FAMILIES = (
             "seq_optimizer_init", "seq_optimizer_step", "seq_optimizer_state",
             "seq_optimizer_import", "seq_optimizer_export", "seq_optimizer_close",
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
-            "ops_session_create",
+            "ops_session_create", "session_public_api_v1", "ops_session_public_connect",
             "ops_shape",
             # checkpoints (autograd/model_checkpoint.mojo)
             "model_save_checkpoint", "model_checkpoint_info", "model_load_checkpoint",
-            "ops_program_fit_native", "ops_session_call", "ops_session_initialize", "ops_program_execute",
+            "ops_program_fit_native", "ops_session_call", "ops_session_initialize", "ops_program_public_call", "ops_program_execute",
             "ops_program_inspect", "ops_program_control",
             "ops_distributed_open", "ops_distributed_load", "ops_distributed_fit",
             "ops_distributed_run", "ops_distributed_state", "ops_distributed_residency",

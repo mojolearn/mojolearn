@@ -73,7 +73,7 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
 
 def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
                      mut values: List[Float64], mut ids: List[Int64], integer: Bool, mut leaf_depth: Int) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if Bool(py=py_call(b.isinstance, a, b.list)) or Bool(py=py_call(b.isinstance, a, b.tuple)):
         var n = len(a)
         if depth >= 8 or n == 0:
@@ -105,7 +105,7 @@ def program_input(value: PythonObject, integer: Bool) raises -> ProgramInput:
     var a = program_native_input(value)
     var values = List[Float64]()
     var ids = List[Int64]()
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if is_ndarray(a):
         var parsed = array_input(a, "numeric program input")
         if integer and parsed[0].kind != CAST_KIND_SIGNED and parsed[0].kind != CAST_KIND_UNSIGNED:
@@ -149,7 +149,7 @@ def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool, variable_
 
 
 def _dict() raises -> PythonObject:
-    return Python.import_module("builtins").dict()
+    return native_loaded_module("builtins").dict()
 
 
 def _result(arrays: PythonObject) raises -> PythonObject:
@@ -291,7 +291,6 @@ def ops_program_inspect_py[E: Exec & Movable & Deinitable, KIND: Int](
 
 
 def _integer(v: PythonObject, what: String, low: Int) raises -> Int:
-    var b = Python.import_module("builtins")
     if not is_integer_input(v):
         raise Error("TypeError: " + what + " must be an integer")
     var value = Int(py=v)
@@ -327,22 +326,25 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
         kind = 5
     if kind < 0:
         raise Error("ValueError: unknown loss " + name)
-    var b = Python.import_module("builtins")
-    var no_target = String(py=py_type(targets).__name__) == "NoneType"
+    var b = native_loaded_module("builtins")
+    var no_target = targets is None
     if (kind == 0) != no_target:
         raise Error("ValueError: omit targets only when loss='output'")
     var count = _integer(epochs, "epochs", 1)
     var batch = _integer(batch_size, "batch_size", 1)
     var opt = _integer(optimizer, "optimizer", 1)
     var seed_word = uint64_input(seed, "seed")
-    var explicit = String(py=py_type(parameters).__name__) != "NoneType"
+    var explicit = parameters is not None
     var selected = List[Int]()
     if explicit:
         if is_integer_input(parameters):
             selected.append(_integer(parameters, "parameter", 1))
         else:
-            for k in range(len(parameters)):  # small-loop(parameters: the selected parameter handles): argument parsing, no data
-                selected.append(_integer(parameters[k], "parameter", 1))
+            # Exact native sequences/arrays only; an Array is unwrapped before
+            # len/index so its Python convenience methods never run here.
+            var selected_values = program_native_input(parameters)
+            for k in range(len(selected_values)):  # small-loop(selected_values: selected parameter handles): argument parsing, no data
+                selected.append(_integer(selected_values[k], "parameter", 1))
     var params = program_fit_parameters[E, KIND](Int(py=sid), Int(py=pid), otherwise_id, explicit, selected)
     var owners = program_inputs(p, arrays, True)
     var target_owners = List[ProgramInput]()

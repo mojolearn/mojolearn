@@ -1,0 +1,23 @@
+Peer6 CV public metadata batch — 2026-10-27
+Branch: lane/peer6-timeseries-metrics-cv-20261027
+Parent: f9ad32a50ad4df41a5bfa4a34d267017cdf42b7a
+
+Search classes_ now reads the best estimator through its admitted native
+schema, preserves the native KNeighborsClassifier class-label property recipe,
+respects descriptor precedence, and returns the finished public Array/ndarray
+view with its retained owner. classes_ identities are pinned in estimator plans.
+The unused Python _best helper is removed.
+Splitter/scorer repr now each hand over once. Mojo owns public-field selection,
+sorting, nested parameter formatting and connected scorer-name lookup.
+Primitive/container formatting is retained. Nonprimitive passive metadata uses
+native scalar or array/type summaries rather than user repr callbacks; ndarray
+settings display Array(shape=..., dtype=...) without invoking NumPy arrayprint.
+No new arithmetic or performance mode is introduced.
+
+Compilation receipt is compile.json: complete runtime_model_selection host
+module, Mac ARM CPU column, identical O0, 10 workers. No runtime/identity run.
+Full source/log/binary under ~/mojolearn-evidence/peer6-cv-metadata-20261027/.
+
+Remaining active batches: CV flags and retained group metadata; search state
+replacement lifetimes; time-series search/forecast and row resampling. This
+batch does not establish whole-library callback freedom or runtime correctness.

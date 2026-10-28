@@ -1,0 +1,168 @@
+{
+  "source_commit": "f6a83c35517720759c0cdde0663e819a37769655",
+  "accepted_commits": [
+    "46f345a2e4",
+    "723d953276",
+    "b1653d9fc6",
+    "9c5c220893",
+    "cbca14a2d1",
+    "9fa3b61a61",
+    "fdbdb68d10",
+    "9e3cfdfc92",
+    "e6dc3ccaa0",
+    "e7457ab732",
+    "5cb0cab9f6",
+    "484eee4d95",
+    "ca86150fe7",
+    "3b0f7546f0",
+    "0921e645d2",
+    "e3d0440c8b",
+    "221b38df05",
+    "706023b03a",
+    "e9e7979705",
+    "f6a83c3551"
+  ],
+  "excluded_failed_prep_commits": [
+    "d7079cc921",
+    "205aecfc07",
+    "4b15c0ac7b",
+    "adc9ec89ba",
+    "4a1d0b089a",
+    "043f6d6bb9"
+  ],
+  "comparison": [
+    {
+      "path": "bindings/host_sparse_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "cda65ccfdabc63e12de15b724a1ed58579bed343ac4517acc13073940889d2ef",
+      "main_sha256": "cda65ccfdabc63e12de15b724a1ed58579bed343ac4517acc13073940889d2ef"
+    },
+    {
+      "path": "bindings/mani_decomp_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "13770126965240e3690f541b552ea3a307075358aaa7e2d587fa46701355f742",
+      "main_sha256": "13770126965240e3690f541b552ea3a307075358aaa7e2d587fa46701355f742"
+    },
+    {
+      "path": "bindings/mani_kit.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "83084f74a5e82b285b24c86525ff988a921819b40b4a76875ddd76aaa493d29a",
+      "main_sha256": "83084f74a5e82b285b24c86525ff988a921819b40b4a76875ddd76aaa493d29a"
+    },
+    {
+      "path": "bindings/mani_tsne_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "35703a1c5ddf530565f41758e82f19390e1b1c1a2e6ae14c8b8310cc83eff888",
+      "main_sha256": "35703a1c5ddf530565f41758e82f19390e1b1c1a2e6ae14c8b8310cc83eff888"
+    },
+    {
+      "path": "bindings/mani_umap_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "3a3f2e94ab40c0eaed37f6b2defe8835a669b22f22195784c2c22820ab9a5013",
+      "main_sha256": "3a3f2e94ab40c0eaed37f6b2defe8835a669b22f22195784c2c22820ab9a5013"
+    },
+    {
+      "path": "bindings/manifold_errors_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "192da546f7f8551fd9386c3bba761a61b0b0f1a309e1aa9b5b5a04f6930b1282",
+      "main_sha256": "192da546f7f8551fd9386c3bba761a61b0b0f1a309e1aa9b5b5a04f6930b1282"
+    },
+    {
+      "path": "bindings/manifold_lifecycle_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "1987187b008bf06af0c8c90631e5ed747bbd8ae29f82cacb3a228c3c06b409a3",
+      "main_sha256": "1987187b008bf06af0c8c90631e5ed747bbd8ae29f82cacb3a228c3c06b409a3"
+    },
+    {
+      "path": "bindings/manifold_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "2a0ea690ac43e5d9431e727b0447de501799f78eebc62199be3fcb4cc7527b26",
+      "main_sha256": "2a0ea690ac43e5d9431e727b0447de501799f78eebc62199be3fcb4cc7527b26"
+    },
+    {
+      "path": "bindings/manifold_settings_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "02fa944db84e344862f1dcb99b61a0ac0aef6fa7919bd58053810b8f02acb909",
+      "main_sha256": "02fa944db84e344862f1dcb99b61a0ac0aef6fa7919bd58053810b8f02acb909"
+    },
+    {
+      "path": "bindings/native_scalar_decode.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "12f276268c76fab43d476ab888ddacd2f6c34e0713316a1dfe0a623db5d294e0",
+      "main_sha256": "12f276268c76fab43d476ab888ddacd2f6c34e0713316a1dfe0a623db5d294e0"
+    },
+    {
+      "path": "bindings/pca_exact.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "dc24d9ab38b862c81fd009b8eeb688a0298b63ab2292e34ee55c86678c6fe0c8",
+      "main_sha256": "dc24d9ab38b862c81fd009b8eeb688a0298b63ab2292e34ee55c86678c6fe0c8"
+    },
+    {
+      "path": "bindings/pca_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "8e41a05b5f38e9a9f2fcf05f079172eeeb3be32fac9753cd14f02113a605b5ec",
+      "main_sha256": "8e41a05b5f38e9a9f2fcf05f079172eeeb3be32fac9753cd14f02113a605b5ec"
+    },
+    {
+      "path": "bindings/pca_query_native.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "e6a9a9fca537485dcf0d1676a809147638dd1cb657e7ef756b1bdbcda4e2b660",
+      "main_sha256": "e6a9a9fca537485dcf0d1676a809147638dd1cb657e7ef756b1bdbcda4e2b660"
+    },
+    {
+      "path": "providers/python/array_metadata_pyapi.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "4a53e0b8790c35d424084862b617932d753bdfb30a651b9d5446a20141a80b93",
+      "main_sha256": "4a53e0b8790c35d424084862b617932d753bdfb30a651b9d5446a20141a80b93"
+    },
+    {
+      "path": "providers/python/pca_input_pyapi.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "062f6ebfa340da08197cc63f184e20da0a06c6878883171b79a5d92ac5c10b97",
+      "main_sha256": "062f6ebfa340da08197cc63f184e20da0a06c6878883171b79a5d92ac5c10b97"
+    },
+    {
+      "path": "providers/python/pca_model_pyapi.mojo",
+      "same_bytes": true,
+      "compiled_sha256": "50d9cd2f29f2b40c710d1742d0919025d422003eb4cc2fd5be529433c683232c",
+      "main_sha256": "50d9cd2f29f2b40c710d1742d0919025d422003eb4cc2fd5be529433c683232c"
+    },
+    {
+      "path": "python/mojolearn/_expansion_ann.py",
+      "same_bytes": false,
+      "compiled_sha256": "b3636824e2a32adff2d86e4cd1a1ce19250bd6765be7ecdf71069f2f65f32570",
+      "main_sha256": "a1cd58ccf96fe18e0bd87f8a63fe6f59264dc1ea7714fc31269b75cea3d843fc"
+    },
+    {
+      "path": "python/mojolearn/_expansion_decomp.py",
+      "same_bytes": true,
+      "compiled_sha256": "1680eb6cb975897e1d34f64230fa4d5d65d89ad0de6af101fc6270b7d8997edc",
+      "main_sha256": "1680eb6cb975897e1d34f64230fa4d5d65d89ad0de6af101fc6270b7d8997edc"
+    },
+    {
+      "path": "python/mojolearn/_native_pca_bridge.py",
+      "same_bytes": true,
+      "compiled_sha256": "172310067d41584b6209aeabfa50a9992c49ca4296c6970a1b6e3ea1063a64c8",
+      "main_sha256": "172310067d41584b6209aeabfa50a9992c49ca4296c6970a1b6e3ea1063a64c8"
+    },
+    {
+      "path": "python/mojolearn/_native_runtime_manifold_bridge.py",
+      "same_bytes": true,
+      "compiled_sha256": "56d7b0d5e5f3da21c128b6675d13bbb9d61d05b683337c87917ef4da6dc52ece",
+      "main_sha256": "56d7b0d5e5f3da21c128b6675d13bbb9d61d05b683337c87917ef4da6dc52ece"
+    }
+  ],
+  "integration_conflicts": [
+    "_expansion_ann.py: retain Peer1 ANN module/attribute setup and add compiled TSNE lifecycle connection",
+    "compile_cpu.py: retain the lane compile controller previously absent on main"
+  ],
+  "pending": [
+    "Normalizer transform not merge-ready until three compile repairs pass prep target",
+    "Manifold numeric setting slots remain native NumPy conversion debt; scalar decoder adapter next batch",
+    "UMAP categorical encoding and inherited lifecycle migration pending",
+    "PCA fit/fit_transform, other decomposition operations and broader preprocessing migration pending",
+    "Shared exception constructor admission being repaired separately by root",
+    "Public runtime, errors/output/ownership negative controls, installed loading and cross-vendor identity pending final integration; no new verification requested"
+  ],
+  "wrapper_difference": "Only the shared ANN file differs: TSNE AST matches the compiled freeze; other differences retain already compiled/merged Peer1 ANN repairs."
+}

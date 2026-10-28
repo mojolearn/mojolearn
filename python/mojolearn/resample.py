@@ -89,13 +89,7 @@ class BootstrapResult:
 
     def __init__(self, point_estimate, distribution, sorted_distribution,
                  standard_error, low, high, order_low, order_high):
-        self.point_estimate = point_estimate
-        self.distribution = distribution
-        self.sorted_distribution = sorted_distribution
-        self.standard_error = standard_error
-        self.confidence_interval = ConfidenceInterval(low, high)
-        self.order_low = order_low
-        self.order_high = order_high
+        return _NATIVE(None, "family_rs_result_initialize", (self, "bootstrap", point_estimate, distribution, sorted_distribution, standard_error, low, high, order_low, order_high), _NATIVE_CONTEXT)
 
 
 class PermutationTestResult:
@@ -115,11 +109,7 @@ class PermutationTestResult:
     """
 
     def __init__(self, statistic, null_distribution, pvalue, count_less, count_greater):
-        self.statistic = statistic
-        self.null_distribution = null_distribution
-        self.pvalue = pvalue
-        self.count_less = count_less
-        self.count_greater = count_greater
+        return _NATIVE(None, "family_rs_result_initialize", (self, "permutation", statistic, null_distribution, pvalue, count_less, count_greater), _NATIVE_CONTEXT)
 
 
 class MonteCarloResult:
@@ -139,10 +129,7 @@ class MonteCarloResult:
     """
 
     def __init__(self, integral, mean, volume, closed_form):
-        self.integral = integral
-        self.mean = mean
-        self.volume = volume
-        self.closed_form = closed_form
+        return _NATIVE(None, "family_rs_result_initialize", (self, "monte_carlo", integral, mean, volume, closed_form), _NATIVE_CONTEXT)
 
 
 def _extension(numeric_mode=None):
@@ -232,7 +219,7 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
     >>> res = mojolearn.resample.bootstrap(x, statistic="mean", method="BCa")
     >>> low, high = res.confidence_interval
     """
-    return _NATIVE(None, "family_rs_bootstrap", (_backend.binding("_mojolearn_resample", numeric_mode), data, statistic, n_resamples, confidence_level,
+    return _NATIVE(None, "family_rs_bootstrap", (None, data, statistic, n_resamples, confidence_level,
                    method, alternative, random_state, q_or_prop, r_first, numeric_mode, paired), _NATIVE_CONTEXT)
 
 
@@ -300,7 +287,7 @@ def permutation_test(x, y=None, statistic="diff_means", n_resamples=9999,
     >>> res = mojolearn.resample.permutation_test(x, y, n_resamples=999)
     >>> res.pvalue  # doctest: +SKIP
     """
-    return _NATIVE(None, "family_rs_permutation_test", (_backend.binding("_mojolearn_resample", numeric_mode), x, y, statistic, n_resamples, alternative,
+    return _NATIVE(None, "family_rs_permutation_test", (None, x, y, statistic, n_resamples, alternative,
                    random_state, r_first, numeric_mode, permutation_type), _NATIVE_CONTEXT)
 
 
@@ -341,7 +328,7 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_
     >>> round(res.closed_form, 6)
     1.0
     """
-    return _NATIVE(None, "family_rs_monte_carlo_integrate", (_backend.binding("_mojolearn_resample", numeric_mode), integrand, lower, upper, n_samples,
+    return _NATIVE(None, "family_rs_monte_carlo_integrate", (None, integrand, lower, upper, n_samples,
                    random_state, i_first, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -382,7 +369,7 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
     >>> import mojolearn
     >>> idx = mojolearn.resample.resample_indices(1000, n_samples=100, replace=False)
     """
-    return _NATIVE(None, "family_rs_resample_indices", (_backend.binding("_mojolearn_resample", numeric_mode), n, n_samples, replace, random_state,
+    return _NATIVE(None, "family_rs_resample_indices", (None, n, n_samples, replace, random_state,
                    numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -466,7 +453,11 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
 # function is one native call, handed the resample binding of its numeric mode.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
-_native_family_bridge.tables(family_rs_state=globals())
+_native_family_bridge.tables(family_rs_state=globals(),
+                             family_rs_result_classes=(BootstrapResult, PermutationTestResult, MonteCarloResult, ConfidenceInterval))
+_native_family_bridge.connect_bindings("_mojolearn_resample")
+from ._native_owner_lifetime import connect_owner_context as _connect_owner_context
+_connect_owner_context(_NATIVE_CONTEXT)
 
 __all__ = ["bootstrap", "permutation_test", "monte_carlo_integrate", "resample", "resample_indices",
            "BootstrapResult", "PermutationTestResult", "MonteCarloResult",

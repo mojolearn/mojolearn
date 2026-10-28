@@ -1,0 +1,39 @@
+{
+  "base_commit": "0061f44ad5a0f514e2ce5227d86f6402191025c5",
+  "exit_code": 0,
+  "target": "apple-m1 CPU column",
+  "workers": 10,
+  "cpu_allocation": 10,
+  "flags": [
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "fixture": "checks/resample_results_compile.mojo",
+  "scope": "Complete result constructor replacement owner, native release admission and instance-dictionary lookup; Mac CPU compile only",
+  "runtime_executed": false,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-results-owners-20261027/resample-results.so",
+  "artifact_sha256": "b53d26f8908e1e9e1c3ce77140aeb85822d582b999ef4baa8c209e88aa0b7155",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-results-owners-20261027/source-bytes.tgz",
+  "source_archive_sha256": "83d57ffae75fea6eba70f94ea9c73b7fbe216ecd20ccf47b15b466dfc5e2b7a1",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-results-owners-20261027/source-manifest.json",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-results-owners-20261027/compile.log",
+  "earlier_attempt_logs": [
+    "/Users/andrewhendel/mojolearn-evidence/peer6-resample-results-owners-20261027/compile-before-instance-accessor.log"
+  ],
+  "pending": [
+    "General row resample migration",
+    "Transitive capture-once audit beyond direct numeric buffers",
+    "GPU compilation and runtime/identity checks excluded by owner"
+  ]
+}

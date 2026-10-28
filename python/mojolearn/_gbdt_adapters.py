@@ -102,7 +102,7 @@ class _GBDTAdapter(PublicOutputsMixin):
             raise not_fitted_error(f'{type(self).__name__} is not fitted')
 
     def __sklearn_is_fitted__(self):
-        return getattr(getattr(self, '_learner_', None), 'model_', None) is not None
+        return _TREES(self, "trees_gbdt_adapter_is_fitted", (), _TREES_CONTEXT)
 
     def __sklearn_tags__(self):
         """scikit-learn's tag protocol, read only by scikit-learn: the shared

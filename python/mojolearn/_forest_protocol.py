@@ -329,17 +329,13 @@ class ForestProtocol:
         holder["forest"] = value
 
     def __getstate__(self):
-        state = self.__dict__.copy()
-        state.pop("_resident_holder", None)
-        state.pop("_resident_forest", None)
-        return state
+        return _TREES(self, "trees_forest_getstate", (), _TREES_CONTEXT)
 
     def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.__dict__["_resident_holder"] = {}
+        return _TREES(self, "trees_public_forest_setstate", (state,), _TREES_CONTEXT)
 
     def __sklearn_is_fitted__(self):
-        return hasattr(self, "_offsets")
+        return _TREES(self, "trees_public_forest_is_fitted", (), _TREES_CONTEXT)
 
     def __sklearn_tags__(self):
         """scikit-learn's tag protocol, read only by scikit-learn: the shared

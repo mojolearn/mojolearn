@@ -17,13 +17,16 @@
 from std.math import isinf
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
+from bindings.family_raw_attr import family_raw_get, family_raw_get_or
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setattr, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance,
-    family_type_name, family_call, family_entry, family_array, family_view, family_cast_view,
+    family_type_name, family_call, family_array, family_view, family_cast_view,
     family_f32, family_as_f32, family_nonfinite, family_sample_weight, family_shape_repr,
 )
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
@@ -44,32 +47,32 @@ comptime _OPTICS_PRECOMPUTED = 5
 
 def _attr(model: PythonObject, name: String) raises -> PythonObject:
     """`getattr(model, name)`; its AttributeError is restored unchanged."""
-    return family_call(Python.import_module("builtins").getattr, model, PythonObject(name))
+    return family_raw_get(model, name)
 
 
 def _attr_or_none(model: PythonObject, name: String) raises -> PythonObject:
     """`getattr(model, name, None)`."""
-    return family_call(Python.import_module("builtins").getattr, model, PythonObject(name), PythonObject(None))
+    return family_raw_get_or(model, name, PythonObject(None))
 
 
 def _truthy(value: PythonObject) raises -> Bool:
     """`bool(value)`."""
-    return Bool(py=family_call(Python.import_module("builtins").bool, value))
+    return Bool(py=family_call(native_loaded_module("builtins").bool, value))
 
 
 def _int(value: PythonObject) raises -> PythonObject:
     """`int(value)`."""
-    return family_call(Python.import_module("builtins").int, value)
+    return family_call(native_loaded_module("builtins").int, value)
 
 
 def _float(value: PythonObject) raises -> PythonObject:
     """`float(value)`."""
-    return family_call(Python.import_module("builtins").float, value)
+    return family_call(native_loaded_module("builtins").float, value)
 
 
 def _eq(value: PythonObject, other: PythonObject) raises -> Bool:
     """`bool(value == other)`."""
-    return _truthy(family_call(Python.import_module("operator").eq, value, other))
+    return _truthy(family_call(native_loaded_module("operator").eq, value, other))
 
 
 def _one_of(value: PythonObject, a: String, b: String) raises -> Bool:
@@ -114,7 +117,7 @@ def _pending_is(error: Error, classes: PythonObject) raises -> Bool:
     var kind = _pending(0)
     if kind is None:
         return False
-    return Bool(py=py_call(Python.import_module("builtins").issubclass, kind, classes))
+    return Bool(py=py_call(native_loaded_module("builtins").issubclass, kind, classes))
 
 
 def _pending_text(error: Error) raises -> String:
@@ -124,7 +127,7 @@ def _pending_text(error: Error) raises -> String:
     var value = _pending(1)
     if value is None:
         return String("")
-    return String(py=py_call(Python.import_module("builtins").str, value))
+    return String(py=py_call(native_loaded_module("builtins").str, value))
 
 
 def _f32(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -143,12 +146,12 @@ def _seed(random_state: PythonObject) raises -> Int:
     low 63 bits."""
     if random_state is None:
         return 0
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if (py_type(random_state) is not b.int
-            or Bool(py=py_call(Python.import_module("operator").lt, random_state, PythonObject(0)))):
+            or Bool(py=py_call(native_loaded_module("operator").lt, random_state, PythonObject(0)))):
         raise Error("mojolearn: random_state must be None or a non-negative int "
                     + "(the lane's seeded host stream; a RandomState object is not taken)")
-    return Int(py=py_call(Python.import_module("operator").and_, random_state,
+    return Int(py=py_call(native_loaded_module("operator").and_, random_state,
                           PythonObject(9223372036854775807)))
 
 
@@ -218,7 +221,7 @@ def _mbk_devscan(binding: PythonObject) raises -> Bool:
     """`MiniBatchKMeans._devscan`: whether the binding scans X for NaN/inf
     itself (MBK_FAST_DEVSCAN), so the host scan is skipped; False on any
     failure."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     try:
         var getter = py_call(b.getattr, binding, PythonObject("x_cluster_mbk_devscan"))
         return Int(py=py_call(b.int, py_call(getter))) == 1
@@ -302,7 +305,7 @@ def _mbk_partial_fit(model: PythonObject, binding: PythonObject, source: PythonO
                      sample_weight: PythonObject, context: PythonObject) raises:
     """`MiniBatchKMeans.partial_fit(X, sample_weight)`: one step on all of X;
     the random stream and the reassignment counter carry over."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var x = _f32(source, "X", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
@@ -318,7 +321,7 @@ def _mbk_partial_fit(model: PythonObject, binding: PythonObject, source: PythonO
              Python.tuple(Python.tuple(PythonObject(seed0 >> 32), PythonObject(seed0 & 0xFFFFFFFF)), PythonObject(0)))
     if not first:
         var fitted = _attr(model, "n_features_in_")
-        if _truthy(family_call(Python.import_module("operator").ne, PythonObject(d), fitted)):
+        if _truthy(family_call(native_loaded_module("operator").ne, PythonObject(d), fitted)):
             raise Error("X has " + String(d) + " features, MiniBatchKMeans was fitted with " + family_str(fitted))
     var parts = Python.list()
     var mode = PythonObject(0)
@@ -388,7 +391,7 @@ def _mbk_partial_fit(model: PythonObject, binding: PythonObject, source: PythonO
     _set(model, "inertia_", _float(s[0]))
     _set(model, "_partial_state", Python.tuple(Python.tuple(_int(s[2]), _int(s[3])), _int(s[1])))
     var steps = family_call(b.getattr, model, PythonObject("n_steps_"), PythonObject(0))
-    _set(model, "n_steps_", family_call(Python.import_module("operator").add, steps, PythonObject(1)))
+    _set(model, "n_steps_", family_call(native_loaded_module("operator").add, steps, PythonObject(1)))
     _set(model, "n_features_in_", PythonObject(d))
 
 
@@ -432,7 +435,7 @@ def _bisect_fit(model: PythonObject, binding: PythonObject, source: PythonObject
     var f = result[0]
     var i = result[1]
     var s = result[2]
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     _set(model, "cluster_centers_", _xc_array(f[0], Python.tuple(k, d), "<f4", "f", context))
     var m = Int(py=py_call(b.len, i[1])) // 3
     _set(model, "_tree_centers", _xc_array(f[1], Python.tuple(m, d), "<f4", "f", context))
@@ -457,7 +460,7 @@ def _centers_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
 def _meanshift_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
                    context: PythonObject) raises:
     """`MeanShift.fit(X)`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var x = _f32(source, "X", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
@@ -501,7 +504,7 @@ def _meanshift_fit(model: PythonObject, binding: PythonObject, source: PythonObj
 def _optics_metric(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """`OPTICS._metric_code`: (code, p); euclidean at p=2 keeps the
     squared-distance route (-1)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var metric = _attr(model, "metric")
     var params = _attr(model, "metric_params")
     var p_field = _attr(model, "p")
@@ -525,7 +528,7 @@ def _optics_metric(model: PythonObject, context: PythonObject) raises -> PythonO
         return Python.tuple(PythonObject(-1), PythonObject(2.0))
     var table = context["family_cfa_optics_metrics"]
     if not py_contains(table, metric):
-        var names = py_call(Python.import_module("operator").add, py_call(b.sorted, table),
+        var names = py_call(native_loaded_module("operator").add, py_call(b.sorted, table),
                             Python.list(PythonObject("minkowski")))
         raise Error("NotImplementedError: mojolearn OPTICS: metric=" + family_repr(metric)
                     + " is not implemented; one of " + family_repr(names) + " (x_cluster/NOT_IMPLEMENTED.tsv)")
@@ -535,8 +538,8 @@ def _optics_metric(model: PythonObject, context: PythonObject) raises -> PythonO
 def _optics_size(value: PythonObject, n: Int, name: String) raises -> Int:
     """`OPTICS._size`: an int count in [2, n], or a fraction in (0, 1] of n
     (at least 2)."""
-    var b = Python.import_module("builtins")
-    var op = Python.import_module("operator")
+    var b = native_loaded_module("builtins")
+    var op = native_loaded_module("operator")
     if family_isinstance(value, b.bool) or value is None:
         raise Error(name + " must be an int >= 2 or a float in (0, 1]")
     if family_isinstance(value, b.int) or (family_isinstance(value, b.float)
@@ -594,7 +597,7 @@ def _optics_fit(model: PythonObject, binding: PythonObject, source: PythonObject
     _set(model, "predecessor_", _xc_array(i[1], Python.tuple(n), "<i4", "i", context))
     _set(model, "labels_", _xc_array(i[2], Python.tuple(n), "<i4", "i", context))
     if is_xi:
-        var rows = Int(py=py_call(Python.import_module("builtins").len, i[3])) // 2
+        var rows = Int(py=py_call(native_loaded_module("builtins").len, i[3])) // 2
         _set(model, "cluster_hierarchy_", _xc_array(i[3], Python.tuple(rows, 2), "<i4", "i", context))
     _set(model, "n_features_in_", PythonObject(d))
 
@@ -604,7 +607,7 @@ def _optics_fit(model: PythonObject, binding: PythonObject, source: PythonObject
 def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
                   context: PythonObject) raises:
     """`AffinityPropagation.fit(X)`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var affinity = _attr(model, "affinity")
     if not _one_of(affinity, "euclidean", "precomputed"):
         raise Error("affinity must be 'euclidean' or 'precomputed', got " + family_repr(affinity))
@@ -689,24 +692,24 @@ def _hdbscan_int_param(model: PythonObject, name: String) raises -> PythonObject
 def _hdbscan_mode(model: PythonObject, binding: PythonObject, context: PythonObject) raises:
     """`HDBSCAN._extension`: the binary's own compile-time mode must be the
     one requested."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var want = _attr_or_none(model, "numeric_mode")
     if want is None or not _truthy(want):
         want = context["backend_fields"]["_DEFAULT_MODE"]
-    var getter = py_call(b.getattr, binding, PythonObject("hdbscan_numeric_mode"), PythonObject(None))
+    var getter = neural_descriptor_entry(binding, "hdbscan_numeric_mode", False)
     if getter is not None:
         var got = Int(py=_int(family_call(getter)))
         var wanted = py_get(context["family_cfa_hdbscan_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
             raise Error("RuntimeError: mojolearn HDBSCAN: numeric_mode=" + family_repr(want) + " was requested but "
-                        + String(py=py_call(b.getattr, binding, PythonObject("__name__"))) + " reports compile-time "
+                        + String(py_fields(binding)["__name__"]) + " reports compile-time "
                         + "mode code " + String(got) + "; rebuild it with bash bindings/build_hdbscan.sh")
 
 
 def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
                  context: PythonObject) raises:
     """`HDBSCAN.fit(X)`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var view = family_view(source, 2, "X", context)
     var x = family_cast_view(view, "X", context)
     # `as_f32_c`'s `copied`: the cast made new storage.
@@ -848,7 +851,7 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
     var params = Python.list(PythonObject(n), PythonObject(d), min_samples, _int(min_cluster_size),
                              _int(max_cluster_size), _float(alpha_field),
                              _flag(_truthy(_attr(model, "allow_single_cluster"))), method, _float(cse_field), metric)
-    var n_clusters = family_call(family_entry(binding, "hdbscan_fit", context), addrs, params)
+    var n_clusters = family_call(neural_descriptor_entry(binding, "hdbscan_fit"), addrs, params)
     _ = t_inv  # keep the Python object alive through the native call above
     _ = t_sz  # keep the Python object alive through the native call above
     _ = t_lam  # keep the Python object alive through the native call above
@@ -923,7 +926,7 @@ def _hdbscan_prediction_data(model: PythonObject, binding: PythonObject, n: Int,
     # exemplar_label_offsets_out, index_into_children_out;
     # n_leaves, n_edges, n_clusters, n_selected
     var n_ex = family_call(
-        family_entry(binding, "hdbscan_generate_prediction_data", context),
+        neural_descriptor_entry(binding, "hdbscan_generate_prediction_data"),
         Python.list(classical_address(labels), classical_address(parents), classical_address(children),
                     classical_address(lambdas), classical_address(sizes), classical_address(inverse),
                     classical_address(deaths), classical_address(selected), classical_address(exemplar_idx),

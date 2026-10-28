@@ -1,0 +1,25 @@
+Peer6 final CV public boundaries — 2026-10-27
+Branch: lane/peer6-timeseries-metrics-cv-20261027
+Dependencies: prior peer6 CV batches through fcc6e65348, plus original search
+commits dcb4433dc41a2b65f1e55621702a72518dd7e557 and
+e7188f24f2e6215aa60bfe59e587163b0ecae373. Local cherry-picks 0011402850 and
+e832ccde79 are dependency copies, not additional batches for integration.
+
+make_scorer now checks connected class/storage identities before native
+allocation and writes fresh fields through the native dictionary descriptor.
+It admits flags without Array bool callbacks. Scorer field/property identities
+and __new__ are pinned at import connection. Public check_cv prepares used
+classification labels once. ParameterGrid indexes use the native search scalar
+preparer, retaining integer buffer support without input conversion hooks.
+Repeated splitter options and stored fold pairs require exact passive native
+containers before their protocols execute. Search multimetric flags use the
+same native scalar truth admission.
+
+Complete runtime_model_selection host CPU/O0/identical compile exit0 with
+10 workers, including both integrated search dependency batches. No runtime,
+GPU, identity or performance execution. Python AST parse and git diff check
+pass. Full source bytes, binary, compiler hash and log retained under
+~/mojolearn-evidence/peer6-cv-final-boundaries-20261027/attempt1/.
+Build environment retained at ~/mojolearn-evidence/peer6-cv-build-environment-20261027/.
+This closes the identified CV public boundary source gaps; compiled scope is
+not runtime validation or a whole-library Python-free claim.
