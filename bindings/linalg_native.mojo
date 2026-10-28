@@ -52,10 +52,14 @@ def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObj
         if py_type(jitter) is b.bool or not Bool(py=py_call(b.isinstance, jitter, Python.tuple(b.int, b.float))):
             raise Error("TypeError: mojolearn Cholesky: jitter must be a float, 0.0 or None")
         jitter = PythonObject(Float64(py=jitter))
+    var fields = py_fields(model)
     var mode = args[1]
+    # NumericModeMixin's former constructor kept an existing instance mode
+    # when numeric_mode=None was supplied during reinitialization.
+    if mode is None and py_contains(fields, "numeric_mode"):
+        mode = fields["numeric_mode"]
     if mode is not None and py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    var fields = py_fields(model)
     # Reinitialization must admit every released owner before publishing any
     # replacement. A user can have assigned an object with a Python finalizer
     # since the previous constructor; retaining the dictionary until this pass
@@ -96,6 +100,9 @@ def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     classical_connect_numpy(context)
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
+    for name in ["n_", "L_", "info_", "nb_", "_logdet", "jitter_", "_mojolearn_fitted"]:  # driver-loop: admit replaced fit owners before numerical work or publication
+        if py_contains(fields, name):
+            native_release_admit(fields[name], context)
     var a = family_as_f32(args[1], 2, "A", context)
     var n = Int(py=a.shape[0])
     var m = Int(py=a.shape[1])
