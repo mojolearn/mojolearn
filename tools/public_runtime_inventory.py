@@ -1495,6 +1495,29 @@ class EndpointConnections:
                 return self.value(alias, mod, func, env, depth + 1)
         if isinstance(expr, (ast.Tuple, ast.List)):
             return ("sequence", [self.value(e, mod, func, env, depth + 1) for e in expr.elts])
+        if isinstance(expr, ast.Dict) and None not in expr.keys:
+            # a constant table keyed by literals (`_LIFECYCLE_METHODS[(module, name)]`)
+            keys = [_canonical(self.value(k, mod, func, env, depth + 1)) for k in expr.keys]
+            if all(k is not None for k in keys):
+                return ("table", tuple(zip(keys, expr.values)), mod, func)
+            return None
+        if isinstance(expr, ast.Subscript):
+            if (isinstance(expr.value, ast.Attribute) and expr.value.attr == "__dict__"):
+                # `cls.__dict__["fit"]`: the class's own namespace entry, never a base's
+                owner = self.value(expr.value.value, mod, func, env, depth + 1)
+                key = self.value(expr.slice, mod, func, env, depth + 1)
+                if owner and owner[0] == "class" and key and key[0] == "literal":
+                    for node in owner[1].node.body:
+                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == key[1]:
+                            return ("func", self.index.func(owner[1].mod, node, cls=owner[1]))
+                return None
+            table = self.value(expr.value, mod, func, env, depth + 1)
+            key = _canonical(self.value(expr.slice, mod, func, env, depth + 1))
+            if table and table[0] == "table" and key is not None:
+                for candidate, value in table[1]:
+                    if candidate == key:
+                        return self.value(value, table[2], table[3], {}, depth + 1)
+            return None
         if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
             # `(base,) + tuple(classes)`: a concatenation of known sequences
             left = self.value(expr.left, mod, func, env, depth + 1)
@@ -1512,6 +1535,11 @@ class EndpointConnections:
                     and expr.attr in ("__getattribute__", "__setattr__", "__delattr__", "__new__", "__init__")):
                 return ("native", "object." + expr.attr)
             base = self.value(expr.value, mod, func, env, depth + 1)
+            if base and base[0] == "class" and expr.attr in ("__module__", "__name__", "__qualname__"):
+                # a package class statement: its module and names are fixed by the source
+                if not any(isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == expr.attr
+                                                             for t in n.targets) for n in base[1].node.body):
+                    return ("literal", base[1].mod.name if expr.attr == "__module__" else base[1].name)
             if base and base[0] == "class":
                 return self.index.lookup(base[1], expr.attr)
             if base and base[0] == "func" and expr.attr in ("__wrapped__", "__func__"):
@@ -1726,6 +1754,16 @@ class EndpointConnections:
                 return None
             current = returns[0]
         return current
+
+
+def _canonical(value):
+    """A hashable form of a literal or a sequence of literals, for table keys."""
+    if value and value[0] == "literal":
+        return ("literal", value[1])
+    if value and value[0] == "sequence":
+        items = [_canonical(v) for v in value[1]]
+        return ("sequence", tuple(items)) if all(i is not None for i in items) else None
+    return None
 
 
 def _endpoint_verdict(func, facts, helpers):
