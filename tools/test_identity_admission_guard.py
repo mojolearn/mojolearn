@@ -1,5 +1,6 @@
 """Reference publication with inert JSON and mocked verifier calls; no native code."""
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -128,8 +129,18 @@ def test_gpu_saved_file_model_na_passes_only_on_the_model_part():
 def test_gpu_only_declarations_are_read_from_the_harness_source():
     lanes, prefixes = GUARD.gpu_only_declarations()
     assert "par-" in prefixes
-    # one dict entry in identity_break.py, one added by a lane module
-    assert {"gbdt-pair-logit-pointwise", "optim-resident-io"} <= lanes
+    assert 'optim-resident-io' in lanes
+    # Ranking now has CPU routes; its older GPU-only exemption must not return.
+    assert 'gbdt-pair-logit-pointwise' not in lanes
+
+
+def test_gpu_only_reader_combines_harness_and_lane_declarations(tmp_path):
+    (tmp_path/'identity_break.py').write_text(
+        'GPU_ONLY_LANES = {"harness-lane": "GPU operation"}\nRECORD_EXCLUDED_PREFIXES = ("cooperative-",)\n')
+    (tmp_path/'identity_lanes').mkdir()
+    (tmp_path/'identity_lanes/example.py').write_text('GPU_ONLY_LANES["module-lane"] = "GPU operation"\n')
+    assert GUARD.gpu_only_declarations(tmp_path) == (
+        frozenset({'harness-lane', 'module-lane'}), ('cooperative-',))
 
 
 def test_gpu_only_declarations_absent_harness_reads_strict(tmp_path):
@@ -238,11 +249,12 @@ def test_selection_preserves_whole_original_record_and_rejects_absent_lane(tmp_p
 def wrapper_fixture(tmp_path, candidate, base, fail_selftest=False):
     repo = tmp_path / "repo"
     (repo / "tools").mkdir(parents=True)
-    for name in ("admit_identity_columns.sh", "identity_admission_guard.py"):
+    for name in ("admit_identity_columns.sh", "identity_admission_guard.py", "retain_run_summary.py"):
         shutil.copyfile(ROOT / "tools" / name, repo / "tools" / name)
     table = repo / "python/mojolearn/verify_reference/table.json"
     table.parent.mkdir(parents=True)
     table.write_text(json.dumps(base))
+    shutil.copyfile(ROOT / 'python/mojolearn/_verify_reference.py', table.parent.parent / '_verify_reference.py')
     for name in (".libs/libMojolearnMath.so", ".dylibs/libMojolearnMath.dylib"):
         path = table.parent.parent / name
         path.parent.mkdir(parents=True)
@@ -250,25 +262,41 @@ def wrapper_fixture(tmp_path, candidate, base, fail_selftest=False):
     incoming = tmp_path / "incoming"
     incoming.mkdir()
     raw = incoming / "apple.identical.json"
-    raw.write_text(json.dumps({"vendor": "apple-inert", "commit": "1" * 40,
+    def git(*args):
+        return subprocess.check_output(['git', *args], cwd=repo, stderr=subprocess.STDOUT, text=True).strip()
+    git('init', '-b', 'main')
+    git('config', 'user.name', 'Admission test')
+    git('config', 'user.email', 'admission@example.invalid')
+    git('add', '.')
+    git('commit', '-m', 'source fixture')
+    source_commit = git('rev-parse', 'HEAD')
+    raw.write_text(json.dumps({"vendor": "apple-inert", "commit": source_commit,
                                "cells": {"selected/base": {}, "held/base": {"verdict": "DIVERGENT"}}}))
     stub = tmp_path / "candidate.json"
     stub.write_text(json.dumps(candidate))
     shim = tmp_path / "inert_python.py"
-    shim.write_text('''import json, os, pathlib, sys
+    shim.write_text('''import json, os, pathlib, runpy, sys
 a = sys.argv[1:]
 if a[0].endswith("identity_host_preflight.py"):
     raise SystemExit(0)
 if a[0].endswith("identity_columns.py"):
     if a[1] == "check":
         for path in a[2:]:
-            print("IDCOLUMN " + path + " admissible=yes class=apple vendor=apple-inert commit=" + "1"*40 + " repeats=1")
+            print("IDCOLUMN " + path + " admissible=yes class=apple vendor=apple-inert commit=" + json.loads(pathlib.Path(path).read_text())["commit"] + " repeats=1")
     else:
         pathlib.Path(a[a.index("--out")+1]).write_text("{}")
     raise SystemExit(0)
 if a[:3] == ["-m", "mojolearn", "verify"]:
     if "--emit-reference" in a:
         assert "--reference-table" in a and a[a.index("--lanes")+1] == "selected"
+        records = []
+        for index, arg in enumerate(a):
+            if arg == "--records":
+                records.append(a[index+1])
+        discover = runpy.run_path("python/mojolearn/_verify_reference.py")["repository_record_paths"]
+        inputs = discover(records, pathlib.Path.cwd())
+        with open(os.environ["EMIT_CALLS"], "a") as log:
+            log.write(json.dumps([str(p) for p in inputs]) + "\\n")
         pathlib.Path(a[a.index("--emit-reference")+1]).write_bytes(pathlib.Path(os.environ["STUB_CANDIDATE"]).read_bytes())
         print("{}")
     if "--self-test" in a and os.environ.get("FAIL_SELFTEST") == "1":
@@ -276,21 +304,18 @@ if a[:3] == ["-m", "mojolearn", "verify"]:
     raise SystemExit(0)
 os.execv(sys.executable, [sys.executable] + a)
 ''')
-    bindir = tmp_path / "bin"
-    bindir.mkdir()
-    git = bindir / "git"
-    git.write_text('#!/bin/sh\ncase "$1" in\ncat-file) exit 0;;\nlog) echo 1; exit 0;;\n*) exit 91;;\nesac\n')
-    git.chmod(0o755)
     evidence = tmp_path / "evidence"
-    env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ["PATH"],
+    env = dict(os.environ,
                PYTHON=f"{sys.executable} {shim}", STUB_CANDIDATE=str(stub),
+               EMIT_CALLS=str(tmp_path/'emit-calls.jsonl'),
                EVIDENCE=str(evidence), ADMIT_DATE="2026-10-23", REF_TAG="inert",
                FAIL_SELFTEST="1" if fail_selftest else "0")
     return repo, table, raw, env
 
 
 @pytest.mark.parametrize("problem", ["apple", "nvidia", "amd", "cpu", "nocpu", "missing", "selftest"])
-def test_wrapper_failure_cannot_mutate_shipped_table(tmp_path, problem):
+@pytest.mark.parametrize('check_only', [False, True])
+def test_wrapper_failure_cannot_mutate_shipped_table(tmp_path, problem, check_only):
     base, candidate = tables()
     if problem == "nocpu":
         del candidate["cells"]["selected/base"]["train"]["cols"]["cpu"]
@@ -301,11 +326,14 @@ def test_wrapper_failure_cannot_mutate_shipped_table(tmp_path, problem):
         del candidate["cells"]["selected/base"]["train"]
     repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base, problem == "selftest")
     before, original = table.read_bytes(), raw.read_bytes()
-    result = subprocess.run(["bash", str(repo / "tools/admit_identity_columns.sh"), "--lanes", "selected", str(raw.parent)],
+    result = subprocess.run(["bash", str(repo / "tools/admit_identity_columns.sh"),
+                            *(['--check-only'] if check_only else []), "--lanes", "selected", str(raw.parent)],
                             env=env, capture_output=True, text=True)
     assert result.returncode != 0, result.stdout + result.stderr
     assert table.read_bytes() == before
     assert raw.read_bytes() == original
+    if check_only:
+        assert not list((repo/'bench/results/identity_break').rglob('*.json'))
 
 
 @pytest.mark.parametrize("check_only", [False, True])
@@ -313,6 +341,7 @@ def test_wrapper_checks_candidate_and_preserves_original_unselected_record(tmp_p
     base, candidate = tables()
     repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base)
     before, original = table.read_bytes(), raw.read_bytes()
+    head = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'])
     result = subprocess.run(["bash", str(repo / "tools/admit_identity_columns.sh"),
                              *(["--check-only"] if check_only else []), "--lanes", "selected", str(raw.parent)],
                             env=env, capture_output=True, text=True)
@@ -320,11 +349,52 @@ def test_wrapper_checks_candidate_and_preserves_original_unselected_record(tmp_p
     assert raw.read_bytes() == original
     if check_only:
         assert table.read_bytes() == before
-        assert not (repo / "bench").exists()
+        assert not (repo / 'bench/results/reference_admissions').exists()
+        assert not list((repo/'bench/results/identity_break').rglob('*.json'))
     else:
         assert json.loads(table.read_text()) == candidate
-        retained = repo / "bench/results/identity_break/2026-10-23-inert/apple-inert" / raw.name
+        retained = repo / 'bench/results/identity_break/retained' / hashlib.sha256(original).hexdigest() / raw.name
         assert retained.read_bytes() == original
+        assert (repo / 'bench/results/reference_admissions/2026-10-23-inert/agreement-summary.json').exists()
+    calls = Path(env['EMIT_CALLS']).read_text().splitlines()
+    assert len(calls) == 1
+    assert len(list((repo/'bench/results/identity_break').rglob('*.identical.json'))) == (0 if check_only else 1)
+    assert all(Path(p).is_relative_to(repo/'bench/results/identity_break') for p in json.loads(calls[0]))
+    assert subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD']) == head
+
+
+@pytest.mark.parametrize('change', ['corrupted-copy', 'symlink'])
+def test_admission_refuses_unsafe_input_without_mutating_table(tmp_path, change):
+    base, candidate = tables()
+    repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base)
+    if change == 'corrupted-copy':
+        retained = repo/'bench/results/identity_break/retained'/hashlib.sha256(raw.read_bytes()).hexdigest()/raw.name
+        retained.parent.mkdir(parents=True)
+        retained.write_text('{}')
+    else:
+        target = raw.with_suffix('.original')
+        raw.rename(target)
+        raw.symlink_to(target)
+    before = table.read_bytes()
+    result = subprocess.run(['bash', str(repo/'tools/admit_identity_columns.sh'), '--lanes', 'selected', str(raw.parent)],
+                            env=env, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'could not retain incoming records' in result.stderr
+    assert table.read_bytes() == before
+    assert not Path(env['EMIT_CALLS']).exists()
+
+
+def test_admission_reuses_an_uncommitted_repository_copy(tmp_path):
+    base, candidate = tables()
+    repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base)
+    retained = repo/'bench/results/identity_break/new-run'/raw.name
+    retained.parent.mkdir(parents=True)
+    retained.write_bytes(raw.read_bytes())
+    result = subprocess.run(['bash', str(repo/'tools/admit_identity_columns.sh'), '--lanes', 'selected', str(raw.parent)],
+                            env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(table.read_text()) == candidate
+    assert list((repo/'bench/results/identity_break').rglob('*.identical.json')) == [retained]
 
 
 def test_source_derived_host_only_cpu_is_sufficient(monkeypatch):

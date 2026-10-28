@@ -8,15 +8,17 @@
 # `ols/base` lane on the HOST column (MOJOLEARN_VENDOR=cpu), so no Metal.
 #
 # Column mode (records from tools/record_identity_column.sh on each box):
+#   Incoming columns are retained under bench/results/identity_break before
+#   generation. Commit the records and updated table together after checks.
 #   1. every <records dir>/*.identical.json must pass
 #      tools/identity_columns.py check (the same _verify_reference.admit() the
 #      table builder applies, plus this harness's fixture bytes); all must name
 #      ONE commit, and that commit must be in this repository (its commit time
 #      decides "newest wins")
-#   2. copies them, with their provenance, to
-#      bench/results/identity_break/<UTC date>-<REF_TAG>/<vendor label>/
+#   2. retains byte-identical copies under bench/results/identity_break/,
+#      reusing existing copies without requiring a separate prerequisite commit
 #   3. regenerates python/mojolearn/verify_reference/table.json from every
-#      committed column for the selected lanes (`verify --all --emit-reference`
+#      repository column for the selected lanes (`verify --all --emit-reference`
 #      with `--reference-table` and `--lanes`; newest commit wins per cell part
 #      and device class, older classes kept as superseded)
 #      INCREMENTAL RE-RECORD (Andrew 2026-10-10): re-record only what changed;
@@ -211,6 +213,19 @@ for d in "${dirs[@]}"; do
     for f in "$d"/*.identical.json; do [ -f "$f" ] && files+=("$f"); done
 done
 [ ${#files[@]} -gt 0 ] || die "no *.identical.json under ${dirs[*]}"
+preview_args=()
+if [ $CHECK_ONLY = 1 ]; then
+    mkdir -p "$ROOT/bench/results/identity_break"
+    PREVIEW_INPUTS=$(mktemp -d "$ROOT/bench/results/identity_break/.admission-preview-XXXXXX") \
+        || die "cannot prepare temporary record inputs"
+    trap 'rm -rf -- "$PREVIEW_INPUTS"' EXIT
+    preview_args=(--preview-dir "$PREVIEW_INPUTS")
+fi
+"${PY[@]}" tools/identity_admission_guard.py inputs --source-root "$ROOT" \
+    ${preview_args[@]+"${preview_args[@]}"} "${files[@]}" \
+    > "$EVID/repository-records.txt" || die "could not retain incoming records in MojoLearn; table unchanged"
+files=()
+while IFS= read -r -d '' f; do files+=("$f"); done < "$EVID/repository-records.txt"
 "${PY[@]}" tools/identity_columns.py check "${files[@]}" > "$EVID/check.txt" 2>&1
 crc=$?
 cut -c1-300 "$EVID/check.txt"
@@ -246,7 +261,11 @@ LANES=$("${PY[@]}" tools/identity_admission_guard.py lanes --lanes "$LANES" "${f
 tmp=$(mktemp -d "$EVID/admission.XXXXXX")
 cp "$TABLE" "$tmp/base.json" || die "cannot retain base table"
 record_args=(--records "$ROOT/bench/results/identity_break")
-for f in "${files[@]}"; do record_args+=(--records "$f"); done
+if [ $CHECK_ONLY = 1 ]; then
+    for f in "${files[@]}"; do
+        case "$f" in "$PREVIEW_INPUTS/"*) record_args+=(--records "$f") ;; esac
+    done
+fi
 candidate() {
     cli --all --emit-reference "$tmp/table.json" --reference-table "$tmp/base.json" \
         --lanes "$LANES" "$@" > "$tmp/emit.log" 2>&1 \
@@ -264,12 +283,13 @@ if [ $CHECK_ONLY = 1 ]; then
     exit $?
 fi
 
-DEST=bench/results/identity_break/$DATE-${REF_TAG:-0836}
+# Admission receipts are not raw columns; keep them outside the input tree.
+DEST=bench/results/reference_admissions/$DATE-${REF_TAG:-0836}
 mkdir -p "$DEST"
 {
     echo "# Reference columns at ${C:0:12} ($DATE)"
     echo
-    echo "Written by \`tools/record_identity_column.sh\` (identity_break.py --json, identical tier,"
+    echo "Columns recorded by \`tools/record_identity_column.sh\` (identity_break.py --json, identical tier,"
     echo "default fixture, one device, every part, every fixture, --repeats 1) and admitted by"
     echo "\`tools/admit_identity_columns.sh\`, which regenerated"
     echo "\`python/mojolearn/verify_reference/table.json\` for these lanes, preserving every other row:"
@@ -280,19 +300,12 @@ mkdir -p "$DEST"
     echo "|---|---|---|"
 } > "$DEST/README.md"
 for f in "${files[@]}"; do
-    label=$("${PY[@]}" -c "import json,sys; print(json.load(open(sys.argv[1]))['vendor'])" "$f")
-    sub="$DEST/$label"; mkdir -p "$sub"
-    base=$(basename "$f")
-    if [ -f "$sub/$base" ] && ! cmp -s "$f" "$sub/$base"; then die "$sub/$base exists with other bytes"; fi
-    cp "$f" "$sub/$base"
-    prov="${f%.identical.json}.provenance.txt"; [ -f "$prov" ] && cp "$prov" "$sub/"
     line=$(grep -F "$f " "$EVID/check.txt" | sed 's/^IDCOLUMN [^ ]* admissible=yes //' | cut -d' ' -f1-2,7-)
-    echo "| \`$label/$base\` | $line | \`$(shasum -a 256 "$f" | cut -c1-16)\` |" >> "$DEST/README.md"
+    echo "| \`${f#"$ROOT/"}\` | $line | \`$(shasum -a 256 "$f" | cut -c1-16)\` |" >> "$DEST/README.md"
 done
 
-# Rebuild with final committed record paths, then revalidate before publishing.
-# A failure can leave original raw records retained, but never a changed table.
-candidate --records "$ROOT/bench/results/identity_break"
+# The candidate already cites its final repository inputs; retain those exact
+# bytes and commit them together with the checked table.
 tail -n 1 "$tmp/emit.log" > "$DEST/admission-summary.json"
 cp "$tmp/agreement.json" "$DEST/agreement-summary.json"
 cut -c1-400 "$DEST/admission-summary.json"
@@ -310,7 +323,14 @@ checks "$tmp/table.json"
     --candidate "$tmp/table.json" --lanes "$LANES" --destination "$TABLE" \
     > "$tmp/publication.json" || die "table publication refused; see $tmp/publication.json"
 echo "NEXT (after SELFTEST rc=0):"
-echo "  git add $DEST $TABLE && git commit -m 'verify_reference: table regenerated from ${C:0:9} columns' && git push"
+printf '  git add -- %q %q ' "$DEST" "$TABLE"
+for f in "${files[@]}"; do
+    printf '%q ' "${f#"$ROOT/"}"
+    for prov in "${f%/*}"/*.provenance.txt; do
+        [ ! -f "$prov" ] || printf '%q ' "${prov#"$ROOT/"}"
+    done
+done
+echo "&& git commit -m 'verify_reference: table regenerated from ${C:0:9} columns' && git push"
 echo "  Re-record portable model files only if their admitted model/batch hashes changed."
 echo "  Preserve every unaffected model in the replacement manifest; --models replaces the whole bundle."
 [ $ST_RC = 0 ] && [ $COV_RC = 0 ] && [ $PTX_RC = 0 ]
