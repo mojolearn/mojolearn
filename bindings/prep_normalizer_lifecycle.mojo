@@ -176,7 +176,8 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
         precomputed = precomputed or (py_type(option) is b.str and String(option) == "precomputed")
     var sparse = _truth(py_get(tags, "sparse", False))
     var snapshot = prep_transform_snapshot(source, name, validate, scan, context, sparse, not nested)
-    if validate and not precomputed and len(snapshot.shape) == 2:
+    var numeric = (snapshot.dtype_number >= 0 and snapshot.dtype_number <= 13) or snapshot.dtype_number == 23
+    if validate and numeric and not precomputed and len(snapshot.shape) == 2:
         if py_type(fitted) is b.int and Int(py=fitted) != snapshot.source.cols:
             raise Error("X has " + String(snapshot.source.cols) + " features, but " + name + " is expecting " + String(Int(py=fitted)) + " features as input.")
         # The former _array_like conversion removed pandas column labels before
