@@ -159,3 +159,42 @@ Native matrix/device lifetime increment
   and training/query algorithms retain their existing buffers and operations.
 - No new verification run per latest owner steering. Focused compile target:
   runtime_manifold host. Source compile and all runtime/vendor coverage pending.
+
+Focused compile feedback retained
+- Root frozen CPU batch 3 failed UMAP scalar validation compilation: four
+  bitcast type arguments needed DType variants; the UInt64 shift needed a
+  UInt64 RHS. Narrow aa8b505f1f repairs those five sites. No lane compilation.
+- Complete failure logs are retained by coordinator under
+  ~/mojolearn-evidence/peer2-native-boundary-20261027/cpu-batch-3/remote/leg_out/
+  (manifold.log, umap_init.log). Root owns the follow-up compile and merge.
+
+Decomp-manifold/TSNE public lifecycle source increment
+- Dedicated native envelope owns fitted checks, sparse/dense/complex/rank/empty
+  input refusal, ignored-y checks, feature width/names, successful fitted flag,
+  and finished public ndarray results. It takes one X metadata capture and
+  hands the same native descriptor to every decomp/TSNE inner method.
+- The metadata admission-only API (preprocessing eafa5a610c) enables original
+  class-specific shape/type errors before numerical casts. CastIn execution
+  is guarded by castable. Ignored float32/64 y uses its own dtype/width/strides
+  admission and exact native exponent scan, preserving finite wide values.
+- Native error refinement preserves device errors, singleton-fit diagnostics,
+  plain-kernel nonfinite error normalization and original exception causes.
+  Only exact builtin exceptions with native string arguments are formatted.
+- TSNE user initialization captures its shape/dtype/strides/address once and
+  retains the original owner through the optimizer. MDS nested ClassicalMDS
+  initialization now consumes its already-owned matrix, avoiding a repeated
+  public buffer capture. Isomap disconnected-graph warnings use the native
+  warning owner rather than warnings.warn.
+- Dedicated import-time connect_lifecycle unwraps only qualified completed
+  methods and marks their fitted/output capabilities. It preserves NumericMode
+  constructor injection and passive subclass inherited methods. Shared wrapper
+  owners supply y-forwarding and EOF installation companion commits; root must
+  integrate those companions with this native envelope.
+- Runtime lifecycle fixture added at
+  python/mojolearn/tests/test_manifold_native_lifecycle.py. Existing source
+  expectations updated, but NO NEW TEST/VERIFICATION RUN per latest owner
+  steering. Earlier source pass counts cover earlier snapshots only.
+- Compile target runtime_manifold host, dependent on root's shared admission,
+  metadata and mode helpers. Compile/runtime/cross-vendor results pending.
+- UMAP fit/transform still retain their existing Python lifecycle until native
+  categorical/supervised target handling and remaining input captures are done.
