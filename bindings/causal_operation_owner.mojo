@@ -33,14 +33,14 @@ def _causal_native_plain(value: PythonObject, context: PythonObject) raises -> P
         return value
     if cls is bi.list or cls is bi.tuple:
         var result = Python.list()
-        for i in range(len(value)):  # small-loop(normalize already admitted scalar metadata)
+        for i in range(len(value)):  # driver-loop: over already admitted scalar metadata containers
             _ = py_call(result.append, _causal_native_plain(value[i], context))
         return py_call(bi.tuple, result) if cls is bi.tuple else result
     if cls is bi.dict:
         neural_string_keys(value)
         var result = Python.dict()
         var keys = py_call(bi.list, value.keys())
-        for i in range(len(keys)):  # small-loop(captured passive metadata dictionary)
+        for i in range(len(keys)):  # driver-loop: over captured passive metadata dictionary fields
             py_setitem(result, keys[i], _causal_native_plain(value[keys[i]], context))
         return result
     if neural_native_scalar(value, context, True):
@@ -124,7 +124,7 @@ def _causal_entries(entries: PythonObject, pinned: PythonObject, context: Python
         raise Error("TypeError: CausalLM execution requires its constructed native entry owner")
     var result = Python.dict()
     var names = py_call(bi.list, entries.keys())
-    for i in range(len(names)):  # driver-loop(capture the admitted execution registry once)
+    for i in range(len(names)):  # driver-loop: over capture the admitted execution registry once
         var name = String(names[i])
         var item = entries[names[i]]
         if original is not None and (not py_contains(original, names[i]) or item is not original[names[i]]):
@@ -155,12 +155,12 @@ def causal_model_capture(model: PythonObject, context: PythonObject) raises -> P
     var live = model_record_fields(model, context["model_class"], names)
     var bi = native_loaded_module("builtins")
     var fields = Python.dict()
-    for i in range(len(names)):  # driver-loop(retain only fields consumed by this operation)
+    for i in range(len(names)):  # driver-loop: over retain only fields consumed by this operation
         if py_contains(live, names[i]):
             py_setitem(fields, names[i], live[names[i]])
     py_setitem(fields, "_causal_original", model)
     py_setitem(fields, "_causal_live_fields", live)
-    for name in ["kind", "d_model", "vocab_size", "n_layers", "norm_eps", "numeric_profile", "device", "weight_format", "max_positions", "_native_vendor", "_native_numeric_mode", "_parameters_exposed", "_resident_busy", "_closed", "_failed"]:  # driver-loop(captured model scalar metadata)
+    for name in ["kind", "d_model", "vocab_size", "n_layers", "norm_eps", "numeric_profile", "device", "weight_format", "max_positions", "_native_vendor", "_native_numeric_mode", "_parameters_exposed", "_resident_busy", "_closed", "_failed"]:  # driver-loop: over captured model scalar metadata
         if py_contains(fields, name):
             neural_plain_value(fields[name], 0, context)
             py_setitem(fields, name, _causal_native_plain(fields[name], context))
@@ -201,7 +201,7 @@ def causal_model_capture(model: PythonObject, context: PythonObject) raises -> P
     else:
         var captured = Python.list()
         var seen = Python.dict()
-        for i in range(len(blocks)):  # driver-loop(capture unique block owners before execution)
+        for i in range(len(blocks)):  # driver-loop: over capture unique block owners before execution
             var identity = py_call(bi.id, blocks[i])
             var block = py_get(seen, identity)
             if block is None:
@@ -236,7 +236,7 @@ def causal_model_publish(model: PythonObject) raises:
             py_setitem(live, name, fields[name])
     var blocks = py_get(fields, "_native_block_fields")
     if blocks is not None:
-        for i in range(len(blocks)):  # driver-loop(publish admitted block session ownership)
+        for i in range(len(blocks)):  # driver-loop: over publish admitted block session ownership
             var block = blocks[i]
             var original = block["_neural_live_fields"]
             neural_string_keys(original)
@@ -254,20 +254,20 @@ def causal_layer_capture(state: PythonObject, kind: PythonObject, context: Pytho
     _ = model_record_fields(state, context["generation_classes"][2][kind], Python.tuple("_resident_session"))
     var bi = native_loaded_module("builtins")
     var fields = Python.dict()
-    for i in range(len(scalar_names)):  # driver-loop(retain declared layer state words)
+    for i in range(len(scalar_names)):  # driver-loop: over retain declared layer state words
         if py_contains(live, scalar_names[i]):
             py_setitem(fields, scalar_names[i], live[scalar_names[i]])
-    for i in range(len(buffers)):  # driver-loop(retain declared layer state buffers)
+    for i in range(len(buffers)):  # driver-loop: over retain declared layer state buffers
         if py_contains(live, buffers[i]):
             py_setitem(fields, buffers[i], live[buffers[i]])
     if py_contains(live, "_resident_session"):
         py_setitem(fields, "_resident_session", live["_resident_session"])
-    for i in range(len(scalar_names)):  # driver-loop(capture layer state scalars before conversion)
+    for i in range(len(scalar_names)):  # driver-loop: over capture layer state scalars before conversion
         if py_contains(fields, scalar_names[i]):
             neural_plain_value(fields[scalar_names[i]], 0, context)
             py_setitem(fields, scalar_names[i], _causal_native_plain(fields[scalar_names[i]], context))
     var original_buffers = Python.dict()
-    for i in range(len(buffers)):  # driver-loop(retain each mutable state buffer exporter)
+    for i in range(len(buffers)):  # driver-loop: over retain each mutable state buffer exporter
         if py_contains(fields, buffers[i]):
             var captured = _causal_buffer(fields[buffers[i]], context)
             py_setitem(original_buffers, buffers[i], captured)
@@ -301,7 +301,7 @@ def causal_state_capture(state: PythonObject, model: PythonObject, context: Pyth
     var parallel = py_get(model._native_entries, "parallel_call")
     var captured = Python.list()
     var seen = Python.dict()
-    for i in range(len(layers)):  # driver-loop(capture each unique state identity once)
+    for i in range(len(layers)):  # driver-loop: over capture each unique state identity once
         var identity = py_call(bi.id, layers[i])
         var layer = py_get(seen, identity)
         if layer is None:
@@ -339,7 +339,7 @@ def causal_layer_publish(value: PythonObject) raises:
         return
     neural_string_keys(target)
     var initial = py_get(layer, "_causal_initial_buffers", Python.dict())
-    for name in ["cached_tokens", "arithmetic_profile", "_numeric_profile", "profile_id", "absolute_position", "_nn34_usable", "buffered_tokens", "_resident_session", "k_cache", "v_cache", "conv_window", "h", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw", "token", "_lifetime"]:  # driver-loop(consumed state fields only)
+    for name in ["cached_tokens", "arithmetic_profile", "_numeric_profile", "profile_id", "absolute_position", "_nn34_usable", "buffered_tokens", "_resident_session", "k_cache", "v_cache", "conv_window", "h", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw", "token", "_lifetime"]:  # driver-loop: over consumed state fields only
         if not py_contains(layer, name):
             continue
         if py_contains(initial, name) and layer[name] is initial[name]:
@@ -361,13 +361,13 @@ def causal_state_publish(state: PythonObject) raises:
     if layers is not fields["_causal_initial_layers"]:
         # reset_state installed freshly allocated state owners.
         var published = Python.list()
-        for i in range(len(layers)):  # driver-loop(reset publishes fresh public state owners)
+        for i in range(len(layers)):  # driver-loop: over reset publishes fresh public state owners
             causal_layer_publish(layers[i])
             _ = py_call(published.append, causal_state_origin(layers[i]))
         py_setitem(live, "layers", published)
         return
     var seen = Python.dict()
-    for i in range(len(layers)):  # driver-loop(publish one result per original aliased state)
+    for i in range(len(layers)):  # driver-loop: over publish one result per original aliased state
         var layer = causal_snapshot_fields(layers[i])
         var identity = py_call(bi.id, layer["_causal_original"])
         if py_contains(seen, identity):
@@ -399,7 +399,7 @@ def causal_checkpoint_capture(checkpoint: PythonObject, context: PythonObject) r
     var bi = native_loaded_module("builtins")
     var result = Python.dict()
     var keys = py_call(bi.list, checkpoint.keys())
-    for i in range(len(keys)):  # driver-loop(capture public checkpoint fields before checksum or restoration)
+    for i in range(len(keys)):  # driver-loop: over capture public checkpoint fields before checksum or restoration
         var name = String(keys[i])
         var value = checkpoint[keys[i]]
         if name == "prompt" or name == "current":
@@ -412,11 +412,11 @@ def causal_checkpoint_capture(checkpoint: PythonObject, context: PythonObject) r
             if py_type(value) is not bi.list and py_type(value) is not bi.tuple:
                 raise Error("TypeError: generation checkpoint layers require native records")
             var layers = Python.list()
-            for j in range(len(value)):  # driver-loop(capture every saved layer record)
+            for j in range(len(value)):  # driver-loop: over capture every saved layer record
                 neural_string_keys(value[j])
                 var fields = Python.dict()
                 var names = py_call(bi.list, value[j].keys())
-                for k in range(len(names)):  # driver-loop(captured checkpoint scalars and state bytes)
+                for k in range(len(names)):  # driver-loop: over captured checkpoint scalars and state bytes
                     var item = value[j][names[k]]
                     if py_type(item) is context["array_class"]:
                         item = generation_array_snapshot(item)
