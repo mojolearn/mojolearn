@@ -874,15 +874,7 @@ class _Pool2d(_Layer):
 
     def __init__(self, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
                  count_include_pad=True, input_shape=None, numeric_mode=None):
-        self.ceil_mode = bool(ceil_mode)
-        self.divisor_override = None
-        self.kernel_size = _pair(kernel_size, "kernel_size")
-        self.stride = _pair(stride if stride is not None else kernel_size, "stride")
-        self.padding = _pair(padding, "padding")
-        self.dilation = _pair(dilation, "dilation")
-        self.count_include_pad = bool(count_include_pad)
-        self.input_shape = input_shape
-        self.numeric_mode = numeric_mode
+        _XCNN(self, "pool_init", (kernel_size, stride, padding, dilation, ceil_mode, count_include_pad, None, input_shape, numeric_mode, False), _XCNN_CONTEXT)
 
     def _params(self, shape):
         n, c, h, w = shape
@@ -900,7 +892,7 @@ class _Pool2d(_Layer):
         return _XCNN(self, "pool_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
-        return self
+        return _XCNN(self, "pool_fit", (X, y), _XCNN_CONTEXT)
 
 
 class MaxPool2d(_Pool2d):
@@ -915,45 +907,17 @@ class MaxPool2d(_Pool2d):
 
     @property
     def indices_(self):
-        d = self.__dict__
-        if d.get("_idx_host") is None and d.get("_idx_dev") is not None:
-            np = _np()
-            idx = np.empty(d["_idx_shape"], np.int32)
-            self._dev.download(d["_idx_dev"], idx)
-            d["_idx_host"] = idx
-        return d.get("_idx_host")
+        return _XCNN(self, "pool_indices_get", (), _XCNN_CONTEXT)
 
     @indices_.setter
     def indices_(self, v):
-        self.__dict__["_idx_host"] = v
-        self.__dict__["_idx_dev"] = None
+        _XCNN(self, "pool_indices_set", (v,), _XCNN_CONTEXT)
 
     def forward(self, x):
         return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
-        np = _np()
-        if _is_t(grad_out):
-            b = self._binding()
-            h = self.__dict__.get("_idx_dev")
-            if not (h is not None and _on_dev(b, grad_out) and self.__dict__.get("_dev") is not None
-                    and self._dev.b is b):
-                return DeviceTensor._wrap(b, MaxPool2d.backward(self, grad_out.numpy()))
-            if grad_out.shape != tuple(self._idx_shape):
-                raise ValueError(f"mojolearn: grad_out shape {grad_out.shape}, expected {tuple(self._idx_shape)}")
-            dxt = _out_new(b, self._xshape)   # the gather stores every word
-            b.x_cnn_maxpool2d_backward_m([grad_out.h, h, dxt.h], 0b111, self._params(self._xshape))
-            return dxt
-        g = _f32(grad_out, "grad_out")
-        dx = np.empty(self._xshape, np.float32)
-        b = self._binding()
-        h = self.__dict__.get("_idx_dev")
-        if h is not None and _mixed(b) and self.__dict__.get("_dev") is not None and self._dev.b is b:
-            b.x_cnn_maxpool2d_backward_m([g.ctypes.data, h, dx.ctypes.data], 0b010, self._params(self._xshape))
-            return dx
-        b.x_cnn_maxpool2d_backward(g.ctypes.data, self.indices_.ctypes.data, dx.ctypes.data,
-                                   self._params(self._xshape))
-        return dx
+        return _XCNN(self, "pool_backward", (grad_out,), _XCNN_CONTEXT)
 
 
 class AvgPool2d(_Pool2d):
@@ -962,31 +926,13 @@ class AvgPool2d(_Pool2d):
 
     def __init__(self, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
                  divisor_override=None, input_shape=None, numeric_mode=None):
-        if divisor_override is not None and int(divisor_override) <= 0:
-            raise ValueError("mojolearn: divisor must be not zero")
-        super().__init__(kernel_size, stride, padding, 1, ceil_mode, count_include_pad, input_shape,
-                         numeric_mode)
-        self.divisor_override = None if divisor_override is None else int(divisor_override)
+        _XCNN(self, "pool_init", (kernel_size, stride, padding, 1, ceil_mode, count_include_pad, divisor_override, input_shape, numeric_mode, False), _XCNN_CONTEXT)
 
     def forward(self, x):
         return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
-        np = _np()
-        if _is_t(grad_out):
-            b = self._binding()
-            if not _on_dev(b, grad_out):
-                return DeviceTensor._wrap(b, AvgPool2d.backward(self, grad_out.numpy()))
-            shape = self._out_shape(self._xshape)
-            if grad_out.shape != shape:
-                raise ValueError(f"mojolearn: grad_out shape {grad_out.shape}, expected {shape}")
-            dxt = _out_new(b, self._xshape)   # the gather stores every word
-            b.x_cnn_avgpool2d_backward_m([grad_out.h, dxt.h], 0b11, self._params(self._xshape))
-            return dxt
-        g = _f32(grad_out, "grad_out")
-        dx = np.empty(self._xshape, np.float32)
-        self._binding().x_cnn_avgpool2d_backward(g.ctypes.data, dx.ctypes.data, self._params(self._xshape))
-        return dx
+        return _XCNN(self, "pool_backward", (grad_out,), _XCNN_CONTEXT)
 
 
 def _one(v):
@@ -998,10 +944,7 @@ class _Pool1dMixin:
         return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
-        if _is_t(grad_out):
-            return _t3(super().backward(_t4(grad_out)))
-        g = _f32(grad_out, "grad_out")
-        return super().backward(g[:, :, None, :])[:, :, 0, :]
+        return _XCNN(self, "pool_backward", (grad_out,), _XCNN_CONTEXT)
 
 
 class MaxPool1d(_Pool1dMixin, MaxPool2d):
@@ -1009,10 +952,7 @@ class MaxPool1d(_Pool1dMixin, MaxPool2d):
 
     def __init__(self, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
                  input_shape=None, numeric_mode=None):
-        k = _one(kernel_size)
-        s = k if stride is None else _one(stride)
-        super().__init__((1, k), (1, s), (0, _one(padding)), (1, _one(dilation)), ceil_mode, True,
-                         input_shape, numeric_mode)
+        _XCNN(self, "pool_init", (kernel_size, stride, padding, dilation, ceil_mode, True, None, input_shape, numeric_mode, True), _XCNN_CONTEXT)
 
 
 class AvgPool1d(_Pool1dMixin, AvgPool2d):
@@ -1020,10 +960,7 @@ class AvgPool1d(_Pool1dMixin, AvgPool2d):
 
     def __init__(self, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
                  input_shape=None, numeric_mode=None):
-        k = _one(kernel_size)
-        s = k if stride is None else _one(stride)
-        super().__init__((1, k), (1, s), (0, _one(padding)), ceil_mode, count_include_pad, None,
-                         input_shape, numeric_mode)
+        _XCNN(self, "pool_init", (kernel_size, stride, padding, 1, ceil_mode, count_include_pad, None, input_shape, numeric_mode, True), _XCNN_CONTEXT)
 
 
 class _ReLU(_Layer):

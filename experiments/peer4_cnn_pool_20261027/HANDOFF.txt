@@ -1,0 +1,36 @@
+Peer4 CNN pooling batch — 2026-10-27
+Branch: lane/peer4-cnn-pool-20261027
+Base: 765a269fc4
+
+Changes
+- MaxPool2d/AvgPool2d/MaxPool1d/AvgPool1d constructors, backward,
+  MaxPool indices getter/setter and pool fit now make one native operation call.
+- Native owner normalizes settings without Python conversion/iteration hooks;
+  scalar, tuple/list and admitted native numeric buffer settings remain accepted.
+- Backward owns fitted-state/gradient shape checks, host/resident route choice,
+  allocations, lazy max-index download and 1D finished-result reshaping.
+- Forward/native row preparation now uses native MRO/type metadata and passive
+  shape admission. Instance dictionaries use the shared native accessor.
+- Arithmetic kernels/operand residency bits remain the existing ones; this
+  source statement is not runtime or identity evidence.
+
+Integration
+Existing xcnn_native.mojo fallback routes all new pool_* operations; no shared
+registration edit is required. Changes in _expansion_cnn.py are limited to the
+Pool2d through AvgPool1d region. xcnn_pool_native.mojo retains Dropout/Adaptive
+code; dictionary accessor/class checks and row-input admission are shared there.
+Parent owns remaining xcnn_common.mojo repairs: stable DeviceTensor slot
+admission, numeric mode metadata, host reads, output reshape and device state.
+This batch must not be called transitively callback-free before those repairs.
+
+Compilation and source checks
+Mac CPU column compile PASS (17.46 sec, O0, apple-m1, 10 configured workers).
+Compile entry reaches xcnn_pool_layers and all its existing/new branches.
+No runtime execution, GPU compilation, bitwise verification or benchmarks.
+Attempt 1 compile-fixture signature failure retained; attempt 2 passed before
+final native buffer setting support; attempt 3 is final source.
+Python AST parse and git diff --check pass. Source/push guards run on branch push.
+Full output, source archive/manifest, binary, compiler hash and command:
+  ~/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-3/
+Receipt: experiments/peer4_cnn_pool_20261027/compile.json
+No pod rented; no other session resources changed.
