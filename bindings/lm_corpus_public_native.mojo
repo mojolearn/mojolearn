@@ -332,8 +332,8 @@ def _batch_construct(directory: PythonObject, batch: PythonObject, length: Pytho
 
 
 def _batch_ids(value: PythonObject, step_value: PythonObject, context: PythonObject,
-               captured_fields: PythonObject = PythonObject(None)) raises -> PythonObject:
-    var fields = _batch_fields(value, context) if captured_fields is None else captured_fields
+               captured_fields: PythonObject) raises -> PythonObject:
+    var fields = captured_fields
     var batch = corpus_int(fields["batch"], "batch", True)
     var length = corpus_int(fields["length"], "length", True)
     var lo = corpus_int(fields["lo"], "lo", True)
@@ -543,7 +543,7 @@ def lm_corpus_public_call(operation: String, args: PythonObject) raises -> Pytho
         return _batch_init(args[0], args[1], args[2], args[3], context)
     if operation == "batches_ids":
         _arity(args, 2)
-        return _batch_ids(args[0], args[1], context)
+        return _batch_ids(args[0], args[1], context, _batch_fields(args[0], context))
     if operation == "batches_prefetch":
         _arity(args, 4)
         return _prefetch(args[0], args[1], args[2], args[3], context)
