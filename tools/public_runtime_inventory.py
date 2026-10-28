@@ -118,6 +118,11 @@ NATIVE_MODULE = re.compile(r"^_mojolearn\w*$")
 CONNECT_CALL = re.compile(r"^_?connect|native")
 # Instance attributes the compiled runtime sets on the object itself.
 NATIVE_ATTRS = frozenset({"_runtime"})
+# Compiled factories that turn a bound compiled entry into a class-slot descriptor, and
+# refuse anything else at runtime: bindings/classical_attributes.mojo
+# classical_attribute_descriptor_c requires MethodType over a BuiltinFunctionType and
+# returns PyInstanceMethod_New of it. The slot then calls that entry.
+NATIVE_DESCRIPTOR_FACTORIES = frozenset({"classical_attribute_descriptor"})
 NATIVE_CALL = re.compile(r"^_native|_native$")
 TAG = re.compile(r"#\s*(driver-loop:|glue)")
 
@@ -1464,6 +1469,18 @@ class EndpointConnections:
             self.walk(mod.tree.body, mod, None, {})
         for cls in list(index.classes.values()):
             for decorator in reversed(cls.node.decorator_list):
+                generated = _dataclass_methods(cls, decorator)
+                if generated is not None:
+                    end = getattr(cls.node, "end_lineno", cls.node.lineno)
+                    own = cls.mod.path.relative_to(self.index.root).as_posix() + ":"
+                    for name in generated:
+                        # a module-level replacement after the class statement supersedes it
+                        later = [r for r in self.replacements.get((cls.key, name), [])
+                                 if r["source"].startswith(own) and int(r["source"].rsplit(":", 1)[1]) > end]
+                        if not later:
+                            self.record(cls, name, ("python", "dataclasses.dataclass"), cls.mod, decorator,
+                                        "dataclass-generated Python method")
+                    continue
                 value = self.value(decorator, cls.mod, None, {})
                 if value and value[0] == "func":
                     self.call(value[1], [("class", cls)], [], {})
@@ -1569,6 +1586,13 @@ class EndpointConnections:
                 return found
             if _final(expr.func) == "unwrap" and args:
                 return args[0]
+            factory = self.value(expr.func, mod, func, env, depth + 1)
+            if (factory and factory[0] == "native" and factory[1] in NATIVE_DESCRIPTOR_FACTORIES
+                    and len(expr.args) == 1 and isinstance(expr.args[0], ast.Call)
+                    and _final(expr.args[0].func) == "MethodType" and expr.args[0].args):
+                bound = self.value(expr.args[0].args[0], mod, func, env, depth + 1)
+                if bound and bound[0] == "native":
+                    return bound
             if (isinstance(expr.func, ast.Name) and expr.func.id in ("classmethod", "staticmethod")
                     and len(args) == 1 and args[0] and args[0][0] == "func"):
                 # `cls.load = classmethod(inspect.unwrap(loader.__func__))`: the same source body
@@ -1754,6 +1778,37 @@ class EndpointConnections:
                 return None
             current = returns[0]
         return current
+
+
+def _dataclass_methods(cls, decorator):
+    """The Python methods `@dataclass(...)` with literal options generates on `cls`, or None
+    when the decorator is not a literal dataclass call (the class's own definitions are kept;
+    a frozen class always gets the generated __setattr__/__delattr__)."""
+    call = decorator if isinstance(decorator, ast.Call) else None
+    target = call.func if call else decorator
+    if ast.unparse(target) not in ("dataclass", "dataclasses.dataclass"):
+        return None
+    imported = cls.mod.imports.get("dataclass") if isinstance(target, ast.Name) else ("mod", "dataclasses")
+    if not imported or (imported[0] == "from" and imported[1] != "dataclasses"):
+        return None
+    options = dict(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False)
+    for keyword in (call.keywords if call else []):
+        if keyword.arg not in options or not isinstance(keyword.value, ast.Constant):
+            return None
+        options[keyword.arg] = bool(keyword.value.value)
+    own = {n.name for n in cls.node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    own |= {t.id for n in cls.node.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
+    names = []
+    for enabled, generated in ((options["init"], ("__init__",)), (options["repr"], ("__repr__",)),
+                               (options["eq"], ("__eq__",)),
+                               (options["order"], ("__lt__", "__le__", "__gt__", "__ge__"))):
+        if enabled:
+            names += [n for n in generated if n not in own]
+    if options["frozen"]:
+        names += ["__setattr__", "__delattr__"]
+    if (options["unsafe_hash"] or options["eq"] and options["frozen"]) and "__hash__" not in own:
+        names.append("__hash__")
+    return names
 
 
 def _canonical(value):
@@ -1954,6 +2009,11 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                     func = None
                     item.update(static_verdict="native", native_entries=[values[0][1]],
                                 runtime_status="native_boundary")
+                elif values[0][0] == "python":
+                    # a Python implementation generated at class creation (dataclass)
+                    func = None
+                    item.update(static_verdict="python", runtime_status="prohibited_source",
+                                generated_by=values[0][1], definition=item["import_connections"][0]["source"])
                 else:
                     func = None
             else:
