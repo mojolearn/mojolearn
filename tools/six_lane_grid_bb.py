@@ -218,6 +218,16 @@ def head():
         return 'unknown'
 
 
+def box_persisted(out, env=None):
+    """MOJOLEARN_BOX_PERSIST=1 and <out> inside MOJOLEARN_RESULTS_DIR (bench_board.box_persisted_out's rule)."""
+    env = os.environ if env is None else env
+    res = env.get('MOJOLEARN_RESULTS_DIR')
+    if env.get('MOJOLEARN_BOX_PERSIST') != '1' or not res:
+        return False
+    res, out = os.path.realpath(res), os.path.realpath(str(out))
+    return out == res or out.startswith(res.rstrip(os.sep) + os.sep)
+
+
 def race_ids(fam, lane, ds, shape='full'):
     """bench_board race ids (tools/bench_board.py race_id) a requested cell may have."""
     if fam == 'neural':
@@ -288,6 +298,10 @@ def main(argv=None):
                '--skip-install', '--cache', args.cache, '--no-smoke-gate', '--no-infer']
         if args.data_root:
             cmd += ['--data-root', args.data_root]
+        if box_persisted(out):
+            # the results dir holding <out> reaches R2 from the box (tools/box_persist_run.sh): keep the evidence
+            # archives local there instead of uploading them with an R2 credential the box does not hold
+            cmd += ['--evidence-local-only']
         cmds.append(cmd)
     if args.dry_run:
         for cmd in cmds:

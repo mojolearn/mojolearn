@@ -366,7 +366,11 @@ from transformer.impl.llama.fused_attention import (
     AttnFwdScan,
     FUSED_RAN,
     FUSED_SKIPPED_STICKY,
+    IDN_DECODE_RESIDENT_IO,
+    IDN_TRAIN_ONE_WAIT,
+    LlamaDeferredChecks,
     attention_fwd_scan_clear,
+    deferred_checks_at,
     attention_fwd_scan_take,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
@@ -375,7 +379,7 @@ from transformer.impl.llama.fused_attention import (
     fused_forward_launch_estash_ran,
     fused_supported_head_dim,
 )
-from core.device_scan import DeviceNonfiniteBatch
+from core.device_scan import DeviceNonfiniteBatch, NONFINITE_NONE
 # lane afn-attn (2026-10-03): the Apple FAST forward candidates; every name
 # is reached only from `comptime if AFN_ATTN_ANY` arms below.
 from transformer.impl.llama.afn_apple_fast import (
@@ -1746,6 +1750,12 @@ struct LlamaDeviceStages(Movable):
     shipped build reads). `llama_decoder_layer_backward_device` hands it
     with `aexp` to `fused_backward_launch_estash_ran`, which runs the
     DEVIATION 2650 backward only when it equals this call's cell count."""
+    var defer_addr: Int
+    """IDN_DECODE_RESIDENT_IO / IDN_TRAIN_ONE_WAIT (lane decode-resident,
+    2026-10-28): the address of the owner's `LlamaDeferredChecks` while a
+    deferred step runs on these stages, 0 otherwise (always 0 on a build
+    without either define). Set and cleared by the owner around the call;
+    `reset` clears it."""
     var attn_fwd_scan: AttnFwdScan
     """IDN_ATTN_BWD_SCAN_REUSE (lane/nr-attn): the LAST call's fused forward
     regime-scan maxima of `q_rope`, `k_cache` and `v_cache`, keyed by their
@@ -1849,6 +1859,7 @@ struct LlamaDeviceStages(Movable):
         self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
+        self.defer_addr = 0
         self.attn_fwd_scan = AttnFwdScan()
 
         # All 30 buffers are owned by self through this fence. Preserve every
@@ -1930,6 +1941,7 @@ struct LlamaDeviceStages(Movable):
         self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
+        self.defer_addr = 0
         self.attn_fwd_scan = AttnFwdScan()
         step_count_sync()
         ctx.synchronize()
@@ -4012,6 +4024,52 @@ MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF` (or the old `-D
 MOJOLEARN_ATTN_CACHE_WAIT=1`) restores the wait."""
 
 
+def _llama_refuse_bad_call_deferred(
+    ctx: DeviceContext,
+    mut w: LlamaDeviceWeights,
+    mut rope: LlamaRopeTable,
+    mut x: DeviceBuffer[DType.float32],
+    mut kv: LlamaKVCache,
+    b: Int,
+    l: Int,
+    defer_addr: Int,
+) raises -> Bool:
+    """IDN_DECODE_RESIDENT_IO / IDN_TRAIN_ONE_WAIT (lane decode-resident,
+    2026-10-28): `llama_refuse_bad_call`'s scans, the same buffers over the
+    same lengths in the same order, enqueued into the owner's deferred
+    window instead of read here. Returns False, enqueuing nothing, when the
+    window has no room or a length is one the batch would refuse by its own
+    message; the caller then refuses synchronously, as today. A hit is
+    never reported from here: the owner replays the call with the window
+    disarmed, and `llama_refuse_bad_call` raises its own message."""
+    var dims = w.dims.copy()
+    var dm = dims.d_model
+    var hd = dims.head_dim
+    var has_kv = kv.s > 0
+    var kv_used = kv.s
+    if kv.window > 0:
+        kv_used = kv.cap
+    var nx = b * l * dm
+    var nkv = b * dims.n_kv * kv_used * hd
+    var count = 2
+    if has_kv:
+        count = 4
+    var d = deferred_checks_at(defer_addr)
+    if not d[].can_defer_nonfinite(count):
+        return False
+    var limit = Int(NONFINITE_NONE)
+    if nx > len(x) or nx > limit or rope.half > len(rope.inv_freq) or rope.half > limit:
+        return False
+    if has_kv and (nkv > len(kv.k) or nkv > len(kv.v) or nkv > limit):
+        return False
+    d[].add_nonfinite(ctx, x, nx)
+    d[].add_nonfinite(ctx, rope.inv_freq, rope.half)
+    if has_kv:
+        d[].add_nonfinite(ctx, kv.k, nkv)
+        d[].add_nonfinite(ctx, kv.v, nkv)
+    return True
+
+
 def llama_refuse_bad_call(
     ctx: DeviceContext,
     mut w: LlamaDeviceWeights,
@@ -4316,6 +4374,9 @@ def eager_attention_forward(
             )
     elif choice != ATTN_PATH_EAGER:
         attention_fwd_scan_clear()
+        # IDN_DECODE_RESIDENT_IO: the owner's deferred window (0: none, the
+        # launchers read their checks on the host as today).
+        var defer_addr = stages.defer_addr
         var kept_estash = False
         comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm,
@@ -4338,7 +4399,7 @@ def eager_attention_forward(
                     stages.k_cache, stages.v_cache, stages.aexp, b, l,
                     dims.n_heads, dims.n_kv, dims.head_dim, s, pos0, key_lo,
                     window, llama_attention_scale(dims.head_dim), arm, ran,
-                    stages.attn_estash_cells,
+                    stages.attn_estash_cells, deferred=defer_addr,
                 )
                 kept_estash = True
         if not kept_estash:
@@ -4346,7 +4407,7 @@ def eager_attention_forward(
                 ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
                 stages.k_cache, stages.v_cache, b, l, dims.n_heads, dims.n_kv,
                 dims.head_dim, s, pos0, key_lo, window,
-                llama_attention_scale(dims.head_dim),
+                llama_attention_scale(dims.head_dim), deferred=defer_addr,
             )
         # IDN_ATTN_BWD_SCAN_REUSE: keep this call's forward scan (empty
         # unless it was taken over exactly these three buffers).
@@ -6127,7 +6188,17 @@ def llama_decoder_layer_forward_planted(
     # and cost nothing to scan. What is left is what a call can actually
     # differ in. `llama_refuse_bad_inputs` is unchanged and still walks all
     # thirteen names for anyone who wants them in one call.
-    llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
+    # IDN_DECODE_RESIDENT_IO / IDN_TRAIN_ONE_WAIT: inside the owner's
+    # deferred window the same scans are enqueued and read after the
+    # owner's one wait; a hit there replays the call through this line.
+    var refusal_deferred = False
+    comptime if IDN_DECODE_RESIDENT_IO or IDN_TRAIN_ONE_WAIT:
+        if stages.defer_addr != 0:
+            refusal_deferred = _llama_refuse_bad_call_deferred(
+                ctx, w, rope, x, kv, b, l, stages.defer_addr
+            )
+    if not refusal_deferred:
+        llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
     pc.tick(ctx, "fwd.refuse_call")
     # lane/lowbit-blocks: this call runs under `fixed15_v1` exactly when its
     # weights carry planes.

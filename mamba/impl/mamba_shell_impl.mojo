@@ -770,6 +770,32 @@ def _m2_session_open_run(
     s.dt_hi = dt_hi
 
 
+comptime IDN_DECODE_RESIDENT_IO_M2 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
+    "MOJOLEARN_IDN_DECODE_RESIDENT_IO"
+]()
+"""`-D MOJOLEARN_IDN_DECODE_RESIDENT_IO` (lane decode-resident, 2026-10-28),
+default OFF, on the resident Mamba-2 session step: y and the h_last report
+go from the device straight into the caller's arrays (two enqueued copies,
+then ONE wait), where the shipped step downloads each into a host List with
+its own wait and copies the List into the caller's array. The same bytes
+land in the same arrays; the block call (and its refusal) is unchanged."""
+
+
+def _m2_session_download_direct(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, addr: Int
+) raises:
+    """Enqueue `buf[0:n]` into the caller's array at `addr`; no wait."""
+    if n > len(buf):
+        raise Error("mamba2 session: download longer than its stage")
+    var dst = f32_ptr(addr)
+    if n == len(buf):
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
+    else:
+        var view = buf.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
+        _ = view^
+
+
 def _m2_session_step_run(mut s: Mamba2DecodeSession, px: Int, py: Int, ph: Int) raises -> Int:
     ref ctx = s.ctx.value()
     ref state = s.state.value()
@@ -779,6 +805,13 @@ def _m2_session_step_run(mut s: Mamba2DecodeSession, px: Int, py: Int, ph: Int) 
     var trace = IdentityTrace.disabled()
     mamba2_block_forward(ctx, stages, state, s.w.value(), s.dx.value(), s.b, 1,
                          s.dt_lo, s.dt_hi, trace, String("py.session"))
+    comptime if IDN_DECODE_RESIDENT_IO_M2:
+        _m2_session_download_direct(ctx, stages.residual_out, s.b * s.dm, py)
+        _m2_session_download_direct(ctx, stages.h_last,
+            s.b * dims.nheads * M2_HEADDIM * M2_D_STATE, ph)
+        ctx.synchronize()
+        _ = stages^
+        return state.buf_len
     _write_f32(py, mamba_download(ctx, stages.residual_out, s.b * s.dm))
     _write_f32(ph, mamba_download(ctx, stages.h_last,
         s.b * dims.nheads * M2_HEADDIM * M2_D_STATE))
