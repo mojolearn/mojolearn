@@ -1,0 +1,67 @@
+Peer5 tree lifecycle follow-up — 2026-10-27
+Branch: lane/peer5-tree-aux-20261027
+Parent accepted batch: 48cebc5fbd3a0c9b8a8ce54150ce78694d49c79f (already merged by root).
+Worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer5-trees
+
+Completed source operations
+- ForestProtocol.__setstate__ is one native call. It admits ordinary dictionary
+  state and exact string keys, preserves the instance dictionary identity and
+  update semantics, and always resets _resident_holder to an empty dictionary.
+- Replaced owners are checked before mutation. Traversal is cycle-safe over
+  native containers, follows native ClassLabels storage, admits connected forest
+  instances and shared native buffers, and rejects Python destructor/weakref
+  callbacks. Identical retained fields and independently retained binding tables
+  keep their original ownership. Unsupported callback owners are refused before
+  state changes; there is no Python fallback or toolchain modification.
+- Native TreesResident owners use the documented checked
+  PythonObject.downcast_value_ptr[TreesResident]() API. Their release callable
+  must be an import-time connected compiled forest-release entry. This keeps
+  normal resident snapshot release native while rejecting an arbitrary callback.
+- ForestProtocol.__sklearn_is_fitted__ and _GBDTAdapter.__sklearn_is_fitted__ are
+  one native call each. Their existing _offsets-presence and learner model_ !=
+  None predicates read actual passive dictionary storage without Python getattr.
+- _native_trees_bridge connects shared owner-admission metadata and retained
+  forest binding/release identities once at import.
+
+Compilation and source checks
+See compile.json for frozen compile receipts and hashes. The focused lifecycle
+owner compile and final complete public tree dispatcher compile use the Mac CPU
+column, identical define, apple-m1 target, optimization level 0, 10 compiler
+workers (sysctl hw.activecpu reports 10). Worker settings do not prove saturation.
+No product runtime, GPU execution, identity comparison, or benchmark was run.
+No rented box. No changes to _mojolearn_gbdt_host.mojo or gbdt_host_entries_impl.mojo.
+The downcast compiles on this installed supported toolchain; no runtime claim.
+
+Evidence retained on the Mac
+/Users/andrewhendel/mojolearn-evidence/peer5-tree-lifecycle-20261027/
+- attempt1: focused native restoration, owner admission and fitted-state compile,
+  exit 0 in 118.16 seconds.
+- attempt2: final full public tree dispatcher compile, including lifecycle routes,
+  exit 0 in 427.94 seconds.
+Each attempt retains complete compile.log, result.json, source-manifest.json,
+source-bytes.tgz and the resulting .so. source-checks.txt records syntax and
+one-call source checks; wrappers.json binds the three edited Python files.
+
+Remaining tree migration scope
+- _GBDTAdapter.__init__, get_params and public set_params remain Python work.
+  Source-inventory clarification: _native_params_metadata connects a reusable
+  gbdt schema, but does not replace _GBDTAdapter.get_params itself. Its public
+  body still uses inspect.signature. The first batch's "connected through"
+  wording must not be interpreted as a completed public getter migration.
+  Existing native metadata/fixed-owner CV helpers are reusable for that work.
+- Boost/RandomTreesEmbedding fit/transform wrappers and transitive native input
+  admission remain outside these auxiliary/lifecycle batches.
+- GradientBoosting and specialized ensemble constructor work remains outside
+  this batch; the prior batch migrated its __getstate__ only.
+- Private legacy _ResidentForest helpers retain Python/weakref.finalize code.
+  Public native inference uses TreesResident; legacy callback-owned holders are
+  refused by native restoration before release rather than executing callbacks.
+- Runtime behavior, installed loading and GPU-specific behavior remain untested
+  under the owner's compile-only development policy.
+
+API reference for the supported checked downcast:
+https://mojolang.org/docs/std/python/python_object/PythonObject/#downcast_value_ptr
+
+Main integration stays serialized by root; this lane does not mutate main.
+Keep complete logs in files. Inspect exit status and bounded diagnostics; never
+infer runtime behavior or whole-library compliance from compilation/source checks.
