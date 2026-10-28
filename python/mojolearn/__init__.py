@@ -669,6 +669,11 @@ del _prep_owner
 from . import _expansion_trees as _tree_owner
 _tree_owner._TREES_CONTEXT.update(native_estimator_entry=model_selection._NATIVE,
                                  native_estimator_context=model_selection._NATIVE_CONTEXT)
+# PermutationExplainer's resident linear route recognizes this library's
+# linear predict by identity (bindings/trees_agnostic_native.mojo).
+from . import _expansion_linear as _linear_owner
+_tree_owner._TREES_CONTEXT["trees_linear_predict"] = _linear_owner._LinearRegressorMixin.__dict__["predict"]
+del _linear_owner
 del _tree_owner
 
 # Parameter-read schemas capture the final built-in installers' method and

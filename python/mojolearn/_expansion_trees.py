@@ -523,19 +523,6 @@ def _trees_switch(est, bit):
     return callable(query) and (int(query()) & bit) != 0
 
 
-def _agn_pool_release(b):
-    """Lane idn-all: frees the IDENTICAL explainers' pooled synthetic device
-    buffer when an explanation ends (xtrees/agnostic_device.mojo
-    `pool_release`), so the pool never outlives the `shap_values` call that
-    grew it."""
-    try:
-        release = getattr(b, "x_trees_agn_pool_release", None)
-    except ImportError:    # a host facade refuses an absent export with ImportError
-        release = None
-    if callable(release):
-        release()
-
-
 def _trees_build_switch(est, bit):
     """True when `est`'s x_trees binding was built with the define `bit`
     stands for, on whichever tier that define belongs to
@@ -1730,13 +1717,6 @@ def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
     return out
 
 
-def _trees_output_2d(x, n):
-    """A member's output as a float32 (n, c) Array (a 1-D output is c = 1)."""
-    a, _ = as_f32_c(x, ndim=2, name="output") if len(getattr(x, "shape", ())) == 2 else \
-        (as_f32_c(x, ndim=1, name="output")[0].reshape((n, 1)), None)
-    return a
-
-
 class _FitTransformMixin:
     """scikit-learn's `TransformerMixin.fit_transform` for the ensembles
     with a `transform` (voting and stacking)."""
@@ -2800,204 +2780,41 @@ class TreeExplainer(_TreesEnsembleBase):
                       (model, data, feature_perturbation, model_output, numeric_mode), _TREES_CONTEXT)
 
     def close(self):
-        """Release native resources; subsequent ``shap_values`` raises RuntimeError."""
+        """Release the explainer's native resources.
+
+        After ``close``, ``shap_values`` raises ``RuntimeError``.
+        """
         return _TREES(self, "trees_explainer_close", (), _TREES_CONTEXT)
 
     def shap_values(self, X):
-        """Return float32 SHAP values, shape (rows, features[, outputs])."""
+        """SHAP values of the rows of ``X``.
+
+        Parameters
+        ----------
+        X : array of shape (n_samples, n_features)
+            Rows to explain, converted to float32. A feature count different from
+            ``data`` raises ``ValueError``.
+
+        Returns
+        -------
+        array, float32
+            Shape (n_samples, n_features) for one output, else
+            (n_samples, n_features, n_outputs).
+        """
         return _TREES(self, "trees_explainer_values", (X,), _TREES_CONTEXT)
 
 
-def _connect_tree_explainer():
-    # glue: install the native attribute descriptor once at class definition;
-    # the inherited Python output getter must not surround public operations.
-    if "trees_unavailable" in _TREES_CONTEXT:
-        return
-    from types import BuiltinFunctionType, MethodType
-    from .tokenizer import _binding
-    from ._native_classical_bridge import _layout
-    from ._forest_host import HostForest
-    _TREES_CONTEXT["trees_explainer_host_forest"] = HostForest
-    module = _binding()._module
-    attribute = module.standard_scaler_attribute_call
-    factory = module.classical_attribute_descriptor
-    if type(attribute) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
-        raise TypeError("native explainers require compiled attribute entries")
-    descriptor = factory(MethodType(attribute, _TREES_CONTEXT))
-    TreeExplainer.__getattribute__ = descriptor
-    _TREES_CONTEXT.setdefault("classical_public_layouts", {})[TreeExplainer] = _layout(TreeExplainer, descriptor)
-    _TREES_CONTEXT["classical_public_installed"] = True
-    _TREES_CONTEXT["classical_attribute_descriptor"] = descriptor
-
-
-_connect_tree_explainer()
-
-
-#: xtrees/agnostic.mojo AGN_BUDGET: synthetic words per explainer chunk
-_AGN_BUDGET = 1 << 25
-#: MOJOLEARN_IDN_PSHAP_RESIDENT (lane/neighbors-small-ports, default off;
-#: `x_trees_pshap_linear_ok`): PermutationExplainer over this library's
-#: linear regressors keeps a chunk's synthetic rows on the device
-#: (xtrees/agnostic_device.mojo `pshap_values_linear`), so a chunk is bounded
-#: by device memory, not by a host matrix: 2^28 float32 words (1 GiB of
-#: synthetic rows), a memory bound that fits every supported GPU, no shape rule.
-_AGN_BUDGET_RESIDENT = 1 << 28
-#: MOJOLEARN_IDN_SHAP_DEVICE_MODEL (lane fam2-forests; an IDENTICAL GPU
-#: build's switch, `x_trees_fast_switches` bit 64, -D
-#: MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF clears it): Kernel/Permutation SHAP
-#: over one of this library's flat forests evaluate the model on the device
-#: inside the explainer (xtrees/agnostic_device.mojo `model_kernel`): no
-#: synthetic matrix, no model call per chunk. Moves no bit.
-_AGN_IDN_DEVICE_MODEL = 64
-#: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL / MOJOLEARN_PSHAP_FAST_DEVICE_MODEL
-#: (lane apple-fast-round2, FAST + Apple experiments, default off; bits 1024
-#: and 2048 of `x_trees_fast_switches`): the FAST KernelExplainer /
-#: PermutationExplainer take the device-model route above instead of
-#: downloading every chunk's synthetic matrix to call the model's predict
-#: (xtrees/agnostic_device.mojo has the cost reasoning). The model's
-#: predict on the host inside a GPU explain is host-route debt; this route
-#: removes it for this library's flat forests.
-_KSHAP_FAST_DEVICE_MODEL = 1024
-_PSHAP_FAST_DEVICE_MODEL = 2048
-
-
-def _agn_device_forest(explainer, model):
-    """(arrays, k, n_trees, rf_input) when `model` is one of this library's
-    flat forests whose predict is the strict increasing-tree device kernel
-    (IDENTICAL, the `sequential` engine served resident) and the explainer's
-    binding carries MOJOLEARN_IDN_SHAP_DEVICE_MODEL; else None (the model
-    callback). The arrays are the snapshot the forest's own predict
-    validated and froze (`_prepare_resident_forest`). rf_input: the random
-    forest's predict flushes the compared feature, ExtraTrees' does not."""
-    if _trees_fast_tier(explainer):
-        # FAST experiments: one bit per explainer (routing only, no compute)
-        bit = _PSHAP_FAST_DEVICE_MODEL if isinstance(explainer, PermutationExplainer) else _KSHAP_FAST_DEVICE_MODEL
-        if not _trees_switch(explainer, bit):
-            return None
-        fast = True
-    elif not _trees_build_switch(explainer, _AGN_IDN_DEVICE_MODEL):
-        return None
-    else:
-        fast = False
-    m = getattr(model, "_random_inner", None)
-    if m is None:
-        m = model
-    if isinstance(m, (RandomForestClassifier, RandomForestRegressor)):
-        rf_input = 1
-    elif isinstance(m, (_ET_CLS, ExtraTreesRegressor)):
-        rf_input = 0
-    else:
-        return None
-    if not type(m).__module__.startswith(__package__ + "."):   # a subclass outside the library may predict otherwise
-        return None
-    if not hasattr(m, "_offsets") or not callable(getattr(m, "_ordered_resident_auto", None)):
-        return None
-    try:
-        if fast:
-            # FAST: the forest's own predict may be parallel_groves; the
-            # device walk is the strict increasing-tree sum over the same
-            # validated snapshot (no bits requirement in FAST).
-            # _prepare_resident_forest refuses (ValueError) a forest with
-            # neither resident route, which keeps the callback.
-            if m._effective_mode() not in ("fast", "identical"):
-                return None
-        elif m._effective_mode() != "identical" or not m._ordered_resident_auto():
-            return None
-        m._prepare_resident_forest()
-    except (AttributeError, ImportError, RuntimeError, ValueError):
-        return None
-    names = ("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
-    arrays = tuple(getattr(m, name) for name in names)  # glue: the five model arrays by name
-    return arrays, int(m._num_outputs), int(m._n_trees), rf_input
-
-
-def _f64_word(x):
-    """The binary64 bits of x as a signed int (a binding param word)."""
-    import struct
-    return struct.unpack("<q", struct.pack("<d", float(x)))[0]
-
-
-def _trees_model_fn(model):
-    """The function an agnostic explainer explains: a callable as given, a
-    classifier's predict_proba, else predict."""
-    if callable(model) and not hasattr(model, "predict"):
-        return model
-    if getattr(model, "_estimator_type", None) == "classifier" and hasattr(model, "predict_proba"):
-        return model.predict_proba
-    return model.predict
-
-
-class _AgnosticExplainer(_TreesEnsembleBase):
-    def __init__(self, model, data, random_state):
-        self.model = model
-        self.data = data
-        self.random_state = random_state
-        self.numeric_mode = getattr(model, "numeric_mode", None)
-        _trees_seed(random_state)
-        self._f = _trees_model_fn(model)
-        bg, _ = as_f32_c(data, ndim=2, name="data")
-        self._bg = bg
-        out = self._eval(bg)
-        self.n_outputs_ = out.shape[1]
-        ev = zeros((self.n_outputs_,), "<f8")
-        self._bind().x_trees_block_mean(addr_ro(out, name="y"), addr(ev, name="ev"),
-                                        [1, bg.shape[0], self.n_outputs_])
-        self._fnull = ev
-        self.expected_value = ev.tolist()[0] if self.n_outputs_ == 1 else ev
-        self.n_features_in_ = bg.shape[1]
-        dev = _agn_device_forest(self, model)
-        if dev is not None and (dev[1] != self.n_outputs_ or int(getattr(model, "n_features_in_", -1)) != bg.shape[1]):
-            dev = None
-        self._dev = dev
-
-    def _model_load(self, b):
-        """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: uploads the explained forest and
-        the background for this `shap_values` call (`x_trees_agn_model_load`);
-        True when the chunks run the model on the device, False for the
-        callback route. The caller releases it (`x_trees_agn_model_release`)."""
-        dev = getattr(self, "_dev", None)
-        if dev is None:
-            return False
-        arrays, k, n_trees, rf_input = dev
-        faddr = [addr_ro(a, name="forest") for a in arrays]  # glue: one address per model array (five)
-        b.x_trees_agn_model_load(faddr, addr_ro(self._bg, name="data"),
-                                 [n_trees, arrays[1].size, k, self._bg.shape[1], self._bg.shape[0], rf_input])
-        return True
-
-    def _eval(self, X):
-        """The model output on X as a float32 (n, k) Array."""
-        out = self._f(X)
-        n = X.shape[0]
-        return _trees_output_2d(out, n)
-
-    def _chunk(self, per_row, n):
-        """Rows per chunk: as many as keep a chunk's synthetic matrix under
-        the budget (xtrees/agnostic.mojo AGN_BUDGET words), at least one."""
-        return max(1, min(n, _AGN_BUDGET // max(1, per_row)))
-
-    def _model_rows(self, syn, rows, d):
-        """The model on a chunk's synthetic matrix: float32 (rows, k)."""
-        return self._eval(syn.reshape((rows, d)))
-
-    def _check(self, X):
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        if Xa.shape[1] != self.n_features_in_:
-            raise ValueError(f"X has {Xa.shape[1]} features, data has {self.n_features_in_}")
-        return Xa
-
-    def _shape(self, phi, n, d):
-        k = self.n_outputs_
-        return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
-
-
-class KernelExplainer(_AgnosticExplainer):
+# KernelExplainer / PermutationExplainer: every operation is one call into the
+# native owner (bindings/trees_agnostic_native.mojo). It admits the model
+# through its compiled model-selection plan, evaluates it there (never its
+# Python predict) and drives the xtrees agnostic kernels and chunk loops.
+class KernelExplainer(_TreesEnsembleBase):
     """Model-agnostic Kernel SHAP values.
 
     Follows the ``shap`` package's ``KernelExplainer``: every coalition size
     small enough is enumerated in full, the rest are sampled with Kernel SHAP
     weights, and the values come from the efficiency-constrained weighted
-    least squares. Every step except the model call runs on the device on GPU
-    installs. The model is called on synthetic rows built from ``data``, so
+    least squares. Every step runs on the device on GPU installs. The model is called on synthetic rows built from ``data``, so
     explaining ``n`` rows makes ``n * n_coalitions * n_background`` model
     evaluations.
 
@@ -3009,11 +2826,11 @@ class KernelExplainer(_AgnosticExplainer):
 
     Parameters
     ----------
-    model : estimator or callable
-        A fitted mojolearn estimator, or a function mapping an
-        (n, n_features) array to outputs. For a classifier with
+    model : estimator
+        A fitted mojolearn estimator. For a classifier with
         ``predict_proba`` the probabilities are explained, otherwise
-        ``predict``.
+        ``predict``. Any other model, including a Python function, raises
+        ``TypeError``.
     data : array of shape (n_background, n_features)
         Background rows that stand in for missing features.
     link : {"identity", "logit"}, default "identity"
@@ -3046,37 +2863,11 @@ class KernelExplainer(_AgnosticExplainer):
     (10, 8)
     """
 
-    def __init__(self, model, data, *, link="identity", random_state=None):
-        if link not in ("identity", "logit"):
-            _refuse(f"link={link!r}", "the identity and logit links are carried (by name; a link object is not).")
-        self.link = link
-        super().__init__(model, data, random_state)
-        if link == "logit":
-            # shap KernelExplainer: expected_value = link(fnull); the link meets
-            # each output AFTER the background mean (fx, fnull, ey).
-            self._fnull = self._link(self._fnull)
-            self.expected_value = self._fnull.tolist()[0] if self.n_outputs_ == 1 else self._fnull
+    _mojolearn_native_public = True
 
-    def _link(self, a):
-        """`a` (float64 Array) through the link, in place; returned."""
-        if self.link == "logit":
-            self._bind().x_trees_logit(addr(a, name="linked"), [len(a)])
-        return a
-
-    def _schedule(self, M, nsamples):
-        """shap `KernelExplainer.explain`'s coalition schedule, built in Mojo
-        (`x_trees_kshap_schedule`, providers/python/xtrees_api_pyapi.mojo; lane cgr4-py-compute):
-        (m, nfixed, nfull, npaired, tables, L, wrand_bits) with tables =
-        (size_off Int64, size_w float64, cdf float64). Every mask is made on
-        the device from these (xtrees/agnostic.mojo kshap_mask_unit)."""
-        h = max(1, M // 2)
-        tables = (zeros((h + 1,), "<i8"), zeros((h,), "<f8"), zeros((h,), "<f8"))
-        out = zeros((6,), "<i8")
-        if M > 1:
-            taddrs = tuple(addr(t, name="schedule") for t in tables)  # glue: the three schedule table addresses
-            self._bind().x_trees_kshap_schedule(taddrs, addr(out, name="schedule"), [M, nsamples])  # cpu-route: three schedule Arrays read once by x_trees_kshap_schedule (launch parameters)
-        m, nfixed, nfull, npaired, L, wbits = out.tolist()
-        return m, nfixed, nfull, npaired, tables, L, wbits
+    def __init__(self, model, data, *, link="identity", random_state=None, numeric_mode=None):
+        return _TREES(self, "trees_agnostic_kernel_init",
+                      (model, data, random_state, link, numeric_mode), _TREES_CONTEXT)
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
         """Kernel SHAP values of the rows of ``X``.
@@ -3099,120 +2890,28 @@ class KernelExplainer(_AgnosticExplainer):
             Shape (n_samples, n_features) for one output, else
             (n_samples, n_features, n_outputs).
         """
-        if l1_reg not in ("auto", False, 0):
-            _refuse(f"l1_reg={l1_reg!r}", "no l1 feature selection is carried.")
-        Xa = self._check(X)
-        n, d = Xa.shape
-        M = d
-        ns = 2 * M + 2048 if nsamples == "auto" else int(nsamples)
-        if M <= 30:
-            ns = min(ns, 2 ** M - 2)
-        seed = _trees_seed(self.random_state)
-        k = self.n_outputs_
-        b = self._bind()
-        nb = self._bg.shape[0]
-        m, nfixed, nfull, npaired, tables, L, wbits = self._schedule(M, max(ns, 0))
-        taddr = tuple(addr_ro(t, name="schedule") for t in tables)  # glue: forest array addresses for the binding
-        phi = zeros((max(n * d * k, 1),), "<f8")
-        if n == 0:
-            return self._shape(zeros((0,), "<f8"), 0, d)
-        fx = self._eval(Xa)                       # the explained rows, one model call
-        x0, f0, p0 = addr_ro(Xa, name="X"), addr_ro(fx, name="fx"), addr(phi, name="phi")
-        fnull = self._fnull
-        R = self._chunk(m * nb * d, n)
-        # MOJOLEARN_KSHAP_FAST_DEVICE_MODEL: a loaded device model (self._dev,
-        # only set on FAST when that bit is on) wins over the batched download
-        if m > 0 and _trees_switch(self, _KSHAP_FAST_BATCH) and getattr(self, "_dev", None) is None:
-            self._batched(b, Xa, fx, taddr, phi, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R)
-            return self._shape(phi, n, d)
-        if self._model_load(b):
-            # the forest on the device: masks -> model -> means -> solve per
-            # chunk, nothing crossing but the chunk's rows and phi
-            link = 1 if self.link == "logit" else 0
-            nl = addr_ro(fnull, name="fnull")
-            try:
-                for r0 in range(0, n, R):  # glue: chunk loop (one binding call per chunk)
-                    rows = min(R, n - r0)
-                    b.x_trees_kshap_solve_model(x0 + 4 * r0 * d, f0 + 4 * r0 * k, nl, taddr, p0 + 8 * r0 * d * k,
-                                                [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits, k, link])
-            finally:
-                b.x_trees_agn_model_release()
-            return self._shape(phi, n, d)
-        reuse = _trees_build_switch(self, _AGN_IDN_SYN_POOL)   # one synthetic buffer for every chunk
-        syn = None
-        try:
-            for r0 in range(0, n, R):  # glue: one binding call per row chunk
-                rows = min(R, n - r0)
-                params = [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits]
-                out = None
-                if m > 0:
-                    if not reuse or syn is None or syn.size != rows * m * nb * d:
-                        syn = None
-                        syn = empty((rows * m * nb * d,), "<f4")
-                    b.x_trees_kshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), taddr,
-                                          addr(syn, name="synthetic"), params)
-                    out = self._model_rows(syn, rows * m * nb, d)
-                    if not reuse:
-                        syn = None
-                b.x_trees_kshap_solve(addr_ro(out, name="y") if out is not None else 0, f0 + 4 * r0 * k,
-                                      addr_ro(fnull, name="fnull"), taddr, p0 + 8 * r0 * d * k,
-                                      params + [k, 1 if self.link == "logit" else 0])
-        finally:
-            if reuse:
-                _agn_pool_release(b)   # the pooled device buffer does not outlive the explanation
-        return self._shape(phi, n, d)
+        return _TREES(self, "trees_agnostic_kernel_values", (X, nsamples, l1_reg), _TREES_CONTEXT)
 
 
-    def _batched(self, b, Xa, fx, taddr, phi, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R):
-        """MOJOLEARN_KSHAP_FAST_BATCH: one host buffer for every chunk's
-        synthetic rows, each chunk's linked background means into one
-        float64 (n, m, k) block, then the solve over as many rows per call
-        as the budget holds (the same words as the per-chunk solve)."""
-        link = 1 if self.link == "logit" else 0
-        ey = zeros((n * m * k,), "<f8")
-        e0 = addr(ey, name="ey")
-        x0, bg0 = addr_ro(Xa, name="X"), addr_ro(self._bg, name="data")
-        # TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (`_overlapped`);
-        # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch.
-        syn = empty((R * m * nb * d,), "<f4")
-        for r0 in range(0, n, R):  # glue: one binding call per row chunk
-            rows = min(R, n - r0)
-            if rows < R:
-                syn = empty((rows * m * nb * d,), "<f4")
-            b.x_trees_kshap_synth(x0 + 4 * r0 * d, bg0, taddr, addr(syn, name="synthetic"),
-                                  [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits])
-            out = self._model_rows(syn, rows * m * nb, d)
-            b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
-            del out
-        del syn
-        f0, p0 = addr_ro(fx, name="fx"), addr(phi, name="phi")
-        nl = addr_ro(self._fnull, name="fnull")
-        S = self._chunk(m * d, n)
-        for s0 in range(0, n, S):  # glue: solve-batch loop (one binding call per batch)
-            rows = min(S, n - s0)
-            b.x_trees_kshap_solve_ey(e0 + 8 * s0 * m * k, f0 + 4 * s0 * k, nl, taddr, p0 + 8 * s0 * d * k,
-                                     [rows, nb, d, nfixed, m, nfull, L, npaired, s0, seed, wbits, k, link])
-
-
-class PermutationExplainer(_AgnosticExplainer):
+class PermutationExplainer(_TreesEnsembleBase):
     """Model-agnostic Permutation SHAP values.
 
     Follows the ``shap`` package's ``PermutationExplainer``: each random
     permutation of the features adds them one by one (forward), then removes
     them (backward), and each feature's marginal contribution is averaged over
-    the background rows and the permutations. Every step except the model call
-    runs on the device on GPU installs.
+    the background rows and the permutations. Every step runs on the device on
+    GPU installs.
 
     Differs from ``shap``: random permutations come from mojolearn's own
     seeded generator, so values differ from ``shap``'s for the same seed.
 
     Parameters
     ----------
-    model : estimator or callable
-        A fitted mojolearn estimator, or a function mapping an
-        (n, n_features) array to outputs. For a classifier with
+    model : estimator
+        A fitted mojolearn estimator. For a classifier with
         ``predict_proba`` the probabilities are explained, otherwise
-        ``predict``.
+        ``predict``. Any other model, including a Python function, raises
+        ``TypeError``.
     data : array of shape (n_background, n_features)
         Background rows that stand in for missing features.
     random_state : int or None, default None
@@ -3242,34 +2941,11 @@ class PermutationExplainer(_AgnosticExplainer):
     (10, 8)
     """
 
-    def __init__(self, model, data, *, random_state=None):
-        super().__init__(model, data, random_state)
+    _mojolearn_native_public = True
 
-    def _linear_wb(self, b):
-        """MOJOLEARN_IDN_PSHAP_RESIDENT: ([w | b] float32 block, link) when
-        the binding carries the switch and the explained model's predict is
-        this library's linear `link(X W^T + b)` (x_linear `decision_kernel`);
-        else None (the model callback). Routing and byte copies only."""
-        try:
-            ok = int(b.x_trees_pshap_linear_ok()) == 1
-        except (AttributeError, ImportError):
-            return None
-        if not ok:
-            return None
-        m = self.model
-        pred = getattr(type(m), "predict", None)
-        if getattr(pred, "__qualname__", "") != "_LinearRegressorMixin.predict":
-            return None
-        if int(getattr(m, "n_features_in_", -1)) != self._bg.shape[1]:
-            return None
-        from ._expansion_linear import _coef_block   # glue: the model's own [w | b] byte copies
-        intercept = m.intercept_
-        if not hasattr(intercept, "shape"):
-            intercept = full((1,), float(intercept), "<f4")
-        wb = _coef_block(m.coef_, intercept)
-        if wb.size != self.n_outputs_ * (self._bg.shape[1] + 1):
-            return None
-        return wb, int(m._link)
+    def __init__(self, model, data, *, random_state=None, numeric_mode=None):
+        return _TREES(self, "trees_agnostic_permutation_init",
+                      (model, data, random_state, None, numeric_mode), _TREES_CONTEXT)
 
     def shap_values(self, X, npermutations=10):
         """Permutation SHAP values of the rows of ``X``.
@@ -3289,93 +2965,31 @@ class PermutationExplainer(_AgnosticExplainer):
             Shape (n_samples, n_features) for one output, else
             (n_samples, n_features, n_outputs).
         """
-        Xa = self._check(X)
-        n, d = Xa.shape
-        k = self.n_outputs_
-        seed = _trees_seed(self.random_state)
-        npm = int(npermutations)
-        if npm < 1:
-            raise ValueError("npermutations must be >= 1")
-        nb = self._bg.shape[0]
-        b = self._bind()
-        phi = zeros((max(n * d * k, 1),), "<f8")
-        if n == 0:
-            return self._shape(zeros((0,), "<f8"), 0, d)
-        mm = npm * (2 * d + 1)
-        x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
-        R = self._chunk(mm * nb * d, n)
-        if self._model_load(b):
-            # the forest on the device: permutations -> model -> means ->
-            # marginals per chunk, nothing crossing but the chunk's rows and phi
-            try:
-                for r0 in range(0, n, R):  # glue: chunk loop (one binding call per chunk)
-                    rows = min(R, n - r0)
-                    b.x_trees_pshap_values_model(x0 + 4 * r0 * d, p0 + 8 * r0 * d * k, [rows, nb, d, npm, r0, seed, k])
-            finally:
-                b.x_trees_agn_model_release()
-            return self._shape(phi, n, d)
-        lin = self._linear_wb(b)
-        if lin is not None:
-            # IDN_PSHAP_RESIDENT: synthetic rows, the linear predict, means
-            # and marginals on the device per chunk; only x rows and phi cross
-            wb, link = lin
-            bg0, wb0 = addr_ro(self._bg, name="data"), addr_ro(wb, name="coef")
-            Rl = max(1, min(n, _AGN_BUDGET_RESIDENT // max(1, mm * nb * d)))
-            for r0 in range(0, n, Rl):  # glue: chunk loop (one binding call per chunk)
-                rows = min(Rl, n - r0)
-                b.x_trees_pshap_values_linear(x0 + 4 * r0 * d, bg0, wb0, p0 + 8 * r0 * d * k,
-                                              [rows, nb, d, npm, r0, seed, k, link])
-            return self._shape(phi, n, d)
-        # one synthetic buffer for every chunk
-        idn_pool = _trees_build_switch(self, _AGN_IDN_SYN_POOL)
-        reuse = _trees_switch(self, _KSHAP_FAST_BATCH) or idn_pool
-        if _trees_switch(self, _PSHAP_DELTA):
-            self._delta(b, Xa, phi, n, d, k, nb, npm, seed, R, mm)
-            return self._shape(phi, n, d)
-        syn = None
-        try:
-            for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
-                rows = min(R, n - r0)
-                params = [rows, nb, d, npm, r0, seed]
-                if not reuse or syn is None or syn.size != rows * mm * nb * d:
-                    syn = None
-                    syn = empty((rows * mm * nb * d,), "<f4")
-                b.x_trees_pshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), addr(syn, name="synthetic"),
-                                      params)
-                out = self._model_rows(syn, rows * mm * nb, d)
-                if not reuse:
-                    syn = None
-                b.x_trees_pshap_values(addr_ro(out, name="y"), p0 + 8 * r0 * d * k, params + [k])
-        finally:
-            if idn_pool:
-                _agn_pool_release(b)   # the pooled device buffer does not outlive the explanation
-        return self._shape(phi, n, d)
+        return _TREES(self, "trees_agnostic_permutation_values", (X, npermutations), _TREES_CONTEXT)
 
-    def _delta(self, b, Xa, phi, n, d, k, nb, npm, seed, R, mm):
-        """MOJOLEARN_PSHAP_DELTA: per chunk, the device builds only the
-        synthetic rows that differ from their previous coalition's into the
-        front of one reused host buffer (their count into `tot`), the model
-        runs on that prefix, and the device expands the outputs back to
-        every (coalition, background row)."""
-        x0, bg0, p0 = addr_ro(Xa, name="X"), addr_ro(self._bg, name="data"), addr(phi, name="phi")
-        # the device keeps three Int64 words per (coalition, background row):
-        # bound them as if d were at least 16 (a narrow X would else index
-        # up to the whole synthetic budget in Int64 triples)
-        R = min(R, self._chunk(mm * nb * max(d, 16), n))
-        # TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1
-        # (`_delta_overlapped`); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch.
-        tot = zeros((1,), "<i8")
-        t0 = addr(tot, name="count")
-        syn = empty((R * mm * nb * d,), "<f4")
-        for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
-            rows = min(R, n - r0)
-            params = [rows, nb, d, npm, r0, seed]
-            b.x_trees_pshap_dsynth(x0 + 4 * r0 * d, bg0, addr(syn, name="synthetic"), t0, params)
-            nv = int(tot.tolist()[0])
-            # the first nv rows of syn, zero-copy (syn stays alive in this frame)
-            front = memory_at(addr(syn, name="synthetic"), 4 * nv * d, writable=True).cast("f")
-            out = self._eval(Array.from_buffer(front).reshape((nv, d)))
-            del front
-            b.x_trees_pshap_dvalues(x0 + 4 * r0 * d, bg0, addr_ro(out, name="y"), p0 + 8 * r0 * d * k, t0,
-                                    params + [k])
-            del out
+
+def _connect_explainers():
+    # glue: install the native attribute descriptor once at class definition;
+    # the inherited Python output getter must not surround public operations.
+    if "trees_unavailable" in _TREES_CONTEXT:
+        return
+    from types import BuiltinFunctionType, MethodType
+    from .tokenizer import _binding
+    from ._native_classical_bridge import _layout
+    from ._forest_host import HostForest
+    _TREES_CONTEXT["trees_explainer_host_forest"] = HostForest
+    module = _binding()._module
+    attribute = module.standard_scaler_attribute_call
+    factory = module.classical_attribute_descriptor
+    if type(attribute) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
+        raise TypeError("native explainers require compiled attribute entries")
+    descriptor = factory(MethodType(attribute, _TREES_CONTEXT))
+    layouts = _TREES_CONTEXT.setdefault("classical_public_layouts", {})
+    for cls in (TreeExplainer, KernelExplainer, PermutationExplainer):  # glue: the three explainer classes, once at import
+        cls.__getattribute__ = descriptor
+        layouts[cls] = _layout(cls, descriptor)
+    _TREES_CONTEXT["classical_public_installed"] = True
+    _TREES_CONTEXT["classical_attribute_descriptor"] = descriptor
+
+
+_connect_explainers()
