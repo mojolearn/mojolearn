@@ -104,16 +104,21 @@ class CommitTree:
         return None if data is None else data.decode('utf-8', errors='replace')
 
     def exists(self, path):
+        if '/' in path:
+            return path in self._ls(path.rsplit('/', 1)[0])
         return _git(self.repo, 'cat-file', '-e', '%s:%s' % (self.sha, path), check=False) is not None
 
     def _ls(self, prefix):
-        out = _git(self.repo, 'ls-tree', '-r', self.sha, '--', prefix + '/', check=False) or ''
-        rows = {}
-        for line in out.splitlines():
-            meta, _, path = line.partition('\t')
-            if meta.split()[1] == 'blob':
-                rows[path] = meta.split()[2]
-        return rows
+        cache = self.__dict__.setdefault('_ls_cache', {})
+        if prefix not in cache:
+            out = _git(self.repo, 'ls-tree', '-r', self.sha, '--', prefix + '/', check=False) or ''
+            rows = {}
+            for line in out.splitlines():
+                meta, _, path = line.partition('\t')
+                if meta.split()[1] == 'blob':
+                    rows[path] = meta.split()[2]
+            cache[prefix] = rows
+        return cache[prefix]
 
     def files_under(self, prefix):
         return sorted(self._ls(prefix))
