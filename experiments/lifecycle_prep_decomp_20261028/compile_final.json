@@ -1,0 +1,77 @@
+{
+ "scope": "lifecycle-prep-decomp final closure after origin/main 30928487f1 merge: prep doors (prep_stateless_c, prep_owner_c/prep_encode_c/labels, prep_classify_c), decomp doors (decomp_c, ipca, dict_learning, mcd, als), tsvd_c, manifold host builder, umap_init; shared helper bindings/public_lifecycle_owner.mojo. Compile only.",
+ "machine": "Mac (compile_slot, nice 19), CPU column, identical, O0, -j 10",
+ "results": [
+  {
+   "name": "prep_doors",
+   "entry": "experiments/lifecycle_prep_decomp_20261028/compile_prep_doors.mojo",
+   "source_commit": "75fd60f68fc1c36c7c908fee30bb92e3cb14309e",
+   "dirty_mojo_files": 0,
+   "exit": 0,
+   "seconds": 40,
+   "jobs": 10,
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "binary_sha256": "5998c06cdd302200a14beadc12fbaf9c7fbd07f668bab61afa9b160da05dc715",
+   "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-prep-decomp-20261028/final/prep_doors.log",
+   "command": "compile_slot pixi mojo build -O0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/lifecycle_prep_decomp_20261028/compile_prep_doors.mojo"
+  },
+  {
+   "name": "decomp_doors",
+   "entry": "experiments/lifecycle_prep_decomp_20261028/compile_decomp_doors.mojo",
+   "source_commit": "75fd60f68fc1c36c7c908fee30bb92e3cb14309e",
+   "dirty_mojo_files": 0,
+   "exit": 0,
+   "seconds": 25,
+   "jobs": 10,
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "binary_sha256": "5b73b31e38ea53a8642b793ee19161b22e843dd5661e625a5c0f9bb132487639",
+   "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-prep-decomp-20261028/final/decomp_doors.log",
+   "command": "compile_slot pixi mojo build -O0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/lifecycle_prep_decomp_20261028/compile_decomp_doors.mojo"
+  },
+  {
+   "name": "tsvd",
+   "entry": "experiments/lifecycle_prep_decomp_20261028/compile_tsvd.mojo",
+   "source_commit": "75fd60f68fc1c36c7c908fee30bb92e3cb14309e",
+   "dirty_mojo_files": 0,
+   "exit": 0,
+   "seconds": 13,
+   "jobs": 10,
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "binary_sha256": "ca3f1a65ed8c2292fdb327b20fe38a424f7fecb04e505d8586d07dd1d6e22e8f",
+   "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-prep-decomp-20261028/final/tsvd.log",
+   "command": "compile_slot pixi mojo build -O0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/lifecycle_prep_decomp_20261028/compile_tsvd.mojo"
+  },
+  {
+   "name": "manifold_host",
+   "entry": "bindings/entry/entry__mojolearn_runtime_manifold_host.mojo",
+   "source_commit": "75fd60f68fc1c36c7c908fee30bb92e3cb14309e",
+   "dirty_mojo_files": 0,
+   "exit": 0,
+   "seconds": 28,
+   "jobs": 10,
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "binary_sha256": "5cb19ef5ed35695a08138d779b235c2280c7beaaf4093ecae381f34d7e6c9586",
+   "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-prep-decomp-20261028/final/manifold_host.log",
+   "command": "compile_slot pixi mojo build -O0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_runtime_manifold_host.mojo"
+  },
+  {
+   "name": "umap_init",
+   "entry": "experiments/peer2_native_boundary_20261027/compile_umap_init.mojo",
+   "source_commit": "a0ed9c1e080d0193dc5c570210de997b69aaf5f9",
+   "dirty_mojo_files": 0,
+   "exit": 0,
+   "seconds": 11,
+   "jobs": 10,
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "binary_sha256": "50deca809df1277b625f5f521a1e6aaa15d4e721a1c01c45cfb06536407e1df7",
+   "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-prep-decomp-20261028/final/umap_init.log",
+   "command": "compile_slot pixi mojo build -O0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/peer2_native_boundary_20261027/compile_umap_init.mojo"
+  }
+ ],
+ "not_compiled": [
+  "GPU targets",
+  "fast mode",
+  "full _mojolearn binding roots",
+  "Python glue execution, runtime, identity"
+ ]
+}
