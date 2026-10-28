@@ -1655,6 +1655,10 @@ def main(argv=None, _gates=True):
     if not re.fullmatch("[0-9a-f]{40}", witness or ""):
         raise SystemExit("pack_wheel: no commit witness for the identity columns "
                          "(no release proof and no git checkout)")
+    if _gates and (not split or gpu_plugins.CORE_PROFILE in kinds):
+        from verification_repository import validate_payload
+        verification = validate_payload(source_root, witness)
+        entries.update(verification)
 
     for source_set in sets:
         for rel, path in source_set.files.items():

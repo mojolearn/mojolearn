@@ -95,6 +95,11 @@ class ProphetForecaster(ParamsMixin):
     (30,)
     """
 
+    # Every public method is one native call whose owner does the whole
+    # lifecycle (fit bookkeeping and the NotFittedError of predict in
+    # bindings/xseq_prophet_native.mojo), so no `_mode` class-creation wrappers are installed.
+    _mojolearn_native_public = True
+
     def __init__(self, growth="linear", changepoints=None, n_changepoints=25, changepoint_range=0.8,
                  yearly_seasonality="auto", weekly_seasonality="auto", daily_seasonality="auto",
                  seasonality_mode="additive", seasonality_prior_scale=10.0, holidays_prior_scale=10.0,
