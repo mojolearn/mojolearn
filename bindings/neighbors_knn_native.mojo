@@ -28,11 +28,13 @@
 # the import-connected provider after entry: `_mojolearn` for prediction and
 # x_neighbors for fit. Explicit bindings remain supported for native drivers.
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
+from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.optimizer_public_words import stash_python_error
@@ -858,7 +860,7 @@ def _reg_score(model: PythonObject, args: PythonObject, context: PythonObject) r
                                   PythonObject("uniform_average"), PythonObject(True), mode), context)
 
 
-def neighbors_knn_operation(model: PythonObject, operation: String, var args: PythonObject,
+def _neighbors_knn_operation(model: PythonObject, operation: String, var args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     _admit_knn_state(model, context)
@@ -896,3 +898,35 @@ def neighbors_knn_operation(model: PythonObject, operation: String, var args: Py
         # args = (_mojolearn binding, X, y, sample_weight, metrics binding)
         return _reg_score(model, args, context)
     raise Error("RuntimeError: unknown neighbors operation " + operation)
+
+
+def neighbors_knn_operation(model: PythonObject, operation: String, args: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    if operation == "family_xn_knn_getstate":
+        var state = py_call(_fields(model).copy)
+        _ = py_call(state.pop, "_resident", PythonObject(None))
+        _ = py_call(state.pop, "_resident_holder", PythonObject(None))
+        return state
+    if operation == "family_xn_knn_setstate":
+        var b = _b()
+        var state = args[0]
+        if py_type(state) is not b.dict:
+            raise Error("TypeError: neighbor pickle state must be an exact dictionary")
+        var keys = py_call(b.tuple, state.keys())
+        for i in range(len(keys)):  # driver-loop: state keys before native dictionary update
+            if py_type(keys[i]) is not b.str:
+                raise Error("TypeError: neighbor pickle state keys must be exact strings")
+        var fields = _fields(model)
+        knn_release(model)
+        _ = py_call(fields.update, state)
+        py_setitem(fields, "_resident_holder", Python.dict())
+        return PythonObject(None)
+    var call = neighbors_public_begin(model, operation, args, context)
+    var result = PythonObject(None)
+    try:
+        result = _neighbors_knn_operation(model, operation, call.args, context)
+    except error:
+        raise neighbors_public_refusal(error, call, model)
+    finally:
+        neighbors_public_end(model, call)
+    return neighbors_public_finish(model, operation, result, call, context)

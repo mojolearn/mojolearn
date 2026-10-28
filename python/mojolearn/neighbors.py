@@ -698,14 +698,10 @@ class NearestNeighbors(NumericModeMixin):
         meaningful only in the process and registry that minted it, and an
         unpickled instance holding it could release ANOTHER model's live
         index. The copy uploads its own index at its first call."""
-        state = self.__dict__.copy()
-        state.pop("_resident", None)
-        state.pop("_resident_holder", None)
-        return state
+        return _NATIVE(self, "family_xn_knn_getstate", (), _NATIVE_CONTEXT)
 
     def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.__dict__["_resident_holder"] = {}
+        return _NATIVE(self, "family_xn_knn_setstate", (state,), _NATIVE_CONTEXT)
 
     # The device-resident index handle lives in a holder dict the fit
     # creates, not in an attribute of its own: the first query changes the
@@ -751,6 +747,7 @@ class NearestNeighbors(NumericModeMixin):
         self._release_resident_index()
         self.__dict__["_resident_holder"] = {}
 
+    @_native_query_method
     def fit(self, X, y=None):
         """Store the points to search.
 
@@ -768,7 +765,7 @@ class NearestNeighbors(NumericModeMixin):
         -------
         self
         """
-        return _NATIVE(self, "family_xn_knn_nn_fit", (X,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_knn_nn_fit", (X, y), _NATIVE_CONTEXT)
 
 
     # Maintainer notes (moved from the docstring): the kernel computes squared
@@ -971,6 +968,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
+    @_native_query_method
     def fit(self, X, y):
         """Store the training points and their labels.
 
@@ -1004,6 +1002,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
             return self._classes_list
         return self._classes_list[0]
 
+    @_native_query_method
     def predict(self, X):
         """Predict the class of each query by neighbor vote.
 
@@ -1027,6 +1026,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         return _NATIVE(self, "family_xn_knn_clf_predict", (None, X), _NATIVE_CONTEXT)
 
 
+    @_native_query_method
     def predict_proba(self, X):
         """Return each query's vote fractions per class.
 
@@ -1043,6 +1043,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         """
         return _NATIVE(self, "family_xn_knn_clf_predict_proba", (None, X), _NATIVE_CONTEXT)
 
+    @_native_query_method
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of ``predict(X)`` against ``y``.
 
@@ -1194,6 +1195,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
+    @_native_query_method
     def fit(self, X, y):
         """Store the training points and their targets.
 
@@ -1212,6 +1214,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
         return _NATIVE(self, "family_xn_knn_reg_fit", (None, X, y), _NATIVE_CONTEXT)
 
 
+    @_native_query_method
     def predict(self, X):
         """Predict each query's target from its neighbors.
 
@@ -1233,6 +1236,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
         """
         return _NATIVE(self, "family_xn_knn_reg_predict", (None, X), _NATIVE_CONTEXT)
 
+    @_native_query_method
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
 

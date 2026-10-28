@@ -24,6 +24,7 @@
 # Python `DevicePool` (python/mojolearn/_parallel_pool.py), whose workers run
 # Python handlers.
 from providers.python.estimator_binding_pyapi import estimator_arguments
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -356,7 +357,7 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
     return out
 
 
-def neighbors_kde_operation(model: PythonObject, operation: String, var args: PythonObject,
+def _neighbors_kde_operation(model: PythonObject, operation: String, var args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     _kde_admit_state(model, context)
@@ -376,3 +377,18 @@ def neighbors_kde_operation(model: PythonObject, operation: String, var args: Py
         _kde_release(py_fields(model))
         return PythonObject(None)
     raise Error("RuntimeError: unknown neighbors operation " + operation)
+
+
+def neighbors_kde_operation(model: PythonObject, operation: String, args: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    if operation == "family_xn_kde_release":
+        return _neighbors_kde_operation(model, operation, args, context)
+    var call = neighbors_public_begin(model, operation, args, context)
+    var result = PythonObject(None)
+    try:
+        result = _neighbors_kde_operation(model, operation, call.args, context)
+    except error:
+        raise neighbors_public_refusal(error, call, model)
+    finally:
+        neighbors_public_end(model, call)
+    return neighbors_public_finish(model, operation, result, call, context)
