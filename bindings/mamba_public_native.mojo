@@ -29,10 +29,9 @@ from bindings.generation_buffers import (
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings, _model_block
 from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths, _neural_int_words
-from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, neural_block_f32, neural_array_snapshot
+from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, neural_block_f32, neural_array_snapshot, neural_native_scalar
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_loaded_module import native_loaded_module
-from providers.python.autograd_program_arrays_pyapi import program_numeric_scalar
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from bindings.neural_prefill_native import _prefill_mamba3_reports
 from providers.python.neural_descriptor_pyapi import (
@@ -70,10 +69,10 @@ def _mamba_record_fields(value: PythonObject, expected: PythonObject, names: Lis
     return _fields(value)
 
 
-def _mamba_scalar(value: PythonObject, name: String) raises:
+def _mamba_scalar(value: PythonObject, name: String, context: PythonObject) raises:
     var bi = native_loaded_module("builtins")
     var cls = py_type(value)
-    if value is None or cls is bi.str or cls is bi.bytes or program_numeric_scalar(value):
+    if value is None or cls is bi.str or cls is bi.bytes or neural_native_scalar(value, context):
         return
     raise Error("TypeError: Mamba " + name + " requires a native scalar without conversion hooks")
 
@@ -113,7 +112,7 @@ def _mamba_state_fields(state: PythonObject, kind: String, context: PythonObject
                 continue
             var item = fields[name]
             if name == "profile_id" or name == "absolute_position" or name == "_nn34_usable" or name == "buffered_tokens" or name == "pending" or name == "_resident_session":
-                _mamba_scalar(item, name)
+                _mamba_scalar(item, name, context)
             elif item is not None:
                 py_setitem(fields, name, _mamba_buffer(item, context))
     return fields
@@ -133,10 +132,10 @@ def mamba_state_init(state: PythonObject, kind: String, values: PythonObject,
     for i in range(count):  # driver-loop: constructor reference storage and native scalar conversion
         var value = values[i]
         if (kind == "mamba1" and (i == 2 or i == 3)) or (kind == "mamba2" and i == 4) or (kind == "mamba3" and i == 10):
-            _mamba_scalar(value, names[i])
+            _mamba_scalar(value, names[i], context)
             value = py_call(bi.int, value)
         elif kind == "mamba3" and i == 11:
-            _mamba_scalar(value, names[i])
+            _mamba_scalar(value, names[i], context)
             value = PythonObject(Bool(py=value))
         _ = py_call(converted.append, value)
     for i in range(count):  # driver-loop: publish only after all scalar arguments were admitted
@@ -1120,7 +1119,7 @@ def mamba_native_call(operation: String, values: PythonObject, context: PythonOb
         var fields = neural_block_fields(values[0], context)
         var kind = String(fields["_native_kind"])
         if operation == "allocate":
-            _mamba_scalar(values[1], "batch_size")
+            _mamba_scalar(values[1], "batch_size", context)
     if operation == "forward_public" or operation == "step_public":
         var step = operation == "step_public"
         var lengths = PythonObject(None)
