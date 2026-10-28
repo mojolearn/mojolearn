@@ -282,7 +282,7 @@ struct GenerationOperationSnapshot(Copyable, Movable):
 from bindings.py_balanced import py_setitem
 from bindings.generation_buffers import generation_mutable
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
-from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi import neural_descriptor_handle
 from providers.python.native_execution_pyapi import AdmittedNativeExecution
 from providers.python.operation_lock_pyapi import OperationLockLease
 from core.generation_metadata import generation_transformer_addresses
@@ -442,7 +442,7 @@ struct GenerationEngineAdmission(Movable):
                             py_setitem(block, "_session_binding", entries["block_binding"])
                         session = block["_native_session"]
                         handle = neural_descriptor_handle(provider,
-                            neural_descriptor_entry(entries["block_binding"], "transformer_native_session_handle_v1"), session)
+                            entries["transformer_native_session_handle_v1"], session)
                     self.owners.append(AdmittedNativeExecution(provider, session, handle,
                         -1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle))
                     native_layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
