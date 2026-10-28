@@ -40,6 +40,8 @@ from core.sha256 import Sha256
 from bindings.sha256_door import sha256_update, sha256_update_text
 from std.math import isfinite
 from std.os import getenv
+from std.sys.compile import is_defined
+
 from transformer.causal_lm_public_impl import (
     causal_lm_rows_done, causal_lm_join_resident, causal_lm_join_continuation,
     causal_lm_pick_step, causal_lm_tokens_row_major, causal_lm_drop_eos,
@@ -101,6 +103,20 @@ def _causal_model_fields(mut mods: NativeModules, model: PythonObject) raises ->
             "numeric_profile", "device", "weight_format", "max_positions", "_embed", "_norm", "_head",
             "_blocks", "_native_entries", "_native_vendor", "_native_numeric_mode", "_head_int15",
             "_closed", "_failed", "_runtime", "_parallel_entry", "_block_kwargs", "unused_names", "_block_class", "_prims", "_causal_entries_owner"))
+
+comptime _LM_RESIDENT_GENERATE = is_defined["MOJOLEARN_IDN_LM_RESIDENT_GENERATE"]()
+"""Experiment, default off (lane lm-resident-generate-20261028): a model
+without a final norm (`final_norm=False`) is admitted to the resident
+generate and forward routes (the session's head reads the stack output, as
+the per-layer route's does; no float operation changes). Off, such models
+take the per-layer route (`_run_snapshot`), as before."""
+
+
+def _resident_norm_ok(model: PythonObject) raises -> Bool:
+    """Whether the model's final norm lets it open a resident session."""
+    comptime if _LM_RESIDENT_GENERATE:
+        return True
+    return model._norm is not None
 
 
 def _standalone_record_fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
@@ -940,7 +956,7 @@ def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: Py
     resident entries, a head the resident session takes, no arithmetic
     profile metadata to carry and no layer state held by a decode session."""
     var e = model._native_entries
-    if String(model.kind) != "transformer" or model._norm is None:
+    if String(model.kind) != "transformer" or not _resident_norm_ok(model):
         return False
     for name in [String("causal_lm_session_forward"), String("transformer_decode_session_load_state"),  # small-loop(required resident entry names)
                  String("transformer_decode_session_export_state"), String("causal_lm_session_run")]:
@@ -1247,7 +1263,9 @@ def _resident_open_all(mut mods: NativeModules,
             else:
                 _ = py_call(e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"], ss, open_a, open_p)
                 mods.released()
-        var top = py_ints([_addr(model._embed, keep), _addr(model._norm, keep)])
+        # A model without a final norm passes 0 (admitted only under
+        # MOJOLEARN_IDN_LM_RESIDENT_GENERATE; see `_resident_norm_ok`).
+        var top = py_ints([_addr(model._embed, keep), 0 if model._norm is None else _addr(model._norm, keep)])
         if int15:
             for i in range(3):  # small-loop(int15 head plane triple)
                 _ = py_call(top.append, _addr(model._head_int15[i], keep))
@@ -1298,7 +1316,7 @@ def _resident_load_states(e: PythonObject, sessions: PythonObject, state: Python
 
 def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, value: PythonObject, maximum: PythonObject, last_logits: PythonObject, supplied_state: PythonObject) raises -> PythonObject:
     var e = model._native_entries
-    if not py_contains(e, "causal_lm_session_run") or model._norm is None:
+    if not py_contains(e, "causal_lm_session_run") or not _resident_norm_ok(model):
         return PythonObject(None)
     var int15 = model._head_int15 is not None
     if int15 and String(e["resident_vendor"]) != "cuda":
