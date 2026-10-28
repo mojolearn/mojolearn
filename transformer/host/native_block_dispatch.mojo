@@ -6,11 +6,16 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
 from transformer.transformer_host_binding_impl import _run_forward, _backward_run, HostTransformerSession
+from transformer.host.session_tape_dispatch import transformer_host_session_tape_operation
 
 
 def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     if len(f) != 0:
         raise Error("Transformer host provider: unexpected floating scalars")
+    # Append-only budget-aware session ticket transport; existing ops retain
+    # their numerical owners, including the separate inference-host routes.
+    if op >= 36 and op < 41:
+        return transformer_host_session_tape_operation(op - 36, a, p)
     if op == 12 or op == 13:
         if len(p) != 1 or p[0] == 0 or len(a) != 0:
             raise Error("transformer tape: invalid administration descriptor")
@@ -65,7 +70,7 @@ def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: Lis
 def transformer_host_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                           result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 36 or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
+        if op < 0 or op >= 41 or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
             raise Error("transformer host provider: invalid descriptor span or operation")
         var a = native_descriptor_words(aa, na)
         var p = native_descriptor_words(pp, np)

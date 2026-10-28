@@ -86,3 +86,20 @@ Evidence
 /Users/andrewhendel/mojolearn-evidence/peer3-tokenizer-20261027/
 experiments/peer3_neural_tokenizer_20261027/transformer/
 The three lane handoffs retain individual commits, failures and narrower limits.
+
+Root CPU compile feedback and repair
+- Root's batch4 compile_neural, compile_mamba, compile_transformer and
+  compile_tokenizer failed. Full failure logs are retained on the Mac and R2:
+  ~/mojolearn-evidence/provider-migration-resume-20261027/runpod-provider-cpu/
+  retained/batch4/compile_{neural,mamba,transformer,tokenizer}.log
+- e02c3fd828 repairs all distinct reported diagnostics: explicit copying of
+  BorrowedBufferLayout metadata; module-scope imports; owned exception
+  temporaries; tokenizer Int64 ABI lengths/counts; UInt64 shift amounts; and a
+  temporary for the String slice assignment. The new decode root received the
+  same explicit layout-copy repair. No numerical algorithm/route changed.
+- All 33 source checks passed again after the repair (exit 0):
+  ~/mojolearn-evidence/peer3-neural-tokenizer-20261027/
+  source-after-compile-fixes.log
+- Root was notified to rerun the affected five roots. This record does not
+  claim that the repaired compile has passed; success remains pending root's
+  actual compiler result. Original failed evidence is preserved.

@@ -3,90 +3,282 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from std.ffi import _Global
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.native_json import native_json_read, native_path, native_path_exists
+from bindings.native_loaded_module import native_loaded_module
+from bindings.native_instance_item import native_instance_item
+from bindings.mode_metadata_native import _fields, _class_fields
+
+
+struct ModelConfigConnection(Defaultable, Movable):
+    var context: PythonObject
+
+    def __init__(out self):
+        self.context = PythonObject(None)
+
+
+comptime MODEL_CONFIG_CONNECTION = _Global[StorageType=ModelConfigConnection,
+    name="MojolearnModelConfigConnection", init_fn=ModelConfigConnection.__init__]
+
+
+def model_string(value: PythonObject) raises -> String:
+    if py_type(value) is not native_loaded_module("builtins").str:
+        raise Error("TypeError: model metadata requires exact strings")
+    return String(value)
+
+
+def model_integer(value: PythonObject) raises -> Int:
+    if py_type(value) is not native_loaded_module("builtins").int:
+        raise Error("TypeError: model metadata requires exact integers; scalar hooks are unsupported")
+    return Int(py=value)
+
+
+def model_sequence(value: PythonObject) raises:
+    var bi = native_loaded_module("builtins")
+    if py_type(value) is not bi.list and py_type(value) is not bi.tuple:
+        raise Error("TypeError: model metadata requires exact list or tuple storage")
+
+
+def model_dict(value: PythonObject) raises:
+    var bi = native_loaded_module("builtins")
+    if py_type(value) is not bi.dict:
+        raise Error("TypeError: model metadata requires an exact dictionary")
+    var keys = py_call(bi.list, value.keys())
+    for i in range(len(keys)):  # driver-loop: admit every key before keyed metadata access
+        _ = model_string(keys[i])
+
+
+def model_plain(value: PythonObject, depth: Int = 0) raises -> PythonObject:
+    # Snapshot mutable JSON metadata once; later validation/conversion cannot
+    # reach user containers, scalar hooks or descriptor protocols.
+    if depth > 128:
+        raise Error("TypeError: model metadata nesting exceeds 128")
+    var bi = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if value is None or cls is bi.str or cls is bi.int or cls is bi.float or cls is bi.bool:
+        return value
+    if cls is bi.list or cls is bi.tuple:
+        var result = Python.list()
+        for i in range(len(value)):  # driver-loop: capture passive model configuration sequence
+            _ = py_call(result.append, model_plain(value[i], depth + 1))
+        return py_call(bi.tuple, result) if cls is bi.tuple else result
+    model_dict(value)
+    var result = Python.dict()
+    var keys = py_call(bi.list, value.keys())
+    for i in range(len(keys)):  # driver-loop: capture passive model configuration dictionary
+        py_setitem(result, keys[i], model_plain(native_instance_item(value, keys[i]), depth + 1))
+    return result
+
+
+def model_record_fields(value: PythonObject, cls: PythonObject, names: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    if py_type(cls) is not bi.type or py_type(py_type(value)) is not bi.type:
+        raise Error("TypeError: model records require ordinary connected class metadata")
+    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, py_type(value))
+    var admitted = False
+    for i in range(len(ancestry)):  # driver-loop: inspect model record descriptors before storage reads
+        admitted = admitted or ancestry[i] is cls
+        var row = _class_fields(ancestry[i])
+        if py_contains(row, "__getattr__"):
+            raise Error("TypeError: model records cannot invoke Python attribute hooks")
+        for hook in [String("__getattribute__"), String("__setattr__")]:  # small-loop(native record access hooks)
+            if py_contains(row, hook) and row[hook] is not bi.object.__dict__[hook]:
+                raise Error("TypeError: model records cannot invoke Python attribute hooks")
+        for j in range(len(names)):  # small-loop(fixed consumed model field names)
+            if py_contains(row, names[j]):
+                raise Error("TypeError: model state fields cannot be replaced by class descriptors")
+    if not admitted:
+        raise Error("TypeError: model operation requires its connected record class")
+    var fields = _fields(value)
+    model_dict(fields)
+    return fields
+
+
+def _model_context() raises -> PythonObject:
+    var result = MODEL_CONFIG_CONNECTION.get_or_create_ptr()[].context
+    if result is None:
+        raise Error("RuntimeError: model configuration requires import-time connection")
+    return result
+
+
+def _config_fields(value: PythonObject) raises -> PythonObject:
+    return model_record_fields(value, _model_context()["config_class"], Python.tuple("_d", "path"))
+
+
+def _plan_fields(value: PythonObject) raises -> PythonObject:
+    return model_record_fields(value, _model_context()["plan_class"],
+        Python.tuple("_layer_map", "embed_name", "norm_name", "head_name", "n_layers", "model_type", "kind", "d_model", "vocab_size"))
+
+
+def model_config_connect(context: PythonObject) raises -> PythonObject:
+    model_dict(context)
+    var copy = Python.dict()
+    var bi = native_loaded_module("builtins")
+    for name in [String("config_class"), String("plan_class"), String("unsupported_class")]:  # small-loop(import-connected model types)
+        var cls = native_instance_item(context, PythonObject(name))
+        if py_type(cls) is not bi.type:
+            raise Error("TypeError: model connection requires ordinary classes")
+        py_setitem(copy, PythonObject(name), cls)
+    for name in [String("defaults"), String("llama_layer"), String("qkv_bias"), String("qk_norm"), String("mamba1_layer"), String("mamba2_layer"), String("byte_layer"), String("byte_fixed")]:  # small-loop(static option matrix data)
+        py_setitem(copy, PythonObject(name), model_plain(native_instance_item(context, PythonObject(name))))
+    # Family rows retain their historical function identity as public metadata;
+    # planning dispatch below never calls those functions.
+    var families = native_instance_item(context, PythonObject("families"))
+    model_dict(families)
+    py_setitem(copy, "families", py_call(bi.dict, families))
+    py_setitem(copy, "byte_row", native_instance_item(context, PythonObject("byte_row")))
+    var state = MODEL_CONFIG_CONNECTION.get_or_create_ptr()
+    if state[].context is not None:
+        raise Error("TypeError: model configuration is already connected")
+    state[].context = copy
+    return PythonObject(None)
+
+
+def _model_error_class() raises -> PythonObject:
+    var cls = _model_context()["unsupported_class"]
+    var bi = native_loaded_module("builtins")
+    var bases = py_call(bi.type.__dict__["__bases__"].__get__, cls)
+    if len(bases) != 1 or bases[0] is not bi.ValueError:
+        raise Error("TypeError: UnsupportedModel must retain native ValueError behavior")
+    var row = _class_fields(cls)
+    for name in ["__new__", "__init__", "__str__", "__repr__", "__getattribute__", "__getattr__", "__setattr__"]:  # small-loop(exception normalization hooks)
+        if py_contains(row, name):
+            raise Error("TypeError: UnsupportedModel cannot invoke Python exception hooks")
+    return cls
 
 
 def config_init_binding(value: PythonObject, data: PythonObject, path: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
-    if py_type(data) is not bi.dict:
-        raise Error("TypeError: HFConfig requires a JSON object")
-    py_setattr(value, "_d", py_call(bi.dict, data))
-    py_setattr(value, "path", path)
+    var fields = _config_fields(value)
+    model_dict(data)
+    var captured = model_plain(data)
+    var filename = PythonObject(None) if path is None else native_path(path)
+    py_setitem(fields, "_d", captured)
+    py_setitem(fields, "path", filename)
     return PythonObject(None)
 
 
 def config_load_binding(cls: PythonObject, input_path: PythonObject) raises -> PythonObject:
+    if cls is not _model_context()["config_class"]:
+        raise Error("TypeError: config factory requires its connected class")
     var path = native_path(input_path)
     if native_path_exists(path, True):
         path = py_call(path.rstrip, "/") + PythonObject("/config.json")
     if not native_path_exists(path):
         raise Error("FileNotFoundError: config.json does not exist")
-    var value = py_call(Python.import_module("builtins").object.__new__, cls)
+    var value = py_call(native_loaded_module("builtins").object.__new__, cls)
     _ = config_init_binding(value, native_json_read(path), path)
     return value
 
 
 def config_access_binding(config: PythonObject, operation: PythonObject, key: PythonObject, default: PythonObject) raises -> PythonObject:
-    var op = Int(py=operation)
+    var op = model_integer(operation)
+    var fields = _config_fields(config)
+    var data = model_plain(native_instance_item(fields, PythonObject("_d")))
+    model_dict(data)
     if op == 0:
-        var mt = py_get(config._d, "model_type")
-        if py_type(mt) is not Python.import_module("builtins").str:
+        var mt = py_get(data, "model_type")
+        if py_type(mt) is not native_loaded_module("builtins").str:
             raise Error("model config has no string model_type")
         return mt
+    if op >= 1 and op <= 3:
+        _ = model_string(key)
     if op == 1:
-        return py_get(config._d, key, default)
+        return py_get(data, key, default)
     if op == 2:
-        if not py_contains(config._d, key):
-            raise Error("KeyError: " + String(py_call(Python.import_module("builtins").repr, key)))
-        return config._d[key]
+        if not py_contains(data, key):
+            raise Error("KeyError: " + String(py_call(native_loaded_module("builtins").repr, key)))
+        return native_instance_item(data, key)
     if op == 3:
-        return py_contains(config._d, key)
+        return py_contains(data, key)
     if op == 4:
-        return config._d.keys()
-    return py_call(Python.import_module("builtins").dict, config._d)
+        return data.keys()
+    if op != 5:
+        raise Error("ValueError: unknown model config access operation")
+    return data
 
 
-def model_plan_init_binding(plan: PythonObject, fields: PythonObject) raises -> PythonObject:
-    _ = py_call(plan.__dict__.update, fields)
+def model_plan_init_binding(plan: PythonObject, input: PythonObject) raises -> PythonObject:
+    var fields = _plan_fields(plan)
+    model_dict(input)
+    var names = py_call(native_loaded_module("builtins").list, input.keys())
+    for i in range(len(names)):  # driver-loop: preserve caller plan fields without invoking setattr descriptors
+        py_setitem(fields, names[i], native_instance_item(input, names[i]))
     return PythonObject(None)
 
 
-def model_layer_weights_binding(plan: PythonObject, layer: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
-    var out = bi.list()
-    for j in range(len(plan._layer_map)):  # driver-loop: over the model layer map entries
-        var entry = plan._layer_map[j]
-        var item = bi.list()
-        _ = py_call(item.append, entry[0])
-        _ = py_call(item.append, PythonObject(String(entry[1]).replace("{i}", String(Int(py=layer)))))
-        _ = py_call(item.append, entry[2])
-        _ = py_call(out.append, py_call(bi.tuple, item))
+def _model_layer_weights(fields: PythonObject, layer: Int) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    var entries = model_plain(native_instance_item(fields, PythonObject("_layer_map")))
+    model_sequence(entries)
+    var out = Python.list()
+    for j in range(len(entries)):  # driver-loop: expand admitted checkpoint names for one model layer
+        var entry = entries[j]
+        model_sequence(entry)
+        if len(entry) != 3:
+            raise Error("ValueError: model layer map requires name, checkpoint name and row slice")
+        var key = model_string(entry[0])
+        var name = model_string(entry[1]).replace("{i}", String(layer))
+        var rows = entry[2]
+        if rows is not None:
+            model_sequence(rows)
+            if len(rows) != 2:
+                raise Error("ValueError: model weight row slice requires two offsets")
+            _ = model_integer(rows[0])
+            _ = model_integer(rows[1])
+        _ = py_call(out.append, Python.tuple(key, name, rows))
     return out
 
 
+def model_layer_weights_binding(plan: PythonObject, layer: PythonObject) raises -> PythonObject:
+    return _model_layer_weights(_plan_fields(plan), model_integer(layer))
+
+
 def model_checkpoint_names_binding(plan: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
-    var names = bi.list()
-    _ = py_call(names.append, plan.embed_name)
-    if plan.norm_name is not None:
-        _ = py_call(names.append, plan.norm_name)
-    if plan.head_name is not None:
-        _ = py_call(names.append, plan.head_name)
-    for i in range(Int(py=plan.n_layers)):  # driver-loop: over model layers
-        var layer = model_layer_weights_binding(plan, PythonObject(i))
-        for j in range(len(layer)):  # driver-loop: over one layer's weight entries
+    var fields = _plan_fields(plan)
+    var names = Python.list()
+    for field in [String("embed_name"), String("norm_name"), String("head_name")]:  # small-loop(three outer checkpoint weight names)
+        var name = native_instance_item(fields, PythonObject(field))
+        if name is not None:
+            _ = model_string(name)
+            _ = py_call(names.append, name)
+    var layers = model_integer(native_instance_item(fields, PythonObject("n_layers")))
+    # Capture the mutable layer map once for the whole enumeration.
+    var captured = Python.dict()
+    py_setitem(captured, "_layer_map", model_plain(native_instance_item(fields, PythonObject("_layer_map"))))
+    for i in range(layers):  # driver-loop: enumerate complete model checkpoint names
+        var layer = _model_layer_weights(captured, i)
+        for j in range(len(layer)):  # driver-loop: deduplicate native checkpoint names in insertion order
             var name = layer[j][1]
             if not py_contains(names, name):
                 _ = py_call(names.append, name)
     return names
 
 
+def model_config_repr(value: PythonObject, plan_value: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    if py_type(plan_value) is not bi.bool:
+        raise Error("TypeError: model repr kind requires an exact boolean")
+    if not Bool(py=plan_value):
+        var fields = _config_fields(value)
+        var data = model_plain(native_instance_item(fields, PythonObject("_d")))
+        var path = native_instance_item(fields, PythonObject("path"))
+        path = PythonObject(None) if path is None else native_path(path)
+        return PythonObject("HFConfig(model_type=" + String(py_call(bi.repr, py_get(data, "model_type"))) + ", path=" + String(py_call(bi.repr, path)) + ")")
+    var fields = _plan_fields(value)
+    var mt = model_string(native_instance_item(fields, PythonObject("model_type")))
+    var kind = model_string(native_instance_item(fields, PythonObject("kind")))
+    var layers = model_integer(native_instance_item(fields, PythonObject("n_layers")))
+    var dm = model_integer(native_instance_item(fields, PythonObject("d_model")))
+    var vocab = model_integer(native_instance_item(fields, PythonObject("vocab_size")))
+    return PythonObject("ModelPlan(" + String(py_call(bi.repr, PythonObject(mt))) + ", kind=" + String(py_call(bi.repr, PythonObject(kind))) + ", layers=" + String(layers) + ", d_model=" + String(dm) + ", vocab=" + String(vocab) + ")")
+
+
 def _config_int(data: PythonObject, field: String, default: PythonObject, required: Bool = True) raises -> PythonObject:
     var v = py_get(data, field, default)
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if v is None and not required:
         return v
     if v is None:
@@ -101,13 +293,13 @@ def _config_int(data: PythonObject, field: String) raises -> PythonObject:
 
 
 def _config_refuse(data: PythonObject, field: String, why: String) raises:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     raise Error("model_type " + String(py_call(bi.repr, py_get(data, "model_type", PythonObject("mojolearn-byte-lm")))) + ": " + field + "=" + String(py_call(bi.repr, py_get(data, field))) + " is not honored: " + why)
 
 
 def _config_number(data: PythonObject, field: String, default: Float64) raises -> PythonObject:
     var v = py_get(data, field, PythonObject(default))
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(v) is not bi.int and py_type(v) is not bi.float:
         raise Error("model config: " + field + " requires a number")
     return py_call(bi.float, v)
@@ -121,7 +313,7 @@ def _config_fixed(data: PythonObject, names: List[String], values: List[Int]) ra
 
 
 def _config_transformer(data: PythonObject, mt: String, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     for field in [String("num_local_experts"), String("num_experts"), String("num_experts_per_tok"), String("n_routed_experts")]:  # small-loop(the four mixture-of-experts field names)
         var v = py_get(data, field)
         if v is not None and not Bool(py=v == PythonObject(0)) and not Bool(py=v == PythonObject(1)):
@@ -206,7 +398,7 @@ def _config_transformer(data: PythonObject, mt: String, context: PythonObject) r
 
 
 def _config_mamba(data: PythonObject, mt: String, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var dm = Int(py=_config_int(data, "hidden_size"))
     var layers = _config_int(data, "num_hidden_layers")
     var vocab = _config_int(data, "vocab_size")
@@ -260,7 +452,7 @@ def _config_mamba(data: PythonObject, mt: String, context: PythonObject) raises 
 
 
 def _config_phi3(mut fields: PythonObject, data: PythonObject) raises:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var original = py_get(data, "original_max_position_embeddings")
     if original is not None and not Bool(py=original == fields["max_position_embeddings"]):
         raise Error("model config: original_max_position_embeddings requests longrope extended context")
@@ -291,13 +483,16 @@ def _config_phi3(mut fields: PythonObject, data: PythonObject) raises:
     py_setitem(fields, "_layer_map", mapped)
 
 
-def model_plan_for_binding(input: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+def model_plan_for_binding(input: PythonObject, supplied_context: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    var context = _model_context()
     var config = input
     if py_type(input) is bi.dict:
         config = py_call(bi.object.__new__, context["config_class"])
         _ = config_init_binding(config, input, PythonObject(None))
-    var data = config._d
+    var fields_owner = _config_fields(config)
+    var data = model_plain(native_instance_item(fields_owner, PythonObject("_d")))
+    model_dict(data)
     var mt_value = py_get(data, "model_type")
     var byte_lm = mt_value is None and Bool(py=py_get(data, "format") == PythonObject("mojolearn.byte-lm"))
     if not byte_lm and py_type(mt_value) is not bi.str:
@@ -366,6 +561,10 @@ def model_config_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = model_checkpoint_names_binding(args[0])
         elif operation == 6:
             result = model_plan_for_binding(args[0], args[1])
+        elif operation == 7:
+            result = model_config_connect(args[0])
+        elif operation == 8:
+            result = model_config_repr(args[0], args[1])
         return result.steal_data()
     except error:
         var message = String(error)
@@ -377,13 +576,8 @@ def model_config_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             return raise_python_exception(error_without_class(error, "KeyError"), ExceptionType("PyExc_KeyError"))
         comptime if operation == 6 or operation == 2:
             try:
-                ref cpy = Python().cpython()
-                var cls = PyObjectPtr()
-                comptime if operation == 6:
-                    cls = causal_borrowed_item(cpy.PyTuple_GetItem(args_ptr, 1), "unsupported_class")
-                else:
-                    cls = cpy.PyTuple_GetItem(args_ptr, 4)
-                return causal_set_exception(error, cls)
+                var cls = _model_error_class()
+                return causal_set_exception(error, cls._obj_ptr)
             except nested:
                 return raise_python_exception(nested)
         else:

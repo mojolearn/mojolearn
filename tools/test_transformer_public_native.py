@@ -45,15 +45,27 @@ def test_state_admits_storage_before_buffer_export_and_preserves_view_copy_split
 
 def test_tape_owns_native_metadata_and_uses_original_budget_aware_session_route():
     owner = NATIVE.split("struct TransformerPublicTapeOwner", 1)[1].split("def _transformer_configuration", 1)[0]
-    for field in ("block: PythonObject", "session: PythonObject", "token: List[Int]", "configuration: List[Int]", "weight_shapes: List[List[Int]]", "consumed: Bool"):
+    for field in ("block: PythonObject", "session: PythonObject", "provider: PythonObject", "handle: Int", "token: List[Int]", "configuration: List[Int]", "weight_shapes: List[List[Int]]", "consumed: Bool"):
         assert field in owner
     forward = NATIVE.split("def transformer_forward_with_tape(", 1)[1].split("def transformer_tape_init", 1)[0]
-    assert '"transformer_session_forward_tape"' in forward
+    assert "transformer_session_tape_forward(provider, session, handle, addresses, params)" in forward
     assert "configuration[5], budget, cost]" in forward
     assert '"transformer_forward_tape"' not in forward
     backward = NATIVE.split("def transformer_backward_from_tape(", 1)[1].split("def transformer_tape_close", 1)[0]
-    assert backward.index("owner[].consumed = True") < backward.index("py_call(owner[].backward")
+    assert backward.index("owner[].consumed = True") < backward.index("transformer_session_tape_backward(owner[].provider")
     assert "owner[].session is not fields[\"_native_session\"]" in backward
     assert "_transformer_same_words(owner[].configuration" in backward
     assert backward.count("lease.release()") == 2
     assert "_ = dy^" in backward and "_ = hobj" in backward
+
+
+def test_public_state_and_tape_use_connected_modules_without_import_callbacks():
+    assert 'Python.import_module(' not in NATIVE
+    assert 'from bindings.native_loaded_module import native_loaded_module' in NATIVE
+    assert 'native_loaded_module("builtins")' in NATIVE
+    assert 'native_loaded_module("types")' in NATIVE
+    allocation = (ROOT / "bindings/generation_buffers.mojo").read_text()
+    initialization = allocation.split("def generation_initialize_binding", 1)[1].split("def py_ints", 1)[0]
+    assert 'Python.import_module(' not in initialization
+    assert 'native_loaded_module("builtins")' in initialization
+    assert 'native_loaded_module("array")' in initialization

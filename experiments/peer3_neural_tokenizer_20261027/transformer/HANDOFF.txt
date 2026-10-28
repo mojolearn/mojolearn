@@ -88,3 +88,88 @@ by the existing standalone-tape table; actual public runtime and cross-vendor
 qualification remain pending integration. No Python-free runtime claim follows
 from the seven source checks. Shared context/provider registry and Array owner
 helpers are coordinator-owned dependencies, not duplicated in this lane.
+
+
+Budget-aware session-ticket provider followup (2026-10-27)
+-------------------------------------------------------
+This section supersedes the pending session-ticket transport item above.
+The public ticket retains the provider, checked native session handle and
+session owner. Forward, backward and discard execute through the existing
+Transformer block ABI with appended operations 36 reserve, 37 release,
+38 forward, 39 backward and 40 discard. CPU and GPU dispatchers call the
+original _session_forward_tape_run/_session_backward_tape_run helpers. Budget,
+replay cost, original retained/replay selection, cookie/epoch, stale-ticket
+invalidation and numerical failure cleanup remain on their original paths.
+Standalone retained-tape operations 6..10 are unchanged and are not substituted.
+
+Both block dispatch limits are now 41; the ticket provider call-counter vector
+has 41 entries. Existing consumers with count36 continue connecting to the same
+factory/name/capsule: the count is provider-local call accounting/admission,
+not a factory-side table-size negotiation. They call unchanged operations
+0..35. No other ABI count record or core ABI-name change is required. New
+operations fit within both existing scalar/address span bounds. No new model
+cache/checkpoint field is introduced; each ticket retains its provider.
+
+Remaining compiled entry calls are native lifetime creation, typed session
+handle admission, arithmetic-profile metadata readback and idempotent session
+close when replacing a cache binding. The last intentionally keeps the verified
+native close entry because the existing GPU handle door rejects closed owners
+whereas close accepts them; this is native lifetime work, not a Python runtime
+implementation. All ticket numerical work uses the native descriptor table.
+Shared Python-visible admission and allocation helpers remain part of the
+coordinator's integrated transitive audit; source guards are not qualification.
+
+Source-only verification: 16 checks passed, 0 failed, exit0, covering public
+state/tape, decode retention/admission, original numerical closure routing,
+append-only tables, ticket ownership, cleanup and report transport.
+Evidence: source-tests-session-tape.log. Python syntax: 3 files, exit0,
+python-syntax-session-tape.log. Scoped git diff --check: exit0,
+diff-check-session-tape.log. Added a public budget-zero versus large-budget
+output/gradient fixture; it remains UNRUN and respects existing retention
+experiment policy rather than requiring retention to be enabled.
+
+Coordinator compile targets (lane performed NO compilation):
+- experiments/peer3_neural_tokenizer_20261027/compile_transformer.mojo
+  reaches the changed public boundary and provider transport.
+- experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_transformer_session_tape_host.mojo
+  exports the actual CPU native descriptor dispatch and numerical closure.
+- experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_transformer_session_tape_gpu.mojo
+  exports the GPU native descriptor dispatch and numerical closure.
+The raw ABI compile probes must never execute as runtime tests. Small local
+compile success precedes main merge. Actual public runtime, failure fixtures,
+installed loading and cross-vendor verification remain pending integration.
+
+Compile-probe path correction
+-----------------------------
+Coordinator public Transformer probe passed. The first CPU dispatch compile
+failed before reaching its source closure: unable to locate transformer.host.
+Existing transformer/host/__init__.mojo is tracked, and standard host binding
+imports already use this qualified package path. The original probe directory
+also contains transformer/ evidence, which can shadow the top-level source
+package. Both dispatch probes now live under compile_roots/ without that
+sibling. Product imports and numerical code are unchanged. Coordinator owns
+the compile retry; this path correction is not compile success.
+Original failure evidence retained at:
+/Users/andrewhendel/mojolearn-evidence/peer3-corpus-tape-moe-20261027/transformer-tape-host-compile-1.log
+Only the affected probe-path source control reran: 1 passed, exit0;
+source-test-session-tape-probe-path.log. Other unchanged source checks retain
+source-tests-session-tape.log. No lane compilation or runtime execution.
+
+
+Connected-module Transformer followup
+------------------------------------
+Transformer public state/tape operations now use native_loaded_module for
+builtins/types rather than runtime imports. The shared generation_buffers
+initializer also uses connected builtins/array metadata, closing the transitive
+import-hook path reached by every Transformer public call. Native loaded-module
+admission checks connected module/export identities without invoking imports.
+Mutable state scalars/Array slots and saved entry records continue through the
+existing admission before their reads; original execution routes are unchanged.
+
+Source checks: tools/test_transformer_public_native.py, 4 passed, 0 failed,
+exit0; source-tests-loaded-modules.log. Scoped git diff --check passed.
+Affected small root is compile_transformer.mojo (public boundary plus shared
+buffer initializer); host/GPU numeric dispatch probes are unchanged. Shared
+buffer initializer also reaches CausalLM and neural public owners, whose
+runtime/cross-vendor checks remain pending integration. Coordinator owns this
+new compile freeze; no lane compilation or runtime execution occurred.

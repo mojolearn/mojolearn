@@ -85,6 +85,7 @@ from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
 from bindings.transformer_public_native import transformer_public_c, TransformerPublicTapeOwner
+from bindings.lm_corpus_public_native import lm_corpus_public_c, LmCorpusIteratorHandle
 from bindings.tokenizer_public_native import (
     tokenizer_public_c, tokenizer_vocab_encode, tokenizer_vocab_decode,
     tokenizer_vocab_pretokenize, tokenizer_vocab_fingerprint,
@@ -1350,6 +1351,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(model_config_c[4], "model_layer_weights")
         module.def_py_c_function(model_config_c[5], "model_checkpoint_names")
         module.def_py_c_function(model_config_c[6], "model_plan_for")
+        module.def_py_c_function(model_config_c[7], "model_config_connect")
+        module.def_py_c_function(model_config_c[8], "model_config_repr")
         module.def_py_c_function(checkpoint_c[0], "tensor_info_init")
         module.def_py_c_function(checkpoint_c[1], "tensor_info_size")
         module.def_py_c_function(checkpoint_c[2], "safetensors_init")
@@ -1372,6 +1375,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(transformer_public_c, "transformer_public_call")
         _ = module.add_type[TransformerPublicTapeOwner]("_TransformerPublicTapeOwner")
         module.def_py_c_function(tokenizer_public_c, "tokenizer_public_call")
+        module.def_py_c_function(lm_corpus_public_c, "lm_corpus_public_call")
+        _ = module.add_type[LmCorpusIteratorHandle]("_LmCorpusIteratorHandle")
         module.def_py_c_function(neural_block_c[0], "neural_block_init")
         module.def_py_c_function(neural_block_c[4], "neural_block_set_params")
         module.def_py_c_function(neural_block_c[5], "neural_block_getstate")
