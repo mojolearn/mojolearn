@@ -101,7 +101,7 @@ def _bytes_key(value: PythonObject) raises -> String:
 def _ordinal(year: Int, month: Int, day: Int) -> Int:
     var previous = year - 1
     var result = 365 * previous + previous // 4 - previous // 100 + previous // 400 + day
-    var lengths = List[Int](31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    var lengths: List[Int] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     for i in range(month - 1):  # small-loop(calendar: at most eleven preceding months)
         result += lengths[i]
     if month > 2 and year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
@@ -135,20 +135,17 @@ def _datetime_key(raw: Int, code: Int, spelling: String) raises -> String:
     # convert_datetime_to_pyobject / convert_timedelta_to_pyobject.
     if raw == -9223372036854775807 - 1:
         return "none"
+    var text = spelling.as_bytes()
     var begin = 0
-    while begin < spelling.byte_length() and spelling[byte=begin] != "[":  # small-loop(dtype: fixed datetime unit spelling)
+    while begin < spelling.byte_length() and text[begin] != UInt8(91):  # small-loop(dtype: fixed datetime unit spelling up to "[", byte 91)
         begin += 1
     if begin == spelling.byte_length():
         return "none" if code == 21 else _machine_key(raw)
     begin += 1
     var multiple = 0
-    var digits = String("0123456789")
     while begin < spelling.byte_length():  # small-loop(dtype: optional native unit multiplier digits)
-        var digit = -1
-        for i in range(10):  # small-loop(decimal: one native metadata digit)
-            if spelling[byte=begin] == digits[byte=i]:
-                digit = i
-        if digit < 0:
+        var digit = Int(text[begin]) - 48  # 48 is "0"
+        if digit < 0 or digit > 9:
             break
         multiple = multiple * 10 + digit
         begin += 1
