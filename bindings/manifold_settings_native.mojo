@@ -91,5 +91,9 @@ struct ManifoldSettings(Copyable, Movable):
                 # Initialization arrays are input buffers, captured by the
                 # algorithm's input preparation rather than scalar settings.
                 py_setitem(self.values, name, _setting(self.values[name], context, 0, name != "init"))
+        if operation.startswith("family_mani_umap_"):
+            for name in ["n_epochs", "min_dist", "spread", "set_op_mix_ratio", "local_connectivity", "repulsion_strength", "negative_sample_rate", "densmap", "output_metric", "metric_kwds", "a", "b"]:  # small-loop(settings: UMAP-only scalar/configuration fields)
+                if py_contains(self.values, name):
+                    py_setitem(self.values, name, _setting(self.values[name], context))
         if py_type(self.default_mode) is not b.str:
             raise Error("TypeError: manifold default numeric mode requires an exact native string")
