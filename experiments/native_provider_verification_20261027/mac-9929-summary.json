@@ -1,0 +1,93 @@
+{
+  "schema": "mojolearn.provider-selective-runtime.v1",
+  "source_commit": "9929d52f4e01635455f619009ed8619b1242a939",
+  "vendor": "Apple",
+  "mode": "identical",
+  "status": "failed",
+  "baseline_version": "0.8.62",
+  "runtime_groups": [
+    {
+      "name": "runtime-0-test_neural_metadata_snapshot",
+      "status": "failed",
+      "exit_code": 1,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/runtime-provider-9929/runtime-0-test_neural_metadata_snapshot.log"
+    },
+    {
+      "name": "runtime-1-test_generation_metadata_snapshot",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/runtime-provider-9929/runtime-1-test_generation_metadata_snapshot.log"
+    },
+    {
+      "name": "runtime-2-test_sequential_native_provider",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/runtime-provider-9929/runtime-2-test_sequential_native_provider.log"
+    },
+    {
+      "name": "runtime-3-test_xseq_native_provider",
+      "status": "failed",
+      "exit_code": 1,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/runtime-provider-9929/runtime-3-test_xseq_native_provider.log"
+    },
+    {
+      "name": "runtime-4-test_program_native_admission",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/runtime-provider-9929/runtime-4-test_program_native_admission.log"
+    },
+    {
+      "name": "runtime-5-test_session_native_provider",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/runtime-provider-9929/runtime-5-test_session_native_provider.log"
+    },
+    {
+      "name": "runtime-6-public_runtime_probe",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/runtime-provider-9929/runtime-6-public_runtime_probe.log"
+    },
+    {
+      "name": "runtime-7-public_runtime_probe",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/runtime-provider-9929/runtime-7-public_runtime_probe.log"
+    },
+    {
+      "name": "runtime-8-public_provider_probe",
+      "status": "passed",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/runtime-provider-9929/runtime-8-public_provider_probe.log"
+    }
+  ],
+  "before_after_probes": [
+    {
+      "name": "small_mlp",
+      "status": "passed",
+      "compared_arrays": 32,
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/provider-selective-9929/small_mlp.json",
+      "baseline": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/provider-baseline/small_mlp.npz"
+    },
+    {
+      "name": "byte_lm",
+      "status": "failed",
+      "compared_arrays": null,
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/provider-selective-9929/byte_lm.json",
+      "baseline": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/provider-baseline/byte_lm.npz"
+    },
+    {
+      "name": "linalg",
+      "status": "passed",
+      "compared_arrays": 16,
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/provider-selective-9929/linalg.json",
+      "baseline": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/provider-baseline/linalg.npz"
+    }
+  ],
+  "identified_failures": [
+    "ByteLM pooled logits address reads Array.__array_interface__ Python property",
+    "RNN/LSTM/GRU and MLP public methods retain inherited Python fit/predict wrappers"
+  ],
+  "artifact_provenance": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/apple-runtime-provider-9929/DEVELOPMENT_PROVENANCE.json",
+  "scope": "Bounded selected operations only; not all recipes, whole-library compliance, performance, release or cross-vendor verification"
+}
