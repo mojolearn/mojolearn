@@ -123,13 +123,10 @@ def _entry(binding: PythonObject, name: String, context: PythonObject) raises ->
 
 def _svm_integral(value: PythonObject, context: PythonObject) raises -> Bool:
     var kind = py_type(value)
-    if kind is native_loaded_module("builtins").int:
-        return True
-    var scalars = context["scalar_types"]
-    for i in range(len(scalars)):  # driver-loop: exact connected primitive types instead of Python numbers ABC callbacks
-        if kind is scalars[i]:
-            var letter = String(value.dtype.kind)
-            return letter == "i" or letter == "u"
+    var integers = context["integer_types"]
+    for i in range(len(integers)):  # driver-loop: exact primitive integer types instead of Python numbers ABC callbacks
+        if kind is integers[i]:
+            return True
     return False
 
 
@@ -151,10 +148,17 @@ def _svm_parameter_admission(fields: PythonObject, classifier: Bool, context: Py
             host_inference_scalar(weights, context)
     else:
         host_inference_scalar(fields["epsilon"], context)
-    var keys = py_call(b.list, fields)
-    for i in range(len(keys)):  # driver-loop: validation can replace checked working metadata only after old owners pass
-        if String(keys[i]).startswith("_hp_"):
-            native_release_admit(fields[keys[i]], context)
+    var replaced = Python.tuple("_hp_C", "_hp_kernel", "_hp_degree", "_hp_gamma", "_hp_coef0", "_hp_tol",
+                                "_hp_cache_size", "_hp_max_iter", "_hp_nochange_steps")
+    for i in range(len(replaced)):  # driver-loop: only working fields the validator actually overwrites
+        if py_contains(fields, replaced[i]):
+            native_release_admit(fields[replaced[i]], context)
+    if classifier:
+        for name in ["_hp_random_state", "_hp_probability", "_hp_break_ties"]:  # small-loop(fixed classifier working state)
+            if py_contains(fields, name):
+                native_release_admit(fields[name], context)
+    elif py_contains(fields, "_hp_epsilon"):
+        native_release_admit(fields["_hp_epsilon"], context)
 
 
 def _svm_validate(model: PythonObject, fields: PythonObject, classifier: Bool, context: PythonObject) raises:
