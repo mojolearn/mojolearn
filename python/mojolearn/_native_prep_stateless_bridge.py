@@ -56,6 +56,6 @@ def connect(kinds):
     # above; no assumed function name/module-owner convention is required.
     context["prep_stateless_entry_identities"] = tuple(
         (mode, tuple(table.items()) if type(table) is dict else None)
-        for mode, table in connected.items()
+        for mode, table in connected.items()  # glue: freeze fixed import-time native ABI identities
     )
     return call, context
