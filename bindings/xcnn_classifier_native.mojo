@@ -24,13 +24,13 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setatt
 from bindings.py_typed_call import py_call_typed
 from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_f32, xcnn_addr
 from bindings.xseq_native_common import XseqStream
-from bindings.xcnn_classifier_labels import xcnn_encode_labels, xcnn_decode_labels
+from bindings.neural_labels_native import neural_encode_labels, neural_decode_labels
 from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array
-from bindings.xcnn_common import xcnn_shape, xcnn_tuple, xcnn_reshape
+from bindings.xcnn_common import xcnn_shape, xcnn_tuple, xcnn_reshape, xcnn_numpy
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.array_helpers_impl import nsum_f64
 
@@ -64,11 +64,13 @@ def _prod(values: List[Int]) -> Int:
 
 
 def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
+    xcnn_numpy(context)
     var dims = Python.tuple(shape) if py_type(shape) is _b().int else shape
     return sequential_array(dims, context[PythonObject(dtype)], context)
 
 
 def _contiguous(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    xcnn_numpy(context)
     sequential_admit_value(source, context)
     var array = sequential_input(source, context)
     admit_native_buffer_exporter(array)
@@ -533,7 +535,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var labels = context["xcnn_label_bindings"][key]
     if py_type(labels) is b.str:
         raise Error(String(py=labels))
-    var encoded = xcnn_encode_labels(args[1], labels, context)
+    var encoded = neural_encode_labels(args[1], labels, context)
     py_setitem(fields, "classes_", encoded[0])
     var yi = encoded[1]
     if Int(py=yi.size) != Int(py=x.shape[0]):
@@ -790,4 +792,4 @@ def cnnclf_predict_proba(model: PythonObject, args: PythonObject, context: Pytho
 
 def cnnclf_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var codes = _run_predict(model, args[0], True, context)
-    return xcnn_decode_labels(_fields(model)["classes_"], codes, context)
+    return neural_decode_labels(_fields(model)["classes_"], codes, context)

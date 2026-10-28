@@ -49,7 +49,7 @@
     "directory": "/Users/andrewhendel/mojolearn-evidence/peer4-embedding-20261027/final-public-sources",
     "sha256": {
       "python/mojolearn/embedding.py": "6ffc0fd11fa7340319b793e0068fa2cb15fa48c2dcedfa8750d5e6dc87afa843",
-      "python/mojolearn/_native_optimizer_bridge.py": "97ce614a7e49038689c5bd04f5212dbb404da0671ee604b1b4cb7ac692e010b1"
+      "python/mojolearn/_native_optimizer_bridge.py": "cdeb88b8654e3347f4054d626a3da2093cc5136ba72eb946de94d5d9e7f9e2df"
     },
     "validation": "AST parse only; final Python metadata getter/guard edit followed native compile snapshot"
   },

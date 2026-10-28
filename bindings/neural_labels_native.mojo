@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Shared native label preparation/publication for the CNN classifier. Numeric
+# Shared native label preparation/publication for the neural classifiers. Numeric
 # sorting stays in the connected neural provider; text uses native code points.
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -9,10 +9,10 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
-from bindings.sequential_arrays import sequential_array, sequential_descriptor
+from bindings.sequential_arrays import sequential_array
 from bindings.xseq_native_common import xseq_neural_provider
 from bindings.str_labels_native import StrTable, _read, _sorted
-from bindings.xcnn_common import xcnn_addr, xcnn_host_i32
+from bindings.native_buffer_address import native_buffer_address
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from sequence.neural_model_dispatch import MODEL_LABELS
@@ -33,10 +33,10 @@ def _numeric(source: PythonObject, entries: PythonObject, context: PythonObject)
     if not Bool(py=dtype.isnative):
         raise Error("TypeError: y must use native byte order")
     var classes = sequential_array(Python.tuple(n), dtype, context)
-    var codes = xcnn_host_i32([n], context)
+    var codes = sequential_array(Python.tuple(n), context["int32"], context)
     var kind = cast_in_kind(Int(py=dtype.num), layout.itemsize, "y")
     var stride = layout.strides[0] if rank > 0 else layout.itemsize
-    var addresses: List[Int] = [Int(py=xcnn_addr(classes)), Int(py=xcnn_addr(codes))]
+    var addresses: List[Int] = [native_buffer_address(classes), native_buffer_address(codes)]
     var words: List[Int] = [layout.address, kind, layout.itemsize, n, 1, stride, layout.itemsize]
     var count = neural_descriptor_execute(xseq_neural_provider(entries), MODEL_LABELS, addresses, words, List[Float64]())
     var selected = py_call(context["ndarray"], Python.tuple(count), dtype=dtype, buffer=classes)
@@ -98,7 +98,7 @@ def _flat(source: PythonObject, context: PythonObject) raises -> PythonObject:
     return result
 
 
-def xcnn_encode_labels(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def neural_encode_labels(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     sequential_admit_value(source, context)
     var array = PythonObject(None)
     try:
@@ -140,8 +140,8 @@ def xcnn_encode_labels(source: PythonObject, entries: PythonObject, context: Pyt
     if not _read(normalized, table):
         raise Error("TypeError: labels require native text")
     var order = _sorted(table, count)
-    var codes = xcnn_host_i32([count], context)
-    var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(codes)))
+    var codes = sequential_array(Python.tuple(count), context["int32"], context)
+    var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(codes))
     var unique = List[Int]()
     var width = 1
     for i in range(count):  # driver-loop: distinct text-label metadata and inverse codes
@@ -152,7 +152,7 @@ def xcnn_encode_labels(source: PythonObject, entries: PythonObject, context: Pyt
         cp[index] = Int32(len(unique) - 1)
     var dtype = py_call(native_numpy_dtype(context), ("S" if all_bytes else "U") + String(width))
     var classes = sequential_array(Python.tuple(len(unique)), dtype, context)
-    var target = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(classes)))
+    var target = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(classes))
     for i in range(len(unique)):  # driver-loop: native class-label result serialization
         var index = unique[i]
         for j in range(table.lengths[index]):  # driver-loop: each native class code point
@@ -167,7 +167,7 @@ def xcnn_encode_labels(source: PythonObject, entries: PythonObject, context: Pyt
     return Python.tuple(classes, codes)
 
 
-def xcnn_decode_labels(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
+def neural_decode_labels(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(classes) is not context["ndarray"]:
         raise Error("TypeError: classes_ requires its native ndarray storage")
     var kind = String(classes.dtype.kind)
@@ -177,12 +177,21 @@ def xcnn_decode_labels(classes: PythonObject, codes: PythonObject, context: Pyth
     var layout = borrowed.layout.value().copy()
     if len(layout.shape) != 1:
         raise Error("ValueError: classes_ must be one-dimensional")
-    var count = Int(py=codes.size)
-    var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(codes)))
+    if py_type(codes) is not context["ndarray"]:
+        raise Error("TypeError: predicted class indices require native ndarray storage")
+    var code_dtype = codes.dtype
+    if String(code_dtype.kind) != "i" or not Bool(py=code_dtype.isnative):
+        raise Error("TypeError: predicted class indices require native signed integers")
+    var code_owner = AdmittedBorrowedBuffer(codes)
+    var code_layout = code_owner.layout.value().copy()
+    if len(code_layout.shape) != 1 or (code_layout.itemsize != 4 and code_layout.itemsize != 8):
+        raise Error("TypeError: predicted class indices require an int32 or int64 vector")
+    var count = code_layout.count
     var result = sequential_array(Python.tuple(count), classes.dtype, context)
-    var base = Int(py=xcnn_addr(result))
+    var base = native_buffer_address(result)
     for i in range(count):  # driver-loop: publish one predicted label from its native class words
-        var index = Int(cp[i])
+        var code_address = code_layout.item_address([i])
+        var index = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=code_address)[0]) if code_layout.itemsize == 4 else Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=code_address)[0])
         if index < 0 or index >= layout.count:
             raise Error("ValueError: predicted class index is outside classes_")
         memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base + i * layout.itemsize),

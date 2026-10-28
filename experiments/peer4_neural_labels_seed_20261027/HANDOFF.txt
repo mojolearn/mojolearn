@@ -1,0 +1,9 @@
+Peer4 shared neural labels, seed admission and optional array setup (2026-10-27)
+
+This coherent batch follows the CNN classifier/graph, MLPInference/trainer and Embedding native owner batches. Numeric label sorting uses the connected neural provider. Unicode/bytes label encoding and numeric/text result gathering are now shared native code; xseq labels no longer use Python sorted/map/NumPy conversion or ndarray.take. Native class index gathering admits int32 and int64 vectors.
+
+XseqStream initialization retains peer6 native module lookup work. Seed word conversion uses the documented CPython integer API and native byte decoding, with admitted scalar inputs. Only the initializer changes; counter-based draws, fill methods and derived-seed arithmetic are unchanged.
+
+CNN array-protocol connection is independent of sequence-device import and NumPy remains optional until a host-array operation needs it. The generic protocol metadata helper is shared at import only. CNNClassifier host helpers explicitly require NumPy. Embedding import-time guard annotations are retained from the agent's final pushed source (2ee7273ffe).
+
+Validation: compile receipts and retained source bytes are recorded separately. Native compilation is compilation only; no runtime, identity, GPU, performance or cross-vendor campaign is run or claimed. The final push must pass the required repository guards. Main integration remains serialized by the parent.

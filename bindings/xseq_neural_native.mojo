@@ -15,6 +15,7 @@ straight into the flat parameter block the entry trains (the old per-layer
 arrays were packed into it, then unpacked out of it), and a classifier's
 predicted codes become labels in this same call.
 """
+from bindings.neural_labels_native import neural_encode_labels, neural_decode_labels
 from std.math import sqrt
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -85,70 +86,12 @@ def xseq_as_f32_c(source: PythonObject, ndim: Int, name: String, context: Python
 
 
 def xseq_labels(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`(classes_, codes)` of a label vector: `unique_inverse(y)`'s sorted
-    classes in y's dtype and one int32 code per row. Numeric labels take the
-    compiled label sort (`model_labels`, the base binding's `unique_inverse`
-    with the cast to y's dtype); str and other Python label objects take the
-    label input step below."""
-    var b = Python.import_module("builtins")
-    var y = PythonObject(None)
-    var numeric = False
-    try:
-        y = xseq_input(source, context)
-        var kind = String(py=y.dtype.kind)
-        numeric = kind == "b" or kind == "i" or kind == "u" or kind == "f"
-    except:
-        numeric = False
-    if numeric:
-        var n = Int(py=y.shape[0]) if Int(py=y.ndim) > 0 else 1
-        var descriptor = sequential_descriptor(y, "y")
-        var classes = sequential_array(Python.tuple(n), y.dtype, context)
-        var codes = sequential_array(Python.tuple(n), context["int32"], context)
-        var source = cast_in_of(descriptor, "y")
-        var addresses: List[Int] = [Int(py=sequential_address(classes)), Int(py=sequential_address(codes))]
-        var words: List[Int] = [source.addr, source.kind, source.itemsize, source.rows, source.cols, source.s0, source.s1]
-        var count = neural_descriptor_execute(xseq_neural_provider(entries), MODEL_LABELS, addresses, words, List[Float64]())
-        _ = classes  # keep the Python object alive through the native call above
-        _ = codes  # keep the Python object alive through the native call above
-        var selected = py_call(context["ndarray"], Python.tuple(count), dtype=y.dtype, buffer=classes)
-        _ = codes  # keep the Python object alive through the native call above
-        _ = y^
-        return Python.tuple(selected, codes)
-    # cpu-route: str and object labels have no native sort; the builtins
-    # order them by the ORDER RULE (the first of equal keys kept, Python's
-    # own comparison), as `_labels.sorted_classes` did
-    var flat = py_call(b.list, py_call(_method(y, "tolist"))) if y is not None else py_call(b.list, source)
-    if len(flat) == 0:
-        raise Error("mojolearn: y is empty")
-    var ordered = py_call(b.sorted, py_call(_attr(b.dict, "fromkeys"), flat))
-    var index = py_call(b.dict, py_call(b.zip, ordered, py_call(b.range, len(ordered))))
-    var store = py_call(context["array_type"], PythonObject("i"), py_call(b.map, _method(index, "__getitem__"), flat))
-    var codes = py_call(context["ndarray"], Python.tuple(len(flat)), dtype=context["int32"], buffer=store)
-    return Python.tuple(py_call(context["np_asarray"], ordered), codes)
+    # One shared native label encoder for numeric, unicode and byte labels.
+    return neural_encode_labels(source, entries, context)
 
 
 def xseq_take(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Numeric measured labels are copied natively. Preserve the existing
-    # string/object compatibility route explicitly; it is NOT callback-free.
-    var dtype = classes.dtype
-    var kind = String(py=dtype.kind)
-    if kind == "b" or kind == "i" or kind == "u" or kind == "f":
-        var shape = classes.shape
-        var strides = classes.strides
-        var dims = List[Int]()
-        var steps = List[Int]()
-        for axis in range(len(shape)):  # driver-loop: admit class layout once
-            dims.append(Int(py=shape[axis]))
-            steps.append(Int(py=strides[axis]))
-        var rows = Int(py=codes.size)
-        var output = sequential_array(codes.shape, dtype, context)
-        xseq_take_native(Int(py=xseq_addr(classes)), dims, steps, Int(py=dtype.itemsize),
-            MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(codes))), rows,
-            MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(output))))
-        _ = classes
-        _ = codes
-        return output
-    return py_call(_method(classes, "take"), codes)
+    return neural_decode_labels(classes, codes, context)
 
 
 def xseq_argmax(scores: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:

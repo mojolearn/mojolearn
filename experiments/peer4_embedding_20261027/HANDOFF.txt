@@ -14,6 +14,7 @@ Compilation and source checks
 - Fixture compiles full embedding public-operation and lifetime owner, shared admission/cast dependencies; dynamically called embedding arithmetic entries and GPU kernels are outside this compilation.
 - Final Mojo bytes match attempt-6's retained source manifest. Final Python getter/guard connection edits followed that snapshot; final Python bytes retained separately and both Python sources AST-parsed. git diff --check passed.
 - attempt-1 failed on two Mojo slice-expression aliasing diagnostics; fixed using local temporaries. Original failure retained. Attempts 2 through 6 passed, each after relevant source changes.
+- Initial push source guard refused three missing line-local import-connection annotations; documented their actual import-only scope. Failure retained in push-attempt-1.log.
 - No runtime tests, identity checks, GPU builds or GPU execution. No claim of verified runtime behavior. No rented box used.
 
 Evidence
