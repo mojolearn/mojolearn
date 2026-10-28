@@ -1,0 +1,101 @@
+{
+ "lane": "attn-fold",
+ "source_commit": "86b4d69c0c581c72faea7bf05f4376128eaa0cc8",
+ "compiler": "Mojo 1.0.0 (ed45d567)",
+ "runtime_executed": false,
+ "gpu_verified": false,
+ "mac_cpu_column": {
+  "cmd": "tools/compile_slot.sh pixi run mojo build --optimization-level 0 -j 10 [--emit shared-lib] --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU [defines] -I . -I bindings <entry>",
+  "builds": [
+   {
+    "tag": "f_tfhost_v2",
+    "entry": "bindings/entry/entry__mojolearn_transformer_host.mojo",
+    "defines": "-D MOJOLEARN_IDN_ATTN_FOLD_V2=1",
+    "MOJOLEARN_IDN_ATTN_FOLD_V2": "1",
+    "rc": "0",
+    "seconds": "1021",
+    "commit": "86b4d69c0c581c72faea7bf05f4376128eaa0cc8",
+    "so_sha256": "c51e5d2fc68cab1ddd327d638900194db1a46289d3c5062d6e847248eb6e4bb4"
+   },
+   {
+    "tag": "f_tfhost_off",
+    "entry": "bindings/entry/entry__mojolearn_transformer_host.mojo",
+    "defines": "",
+    "rc": "0",
+    "seconds": "10",
+    "commit": "86b4d69c0c581c72faea7bf05f4376128eaa0cc8",
+    "so_sha256": "31ee07d1c6cde793a4c80ed90db8de6e9a630e285789d016d6c901458a5c51bd"
+   },
+   {
+    "tag": "f_bytelm_kernels_v2",
+    "entry": "experiments/attn_fold_20261028/byte_lm_host_fold_compile.mojo",
+    "defines": "-D MOJOLEARN_IDN_ATTN_FOLD_V2=1",
+    "MOJOLEARN_IDN_ATTN_FOLD_V2": "1",
+    "rc": "0",
+    "seconds": "3",
+    "commit": "86b4d69c0c581c72faea7bf05f4376128eaa0cc8",
+    "so_sha256": "92bb2e03d3678e6f52c51b750e639d87ccfb75813735698e20bfb3bc60b41d36"
+   },
+   {
+    "tag": "f_bytelm_kernels_off",
+    "entry": "experiments/attn_fold_20261028/byte_lm_host_fold_compile.mojo",
+    "defines": "",
+    "rc": "0",
+    "seconds": "3",
+    "commit": "86b4d69c0c581c72faea7bf05f4376128eaa0cc8",
+    "so_sha256": "b29a35605308b4e09dc27df6afc2439562441035ad710eaca59b8c0f47ec4fef"
+   }
+  ],
+  "log_dir": "/Users/andrewhendel/mojolearn-evidence/attn-fold-20261028/mac"
+ },
+ "nvidia_sm89": {
+  "pod": "5l8iekpi01luwx (RunPod CPU, 32 vCPU, reaped: verified 404)",
+  "cmd": "pixi run mojo build --optimization-level 0 -j $(nproc) --emit shared-lib --target-cpu x86-64-v3 --target-accelerator sm_89 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_NVIDIA [defines] -I . -I bindings <entry>",
+  "builds": [
+   {
+    "tag": "tf_sm89_off",
+    "entry": "bindings/entry/entry__mojolearn_transformer.mojo",
+    "defines": "",
+    "rc": "0",
+    "seconds": "234",
+    "so_sha256": "00dde2bbd99c69ad940a9d0168bfd82aba0d456b04182834c2427af10a3447ee"
+   },
+   {
+    "tag": "tf_sm89_v2",
+    "entry": "bindings/entry/entry__mojolearn_transformer.mojo",
+    "defines": "-D MOJOLEARN_IDN_ATTN_FOLD_V2=1",
+    "MOJOLEARN_IDN_ATTN_FOLD_V2": "1",
+    "rc": "0",
+    "seconds": "236",
+    "so_sha256": "4d3c2207f43a9cc1bdbbe7b956efe29068b3ea0734a5b0b890f7cfdc6816a502"
+   },
+   {
+    "tag": "bytelm_sm89_off",
+    "entry": "bindings/entry/entry__mojolearn_byte_lm.mojo",
+    "defines": "",
+    "rc": "0",
+    "seconds": "319",
+    "so_sha256": "654177c94700ff09ae23e2bb26f8c868ad10a3e8625234c4efa9dfb3ca2ea1a1"
+   },
+   {
+    "tag": "bytelm_sm89_v2",
+    "entry": "bindings/entry/entry__mojolearn_byte_lm.mojo",
+    "defines": "-D MOJOLEARN_IDN_ATTN_FOLD_V2=1",
+    "MOJOLEARN_IDN_ATTN_FOLD_V2": "1",
+    "rc": "0",
+    "seconds": "322",
+    "so_sha256": "a6e879d29776d9b25d925b8ac1a735c0d535f33af3c4cf915db4c658f36a8264"
+   }
+  ],
+  "log_dir": "/Users/andrewhendel/mojolearn-evidence/attn-fold-20261028/pod3/remote/leg_out"
+ },
+ "apple_metal_typecheck_prior_head": {
+  "commit": "768fee53e4",
+  "entry": "bindings/entry/entry__mojolearn_transformer.mojo",
+  "defines": "-D MOJOLEARN_COLUMN_APPLE -D MOJOLEARN_IDN_ATTN_FOLD_V2=1",
+  "rc": 0,
+  "log": "/Users/andrewhendel/mojolearn-evidence/attn-fold-20261028/mac/tf_apple_v2.log"
+ },
+ "covers": "attn_fold_v2.mojo; modeling_llama eager v2 kernels; fused_attention v2 leaf/combine kernels + launchers (via transformer and byte_lm GPU bindings); transformer host oracle (transformer host binding); byte-LM host kernels (probe)",
+ "not_covered": "AMD gfx942 target; Apple Metal at the merged head (only at 768fee53e4); byte_lm host binding entry (red on main in providers/python/byte_lm_host_compat_pyapi.mojo, untouched); no runtime, identity or timing"
+}
