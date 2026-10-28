@@ -1,0 +1,11 @@
+{
+  "scope": "Sequential native field identity admission and registered NativeIdentityKey; runtime_sequential host root",
+  "source_commit": "0550ebf4ac",
+  "exit_code": 0,
+  "target": "Mac arm64 CPU",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/sequential-native-host/_mojolearn_runtime_sequential_host.so",
+  "sha256": "8eca7dcac16d856992d66cec8b7ac181b2b4715fbcc77f4d8721591f59b43935",
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/sequential-native-compile.log",
+  "runtime_executed": false,
+  "performance_measured": false
+}
