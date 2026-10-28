@@ -132,9 +132,18 @@ def _keep_extrema(fields: PythonObject, output: PythonObject, colnan: PythonObje
     _ = arena^
 
 
+def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    return minmax_fit(model, source, context, PythonObject(None), PythonObject(None))
+
+
 def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
-                  input_cache: PythonObject = PythonObject(None),
-                  var configuration: PythonObject = PythonObject(None)) raises -> PythonObject:
+               input_cache: PythonObject) raises -> PythonObject:
+    return minmax_fit(model, source, context, input_cache, PythonObject(None))
+
+
+def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
+                  input_cache: PythonObject,
+                  var configuration: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
     if configuration is None:
         configuration = _configuration(fields,context)
@@ -184,9 +193,18 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
     return model
 
 
+def minmax_fit_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    return minmax_fit_transform(model, source, context, PythonObject(None), PythonObject(None))
+
+
 def minmax_fit_transform(model: PythonObject, source: PythonObject, context: PythonObject,
-                  input_cache: PythonObject = PythonObject(None),
-                  var configuration: PythonObject = PythonObject(None)) raises -> PythonObject:
+                         input_cache: PythonObject) raises -> PythonObject:
+    return minmax_fit_transform(model, source, context, input_cache, PythonObject(None))
+
+
+def minmax_fit_transform(model: PythonObject, source: PythonObject, context: PythonObject,
+                  input_cache: PythonObject,
+                  var configuration: PythonObject) raises -> PythonObject:
     """fit_transform on one upload of X: the combined `minmax_fit_transform`
     export runs `minmax_fit_direct` then `minmax_transform_direct` on the
     resident X (the same kernels on the same words) and the fitted rows are
@@ -252,7 +270,7 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
     var batch = py_call(b.object.__new__,context["scaler_class"])
     var batch_configuration = Python.tuple(_configuration_mode(fitted_mode,context),configuration[1],configuration[2],True,configuration[4])
     _ = minmax_initialize(batch,Python.tuple(Python.tuple(configuration[1],configuration[2]),True,configuration[4],fitted_mode))
-    _ = minmax_fit(batch,source,context,configuration=batch_configuration)
+    _ = minmax_fit(batch,source,context,PythonObject(None),batch_configuration)
     var fresh = _fields(batch)
     var d = _features(fields)
     if _features(fresh) != d:
@@ -284,9 +302,18 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
     return model
 
 
+def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
+    return minmax_transform(model, source, inverse, context, PythonObject(None), PythonObject(None))
+
+
 def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, context: PythonObject,
-                  input_cache: PythonObject = PythonObject(None),
-                  configuration: PythonObject = PythonObject(None)) raises -> PythonObject:
+                     input_cache: PythonObject) raises -> PythonObject:
+    return minmax_transform(model, source, inverse, context, input_cache, PythonObject(None))
+
+
+def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, context: PythonObject,
+                  input_cache: PythonObject,
+                  configuration: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
     var copy = _flag(fields["copy"],"copy",context) if configuration is None else Bool(py=configuration[3])
     if not _fitted(fields):

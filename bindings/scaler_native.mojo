@@ -88,8 +88,12 @@ def _bool(value: PythonObject, context: PythonObject) raises -> Bool:
     return Bool(py=value)
 
 
+def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject) raises -> PythonObject:
+    return scaler_fit(model, source, weight_source, context, PythonObject(None))
+
+
 def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject,
-               input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
+               input_cache: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
