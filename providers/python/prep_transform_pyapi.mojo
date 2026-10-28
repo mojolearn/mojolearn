@@ -138,7 +138,7 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
         if cls is not _pd_class("pandas.core.internals.blocks", "NumpyBlock") and cls is not _pd_class("pandas.core.internals.blocks", "NumericBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ObjectBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ExtensionBlock"):
             raise Error("TypeError: pandas requires ordinary native blocks without subclass hooks")
         var pair = _pandas_block(_pd_get("pandas._libs.internals", "Block", "values", block), series, context)
-        var data = pair[0]
+        var data = pair[0].copy()
         var rank = len(data.shape)
         if rank != 1 and rank != 2:
             raise Error("pandas numeric block rank must be one or two")
@@ -184,7 +184,7 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
     var dest = F32P(unsafe_from_address=address)
     var seen = List[Bool](length=cols, fill=False)
     for k in range(len(snapshots)):  # driver-loop: native numeric block scatter, metadata already captured
-        var data = snapshots[k]
+        ref data = snapshots[k]
         if not data.castable:
             raise Error("TypeError: pandas block cannot be cast")
         var rank = len(data.shape)
