@@ -851,7 +851,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, Float32(0), lr)
         var sched_step = ints[3] if sched == SCHED_STEP else 1
         self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
-        self.opt_state_indices.append(Dict[Int, Int]())
+        # Failed control-checkpoint restore pops opts before its caller retires
+        # partial parameter states. Keep that index addressable during cleanup,
+        # then reuse its table on the next creation instead of accumulating an
+        # orphan table for each failed restore. Index storage is bounded by the
+        # optimizer-count high-water mark; ordinary creation still adds one.
+        if len(self.opt_state_indices) < len(self.opts):
+            self.opt_state_indices.append(Dict[Int, Int]())
         return len(self.opts)
 
     def _opt_index(self, o: Int) raises -> Int:

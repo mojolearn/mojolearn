@@ -18,3 +18,10 @@ def compile_session_init() raises:
 @export
 def compile_optimizer_create(mut session: OpsSession[HostExec], ints: List[Int], floats: List[Float32]) raises -> Int:
     return session.optimizer(ints, floats)
+
+from autograd.control_training_checkpoint import restore_control_training, ControlTraining
+from autograd.rankn import ShapeN
+from training.checkpoint import Checkpoint
+@export
+def compile_restore(mut session: OpsSession[HostExec], handles: List[Int], shapes: List[ShapeN], checkpoint: Checkpoint, metadata: ControlTraining) raises -> Int:
+    return restore_control_training(session, handles, shapes, checkpoint, metadata)
