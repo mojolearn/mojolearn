@@ -1,0 +1,40 @@
+{
+ "xseq_dispatcher": {
+  "source_commit": "ac2484736ff66cbcb5b433f5faba9cac59063b51",
+  "worktree": "/Users/andrewhendel/mojolearn-wt/peer6-timeseries-20261027",
+  "entry": "checks/peer6_forecast_convenience_compile.mojo",
+  "exit_code": 0,
+  "seconds": 42,
+  "jobs": 10,
+  "command": "compile_slot.sh pixi run mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I <wt> -I <wt>/bindings <entry> -o <out>",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/xseq-forecast-pandas/_peer6_forecast_compile.so",
+  "artifact_sha256": "7649acbb2f2c3277429eb92bff24a0f5d13bfa1bfbd4d064a511a6d86d53562a",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/xseq-forecast-pandas/compile.log",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/xseq-forecast-pandas/source.tgz",
+  "runtime_executed": false,
+  "gpu_compiled": false
+ },
+ "tsa_dispatcher": {
+  "source_commit": "ac2484736ff66cbcb5b433f5faba9cac59063b51",
+  "worktree": "/Users/andrewhendel/mojolearn-wt/peer6-timeseries-20261027",
+  "entry": "checks/peer6_autoarima_lifecycle_compile.mojo",
+  "exit_code": 0,
+  "seconds": 27,
+  "jobs": 10,
+  "command": "compile_slot.sh pixi run mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I <wt> -I <wt>/bindings <entry> -o <out>",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/tsa-forecast-pandas/_peer6_autoarima_compile.so",
+  "artifact_sha256": "2890d40c3e6c359c104b0c9535cd0ace360656c85907ca098b84e09622058fde",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/tsa-forecast-pandas/compile.log",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/tsa-forecast-pandas/source.tgz",
+  "runtime_executed": false,
+  "gpu_compiled": false
+ },
+ "scope": "Mac CPU/O0/identical/apple-m1 -j10: actual xseq public dispatcher (VAR/STL matrices, Croston/Theta/ETS/GARCH series) and actual TSA dispatcher (ARIMA series/exog, AutoARIMA endog) with native pandas admission; classical_pandas.mojo shared signature change is default-compatible",
+ "not_covered": [
+  "other importers of bindings/classical_pandas.mojo were not recompiled (new trailing default parameter only)",
+  "GPU targets",
+  "runtime, identity and behavior execution (excluded by owner direction)"
+ ]
+}

@@ -1,0 +1,16 @@
+Peer6 forecast pandas input admission, 2026-10-28.
+Branch lane/peer6-timeseries-20261027 (follows 4b9999bee4 + origin/main merge 12f691b2b1).
+Source commit ac2484736f. Plain pandas Series/DataFrame input to VAR/STL,
+ARIMA (y, exog), AutoARIMA (endog) and the xseq Croston/Theta/ETS/GARCH
+series now converts native pandas block storage via
+bindings/classical_pandas.mojo::native_pandas_f32 (no __array__/to_numpy).
+New optional refuse_double message: raised before conversion when pandas
+storage promotes beyond float32 (float64, object, nullable frame or bool
+mixed with numbers), so VAR/STL/AutoARIMA/xseq keep their float64 refusal and
+messages; integer/half/float32 storage is admitted. ARIMA keeps its cast (no
+refusal). Nonfinite values pass through to each operation's own rule.
+ARIMA input_copied_ is True for pandas input (native copy).
+Compiles: xseq dispatcher exit0 42s, TSA dispatcher exit0 27s (CPU/O0/
+identical/-j10); receipts compile.json; logs/binaries under
+~/mojolearn-evidence/peer6-forecast-pandas-20261028/. No runtime/identity/GPU.
+Must integrate after VAR/STL e456212ca7 + 4b9999bee4 (same lane, in order).
