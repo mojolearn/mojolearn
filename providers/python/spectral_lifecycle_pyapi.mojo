@@ -21,8 +21,11 @@ def spectral_admit(model: PythonObject, clustering: Bool, replacing: Bool,
     var b = native_loaded_module("builtins")
     var names = context["spectral_clustering_parameters"] if clustering else context["spectral_embedding_parameters"]
     for i in range(len(names)):  # driver-loop: fixed consumed scalar configuration before comparisons/hash/conversion
-        var value = family_raw_get_or(model, names[i], PythonObject(None)) if String(names[i]) == "numeric_mode" else family_raw_get(model, names[i])
-        if String(names[i]) == "kernel_params":
+        if py_type(names[i]) is not b.str:
+            raise Error("TypeError: spectral parameter schema requires exact names")
+        var key = String(py=names[i])
+        var value = family_raw_get_or(model, key, PythonObject(None)) if key == "numeric_mode" else family_raw_get(model, key)
+        if key == "kernel_params":
             # The algorithm refuses any non-None kernel_params; admission
             # prevents its diagnostic from traversing custom state.
             classical_admit_value(value, context)
