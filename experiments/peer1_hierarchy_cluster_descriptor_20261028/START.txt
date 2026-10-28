@@ -1,0 +1,6 @@
+Branch: lane/peer1-hierarchy-cluster-20261028
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-hierarchy-cluster-20261028
+Starting local main: 780cd217d65a24e15656eab73ff00a49522368c3
+Scope: dedicated hierarchy cluster descriptor and cfb_agglo._agglo_x routing.
+Shared module registrations remain an exact patch for root.
+No lane compile, product imports, runtime/identity tests or benchmarks.
