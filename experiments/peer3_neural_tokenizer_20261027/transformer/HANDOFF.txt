@@ -223,3 +223,33 @@ no route, quantization algorithm, arithmetic, or decoding policy was substituted
 Actual public runtime, failure-progress/alias controls, worker lifecycle loading,
 checkpoint roundtrip and cross-vendor identity remain pending final integration.
 Source guards and compile passes do not establish Python-free runtime.
+
+Constructor retained publication followup (2026-10-28)
+----------------------------------------------------
+Owned source: bindings/causal_lm_construct.mojo. Constructor preparation and
+initialization retain the admitted live dictionary and a separate private
+construction dictionary. Subsequent native calls consume the private record;
+original model attribute reads/setters no longer run after a kernel can release
+the GIL. Checked raw dictionary publication preserves incremental top-field,
+layer-list and native admission results, including vendor/mode/entry/pin fields
+on an admission error. Published lists/dictionaries are separate from the
+containers traversed by construction. Public head/embed views preserve tied
+object identity and share their original live storage; their public Array slots
+are separate from subsequent constructor metadata. Native array descriptors
+are checked before post-call shape/packing/int15 metadata access.
+
+The six-argument _causal_model_prepare_snapshot signature and bindings return
+value remain compatible with the parallel constructor. Its eight-argument
+internal overload carries retained dictionaries without PythonObject defaults.
+Final causal_lm_admit_binding receives a private exact native namespace; no
+new arithmetic, quantization, decoding route or shared provider ABI was added.
+The two malformed driver-loop(...) comments now use accepted driver-loop:
+annotations with their actual metadata traversal purpose.
+
+Validation: six focused source controls passed, exit0, including the exact
+no_compute_in_shells constructor scan with zero findings. Evidence:
+source-tests-causal-constructor-retained.log. No compilation or product runtime
+was run by this lane. Parent should compile the frozen compile_causal_construct.mojo
+root and its affected parallel parent/worker closure; existing public execution
+and generation probes remain part of the pending integrated source freeze.
+These checks establish source structure only, not runtime/Python-free behavior.
