@@ -21,14 +21,15 @@ def _class_name(model: PythonObject) raises -> String:
     return String(py_call(b.type.__dict__["__name__"].__get__, py_type(model)))
 
 
-def _missing(model: PythonObject, name: String) raises -> Error:
-    return Error("AttributeError: '" + _class_name(model) + "' object has no attribute '" + name + "'")
+def _missing(model: PythonObject, name: String) raises -> String:
+    return "AttributeError: '" + _class_name(model) + "' object has no attribute '" + name + "'"
 
 
 def _fitted(model: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
     var value = py_get(fields, PythonObject(name), PythonObject(None))
     if value is None and not py_contains(fields, PythonObject(name)):
-        raise _missing(model, name)
+        var message = _missing(model, name)
+        raise Error(message)
     return value
 
 
