@@ -8,6 +8,7 @@
 # order are the ones the mixins called, so the score keeps its bits.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_contains
+from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs import (
     TreesMatrix, trees_f32, trees_builtins, trees_table, trees_entry, trees_helper, trees_vector,
@@ -86,11 +87,12 @@ def _codes_i32(codes: PythonObject, n: Int, context: PythonObject) raises -> Pyt
     return out
 
 
-def _vocabulary_codes(target: ScoreLabels, classes: PythonObject, context: PythonObject) raises -> PythonObject:
+def _vocabulary_codes(target: ScoreLabels, var classes: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_label_map(target, vocabulary.get(label, -1))`: each label's index in
     the fitted `classes_`, -1 for a label outside them; one lookup per class
     and the base binding's gather for encoded labels."""
     var b = trees_builtins()
+    classes = classifier_label_list(classes, context)
     var vocabulary = Python.dict()
     for i in range(len(classes)):  # driver-loop: over the fitted classes (the binary vocabulary)
         py_setitem(vocabulary, classes[i], PythonObject(i))

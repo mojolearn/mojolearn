@@ -20,7 +20,9 @@ from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
-from bindings.py_attr import py_attr
+from bindings.params_metadata_native import _read, _resolved
+from bindings.classical_pandas import classical_admit_value
+from bindings.trees_public_state import _release_tree_values
 from bindings.py_typed_call import py_call_typed
 from bindings.host_archive_native import host_archive_gbdt_state
 from bindings.classical_arrays import classical_wrap_array
@@ -1184,16 +1186,7 @@ def _adapter_tables(context: PythonObject) raises -> PythonObject:
 
 def _adapter_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_GBDTAdapter.get_params()`."""
-    var t = _adapter_tables(context)
-    var cls = py_type(model)
-    if not (py_attr(cls, "__init__") is py_attr(t["base"], "__init__")):
-        raise Error("TypeError: GBDT adapter subclasses with custom constructors need their own parameter protocol")
-    var fields = py_fields(model)
-    var names = t["names"]
-    var params = Python.dict()
-    for i in range(len(names)):  # driver-loop: over the adapter's constructor parameter names
-        py_setitem(params, names[i], _field(fields, model, String(names[i])))
-    return params
+    return _read(model, False, context["trees_gbdt_parameter_metadata"], Python.list())
 
 
 def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1208,7 +1201,8 @@ def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject)
             ok = clean == "fast" or clean == "identical"
         if not ok:
             raise Error("numeric_mode must be fast, identical or None")
-    var loss = py_type(model)._loss
+    var loss = _resolved(py_type(model), "_loss", PythonObject(None))
+    classical_admit_value(loss, context)
     if _eq(loss, "RMSE") and _field(py_fields(model), model, "class_weights") is not None:
         raise Error("NotImplementedError: GradientBoostingRegressor does not support class_weights")
     var params = _adapter_params(model, context)
@@ -1229,9 +1223,17 @@ def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject)
     return learner
 
 
-def _clear_fit(fields: PythonObject) raises:
+def _clear_fit(fields: PythonObject, context: PythonObject) raises:
     """`_GBDTAdapter._clear_fit`: drop every fitted attribute."""
     var keys = py_call(_b().list, fields)
+    var removed = Python.list()
+    var retained = Python.list()
+    for i in range(len(keys)):  # driver-loop: admit displaced fitted owners before dropping references
+        if String(keys[i]).endswith("_"):
+            _ = py_call(removed.append, fields[keys[i]])
+        else:
+            _ = py_call(retained.append, fields[keys[i]])
+    _release_tree_values(removed, retained, context)
     for i in range(len(keys)):  # driver-loop: over the instance's attribute names
         if String(keys[i]).endswith("_"):
             _ = py_call(fields.pop, keys[i], PythonObject(None))
@@ -1334,7 +1336,7 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
     """`GradientBoostingClassifier.fit(X, y, sample_weight, eval_set)`."""
     var fields = py_fields(model)
     _ = _new_learner(model, _field(fields, model, "numeric_mode"), context)
-    _clear_fit(fields)
+    _clear_fit(fields, context)
     var y = args[1]
     var labels = trees_encode_labels(y, context)
     var seen = len(labels.classes)
@@ -1401,7 +1403,7 @@ def adapter_regressor_fit(model: PythonObject, args: PythonObject, context: Pyth
     """`GradientBoostingRegressor.fit(X, y, sample_weight, eval_set)`."""
     var fields = py_fields(model)
     _ = _new_learner(model, _field(fields, model, "numeric_mode"), context)
-    _clear_fit(fields)
+    _clear_fit(fields, context)
     var target = _regression_target(args[1], "y", context)
     var eval_set = args[3]
     var eval_target: Optional[TreesMatrix] = None

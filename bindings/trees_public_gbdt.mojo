@@ -20,6 +20,8 @@
 # from the predict entry to the binary output kernel without a Python step.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.params_metadata_native import _resolved
+from bindings.native_instance_item import native_instance_item
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.host_tree_native import host_tree_operation
@@ -102,13 +104,15 @@ def gbdt_host_tree_context(context: PythonObject) raises -> PythonObject:
 def _field(fields: PythonObject, model: PythonObject, name: String) raises -> PythonObject:
     """An attribute the model holds (instance first, then its class), or
     the AttributeError Python's attribute read raised."""
-    var value = py_get(fields, PythonObject(name), PythonObject(None))
-    if value is not None or py_contains(fields, PythonObject(name)):
-        return value
+    var missing = Python.tuple()
     var cls = py_type(model)
-    var b = trees_builtins()
-    if Bool(py=py_call(b.hasattr, cls, PythonObject(name))):
-        return py_call(b.getattr, cls, PythonObject(name))
+    var member = _resolved(cls, PythonObject(name), missing)
+    if member is not missing and _resolved(py_type(member), "__get__", missing) is not missing:
+        raise Error("TypeError: native GBDT fields cannot invoke Python property/descriptor hooks")
+    if py_contains(fields, PythonObject(name)):
+        return native_instance_item(fields, PythonObject(name))
+    if member is not missing:
+        return member
     raise Error("AttributeError: '" + String(cls.__name__) + "' object has no attribute '" + name + "'")
 
 
