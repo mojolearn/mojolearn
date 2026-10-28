@@ -22,6 +22,12 @@
 # tools/hooks/python_in_kernels_baseline.txt. It judges refs exactly like the
 # host-route fence: main on the whole tree, any other branch with --branch.
 #
+# The tombstone fence (2026-10-28): tools/tests/test_tombstones_preserved.py --tree, when the
+# pushed tree has it, refuses a push whose docs/TOMBSTONES.md index row, section, patch under
+# experiments/removed/ or inline TOMBSTONE marker is missing, or that removes or rewrites any of
+# them against the merge-base with main (the record is permanent, Andrew 2026-10-28). Both modes
+# judge against the merge-base; removing the test file itself is refused too.
+#
 # The fifth fence (2026-10-21): no_compute_in_shells.py --tree refuses, in a shell
 # .mojo file (bindings/, *pyapi*.mojo, *_py.mojo), an untagged for/while loop or a
 # kernel launch (enqueue_function, DeviceContext(, parallelize, vectorize) beyond
@@ -81,6 +87,21 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     python3 "$here/no_host_routes.py" --tree "$local_sha" $mode || exit 4
     # the rebuild fence (2026-10-17): a lane change to a module most bindings import is refused
     if [ -f "$here/rebuild_fence.py" ]; then python3 "$here/rebuild_fence.py" "$local_sha" $mode || exit 4; fi
+    # the tombstone fence (2026-10-28): the record only grows (tools/tests/test_tombstones_preserved.py,
+    # the pushed commit's copy, judged against the merge-base with main)
+    tomb_test=tools/tests/test_tombstones_preserved.py
+    tomb_base=$(git merge-base "$local_sha" refs/remotes/origin/main 2>/dev/null)
+    if git cat-file -e "$local_sha:$tomb_test" 2>/dev/null; then
+        tomb=$(mktemp "${TMPDIR:-/tmp}/tombstones.XXXXXX") || exit 4
+        git show "$local_sha:$tomb_test" >"$tomb" || { rm -f "$tomb"; exit 4; }
+        python3 "$tomb" --tree "$local_sha" ${tomb_base:+--base "$tomb_base"} >"$tomb.log" 2>&1
+        status=$?
+        grep -E '^(FAIL|ERROR):|Error|^[-+] ' "$tomb.log" | cut -c1-240 | head -n 30 >&2
+        rm -f "$tomb" "$tomb.log"
+        [ $status -eq 0 ] || { echo "pre-push: REFUSED by the tombstone fence ($tomb_test): tombstones are a permanent record" >&2; exit 4; }
+    elif [ -n "$tomb_base" ] && git cat-file -e "$tomb_base:$tomb_test" 2>/dev/null; then
+        echo "pre-push: REFUSED: $local_ref deletes $tomb_test (the tombstone fence)" >&2; exit 4
+    fi
     # the no-Python-in-kernels check (2026-10-21), same branch/main judging rule
     if [ -f "$here/no_python_in_kernels.py" ]; then python3 "$here/no_python_in_kernels.py" --tree "$local_sha" $mode || exit 4; fi
     # the no-compute-in-shells check (2026-10-21), same branch/main judging rule

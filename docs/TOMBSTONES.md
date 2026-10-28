@@ -2,6 +2,8 @@
 
 > **PERMANENT RECORD (Andrew, 2026-10-28): entries, their patches under experiments/removed/ and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED here.**
 
+> **Fence:** `tools/hooks/pre-push` runs `tools/tests/test_tombstones_preserved.py` on every pushed branch and on main. It refuses a push that removes or rewrites an index row, a section heading, a patch under `experiments/removed/` or an inline TOMBSTONE marker present at the merge-base with main, an index row without its section, patch or marker, or an index with fewer rows than `experiments/tombstones/index_count.txt` (raise that number when you add rows). Run it locally with `python3 tools/tests/test_tombstones_preserved.py`.
+
 Every experiment define deleted from mojolearn, in one place. Each section says what the define tried, its verdict with the
 NVIDIA / AMD ratios and the quality change as the guard message, `grid_controls` entry and `docs/apple-fast/EXPERIMENTS.md` rows
 recorded them, the run ids, the sha where the code still exists, and a patch that restores it.
