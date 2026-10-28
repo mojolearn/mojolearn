@@ -180,7 +180,7 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
                     + ") is needed")
     if not _umap_finite(a.source.addr, a.count):
         raise Error("UMAP init array must be finite")
-    return Optional(a)
+    return Optional(a^)
 
 
 def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:

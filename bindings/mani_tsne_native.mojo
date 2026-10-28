@@ -165,7 +165,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         var prepared = _cast(captured, "init", context)
         y0 = prepared.keep
         y0_address = prepared.source.addr
-        initial_snapshot = Optional(prepared)
+        initial_snapshot = Optional(prepared^)
         _ = view
     var embedding = family_array(Python.tuple(n, k), "<f4", context)
     var kl = family_array(Python.tuple(1), "<f4", context)
