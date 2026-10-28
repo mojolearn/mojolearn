@@ -7,6 +7,7 @@ allocation, layer traversal, token traversal and selection are native. Calling
 a compiled sibling extension through CPython's native function ABI changes no
 arithmetic and uses no interpreter callback; targets are checked at admission.
 """
+from providers.python.transformer_resident_pyapi import transformer_resident_decode_call, transformer_resident_words
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -149,7 +150,7 @@ def causal_lm_admit_binding(
         py_setitem(entries, "native_primitives", primitive_provider)
         if kind == "transformer":
             var block_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_block_provider_cache"),
-                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 15)
+                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 25)
             py_setitem(owner_fields, "_native_block_provider_cache", block_provider)
             py_setitem(entries, "native_block_operations", block_provider)
         if kind == "mamba1" or kind == "mamba2":
@@ -451,7 +452,7 @@ def causal_transformer_admin(binding: PythonObject, session: PythonObject, opera
     # Administration intentionally holds the GIL, matching the raw public API.
     if String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
         var provider = neural_descriptor_reuse(PythonObject(None),
-            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 15)
+            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 25)
         var handle = neural_descriptor_handle(provider,
             _native_function(binding, "transformer_native_session_handle_v1"), session)
         _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)
@@ -773,7 +774,11 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
             var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
             var pk = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
             var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
-            _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
+            var provider = py_get(e, "native_block_operations")
+            if provider is not None:
+                _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
+            else:
+                _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
             py_setattr(st, "cached_tokens", cached)
             _ = out  # keep the Python object alive through the native call above
         _writeback(copies)
@@ -924,7 +929,11 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
 def _resident_close(entries: PythonObject, lm: PythonObject, sessions: PythonObject) raises:
     _ = py_call_typed(entries["causal_lm_session_close"], lm)
     for i in range(len(sessions)):  # driver-loop: over layer decode sessions
-        _ = py_call_typed(entries["transformer_decode_session_close"], sessions[i])
+        var provider = py_get(entries, "native_block_operations")
+        if provider is not None:
+            _ = transformer_resident_decode_call(provider, sessions[i], 24, [], [])
+        else:
+            _ = py_call_typed(entries["transformer_decode_session_close"], sessions[i])
 
 
 def _resident_open_all(
@@ -954,7 +963,12 @@ def _resident_open_all(
                     _ = py_call(open_p.append, p[j])
             var ss = e["transformer_decode_session_create"]()
             _ = py_call(sessions.append, ss)
-            _ = py_call(e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"], ss, open_a, open_p)
+            var provider = py_get(e, "native_block_operations")
+            if provider is not None:
+                _ = transformer_resident_decode_call(provider, ss, 19 if int15 else 18,
+                    transformer_resident_words(open_a), transformer_resident_words(open_p))
+            else:
+                _ = py_call(e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"], ss, open_a, open_p)
         var top = py_ints([_addr(model._embed, keep), _addr(model._norm, keep)])
         if int15:
             for i in range(3):  # small-loop(int15 head plane triple)
@@ -985,8 +999,13 @@ def _resident_load_states(e: PythonObject, sessions: PythonObject, state: Python
     an open; the weights stay where they are)."""
     for i in range(len(sessions)):  # driver-loop: over layer decode sessions
         var st = state.layers[i]
-        _ = py_call(e["transformer_decode_session_load_state"], sessions[i],
-                    py_ints([_addr(st.k_cache, keep), _addr(st.v_cache, keep)]), py_ints([Int(py=st.cached_tokens)]))
+        var provider = py_get(e, "native_block_operations")
+        var a: List[Int] = [_addr(st.k_cache, keep), _addr(st.v_cache, keep)]
+        var p: List[Int] = [Int(py=st.cached_tokens)]
+        if provider is not None:
+            _ = transformer_resident_decode_call(provider, sessions[i], 23, a, p)
+        else:
+            _ = py_call(e["transformer_decode_session_load_state"], sessions[i], py_ints(a), py_ints(p))
 
 
 def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, last_logits: PythonObject, supplied_state: PythonObject) raises -> PythonObject:

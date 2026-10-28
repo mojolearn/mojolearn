@@ -2,6 +2,7 @@
 # Private sibling ABI for the existing fresh/backward Transformer operations.
 # Common descriptor transport; no Python/provider imports or changed kernels.
 from std.ffi import _Global
+from transformer.native_decode_dispatch import transformer_decode_operation
 from transformer.native_tape_dispatch import transformer_tape_operation
 from transformer.session_native_dispatch import transformer_session_forward_native
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
@@ -19,6 +20,8 @@ from transformer.transformer_binding_impl import (
 
 
 def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
+    if op >= 15:
+        return transformer_decode_operation(op - 15, a, words)
     if op == 14:
         return transformer_tape_operation(5, a, words)
     if op == 12 or op == 13:
@@ -140,7 +143,7 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises 
 def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 15 or nf != 0 or na < 0 or na > 24 or np < 0 or np > 28:
+        if op < 0 or op >= 25 or nf != 0 or na < 0 or na > 45 or np < 0 or np > 28:
             raise Error("transformer block native ABI: unknown operation or scalar span")
         if result == 0:
             raise Error("transformer block native ABI: null result")
