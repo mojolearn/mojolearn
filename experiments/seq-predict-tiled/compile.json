@@ -1,0 +1,66 @@
+{
+ "scope": "lane seq-predict-tiled: MOJOLEARN_IDN_SEQ_TILED_PREDICT (autograd/model.mojo predict_chunk_rows); compile only, no runtime, identity or GPU execution",
+ "compiler": "Mojo 1.0.0 (ed45d567) on both hosts",
+ "covers": "the Sequential native predict closure (autograd/model.mojo model_predict through autograd/model_execution.mojo and the x_sequence bindings) in both define arms, on the CPU host root and the NVIDIA sm_89 device root",
+ "not_covered": "AMD (gfx942) and Apple Metal device targets; FAST-mode builds; any runtime, digest or timing",
+ "pod": {
+  "id": "881iesii741ufl",
+  "reaped": true,
+  "verified": "GET pod HTTP 404, absent from listing",
+  "spend_usd": 0.1136
+ },
+ "results": [
+  {
+   "name": "x_sequence_host_on",
+   "entry": "bindings/entry/entry__mojolearn_x_sequence_host.mojo",
+   "target": "cpu (macOS arm64, MOJOLEARN_COLUMN_CPU)",
+   "host": "Mac",
+   "jobs": 10,
+   "exit": 0,
+   "seconds": 264,
+   "binary_sha256": "964052fd157708b2daf9d7065e695782916315490ede3cb52124de1443207d77",
+   "command": "mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_x_sequence_host.mojo (pixi env of the main checkout, via tools/compile_slot.sh)",
+   "log": "/Users/andrewhendel/mojolearn-evidence/seq-predict-tiled-20261028/mac/build-on.log",
+   "source_commit": "bdaa8554f8"
+  },
+  {
+   "name": "x_sequence_sm89_on",
+   "entry": "bindings/entry/entry__mojolearn_x_sequence.mojo",
+   "target": "linux x86-64-v3 + sm_89 (NVIDIA Ada / L40S class)",
+   "host": "RunPod CPU pod 881iesii741ufl (32 vCPU, cgroup cpu.max 'max 100000', affinity 32; 2 arms in parallel, -j 16 each)",
+   "jobs": 16,
+   "exit": 0,
+   "seconds": 260,
+   "binary_sha256": "7ea261703f464b7638d0d67f8b2f518005acf234626e2b7681b1a29e74b73d9f",
+   "command": "pixi run mojo build -j 16 --emit shared-lib --target-cpu x86-64-v3 --target-accelerator sm_89 -D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings bindings/entry/entry__mojolearn_x_sequence.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/seq-predict-tiled-20261028/pod/leg_out/remote/leg_out/build-on.log",
+   "source_commit": "bdaa8554f8 (tracked tree shipped by tools/runpod_cpu_leg.sh, 0 dirty)"
+  },
+  {
+   "name": "x_sequence_host_off",
+   "entry": "bindings/entry/entry__mojolearn_x_sequence_host.mojo",
+   "target": "cpu (macOS arm64, MOJOLEARN_COLUMN_CPU)",
+   "host": "Mac",
+   "jobs": 10,
+   "exit": 0,
+   "seconds": 321,
+   "binary_sha256": "b8534d73d01a68bbfc0ca3f10b3ccbb0a72619121c87c9ef664e6e2dc09ea83a",
+   "command": "mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_x_sequence_host.mojo (pixi env of the main checkout, via tools/compile_slot.sh)",
+   "log": "/Users/andrewhendel/mojolearn-evidence/seq-predict-tiled-20261028/mac/build-off.log",
+   "source_commit": "bdaa8554f8"
+  },
+  {
+   "name": "x_sequence_sm89_off",
+   "entry": "bindings/entry/entry__mojolearn_x_sequence.mojo",
+   "target": "linux x86-64-v3 + sm_89 (NVIDIA Ada / L40S class)",
+   "host": "RunPod CPU pod 881iesii741ufl (32 vCPU, cgroup cpu.max 'max 100000', affinity 32; 2 arms in parallel, -j 16 each)",
+   "jobs": 16,
+   "exit": 0,
+   "seconds": 263,
+   "binary_sha256": "cea6d1f7565b840f81f51f9b771162bed5f46137140e0cb496d339c3981932cc",
+   "command": "pixi run mojo build -j 16 --emit shared-lib --target-cpu x86-64-v3 --target-accelerator sm_89 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings bindings/entry/entry__mojolearn_x_sequence.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/seq-predict-tiled-20261028/pod/leg_out/remote/leg_out/build-off.log",
+   "source_commit": "bdaa8554f8 (tracked tree shipped by tools/runpod_cpu_leg.sh, 0 dirty)"
+  }
+ ]
+}
