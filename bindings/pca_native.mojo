@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The native PCA owner: every public PCA operation is one call into pca_c.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -19,7 +20,7 @@ from bindings.pca_archive import pca_archive_save, pca_archive_load
 def _pca_admitted(model: PythonObject, loading: Bool, context: PythonObject) raises -> Bool:
     # PCA itself or an ordinary subclass of it (HostPCA, a user's class):
     # the class's MRO, read through type's own descriptor, holds PCA.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = model if loading else py_type(model)
     if py_type(cls) is not b.type:
         return False
@@ -36,7 +37,7 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if len(call) != 4:
             raise Error("TypeError: pca_native_call requires model, operation, arguments and connected context")
         var model = call[0]
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple:
             raise Error("TypeError: native PCA operation and argument tuple are required")
         var operation = String(call[1])

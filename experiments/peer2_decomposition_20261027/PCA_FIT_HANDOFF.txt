@@ -145,3 +145,15 @@ parser pending root's coordinated shared repair. This callback closure remains
 unresolved; do not label this operation Python-free/compliant before integrating
 that repair and its affected source/compile closure. The same caveat applies to
 large-int representation paths where CPython selects its Python implementation.
+
+
+Public context-envelope debt (coordinator review, before next freeze)
+pca_c and _pca_admitted now obtain the registered builtins module through
+native_loaded_module, eliminating runtime import callbacks on those public
+entry paths. A canonical immutable provider-context connection still must be
+admitted before classical_connect_numpy consumes the passed context. Current
+fit/query helpers validate their entry tables but do not complete that earlier
+public context envelope. The dedicated fit/query increment may compile while
+this remains explicit; it is not a complete public-runtime compliance claim.
+When the context is privately snapshotted, NotFitted transport must preserve
+that private context's actual exception class instead of re-reading args[3].
