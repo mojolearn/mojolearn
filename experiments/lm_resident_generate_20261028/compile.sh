@@ -15,7 +15,7 @@ git rev-parse HEAD > "$EV/source-commit.txt"
 overall=0
 for root in compile_causal_public compile_resident_session; do
   for arm in off on; do
-    defs=(-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU)
+    defs=(-D MOJOLEARN_NUMERIC_IDENTICAL=1 ${COLUMN_DEFS--D MOJOLEARN_COLUMN_CPU})
     [ "$arm" = on ] && defs+=(-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1)
     tag=$root-$arm
     t0=$(date +%s)
