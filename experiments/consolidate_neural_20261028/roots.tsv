@@ -44,3 +44,5 @@ gfx942	mamba-off	lib	bindings/entry/entry__mojolearn_mamba.mojo
 gfx942	mamba-bwd_folds	lib	bindings/entry/entry__mojolearn_mamba.mojo	-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1
 gfx942	training-off	lib	bindings/entry/entry__mojolearn_training.mojo	
 gfx942	training-bwd_folds	lib	bindings/entry/entry__mojolearn_training.mojo	-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1
+sm_89x	resident_session-off	lib	experiments/lm_resident_generate_20261028/compile_resident_session.mojo	
+sm_89x	resident_session-resident	lib	experiments/lm_resident_generate_20261028/compile_resident_session.mojo	-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1

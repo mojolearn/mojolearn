@@ -56,7 +56,7 @@ root() { # tag kind entry defines...
 }
 export -f root
 # no trailing blank on a define-off line: xargs -L treats a trailing blank as a line continuation
-awk -F'\t' -v s="$SET" '$1==s {d=$5; if (d == "") printf "root %s %s %s\n", $2, $3, $4; else printf "root %s %s %s %s\n", $2, $3, $4, d}' experiments/consolidate_neural_20261028/roots.tsv > "$OUT/root_plan.txt"
+awk -F'\t' -v s="${ROWSET:-$SET}" '$1==s {d=$5; if (d == "") printf "root %s %s %s\n", $2, $3, $4; else printf "root %s %s %s %s\n", $2, $3, $4, d}' experiments/consolidate_neural_20261028/roots.tsv > "$OUT/root_plan.txt"
 xargs -P $PAR -L 1 bash -c '"$@"' _ < "$OUT/root_plan.txt"
 nr=$(wc -l < "$OUT/root_plan.txt"); okr=$(grep -c 'rc=0' "$OUT/roots.tsv" 2>/dev/null)
 echo "ROOTS set=$SET total=$nr ok=$okr" >> "$OUT/summary.txt"
