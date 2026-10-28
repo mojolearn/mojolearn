@@ -5,7 +5,8 @@
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.python import Python, PythonObject
 from bindings.native_torch_admission import native_torch_exact, native_torch_admit
-from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_get
+from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_get, py_setitem
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_add, prepared_key_same
 
 
 def _one_of(cls: PythonObject, types: PythonObject) raises -> Bool:
@@ -132,6 +133,9 @@ def _read_fields(operation: String) raises -> PythonObject:
     return PythonObject(None)
 
 
+comptime _SEQUENTIAL_ADMIT_SLOT = "sequential_admit_v1"
+
+
 def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises:
     var b = mods.module("builtins")
     if operation == "load_checkpoint":
@@ -146,7 +150,34 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
         var names = _read_fields(operation)
         if names is None:
             names = context["model_fields"]
-        for k in range(len(names)):  # driver-loop: over model metadata and native buffer owners used by execution
+        # Prepared admission: the model's fields are admitted once and again
+        # only when one of them, or any container item within the admitted
+        # depth, changed identity (fit, set_params, load). Arguments are
+        # admitted on every call.
+        var key = b.list()
+        _ = py_call(key.append, context)
+        _ = py_call(key.append, names)
+        for k in range(len(names)):  # driver-loop: over model fields read by this operation, identity only
+            _ = py_call(key.append, PythonObject(py_contains(fields, names[k])))
             if py_contains(fields, names[k]):
-                sequential_admit_value(mods, fields[names[k]], context)
+                prepared_key_add(mods, key, fields[names[k]], 0, 65)
+        var cache = prepared_get(mods, _SEQUENTIAL_ADMIT_SLOT, model)
+        var seen = PythonObject(None) if cache is None else py_get(cache, PythonObject(operation))
+        if seen is None or not prepared_key_same(seen, key):
+            for k in range(len(names)):  # driver-loop: over model metadata and native buffer owners used by execution
+                if py_contains(fields, names[k]):
+                    sequential_admit_value(mods, fields[names[k]], context)
+            # A defaultdict's factory is an attribute, not an item: such a
+            # model is admitted on every call.
+            var factory_class = py_get(context, "defaultdict_class")
+            var stable = True
+            for k in range(len(key)):  # small-loop(key: admitted field objects): identity type check only
+                if factory_class is not None and py_type(key[k]) is factory_class:
+                    stable = False
+                    break
+            if stable:
+                if cache is None:
+                    cache = b.dict()
+                py_setitem(cache, PythonObject(operation), key)
+                prepared_put(mods, _SEQUENTIAL_ADMIT_SLOT, model, cache)
     sequential_admit_value(mods, args, context)

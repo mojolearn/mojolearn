@@ -93,22 +93,23 @@ def prepared_drop(mut mods: NativeModules, slot: String, owner: PythonObject) ra
     _ = py_call(table.pop, _prepared_id(owner), PythonObject(None))
 
 
-def prepared_key_add(mut mods: NativeModules, key: PythonObject, value: PythonObject, depth: Int = 0) raises:
-    """Append `value` and, for exact list/tuple/dict containers, their items."""
+def prepared_key_add(mut mods: NativeModules, key: PythonObject, value: PythonObject, depth: Int = 0, limit: Int = 4) raises:
+    """Append `value` and, for exact list/tuple/dict containers, their items
+    (to `limit` levels; deeper containers are compared by identity only)."""
     _ = py_call(key.append, value)
-    if depth >= 4:
+    if depth >= limit:
         return
     var bi = mods.module("builtins")
     var cls = py_type(value)
     if cls is bi.list or cls is bi.tuple:
         for i in range(len(value)):  # small-loop(value: retained container items): identity only, no hooks
-            prepared_key_add(mods, key, value[i], depth + 1)
+            prepared_key_add(mods, key, value[i], depth + 1, limit)
     elif cls is bi.dict:
         # items() of an exact dict never hashes or compares keys.
         var items = py_call(bi.list, py_call(value.items))
         for i in range(len(items)):  # small-loop(items: retained mapping items): identity only, no hooks
             _ = py_call(key.append, items[i][0])
-            prepared_key_add(mods, key, items[i][1], depth + 1)
+            prepared_key_add(mods, key, items[i][1], depth + 1, limit)
 
 
 def prepared_key_fields(mut mods: NativeModules, key: PythonObject, fields: PythonObject, skip: List[String]) raises:
