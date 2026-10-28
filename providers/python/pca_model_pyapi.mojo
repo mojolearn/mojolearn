@@ -128,17 +128,22 @@ def pca_query_entries(fields: PythonObject, context: PythonObject) raises -> Pyt
     var names = Python.tuple("estimators_vendor", "estimators_numeric_mode", "pca_transform", "inverse_transform",
                              "pca_whiten_transform", "pca_whiten_inverse_transform")
     var builtin_type = py_type(native_loaded_module("builtins").len)
-    var module_type = py_type(native_loaded_module("sys"))
     for index in range(6):  # small-loop(all consumed compiled entries, before either reader executes)
         var entry = py_get(entries, names[index])
         if index >= 4 and entry is None:
             # Missing or explicitly None whitening exports keep the existing
             # optional-pair refusal at pca_whiten_entries when whitening runs.
             continue
-        if entry is None or py_type(entry) is not builtin_type or entry is not connected[index]:
+        var registration = connected[index]
+        if py_type(registration) is not py_type(Python.tuple()) or len(registration) != 3:
+            raise Error("TypeError: PCA query requires its import-connected entry record")
+        if entry is None or py_type(entry) is not builtin_type or entry is not registration[0]:
             raise Error("TypeError: PCA query requires its connected compiled entry " + String(names[index]))
-        if py_type(entry.__self__) is not module_type or String(entry.__name__) != String(names[index]):
-            raise Error("TypeError: PCA query requires a compiled module entry " + String(names[index]))
+        # Preserve the exact native function's import-time owner/name. Some
+        # legitimate bindings may use None owners or exported aliases; neither
+        # requires the universal ModuleType/export-key assumptions.
+        if entry.__self__ is not registration[1] or py_type(registration[2]) is not py_type(PythonObject("")) or String(entry.__name__) != String(registration[2]):
+            raise Error("TypeError: PCA query compiled entry metadata changed after import")
     if String(py_call(entries["estimators_vendor"])) != String(context["vendor"]):
         raise Error("RuntimeError: PCA native vendor differs from selected execution")
     if Int(py=py_call(entries["estimators_numeric_mode"])) != (1 if String(mode) == "identical" else 0):
