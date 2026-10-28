@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public model attribute lookup. Only connected function/native
 # descriptors may bind; arbitrary Python properties/hooks are never called.
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same, prepared_class_stamp
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -54,6 +55,24 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     var b = native_loaded_module("builtins")
     var cls = model if py_type(model) is b.type else py_type(model)
     var plan = _public_plan(model, context)
+    # Prepared class admission: the ancestry, hook, finalizer and dictionary
+    # descriptor checks run on first use per class and again whenever the
+    # class stamp changes; instance keys are admitted on every call.
+    var mods = NativeModules()
+    var stamp = prepared_class_stamp(mods, cls, Python.list(plan, py_get(context, "host_archive_finalizer_descriptor"),
+                                                            py_get(context, "host_archive_peer_finalizer_descriptor")))
+    var admitted = prepared_get(mods, _LAYOUT_CLASS_SLOT, cls)
+    if admitted is None or not prepared_key_same(admitted, stamp):
+        _classical_check_class(model, context, cls, plan)
+        prepared_put(mods, _LAYOUT_CLASS_SLOT, cls, stamp)
+    _classical_check_instance(model, context, cls, plan)
+
+
+comptime _LAYOUT_CLASS_SLOT = "classical_layout_class_v1"
+
+
+def _classical_check_class(model: PythonObject, context: PythonObject, cls: PythonObject, plan: PythonObject) raises:
+    var b = native_loaded_module("builtins")
     var mro = _type_mro(cls)
     var connected = plan["mro"]
     if len(mro) != len(connected):
@@ -91,6 +110,10 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
                 found_fields = True
     if not found_fields:
         raise Error("TypeError: native public model dictionary descriptor is missing")
+
+
+def _classical_check_instance(model: PythonObject, context: PythonObject, cls: PythonObject, plan: PythonObject) raises:
+    var b = native_loaded_module("builtins")
     if py_type(model) is not b.type:
         var fields = py_call(plan["fields_get"], model, cls)
         var keys = py_call(py_type(Python.list()), fields.keys())

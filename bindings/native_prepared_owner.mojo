@@ -138,3 +138,28 @@ def prepared_key_same(a: PythonObject, b: PythonObject) raises -> Bool:
         if a[i] is not b[i]:
             return False
     return True
+
+
+def prepared_class_stamp(mut mods: NativeModules, cls: PythonObject, extras: PythonObject) raises -> PythonObject:
+    """Identity stamp of a class admission: `extras` (the admission's own
+    inputs), the ancestry tuple, and every key and value of each mutable
+    ancestry row (immutable builtin rows cannot change). A namespace edit,
+    insertion or removal on any mutable row changes it."""
+    var bi = mods.module("builtins")
+    ref cpy = Python().cpython()
+    var stamp = py_call(bi.list, extras)
+    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
+    _ = py_call(stamp.append, ancestry)
+    var dict_get = bi.type.__dict__["__dict__"].__get__
+    for i in range(len(ancestry)):  # small-loop(ancestry: class rows): identity stamp of mutable rows
+        var row = ancestry[i]
+        _ = py_call(stamp.append, row)
+        # Py_TPFLAGS_IMMUTABLETYPE (1 << 8): attributes cannot be set.
+        var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(row._obj_ptr)
+        if (flags & UInt64(1 << 8)) != 0:
+            continue
+        var items = py_call(bi.list, py_call(py_call(dict_get, row).items))
+        for k in range(len(items)):  # small-loop(items: one class namespace): identity only, no hooks
+            _ = py_call(stamp.append, items[k][0])
+            _ = py_call(stamp.append, items[k][1])
+    return stamp
