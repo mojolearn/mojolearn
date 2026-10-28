@@ -109,7 +109,7 @@ struct NativeGenerationModel(Movable):
         self.calls[op] += 1
         _ = self.primitive.call(op, a, p, f)
 
-    def forward(mut self, ids: Int, length: Int, step: Bool = False) raises -> List[Float32]:
+    def forward(mut self, ids: Int, length: Int) raises -> List[Float32]:
         # These checks precede execution/failure invalidation, matching _state.
         if length < 0 or self.position < 0:
             raise Error("CausalLM: negative sequence position")
@@ -146,13 +146,9 @@ struct NativeGenerationModel(Movable):
                     parameters[8] = self.layers[i].cached
                 elif kind == 2:
                     parameters[3] = self.layers[i].cached
-                if kind != 0 and step:
-                    operation += 1
-                    var decode = List[Int]()
-                    for index in range(len(parameters)):  # small-loop(Mamba decode omits the length word)
-                        if index != 1:
-                            decode.append(parameters[index])
-                    parameters = decode^
+                # Local _run_snapshot always uses forward(step=False), including
+                # one-token continuations. remote_step selects only distributed
+                # execution; changing to decode here would change the algorithm.
                 var report = List[Float32](length=self.layers[i].report_size, fill=0)
                 if kind == 2:
                     addresses[15] = Int(report.unsafe_ptr())
@@ -216,7 +212,7 @@ def native_generation_read(
     # The entire token/layer loop owns native state. Sampling is the exact
     # existing native policy; partial counters remain in progress on failure.
     while progress.wrote < count and progress.produced < maximum and not causal_lm_rows_done(finished):  # driver-loop: native autoregressive tokens
-        var logits = model.forward(Int(progress.current.unsafe_ptr()), progress.length, progress.produced != 0)
+        var logits = model.forward(Int(progress.current.unsafe_ptr()), progress.length)
         var next = List[Int32](length=model.batch, fill=0)
         causal_lm_pick_step(
             MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(logits.unsafe_ptr())),

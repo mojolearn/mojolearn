@@ -24,6 +24,13 @@ Extends the native generation engine to Mamba1/2 on CPU/GPU, including state des
 
 ## Evidence and validation limits
 
+Continuation correction (2026-10-27): removed the local decode selection and
+the engine's `step` argument. Both direct local execution and streamed token
+continuations retain the original forward operation and its length parameter.
+The eight focused generation source checks pass; this correction remains
+uncompiled and has no runtime or numerical qualification yet. Full check log:
+`/Users/andrewhendel/mojolearn-evidence/provider-migration-resume-20261027/mamba-route-source-tests.log`.
+
 All full logs retained under `/Users/andrewhendel/mojolearn-evidence/neural-provider-completion-20261027/`.
 
 - `packed-provider-source-tests.log`: 32 passed.
