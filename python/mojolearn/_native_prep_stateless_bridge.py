@@ -52,4 +52,10 @@ def connect(kinds):
                    scaler_bindings=connected, scaler_host_contexts={},
                    maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, prep_stateless_kinds=dict(kinds))
+    # glue: immutable identities of the compiled exports actually selected
+    # above; no assumed function name/module-owner convention is required.
+    context["prep_stateless_entry_identities"] = tuple(
+        (mode, tuple(table.items()) if type(table) is dict else None)
+        for mode, table in connected.items()
+    )
     return call, context

@@ -106,12 +106,32 @@ def _native_entries(mode: PythonObject, context: PythonObject) raises -> PythonO
             raise Error("TypeError: native Normalizer entry keys require exact strings")
     for i in range(len(keys)):  # driver-loop: retain compiled entries once before any entry executes
         py_setitem(captured, keys[i], entries[keys[i]])
+    var pins = context["prep_stateless_entry_identities"]
+    if py_type(pins) is not b.tuple:
+        raise Error("TypeError: native Normalizer requires its immutable import-time entry identities")
+    var selected = PythonObject(None)
+    for i in range(len(pins)):  # small-loop(ABI: connected numeric modes)
+        var record = pins[i]
+        if py_type(record) is not b.tuple or len(record) != 2 or py_type(record[0]) is not b.str:
+            raise Error("TypeError: native Normalizer binding identity metadata is invalid")
+        if String(record[0]) == String(mode):
+            selected = record[1]
+    if py_type(selected) is not b.tuple:
+        raise Error("TypeError: native Normalizer requires the originally connected compiled entries")
+    var expected_entries = Python.dict()
+    for i in range(len(selected)):  # driver-loop: immutable imported entry references, never name/module inference
+        var pair = selected[i]
+        if py_type(pair) is not b.tuple or len(pair) != 2 or py_type(pair[0]) is not b.str:
+            raise Error("TypeError: native Normalizer entry identity metadata is invalid")
+        py_setitem(expected_entries, pair[0], pair[1])
     var names = Python.tuple("preprocessing_numeric_mode", "x_prep_numeric_mode", "x_prep_run",
         "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges", "x_prep_dev_put", "x_prep_dev_free",
-        "x_prep_dev_live", "x_prep_dev_take_rows")
+        "x_prep_dev_live", "x_prep_dev_take_rows", "arena_binding", "arena_binding_id")
     for i in range(len(names)):  # small-loop(ABI: fixed connected numerical entry points)
         var entry = captured[names[i]] if i < 3 else py_get(captured, names[i])
-        if entry is not None and py_type(entry) is not py_type(b.len):
+        if entry is not py_get(expected_entries, names[i]):
+            raise Error("TypeError: native Normalizer compiled entry identity changed after import")
+        if i < 10 and entry is not None and py_type(entry) is not py_type(b.len):
             raise Error("TypeError: native Normalizer execution requires compiled binding entries; Python callbacks cannot execute")
     if py_type(captured["arena_binding_id"]) is not b.int:
         raise Error("TypeError: native Normalizer arena binding identity must remain a native integer")
