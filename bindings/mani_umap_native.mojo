@@ -17,16 +17,18 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.pca_exact import pca_copied
 from bindings.manifold_settings_native import ManifoldSettings
+from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from bindings.classical_validate import classical_view
 from bindings.umap_parameters_native import umap_parameters_fields, umap_scalar as _umap_scalar, umap_integer as _umap_integer
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_is_str, family_type_name, family_call, family_array,
-    family_as_f32, family_field, family_shape_repr,
+    FAMILY_F32P, family_repr, family_is_str, family_call, family_array,
+    family_f32_snapshot, family_field,
 )
 from bindings.spectral_umap_routes import spectral_umap_route, spectral_umap_entry as family_entry
 from core.family_cast_impl import family_all_finite_f32
 from core.mani_impl import mani_same_words
 from bindings.mani_kit import (
-    MKit, mk_from_input, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,
+    MKit, mk_from_snapshot, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,
     mk_store_ptr, mk_at, OP_SUB, OP_SCALE, OP_ADDS, OP_DIV, OP_MUL, OP_ABS, OP_ADD,
 )
 
@@ -83,44 +85,36 @@ def _umap_concat(a: PythonObject, b: PythonObject) raises -> PythonObject:
     return out
 
 
-def _umap_copy_f32(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    """A new owned C-order float32 Array holding a copy of `value`."""
-    var out = family_array(py_call(Python.import_module("builtins").tuple, value.shape), "<f4", context)
-    var count = Int(py=value.size)
+def _umap_copy(shape: PythonObject, address: Int, count: Int, context: PythonObject) raises -> PythonObject:
+    """An owned float32 copy using already-captured shape/address/count."""
+    var output = family_array(shape, "<f4", context)
     if count > 0:
-        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
-               src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count=count)
-        _ = out  # keep the Python object alive through the native call above
-    return out
+        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(output))),
+               src=FAMILY_F32P(unsafe_from_address=address), count=count)
+    return output
 
 
-def _umap_same_bytes(a: PythonObject, b: PythonObject, count: Int) raises -> Bool:
-    """Whether two C-order float32 arrays hold the same bytes."""
-    var pa = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(a)))
-    var pb = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(b)))
-    var _keep_ret_pa_r214 = mani_same_words(pa, pb, count)
-    _ = pa  # keep the Python object alive through the native call above
-    var _keep_ret_pa = _keep_ret_pa_r214^
-    _ = pa  # keep the Python object alive through the native call above
-    return _keep_ret_pa^
+def _umap_finite(address: Int, count: Int) -> Bool:
+    return count == 0 or family_all_finite_f32(FAMILY_F32P(unsafe_from_address=address), count)
 
 
-def _umap_finite(value: PythonObject) raises -> Bool:
-    """`all_finite(value)` of a C-order float32 array."""
-    var count = Int(py=value.size)
-    if count == 0:
-        return True
-    return family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count)
+def _umap_state(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
+    var view = classical_view(value, context, name)
+    var shape = array_shape_once(view, context)
+    var snapshot = array_metadata_once(view, shape^, name, context)
+    if len(snapshot.shape) != 2 or not snapshot.f32_c():
+        raise Error("UMAP fitted " + name + " must be a C-order float32 matrix")
+    return snapshot^
 
 
-def _umap_initial(settings: ManifoldSettings, x: PythonObject, n: Int, nc: Int, seed: PythonObject,
-                  context: PythonObject) raises -> PythonObject:
+def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int, seed: PythonObject,
+                  context: PythonObject) raises -> Optional[ArrayMetadata]:
     """`_initial(x, n, nc, seed)`: None for 'spectral'; 'random' uniform(-10,
     10) on the Philox stream; 'pca' umap-learn's PCA of the data scaled to
     max |coordinate| 10 plus N(0, 1e-4) noise; an array as given."""
     var init = family_field(settings.values, "init")
     if family_is_str(init) and String(py=init) == "spectral":
-        return PythonObject(None)
+        return Optional[ArrayMetadata]()
     if family_is_str(init):
         # `_Kit("identical")`, and `_host_kit()` (the default mode) for the
         # host moves and `_svd_flip_v`
@@ -131,9 +125,9 @@ def _umap_initial(settings: ManifoldSettings, x: PythonObject, n: Int, nc: Int, 
         if String(py=init) == "random":
             var u = k.rand(n, nc, seed, 90, 0)
             var scaled = k.ew1(OP_SCALE, u, 20.0)
-            return mk_out2(k.ew1(OP_ADDS, scaled, -10.0), context)
+            return Optional(family_f32_snapshot(mk_out2(k.ew1(OP_ADDS, scaled, -10.0), context), 2, "init", context))
         # 'pca'
-        var m = mk_from_input(x, "X", context)
+        var m = mk_from_snapshot(x, "X", context)
         if nc > min(mk_r(m), mk_c(m)):
             raise Error("UMAP init='pca' needs n_components <= min(n_samples, n_features)")
         # k.center(M, k.colmean(M))
@@ -179,14 +173,14 @@ def _umap_initial(settings: ManifoldSettings, x: PythonObject, n: Int, nc: Int, 
             raise Error("UMAP init='pca' found a zero spread")
         coords = k.ew1(OP_SCALE, coords, 10.0 / peak)
         var noise = k.ew1(OP_SCALE, k.rand(n, nc, seed, 91, 1), 1e-4)
-        return mk_out2(k.ew2(OP_ADD, coords, noise), context)
-    var a = family_as_f32(init, 2, "init", context)
-    if Int(py=a.shape[0]) != n or Int(py=a.shape[1]) != nc:
-        raise Error("UMAP init array has shape " + family_shape_repr(a) + "; (" + String(n) + ", " + String(nc)
+        return Optional(family_f32_snapshot(mk_out2(k.ew2(OP_ADD, coords, noise), context), 2, "init", context))
+    var a = family_f32_snapshot(init, 2, "init", context)
+    if a.source.rows != n or a.source.cols != nc:
+        raise Error("UMAP init array has shape " + family_repr(a.python_shape()) + "; (" + String(n) + ", " + String(nc)
                     + ") is needed")
-    if not _umap_finite(a):
+    if not _umap_finite(a.source.addr, a.count):
         raise Error("UMAP init array must be finite")
-    return a
+    return Optional(a)
 
 
 def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -239,20 +233,15 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
             else:
                 tp[i] = Float32(Float64(py=code[vals[i]]))
                 _ = t  # keep the Python object alive through the native call above
-        return Python.tuple(PythonObject(1), PythonObject(1), t, tk_kept, PythonObject(w))
+        return Python.tuple(PythonObject(1), PythonObject(1), t, tk_kept, PythonObject(w), t, PythonObject(Int(tp)))
     if Bool(py=py_call(op.contains, Python.tuple(PythonObject("l2"), PythonObject("euclidean")), tm)):
-        var t = family_as_f32(y, -1, "y", context)
-        var nd = Int(py=t.ndim)
-        var dims = 1
-        var rows = -1
-        if nd == 1:
-            rows = Int(py=t.shape[0])
-        elif nd == 2:
-            rows = Int(py=t.shape[0])
-            dims = Int(py=t.shape[1])
-        if (nd != 1 and nd != 2) or rows != n or not _umap_finite(t):
+        var target = family_f32_snapshot(y, -1, "y", context)
+        var nd = len(target.shape)
+        var dims = 1 if nd == 1 else target.source.cols
+        if (nd != 1 and nd != 2) or target.source.rows != n or not _umap_finite(target.source.addr, target.count):
             raise Error("UMAP continuous y must be finite with one row per sample")
-        return Python.tuple(PythonObject(2), PythonObject(dims), t, tk_kept, PythonObject(w))
+        return Python.tuple(PythonObject(2), PythonObject(dims), target.keep, tk_kept, PythonObject(w),
+                            target.owner, PythonObject(target.source.addr))
     raise Error("NotImplementedError: UMAP target_metric=" + family_repr(tm) + " is not implemented; "
                 + "'categorical' and 'l2' / 'euclidean' are")
 
@@ -266,32 +255,42 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var validated = umap_parameters_fields(settings.values, context)
     var config = validated[0]
     var extras = validated[1]
-    var x = family_as_f32(source, 2, "X", context)
-    var copied = pca_copied(source, context)
-    if not _umap_finite(x):
+    var x = family_f32_snapshot(source, 2, "X", context)
+    var b = Python.import_module("builtins")
+    var source_type = py_type(source)
+    var copied = True
+    if source_type is py_get(context, "ndarray") or source_type is context["array_class"]:
+        copied = x.copied
+    elif source_type is b.memoryview or source_type is context["array_type"] or source_type is b.bytearray:
+        # Remaining shared-provider debt: native buffer materialization does
+        # not yet carry the original input_copied provenance in ArrayMetadata.
+        # Preserve this public flag until the provider can capture it once.
+        copied = pca_copied(source, context)
+    if not _umap_finite(x.source.addr, x.count):
         raise Error("UMAP input coordinates must be finite")
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
+    var n = x.source.rows
+    var d = x.source.cols
     var nc = Int(py=config[1])
     if Bool(py=py_call(Python.import_module("operator").gt, config[0], PythonObject(n))):
         raise Error("UMAP n_neighbors exceeds n_samples")
     var initial = _umap_initial(settings, x, n, nc, config[7], context)
-    if initial is None and n < 2 * nc + 4:
+    if not initial and n < 2 * nc + 4:
         raise Error("UMAP has too few samples for spectral initialization")
     var target = PythonObject(None)
     if not (y is None):
         target = _umap_target(settings, y, n, context)
     var embedding = family_array(Python.tuple(n, nc), "<f4", context)
+    var embedding_address = Int(py=classical_address(embedding))
     var mode = _umap_mode(settings, context)
     _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with requested mode", context)
-    var legacy = initial is None and target is None and _umap_default_extras(extras) and (nc == 2 or nc == 3)
+    var legacy = not initial and target is None and _umap_default_extras(extras) and (nc == 2 or nc == 3)
     var columns: PythonObject
     if legacy:
         # Preserve the legacy ABI for default controls and existing wheels.
         var native_config = _umap_head(config, 8) if _umap_legacy_tail(config) else config
         var params = _umap_concat(Python.list(PythonObject(n), PythonObject(d)), native_config)
-        columns = family_call(family_entry(binding, "umap_fit_transform", context), classical_address(x),
-                              classical_address(embedding), params)
+        columns = family_call(family_entry(binding, "umap_fit_transform", context), PythonObject(x.source.addr),
+                              PythonObject(embedding_address), params)
         _ = x  # keep the Python object alive through the native call above
         _ = embedding  # keep the Python object alive through the native call above
     else:
@@ -306,9 +305,9 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
             tarr = target[2]
             tk = target[3]
             tw = target[4]
-        var addrs = Python.list(classical_address(x), classical_address(embedding),
-                                PythonObject(0) if initial is None else classical_address(initial),
-                                PythonObject(0) if tarr is None else classical_address(tarr))
+        var addrs = Python.list(PythonObject(x.source.addr), PythonObject(embedding_address),
+                                PythonObject(0) if not initial else PythonObject(initial.value().source.addr),
+                                PythonObject(0) if target is None else target[6])
         _ = embedding  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
         _ = initial  # keep the Python object alive through the native call above
@@ -322,12 +321,12 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         _ = x  # keep the Python object alive through the native call above
     _ = initial^
     _ = target^
-    if Bool(py=py_call(Python.import_module("operator").ne, columns, PythonObject(nc))) or not _umap_finite(embedding):
+    if Bool(py=py_call(Python.import_module("operator").ne, columns, PythonObject(nc))) or not _umap_finite(embedding_address, n * nc):
         raise Error("RuntimeError: UMAP returned an invalid embedding")
     # Prepare all retained state before publishing a successful fit. Copies
     # prevent caller edits of X or embedding_ from changing transform's model.
-    var training = _umap_copy_f32(x, context)
-    var frozen = _umap_copy_f32(embedding, context)
+    var training = _umap_copy(x.python_shape(), x.source.addr, x.count, context)
+    var frozen = _umap_copy(Python.tuple(n, nc), embedding_address, n * nc, context)
     _ = x^
     py_setitem(settings.fields, "embedding_", embedding)
     py_setitem(settings.fields, "n_features_in_", PythonObject(d))
@@ -364,32 +363,35 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     # The fitted route is selected only after the live-mode/refit refusal,
     # so changing a fitted identical model to unavailable fast still says refit.
     var binding = spectral_umap_route(context, "metrics", fitted_mode)
-    var x = family_as_f32(args[0], 2, "X", context)
-    var training = family_field(settings.values, "_transform_training")
-    var fitted_embedding = family_field(settings.values, "_transform_embedding")
-    var nq = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    var nt = Int(py=training.shape[0])
-    if d != Int(py=training.shape[1]):
+    var x = family_f32_snapshot(args[0], 2, "X", context)
+    var training = _umap_state(family_field(settings.values, "_transform_training"), "training", context)
+    var fitted_embedding = _umap_state(family_field(settings.values, "_transform_embedding"), "embedding", context)
+    var nq = x.source.rows
+    var d = x.source.cols
+    var nt = training.source.rows
+    var nc = Int(py=config[1])
+    if fitted_embedding.source.rows != nt or fitted_embedding.source.cols != nc:
+        raise Error("UMAP fitted embedding shape differs from fitted configuration")
+    if d != training.source.cols:
         raise Error("UMAP transform feature count differs from fitted data")
-    if not _umap_finite(x):
+    if not _umap_finite(x.source.addr, x.count):
         raise Error("UMAP transform input coordinates must be finite")
     # the C-order bytes compared (`x.tobytes() == training.tobytes()`)
     if nq == nt and nq * d > 0:
-        if _umap_same_bytes(x, training, nq * d):
-            return _umap_copy_f32(fitted_embedding, context)
+        if mani_same_words(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=x.source.addr), MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=training.source.addr), nq * d):
+            return _umap_copy(fitted_embedding.python_shape(), fitted_embedding.source.addr, fitted_embedding.count, context)
     elif nq == nt:
-        return _umap_copy_f32(fitted_embedding, context)
+        return _umap_copy(fitted_embedding.python_shape(), fitted_embedding.source.addr, fitted_embedding.count, context)
     _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with fitted mode", context)
-    var nc = Int(py=config[1])
     var output = family_array(Python.tuple(nq, nc), "<f4", context)
+    var output_address = Int(py=classical_address(output))
     var native_config = _umap_head(config, 8) if _umap_legacy_tail(config) else config
     if not _umap_default_extras(extras):
         native_config = _umap_concat(config, extras)
     var params = _umap_concat(Python.list(PythonObject(nt), PythonObject(nq), PythonObject(d)), native_config)
     var columns = family_call(family_entry(binding, "umap_transform", context),
-                              Python.list(classical_address(training), classical_address(fitted_embedding),
-                                          classical_address(x), classical_address(output)), params)
+                              Python.list(PythonObject(training.source.addr), PythonObject(fitted_embedding.source.addr),
+                                          PythonObject(x.source.addr), PythonObject(output_address)), params)
     _ = fitted_embedding  # keep the Python object alive through the native call above
     _ = training  # keep the Python object alive through the native call above
     _ = output  # keep the Python object alive through the native call above
@@ -397,7 +399,7 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     _ = x^
     _ = training^
     _ = fitted_embedding^
-    if Bool(py=py_call(op.ne, columns, PythonObject(nc))) or not _umap_finite(output):
+    if Bool(py=py_call(op.ne, columns, PythonObject(nc))) or not _umap_finite(output_address, nq * nc):
         raise Error("RuntimeError: UMAP transform returned an invalid embedding")
     return output
 
