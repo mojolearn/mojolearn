@@ -14,6 +14,7 @@ from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_arrays import classical_is_array
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
+from providers.python.array_metadata_pyapi import array_owner_once
 from bindings.classical_arrays import classical_wrap_array, _store_code, classical_address
 from bindings.family_common import family_isinstance, family_view
 from bindings.optimizer_public_door import (
@@ -424,9 +425,7 @@ struct LinAdmission(Movable):
             # the input Array's slots while native code releases the GIL cannot
             # free the captured address. Each slot is read once through its
             # import-pinned native descriptor rather than a mutable class hook.
-            self.owner = Python.tuple(py_call(slots["_store"], value, cls),
-                py_call(slots["_base"], value, cls), py_call(slots["_pin"], value, cls),
-                py_call(slots["_mv"], value, cls))
+            self.owner = array_owner_once(value, context)
             var address = py_call(slots["_addr"], value, cls)
             var item = py_call(slots["itemsize"], value, cls)
             var readonly = py_call(slots["_readonly"], value, cls)

@@ -116,6 +116,22 @@ def qualify():
         name, counts = vars(models[1])['_native_svc_dispatch']
         assert counts[5] == 1 and counts[7] == 1
         results.append(dict(estimator='SVR', kernel=kernel, status='passed'))
+    # These equivalent storage layouts exercise snapshot/cast/owner admission.
+    # Each model gets the same values; changing layout must not change bits.
+    for layout, data in [('fortran', np.asfortranarray(x)),
+                         ('negative_stride', x[:, ::-1]),
+                         ('double', x.astype('f8'))]:
+        contiguous = np.array(data, dtype='f4', order='C')
+        opts = dict(kernel='linear', gamma=.2, C=1.25, epsilon=.15, tol=1e-3,
+                    max_iter=64, nochange_steps=32, numeric_mode='identical')
+        y = (contiguous[:, 0] - np.float32(.25) * contiguous[:, 1]).astype('f4')
+        reference, candidate = SVR(**opts), SVR(**opts)
+        call(1, reference.fit, contiguous, y)
+        call(1, candidate.fit, data, y)
+        for attr in ('support_', 'support_vectors_', 'dual_coef_', 'intercept_', 'n_iter_'):
+            equal(getattr(reference, attr), getattr(candidate, attr), layout + '_' + attr)
+        equal(call(1, reference.predict, contiguous), call(1, candidate.predict, data), layout)
+        results.append(dict(estimator='SVR', layout=layout, status='passed'))
     return dict(status='passed', cases=results,
                 pending=['all kernels/label types/class weights', 'concurrent input mutation',
                          'CPU binding candidate', 'other SVM surfaces and families', 'performance', 'other targets'])

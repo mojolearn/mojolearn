@@ -85,7 +85,7 @@ def test_common_array_metadata_snapshot_retains_owner_and_native_shape():
     for field in ('value.shape', 'value.dtype', 'value.itemsize', 'value.strides'):
         assert source.count(field) == 1, field
     conversion = body(read('bindings/family_common.mojo'), 'family_f32_snapshot')
-    assert conversion.count('array_shape_once(view)') == 1
+    assert conversion.count('array_shape_once(view, context)') == 1
     assert 'family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind' in conversion
     assert 'snapshot.replace_f32(result, address)' in conversion
     source = read('bindings/kernel_methods_native.mojo')
