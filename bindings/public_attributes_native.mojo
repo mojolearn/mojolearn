@@ -124,8 +124,8 @@ def _availability_member(cls: PythonObject, name: PythonObject, missing: PythonO
 
 def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
                fields: PythonObject, plan: PythonObject, context: PythonObject) raises -> PythonObject:
-    # The only admitted prep rule is presence of transform. Never call the
-    # Python available_if descriptor, its check, or the wrapped method body.
+    # Admitted rules are presence of transform and LOF's novelty word. Never
+    # call the Python available_if descriptor, its check, or its wrapped body.
     var ancestry = _type_mro(py_type(member))
     if len(ancestry) != len(schema["mro"]):
         raise Error("TypeError: native availability descriptor ancestry changed")
@@ -150,7 +150,20 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
     if PythonObject(from_borrowed=code) is not schema["code"]:
         raise Error("TypeError: native availability predicate code changed")
     try:
-        _ = _lookup(model, PythonObject("transform"), fields, plan, context)
+        var condition = py_get(schema, "condition")
+        if condition is not None:
+            if py_type(condition) is not py_type(PythonObject("")):
+                raise Error("TypeError: native availability requires its connected condition")
+            var rule = String(condition)
+            if rule != "novelty" and rule != "not_novelty":
+                raise Error("TypeError: unknown native availability condition")
+            var novelty = _lookup(model, PythonObject("novelty"), fields, plan, context)
+            if py_type(novelty) is not py_type(PythonObject(True)) and py_type(novelty) is not py_type(PythonObject(0)):
+                raise Error("TypeError: novelty must be an exact native boolean or integer")
+            if Bool(py=novelty) != (rule == "novelty"):
+                raise Error("AttributeError: method unavailable for this novelty setting")
+        else:
+            _ = _lookup(model, PythonObject("transform"), fields, plan, context)
     except error:
         if String(error).startswith("AttributeError:"):
             var name = schema["attribute_name"]
