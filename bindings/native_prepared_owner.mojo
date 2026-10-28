@@ -56,7 +56,7 @@ def _prepared_table(mut mods: NativeModules, slot: String) raises -> PythonObjec
     return table
 
 
-def _prepared_id(value: PythonObject) -> PythonObject:
+def _prepared_id(value: PythonObject) raises -> PythonObject:
     return PythonObject(Int(value._obj_ptr))
 
 
