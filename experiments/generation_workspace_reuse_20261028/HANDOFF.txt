@@ -1,0 +1,48 @@
+Generation activation workspace reuse, 2026-10-28
+Branch: lane/generation-metadata-hoist-20261028
+Base: 423ed46cf065cfe05f85320c10cb08081a07a727
+
+Repeated work removed:
+NativeGenerationModel previously allocated a fresh hidden vector for embedding,
+one fresh output vector per layer and another vector for optional final norm,
+on every forward/token. It now owns two Float32 workspaces and ping-pongs their
+addresses between those same synchronous calls. Existing native descriptor
+vectors receive each selected address; no numerical call or order changed.
+
+Setup/reuse/invalidation:
+- Allocate each private buffer lazily at its original execution position, only
+  when needed. Retain it for the enclosing public operation, including subsequent
+  token forwards. Neither workspace aliases caller weights or recurrent state.
+- Reuse only an exactly matching element count. A changed prompt/decode extent
+  replaces the relevant storage. The next public operation gets fresh admission
+  and fresh workspaces; there is no persistent cache or new public invalidation.
+- Preserve fresh-list zero initialization before EVERY embedding, layer output
+  and norm call. New storage is constructed with fill=0; reused Float32 storage
+  uses native memset_zero. Do not assume complete kernel writes or skip zeroing.
+- Keep layer visitation, attempted/completed flags, report publication, alias
+  counters, deferred copy/writeback order and error boundaries unchanged. Swap
+  buffer roles only after successful layer call/writeback/counter publication.
+- Synchronous completion is the existing endpoint contract: prior code freed
+  each input vector after its consumer returned. Reuse adds no asynchronous
+  host-pointer lifetime assumption.
+
+Validation:
+Focused CausalLM public forward/generate Mac arm64 CPU compile passed, rc0,
+identical define, optimization level 0. See compile.json for exact command,
+binary hash, source hashes and scope. No runtime/performance/identity run.
+Final main/push guards belong to root serialized integration.
+
+Evidence: ~/mojolearn-evidence/generation-workspace-reuse-20261028/
+Complete compile output, binary, exit receipt and conservative tracked-Mojo
+source hash manifest are retained on the Mac. No rented box or watcher service.
+
+Limits:
+Two activation buffers remain owned until this public operation ends, including
+through head projection; this can retain one extra activation buffer beside
+logits compared with freeing the spare immediately. No peak-memory measurement
+or speedup claim is made. Buffers shrink to the exact next used extent rather
+than retaining a prompt-sized capacity during decode. Logits still allocate per
+forward because their owned result leaves the model. Mamba2 reports still use
+separate per-call storage so a later failure cannot overwrite the last completed
+report. Token/sample scratch and foreign-buffer compatibility copies remain.
+Boundary Python snapshots/publication and specialized routes remain transitional.

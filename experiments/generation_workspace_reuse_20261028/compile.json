@@ -1,0 +1,22 @@
+{
+  "base_commit": "423ed46cf065cfe05f85320c10cb08081a07a727",
+  "compile_exit": 0,
+  "scope": "CausalLM public forward/generate CPU source closure, including activation workspace resize, zeroing and ping-pong reuse; compile only",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/generation-metadata-hoist-20261028 -I /Users/andrewhendel/mojolearn-wt/generation-metadata-hoist-20261028/bindings /Users/andrewhendel/mojolearn-wt/generation-metadata-hoist-20261028/experiments/native_owner_hot_20261028/compile_engine.mojo -o /Users/andrewhendel/mojolearn-evidence/generation-workspace-reuse-20261028/compile_engine",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "compile_slots": 4,
+  "compiler_workers": "compiler default; no explicit -j; CPU saturation not measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/generation-workspace-reuse-20261028/compile_engine",
+  "binary_sha256": "2518eb1a87d03f0fccd7808818b4c1ba614e8c8d52b3308d563d3511eccf7293",
+  "log": "/Users/andrewhendel/mojolearn-evidence/generation-workspace-reuse-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/generation-workspace-reuse-20261028/source-sha256.json",
+  "source_manifest_scope": "SHA256 of all tracked Mojo sources plus Pixi manifest/lock: conservative source-closure superset, not a claim that all sources compiled",
+  "modified_source_sha256": {
+    "transformer/native_generation_engine.mojo": "c2235430faef8ed8d2d3e49d564beabb4305c9cea0d89195510516d0bbfa3f2d"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_verified": false,
+  "rented_boxes": []
+}

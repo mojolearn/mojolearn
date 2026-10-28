@@ -2,9 +2,22 @@
 # Operation-local nonresident fp32 Transformer execution. Numerical operations
 # use the existing sibling ABI entries in their original order. No provider,
 # Python state, Python allocator, or callback is reachable from this module.
+from std.memory import memset_zero
 from core.native_execution import NativeExecutionEndpoint
 from core.borrowed_buffer import BorrowedBufferLayout
 from transformer.causal_lm_public_impl import causal_lm_pick_step, causal_lm_rows_done
+
+
+def _generation_zero_workspace(mut storage: List[Float32], count: Int) -> Int:
+    # Native calls borrow, and finish consuming, these host buffers before
+    # returning. Reuse only an exactly matching extent; a prompt/decode shape
+    # transition replaces storage. Keep the former fresh-list zero semantics,
+    # including for kernels that write only part of their output on failure.
+    if len(storage) != count:
+        storage = List[Float32](length=count, fill=0)
+    elif count > 0:
+        memset_zero(storage.unsafe_ptr(), count)
+    return Int(storage.unsafe_ptr())
 
 
 struct NativeGenerationLayer(Movable):
@@ -77,6 +90,8 @@ struct NativeGenerationModel(Movable):
     var state_counters: List[Int]
     var embedding_failure: String
     var head_failure: String
+    var hidden_workspace: List[Float32]
+    var output_workspace: List[Float32]
 
     def __init__(out self, primitive: NativeExecutionEndpoint, embedding: Int, norm: Int, head: Int,
                  norm_eps: Float64, batch: Int, width: Int, vocab: Int, position: Int,
@@ -104,6 +119,8 @@ struct NativeGenerationModel(Movable):
         self.state_counters = List[Int]()
         self.embedding_failure = String("")
         self.head_failure = String("")
+        self.hidden_workspace = List[Float32]()
+        self.output_workspace = List[Float32]()
 
     def primitive_call(mut self, op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises:
         self.calls[op] += 1
@@ -123,8 +140,13 @@ struct NativeGenerationModel(Movable):
                 raise Error(self.embedding_failure)
             for i in range(len(self.embedding_refresh)):  # driver-loop: admitted embedding copy descriptors
                 self.embedding_refresh[i].copy_to(self.embedding_targets[i])
-            var hidden = List[Float32](length=rows * self.width, fill=0)
-            self.primitive_call(0, [Int(hidden.unsafe_ptr()), self.embedding, ids], [rows, self.vocab, self.width], [])
+            var count = rows * self.width
+            # One operation owns two disjoint activation buffers. Ping-pong
+            # through every layer and the final norm, then reuse at the next
+            # token of the same extent. No caller/state buffer enters this pair.
+            var hidden = _generation_zero_workspace(self.hidden_workspace, count)
+            var output_slot = 1
+            self.primitive_call(0, [hidden, self.embedding, ids], [rows, self.vocab, self.width], [])
             for i in range(len(self.layers)):  # driver-loop: ordered native layer descriptors
                 ref layer = self.layers[i]
                 layer.visited = True
@@ -132,13 +154,13 @@ struct NativeGenerationModel(Movable):
                     raise Error(layer.failure)
                 for j in range(len(layer.refresh_layouts)):  # driver-loop: ordered deferred weight/state byte copies
                     layer.refresh_layouts[j].copy_to(layer.refresh_addresses[j])
-                var next = List[Float32](length=rows * self.width, fill=0)
+                var next = _generation_zero_workspace(self.output_workspace, count) if output_slot == 1 else _generation_zero_workspace(self.hidden_workspace, count)
                 # Admission owns these vectors exclusively for this operation.
                 # Only token-dependent slots change; the synchronous endpoint
                 # consumes them before the next layer/token. Keep stable weights
                 # and launch words in place instead of copying every token.
-                layer.addresses[0] = Int(hidden.unsafe_ptr())
-                layer.addresses[layer.output_slot] = Int(next.unsafe_ptr())
+                layer.addresses[0] = hidden
+                layer.addresses[layer.output_slot] = next
                 layer.parameters[1] = length
                 if layer.state_index >= 0:
                     layer.cached = self.state_counters[layer.state_index]
@@ -164,22 +186,20 @@ struct NativeGenerationModel(Movable):
                     layer.writeback_layouts[j].copy_from(layer.writeback_addresses[j])
                 if layer.state_index >= 0:
                     self.state_counters[layer.state_index] = layer.cached
-                _ = hidden
-                hidden = next^
+                hidden = next
+                output_slot = 1 - output_slot
             if self.head_failure.byte_length() != 0:
                 raise Error(self.head_failure)
             for i in range(len(self.head_refresh)):  # driver-loop: preserve head snapshot copy before norm and projection
                 self.head_refresh[i].copy_to(self.head_targets[i])
             if self.norm != 0:
-                var normalized = List[Float32](length=rows * self.width, fill=0)
-                self.primitive_call(2, [Int(normalized.unsafe_ptr()), Int(hidden.unsafe_ptr()), self.norm],
+                var normalized = _generation_zero_workspace(self.output_workspace, count) if output_slot == 1 else _generation_zero_workspace(self.hidden_workspace, count)
+                self.primitive_call(2, [normalized, hidden, self.norm],
                                     [rows, self.width], [self.norm_eps])
-                _ = hidden
-                hidden = normalized^
+                hidden = normalized
             var logits = List[Float32](length=rows * self.vocab, fill=0)
-            self.primitive_call(4, [Int(logits.unsafe_ptr()), Int(hidden.unsafe_ptr()), self.head],
+            self.primitive_call(4, [Int(logits.unsafe_ptr()), hidden, self.head],
                                 [rows, self.vocab, self.width], [])
-            _ = hidden
             self.position += length
             self.forwards += 1
             return logits^
