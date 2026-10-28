@@ -1,0 +1,5 @@
+balanced lexical delimiters: bindings/kernel_methods_native.mojo
+balanced lexical delimiters: bindings/neighbors_native.mojo
+balanced lexical delimiters: providers/python/kernel_public_lifecycle_pyapi.mojo
+Python AST one-call native-marked data methods: 9 KernelRidge.fit, KernelRidge.predict, KernelRidge.score, Nystroem.fit, Nystroem.transform, Nystroem.fit_transform, RBFSampler.fit, RBFSampler.transform, RBFSampler.fit_transform
+SOURCE CHECK ONLY; no Mojo compile, product import, runtime or vendor execution
