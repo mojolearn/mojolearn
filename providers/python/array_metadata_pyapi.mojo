@@ -149,7 +149,7 @@ def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
     # Preserve each owner's public dtype refusal without rereading dtype.
     # Reject before cast_in_kind: complex128/longcomplex have wider items
     # than CastIn supports and must never reach a numerical descriptor.
-    if complex_error.byte_length() > 0 and (code == 13 or code == 14 or code == 15):
+    if complex_error.byte_length() > 0 and (code == 14 or code == 15 or code == 16):
         raise Error(complex_error)
     if nd > 2:
         raise Error(name + " metadata requires an admitted scalar/vector/matrix")
