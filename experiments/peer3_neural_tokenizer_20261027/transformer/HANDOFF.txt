@@ -173,3 +173,83 @@ buffer initializer); host/GPU numeric dispatch probes are unchanged. Shared
 buffer initializer also reaches CausalLM and neural public owners, whose
 runtime/cross-vendor checks remain pending integration. Coordinator owns this
 new compile freeze; no lane compilation or runtime execution occurred.
+
+CausalLM complete operation ownership followup (2026-10-28)
+--------------------------------------------------------
+The dedicated causal_operation_owner captures connected model/state records,
+passive scalar/container metadata, native buffers, entry identities and layer
+owners before local/resident/streamed execution. Original objects remain only
+identity tokens and retained publication targets. Aliased state layers share
+one captured namespace and one publication; tied head/embedding identity and
+resident entry-cache identity are retained. Parameters return original live
+buffer objects, while fused outputs consume captured bytes. Layer admission
+errors remain deferred to the original execution position, so earlier progress
+survives failures. Native sessions and Mamba h_last_ reports publish to checked
+live dictionaries on success and failure; unchanged mutable exporters retain
+their original identities. Publication rechecks string keys after GIL release.
+
+Each stream read/checkpoint captures model and state anew from retained original
+owners, preserving supported changes between calls. The native stream capsule
+itself is captured once and passed directly through the public dispatch.
+Restored state is published before resume returns. Resident generation consumes
+the already captured prompt instead of recapturing caller input. Output Array
+storage descriptors are checked after native calls before metadata is consumed.
+Checkpoint buffers and passive fields are captured before hashing/restoration.
+
+Parallel operations pass separate original identities and captured payloads;
+Mamba lane commit90f3d3e95b owns the matching helper interfaces. Partial remote
+allocation cleanup captures its partial outer state first. Native session-handle
+entry is captured in the construction registry and reused directly; tokenizer
+commit7c405e31f7 and parent standalone helper consume the same retained entry.
+The native C entry registry is sealed in CausalExecutionEntries at construction;
+replacing registry entries cannot silently select unrelated runtime functions.
+
+Validation: 11 source controls pass, exit0, source-tests-causal-operation-owner-final.log.
+The original run had 10pass/1failure in a test's function-name delimiter (it matched
+causal_public_connect); source-tests-causal-operation-owner.log retains that failure.
+The delimiter is corrected, and stream per-operation recapture assertions were
+updated with the final implementation. Python AST syntax2/2 pass, exit0,
+python-syntax-causal-operation-owner.log. Diff check exit0 retained separately.
+These are source controls only. No lane compile or runtime/vendor tests ran.
+
+Focused compile roots: compile_roots/compile_causal_execution.mojo exports public
+allocate/reset/forward/resident/parameters/blocks; compile_causal_generation.mojo
+exports stream/read/info/generate/text/checkpoint/resume. Constructor changes from
+4f5f63bd62 use compile_causal_construct.mojo; repr/state metadata use
+compile_causal_public_metadata.mojo. Parent coordinates the final frozen closure
+including matching generation metadata, Array/foreign buffer and parallel helpers.
+Verified native numeric extension calls and native process/codec transport remain;
+no route, quantization algorithm, arithmetic, or decoding policy was substituted.
+Actual public runtime, failure-progress/alias controls, worker lifecycle loading,
+checkpoint roundtrip and cross-vendor identity remain pending final integration.
+Source guards and compile passes do not establish Python-free runtime.
+
+Constructor retained publication followup (2026-10-28)
+----------------------------------------------------
+Owned source: bindings/causal_lm_construct.mojo. Constructor preparation and
+initialization retain the admitted live dictionary and a separate private
+construction dictionary. Subsequent native calls consume the private record;
+original model attribute reads/setters no longer run after a kernel can release
+the GIL. Checked raw dictionary publication preserves incremental top-field,
+layer-list and native admission results, including vendor/mode/entry/pin fields
+on an admission error. Published lists/dictionaries are separate from the
+containers traversed by construction. Public head/embed views preserve tied
+object identity and share their original live storage; their public Array slots
+are separate from subsequent constructor metadata. Native array descriptors
+are checked before post-call shape/packing/int15 metadata access.
+
+The six-argument _causal_model_prepare_snapshot signature and bindings return
+value remain compatible with the parallel constructor. Its eight-argument
+internal overload carries retained dictionaries without PythonObject defaults.
+Final causal_lm_admit_binding receives a private exact native namespace; no
+new arithmetic, quantization, decoding route or shared provider ABI was added.
+The two malformed driver-loop(...) comments now use accepted driver-loop:
+annotations with their actual metadata traversal purpose.
+
+Validation: six focused source controls passed, exit0, including the exact
+no_compute_in_shells constructor scan with zero findings. Evidence:
+source-tests-causal-constructor-retained.log. No compilation or product runtime
+was run by this lane. Parent should compile the frozen compile_causal_construct.mojo
+root and its affected parallel parent/worker closure; existing public execution
+and generation probes remain part of the pending integrated source freeze.
+These checks establish source structure only, not runtime/Python-free behavior.

@@ -34,7 +34,10 @@ if type(_ENTRY) is not BuiltinFunctionType:
 _INIT_ENTRY = _binding()._module.full_reset_constructor_native_call
 if type(_INIT_ENTRY) is not BuiltinFunctionType:
     raise TypeError('full-reset constructors require a compiled native entry')
-_CONTEXT = dict(plans={}, missing=object(), ready=False, originals={})
+# The same context object serves the generic ParamsMixin.set_params slot
+# (_mode._GENERIC_PARAMS_CONTEXT): one native owner for both setters.
+from ._mode import ParamsMixin as _ParamsMixin, _GENERIC_PARAMS_CONTEXT as _CONTEXT
+_CONTEXT['generic_setter'] = _ParamsMixin.set_params
 # Instance lookup/assignment protocols a native constructor write must not bypass.
 _CONSTRUCTOR_HOOKS = ('__getattribute__', '__getattr__', '__setattr__')
 _CLASSES = (

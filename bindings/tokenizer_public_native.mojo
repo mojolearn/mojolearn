@@ -45,10 +45,14 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
 struct TokenizerPublicConnection(Defaultable, Movable):
     var vocab: PythonObject
     var bpe: PythonObject
+    var error_handlers: PythonObject
+    var error_lookup: PythonObject
 
     def __init__(out self):
         self.vocab = PythonObject(None)
         self.bpe = PythonObject(None)
+        self.error_handlers = PythonObject(None)
+        self.error_lookup = PythonObject(None)
 
 
 comptime TOKENIZER_PUBLIC_CONNECTION = _Global[
@@ -186,6 +190,32 @@ def _native(entry: PythonObject) raises:
         raise Error("TypeError: tokenizer provider entry must be native")
 
 
+def _connect_error_handlers() raises:
+    var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
+    if state[].error_handlers is not None:
+        return
+    var codecs = native_loaded_module("_codecs")
+    var lookup = codecs.lookup_error
+    _native(lookup)
+    if lookup.__self__ is not codecs or _str(lookup.__name__, "codec lookup name") != "lookup_error":
+        raise Error("TypeError: tokenizer connection requires the canonical native codec error lookup")
+    var names = Python.tuple("strict", "ignore", "replace", "backslashreplace", "surrogateescape", "surrogatepass")
+    var canonical = Python.tuple("strict_errors", "ignore_errors", "replace_errors", "backslashreplace_errors", "surrogateescape", "surrogatepass")
+    var handlers = Python.dict()
+    for i in range(len(names)):  # small-loop(canonical CPython UTF-8 error policies)
+        var entry = py_call(lookup, names[i])
+        _native(entry)
+        # A builtin such as print can still invoke Python hooks. Admit the
+        # canonical unbound CPython handlers before retaining their identities;
+        # exact builtin metadata reads cannot dispatch a Python descriptor.
+        if (entry.__self__ is not None or entry.__module__ is not None
+                or _str(entry.__name__, "codec handler name") != String(canonical[i])):
+            raise Error("TypeError: tokenizer connection requires canonical builtin UTF-8 error handlers")
+        py_setitem(handlers, names[i], entry)
+    state[].error_lookup = lookup
+    state[].error_handlers = handlers
+
+
 def _bytes(value: PythonObject, allow_text: Bool = True, name: String = "text") raises -> List[UInt8]:
     var raw = value
     if py_type(raw) is native_loaded_module("builtins").str:
@@ -291,15 +321,25 @@ def _ids(var value: PythonObject) raises -> List[Int]:
     return result^
 
 
-def _text_result(raw: PythonObject, errors: PythonObject) raises -> PythonObject:
-    var name = _str(errors, "errors")
-    # Arbitrary codec error handlers are callbacks. Admit only CPython's
-    # builtin handlers, retained by the import-time connection.
-    var codecs = native_loaded_module("_codecs")
-    var entry = py_call(codecs.lookup_error, errors)
-    _native(entry)
-    if name != "strict" and name != "ignore" and name != "replace" and name != "backslashreplace" and name != "surrogateescape" and name != "surrogatepass":
+def tokenizer_decode_utf8(raw: PythonObject, errors: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    if py_type(raw) is not bi.bytes and py_type(raw) is not bi.bytearray:
+        raise Error("TypeError: tokenizer UTF-8 decoding requires exact native bytes")
+    _ = _str(errors, "errors")
+    var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
+    var handlers = state[].error_handlers
+    var lookup = state[].error_lookup
+    if handlers is None or lookup is None:
+        raise Error("RuntimeError: tokenizer UTF-8 handlers require their import-time connection")
+    var expected = py_get(handlers, errors)
+    if expected is None:
         raise Error("ValueError: tokenizer decode requires a builtin UTF-8 error policy")
+    # Registry names and native function types alone do not establish safety:
+    # register_error can replace a policy with another C builtin such as print.
+    # Refuse that mutation before the existing bytes/bytearray decode route.
+    var entry = py_call(lookup, errors)
+    if entry is not expected:
+        raise Error("ValueError: tokenizer decode requires its canonical builtin UTF-8 error policy")
     ref cpy = Python().cpython()
     var args = Python.tuple("utf-8", errors)
     var decode = raw.decode
@@ -471,7 +511,7 @@ def _bpe_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool, b
         bpe_check_ids(ids, owner[].tok.value().n_vocab())
         var bytes = bpe_decode_seq_bytes(owner[], ids, len(ids) * owner[].max_token_bytes)
         var raw = _py_bytes(bytes)
-        _ = py_call(result.append, raw if bytes_only else _text_result(raw, errors))
+        _ = py_call(result.append, raw if bytes_only else tokenizer_decode_utf8(raw, errors))
     _ = handle
     _ = data
     return result if batch else result[0]
@@ -909,7 +949,7 @@ def _vocab_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool,
     var raw = _py_bytes(bytes)
     _ = handle
     _ = data
-    return raw if bytes_only else _text_result(raw, errors)
+    return raw if bytes_only else tokenizer_decode_utf8(raw, errors)
 
 
 def _vocab_pretokenize(tokenizer: PythonObject, data: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1479,6 +1519,7 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
         if state[].bpe is not None and state[].bpe is not context:
             raise Error("TypeError: BPE native context was already connected")
+        _connect_error_handlers()
         state[].bpe = context
         return PythonObject(None)
     if operation == "identity_file":
@@ -1516,6 +1557,7 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
         if state[].vocab is not None and state[].vocab is not context:
             raise Error("TypeError: tokenizer native context was already connected")
+        _connect_error_handlers()
         state[].vocab = context
         return PythonObject(None)
     if operation == "bpe_init":

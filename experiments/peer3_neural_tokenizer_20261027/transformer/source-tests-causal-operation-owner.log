@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "<stdin>", line 12, in <module>
+  File "/Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027/tools/test_causal_model_native.py", line 154, in test_streams_and_checkpoints_capture_before_execution_and_guard_output_metadata
+    assert door.index('causal_model_capture(args[0]') < door.index('causal_lm_forward_binding(model')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+PASS test_compiled_entry_resolution_admits_raw_storage_before_keyed_reads
+PASS test_construct_captures_plan_options_and_all_weights_before_numerical_work
+PASS test_execution_registry_is_pinned_and_native_handles_do_not_reread_bindings
+PASS test_model_modules_use_loaded_connections_and_safe_optional_entries
+PASS test_model_wrappers_never_select_binding_through_mutable_instance_fields
+PASS test_operation_owner_preserves_aliases_tied_weights_and_original_parameters
+PASS test_packed_weights_admit_metadata_and_keep_original_quantization_routes
+PASS test_parallel_paths_pass_identity_and_distinct_captured_payloads
+PASS test_state_construction_and_error_classification_admit_before_protocols
+FAIL test_streams_and_checkpoints_capture_before_execution_and_guard_output_metadata
+PASS test_success_and_failure_publish_only_admitted_live_fields
+SUMMARY {'passed': 10, 'failed': 1, 'failures': ['test_streams_and_checkpoints_capture_before_execution_and_guard_output_metadata'], 'scope': 'source controls only; no compile or runtime'}

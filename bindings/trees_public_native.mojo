@@ -9,6 +9,7 @@ from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, f
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_get_params, forest_refresh
 from bindings.trees_constructor_native import forest_construct
+from bindings.trees_boost_constructor_native import dart_construct
 from bindings.trees_public_lifecycle_native import forest_public_operation
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_iforest import iforest_operation
@@ -27,7 +28,7 @@ from bindings.trees_explainer_native import trees_explainer_operation
 from bindings.trees_agnostic_native import trees_agnostic_operation
 from bindings.trees_public_gbdt_fit import (
     gbdt_fit, catboost_auto_learning_rate_op, gbdt_inspect, gbdt_initialize, adapter_classifier_fit,
-    adapter_regressor_fit,
+    adapter_regressor_fit, gbdt_ordered_construct, gbdt_feature_freq_construct,
 )
 from bindings.trees_public_gbdt import (
     gbdt_predict, gbdt_predict_proba, gbdt_predict_classes, gbdt_tree_metadata_op, ordered_rmse_fit,
@@ -54,6 +55,8 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return embedding_apply(model, args, context)
     if operation == "trees_forest_construct":
         return forest_construct(model, args, context)
+    if operation == "trees_dart_construct":
+        return dart_construct(model, args, context)
     if operation.startswith("trees_public_iforest_"):
         return iforest_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_forest_"):
@@ -113,6 +116,10 @@ def _gbdt_operation(model: PythonObject, operation: String, args: PythonObject,
     the scikit-learn GBDT adapters (bindings/trees_public_gbdt.mojo)."""
     if operation == "trees_gbdt_init":
         return gbdt_initialize(model, args, context)
+    if operation == "trees_gbdt_ordered_init":
+        return gbdt_ordered_construct(model, args, context)
+    if operation == "trees_gbdt_feature_freq_init":
+        return gbdt_feature_freq_construct(model, args, context)
     if operation == "trees_gbdt_adapter_classifier_fit":
         return adapter_classifier_fit(model, args, context)
     if operation == "trees_gbdt_adapter_regressor_fit":

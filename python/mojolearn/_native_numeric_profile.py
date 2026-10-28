@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection for the complete native public numeric-profile operations."""
-_CALL = None
+from .tokenizer import _binding
+
+# Imported by the package after its native imports exist: the compiled entry is
+# bound once here; connect() supplies the context and installs the public names.
+_CALL = _binding()._module.numeric_profile_native_call
 _CONTEXT = None
 
 
@@ -22,15 +26,12 @@ def _set_default_profile(name, use="inference"):
 
 def connect(package):
     # glue: replace the bootstrap definitions only after all native imports exist
-    global _CALL, _CONTEXT
+    global _CONTEXT
     import os
     from types import BuiltinFunctionType
     from . import _numeric_profile
-    from .tokenizer import _binding
-    entry = _binding()._module.numeric_profile_native_call
-    if type(entry) is not BuiltinFunctionType:
+    if type(_CALL) is not BuiltinFunctionType:
         raise TypeError("numeric profiles require the compiled native owner")
-    _CALL = entry
     _CONTEXT = dict(fields=vars(_numeric_profile), defaults=_numeric_profile._defaults,
                     os_fields=vars(os), environ=os.environ, environ_fields=vars(os.environ))
     for name, public, replacement in (  # glue: fixed public profile aliases installed once

@@ -1,0 +1,50 @@
+Kernel lifecycle continuation — 2026-10-28
+Branch: lane/peer1-kernel-descriptor-default-20261027
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-kernel-descriptor-default-20261027
+Continuation source: cfd17fd9ab (previous descriptor batch; parent reported
+CPU descriptor compile green in batch33a63ba6ad). No duplicate compilation.
+
+New dedicated commits
+- e2cbe3cf47: capture feature-name snapshot before numerical execution, retain
+  it across the operation, and publish that snapshot after successful fit.
+  Applies to KernelRidge.fit, Nystroem.fit/fit_transform and RBFSampler.fit/
+  fit_transform. Shared native feature extraction is reused, not rewritten.
+- eacf9d85f6: direct descriptor nonfinite refusals retain the old canonical
+  NaN/infinity wording before one-row/one-column remapping. Explicit native
+  exception prefixes and device faults retain their meaning; ZeroDivisionError
+  is no longer treated as ValueError for the one-column-only case.
+
+Actual source audit
+- KernelRidge.score still calls shared scalar/weighted metrics packed CPython
+  entries or multioutput x_metrics program packed entries. Target/prediction/
+  weight metadata are repeated. SHARED_SCOPE.txt identifies exact functions,
+  registrations and proposed captured-input APIs; no shared metrics edits.
+- Ignored-y and feature-name label materialization still reaches shared
+  classical_labels._label_list ndarray/array/memoryview tolist conversion.
+  Metadata capture and those conversions need shared repair. Categorical
+  target behavior has not been removed to make a native-complete claim.
+- Native feature metadata now remains consistent with the input captured
+  before the numerical call; no post-execution source-column reread.
+- Parallel kernel drivers, archive/lifetime and installed-slot metadata
+  retain their prior separate audit scope. Fast packed numerical routes
+  remain explicit legacy debt from the previous handoff.
+
+Validation and pending coverage
+- git diff --check: exit 0, retained in diff-check.log. Source inspection only.
+- No Mojo compilation, public runtime tests, installed-artifact checks,
+  benchmarks or identity/vendor verification run. Parent owns the new focused
+  kernel public-owner compile; existing CPU descriptor evidence is unchanged.
+- Small meaningful compile root: prior kernel-only export retaining
+  classical_family_admit + kernel_methods_operation, which reaches both
+  changed lifecycle helpers. No CPU numerical descriptor rebuild is required
+  solely for these untouched numerical sources.
+- A patch initially failed to write during shared Mac ENOSPC (Data volume100%,
+  116MiB free). Worktree remained clean; retry succeeded. No data cleanup was
+  performed by this lane.
+
+Evidence
+SHARED_SCOPE.txt: precise shared score and label metadata proposal.
+diff-check.log: whitespace source check only.
+/tmp/peer1-kernel-lifecycle-feature-commit.log
+/tmp/peer1-kernel-lifecycle-refusal-commit.log
+Push output retained at /tmp/peer1-kernel-lifecycle-push.log.
