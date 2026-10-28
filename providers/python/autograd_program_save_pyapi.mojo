@@ -24,7 +24,7 @@ def _save_fields(program: PythonObject, context: PythonObject) raises -> PythonO
         if py_type(layout) is not b.dict:
             raise Error("TypeError: Program save requires a native layout dictionary")
         if py_type(program) is layout["cls"]:
-            return py_call(b.dict, _fields(program, layout))
+            return _fields(program, layout)
     raise Error("TypeError: save requires an exact Program or ImportedProgram")
 
 
@@ -68,6 +68,14 @@ def ops_program_save_native_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("TypeError: Program save requires its native admission context")
     var fields = _save_fields(program, context)
     var state = ops_session_fields(fields["_s"])
+    return ops_program_save_fields_py[E, KIND](fields, state, path, fields)
+
+
+def ops_program_save_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
+    fields: PythonObject, state: PythonObject, path: PythonObject, metadata: PythonObject,
+) raises -> PythonObject:
+    var b = native_loaded_module("builtins")
+    var context = program_admission_context()["program_save_context"]
     if state["_id"] is None:
         raise Error("ValueError: this session is closed")
     if py_type(state["_id"]) is not b.int or py_type(fields["_id"]) is not b.int:
@@ -80,8 +88,8 @@ def ops_program_save_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var s = ops_session[E, KIND](sid)
     var p = s[].program(pid)
     var normalized = native_path(path)
-    var input_names = _names(fields, "inputs", p.n_in)
-    var output_names = _names(fields, "outputs", len(p.outs))
+    var input_names = _names(metadata, "inputs", p.n_in)
+    var output_names = _names(metadata, "outputs", len(p.outs))
     var provenance = _save_provenance(context)
     program_save_verified[E, KIND](sid, pid, String(py=normalized), input_names,
                                   output_names, provenance[0], provenance[1])
