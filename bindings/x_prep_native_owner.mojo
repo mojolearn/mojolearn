@@ -137,6 +137,8 @@ def _cache_fields(value: PythonObject, cls: PythonObject, descriptor: PythonObje
         raise Error("TypeError: arena caches require their native metadata class")
     _cache_layout(cls,descriptor)
     var fields = py_fields(value)
+    if py_type(fields) is not b.dict:
+        raise Error("TypeError: arena cache storage requires an exact native dictionary")
     var names = py_call(b.list,fields)
     for i in range(len(names)):  # driver-loop: inspect cache metadata keys before lookup
         if py_type(names[i]) is not b.str:
@@ -148,7 +150,17 @@ def _resident(entries: PythonObject, words: Int, rows: Bool, context: PythonObje
     # `prefix` names the arena family store (x_prep, x_metrics); the shared
     # arena program runner (bindings/arena_prog_native.mojo) passes its own.
     var b = native_loaded_module("builtins")
-    var scope = py_call(b.getattr,context["arena_local"],"scope",PythonObject(None))
+    var local = context["arena_local"]
+    if py_type(local) is not native_loaded_module("_thread")._local:
+        raise Error("TypeError: arena scope storage requires an exact native thread-local object")
+    var local_fields = local.__dict__
+    if py_type(local_fields) is not b.dict:
+        raise Error("TypeError: arena scope storage requires an exact native dictionary")
+    var local_keys = py_call(b.list, local_fields)
+    for i in range(len(local_keys)):  # driver-loop: thread-local keys before any keyed read
+        if py_type(local_keys[i]) is not b.str:
+            raise Error("TypeError: arena scope keys require exact native strings")
+    var scope = py_get(local_fields,"scope")
     if scope is None or py_get(entries,PythonObject(prefix+"_dev_put")) is None or py_get(entries,PythonObject(prefix+"_dev_free")) is None:
         return PythonObject(None)
     var fields = _cache_fields(scope,context["arena_scope_class"],context["arena_scope_dict"])
