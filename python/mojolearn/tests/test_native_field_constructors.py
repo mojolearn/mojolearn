@@ -1,4 +1,4 @@
-"""Public constructor probes for the 77 full-reset owners and the 52 declared
+"""Public constructor probes for the 77 full-reset owners and the 50 declared
 prep/decomp owners; run only against the integrated native build
 (bindings/full_reset_constructor_native.mojo).
 

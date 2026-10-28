@@ -160,7 +160,7 @@ def _message(source: PythonObject, problems: PythonObject, context: PythonObject
 def graph_metadata_operation(operation: String, value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if operation == "record_descriptor":
-        if py_type(value) is not context["method_type"] or value.__func__ is not context["native_entry"]:
+        if py_type(value) is not context["method_type"] or value.__func__ is not context["record_native_entry"]:
             raise Error("TypeError: graph protocol descriptors require the connected compiled entry")
         ref cpy = Python().cpython()
         var descriptor = cpy.lib.get_function[PyObjectPtr]("PyInstanceMethod_New")(value._obj_ptr)
