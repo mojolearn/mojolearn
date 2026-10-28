@@ -14,6 +14,7 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input
 from bindings.scaler_native import _input, _ptr, _stage, _copy_row
 from bindings.scaler_lifecycle_native import _run, _direct, _entries, _fitted, _write_back, _public_result, _nan_fill
 from core.scaler_fit_impl import scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices
@@ -124,7 +125,8 @@ def _keep_extrema(fields: PythonObject, output: PythonObject, colnan: PythonObje
     _ = arena^
 
 
-def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
+                  input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
     var fields = py_fields(model)
     var configuration = _configuration(fields,context)
     var mode = configuration[0]
@@ -136,9 +138,11 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject)
     if py_get(entries,"minmax_fit") is None:
         raise Error("ImportError: HostMinMaxScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,"scaler_training_error","minmax_fit is unavailable")))
     var direct = _direct(entries,"minmax_fit_direct")
-    var values = _input(source,2,True,context)
-    var n = Int(py=values.shape[0])
-    var d = Int(py=values.shape[1])
+    var snapshot = scaler_operation_input(source, context, input_cache)
+    var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
+    var values = captured[].values
+    var n = captured[].metadata.source.rows
+    var d = captured[].metadata.source.cols
     var params = Python.list(n,d,configuration[1],configuration[2])
     var output = classical_typed(Python.tuple(5,d),"<f4",context["output_context"])
     var finite = True
@@ -171,7 +175,8 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject)
     return model
 
 
-def minmax_fit_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def minmax_fit_transform(model: PythonObject, source: PythonObject, context: PythonObject,
+                  input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
     """fit_transform on one upload of X: the combined `minmax_fit_transform`
     export runs `minmax_fit_direct` then `minmax_transform_direct` on the
     resident X (the same kernels on the same words) and the fitted rows are
@@ -192,9 +197,11 @@ def minmax_fit_transform(model: PythonObject, source: PythonObject, context: Pyt
         if String(names[k]).endswith("_"):
             _ = py_call(fields.pop,names[k])
     var clip = _flag(fields["clip"],"clip",context)
-    var values = _input(source,2,True,context)
-    var n = Int(py=values.shape[0])
-    var d = Int(py=values.shape[1])
+    var snapshot = scaler_operation_input(source, context, input_cache)
+    var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
+    var values = captured[].values
+    var n = captured[].metadata.source.rows
+    var d = captured[].metadata.source.cols
     var stats = classical_typed(Python.tuple(5,d),"<f4",context["output_context"])
     var output = classical_typed(Python.tuple(n,d),"<f4",context["output_context"])
     var got = Int(py=py_call(entry,classical_address(values),classical_address(stats),classical_address(output),
@@ -218,7 +225,7 @@ def minmax_fit_transform(model: PythonObject, source: PythonObject, context: Pyt
     if got < 0:
         raise Error("MinMaxScaler transform overflowed in Float32")
     _ = output  # keep the Python object alive through the native calls above
-    return _write_back(source,values,output,_flag(fields["copy"],"copy",context),context)
+    return _write_back(source,values,output,_flag(fields["copy"],"copy",context),context,snapshot)
 
 
 def minmax_partial_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -264,7 +271,8 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
     return model
 
 
-def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
+def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, context: PythonObject,
+                  input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
     var fields = py_fields(model)
     var copy = _flag(fields["copy"],"copy",context)
     if not _fitted(fields):
@@ -272,9 +280,11 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         raise Error("NotFittedError: MinMaxScaler is not fitted")
     var entries = _minmax_entries(fields["numeric_mode_"], context)
     var direct = _direct(entries, "minmax_transform_direct")
-    var values = _input(source, 2, True, context)
-    var n = Int(py=values.shape[0])
-    var d = Int(py=values.shape[1])
+    var snapshot = scaler_operation_input(source, context, input_cache)
+    var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
+    var values = captured[].values
+    var n = captured[].metadata.source.rows
+    var d = captured[].metadata.source.cols
     if d != _features(fields):
         raise Error("MinMaxScaler input feature count differs from fit")
     var mean = _statistic(fields["min_"],d,"min_",context)
@@ -351,7 +361,7 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     _ = arena^
     _ = mean^
     _ = scale^
-    return _write_back(source, values, output, copy, context)
+    return _write_back(source, values, output, copy, context, snapshot)
 
 
 
@@ -399,13 +409,15 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         elif operation == "fit_transform":
             if len(args[2]):
                 raise Error("TypeError: MinMaxScaler.fit got an unexpected keyword argument")
-            result = minmax_fit_transform(model,args[0],context)
+            var input_cache = Python.list()
+            result = minmax_fit_transform(model,args[0],context,input_cache)
             if result is None:
-                _ = minmax_fit(model,args[0],context)
-                result = minmax_transform(model,args[0],False,context)
-            result = _public_result(result,context)
+                _ = minmax_fit(model,args[0],context,input_cache)
+                result = minmax_transform(model,args[0],False,context,input_cache)
+            result = _public_result(result,context,input_cache)
         elif operation == "transform":
-            result = _public_result(minmax_transform(model,args[0],Bool(py=args[1]),context),context)
+            var input_cache = Python.list()
+            result = _public_result(minmax_transform(model,args[0],Bool(py=args[1]),context,input_cache),context,input_cache)
         elif operation == "save":
             result = minmax_archive_save(model,args[0],context)
         elif operation == "load":
