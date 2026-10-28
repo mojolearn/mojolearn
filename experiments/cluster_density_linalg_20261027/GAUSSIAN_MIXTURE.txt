@@ -1,0 +1,25 @@
+GaussianMixture public boundary — 2026-10-27
+
+Frozen source: 785850bfd5f83d88d7f97fbef299da0e5ab70d03.
+Constructor, binding selection, X/y admission, fitted-state and feature-name
+checks, fit tracking and completed-result conversion now run in the native
+owner. Public methods pass original arguments through one native call.
+Reinitialization and refitting admit replaced owners before mutation. Extended
+solver state retains the exact connected compiled module; native entry lookup
+uses exact module dictionaries and compiled owner identities.
+
+GaussianMixture.sample now reads fields through native generic lookup, avoiding
+the Python public-attribute hook, and uses admitted compiled mode/sample entries.
+The arithmetic kernels and extended solver selection are unchanged. The shared
+target and fit-error helpers were moved unchanged into a reusable module.
+
+Compile PASS: actual GaussianMixture owner 98.82s, shared cluster owner 80.47s,
+Mac CPU O0, ten compiler workers. Earlier failed compile (explicit UTF-8 slice
+required) remains retained; source fix and both final receipts are committed.
+No runtime test, identity or GPU qualification is claimed. Save/load already
+enter the native archive owner; this batch does not qualify their transitive
+archive behavior or claim a complete library audit.
+
+Receipts: mixture_public_compile.json and mixture_shared_cluster_compile.json.
+Logs/source bytes/binaries: ~/mojolearn-evidence/cluster-density-linalg-20261027/
+mixture-public-compile-fixed/ and mixture-shared-cluster-compile/.
