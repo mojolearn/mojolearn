@@ -66,6 +66,31 @@ import subprocess
 import sys
 
 FORMAT = "mojolearn.verify-reference.v1"
+
+
+def require_committed_records(paths, repo_root):
+    """Maintainer generation accepts only public, committed record inputs."""
+    from pathlib import Path
+    root = Path(repo_root).resolve()
+    base = root / "bench/results/identity_break"
+    rows = subprocess.check_output(["git", "-C", str(root), "ls-tree", "-r", "-z", "HEAD"])
+    blobs = {}
+    for row in rows.split(b"\0"):
+        if row:
+            meta, name = row.split(b"\t", 1)
+            if meta.split()[0] in (b"100644", b"100755"):
+                blobs[name.decode()] = meta.split()[2].decode()
+    for filename in paths:
+        path = Path(filename)
+        resolved = path.resolve()
+        if path.is_symlink() or not resolved.is_relative_to(base):
+            raise ValueError("reference input must be committed under bench/results/identity_break: " + str(path))
+        data = path.read_bytes()
+        oid = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+        if blobs.get(resolved.relative_to(root).as_posix()) != oid:
+            raise ValueError("reference input is uncommitted or changed: " + str(path))
+
+
 TABLE_DIR = "verify_reference"
 TABLE_NAME = "table.json"
 #: THE PARTS A USER CAN CHECK. `stepfull` joined the four on 2026-09-16
@@ -622,8 +647,9 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     absent_total = {}              # part -> {reason: count}, over every admitted column
     for path in sorted(record_paths):
         try:
-            with open(path, "r", encoding="utf-8") as fh:
-                j = json.load(fh)
+            with open(path, "rb") as fh:
+                record_bytes = fh.read()
+                j = json.loads(record_bytes)
         except (OSError, ValueError) as exc:
             log(f"skip {path}: unreadable ({exc})")
             continue
@@ -646,6 +672,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         commit = j["commit"]
         rec = dict(dir=rel_dir, file=os.path.basename(path), vendor=j.get("vendor"), **{"class": cls},
                    commit=commit, commit_time=_commit_time(repo_root, commit, cache))
+        rec["sha256"] = hashlib.sha256(record_bytes).hexdigest()
         idx = len(records)
         records.append(rec)
         key = (rec["commit_time"], rec["dir"], rec["file"])
