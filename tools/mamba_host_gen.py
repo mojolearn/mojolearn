@@ -71,6 +71,9 @@ SOURCES = {
     "mamba/impl/modeling/modeling_mamba.mojo": "modeling_mamba",
     "mamba/impl/modules/ssd_minimal.mojo": "ssd_minimal",
     "mamba/impl/modules/mamba2.mojo": "mamba2",
+    # lane mamba-folds (2026-10-28): the v2 backward row folds
+    # (MOJOLEARN_IDN_MAMBA_BWD_FOLDS) shared by the Mamba-2 and Mamba-3 backward
+    "autograd/kernels/mamba_bwd_folds.mojo": "mamba_bwd_folds",
     "autograd/kernels/mamba2_proj.mojo": "mamba2_backward_checks",
     "autograd/kernels/mamba2.mojo": "mamba2_backward",
     "autograd/kernels/mamba2_ssd.mojo": "mamba2_ssd_backward",

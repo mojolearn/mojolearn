@@ -16,6 +16,17 @@ from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_sm
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
 from mamba.checks.mamba3_fixture import M3_A_FLOOR, M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, M3_RMS_EPS, Mamba3Dims
 comptime M3_BWD_TPB = 128
+#: lane mamba-folds (2026-10-28): MOJOLEARN_IDN_MAMBA_BWD_FOLDS, the block-norm
+#: backward's row dot as lanes then a fixed tree (mamba_bwd_folds.mojo).
+from autograd.kernels.mamba_bwd_folds import (
+    IDN_MAMBA_BWD_FOLDS,
+    mamba_bwd_fold_dot_offset,
+    mamba_bwd_fold_floats,
+    mamba_bwd_fold_grid,
+    mamba_bwd_rowdot_lane_kernel,
+    mamba_bwd_rowdot_tree_kernel,
+    MAMBA_BWD_FOLD_TPB,
+)
 comptime M3_S16_V_SHARED = not is_defined["MOJOLEARN_MAMBA3_S16_V_NAIVE"]()
 """lane/neural-apple2 (2026-09-28): the S16 d_v half runs one block per
 (row, head) with the q . k dot of each later row computed ONCE into shared
@@ -1959,6 +1970,49 @@ def mamba3_block_norm_backward_kernel(
         )))
 
 
+def mamba3_block_norm_backward_cell_kernel(
+    dx: MutPointer[Float32, MutAnyOrigin],
+    dw_rows: MutPointer[Float32, MutAnyOrigin],
+    dy: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    fold: MutPointer[Float32, MutAnyOrigin],
+    dot_off_in: Int32,
+    m_in: Int32,
+    width_in: Int32,
+):
+    """MOJOLEARN_IDN_MAMBA_BWD_FOLDS: `mamba3_block_norm_backward_kernel`'s
+    per-cell half, one thread per cell, reading the lane + tree row dot from
+    `fold[dot_off + row]`. `rstd` and `correction` are the v1 expressions on
+    the same operands; the cell arithmetic is v1's line for line."""
+    var m = Int(m_in)
+    var width = Int(width_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= m * width:
+        return
+    var row = cell // width
+    var col = cell - row * width
+    var rstd = ftz(identical_rsqrt(ftz(
+        ftz(identical_div(sumsq.unsafe_load(row), Float32(width)))
+        + M3_RMS_EPS
+    )))
+    var dot = fold.unsafe_load(Int(dot_off_in) + row)
+    var correction = ftz(identical_mul(
+        ftz(identical_mul(rstd, rstd)),
+        ftz(identical_div(dot, Float32(width))),
+    ))
+    var xv = ftz(x.unsafe_load(cell))
+    var dyv = ftz(dy.unsafe_load(cell))
+    var weighted = ftz(identical_mul(dyv, ftz(weight.unsafe_load(col))))
+    dx.unsafe_store(cell, ftz(identical_mul(
+        rstd, ftz(weighted - ftz(identical_mul(xv, correction)))
+    )))
+    dw_rows.unsafe_store(cell, ftz(identical_mul(
+        dyv, ftz(identical_mul(xv, rstd))
+    )))
+
+
 def mamba3_residual_join_kernel(
     dx: MutPointer[Float32, MutAnyOrigin],
     residual_cotangent: MutPointer[Float32, MutAnyOrigin],
@@ -1984,12 +2038,39 @@ def mamba3_backward_block_norm_into(
     m: Int,
     dims: Mamba3Dims,
 ) raises:
-    ctx.enqueue_function[mamba3_block_norm_backward_kernel](
-        dx.unsafe_ptr(), dw_rows.unsafe_ptr(), dy.unsafe_ptr(), x.unsafe_ptr(),
-        sumsq.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
-        Int32(dims.d_model), grid_dim=(_grid(m), 1, 1),
-        block_dim=(M3_BWD_TPB, 1, 1),
-    )
+    comptime if IDN_MAMBA_BWD_FOLDS:
+        # v2: lanes, tree, cells. The scratch is this call's own, so it waits
+        # once before the scratch goes out of scope (every caller closes its
+        # walk with a synchronize right after this stage and its reduce).
+        var fold = ctx.enqueue_create_buffer[DType.float32](mamba_bwd_fold_floats(m))
+        var off = mamba_bwd_fold_dot_offset(m)
+        ctx.enqueue_function[mamba_bwd_rowdot_lane_kernel](
+            fold.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(), x.unsafe_ptr(),
+            Int32(m), Int32(dims.d_model),
+            grid_dim=(mamba_bwd_fold_grid(off), 1, 1),
+            block_dim=(MAMBA_BWD_FOLD_TPB, 1, 1),
+        )
+        ctx.enqueue_function[mamba_bwd_rowdot_tree_kernel](
+            fold.unsafe_ptr(), Int32(m), Int32(off),
+            grid_dim=(mamba_bwd_fold_grid(m), 1, 1),
+            block_dim=(MAMBA_BWD_FOLD_TPB, 1, 1),
+        )
+        ctx.enqueue_function[mamba3_block_norm_backward_cell_kernel](
+            dx.unsafe_ptr(), dw_rows.unsafe_ptr(), dy.unsafe_ptr(), x.unsafe_ptr(),
+            sumsq.unsafe_ptr(), weight.unsafe_ptr(), fold.unsafe_ptr(),
+            Int32(off), Int32(m), Int32(dims.d_model),
+            grid_dim=(mamba_bwd_fold_grid(m * dims.d_model), 1, 1),
+            block_dim=(MAMBA_BWD_FOLD_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        _ = fold^
+    else:
+        ctx.enqueue_function[mamba3_block_norm_backward_kernel](
+            dx.unsafe_ptr(), dw_rows.unsafe_ptr(), dy.unsafe_ptr(), x.unsafe_ptr(),
+            sumsq.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
+            Int32(dims.d_model), grid_dim=(_grid(m), 1, 1),
+            block_dim=(M3_BWD_TPB, 1, 1),
+        )
     ctx.enqueue_function[mamba3_residual_join_kernel](
         dx.unsafe_ptr(), residual_cotangent.unsafe_ptr(),
         Int32(m * dims.d_model),
