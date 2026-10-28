@@ -1400,8 +1400,9 @@ ADAPTED_MODULES = {
 #: pointwise lane predate this review; CTR training with all permutations has
 #: existed since 2026-09-28. The former blanket weight/CTR refusals were stale.
 #: Plain numeric Logloss now admits sample weights through the existing
-#: weighted owners. That extension requires its own runtime/identity evidence;
-#: this source inventory and its compile receipt do not supply that evidence.
+#: weighted owners; CTR evaluation uses the shared final-table expander and
+#: held-out owner. Their runtime/identity evidence remains pending; this source
+#: inventory and the compile receipts do not supply that evidence.
 NO_CPU_PATH = (
     "gradient boosting training with sample weights outside Plain numeric "
     "Logloss and the dedicated pointwise Logloss configuration; weighted "
@@ -1410,11 +1411,9 @@ NO_CPU_PATH = (
     "Logloss, MultiClass and MultiClassOneVsAll, and in Ordered boosting "
     "or the pointwise searcher",
 
-    "gradient boosting training with an eval set on a CTR categorical "
-    "column: CPU CTR training and saved-model inference exist, but this "
-    "training route does not yet apply its CTR tables to held-out rows. "
-    "The separate ExperimentalTwoLevelFeatureFreq CPU route also refuses "
-    "a tree whose level winner is the tensor column itself",
+    "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
+    "tree's level winner is the tensor column itself: the separate CPU "
+    "feature-frequency route refuses that case",
 
     "gradient boosting training with a categorical or one-hot column "
     "outside SymmetricTree with Logloss and Plain boosting, or with "
@@ -3631,33 +3630,17 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #:                     vocabulary and when the shipped table's cells have
 #:                     GAINED it on every part, so the hold cannot outlive the
 #:                     column that pays it.
-#:   no cpu route      THE ONE REASON A COVERED LANE CANNOT HAVE, and the
-#:                     only entry here that is not a covered lane
-#:                     (lane/unlaned-public-algorithms, 2026-09-20).
-#:                     IN USE BY NOTHING SINCE 2026-09-20
-#:                     (lane/cpu-routes-gpu-only-four). All four lanes that
-#:                     carried it now have CPU columns, and the reason they
-#:                     did not is worth keeping in the vocabulary rather
-#:                     than deleting: each of the four refusals was read as
-#:                     a statement about arithmetic when three were about
-#:                     RESIDENCY and one about a DEVICE INVENTORY. "Refuses
-#:                     by name on a CPU-only install" is what the entry
-#:                     requires and it was true of all four; what nobody
-#:                     had asked was whether the thing being refused was
-#:                     the thing being hashed. The next lane to reach for
-#:                     this reason should answer that question first, and
-#:                     `identity_break.GPU_ONLY_LANES` -- now empty --
-#:                     still holds the reason per lane. The rest of the
-#:                     original entry stands as written:
-#:
-#:                     The
-#:                     lane's public surface REFUSES BY NAME on a CPU-only
-#:                     install, so no CPU column can ever carry it and no
-#:                     host family can ever declare it: the reference it owes
-#:                     is owed on a GPU column and on no other. Every other
-#:                     reason here says "the evidence has not been taken
-#:                     yet"; this one says "this box is the wrong box, and
-#:                     always will be". It is CHECKED against
+#:   no cpu route      A lane with no current CPU implementation cannot be
+#:                     declared covered. The four original holds were removed
+#:                     in September 2026, but later lanes use this reason too.
+#:                     Inspect the fully registered GPU_ONLY_LANES: extensions
+#:                     in tools/identity_lanes add device-buffer/pool entries
+#:                     beyond the GBDT entries in identity_break.py's literal.
+#:                     A GPU-resource operation and missing CPU algorithm
+#:                     arithmetic are different reasons for a CPU refusal.
+#:                     Once a CPU implementation exists, missing execution or
+#:                     reference evidence belongs under a different hold.
+#:                     This reason is checked against
 #:                     `identity_break.GPU_ONLY_LANES`, which is what
 #:                     `tools/identity_break.py` uses to drop the lane from a
 #:                     full-column CPU run, so the reason cannot be used as
@@ -4561,7 +4544,7 @@ def inference_sentence():
 
 
 def no_cpu_path_sentence():
-    """`NO_CPU_PATH` as the README states it, NUMBERED and semicolon-joined.
+    """`NO_CPU_PATH` for the generated support matrix, numbered and joined.
 
     `_join`'s comma-and is right for a list of short nouns and wrong here:
     every entry below carries its own commas and its own structural reason,
