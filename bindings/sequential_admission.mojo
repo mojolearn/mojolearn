@@ -115,6 +115,9 @@ def _sequential_admit_value(mut mods: NativeModules, value: PythonObject, contex
                 raise Error("TypeError: Sequential defaultdict requires a native builtin default factory or None")
         var pairs = py_call(types.list_type, value.items())
         mods.released()
+        # Re-admit the connection after a release window before reusing its
+        # retained type handles, once for the window rather than every item.
+        _ = mods.module("builtins")
         for k in range(len(pairs)):  # driver-loop: over native mapping keys and buffer owners
             var pair = pairs[k]
             _sequential_admit_value(mods, pair[0], context, types, depth + 1)
@@ -132,6 +135,7 @@ def _sequential_admit_value(mut mods: NativeModules, value: PythonObject, contex
         mods.released()
         native_torch_admit(value)
         mods.released()
+        _ = mods.module("builtins")
         return
     mods.released()
     raise Error("TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported")
