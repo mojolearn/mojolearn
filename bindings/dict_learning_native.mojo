@@ -21,6 +21,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_typed, classical_address, classical_host_f32
+from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish, decomp_coder_width
+from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode,
     decomp_entries, decomp_input, decomp_shape, XD_SPARSE_ALGOS,
@@ -513,6 +515,27 @@ def sparse_encode_call(args: PythonObject, context: PythonObject) raises -> Pyth
         kit.close()
 
 
+def _dict_learning_dispatch(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var result = PythonObject(None)
+    if operation == "dl_fit" or operation == "dl_fit_transform":
+        result = dictionary_learning_fit(model, args, operation == "dl_fit_transform", context)
+    elif operation == "mbdl_fit" or operation == "mbdl_fit_transform":
+        result = minibatch_dictionary_fit(model, args, operation == "mbdl_fit_transform", context)
+    elif operation == "coding_transform" or operation == "coding_inverse":
+        result = coding_transform(model, args, operation == "coding_inverse", context)
+    elif operation == "coder_fit" or operation == "coder_transform" or operation == "coder_fit_transform" or operation == "coder_inverse":
+        result = sparse_coder(model, operation, args, context)
+    elif operation == "spca_fit" or operation == "spca_fit_transform":
+        result = sparse_pca_fit(model, args, operation == "spca_fit_transform", context)
+    elif operation == "spca_transform" or operation == "spca_inverse":
+        result = sparse_pca_transform(model, args, operation == "spca_inverse", context)
+    elif operation == "sparse_encode":
+        result = sparse_encode_call(args, context)
+    else:
+        raise Error("unknown native dictionary learning operation")
+    return result
+
+
 def dict_learning_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -526,23 +549,16 @@ def dict_learning_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var args = call[2]
         var context = call[3]
         classical_connect_numpy(context)
+        if operation == "coder_transform" or operation == "coder_fit_transform":
+            decomp_coder_width(model, args, context)
+        var method = decomp_public_method(operation)
+        var depth = decomp_public_begin(model, method, args, True, not operation.startswith("coder_"), context)
         var result = PythonObject(None)
-        if operation == "dl_fit" or operation == "dl_fit_transform":
-            result = dictionary_learning_fit(model, args, operation == "dl_fit_transform", context)
-        elif operation == "mbdl_fit" or operation == "mbdl_fit_transform":
-            result = minibatch_dictionary_fit(model, args, operation == "mbdl_fit_transform", context)
-        elif operation == "coding_transform" or operation == "coding_inverse":
-            result = coding_transform(model, args, operation == "coding_inverse", context)
-        elif operation == "coder_fit" or operation == "coder_transform" or operation == "coder_inverse":
-            result = sparse_coder(model, operation, args, context)
-        elif operation == "spca_fit" or operation == "spca_fit_transform":
-            result = sparse_pca_fit(model, args, operation == "spca_fit_transform", context)
-        elif operation == "spca_transform" or operation == "spca_inverse":
-            result = sparse_pca_transform(model, args, operation == "spca_inverse", context)
-        elif operation == "sparse_encode":
-            result = sparse_encode_call(args, context)
-        else:
-            raise Error("unknown native dictionary learning operation")
+        try:
+            result = _dict_learning_dispatch(model, operation, args, context)
+        finally:
+            lifecycle_end(model, method, depth)
+        result = decomp_public_finish(model, method, args, result, "", context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:

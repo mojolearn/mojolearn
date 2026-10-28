@@ -1,0 +1,27 @@
+{
+ "scope": "decomp part: decomp_c, ipca_c, dict_learning_c, mcd_c, als_c doors with the native public lifecycle (bindings/decomp_public_lifecycle.mojo, bindings/public_lifecycle_owner.mojo). Compile only.",
+ "machine": "Mac (compile_slot, nice 19), CPU column, identical, O0",
+ "results": [
+  {
+   "name": "decomp_doors_a1",
+   "entry": "experiments/lifecycle_prep_decomp_20261028/compile_decomp_doors.mojo",
+   "source_commit": "61b3224294d2663fb274a2c39da2a6725438777e",
+   "dirty_mojo_files": 0,
+   "exit": 0,
+   "seconds": 437,
+   "jobs": 10,
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "binary_sha256": "f37e7ba20d960845c88fde8c92e3739a67b5521bac2b4e28c9ca929db09333e6",
+   "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-prep-decomp-20261028/decomp/decomp_doors_a1.log",
+   "command": "compile_slot pixi mojo build -O0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/lifecycle_prep_decomp_20261028/compile_decomp_doors.mojo"
+  }
+ ],
+ "note": "HEAD after the receipt differs only in a comment in bindings/public_lifecycle_owner.mojo",
+ "not_compiled": [
+  "GPU targets",
+  "fast mode",
+  "the full _mojolearn binding roots",
+  "KernelPCA/neighbors paths beyond decomp_c",
+  "runtime, identity, Python tests"
+ ]
+}
