@@ -1176,6 +1176,8 @@ _native_family_bridge.tables(
 
 # Fixed binding connections belong to package setup, never a model operation.
 _native_family_bridge.connect_bindings("_mojolearn_x_cluster")
+from ._native_owner_lifetime import connect_owner_context as _connect_cluster_owner_context
+_connect_cluster_owner_context(_NATIVE_CONTEXT)
 
 # Import-time schema only; runtime reads each admitted parameter natively.
 from inspect import signature as _cluster_signature
