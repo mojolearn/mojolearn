@@ -14,6 +14,8 @@
 set -u
 OUT=${LEG_OUT:?LEG_OUT is set by the CPU leg runner}
 mkdir -p "$OUT/logs"
+# Start from no host binaries: every family is placed by its own cache entry or built here.
+rm -f python/mojolearn/host/*.so
 CORES=$(python3 -c 'import os; print(len(os.sched_getaffinity(0)))')
 PAR=${POD_SMOKE_PARALLEL:-4}
 [ "$PAR" -gt "$CORES" ] && PAR=$CORES
