@@ -13,6 +13,7 @@
 # A caller's own object can still run its own code where the Python method
 # did: an `__index__`, `__int__` or dtype attribute of an index, a shape or a
 # dtype argument. The library itself executes no Python here.
+from bindings.array_from_buffer_native import array_from_buffer
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -1015,6 +1016,8 @@ def _initialize(a: PythonObject, shape: PythonObject, requested: PythonObject, c
 def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonObject) raises -> PythonObject:
     if op == "init":
         return _initialize(a, args[0], args[1], context)
+    if op == "from_buffer":
+        return array_from_buffer(a, args[0], context)
     if op == "from_list":
         # `a` is the class the classmethod was called on.
         var b = native_loaded_module("builtins")

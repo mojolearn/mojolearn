@@ -1,0 +1,27 @@
+Peer6 CV constructor batch — 2026-10-27
+Branch: lane/peer6-timeseries-metrics-cv-20261027
+Base: 765a269fc4 (main at worktree creation)
+
+Changes: KFold/StratifiedKFold/GroupKFold/StratifiedGroupKFold,
+TimeSeriesSplit, RepeatedKFold/RepeatedStratifiedKFold, PredefinedSplit,
+and private explicit-fold construction now hand off once to the native
+model-selection owner. It validates passive inputs, prepares copied indices
+and finished list state, admits overwritten owner lifetimes, and writes native
+instance dictionaries. Existing field-only shuffle/leave-P constructors were
+already connected to the native declared constructor and remain unchanged.
+check_cv flags now reject Python boolean hooks; invalid splitter arguments
+are refused without calling their repr/str. Native explicit pairs preserve
+native sequence/buffer row preparation and reject Python iterator hooks.
+Removed unused Python repeated base constructor and index-copy helper.
+
+Compilation: complete runtime_model_selection host module, Mac ARM CPU
+column, identical, O0, 10 compiler workers, exit 0. Attempt2 supersedes the
+first successful compile after source-review corrections. See compile.json
+for command, hashes, source archive, full log and binary locations.
+Python AST parsing and git diff --check passed. Source reviewer found no
+additional issue in the corrected narrow diff. No runtime or identity runs.
+
+Remaining: search classes_ property and splitter/scorer repr; search state
+replacement lifetime admission; transitive capture-once inventory beyond
+this constructor batch. Time-series and metrics/resampling are separate
+active sublanes. No whole-library Python-free claim. No rented boxes.

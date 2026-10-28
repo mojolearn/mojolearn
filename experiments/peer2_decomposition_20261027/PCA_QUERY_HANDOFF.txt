@@ -1,0 +1,110 @@
+PCA transform/inverse_transform envelope, 2026-10-27
+
+Branch: lane/peer2-decomposition-20261027
+Worktree: /Users/andrewhendel/mojolearn-wt/peer2-decomposition-20261027
+Base local main: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+
+Source scope:
+The two existing public one-call shells now reach pca_query_operation before
+the older pca_fields/model reread path and the narrower Sequential argument
+admission that preempted PCA's supported sparse/pandas input provider. A dedicated provider takes root's model
+layout admission and one private field snapshot. Primitive settings are decoded
+without object-array conversion hooks. Original scalar owners remain retained.
+Fitted detection retains lifecycle flags and the public trailing-underscore
+attribute compatibility rule; synthesized mode metadata follows that check.
+PCA queries continue selecting current numeric_mode and capturing its process
+default, preserving vendor/mode readback checks.
+
+The input provider uses array_metadata_once(...allow_unsupported=True) to
+capture the complete native shape/dtype/strides/address before applying PCA's
+existing errors. It preserves complex-before-rank, numeric empty/shape errors,
+non-numeric PEP3118-format refusals, native byte order, unsupported CastIn and
+finite checks. The sparse path keeps its original simpler rank/empty/finite
+wording. Unsupported descriptors are refused before numerical execution.
+X casts use the existing family_cast_rows native conversion and finite scan.
+
+Fitted components/mean/singular values/explained variance remain strictly
+C-order native float32 with their fitted shapes. They are never silently cast
+or made contiguous. Whitening retains finite/nonnegative checks, the fit row
+count, compiled entry presence checks and the existing pca_refusal boundary.
+Original source/storage owners remain held independently of mutable Array
+slots through execution. The output is a fresh owned C-order float32 ndarray,
+using the same native ndarray/bytearray allocation as the previous owner.
+
+Reviewed public execution path:
+mojolearn.PCA and mojolearn.decomposition.PCA aliases -> decomposition.PCA's
+transform/inverse_transform -> _PCA_ENTRY -> host_surface runtime-classical
+alias -> pca_c -> pca_query_operation -> pca_model_pyapi/pca_input_pyapi ->
+import-connected compiled estimators pca_transform/inverse_transform or
+pca_whiten_{inverse_,}transform -> native *_host orchestration and synchronize
+-> completed ndarray return. PCA's existing _mojolearn_native_public marker
+already bypasses _mode's Python query decorators; no new marker was added.
+Compiled estimators receive only newly published primitive addresses and shape
+words. Their bodies unpack these before GILReleased execution and do not read
+caller/model Python objects during that numerical region. Kernels unchanged.
+
+Removed the now-unreferenced old pca_transform and pca_state_array bodies from
+pca_exact. Fit, fit_transform, archives, constructor/metadata and other
+decomposition families are not qualified by this query-only change.
+
+Dependencies:
+- Root classical_family_admit (346cb95a21b2 and subsequent integration).
+- Shared metadata eafa5a610c / frozen5bfbe8118e: allow_unsupported plus full
+  shape/stride/count retention; complex codes14/15/16 corrected46061ae81e.
+- This lane's shared scalar factor5d0762dfe281:
+  native_scalar_buffer_dtype(value,dtype), existing API delegates unchanged.
+  Root assigned sole ownership of that narrow factor; no arithmetic changed.
+
+Compile handoff:
+experiments/peer2_decomposition_20261027/pca_query_compile.mojo exports a minimal
+C forwarder instantiating both query branches and their provider closures.
+The changed dispatch hook is bindings.pca_native.pca_c; the supported full host
+group remains bindings/build_runtime_classical_host.sh. The coordinator owns
+small local compilation and any main merge. No lane compilation occurred.
+
+Validation status:
+No tests, runtime checks, syntax test run, benchmark or GPU campaign were run,
+per the owner's latest stop-verification instruction. Source reading is not
+runtime compliance evidence. Compile, runtime and vendor coverage remain
+pending. Existing PLS/JL evidence is retained unchanged and does not qualify
+these PCA changes.
+
+Remaining audit/verification work:
+The existing shared scalar/buffer/layout admission and sparse/pandas/Torch
+providers remain transitive dependencies. In particular, host_sparse_dense
+currently rereads data shape/strides and index itemsize/dtype (compressed/COO/
+DIA paths around host_sparse_native.mojo:221-249). Original sparse metadata
+therefore does NOT yet satisfy one-capture admission. Root assigned this lane
+the narrow shared sparse repair as a separate next commit; this PCA commit
+preserves sparse support and does not claim that remaining debt is complete. The installed public operation and
+output ownership still need final integration coverage when requested. The
+CPython packed compiled-entry ABI remains in use; there is no new raw numerical
+descriptor table or independent arithmetic implementation in this chunk.
+
+Independent coordinator review follow-up:
+Query binding dictionaries are now copied only after exact dict/string-key
+admission. All six required/optional consumed entries are compared with the
+import-connected immutable identity/owner/name records and checked as compiled
+builtin functions before vendor/mode readback executes. No universal module
+owner or exported-name assumption narrows legitimate import-time bindings. Optional whitening
+None/missing entries retain their existing later NotImplementedError behavior.
+Mutable native container truth (bytearray/list/tuple/dict) is frozen to Bool
+while original references remain in scalar_owners. No verification was run.
+
+
+2026-10-28 query truth compatibility companion
+Query lifecycle flags and whiten reuse the dedicated native PCA scalar truth
+snapshot introduced for fit. Temporal, text/object arrays, native scalar types,
+structured/raw void and builtin container truth retain supported behavior;
+unsupported Python truth hooks are refused. The existing strict integer/index
+contract for fitted dimensions is unchanged. Numeric/temporal/header snapshots
+and original owners remain local to the native query. Query warning source
+metadata is connected once at import for transform/inverse_transform.
+
+This companion depends on fit scalar source281742 +29ad490 and temporal helper
+7082db091c (local cherrye4fa50751b), plus the fit bridge scalar context. It needs
+the affected pca_query_compile.mojo target recompiled in the next coherent
+batch; previous query compile coverage does not qualify this changed closure.
+No tests/runtime or lane compile were run. The root-owned huge-decimal CPython
+_pylong callback repair remains explicit shared debt for native scalar parser
+closures; do not promote source review to full runtime compliance.

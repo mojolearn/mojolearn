@@ -2,8 +2,6 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """STL, Season-Trend decomposition by Loess, following
 ``statsmodels.tsa.seasonal.STL``. Series are decomposed on the GPU."""
-from . import _portable_math as math
-
 from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_stl')
@@ -26,11 +24,7 @@ class DecomposeResult:
     """
 
     def __init__(self, observed, seasonal, trend, resid, weights):
-        self.observed = observed
-        self.seasonal = seasonal
-        self.trend = trend
-        self.resid = resid
-        self.weights = weights
+        return _XSEQ(self, "decompose_initialize", (observed, seasonal, trend, resid, weights), _XSEQ_CONTEXT)
 
 
 # The arithmetic is `sequence/stl.mojo`, statsmodels' `_stl.pyx` loops in
@@ -92,46 +86,12 @@ class STL(ParamsMixin):
     def __init__(self, endog, period=None, seasonal=7, trend=None, low_pass=None, seasonal_deg=1,
                  trend_deg=1, low_pass_deg=1, robust=False, seasonal_jump=1, trend_jump=1,
                  low_pass_jump=1, numeric_mode=None):
-        y = np.asarray(endog)
-        if y.dtype == np.float64:
-            raise TypeError("STL: float64 is refused; pass float32 (no float64 on the device)")
-        self._one = y.ndim == 1
-        y = np.ascontiguousarray(y, dtype=np.float32).reshape(1, -1) if self._one else \
-            np.ascontiguousarray(y, dtype=np.float32)
-        if y.ndim != 2 or y.shape[1] < 1:
-            raise ValueError("STL: endog must be (n_obs,) or (batch_size, n_obs)")
-        if period is None:
-            raise ValueError("STL: period is required (the reference infers it from a pandas index only)")
-        period = int(period)
-        if period < 2:
-            raise ValueError("period must be a positive integer >= 2")
-        if trend is None:
-            trend = int(math.ceil(1.5 * period / (1 - 1.5 / seasonal)))
-            trend += (trend % 2) == 0
-        if low_pass is None:
-            low_pass = period + 1
-            low_pass += (low_pass % 2) == 0
-        for name, v in (("seasonal_deg", seasonal_deg), ("trend_deg", trend_deg), ("low_pass_deg", low_pass_deg)):  # glue: the three named degree arguments
-            if v not in (0, 1):
-                raise ValueError(f"{name} must be 0 or 1")
-        self.endog = endog  # verbatim, as get_params / clone report it
-        self._endog = y
-        self.period = period
-        self.seasonal = int(seasonal)
-        self.trend = int(trend)
-        self.low_pass = int(low_pass)
-        self.seasonal_deg, self.trend_deg, self.low_pass_deg = int(seasonal_deg), int(trend_deg), int(low_pass_deg)
-        self.robust = bool(robust)
-        self.seasonal_jump, self.trend_jump, self.low_pass_jump = int(seasonal_jump), int(trend_jump), int(low_pass_jump)
-        self.numeric_mode = numeric_mode
+        return _XSEQ(self, "stl_initialize", (endog, period, seasonal, trend, low_pass, seasonal_deg, trend_deg, low_pass_deg, robust, seasonal_jump, trend_jump, low_pass_jump, numeric_mode), _XSEQ_CONTEXT)
 
     @property
     def config(self):
         """The decomposition settings as a dict."""
-        return dict(period=self.period, seasonal=self.seasonal, seasonal_deg=self.seasonal_deg,
-                    seasonal_jump=self.seasonal_jump, trend=self.trend, trend_deg=self.trend_deg,
-                    trend_jump=self.trend_jump, low_pass=self.low_pass, low_pass_deg=self.low_pass_deg,
-                    low_pass_jump=self.low_pass_jump, robust=self.robust)
+        return _XSEQ(self, "stl_config", (), _XSEQ_CONTEXT)
 
     def fit(self, inner_iter=None, outer_iter=None):
         """Run the decomposition.
@@ -154,4 +114,4 @@ class STL(ParamsMixin):
         return _XSEQ(self, "stl_fit", (inner_iter, outer_iter), _XSEQ_CONTEXT)
 
 
-_native_xseq_bridge.register(xseq_decompose_result=DecomposeResult)
+_native_xseq_bridge.register(xseq_decompose_result=DecomposeResult, xseq_stl_class=STL)

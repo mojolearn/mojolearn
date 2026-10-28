@@ -230,7 +230,7 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
     return result
 
 
-def family_f32_snapshot(source: PythonObject, ndim: Int, name: String,
+def family_input_snapshot(source: PythonObject, ndim: Int, name: String,
                         context: PythonObject, dense: Bool = False) raises -> ArrayMetadata:
     # Common provider metadata admission for classical algorithms. Preserve
     # family_view's rank/empty refusals before casting or numerical execution.
@@ -266,15 +266,27 @@ def family_f32_snapshot(source: PythonObject, ndim: Int, name: String,
     if nd > 2:
         raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
     var snapshot = array_metadata_once(view, shape^, name, context)
+    _ = view^
+    _ = prepared^
+    return snapshot^
+
+
+def family_snapshot_f32(mut snapshot: ArrayMetadata, context: PythonObject) raises:
+    # Pack from one retained snapshot. Rebuild shape only from its native words;
+    # never reread exporter shape/dtype/address after operation admission.
     if not snapshot.f32_c():
-        var result = family_array(pyshape, "<f4", context)
+        var result = family_array(snapshot.python_shape(), "<f4", context)
         var address = Int(py=classical_address(result))
         var src = snapshot.source
         family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
                          FAMILY_F32P(unsafe_from_address=address))
         snapshot.replace_f32(result, address)
-    _ = view^
-    _ = prepared^
+
+
+def family_f32_snapshot(source: PythonObject, ndim: Int, name: String,
+                        context: PythonObject, dense: Bool = False) raises -> ArrayMetadata:
+    var snapshot = family_input_snapshot(source, ndim, name, context, dense)
+    family_snapshot_f32(snapshot, context)
     return snapshot^
 
 
@@ -343,7 +355,7 @@ def _family_weight_scalar(value: Float64, n: Int, wide: Bool,
     else:
         family_fill_f32(FAMILY_F32P(unsafe_from_address=address), n, Float32(value))
     var descriptor = CastIn(address, CAST_KIND_FLOAT, item, n, 1, item, 0)
-    return ArrayMetadata(weights, List[Int](n), descriptor, n, NPY_DOUBLE if wide else NPY_FLOAT,
+    return ArrayMetadata(weights, List[Int]([n]), descriptor, n, NPY_DOUBLE if wide else NPY_FLOAT,
                          True, True, True, weights, True)
 
 

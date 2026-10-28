@@ -82,12 +82,71 @@ def _availability_plan(member, checks, missing):
                             for name in ('__get__', '__set__', '__delete__', '__getattribute__', '__getattr__')))  # glue: fixed import-time protocol metadata
 
 
+def _neighbor_availability(package):
+    # glue: the four fixed LOF declarations are data at import; runtime
+    # evaluates the native novelty word without invoking these predicates.
+    import sys
+    module = sys.modules.get(package.__name__ + '._expansion_neighbors')
+    if type(module) is not ModuleType:
+        return {}
+    cls = vars(module).get('LocalOutlierFactor')
+    if type(cls) is not type:
+        return {}
+    result = {}
+    for name in ('fit_predict', 'score_samples', 'decision_function', 'predict'):  # glue: fixed public availability declarations
+        member = vars(cls)[name]
+        condition = 'not_novelty' if name == 'fit_predict' else 'novelty'
+        result[name] = ((vars(member)['check'],), condition)
+    return {cls: result}
+
+
+def _hierarchy_availability(package):
+    # glue: pin the hierarchy prediction predicate without invoking it.
+    import sys
+    module = sys.modules.get(package.__name__ + '._hierarchy_impl')
+    if type(module) is not ModuleType:
+        return {}
+    cls = vars(module).get('AgglomerativeClustering')
+    if type(cls) is not type:
+        return {}
+    member = vars(cls)['predict']
+    return {cls: {'predict': ((vars(member)['check'],), 'hierarchy_predict')}}
+
+
+def _density_availability(package):
+    # glue: the declared DBSCAN predicate is frozen import metadata only.
+    import sys
+    module = sys.modules.get(package.__name__ + '.density')
+    if type(module) is not ModuleType:
+        return {}
+    cls = vars(module).get('DBSCAN')
+    if type(cls) is not type:
+        return {}
+    member = vars(cls)['predict']
+    return {cls: {'predict': ((vars(member)['check'],), 'density_predict')}}
+
+
+def _linear_spectral_availability(package):
+    # glue: fixed availability declarations, captured once without calling predicates
+    import sys
+    result = {}
+    for module_name, class_name, member_name, condition in (  # glue: two native availability schemas
+            ('_expansion_linear', 'SGDClassifier', 'predict_proba', 'sgd_probability'),
+            ('_spectral_impl', 'SpectralClustering', 'predict', 'spectral_predict')):
+        module = sys.modules.get(package.__name__ + '.' + module_name)
+        if type(module) is ModuleType:
+            cls = vars(module)[class_name]
+            member = vars(cls)[member_name]
+            result[cls] = {member_name: ((vars(member)['check'],), condition)}
+    return result
+
+
 def connect_classes(package):
     # glue: establish native slots once, before dependent estimator/parameter
     # tables capture method identities; lazy imports admit only new classes.
     global _CONTEXT
     import sys
-    from . import _mode, _cholesky_impl
+    from . import _mode, _cholesky_impl, _svm_impl
     from ._native_classical_bridge import _layout, _numpy_free_context
     from .tokenizer import _binding
 
@@ -100,13 +159,24 @@ def connect_classes(package):
             raise TypeError('public attributes require compiled native entries')
         context = _numpy_free_context()
         context.update(native_module_type=ModuleType, plans={}, pending={}, missing=object(),
-                       property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet'},
+                       property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet',
+                                         vars(_svm_impl.SVC)['coef_']: 'svm_svc_coef',
+                                         vars(_svm_impl.SVR)['coef_']: 'svm_svr_coef'},
+                       svm_owner=(_svm_impl._NATIVE, _svm_impl._NATIVE_CONTEXT),
                        stl_connected=False, archive_finalizer_entry=finalizer)
         context['descriptor'] = factory(MethodType(entry, context))
         _CONTEXT = context
     context = _CONTEXT
     archives = _archive_finalizers(package)
     prep_availability = _prep_availability(package, context['missing'])
+    neighbor_availability = _neighbor_availability(package)
+    neighbor_availability.update(_hierarchy_availability(package))
+    neighbor_availability.update(_density_availability(package))
+    neighbor_availability.update(_linear_spectral_availability(package))
+    neighbor_availability[_svm_impl.SVC] = {
+        name: ((vars(vars(_svm_impl.SVC)[name])['check'],), 'svm_probability')
+        for name in ('predict_proba', 'predict_log_proba')  # glue: two fixed native availability schemas
+    }
     stl_module = sys.modules.get(package.__name__ + '._x_sequence_stl')
     if not context['stl_connected'] and type(stl_module) is ModuleType:
         context['property_schemas'][vars(vars(stl_module)['STL'])['config']] = 'stl_config'
@@ -156,6 +226,11 @@ def connect_classes(package):
                 elif (cls in prep_availability and name == 'fit_transform'
                       and type(member) is _mode.available_if):
                     availability[name] = _availability_plan(member, prep_availability[cls], context['missing'])
+                elif (cls in neighbor_availability and name in neighbor_availability[cls]
+                      and type(member) is _mode.available_if):
+                    checks, condition = neighbor_availability[cls][name]
+                    availability[name] = _availability_plan(member, checks, context['missing'])
+                    availability[name]['condition'] = condition
                 elif type(member) is ClassMethodDescriptorType and member.__objclass__ is object:
                     plan['bindings'][name] = (member, member.__get__)
                 elif _resolved(type(member), '__get__', context['missing']) is not context['missing'] and name not in plan['bindings']:

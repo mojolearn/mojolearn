@@ -709,6 +709,12 @@ from ._native_declared_params import CONTEXT as _declared_constructor_setters
 _connect_declared_constructors(_declared_constructor_setters)
 del _connect_declared_constructors, _declared_constructor_setters
 
+# Snapshot family storage after every native constructor/attribute installer.
+from ._native_family_layouts import connect as _connect_family_layouts
+import sys as _family_layout_sys
+_connect_family_layouts(_family_layout_sys.modules[__name__])
+del _connect_family_layouts, _family_layout_sys
+
 # Default member estimators are constructed only after every constructor above is connected.
 from ._native_msel_prep import connect_estimator_defaults as _connect_estimator_defaults
 _connect_estimator_defaults()
@@ -720,3 +726,15 @@ del _connect_estimator_defaults
 from ._native_parallel_public import refresh as _refresh_parallel_public
 _refresh_parallel_public(parallel_ensemble._FAMILY_CONTEXT)
 del _refresh_parallel_public
+
+# Complete process backend metadata is native after import-time provider setup.
+from ._native_backend_public import connect as _connect_backend_public
+import sys as _backend_public_sys
+_connect_backend_public(_backend_public_sys.modules[__name__])
+del _connect_backend_public, _backend_public_sys
+# Profile bootstrap defaults are already shared with the native providers.
+# Replace both public aliases and module functions after import connections.
+from ._native_numeric_profile import connect as _connect_numeric_profile_public
+import sys as _numeric_profile_public_sys
+_connect_numeric_profile_public(_numeric_profile_public_sys.modules[__name__])
+del _connect_numeric_profile_public, _numeric_profile_public_sys

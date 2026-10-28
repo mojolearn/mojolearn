@@ -1,0 +1,37 @@
+{
+  "base_commit": "d20b608bbf13e79d6eec7303a975eda7bed8ec80",
+  "exit_code": 0,
+  "target": "apple-m1 CPU column",
+  "workers": 10,
+  "cpu_allocation": 10,
+  "flags": [
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "fixture": "checks/metrics_public_compile.mojo",
+  "scope": "Full metrics classification owner, including fowlkes_mallows native empty-input shape admission; CPU compile only",
+  "runtime_executed": false,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-metric-empty-labels-20261027/metrics-public.so",
+  "artifact_sha256": "a1f5de2fb53a86f4bd5980f558c573175fbb42d1b6ea0c160e9a900f5148c576",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-metric-empty-labels-20261027/source-bytes.tgz",
+  "source_archive_sha256": "1c20b0bc02d33a92669f4faf5d1276fca1ee2d3797bc346c3b0599b004e3ee28",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer6-metric-empty-labels-20261027/source-manifest.json",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-metric-empty-labels-20261027/compile.log",
+  "earlier_attempt_logs": [],
+  "pending": [
+    "General row resample migration",
+    "Transitive capture-once audit beyond direct numeric buffers",
+    "GPU compilation and runtime/identity checks excluded by owner"
+  ]
+}

@@ -1,0 +1,159 @@
+Peer2 decomposition: PCA fit/fit_transform native envelope
+2026-10-27
+
+Branch lane/peer2-decomposition-20261027
+Base local main 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Compile/runtime status: PENDING. No lane compile or tests were run for this
+increment, following the owner's latest instruction. Required commit/push hooks
+are retained separately and are not evidence of runtime compliance.
+
+Public path reviewed
+mojolearn.PCA -> decomposition.PCA.fit/fit_transform -> one _PCA_ENTRY call
+-> pca_c -> pca_fit_operation. The existing _mojolearn_native_public class
+flag bypasses _mode input/fitted/output wrappers; no new flags or wrappers
+were introduced. Constructors and unrelated metadata/archive methods are
+outside this increment. No Python wrapper performs result conversion.
+
+The dedicated operation uses classical_family_admit before model fields,
+a private exact-dict settings snapshot and retained original scalar/buffer
+references. Mutable scalar arrays/buffers are captured into native records
+before input preparation can release the GIL. Reused option objects share one
+snapshot. Each consumed setting is converted once before numerical execution,
+at its original validation point; solver/refusal ordering, exact/full/fraction/
+MLE/randomized behavior, ignored y admission and native host-only refusal are
+retained. Scalars use the shared native decoder/parser/warning provider with a
+dedicated import-connected metadata context, not a training or optimizer owner.
+Object conversion hooks are refused before they can execute. Unknown solver
+objects with representation hooks are refused instead of invoking repr.
+
+The whole input path is the PCA snapshot provider from the prior query chunk,
+including native dense/sparse preparation, rank/type/finite refusal, one metadata
+capture and original owner retention. Input copying metadata comes from that
+same preparation and source type, rather than rereading X after execution.
+The seven compiled fit/metadata/optional-whiten entries are identity-checked
+against import-retained entry/owner/name records before either metadata reader.
+Their private table is copied before use. Vendor/mode results are captured once.
+
+Output allocation captures each pointer once. Existing pca_fit_owned and
+pca_fit_randomized receive only newly boxed native addresses and dimensions.
+Their bindings unpack those primitives before GILReleased and invoke
+pca_fit_owned/pca_randomized_owned in decomposition/impl/pca_owner.mojo or the
+corresponding core/estimators_host_impl.mojo owners. The metadata reader
+bindings return fixed constants without releasing the GIL. Existing numerical
+implementations, dimensions, dtype, seeded arithmetic and algorithms are
+unchanged. Native memcpy trims the packed result prefix when rank selection
+changes the kept count. MLE may select zero; a projection retains explicit
+(rows, 0) matrix shape in that case. Only completed owned C-float32 arrays and the noise
+scalar are committed to the original admitted model dictionary; no setting is
+reread from the live model after execution.
+
+Dependencies
+- Prior PCA query/sparse commits through 847a303 and their integrated shared
+  array-metadata/classical-model admission prerequisites.
+- fa442d9bf27e94c4614ba8c2dc2109e733601501: four shared scalar decode calls reuse
+  their captured dtype (depends on cbca14a native_scalar_buffer_dtype factor).
+- cc18ae9: import-time query-loop annotation required by the push hook.
+
+Affected compile targets
+experiments/peer2_decomposition_20261027/pca_fit_compile.mojo instantiates both
+fit results, exact and randomized branches, metadata/scalar parsing and existing
+sparse input formats. Coordinator may compile this narrow root, then integrate
+pca_c; no unrelated family build is required solely for this increment.
+Existing _mojolearn_estimators and _mojolearn_estimators_host arithmetic sources
+were inspected and are unchanged; optional GPU/vendor and runtime coverage is
+explicitly pending final integration.
+
+Pending focused runtime controls
+Public exact/full/randomized/whiten fit and fit_transform; fractional/MLE prefix
+shape and ownership; fitted-state atomicity on refusal; NaN/complex/zero/rank
+errors; strict NumPy scalar dtype/rank/byte-order, warnings, invalid native
+settings and object-dtype hook controls; mutable model field replacement during
+native execution; all admitted dense/sparse/pandas/Torch inputs; input_copied_
+and output dtype/ownership. No source review or hook result substitutes for them.
+
+Remaining scope/debt
+Other decomposition/cross-decomposition public operations remain separate work.
+Legacy pca_exact/pca_randomized helper definitions no longer drive PCA fitting;
+shared pca_copied remains reachable by unrelated decomposition/manifold owners.
+PCA constructor/attribute/parameter/archive lifecycle and shared input/scalar
+provider closures retain their broader integration/audit responsibilities.
+No claim that the entire decomposition family is runtime compliant.
+
+Evidence
+~/mojolearn-evidence/peer2-decomposition-20261027/
+  scalar-captured-dtype-commit.log
+  pca-fit-commit.log
+  pca-fit-push.log (initial push refused an unrecognized loop annotation)
+  pca-fit-scalar-snapshot-commit.log
+  pca-fit-scalar-snapshot-push.log
+  pca-connection-annotation-push.log
+Full hook output stays in those files. Compiler/runtime evidence belongs to
+the coordinator's frozen compile batch and final integration run.
+
+2026-10-28 compatibility review followup
+The dedicated PCAFitScalar provider now owns scalar conversion completely;
+training_scalar_native is reused only for native warning delivery. This covers
+tol, n_components, n_oversamples and iterated_power, including native temporal
+scalars/arrays through the pure helper7082db091c (local cherry e4fa50751b).
+Temporal dtype/layout and eight raw bytes are captured before input work;
+calendar category/range decisions are native. Neither NumPy number slots nor
+Python date/calendar helpers execute. Exact native scalar admission precedes
+legacy sequential admission so long double/complex/temporal scalars can reach
+the dedicated decoder. Primitive strings/bytes are boxed as native builtin
+text before the fixed CPython parser. Unsupported protocols are refused.
+
+An array.array setting keeps its exact native wrapper and typecode around a
+private bytes copy so native integer/float parser error representation/type is
+preserved. The previous conversion to bare bytes was repaired. Structured void
+number conversion uses a native empty tuple to retain integer-specific versus
+float-specific refusal; no field conversion is needed to refuse a record.
+
+Whiten now uses dedicated native truth handling for numeric/complex/temporal,
+text/object arrays, structured/raw void and builtin containers/buffers. It
+freezes the result before input preparation. Empty-array truth retains the
+NumPy2.2 transition from warning/False to ValueError. Structured fields are
+walked natively with ordinary owned scalar snapshots; Python truth hooks are
+refused before execution. Query truth reuse is a separate followup target.
+
+Deferred native scalar item errors now own the exact CPython (type,value,
+traceback) triple using the same supported FetchTriple/Restore ownership
+pattern as ByteCheckpointIOError. A native item-boxing allocation or dtype
+boxing failure need not preempt the original input-validation stage. The
+record restores the captured exception only when its setting is consumed;
+unused records release owned references normally. No error category is guessed
+from a filtered log or reconstructed Python callback.
+
+Source-only status remains unchanged: no tests/runtime/compile were run.
+The coordinator must compile pca_fit_compile.mojo before merging; runtime,
+negative-control, error-precedence and cross-vendor coverage remain pending.
+
+Additional source compatibility decisions
+Extended complex (G/clongdouble) scalar-array integer and float conversion both
+preserve the native real-part conversion plus ComplexWarning; F/D arrays box
+builtin complex and retain integer-/float-specific refusals. Manifold confirmed
+the NumPy2.3 source contract (its shared training scalar comment had retained it).
+A copied memoryview's float parsing error preserves the original native repr,
+including its identity address, captured before input work. Only the native
+ValueError text from this exact buffer parser is rewritten, using CPython's
+floatobject.c wording; other native exceptions are retained unchanged.
+
+Explicit remaining shared callback dependency
+Root identified CPython's huge-decimal conversion route (>6000 digits) entering
+Python _pylong from native integer text parsing. This lane does not cap or drop
+supported values. _pca_builtin_number still uses the ordinary CPython native
+parser pending root's coordinated shared repair. This callback closure remains
+unresolved; do not label this operation Python-free/compliant before integrating
+that repair and its affected source/compile closure. The same caveat applies to
+large-int representation paths where CPython selects its Python implementation.
+
+
+Public context-envelope debt (coordinator review, before next freeze)
+pca_c and _pca_admitted now obtain the registered builtins module through
+native_loaded_module, eliminating runtime import callbacks on those public
+entry paths. A canonical immutable provider-context connection still must be
+admitted before classical_connect_numpy consumes the passed context. Current
+fit/query helpers validate their entry tables but do not complete that earlier
+public context envelope. The dedicated fit/query increment may compile while
+this remains explicit; it is not a complete public-runtime compliance claim.
+When the context is privately snapshotted, NotFitted transport must preserve
+that private context's actual exception class instead of re-reading args[3].

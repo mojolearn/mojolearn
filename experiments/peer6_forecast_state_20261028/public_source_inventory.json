@@ -1,0 +1,357 @@
+{
+  "scope": "source AST only, declared public methods and constructors; no runtime/installed inspection",
+  "methods": 43,
+  "single_native_call": 43,
+  "rows": [
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "__init__",
+      "line": 445,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "fit",
+      "line": 474,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "mu_",
+      "line": 503,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "beta_",
+      "line": 507,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "ar_",
+      "line": 511,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "ma_",
+      "line": 515,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "sar_",
+      "line": 519,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "sma_",
+      "line": 523,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "sigma2_",
+      "line": 527,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "predict",
+      "line": 554,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "forecast",
+      "line": 593,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "save",
+      "line": 629,
+      "single_native_call": true,
+      "entry": "_ARCHIVE"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "load",
+      "line": 646,
+      "single_native_call": true,
+      "entry": "_ARCHIVE"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "cls": "ARIMA",
+      "operation": "__repr__",
+      "line": 666,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "cls": "AutoARIMA",
+      "operation": "__init__",
+      "line": 81,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "cls": "AutoARIMA",
+      "operation": "search",
+      "line": 84,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "cls": "AutoARIMA",
+      "operation": "fit",
+      "line": 145,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "cls": "AutoARIMA",
+      "operation": "predict",
+      "line": 176,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "cls": "AutoARIMA",
+      "operation": "forecast",
+      "line": 195,
+      "single_native_call": true,
+      "entry": "_TSA"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_croston.py",
+      "cls": "_Croston",
+      "operation": "__init__",
+      "line": 22,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_croston.py",
+      "cls": "_Croston",
+      "operation": "fit",
+      "line": 25,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_croston.py",
+      "cls": "_Croston",
+      "operation": "predict",
+      "line": 50,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_croston.py",
+      "cls": "_Croston",
+      "operation": "forecast",
+      "line": 74,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_theta.py",
+      "cls": "AutoTheta",
+      "operation": "__init__",
+      "line": 83,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_theta.py",
+      "cls": "AutoTheta",
+      "operation": "fit",
+      "line": 87,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_theta.py",
+      "cls": "AutoTheta",
+      "operation": "predict",
+      "line": 114,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_theta.py",
+      "cls": "AutoTheta",
+      "operation": "forecast",
+      "line": 135,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "cls": "ETS",
+      "operation": "__init__",
+      "line": 97,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "cls": "ETS",
+      "operation": "fit",
+      "line": 101,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "cls": "ETS",
+      "operation": "predict",
+      "line": 131,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "cls": "ETS",
+      "operation": "forecast",
+      "line": 152,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "cls": "DampedETS",
+      "operation": "__init__",
+      "line": 200,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_garch.py",
+      "cls": "GARCH",
+      "operation": "__init__",
+      "line": 83,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_garch.py",
+      "cls": "GARCH",
+      "operation": "fit",
+      "line": 86,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_garch.py",
+      "cls": "GARCH",
+      "operation": "forecast",
+      "line": 111,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_var.py",
+      "cls": "VARResults",
+      "operation": "__init__",
+      "line": 46,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_var.py",
+      "cls": "VARResults",
+      "operation": "forecast",
+      "line": 49,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_var.py",
+      "cls": "VAR",
+      "operation": "__init__",
+      "line": 98,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_var.py",
+      "cls": "VAR",
+      "operation": "fit",
+      "line": 101,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_stl.py",
+      "cls": "DecomposeResult",
+      "operation": "__init__",
+      "line": 26,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_stl.py",
+      "cls": "STL",
+      "operation": "__init__",
+      "line": 86,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_stl.py",
+      "cls": "STL",
+      "operation": "config",
+      "line": 92,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_stl.py",
+      "cls": "STL",
+      "operation": "fit",
+      "line": 96,
+      "single_native_call": true,
+      "entry": "_XSEQ"
+    }
+  ],
+  "pending": [
+    "Prophet separately owned",
+    "Legacy TSA separately owned",
+    "Inherited mode/parameter/archive providers have separate ownership",
+    "Runtime/GPU/identity explicitly not performed"
+  ]
+}

@@ -1,0 +1,24 @@
+Shared public boundaries: peer4 checkpoint, 2026-10-28
+Parent assigned backend public mode/vendor/arch queries, four numeric profile exports, Array.from_buffer, and _mode.__getattribute__/set_params only. Peer1 retains estimator_checked_mode kernel ownership. No runtime/GPU/identity tests; focused CPU compilations and required source/push guards only.
+
+Root worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer4-public-boundaries
+Root branch: lane/peer4-public-boundaries-20261028, initial HEAD20ab53ec02.
+Root owns Array.from_buffer: static trace confirms live Python body; existing array_native_call has no from_buffer branch. Planning dedicated native helper and reuse existing native entry. No source code edits or builds yet at this checkpoint; this brief is uncommitted.
+
+cnn_conv owns _backend.py gpu_arch/gpu_arch_how/set_default_mode (public set_numeric_mode)/numeric_mode/vendor. Static trace confirms direct live Python aliases in __init__. Plans native owner + import-time bridge, narrow tokenizer registration and final package export rebinding. No build reported yet. Will create branch/worktree from root branch; scope disjoint from CPUreview backend comments.
+cnn_pool owns _numeric_profile.py exported default_profile/set_default_profile/profiles/measured. Static trace confirms live aliases. New full checkout hit disk exhaustion; no source edits yet. Recreating only its own worktree with sparse historical results. No builds.
+moe owns _mode.py __getattribute__/set_params and necessary native metadata implementation; checks actual installed replacements first. New checkout hit disk exhaustion; removing only its clean already-pushed older worktrees and recreating sparse checkout. No builds.
+
+Earlier neural range ffdc634271 was reported merged/pushed by parent via9ae87214e0. All its compilation/source/push receipts and complete logs/source/binaries remain under ~/mojolearn-evidence/peer4-neural-20261027/ and agent-specific evidence paths listed in experiments/peer4_neural_labels_seed_20261027/HANDOFF.txt.
+
+Agent worktrees now ready at base20ab53ec02; source edits/builds not yet reported:
+- backend: /Users/andrewhendel/CascadeProjects/mojolearn-peer4-backend-public; lane/peer4-backend-public-20261028.
+- profiles: /Users/andrewhendel/CascadeProjects/mojolearn-peer4-numeric-profile; lane/peer4-numeric-profile-20261028; experiments/peer4_numeric_profile_20261028/ checkpoint.
+- mode: /Users/andrewhendel/CascadeProjects/mojolearn-peer4-mode; lane/peer4-mode-boundaries-20261028; experiments/peer4_mode_boundaries_20261028/CHECKPOINT.txt. Static trace found deferred host set_params and pending-property classes retaining old attribute slots.
+Root and previous root worktree use sparse checkout excluding bench/results only; historical records remain committed and evidence stays retained. Agents coordinate separate tokenizer/__init__ registration blocks.
+
+Root Array implementation now uncommitted in bindings/array_from_buffer_native.mojo, bindings/array_native.mojo, python/mojolearn/_array.py; fixture checks/array_from_buffer_public_compile.mojo. Full actual Array dispatcher compile attempt1 failed on source String self-aliasing assignment; fixed with an intermediate owned string. Attempt2 running via /tmp/peer4_public_compile.py, output ~/mojolearn-evidence/peer4-public-boundaries-20261028/array-from-buffer-attempt2/compile.log. No runtime tests. Root checks native field slots, passive subclasses, readonly/lifetimes, C/F layouts, admitted exporter pinning, full metadata publication.
+
+Backend/profile completed source commits were cherry-picked as fcee3d4bfc / ff81abe394. Adjacent tokenizer imports/exports and final __init__ blocks resolved by retaining both; no owner logic changed. Both child branches pushed with guards passed, parent notified. Array attempt3 passed21.482s. Source-only review found missing NumPy scalar exporters; fixed along with standalone mmap support via local canonical native type admission. Attempt4 compiler crashed (uncaught system_error/mutex failure); ENOSPC also prevented crash-report/result receipt writes, internal compiler cause unconfirmed. Full failure log/controller-failure.json retained. Own clean/sparse worktree cleanup restored9.7GiB; unchanged-source attempt5 now running. Mode child paused new compilation until retention room confirmed; source implementation continues.
+
+Root final Array compile attempt5 passed52.932s at unchanged final native source. Source/binary/logs retained; detailed final handoff experiments/peer4_array_from_buffer_20261028/HANDOFF.txt. Disk now16GiB after owned cleanup; mode compile hold released. Backend/profile source guards passed, parent already notified of independently pushed child commits. Root will push coherent Array + these two imported batches; mode remains an independent follow-up.

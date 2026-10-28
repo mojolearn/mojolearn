@@ -1,5 +1,35 @@
 # Agent working rules
 
+## Compile and merge; no verification campaign (Andrew, 2026-10-27)
+
+- Continue the migration with small affected compilations, then merge and push
+  successful coherent batches into main. Local or authorized CPU RunPod builds
+  qualify the paths actually compiled; keep their scope explicit.
+- Do not run runtime, identity or cross-vendor verification campaigns for this
+  work. This supersedes the earlier instruction to run a final verification
+  pass in this session. Required source/push guards still apply; compilation
+  must never be described as verified runtime behavior or bitwise identity.
+
+## Provider migration CPU builds and peer autonomy (Andrew, 2026-10-27)
+
+- Any peer or subagent may rent a RunPod CPU box when useful for this migration.
+  Use all allocated CPU cores for compiler workers or bounded build concurrency;
+  determine the allocation from affinity/cgroup limits, not the host CPU count.
+  Do not inherit one- or two-core development caps. Record the actual allocation
+  and settings; configured parallelism does not prove every phase saturates CPUs.
+- Arm a 60-minute deadman. A box may remain available for reuse within its
+  protected lease. Record ownership and state so other sessions do not delete
+  it. Preserve complete run outputs and required binaries on the Mac and in R2
+  before teardown. Existing disabled watcher services remain disabled.
+- This authorizes focused CPU compilation by peers/subagents, superseding the
+  older lane-never-compiles restriction for this migration. Avoid duplicate
+  same-source builds; a small successful compile remains required before merge.
+- Peers may fan out and resolve routine implementation and merge decisions
+  autonomously. Report completed coherent batches, genuine blockers/ownership
+  conflicts, and rented-box ownership. Put routine findings in handoff files
+  rather than sending repeated coordination messages. Main integration remains
+  serialized; do not mutate another agent's worktree.
+
 ## Provider migration delivery (Andrew, 2026-10-27)
 
 - Move the whole public operation into native code: validation, fitted-state

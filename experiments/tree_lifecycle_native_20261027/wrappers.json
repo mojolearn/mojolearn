@@ -1,0 +1,10 @@
+{
+  "python_syntax": "pass",
+  "single_call_source_check": "three modified public methods",
+  "files": {
+    "python/mojolearn/_forest_protocol.py": "e83e637b4b5e046d4020ee24add317b89994c939707993a43c47e44c4f503420",
+    "python/mojolearn/_gbdt_adapters.py": "d3375445289b6a4cc110d1e63c1a820cd498ad9063af9bd85759d8f7972cd58d",
+    "python/mojolearn/_native_trees_bridge.py": "f2ff732a987ba6719594edf930a32f14fd936b487f36e5fc5d90c8723a6a6d67"
+  },
+  "runtime_executed": false
+}

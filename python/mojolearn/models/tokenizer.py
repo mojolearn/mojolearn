@@ -32,7 +32,7 @@ _NAME_OF = {spelling: name for name, spellings in PATTERNS.items() for spelling 
 
 def pattern_name(regex):
     """The name of a known pattern spelling, or None."""
-    return _NATIVE.vocab_pattern_name(regex, _NAME_OF)
+    return _NATIVE.tokenizer_public_call('vocab_pattern', (regex,), _TOKENIZER_CONTEXT)
 
 
 def _text_bytes(data):
@@ -47,7 +47,7 @@ def pretokenize(data, pattern):
     """Pre-token boundaries of `data` (bytes) under `pattern` ("gpt2",
     "llama3" or "qwen2"): `m + 1` offsets, first 0 and last `len(data)`.
     The cut is the binding's (`vocab_pretokenize_pattern`)."""
-    return _NATIVE.vocab_pretokenize_pattern(data, pattern)
+    return _NATIVE.tokenizer_public_call('vocab_cut', (data, pattern), _TOKENIZER_CONTEXT)
 
 
 # --------------------------------------------------------- the reader
@@ -62,35 +62,33 @@ class Tokenizer:
 
     def __init__(self, tokens, merges, *, pattern, added=None, normalizer=None,
                  bos_ids=(), eos_ids=(), ignore_merges=False, source="<tokens>"):
-        return _NATIVE.vocab_init_public(self, tokens, merges,
-            (pattern, added, normalizer, bos_ids, eos_ids, ignore_merges, source), _NATIVE)
+        return _NATIVE.tokenizer_public_call('vocab_init', (self, tokens, merges, (pattern, added, normalizer, bos_ids, eos_ids, ignore_merges, source)), _TOKENIZER_CONTEXT)
 
     @classmethod
     def _from_spelled(cls, vocab, merges, *, pattern, added, normalizer, bos_ids, eos_ids, ignore_merges,
                       source):
-        return _NATIVE.vocab_spelled_public(cls, vocab, merges,
-            (pattern, added, normalizer, bos_ids, eos_ids, ignore_merges, source), _NATIVE)
+        return _NATIVE.tokenizer_public_call('vocab_spelled', (cls, vocab, merges, (pattern, added, normalizer, bos_ids, eos_ids, ignore_merges, source)), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ loading
     @classmethod
     def from_pretrained(cls, path):
         """`path` is a directory holding `tokenizer.json` (and optionally
         `tokenizer_config.json`), or the `tokenizer.json` itself."""
-        return _NATIVE.vocab_pretrained_public(cls, path, _NATIVE, _NAME_OF)
+        return _NATIVE.tokenizer_public_call('vocab_pretrained', (cls, path), _TOKENIZER_CONTEXT)
 
     @classmethod
     def _from_json(cls, data, path, cfg=None):
-        return _NATIVE.vocab_json_public(cls, data, path, cfg, _NATIVE, _NAME_OF)
+        return _NATIVE.tokenizer_public_call('vocab_json', (cls, data, path, cfg), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ facts
     @property
     def n_vocab(self):
         """The ranks, extended by the added tokens above them."""
-        return self._n_vocab
+        return _NATIVE.tokenizer_public_call('vocab_fact', (self, 'n_vocab'), _TOKENIZER_CONTEXT)
 
     @property
     def n_ranks(self):
-        return self._n_ranks
+        return _NATIVE.tokenizer_public_call('vocab_fact', (self, 'n_ranks'), _TOKENIZER_CONTEXT)
 
     bos_token_id = None
     eos_token_id = None
@@ -99,7 +97,7 @@ class Tokenizer:
     def pretokenize(self, data):
         """The pre-tokens of `data` (bytes) under this tokenizer's pattern,
         as a list of bytes; the cut before any merge."""
-        return self._m.vocab_pretokenize_public(self, data)
+        return _NATIVE.tokenizer_public_call('vocab_pretokenize', (self, data), _TOKENIZER_CONTEXT)
 
     _bytes = staticmethod(_text_bytes)
 
@@ -108,23 +106,28 @@ class Tokenizer:
         `allow_special=True`; the segments between them are encoded alone
         (a special token ends the text before it, as the binding's
         `<|endoftext|>` rule has it)."""
-        return self._m.vocab_encode_public(self, data, False, allow_special, True)
+        return _NATIVE.tokenizer_public_call('vocab_encode', (self, data, False, allow_special, True), _TOKENIZER_CONTEXT)
 
     def encode(self, text, *, add_special_tokens=True, allow_special=False):
         """The ids of `text` (str, NFC-normalized when the file says so, then
         UTF-8; or bytes-like), with the template's BOS/EOS ids around them
         when `add_special_tokens` is True."""
-        return self._m.vocab_encode_public(self, text, add_special_tokens, allow_special, False)
+        return _NATIVE.tokenizer_public_call('vocab_encode', (self, text, add_special_tokens, allow_special, False), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ decode
     def decode_bytes(self, ids):
         """The bytes of an id sequence; an added token renders its content.
         An id outside the vocabulary is refused by value and position."""
-        return self._m.vocab_decode_public(self, ids, True, "replace")
+        return _NATIVE.tokenizer_public_call('vocab_decode', (self, ids, True, 'replace'), _TOKENIZER_CONTEXT)
 
     def decode(self, ids, errors="replace"):
-        return self._m.vocab_decode_public(self, ids, False, errors)
+        return _NATIVE.tokenizer_public_call('vocab_decode', (self, ids, False, errors), _TOKENIZER_CONTEXT)
 
     def __repr__(self):
-        return (f"Tokenizer(pattern={self.pattern!r}, n_ranks={self._n_ranks}, added={len(self.added)}, "
-                f"source={self.source!r})")
+        return _NATIVE.tokenizer_public_call('vocab_fact', (self, 'repr'), _TOKENIZER_CONTEXT)
+
+
+# Immutable import-time metadata; native execution owns all public operations.
+_TOKENIZER_CONTEXT = (Tokenizer, _NATIVE, _NAME_OF, unicodedata.unidata_version,
+                      unicodedata.normalize)
+_NATIVE.tokenizer_public_call("connect_vocab", (), _TOKENIZER_CONTEXT)

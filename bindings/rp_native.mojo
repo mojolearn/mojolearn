@@ -44,7 +44,7 @@ def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: Pyt
     var kc: Int
     if auto:
         var eps = fields["eps"]
-        var bound = jl_min_dim(PythonObject(n), eps)
+        var bound = jl_min_dim(PythonObject(n), eps, context)
         if decomp_le(bound, PythonObject(0)):
             raise Error("eps=" + _str(eps) + " and n_samples=" + String(n) + " lead to a target dimension of "
                         + _str(bound) + " which is invalid")
@@ -89,6 +89,27 @@ def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: Pyt
     if inverse:
         py_setitem(fields, "inverse_components_", inverse_m)
     return x
+
+
+def rp_components(model: PythonObject) raises -> PythonObject:
+    """The `components_` getter: the fitted matrix, or AttributeError."""
+    var value = _components(py_fields(model))
+    if value is None:
+        raise Error("AttributeError: components_")
+    return value
+
+
+def rp_set_components(model: PythonObject, value: PythonObject) raises:
+    """The `components_` setter: replaces the fitted matrix field."""
+    var fields = py_fields(model)
+    if py_contains(fields, "_rp_lazy"):
+        _ = py_call(fields.pop, "_rp_lazy")
+    py_setitem(fields, "_rp_components", value)
+
+
+def rp_getstate(model: PythonObject) raises -> PythonObject:
+    """`__getstate__`: a shallow copy of the instance fields."""
+    return py_call(Python.import_module("builtins").dict, py_fields(model))
 
 
 def _check(model: PythonObject, fields: PythonObject) raises:

@@ -1,0 +1,20 @@
+Cluster refit owner admission — 2026-10-28
+
+Frozen sourceefdca57f71e17ff22107564bb0e4e948b0673d91.
+MiniBatchKMeans, BisectingKMeans, MeanShift, OPTICS, AffinityPropagation and
+BayesianGaussianMixture now admit prior fit-state owners before numerical
+work or state mutation. Fixed per-class field lists follow their existing
+native fit owners, including fields not consumed by inference (inertia,
+iteration counts, reachability/tree state and Bayesian prior attributes).
+Shared fitted flags/depth/feature names are covered too. This complements
+the earlier constructor lifetime repair.
+
+OPTICS metric_params requires a native mapping before .get lookup, and its
+p value receives scalar admission before float conversion. This prevents
+object-array elements or arbitrary owner methods from entering Python.
+
+Compile PASS actual cluster lifecycle owner, Mac CPU O0-j10,44.95s. The
+earlier173.41s compile is retained as superseded by explicit mapping-owner
+admission. Receipt cluster_refit_compile.json and complete source/log/binary
+in ~/mojolearn-evidence/cluster-density-linalg-20261027/
+cluster-refit-mapping-compile/. No runtime/identity/GPU qualification claimed.

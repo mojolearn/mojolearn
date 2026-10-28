@@ -12,9 +12,11 @@ from autograd.partition_entries import (
     partition, partition_open_native, partition_load_native, partition_run_native, partition_save_native,
     partition_state_native, partition_residency_native, partition_events, partition_ready, partition_close_native,
 )
-from providers.python.autograd_program_pyapi import array_input, output_array
-from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays, host_arrays_py
+from providers.python.autograd_program_pyapi import program_input, output_array, _integer
+from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays, host_arrays_py, program_admit_value, program_native_input
+from providers.python.autograd_distributed_pyapi import owned_program_id_admission, owned_program_array_admission, owned_program_fit_admission
 from autograd.rankn import ShapeN
+from autograd.program_io import ProgramInput
 from core.cast_in import CastIn
 
 
@@ -23,19 +25,20 @@ def partition_open[E: Exec & Movable & Deinitable, KIND: Int](
     tensor_shards: PythonObject, microbatches: PythonObject, optimizer: PythonObject,
     parameters: PythonObject, seed: PythonObject, var executors: List[E],
 ) raises -> PythonObject:
+    program_admit_value(Python.tuple(sid, pid, stages, tensor_shards, microbatches, optimizer, parameters, seed))
     var selected = List[Int]()
-    for k in range(len(parameters)):  # small-loop(parameters: the selected trainable handles): argument parsing, no data
-        selected.append(Int(py=parameters[k]))
+    var parameter_values = program_native_input(parameters)
+    for k in range(len(parameter_values)):  # small-loop(parameters: the selected trainable handles): argument parsing, no data
+        selected.append(_integer(parameter_values[k], "parameter", 1))
     return PythonObject(partition_open_native[E, KIND](
-        Int(py=sid), Int(py=pid), devices, Int(py=stages), Int(py=tensor_shards), Int(py=microbatches),
-        Int(py=optimizer), selected, Int(py=seed), executors^,
+        _integer(sid, "session", 1), _integer(pid, "program", 1), devices, _integer(stages, "stages", 1), _integer(tensor_shards, "tensor_shards", 1), _integer(microbatches, "microbatches", 1),
+        _integer(optimizer, "optimizer", 1), selected, _integer(seed, "seed", 0), executors^,
     ))
 
 
 def partition_load[E: Exec & Movable & Deinitable, KIND: Int](
     path: PythonObject, devices: List[Int], var executors: List[E],
 ) raises -> PythonObject:
-    initialize_program_arrays()
     return PythonObject(partition_load_native[E, KIND](String(py=native_path(path)), devices, executors^))
 
 
@@ -43,6 +46,8 @@ def partition_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
     id: PythonObject, arrays: PythonObject, targets: PythonObject, loss: PythonObject,
     epochs: PythonObject, batch: PythonObject, shuffle: PythonObject, delta: PythonObject,
 ) raises -> PythonObject:
+    owned_program_fit_admission(id, arrays, loss, epochs, batch, shuffle, delta)
+    var retained = List[ProgramInput]()
     var name = String(py=loss)
     var kind = -1
     if name == "output":
@@ -62,19 +67,25 @@ def partition_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
     var srcs = List[CastIn]()
     var shapes = List[ShapeN]()
     for k in range(len(arrays)):  # small-loop(arrays: one descriptor per program input): argument parsing, no data
-        var parsed = array_input(arrays[k], "partitioned input")
-        srcs.append(parsed[0])
-        shapes.append(parsed[1])
+        var prepared = program_input(arrays[k], False)
+        srcs.append(prepared.src)
+        shapes.append(prepared.shape)
+        retained.append(prepared^)
     var target = CastIn.f32_c(0, 1, 1)
     if kind != 0:
-        target = array_input(targets, "partitioned target")[0]
-    var ne = Int(py=epochs)
+        var prepared_target = program_input(targets, False)
+        target = prepared_target.src
+        retained.append(prepared_target^)
+    var ne = _integer(epochs, "epochs", 1)
     if ne < 1:
         raise Error("partitioned fit: epochs must be positive")
     var curve = output_array(ShapeN.of([ne]))
     var d = partition[E, KIND](Int(py=id))
-    d[].fit(srcs, shapes, target, kind, Float32(Float64(py=delta)), ne, Int(py=batch), Bool(py=shuffle),
+    d[].fit(srcs, shapes, target, kind, Float32(Float64(py=delta)), ne, _integer(batch, "batch_size", 1), Bool(py=shuffle),
             FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])))
+    _ = retained  # CastIn borrows sequence backing stores through the complete fit
+    _ = arrays
+    _ = targets
     return curve
 
 
@@ -86,20 +97,28 @@ def graph_array_output(a: GraphBytes) raises -> PythonObject:
 
 
 def partition_run_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, arrays: PythonObject) raises -> PythonObject:
+    owned_program_array_admission(id, arrays)
+    var retained = List[ProgramInput]()
     var srcs = List[CastIn]()
     var shapes = List[ShapeN]()
     for k in range(len(arrays)):  # small-loop(arrays: one descriptor per program input): argument parsing, no data
-        var parsed = array_input(arrays[k], "partitioned input")
-        srcs.append(parsed[0])
-        shapes.append(parsed[1])
-    return graph_array_output(partition_run_native[E, KIND](Int(py=id), srcs, shapes))
+        var prepared = program_input(arrays[k], False)
+        srcs.append(prepared.src)
+        shapes.append(prepared.shape)
+        retained.append(prepared^)
+    var result = graph_array_output(partition_run_native[E, KIND](Int(py=id), srcs, shapes))
+    _ = retained
+    _ = arrays
+    return result
 
 
 def partition_save_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, path: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     return PythonObject(partition_save_native[E, KIND](Int(py=id), String(py=native_path(path))))
 
 
 def partition_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     var r = partition_state_native[E, KIND](Int(py=id))
     var result = Python.dict()
     py_setitem(result, "parameters", host_arrays_py(r.arrays[0]))
@@ -122,6 +141,7 @@ def _int_list(xs: List[Int]) raises -> PythonObject:
 
 
 def partition_residency_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     var r = partition_residency_native[E, KIND](Int(py=id))
     var result = Python.dict()
     py_setitem(result, "devices", _int_list(r.devices))
@@ -139,6 +159,7 @@ def partition_residency_py[E: Exec & Movable & Deinitable, KIND: Int](id: Python
 
 
 def partition_profile_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     var events = partition_events[E, KIND](Int(py=id))
     var result = Python.list()
     for k in range(len(events)):  # small-loop(events: one row per recorded operation interval): result packing, no data
@@ -156,10 +177,12 @@ def partition_profile_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonOb
 
 
 def partition_enter_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, owner: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     partition_ready[E, KIND](Int(py=id))
     return owner
 
 
 def partition_close_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
+    owned_program_id_admission(id)
     partition_close_native[E, KIND](Int(py=id))
     return PythonObject(0)

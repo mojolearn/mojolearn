@@ -1,0 +1,419 @@
+{
+  "scope": "Current checkout source AST only. This does not prove runtime behavior, installed monkeypatches, or transitive compliance. Public imports/registration were read in the source; no runtime introspection was performed.",
+  "base_commit": "e89bfc1b2db5144c9a64588f82d6a4f940ac4300",
+  "operations": [
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "class": "AutoARIMA",
+      "operation": "__init__",
+      "line": 81,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "class": "AutoARIMA",
+      "operation": "search",
+      "line": 84,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "class": "AutoARIMA",
+      "operation": "fit",
+      "line": 145,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "class": "AutoARIMA",
+      "operation": "predict",
+      "line": 176,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_autoarima.py",
+      "class": "AutoARIMA",
+      "operation": "forecast",
+      "line": 195,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "__init__",
+      "line": 583,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "fit",
+      "line": 705,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "mu_",
+      "line": 802,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "beta_",
+      "line": 812,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "ar_",
+      "line": 821,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "ma_",
+      "line": 825,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "sar_",
+      "line": 829,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "sma_",
+      "line": 834,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "sigma2_",
+      "line": 840,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "predict",
+      "line": 904,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "forecast",
+      "line": 943,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "save",
+      "line": 1005,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "load",
+      "line": 1022,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_arima_impl.py",
+      "class": "ARIMA",
+      "operation": "__repr__",
+      "line": 1042,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "_Binding",
+      "operation": "__getattr__",
+      "line": 103,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "__init__",
+      "line": 554,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "fit",
+      "line": 667,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "forecast",
+      "line": 736,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "predict",
+      "line": 825,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "save",
+      "line": 864,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "load",
+      "line": 880,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "score",
+      "line": 895,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "__getattr__",
+      "line": 911,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "get_level",
+      "line": 957,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "get_trend",
+      "line": 973,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_tsa_impl.py",
+      "class": "ExponentialSmoothing",
+      "operation": "get_season",
+      "line": 989,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_prophet.py",
+      "class": "ProphetForecaster",
+      "operation": "__init__",
+      "line": 98,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_prophet.py",
+      "class": "ProphetForecaster",
+      "operation": "add_seasonality",
+      "line": 121,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_prophet.py",
+      "class": "ProphetForecaster",
+      "operation": "fit",
+      "line": 147,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_prophet.py",
+      "class": "ProphetForecaster",
+      "operation": "predict",
+      "line": 175,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_stl.py",
+      "class": "DecomposeResult",
+      "operation": "__init__",
+      "line": 28,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_stl.py",
+      "class": "STL",
+      "operation": "__init__",
+      "line": 92,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_stl.py",
+      "class": "STL",
+      "operation": "config",
+      "line": 129,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_stl.py",
+      "class": "STL",
+      "operation": "fit",
+      "line": 136,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_var.py",
+      "class": "VARResults",
+      "operation": "__init__",
+      "line": 47,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_var.py",
+      "class": "VARResults",
+      "operation": "forecast",
+      "line": 63,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_var.py",
+      "class": "VAR",
+      "operation": "__init__",
+      "line": 122,
+      "source_shape": "Python public body requires migration/current dispatch assessment"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_var.py",
+      "class": "VAR",
+      "operation": "fit",
+      "line": 137,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_croston.py",
+      "class": "_Croston",
+      "operation": "__init__",
+      "line": 22,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_croston.py",
+      "class": "_Croston",
+      "operation": "fit",
+      "line": 25,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_croston.py",
+      "class": "_Croston",
+      "operation": "predict",
+      "line": 50,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_croston.py",
+      "class": "_Croston",
+      "operation": "forecast",
+      "line": 74,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "class": "ETS",
+      "operation": "__init__",
+      "line": 97,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "class": "ETS",
+      "operation": "fit",
+      "line": 101,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "class": "ETS",
+      "operation": "predict",
+      "line": 131,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "class": "ETS",
+      "operation": "forecast",
+      "line": 152,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_ets.py",
+      "class": "DampedETS",
+      "operation": "__init__",
+      "line": 200,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_theta.py",
+      "class": "AutoTheta",
+      "operation": "__init__",
+      "line": 83,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_theta.py",
+      "class": "AutoTheta",
+      "operation": "fit",
+      "line": 87,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_theta.py",
+      "class": "AutoTheta",
+      "operation": "predict",
+      "line": 114,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_theta.py",
+      "class": "AutoTheta",
+      "operation": "forecast",
+      "line": 135,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_garch.py",
+      "class": "GARCH",
+      "operation": "__init__",
+      "line": 83,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_garch.py",
+      "class": "GARCH",
+      "operation": "fit",
+      "line": 86,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    },
+    {
+      "file": "python/mojolearn/_x_sequence_garch.py",
+      "class": "GARCH",
+      "operation": "forecast",
+      "line": 111,
+      "source_shape": "single native bridge call; transitive review remains operation-specific"
+    }
+  ]
+}

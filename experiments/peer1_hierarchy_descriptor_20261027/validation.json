@@ -1,0 +1,10 @@
+{
+  "validation": "source-only",
+  "factory_patch_check_exit": 0,
+  "initial_staged_diff_check_exit": 2,
+  "initial_failure": "retained unified diff blank context lines had trailing spaces; removed; patch still applies",
+  "compile": "NOT_RUN_LANE",
+  "runtime": "NOT_RUN_LANE",
+  "identity": "NOT_RUN_LANE",
+  "logs_directory": "/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027"
+}

@@ -1,0 +1,17 @@
+Peer4 BatchNorm native public batch
+Constructor, train/eval, lazy running-statistics and gradient access/setters, and
+whole backward now run in the native owner. Host/mixed/resident backward retain
+existing kernel calls and residency flags. Exact passive settings and resident
+owner/handle metadata are admitted before coercion. Shapes and saved capacities
+are checked before execution. Fit restores training mode even on failure.
+
+Focused Mac CPU compile passes: xcnn_c dispatcher (including prior pool/tensor
+repairs) plus explicit instantiation of the resident BN backward helper for native
+BasicBlock composition. O0, apple-m1, 10 workers, 92.07s. Receipt compile.json.
+No runtime, GPU, vendor identity or benchmark execution.
+Full output/source/binary: ~/mojolearn-evidence/peer4-neural-20261027/bn-attempt3/.
+Earlier passing public-only compile bn-attempt1 retained. Failed fixture registration
+bn-attempt2 retained; it was corrected with a PythonObject fixture envelope.
+
+Pending: CNN graph/classifier and BasicBlock lifecycle; full transitive provider
+migration and public-runtime coverage. Compilation does not establish behavior.

@@ -32,6 +32,7 @@ arithmetic in half precision.
 from __future__ import annotations
 
 import array
+import mmap as _array_mmap
 import functools
 import operator
 import struct
@@ -430,38 +431,7 @@ class Array:
         ValueError, TypeError
             For a non-contiguous buffer or an unsupported format (no copy is made).
         """
-        from . import _buffer  # lazy: _buffer imports this module
-
-        if isinstance(obj, Array):
-            return cls._view_of(obj, obj.shape, obj.order)
-        with _buffer.view(obj, name="object") as b:
-            dtype = _buffer.typestr_of(b)
-            if dtype not in _CODE:
-                raise TypeError(
-                    f"mojolearn: buffer format {b.format!r} (itemsize "
-                    f"{b.itemsize}) is not a supported Array dtype"
-                )
-            if b.c_contiguous:
-                order = "C"
-            elif b.f_contiguous:
-                order = "F"
-            else:
-                raise ValueError(
-                    "mojolearn: from_buffer needs a contiguous buffer; "
-                    f"got shape {b.shape} strides {b.strides}"
-                )
-            self = cls.__new__(cls)
-            self._store = obj
-            self._base = None
-            # a memoryview of the exporter pins its buffer for our lifetime
-            self._pin = memoryview(obj)
-            self._addr = b.addr
-            self._readonly = b.readonly
-            self._mv = _buffer.memory_at(
-                b.addr, b.nbytes, writable=not b.readonly
-            ).cast(_CODE[dtype])
-            self._set_meta(b.shape, dtype, order)
-            return self
+        return _ARRAY_NATIVE("from_buffer", cls, _ARRAY_CONTEXT, obj)
 
     @classmethod
     def from_list(cls, nested, dtype="<f8"):
@@ -1398,12 +1368,15 @@ _ARRAY_CONTEXT = dict(
     aliases=dict(_ALIAS), supported=SUPPORTED_DTYPES, native_min=_NATIVE_MIN,
     empty_address=_EMPTY_ARRAY_STORAGE.buffer_info()[0], empty_storage=_EMPTY_ARRAY_STORAGE,
     struct_pack=struct.pack, struct_unpack=struct.unpack, operator=operator,
-    partial=functools.partial, sys_modules=sys.modules, restore=_restore_array,
+    partial=functools.partial, sys_modules=sys.modules, modules=sys.modules, restore=_restore_array,
     entry=_ARRAY_NATIVE, helpers={}, int_bounds=dict(_INT_BOUNDS), infinity=float("inf"),
     minus_infinity=float("-inf"), scalar_types=(int, float, bool), eq_i64_f64=_EQ_I64_F64,
     not_implemented=NotImplemented, not_table=_NOT, scalar_type_set=_SCALAR_TYPES,
     row_type_set=_ROW_TYPES, chain_from_iterable=chain.from_iterable,
-    user_objects=_array_binding().user_objects_native_call)
+    user_objects=_array_binding().user_objects_native_call,
+    from_buffer_mmap=_array_mmap.mmap,
+    from_buffer_mmap_hooks={name: vars(_array_mmap.mmap).get(name) for name in ("__buffer__", "__release_buffer__")},  # glue: capture native mmap protocol identities at import
+    from_buffer_slots={name: Array.__dict__[name] for name in Array.__slots__})  # glue: retain fixed native Array member descriptor identities
 
 
 def connect_helpers(resolve):

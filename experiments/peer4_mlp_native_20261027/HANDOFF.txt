@@ -1,0 +1,50 @@
+MLPInference and SmallMLPTrainer native public owners — 2026-10-27
+
+Branch: lane/peer4-mlp-native-20261027
+Base: 5d490ccbff6aa46feb5cb4dac77abbb043a16f36
+
+Changes
+- All five MLPInference methods now make one native call. Construction owns
+  strict weight admission, packed BF16/int8 materialization via the existing
+  native lowbit implementation, owned float32 arrays and published fields.
+- Native checkpoint loading shares the bounded native reader, unique JSON
+  parser, schema/hash/profile checks and full resumable-state validation with
+  SmallMLPTrainer; it returns an allocated inference owner without a Python
+  constructor callback. weights_ returns independent native arrays. Prediction
+  owns input checks/copies, the retained host entry, final output shape and
+  result count/finite checks. Existing host numerical kernels are unchanged.
+- SmallMLPTrainer public instance methods pass the owner into native admission;
+  native storage supplies the handle and load_state_dict returns the owner.
+  Construction and checkpoint restoration use native publication with rollback.
+- Passive owner classes/subclasses and storage descriptor guards avoid invoking
+  Python metadata hooks. The trainer finalizer is installed as a compiled
+  native descriptor, including cleanup when an owner is decref'd in native code.
+- Removed the direct user __buffer__ callback in the native MLP buffer helper;
+  exact-type admission precedes native buffer acquisition. Batched-session
+  prediction reuses its captured view and shape during input copying.
+- No Transformer/Mamba/Samba inference changes. Legacy private Python helpers
+  remain for their existing callers; this batch makes no package-wide claim.
+
+Compilation and evidence
+- compile.json: selected-owner fixture compiles the complete SmallMLPTrainer
+  and MLPInference native owners, shared lowbit glue and trainer finalizer.
+  Mac CPU/identical, O0, 10 compiler workers, exit 0, 51.157 seconds.
+- Final full output, binary, source archive/manifest and AST-only checks:
+  ~/mojolearn-evidence/peer4-mlp-native-20261027/attempt3/.
+- Attempt1 failed because low_materialize requires a mutable binding argument;
+  corrected to a retained local variable. Attempt2 passed before the final
+  native handle/path admission and state-publication rollback edits. All logs
+  remain in the same evidence root; attempt3 covers the final native sources.
+- Fourteen trainer methods (excluding its unchanged private loader helper) and
+  five inference methods passed source AST one-call checks. No module import or
+  product operation was executed. git diff --check passed.
+- Required source guards run during branch push; full output is retained in
+  ~/mojolearn-evidence/peer4-mlp-native-20261027/push.log.
+
+Limits and remaining work
+- No runtime, identity, GPU or performance verification. No rented boxes.
+- Dynamic low-level host/training numerical entries are not compiled by this
+  fixture. Full tokenizer host registration/loading is not compiled; its narrow
+  finalizer import/registration change is source-reviewed only.
+- GPU compilation and actual public runtime behavior remain unproven. Parent
+  owns serialized main integration and any subsequent user-authorized checks.

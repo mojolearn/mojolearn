@@ -1,0 +1,24 @@
+HDBSCAN complete public operations — 2026-10-27
+
+Source: 7891a4845a3f4c11ca19d62ca91a07886f7aa950.
+Constructor, binding selection, fit/fit_predict lifecycle and the three public
+module prediction functions enter one native operation. Native code owns
+validation, fitted-tree admission, buffer preparation, warning/refusals and
+all membership-vector batch loops. Result types are preserved: module prediction
+functions return Arrays; public fit_predict publishes its NumPy view when loaded.
+
+Reinitialization and refitting admit all replaced owners before changing state.
+Prediction metadata uses exact dictionary/string/count admission; retained
+buffers are checked for dtype, layout and the declared minimum sizes, with
+explicit retention through native launches. The compiled CFA owner now reads
+model fields through native generic lookup, avoids runtime Python imports and
+uses exact compiled HDBSCAN mode/fit/prediction-data entries. Shared CFA method
+signatures and arithmetic kernels remain unchanged.
+
+Compile PASS: actual new owner, CFA dispatcher and shared family admission,
+Mac CPU O0, ten workers, 73.03s. See hdbscan_public_compile.json. Full logs, source
+bytes and binary: ~/mojolearn-evidence/cluster-density-linalg-20261027/
+hdbscan-public-compile/. No runtime, identity or GPU qualification is claimed.
+The three-line family_native import/dispatch connection is included; the
+monolithic family extension was not rebuilt. Archive save/load already enter
+native code but their transitive archive path is outside this batch's claim.

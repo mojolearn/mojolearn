@@ -1,0 +1,64 @@
+{
+  "endpoints": 3814,
+  "groups_by_phase_hint": {
+    "argument_or_result_preparation": 31,
+    "binding_selection": 8,
+    "callee_resolution_pending": 274,
+    "fitted_state": 78,
+    "instance_method_dispatch": 46,
+    "loop_or_resource_orchestration": 19,
+    "post_native_result_work": 4,
+    "source_resolution_pending": 82,
+    "transitive_native_review_pending": 1478,
+    "validation_or_branch": 63
+  },
+  "groups_by_status_combination": {
+    "allowed_tag_metadata": 11,
+    "native_boundary": 1452,
+    "prohibited_source": 74,
+    "refusal_only": 4,
+    "unresolved": 293
+  },
+  "input_path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-refresh-20261028/endpoints.json",
+  "input_sha256": "561ce755bcd1f7e520d94f78bde638a4acda13f249e96efd214b36061cb08195",
+  "limitations": [
+    "Source identity deduplicates aliases/inherited bodies, not algorithms or data-driven options.",
+    "Phase tags are heuristic triage hints and never qualification or proof of a defect.",
+    "Native-boundary wrappers still need transitive native review and installed runtime evidence.",
+    "Installed replacements may make retained source bodies unreachable; retain inventory qualification debt.",
+    "Tag metadata is an allowed category. Other approved exceptions require exact named operation evidence."
+  ],
+  "runtime_executed": false,
+  "schema": "mojolearn.provider-boundary-worklist.v1",
+  "source_implementation_groups": 1834,
+  "source_ref": "20ab53ec02ff58a34146568a2105994a2b66605e",
+  "old_inventory_reference": "experiments/provider_boundary_audit_20261027/operations.tsv: historical386 prohibited groups/59files",
+  "artifacts": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-refresh-20261028/endpoints.json",
+      "bytes": 6318247,
+      "sha256": "561ce755bcd1f7e520d94f78bde638a4acda13f249e96efd214b36061cb08195"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-refresh-20261028/operations.tsv",
+      "bytes": 680172,
+      "sha256": "f1de71578bc4db5d9fd9a59637fa786322d55cbeb8ac5a0d85c7edf757299f9d"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-refresh-20261028/inventory.log",
+      "bytes": 485,
+      "sha256": "d163e8793e433e92c7d5f953a2a878663902b131fcd4064fb93de130aebe45b6"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-refresh-20261028/worklist.log",
+      "bytes": 88,
+      "sha256": "000a0d262a1e894f2ab7b0859ea6f2bdc03df43520931eeb9c753ebd534b1245"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-refresh-20261028/result.json",
+      "bytes": 192,
+      "sha256": "47244c89047ca393950e70da65e9e1d2da2c71c82d9bb7d35166b8fb1a87d72c"
+    }
+  ],
+  "output_note": "--summary writes inventory summary to inventory.log; inventory.tsv is not emitted in summary mode."
+}

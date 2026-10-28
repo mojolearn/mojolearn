@@ -18,6 +18,10 @@ from bindings.py_attr import py_attr
 from bindings.py_slice_native import py_slice
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_arrays import classical_wrap_array
+from bindings.classical_attributes import classical_connect_numpy
+from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.native_scalar_decode import native_scalar_buffer
+from bindings.arena_materialize_native import _cast
 from bindings.family_common import (
     FAMILY_I64P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
     family_type_name, family_as_f32,
@@ -30,14 +34,68 @@ from bindings.msel_common import (
     msel_slice_i64, msel_index_i64, msel_resident_new, msel_resident_take, msel_resident_release,
     msel_resident_close, msel_get_scorer, msel_score, msel_admit, MselRng, MselGroups, msel_apply,
 )
-from bindings.msel_split import msel_truth, msel_cls, msel_sabotage
+from bindings.msel_split import msel_truth, msel_flag_truth, msel_field, msel_cls, msel_sabotage
 from bindings.msel_cv import (
     msel_clone, msel_cv_folds, msel_device_rows_ok, msel_require_serial, msel_scorers, MselFoldRows, MselScores,
     msel_cross_validate_run, msel_seconds, msel_fit, msel_error_value,
 )
 
 from bindings.msel_estimator_native import msel_native_set_params, msel_estimator_plan
-from bindings.msel_search_state import msel_search_fields, msel_parameter_values
+from bindings.msel_search_state import msel_search_fields, msel_parameter_values, msel_search_update
+
+
+# Scalar options and native numeric container leaves are admitted before
+# int/comparison/slicing. Data admission alone accepts Array/ndarray owners,
+# whose ordinary number slots are not a safe scalar conversion boundary.
+def _search_scalar(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    var b = msel_b()
+    var cls = py_type(value)
+    if cls is b.int or cls is b.float or cls is b.bool:
+        return value
+    classical_connect_numpy(context)
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is not None:
+        var records = py_get(context, "family_msel_search_scalar_records")
+        if records is None:
+            records = Python.list()
+            var factory = native_numpy_dtype(context)
+            for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "q", "Q", "f2", "f4", "f8", "g"]:  # driver-loop: exact native scalar/dtype classes, including aliases and long double
+                var dtype = py_call(factory, code)
+                var integer = code == "?" or code.startswith("i") or code.startswith("u") or code == "q" or code == "Q"
+                _ = py_call(records.append, Python.tuple(dtype, PythonObject(integer)))
+            py_setitem(context, "family_msel_search_scalar_records", records)
+        var dtype = value.dtype if cls is ndarray else PythonObject(None)
+        for i in range(len(records)):  # driver-loop: identity-only admission before reading numeric buffer bytes
+            var canonical = records[i][0]
+            if cls is canonical.type or (cls is ndarray and py_type(dtype) is py_type(canonical)):
+                return native_scalar_buffer(value).to_python_number(Bool(py=records[i][1]))
+    if cls is context["array_class"] or (ndarray is not None and cls is ndarray):
+        # Numeric object ndarray leaves are checked by the existing native
+        # materializer before conversion. The Array path captures native
+        # shape/storage and never invokes its Python number convenience hooks.
+        var packed = msel_materialize(value, name, context)
+        if Int(py=packed.size) != 1:
+            raise Error("TypeError: " + name + " requires a single native numeric value")
+        if String(packed.dtype) == "<f2":
+            packed = _cast(packed, "<f8", context["family_msel_resident_context"])
+        return packed._mv[0]
+    raise Error("TypeError: " + name + " requires native numeric scalar or single-element buffer storage")
+
+
+def _search_index(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    var scalar = _search_scalar(value, name, context)
+    var cls = py_type(scalar)
+    if cls is not msel_b().int and cls is not msel_b().bool:
+        raise Error("TypeError: " + name + " must be an integer")
+    return scalar
+
+
+def _search_seed(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    if value is None:
+        return value
+    if msel_is_bool(value, context) or not msel_is_integral(value, context):
+        raise Error("TypeError: random_state must be None or a non-negative native integer")
+    return _search_index(value, "random_state", context)
 
 
 # ---------------------------------------------------------------- parameter grids
@@ -130,16 +188,15 @@ def msel_sampler_list(dists: PythonObject, n_iter_in: PythonObject, random_state
                       context: PythonObject) raises -> PythonObject:
     """`list(ParameterSampler)`: a random permutation of the full grid,
     its first n_iter combinations."""
-    msel_admit(n_iter_in, context)
-    msel_admit(random_state, context)
+    var n_iter = _search_index(n_iter_in, "n_iter", context)
+    var seed = _search_seed(random_state, context)
     var grid = msel_grid_list(msel_grid_dicts(dists, context), context)
-    var n_iter = n_iter_in
     if msel_cmp("lt", PythonObject(len(grid)), n_iter):
         msel_warn("The total space of parameters " + String(len(grid)) + " is smaller than n_iter="
                   + family_str(n_iter) + ". Running " + String(len(grid)) + " iterations. For exhaustive "
                   + "searches, use GridSearchCV.", msel_b().UserWarning, context)
         n_iter = PythonObject(len(grid))
-    var rng = MselRng(random_state, context)
+    var rng = MselRng(seed, context)
     var perm = rng.permutation(len(grid), context)
     var head = py_slice(perm, PythonObject(None), n_iter, PythonObject(None))
     var out = Python.list()
@@ -151,8 +208,8 @@ def msel_sampler_list(dists: PythonObject, n_iter_in: PythonObject, random_state
 
 def msel_sampler_len(dists: PythonObject, n_iter: PythonObject, context: PythonObject) raises -> PythonObject:
     """`len(ParameterSampler)`."""
-    msel_admit(n_iter, context)
-    return family_call(msel_b().min, n_iter, PythonObject(msel_grid_len(msel_grid_dicts(dists, context), context)))
+    var count = _search_index(n_iter, "n_iter", context)
+    return family_call(msel_b().min, count, PythonObject(msel_grid_len(msel_grid_dicts(dists, context), context)))
 
 
 # ---------------------------------------------------------------- score tables
@@ -257,8 +314,6 @@ def msel_candidates(model: PythonObject, context: PythonObject) raises -> Python
         return msel_grid_list(msel_grid_dicts(fields["param_grid"], context), context)
     if kind is msel_cls("RandomizedSearchCV", context):
         var dists = msel_sampler_check(fields["param_distributions"], context)
-        msel_admit(fields["n_iter"], context)
-        msel_admit(fields["random_state"], context)
         return msel_sampler_list(dists, fields["n_iter"], fields["random_state"], context)
     raise Error("TypeError: Python candidate callbacks are not supported; use GridSearchCV or RandomizedSearchCV")
 
@@ -289,8 +344,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     if multi is not None and not refit_false and (py_type(refit) is not b.str or not py_contains(multi, refit)):
         raise Error("For multi-metric scoring, refit must be False or a scorer key.")
     var scoring = multi if multi is not None else scoring_in
-    msel_admit(fields["return_train_score"], context)
-    var return_train = msel_truth(fields["return_train_score"])
+    var return_train = msel_flag_truth(fields["return_train_score"], context)
     var got = msel_cv_folds(estimator, x_in, y_in, fields["cv"], groups, True, context)
     var xf = got[0]
     var yf = got[1]
@@ -352,23 +406,25 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
         if k == key_index:
             best_means = _floats(means)
             best_ranks = ranks
-    py_setitem(fields, "cv_results_", results)
-    py_setitem(fields, "n_splits_", PythonObject(n_splits))
-    py_setitem(fields, "multimetric_", PythonObject(multi is not None))
+    var updates = Python.dict()
+    py_setitem(updates, "cv_results_", results)
+    py_setitem(updates, "n_splits_", PythonObject(n_splits))
+    py_setitem(updates, "multimetric_", PythonObject(multi is not None))
     var best_params = PythonObject(None)
     if key_index >= 0:
         var best_index = family_call(best_ranks.index, PythonObject(1))
-        py_setitem(fields, "best_index_", best_index)
-        py_setitem(fields, "best_score_", best_means[best_index])
+        py_setitem(updates, "best_index_", best_index)
+        py_setitem(updates, "best_score_", best_means[best_index])
         best_params = candidates[best_index]
-        py_setitem(fields, "best_params_", best_params)
+        py_setitem(updates, "best_params_", best_params)
     if not refit_false:
         var best = msel_clone(estimator, False, context)
-        _set_params(best, fields["best_params_"], context)
+        _set_params(best, best_params, context)
         var xa = msel_materialize(x_in, "X", context)
         msel_fit(best, xa, y_in, context)
-        py_setitem(fields, "best_estimator_", best)
-        py_setitem(fields, "scorer_", msel_get_scorer(scoring_in, context) if multi is None else multi)
+        py_setitem(updates, "best_estimator_", best)
+        py_setitem(updates, "scorer_", msel_get_scorer(scoring_in, context) if multi is None else multi)
+    msel_search_update(fields, updates, context)
     return model
 
 
@@ -426,9 +482,9 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var b = msel_b()
     var estimator = args[0]
     msel_require_serial(args[7], args[10], "learning_curve", context)
-    msel_admit(args[8], context)
-    msel_admit(args[9], context)
-    msel_admit(args[11], context)
+    var shuffle = msel_flag_truth(args[8], context)
+    var seed = _search_seed(args[9], context)
+    var return_times = msel_flag_truth(args[11], context)
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
@@ -441,9 +497,9 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var requested = msel_parameter_values(args[4], context)
     var math = native_loaded_module("math")
     for i in range(len(requested)):  # driver-loop: over the requested train sizes
-        var s = requested[i]
+        var s = _search_scalar(requested[i], "train_sizes", context)
         var a = 0
-        if family_isinstance(s, b.float):
+        if py_type(s) is b.float:
             a = msel_int(family_call(math.floor, family_call(msel_op("mul"), s, PythonObject(n_max))))
         else:
             a = msel_int(s)
@@ -455,10 +511,9 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var sizes = List[Int]()
     for i in range(len(sizes_py)):  # driver-loop: over train sizes
         sizes.append(Int(py=sizes_py[i]))
-    var shuffle = msel_truth(args[8])
     var orders = Python.list()
     if shuffle:
-        var rng = MselRng(args[9], context)
+        var rng = MselRng(seed, context)
         var lengths = List[Int]()
         for f in range(nf):  # driver-loop: over folds
             lengths.append(Int(py=folds[f][0].size))
@@ -522,7 +577,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     _ = py_call(out.append, msel_i64_list(sizes, context))
     _ = py_call(out.append, msel_f64_block(tr_s, len(sizes), nf, context))
     _ = py_call(out.append, msel_f64_block(te_s, len(sizes), nf, context))
-    if msel_truth(args[11]):
+    if return_times:
         _ = py_call(out.append, msel_f64_block(ft, len(sizes), nf, context))
         _ = py_call(out.append, msel_f64_block(st, len(sizes), nf, context))
     return py_call(b.tuple, out)
@@ -549,11 +604,11 @@ def _y_free(splitter: PythonObject, context: PythonObject) raises -> Bool:
     for i in range(len(fixed)):  # driver-loop: over the y-free splitter classes
         if t is msel_cls(fixed[i], context):
             return True
-    var seeded = msel_is_integral(py_call(b.getattr, splitter, PythonObject("random_state"), PythonObject(None)), context)
     if t is msel_cls("KFold", context) or t is msel_cls("GroupKFold", context):
-        return not msel_truth(family_call(b.getattr, splitter, PythonObject("shuffle"))) or seeded
+        var seeded = msel_is_integral(msel_field(splitter, "random_state", context), context)
+        return not msel_flag_truth(msel_field(splitter, "shuffle", context), context) or seeded
     if t is msel_cls("ShuffleSplit", context) or t is msel_cls("GroupShuffleSplit", context):
-        return seeded
+        return msel_is_integral(msel_field(splitter, "random_state", context), context)
     return False
 
 
@@ -562,7 +617,8 @@ def _perm_base(y: PythonObject, context: PythonObject) raises -> PythonObject:
     `mean_score` array (int32 or float32), or None."""
     var b = msel_b()
     var array_mod = native_loaded_module("array")
-    if family_isinstance(y, Python.tuple(b.list, b.tuple)):
+    msel_admit(y, context)
+    if py_type(y) is b.list or py_type(y) is b.tuple:
         var kinds = py_call(b.set, py_call(b.map, b.type, y))
         var code = String("")
         var dtype = String("")
@@ -585,7 +641,7 @@ def _perm_base(y: PythonObject, context: PythonObject) raises -> PythonObject:
     if Int(py=a.ndim) != 1 or Int(py=a.size) < 1:
         return PythonObject(None)
     var d = String(py=a.dtype)
-    if d == "<f4" or d == "<f8":
+    if d == "<f2" or d == "<f4" or d == "<f8":
         return family_as_f32(a, 1, "y", context)
     if d == "<i4":
         return a
@@ -714,8 +770,9 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
     var y = args[2]
     var groups = args[3]
     var cv = args[4]
-    var n_permutations = msel_int(args[5])
-    var random_state = args[7]
+    msel_require_serial(args[6], PythonObject(_nan()), "permutation_test_score", context)
+    var n_permutations = msel_int(_search_scalar(args[5], "n_permutations", context))
+    var random_state = _search_seed(args[7], context)
     var base = PythonObject(None)
     if not msel_sabotage():
         _ = msel_entry("gather_i64", context)
@@ -723,7 +780,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
         if base is not None and Int(py=base.size) < 2:
             base = PythonObject(None)
     if base is None:
-        return _permutation_definition(args, context)
+        return _permutation_definition(args, n_permutations, random_state, context)
     var x = msel_materialize(args[1], "X", context)
     var sc = msel_get_scorer(args[9], context)
     var n = Int(py=base.size)
@@ -757,7 +814,8 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
                         PythonObject(_pvalue(perm_scores, score, n_permutations)))
 
 
-def _permutation_definition(args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _permutation_definition(args: PythonObject, n_permutations: Int, random_state: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
     """`permutation_test_score`'s definition route (label objects the
     native permutation cannot hold): y rebuilt from a list per permutation,
     the permutations by Python's own list operations."""
@@ -767,12 +825,11 @@ def _permutation_definition(args: PythonObject, context: PythonObject) raises ->
     var estimator = args[0]
     var groups = args[3]
     var cv = args[4]
-    var n_permutations = msel_int(args[5])
     var xa = msel_materialize(args[1], "X", context)
     var yl = msel_flatten(args[2], context)
     var sc = msel_get_scorer(args[9], context)
     var score = _definition_mean(estimator, xa, yl, groups, cv, sc, context)
-    var rng = MselRng(args[7], context)
+    var rng = MselRng(random_state, context)
     var perm_scores = List[Float64]()
     for _ in range(n_permutations):  # driver-loop: over permutations
         var yp = PythonObject(None)
@@ -800,8 +857,8 @@ def _definition_mean(estimator: PythonObject, xa: PythonObject, yv: PythonObject
     """The definition's `mean_score(yv)`: y as a float32 / int32 Array by
     `Array.from_list`, then one cross_validate."""
     var b = msel_b()
-    var dtype = PythonObject("<f4") if family_isinstance(yv[0], b.float) else PythonObject("<i4")
-    var from_list = family_call(b.getattr, msel_cls("Array", context), PythonObject("from_list"))
-    var yarr = msel_materialize(family_call(from_list, yv, dtype), "y", context)
+    var first = _search_scalar(yv[0], "y", context)
+    var dtype = String("<f4") if py_type(first) is b.float else String("<i4")
+    var yarr = _cast(msel_materialize(yv, "y", context), dtype, context["family_msel_resident_context"])
     var folds = msel_cv_folds(estimator, xa, yarr, cv, groups, False, context)[2]
     return _mean_own(estimator, xa, yarr, folds, sc, msel_device_rows_ok(estimator, sc, context), context)

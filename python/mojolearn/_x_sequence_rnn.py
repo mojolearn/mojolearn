@@ -16,10 +16,9 @@ Refused by name (sequence/NOT_IMPLEMENTED.tsv): bidirectional, dropout
 between layers, proj_size, initial hidden state, packed / variable-length
 sequences, float64.
 """
-from ._optional_numpy import require_numpy
 from ._mode import ClassifierScoreMixin, ParamsMixin, RegressorScoreMixin
-np = require_numpy('_x_sequence_rnn')
 
+from collections import OrderedDict
 from . import _native_xseq_bridge
 
 # Package-import connection: every public operation below is ONE call into
@@ -43,12 +42,6 @@ _OPT_DEFAULTS = {
                   decoupled_weight_decay=False),
 }
 
-
-def _f32(a, name):
-    a = np.asarray(a)
-    if a.dtype == np.float64:
-        raise TypeError(f"{name}: float64 is refused; pass float32 (no float64 on the device)")
-    return np.ascontiguousarray(a, dtype=np.float32)
 
 
 class _RecurrentBase(ParamsMixin):
@@ -83,35 +76,14 @@ class _RecurrentBase(ParamsMixin):
             return CELLS["rnn_" + self.nonlinearity]
         return CELLS[self._CELL]
 
-    def _layout(self):
-        """[(torch name, shape)] in the binding's flat order."""
-        G, H = GATES[self._cell()], int(self.hidden_size)
-        out = []
-        for l in range(int(self.num_layers)):  # glue: one entry per recurrent layer
-            din = self.n_features_in_ if l == 0 else H
-            out += [(f"weight_ih_l{l}", (G * H, din)), (f"weight_hh_l{l}", (G * H, H)),
-                    (f"bias_ih_l{l}", (G * H,)), (f"bias_hh_l{l}", (G * H,))]
-        return out + [("head.weight", (self.n_outputs_, H)), ("head.bias", (self.n_outputs_,))]
-
     def state_dict(self):
         """{torch name: array}: `nn.LSTM`/`nn.GRU`/`nn.RNN` names for the
         recurrent layers, `head.weight` and `head.bias` for the `nn.Linear`."""
-        out, off = {}, 0
-        for name, shape in self._layout():  # glue: one view per parameter tensor
-            n = int(np.prod(shape))  # glue: product of the tensor shape dims
-            out[name] = self.params_[off:off + n].reshape(shape).copy()
-            off += n
-        return out
+        return _XSEQ(self, "rnn_state_dict", (), _XSEQ_CONTEXT)
 
     def load_state_dict(self, state):
-        parts = []
-        for name, shape in self._layout():  # glue: one check per parameter tensor
-            a = _f32(state[name], name)
-            if a.shape != tuple(shape):
-                raise ValueError(f"{name}: shape {a.shape}, expected {tuple(shape)}")
-            parts.append(a.ravel())
-        self.params_ = np.ascontiguousarray(np.concatenate(parts), dtype=np.float32)  # glue: packs user weight tensors into the flat buffer
-        return self
+        """Load the named recurrent and head parameter arrays; return this model."""
+        return _XSEQ(self, "rnn_load_state_dict", (state,), _XSEQ_CONTEXT)
 
     def hidden_sequence(self, X):
         """The top layer's hidden states h_1..h_T, (n_samples, n_timesteps,
@@ -734,9 +706,22 @@ class RNNClassifier(_RecurrentClassifier):
     _CELL = "rnn"
 
 
+def _state_layout(cls):
+    # glue: connect fixed native storage identities at module import.
+    mro = cls.__mro__
+    rows = tuple(vars(base) for base in mro)  # glue: imported class metadata
+    descriptor = next(row["__dict__"] for row in rows if "__dict__" in row)  # glue: native storage descriptor
+    names = ("__getattribute__", "__getattr__", "__setattr__", "__dict__")
+    hooks = tuple((base, name, row.get(name)) for base, row in zip(mro, rows) for name in names)  # glue: fixed native storage identities
+    return cls, mro, descriptor.__get__, hooks, cls._CELL
+
+
 _native_xseq_bridge.register(
     xseq_rnn_optimizers=OPTIMIZERS,
     xseq_rnn_defaults=_OPT_DEFAULTS,
+    xseq_rnn_state_mappings=(dict, OrderedDict),
+    xseq_rnn_state_layouts=tuple(_state_layout(cls) for cls in (RNNRegressor, RNNClassifier, LSTMRegressor, LSTMClassifier, GRURegressor, GRUClassifier)),  # glue: fixed recurrent classes
+
 )
 
 # Last statement: connect this module's classes to the native full-reset
@@ -745,3 +730,6 @@ _native_xseq_bridge.register(
 from ._native_full_reset_params import connect_module as _connect_full_reset
 _connect_full_reset(globals())
 del _connect_full_reset
+# glue: reuse the final native owner storage contract for public operations.
+from ._native_full_reset_params import _CONTEXT as _XSEQ_OWNER_CONTEXT
+_native_xseq_bridge.register(xseq_owner_context=_XSEQ_OWNER_CONTEXT)

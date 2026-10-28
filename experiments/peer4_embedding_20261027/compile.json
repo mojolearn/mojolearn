@@ -1,0 +1,88 @@
+{
+  "exit_code": 0,
+  "seconds": 78.97983962506987,
+  "command": [
+    "/Users/andrewhendel/.pixi/bin/pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-embedding",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-embedding/bindings",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-embedding/experiments/peer4_embedding_20261027/compile.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/peer4-embedding-20261027/attempt-6/embedding_owner_compile.so"
+  ],
+  "cores": 10,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "runtime_executed": false,
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer4-embedding-20261027/attempt-6/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer4-embedding-20261027/attempt-6/source_manifest.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer4-embedding-20261027/attempt-6/source_bytes.tgz",
+  "scope": "Mac CPU column; Embedding constructors, pretrained, forward, backward, upload, load, state and attribute lifetime owner; no runtime execution",
+  "artifact_sha256": "aa0e4ad4cf53432d5d2f68f7206966d7e57769657a9560f2a7c8ef8074f4fa50",
+  "base_commit": "2e099c1ad4c048a97109104ba6a944e671ddca85",
+  "branch": "lane/peer4-embedding-20261027",
+  "source_archive_sha256": "c8947424de51b8da6cf8b87650d9503a721c02807b1a63d2b67374ecb2905ba8",
+  "final_native_sources_match_compile_snapshot": true,
+  "final_python_sources": {
+    "directory": "/Users/andrewhendel/mojolearn-evidence/peer4-embedding-20261027/final-public-sources",
+    "sha256": {
+      "python/mojolearn/embedding.py": "6ffc0fd11fa7340319b793e0068fa2cb15fa48c2dcedfa8750d5e6dc87afa843",
+      "python/mojolearn/_native_optimizer_bridge.py": "cdeb88b8654e3347f4054d626a3da2093cc5136ba72eb946de94d5d9e7f9e2df"
+    },
+    "validation": "AST parse only; final Python metadata getter/guard edit followed native compile snapshot"
+  },
+  "pending": [
+    "No runtime execution",
+    "No GPU target compilation or execution",
+    "No cross-vendor identity checks"
+  ],
+  "previous_attempts": [
+    {
+      "attempt": 1,
+      "exit_code": 1,
+      "seconds": 7.147912041982636
+    },
+    {
+      "attempt": 2,
+      "exit_code": 0,
+      "seconds": 57.39732458302751
+    },
+    {
+      "attempt": 3,
+      "exit_code": 0,
+      "seconds": 48.624173625023104
+    },
+    {
+      "attempt": 4,
+      "exit_code": 0,
+      "seconds": 58.58821008307859
+    },
+    {
+      "attempt": 5,
+      "exit_code": 0,
+      "seconds": 111.9981442920398
+    }
+  ]
+}

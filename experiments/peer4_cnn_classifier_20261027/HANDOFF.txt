@@ -1,0 +1,25 @@
+CNNClassifier whole-operation source batch
+Constructor and weights() now call the native owner once. Native fit/predict
+prepare buffers and return complete results without NumPy allocation/conversion,
+reshape/tolist/take or Python label sorting. Numeric labels use the shared neural
+descriptor provider; native text/object-array admission reads exact scalar owners,
+uses the existing native codepoint sort, and publishes fixed-width class arrays.
+Native int32/int64/float/boolean and Unicode/bytes labels retain their native
+storage routes; unsupported Python-defined label protocols are refused before
+hooks. Native model settings, child classes and learned arrays are admitted
+before shape/address reads. NumPy native scalar settings use the shared neural
+admission context connected once at import.
+
+Graph dispatch now routes complete gcn/sage/linear/relu operation families.
+Actual combined xcnn_c dispatcher and BN resident helper compiled successfully
+on Mac CPU/apple-m1/identical/O0/10 workers, 154.92 seconds. The compile includes
+all integrated CNN owners with current shared helpers and graph routing.
+Full logs, binaries and source closure at
+~/mojolearn-evidence/peer4-neural-20261027/classifier-attempt3/.
+Failed attempts1/2 retained (nullable pointer representation); public supported
+FFI integer address words replaced construction of a forbidden null Mojo Pointer.
+No toolchain modification, runtime, GPU or identity checks.
+
+Pending: shared XseqStream seed initialization and graph review corrections;
+adjacent Embedding/MLP/sequence lifecycle batches. Compilation alone does not
+establish public behavior, descriptor lifetimes, or cross-vendor identity.

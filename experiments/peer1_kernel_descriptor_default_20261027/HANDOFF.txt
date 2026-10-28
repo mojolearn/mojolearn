@@ -1,0 +1,101 @@
+Peer 1 kernel descriptor continuation — 2026-10-27
+
+Branch: lane/peer1-kernel-descriptor-default-20261027
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-kernel-descriptor-default-20261027
+Starting local main: b3239afc49478f01ff338b35121ee749396417aa
+Only this isolated worktree was edited. Shared registration/mode patch was
+explicitly authorized by parent/root before application.
+
+Source commits
+74d8a8a544: add kernel_methods/descriptor_host.mojo native ABI over the existing
+  typed CPU implementations; no replacement arithmetic.
+0312f23759: identical kernel methods require a valid versioned descriptor by
+  default, independent of MOJOLEARN_CLASSICAL_NATIVE_DISPATCH. Missing factory
+  is an explicit rebuild refusal. Existing fast route is retained.
+8d19a2e6e9: remove builtins import hooks and binding __getattr__ from kernel
+  metadata reads; exact dictionary/string-key admission for native setstate.
+04972042b1: register CPU kernel_methods_api_v1; skip the legacy mode getter for
+  identical kernel methods so descriptor operation 13 supplies the single mode
+  readback. Fast keeps its legacy check and is no longer rejected merely by
+  the candidate environment switch. No fast-specific development performed.
+
+Audited operations and capabilities
+- GPU bindings/_mojolearn_kernel_methods.mojo already registers the capsule.
+  kernel_methods/native_descriptor_dispatch.mojo calls the existing typed
+  km_binding_impl, estimator, resident, and scale-gamma owners directly.
+- CPU capsule uses the same v1 ABI and 17 operation numbers. Implemented:
+  0 KRR fit, 1 KRR predict, 8 Nystroem fit, 10 Nystroem transform,
+  11 RBF fit, 12 RBF transform, 13 mode, 14 capability flags (zero),
+  15 scale-gamma flags, 16 exact scale-gamma limbs.
+- CPU pointer/resident/joint-fit device operations explicitly refuse direct
+  invocation. Flags zero select ordinary host fit/predict and separate native
+  fit+transform, matching existing CPU support. No unsupported operation is
+  advertised as available.
+- The new CPU transport uses the exact existing kmh_*_run/*_into functions,
+  retained input Lists, sample-weight sqrt conversion, Float32 roundings, seed
+  conversion and scale_gamma_limbs_host used by the packed host entries.
+- Identical model preparation retains existing operation-local ArrayMetadata
+  owners and fitted storage owners through descriptor calls. The common
+  NeuralDescriptorProvider pins module, factory and capsule through execution;
+  factory identity replacement reconnects via neural_descriptor_reuse.
+- Descriptor numerical calls go through native_descriptor_call with typed
+  addresses/integers/floats. Capsule construction is the admitted compiled
+  binding operation; numerical work does not redispatch through CPython.
+
+Source audit and limits
+- transitive-source-audit.txt: repo-local import closure GPU 91 modules, CPU
+  50 modules; no PythonObject/Python imports/py_call mentions in either closure.
+  Exact callers and typed numerical entries were source-reviewed. Counts are
+  module closure only: not symbol liveness, stdlib audit, compilation, runtime
+  or identity evidence. Grep alone is not family completion.
+- diff-check.log: git diff --check, exit 0.
+- No compile, product runtime tests, vendor verification, benchmarks, machines,
+  publishing or main merges performed by this source lane.
+- All new source needs parent compile. Installed public semantics, factory
+  removal/replacement negative controls, metadata count, outputs and within-
+  release vendor identity remain unverified until integration work authorizes it.
+
+Smallest meaningful compile scopes
+1. Actual CPU registration: bindings/entry/entry__mojolearn_kernel_methods_host.mojo
+   with normal identical CPU defines. Retains real module registration,
+   kernel_methods_api_v1_binding, KERNEL_METHOD_HOST_API, km_host_v1 and existing
+   host arithmetic. The regular build_kernel_methods_host.sh is the shipping
+   compile owner; do not claim a generic lifecycle-only compile covers this.
+2. Public owner: existing kernel-only export retaining classical_family_admit
+   then kernel_methods_operation(model, operation, args, context). Covers
+   default descriptor admission, native lifecycle and all 9 kernel data
+   operations, state and parallel dispatch. No GPU algorithm source changed.
+
+Explicit remaining paths (family is not complete)
+1. KernelRidge.score calls shared mcls_cluster._r2. Scalar/weighted paths call
+   metrics r2_score/r2_score_weighted packed CPython entries. Multioutput calls
+   metrics_reg_native._r2_options -> _reg_run -> metrics program execution.
+   These are shared metrics ownership, not repaired by native prediction.
+   The score path still captures y/prediction metadata again in these helpers.
+2. Exact proposed shared scope: add a descriptor-backed R2 entry to the metrics
+   family with CPU/GPU registrations calling existing r2_score_host /
+   r2_score_weighted_host (GPU) and host_r2_score / existing weighted host owner
+   (CPU); preserve the current multioutput program path by moving its numerical
+   dispatch to its own existing typed program owner. Expose a captured-input
+   native R2 helper taking truth/prediction/optional weight ArrayMetadata, mode
+   and context. Kernel owner then captures y once and passes its completed
+   prediction descriptor directly. Do not substitute a new R2 implementation
+   or route multioutput through averaged scalar R2: that changes arithmetic.
+3. Fast numerical routes remain the existing packed CPython entry paths. They
+   are explicit migration debt; this task preserves support without a dedicated
+   fast build, numerical rewrite, optimization or verification workstream.
+4. Shared labels_shape_of/_flatten_labels ignored-y capture and general array,
+   estimator admission, feature-name/lifecycle transitive paths remain with
+   their shared owners. Constructor/attribute installed-slot runtime evidence
+   was not rerun by this lane.
+5. Existing legacy resident holder release can still invoke an admitted compiled
+   release entry when replacing old holder state. New identical holders use
+   native descriptor resource close. Archive and wider family paths remain
+   independently tracked; no broad family-complete claim.
+
+Evidence
+shared_registration.patch: exact authorized shared patch, already applied.
+transitive-source-audit.txt: retained static numerical import-closure report.
+diff-check.log: whitespace check status only.
+/tmp/peer1-kernel-descriptor-worktree.log: worktree creation, exit 0.
+/tmp/peer1-kernel-descriptor-*-commit.log: commit outputs.

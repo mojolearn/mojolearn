@@ -1,0 +1,21 @@
+Peer1 next native migration batch
+Start: b3239afc49478f01ff338b35121ee749396417aa (local main)
+Parent branch: lane/peer1-native-next-20261027
+Parent worktree: /Users/andrewhendel/mojolearn-wt/peer1-native-next-20261027
+
+Disjoint ownership:
+- Parent: neighbor_query_native.mojo and IVF metadata/query helpers.
+- Kernel lane: kernel methods owners, descriptor/provider and CPU transport.
+  Root explicitly authorized exact host factory and kernel mode helper wiring.
+- Neighbor lane: neighbors_native.mojo, neighbors.py, Radius lifecycle and
+  x_neighbors descriptor admission; PCS RNG audit only until supported API.
+- Hierarchy lane: new solver descriptor/provider plus _agglo_legacy only.
+  Solver binding exports remain shared patch proposals for root.
+- Root density child: public_attributes_native/_native_public_attributes
+  DBSCAN/KDE predicates and cfb_resident; these are not edited here.
+
+Required workflow: complete native operation ownership and transitive audit,
+small affected compile, coherent commit/push and serialized main integration.
+No runtime, identity, vendor verification or benchmark campaigns.
+Retain complete logs/binaries in files and Mac/R2 for CPU rentals; all allocated
+CPU workers,60-minute deadman,explicit ownership,retention before teardown.

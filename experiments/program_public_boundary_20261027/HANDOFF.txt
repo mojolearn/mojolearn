@@ -1,0 +1,46 @@
+Program public native boundary, 2026-10-27.
+
+Branch: lane/program-distributed-boundary-20261027. Root owns main integration.
+Existing completed Program-save batch is preserved and not repeated here.
+
+Program construction, run, profile, run_dynamic, inspect, run_if, while_loop,
+vjp_if, vjp_while, fit, fit_if, save, save_control and free now hand off once to
+native admission. The retained Session descriptor selects the exact registry
+image. Program attributes no longer select instance callables. Native admission
+checks exact owner/layout, ids, metadata containers, flags/settings, sibling
+Session ownership, and prior fitted/metadata owners before mutation.
+
+Reinitialization admits the previous valid Session's full ownership, its
+weakrefs and native registry resource; connected modules/functions/classes stay
+independently retained. It does not reject a valid Session merely because the
+general scalar/array release helper does not recognize it. Fit admits old
+loss_curve_, n_iter_ and branch_counts_ before training can mutate state. Public
+request snapshots retain only _s and _id, and save reads only consumed metadata.
+Program/control result helpers no longer import builtins in product execution.
+The new compiled entry is included in both binding exports and the CPU manifest.
+
+Validation: the actual C entry and native Session dispatch root compiled with
+HostExec on the local Mac, Mojo 1.0.0 (ed45d567), O0, -j 10, CPU identical flags,
+exit 0 in 396.630 seconds. All 244 source-manifest files matched at compile completion. The required
+push guard then required five ownership-loop comment annotations in
+native_owner_lifetime.mojo; executable lines remain identical. The original
+refusal, exact annotation diff and before/after hashes are retained. This
+comment-only correction does not require another compilation.
+Four structural source checks passed; pytest was unavailable, so their pure
+assertion functions ran directly with runpy. No product runtime, identity,
+vendor, installed-wheel or performance campaign ran. The GPU export was edited
+but this compile only qualifies the HostExec instantiations.
+
+Complete source bytes, compiler/dependency hashes, command/flags, logs, original
+failed/interrupted attempts and the 18,545,592-byte binary are on the Mac at:
+~/mojolearn-evidence/program-distributed-boundary-20261027/public-attempt3/
+The complete evidence archive is also in R2; compile.json gives its key, size,
+SHA-256 and successful byte-for-byte upload readback. No box was rented.
+
+Remaining: Program.partition/distribute and distributed/partitioned owners are
+separate work. Their preserved uncommitted child draft remains in
+/Users/andrewhendel/mojolearn-wt/distributed-public-boundary-20261027 and has not
+been altered or qualified by this batch. Pooled/offloaded training needs its
+shared native provider reviewed, as well as the remaining Python super/alias
+wrappers. No completion claim extends to those paths or to ImportedProgram's
+separately owned import/run override.

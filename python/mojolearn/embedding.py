@@ -76,6 +76,9 @@ class Embedding(NumericModeMixin):
     plan : {'auto', 'scan', 'sort'}, default 'auto'
         How the backward groups the positions of each row. Both plans give the same bits;
         'auto' picks by problem size.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        Numeric mode; 'fast' is Apple only. None uses the process default.
+        In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 
     Attributes
     ----------
@@ -92,68 +95,15 @@ class Embedding(NumericModeMixin):
     >>> dW = emb.backward(ids, np.ones((2, 3, 64), dtype=np.float32))
     """
 
+    _mojolearn_native_public = True
+    # Public fields are passive scalar/table storage. Avoid inheriting the
+    # Python fitted-output lookup wrapper on every operation lookup.
+    __getattribute__ = object.__getattribute__
     _BINDING = "_mojolearn_embedding"
 
     def __init__(self, num_embeddings, embedding_dim, padding_idx=None, max_norm=None,
-                 norm_type=2.0, scale_grad_by_freq=False, sparse=False, weight=None, plan="auto"):
-        for name, v in (("num_embeddings", num_embeddings), ("embedding_dim", embedding_dim)):  # glue: validates two int arguments
-            if isinstance(v, bool) or not isinstance(v, int):
-                raise TypeError(f"mojolearn Embedding: {name} must be an int, got {type(v).__name__}")
-            if v < 1:
-                raise ValueError(f"mojolearn Embedding: {name} must be at least 1, got {v}")
-        if max_norm is not None:
-            raise ValueError(
-                "mojolearn Embedding: max_norm is REFUSED. torch renormalizes the "
-                "gathered rows of the weight in place during the forward, and that "
-                "write is outside profile mojolearn.identical.embedding.fp32.v1"
-            )
-        if norm_type != 2.0:
-            raise ValueError("mojolearn Embedding: norm_type is only 2.0 (it has no effect without max_norm, which is refused)")
-        if scale_grad_by_freq:
-            raise ValueError(
-                "mojolearn Embedding: scale_grad_by_freq=True is REFUSED; the profile's "
-                "backward is the plain ascending fold (contract 5.1) with no division"
-            )
-        if sparse:
-            raise ValueError("mojolearn Embedding: sparse=True is REFUSED (DEVIATION 1314: the dense (V, d) gradient only)")
-        if not isinstance(plan, str) or plan not in _PLAN_CODE:
-            raise ValueError(
-                f"mojolearn Embedding: plan must be 'auto', 'scan' or 'sort' (contract section 6's "
-                f"PLAN_SCAN and PLAN_SORT), got {plan!r}"
-            )
-        if padding_idx is not None:
-            if isinstance(padding_idx, bool) or not isinstance(padding_idx, int):
-                raise TypeError(f"mojolearn Embedding: padding_idx must be an int or None, got {type(padding_idx).__name__}")
-            if not -num_embeddings <= padding_idx < num_embeddings:
-                raise ValueError(
-                    f"mojolearn Embedding: padding_idx must be within [-{num_embeddings}, {num_embeddings}), got {padding_idx}"
-                )
-            if padding_idx < 0:
-                padding_idx = num_embeddings + padding_idx
-        if weight is None:
-            raise ValueError(
-                "mojolearn Embedding: weight is required. Initialization is not part of "
-                "the profile (a host normal draw is not pinned across platforms); pass "
-                "the table, or use Embedding.from_pretrained"
-            )
-        w, copied = as_f32_c(weight, ndim=2, name="weight")
-        if tuple(w.shape) != (num_embeddings, embedding_dim):
-            raise ValueError(
-                f"mojolearn Embedding: weight has shape {tuple(w.shape)}, want ({num_embeddings}, {embedding_dim})"
-            )
-        if not copied:
-            # the layer's own bytes: the binding keeps a device copy of the
-            # table across forwards, so the caller's array must not alias it
-            w = frombytes(w.tobytes(), "<f4", (num_embeddings, embedding_dim))
-        self.num_embeddings = num_embeddings
-        self.embedding_dim = embedding_dim
-        self.padding_idx = padding_idx
-        self.max_norm = max_norm
-        self.norm_type = norm_type
-        self.scale_grad_by_freq = scale_grad_by_freq
-        self.sparse = sparse
-        self.plan = plan
-        self.weight = w
+                 norm_type=2.0, scale_grad_by_freq=False, sparse=False, weight=None, plan="auto", *, numeric_mode=None):
+        _EMBEDDING_NATIVE("emblayer_init", self, (num_embeddings, embedding_dim, padding_idx, max_norm, norm_type, scale_grad_by_freq, sparse, weight, plan, numeric_mode), None, _EMBEDDING_CONTEXT)
 
     @classmethod
     def from_pretrained(cls, embeddings, padding_idx=None, max_norm=None, norm_type=2.0,
@@ -163,11 +113,11 @@ class Embedding(NumericModeMixin):
         There is no `freeze` argument, because nothing here trains the table. The other
         arguments are the constructor's.
         """
-        w, _ = as_f32_c(embeddings, ndim=2, name="embeddings")
-        v, d = (int(s) for s in w.shape)  # glue: two shape dimensions only
-        return cls(v, d, padding_idx=padding_idx, max_norm=max_norm, norm_type=norm_type,
-                   scale_grad_by_freq=scale_grad_by_freq, sparse=sparse, weight=w,
-                   numeric_mode=numeric_mode, plan=plan)
+        return _EMBEDDING_NATIVE("emblayer_pretrained", cls, (embeddings, padding_idx, max_norm, norm_type, scale_grad_by_freq, sparse, numeric_mode, plan), None, _EMBEDDING_CONTEXT)
+
+    def set_params(self, **params):
+        """Set constructor parameters and rebuild the table from the supplied settings."""
+        return _EMBEDDING_NATIVE("emblayer_set_params", self, (params,), None, _EMBEDDING_CONTEXT)
 
     # -- the resident device table (bindings/_mojolearn_embedding.mojo) ------
     # The layer's `__setattr__` (assigning `weight` releases the table) and
@@ -175,9 +125,7 @@ class Embedding(NumericModeMixin):
     # (bindings/embedding_layer_native.mojo).
 
     def __getstate__(self):
-        state = dict(self.__dict__)
-        state.pop("_table_tok", None)
-        return state
+        return _EMBEDDING_NATIVE("emblayer_state", self, (), None, _EMBEDDING_CONTEXT)
 
     def _extension(self):
         mod = self._bind()
@@ -217,8 +165,7 @@ class Embedding(NumericModeMixin):
 
     def to_device(self, a):
         """Upload a float32 array once, for use as `dy` in `backward` on the device."""
-        from ._x_sequence_device import SequenceDeviceTensor
-        return SequenceDeviceTensor._wrap(self._dev_module(), a)
+        return _EMBEDDING_NATIVE("emblayer_to_device", self, (a,), None, _EMBEDDING_CONTEXT)
 
     def _is_dev(self, x):
         from ._x_sequence_device import is_seq_tensor
@@ -267,38 +214,7 @@ class Embedding(NumericModeMixin):
         # The gradient is training: on a CPU-only install it runs only inside
         # the internal reference context;
         # the shipped embedding_infer binding carries no backward at all.
-        from ._cpu_reference import require_training
-        require_training(self)
-        flat, shape = self._ids(ids)
-        t, d, v = int(flat.size), self.embedding_dim, self.num_embeddings
-        if self._is_dev(dy):
-            return self._backward_dev(flat, shape, dy, grad)
-        g, _ = as_f32_c(dy, ndim=None, name="dy")
-        if tuple(g.shape) != shape + (d,):
-            raise ValueError(f"mojolearn Embedding: dy has shape {tuple(g.shape)}, want {shape + (d,)}")
-        g = g.reshape((t * d,))
-        accumulate = 0
-        if grad is None:
-            dw = empty((v * d,), "<f4")
-        else:
-            prev, _ = as_f32_c(grad, ndim=2, name="grad")
-            if tuple(prev.shape) != (v, d):
-                raise ValueError(f"mojolearn Embedding: grad has shape {tuple(prev.shape)}, want ({v}, {d})")
-            dw = frombytes(prev.tobytes(), "<f4", (v * d,))
-            accumulate = 1
-        pad = _NO_PADDING if self.padding_idx is None else int(self.padding_idx)
-        mod = self._extension()
-        plan = _PLAN_CODE[self.plan]
-        if self.plan == "auto" and getattr(mod, "embedding_table_release", None) is None:
-            plan = _PLAN_CODE["scan"]  # a binding without PLAN_AUTO (the host bindings)
-        mod.embedding_backward(
-            # ORDER MATCHES bindings/_mojolearn_embedding.mojo::embedding_backward_binding.
-            # dy, ids, dw (read first when accumulate)
-            [addr_ro(g, name="dy"), addr_ro(flat, name="ids"), addr(dw, name="dw")],
-            # V, d, T, padding_idx, accumulate, plan
-            [v, d, t, pad, accumulate, plan],
-        )
-        return dw.reshape((v, d))
+        return _EMBEDDING_NATIVE("emblayer_backward", self, (ids, dy, grad), None, _EMBEDDING_CONTEXT)
 
     def _backward_dev(self, flat, shape, dy, grad):
         """`backward` on a resident dy: the gradient as a resident tensor."""

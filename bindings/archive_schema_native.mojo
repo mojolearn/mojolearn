@@ -149,6 +149,16 @@
 # ("noneflag", field) is 1 when field is None, ("setflag", field) 1 when it
 # is not. Messages may name the class as {cls}.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.classical_attributes import _type_mro
+from providers.python.array_metadata_pyapi import array_shape_once
+from bindings.gp_kernel_public_native import gp_kernel_nodes
+from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.gp_label_snapshot_native import gp_label_list as _label_list
+from bindings.gp_state_admission_native import _gp_scalar_fields, _gp_array_fields, _gp_admit_binary_class
+from bindings.mode_metadata_native import _fields
+from providers.python.classical_family_admission_pyapi import classical_family_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array, classical_input, classical_dtype_str, classical_c_bytes, _store_code
 from bindings.classical_pandas import classical_admit_value
@@ -158,9 +168,77 @@ from bindings.classical_archive_read import _archive_builtin_repr
 from bindings.trees_public_iforest import iforest_validate
 
 
+def _schema_dictionary(value: PythonObject) raises:
+    var b = native_loaded_module("builtins")
+    if py_type(value) is not b.dict:
+        raise Error("TypeError: saved field storage requires an exact dictionary")
+    var keys = py_call(b.list, value)
+    for i in range(len(keys)):  # driver-loop: exact metadata keys before any dictionary lookup
+        if py_type(keys[i]) is not b.str and py_type(keys[i]) is not b.int:
+            raise Error("TypeError: saved field paths require native string or integer keys")
+
+
+def _schema_index(value: PythonObject, index: PythonObject) raises -> PythonObject:
+    var b = native_loaded_module("builtins")
+    var kind = py_type(value)
+    if kind is b.dict:
+        _schema_dictionary(value)
+        if py_type(index) is not b.str and py_type(index) is not b.int:
+            raise Error("TypeError: saved mapping indices require native strings or integers")
+    elif kind is b.tuple or kind is b.list:
+        if py_type(index) is not b.int:
+            raise Error("TypeError: saved sequence indices require exact integers")
+    else:
+        raise Error("TypeError: saved field paths require exact native containers")
+    return value[index]
+
+
+def _schema_float(value: PythonObject, context: PythonObject) raises -> Float64:
+    host_inference_scalar(value, context)
+    return Float64(py=value)
+
+
+def _schema_equal(value: PythonObject, other: PythonObject, context: PythonObject) raises -> Bool:
+    host_inference_scalar(value, context, True)
+    host_inference_scalar(other, context, True)
+    return Bool(py=value == other)
+
+
+def _schema_hash_scalar(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    host_inference_scalar(value, context)
+    return value
+
+
+def _schema_shape(value: PythonObject, context: PythonObject) raises -> List[Int]:
+    classical_admit_value(value, context)
+    if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
+        raise Error("TypeError: saved array dimensions require native array storage")
+    return array_shape_once(value, context)
+
+
+def _schema_length(value: PythonObject, context: PythonObject) raises -> Int:
+    var b = native_loaded_module("builtins")
+    # Native container descriptors bypass subclass __len__, preserving e.g.
+    # ClassLabels storage without invoking its Python public array facade.
+    var ancestry = _type_mro(py_type(value))
+    for i in range(len(ancestry)):  # driver-loop: admit a native container base without arbitrary protocols
+        if ancestry[i] is b.list:
+            return Int(py=py_call(b.list.__dict__["__len__"], value))
+        if ancestry[i] is b.tuple:
+            return Int(py=py_call(b.tuple.__dict__["__len__"], value))
+        if ancestry[i] is b.dict:
+            return Int(py=py_call(b.dict.__dict__["__len__"], value))
+    if py_type(value) is b.str or py_type(value) is b.bytes or py_type(value) is b.bytearray or py_type(value) is b.memoryview or py_type(value) is context["array_type"]:
+        return len(value)
+    var shape = _schema_shape(value, context)
+    if len(shape) == 0:
+        raise Error("TypeError: len() of unsized saved array")
+    return shape[0]
+
+
 def archive_schema_lookup(cls: PythonObject, table: PythonObject) raises -> PythonObject:
     """The entry of `table` for `cls` or its nearest connected ancestor, or None."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     for i in range(len(mro)):  # driver-loop: over the loading class's ancestry metadata
         if py_contains(table, mro[i]):
@@ -173,75 +251,78 @@ def _schema_fail(kind: PythonObject, text: PythonObject, name: String) raises:
 
 
 def _schema_field(fields: PythonObject, key: PythonObject, name: String) raises -> PythonObject:
+    _schema_dictionary(fields)
+    if py_type(key) is not py_type(PythonObject("")):
+        raise Error("TypeError: saved field names require exact strings")
     if not py_contains(fields, key):
         raise Error("AttributeError: '" + name + "' object has no attribute '" + String(key) + "'")
     return fields[key]
 
 
 def _schema_has(fields: PythonObject, path: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var key = path[0] if py_type(path) is b.tuple else path
+    if py_type(key) is not b.str:
+        raise Error("TypeError: saved field names require exact strings")
     return py_contains(fields, key)
 
 
 def _schema_value(fields: PythonObject, path: PythonObject, name: String) raises -> PythonObject:
     """The field a path names: an instance field, then keys and indices."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(path) is not b.tuple:
         return _schema_field(fields, path, name)
     var value = _schema_field(fields, path[0], name)
     for i in range(1, len(path)):  # driver-loop: over the fixed steps of one schema field path
-        var container = py_type(value)
-        if container is not b.dict and container is not b.tuple and container is not b.list:
-            raise Error("TypeError: saved field path " + String(path[0]) + " requires native containers")
-        value = value[path[i]]
+        value = _schema_index(value, path[i])
     return value
 
 
 def _schema_shown(fields: PythonObject, msg: PythonObject, shown: PythonObject, name: String) raises -> PythonObject:
     """`msg` with {0}, {1}, ... replaced by repr() of the fields `shown` names."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var text = String(msg)
     for i in range(len(shown)):  # driver-loop: over the fixed fields one refusal message names
         var shown_value = _schema_value(fields, shown[i], name)
-        text = text.replace("{" + String(i) + "}", String(py_call(b.repr, shown_value)))
+        text = text.replace("{" + String(i) + "}", _schema_repr_shown(shown_value))
     return PythonObject(text)
 
 
-def _schema_choice(fields: PythonObject, step: PythonObject, name: String) raises:
+def _schema_choice(fields: PythonObject, step: PythonObject, name: String, context: PythonObject) raises:
     """The ("choice", ...) step: stores (name, code) under the derived field."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var value = _schema_value(fields, step[1], name)
     var names = step[3]
     var saved = step[4]
     var fallback = step[5]
-    var shown = String(py_call(b.repr, value))
+    var shown = _schema_repr_shown(value)
     if py_type(value) is b.str:
         if not py_contains(names, value):
             _schema_fail(step[6], PythonObject(String(step[7]).replace("{value}", shown)), name)
         py_setitem(fields, step[2], Python.tuple(value, names[value]))
         return
     if fallback is not None:
-        if Bool(py=py_call(b.callable, value)) or py_type(value) is b.bool or not Bool(py=py_call(b.isinstance, value, b.int)):
+        if py_type(value) is not b.int:
             py_setitem(fields, step[2], fallback)
             return
-    var code = py_call(b.int, value)
+    var code = PythonObject(_schema_int(value, "choice", context))
     if not py_contains(saved, code):
         var text = String(step[8]).replace("{value}", shown).replace("{code}", String(py_call(b.repr, code)))
         _schema_fail(step[6], PythonObject(text), name)
     py_setitem(fields, step[2], Python.tuple(saved[code], code))
 def _schema_list(value: PythonObject, label: String) raises -> PythonObject:
     """A list or tuple field, refused otherwise (no Python iteration protocol runs)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.list and py_type(value) is not b.tuple:
         raise Error("TypeError: saved field " + label + " must be a list")
     return value
 
 
-def _schema_int(value: PythonObject, label: String) raises -> Int:
+def _schema_int(value: PythonObject, label: String, context: PythonObject) raises -> Int:
     """int(value) for the builtin numbers a fitted field holds (a float
     truncates toward zero, as int() does)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
+    host_inference_scalar(value, context)
     if value is None:
         raise Error("TypeError: int() argument must be a string, a bytes-like object or a real number, not 'NoneType' (" + label + ")")
     if py_type(value) is b.float:
@@ -249,12 +330,13 @@ def _schema_int(value: PythonObject, label: String) raises -> Int:
     return Int(py=value)
 
 
-def _schema_truth(value: PythonObject) raises -> Bool:
+def _schema_truth(value: PythonObject, context: PythonObject) raises -> Bool:
+    host_inference_scalar(value, context, True)
     return Bool(py=value)
 
 
 def _schema_label(path: PythonObject) raises -> String:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return String(path[0]) if py_type(path) is b.tuple else String(path)
 
 
@@ -262,18 +344,18 @@ def _schema_real(fields: PythonObject, item: PythonObject, name: String,
                  context: PythonObject) raises -> Float64:
     var kind = String(item[0])
     if kind == "float":
-        return Float64(py=_schema_value(fields, item[1], name))
+        return _schema_float(_schema_value(fields, item[1], name), context)
     if kind == "float_or":
         if not _schema_has(fields, item[1]):
             return Float64(py=item[2])
-        return Float64(py=_schema_value(fields, item[1], name))
+        return _schema_float(_schema_value(fields, item[1], name), context)
     if kind == "const":
         return Float64(py=item[1])
     if kind == "none_real":
         var value = _schema_value(fields, item[1], name)
-        return Float64(py=item[2]) if value is None else Float64(py=value)
+        return Float64(py=item[2]) if value is None else _schema_float(value, context)
     if kind == "if_eq":
-        var chosen = item[3] if Bool(py=_schema_value(fields, item[1], name) == item[2]) else item[4]
+        var chosen = item[3] if _schema_equal(_schema_value(fields, item[1], name), item[2], context) else item[4]
         return _schema_real(fields, chosen, name, context)
     return Float64(_schema_whole(fields, item, name, context))
 
@@ -282,62 +364,66 @@ def _schema_whole(fields: PythonObject, item: PythonObject, name: String,
                   context: PythonObject) raises -> Int:
     var kind = String(item[0])
     if kind == "int":
-        return _schema_int(_schema_value(fields, item[1], name), _schema_label(item[1]))
+        return _schema_int(_schema_value(fields, item[1], name), _schema_label(item[1]), context)
     if kind == "bool":
-        return 1 if _schema_truth(_schema_value(fields, item[1], name)) else 0
+        return 1 if _schema_truth(_schema_value(fields, item[1], name), context) else 0
     if kind == "const":
-        return _schema_int(item[1], "constant")
+        return _schema_int(item[1], "constant", context)
     if kind == "dim":
-        var shape = _schema_value(fields, item[1], name).shape
-        return Int(py=shape[item[2]])
+        var shape = _schema_shape(_schema_value(fields, item[1], name), context)
+        return shape[Int(py=item[2])]
     if kind == "size":
-        return Int(py=_schema_value(fields, item[1], name).size)
+        var shape = _schema_shape(_schema_value(fields, item[1], name), context)
+        var count = 1
+        for dimension in shape:  # driver-loop: saved array rank metadata
+            count *= dimension
+        return count
     if kind == "len":
-        return len(_schema_value(fields, item[1], name))
+        return _schema_length(_schema_value(fields, item[1], name), context)
     if kind == "none":
         var value = _schema_value(fields, item[1], name)
-        return _schema_int(item[2], "sentinel") if value is None else _schema_int(value, _schema_label(item[1]))
+        return _schema_int(item[2], "sentinel", context) if value is None else _schema_int(value, _schema_label(item[1]), context)
     if kind == "noneflag":
         return 1 if _schema_value(fields, item[1], name) is None else 0
     if kind == "setflag":
         return 0 if _schema_value(fields, item[1], name) is None else 1
     if kind == "int_or":
         if not _schema_has(fields, item[1]):
-            return _schema_int(item[2], "default")
-        return _schema_int(_schema_value(fields, item[1], name), _schema_label(item[1]))
+            return _schema_int(item[2], "default", context)
+        return _schema_int(_schema_value(fields, item[1], name), _schema_label(item[1]), context)
     if kind == "bool_or":
         if not _schema_has(fields, item[1]):
             return 1 if Bool(py=item[2]) else 0
-        return 1 if _schema_truth(_schema_value(fields, item[1], name)) else 0
+        return 1 if _schema_truth(_schema_value(fields, item[1], name), context) else 0
     if kind == "code":
-        var key = _schema_value(fields, item[1], name)
+        var key = _schema_hash_scalar(_schema_value(fields, item[1], name), context)
         if not py_contains(item[2], key):
             raise Error("ValueError: mojolearn " + name + ": " + _schema_label(item[1]) + " has no saved code")
-        return _schema_int(item[2][key], "code")
+        return _schema_int(item[2][key], "code", context)
     if kind == "if_eq":
-        var chosen = item[3] if Bool(py=_schema_value(fields, item[1], name) == item[2]) else item[4]
+        var chosen = item[3] if _schema_equal(_schema_value(fields, item[1], name), item[2], context) else item[4]
         return _schema_whole(fields, chosen, name, context)
     if kind == "strict":
         # An int and not a bool, as `isinstance(v, int)` after the bool
         # refusal (bool has no subclasses, so the type test is exact).
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var value = _schema_value(fields, item[1], name)
-        if py_type(value) is b.bool or not Bool(py=py_call(b.isinstance, value, b.int)):
-            var held = String(py_type(value).__name__)
+        if py_type(value) is not b.int:
+            var held = String(py_call(b.type.__dict__["__name__"].__get__, py_type(value)))
             raise Error(String(item[2]) + ": " + String(item[3]).replace("{cls}", name).replace("{type}", held))
         return Int(py=value)
     if kind == "none_or":
         if _schema_value(fields, item[1], name) is None:
-            return _schema_int(item[2], "sentinel")
+            return _schema_int(item[2], "sentinel", context)
         return _schema_whole(fields, item[3], name, context)
     if kind == "at_least":
         var whole = _schema_whole(fields, item[1], name, context)
-        if whole < _schema_int(item[2], "bound"):
+        if whole < _schema_int(item[2], "bound", context):
             raise Error(String(item[3]) + ": " + String(item[4]).replace("{cls}", name))
         return whole
     if kind == "mod":
         var whole = _schema_whole(fields, item[1], name, context)
-        var modulus = _schema_int(item[2], "modulus")
+        var modulus = _schema_int(item[2], "modulus", context)
         if modulus <= 0:
             raise Error("RuntimeError: a saved modulus must be positive")
         var rest = whole % modulus
@@ -347,8 +433,7 @@ def _schema_whole(fields: PythonObject, item: PythonObject, name: String,
     if kind == "mul":
         return _schema_whole(fields, item[1], name, context) * _schema_whole(fields, item[2], name, context)
     if kind == "kernel_ls":
-        var nodes = Python.list()
-        _schema_kernel_nodes(_schema_value(fields, item[1], name), item[2], nodes)
+        var nodes = _schema_kernel_snapshot(_schema_value(fields, item[1], name), item[2], context)
         var total = 0
         for i in range(len(nodes)):  # driver-loop: over the kernel's postfix nodes
             total += len(nodes[i][2])
@@ -357,7 +442,7 @@ def _schema_whole(fields: PythonObject, item: PythonObject, name: String,
         var elements = _schema_list(_schema_value(fields, item[1], name), _schema_label(item[1]))
         var total = 0
         for i in range(len(elements)):  # driver-loop: over the fitted sub-models of one list field
-            total += _schema_int(elements[i][item[2]], String(item[2]))
+            total += _schema_int(_schema_index(elements[i], item[2]), String(item[2]), context)
         return total
     raise Error("RuntimeError: unknown saved item kind " + kind)
 
@@ -378,7 +463,7 @@ def _schema_vector(fields: PythonObject, dtype: String, items: PythonObject, nam
 def _schema_zeros(dtype: String, count: Int, context: PythonObject) raises -> PythonObject:
     """A zeroed C-order Array of `count` elements of `dtype`."""
     var store = py_call(context["array_type"], _store_code(dtype))
-    var raw = py_call(Python.import_module("builtins").bytes, count * Int(py=store.itemsize))
+    var raw = py_call(native_loaded_module("builtins").bytes, count * Int(py=store.itemsize))
     _ = py_call(store.frombytes, raw)
     return classical_wrap_array(store, Python.tuple(count), dtype, "C", context)
 
@@ -434,7 +519,7 @@ def _schema_concat(fields: PythonObject, dtype: String, path: PythonObject, key:
     var joined = py_call(context["archive_bytearray_type"])
     for e in range(len(elements)):  # driver-loop: over the fitted sub-models of one list field
         var element = elements[e]
-        var block = _schema_field(element, key, name) if py_type(element) is Python.import_module("builtins").dict else element[key]
+        var block = _schema_field(element, key, name) if py_type(element) is native_loaded_module("builtins").dict else element[key]
         var parts = _schema_bytes(block, context)
         if String(parts[0]) != dtype:
             raise Error("TypeError: saved block " + String(key) + " holds " + String(parts[0]) + ", the format stores " + dtype)
@@ -472,8 +557,8 @@ def _schema_copy(raw: PythonObject, dtype: String, first: Int, count: Int, conte
     """A C-order Array of `count` elements of `raw` from element `first`."""
     var store = py_call(context["array_type"], _store_code(dtype))
     var width = Int(py=store.itemsize)
-    var view = py_call(Python.import_module("builtins").memoryview, raw)
-    var builtins = Python.import_module("builtins")
+    var view = py_call(native_loaded_module("builtins").memoryview, raw)
+    var builtins = native_loaded_module("builtins")
     var getitem = py_call(builtins.getattr, view, PythonObject("__getitem__"))
     var part = py_call(getitem, py_call(builtins.slice, first * width, (first + count) * width))
     _ = py_call(store.frombytes, part)
@@ -490,7 +575,7 @@ def _schema_shaped(raw: PythonObject, dtype: String, shape: PythonObject, contex
 def _schema_text_member(value: PythonObject, lower: Bool) raises -> PythonObject:
     """str(value) for a builtin scalar; refuses a value whose str would run
     Python code."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var text = PythonObject(None)
     if cls is b.str:
@@ -505,12 +590,13 @@ def _schema_text_member(value: PythonObject, lower: Bool) raises -> PythonObject
 def _schema_mode(fields: PythonObject, prefix: PythonObject, context: PythonObject) raises -> PythonObject:
     """The tier `predict` would run on now, persisted so a loaded model
     never silently changes tier (`numeric_mode` or the process default)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
+    host_inference_scalar(mode, context, True)
     if mode is None or not Bool(py=mode):
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str:
-        var shown = _archive_builtin_repr(mode) if mode is None or py_type(mode) is b.bool or py_type(mode) is b.int or py_type(mode) is b.float else String("<" + String(py_type(mode).__name__) + ">")
+        var shown = _archive_builtin_repr(mode) if mode is None or py_type(mode) is b.bool or py_type(mode) is b.int or py_type(mode) is b.float else String("<" + String(py_call(b.type.__dict__["__name__"].__get__, py_type(mode))) + ">")
         raise Error("ValueError: " + String(prefix) + "cannot save invalid numeric_mode " + shown)
     var folded = py_call(py_call(mode.strip).lower)
     if String(folded) != "fast" and String(folded) != "identical":
@@ -521,50 +607,22 @@ def _schema_mode(fields: PythonObject, prefix: PythonObject, context: PythonObje
 def _schema_repr_shown(value: PythonObject) raises -> String:
     """repr(value) for a builtin scalar; `<type>` for anything whose repr
     would run Python code."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if value is None or cls is b.str or cls is b.bool or cls is b.int or cls is b.float:
         return _archive_builtin_repr(value)
-    return "<" + String(cls.__name__) + ">"
-
-
-def _schema_is_bool(value: PythonObject) raises -> Bool:
-    """`_labels.is_bool`: Python's bool or NumPy's bool_."""
-    var cls = py_type(value)
-    return cls is Python.import_module("builtins").bool or String(cls.__name__) == "bool_"
+    return "<" + String(py_call(b.type.__dict__["__name__"].__get__, cls)) + ">"
 
 
 def _schema_classes(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`_labels.classes_member(value)`: the saved form of `classes_`."""
-    var b = Python.import_module("builtins")
-    var numbers = Python.import_module("numbers")
-    var count = len(value)
-    var labels = Python.list()
-    var all_int = True
-    var all_real = True
-    var all_bool = True
-    var all_str = True
-    for i in range(count):  # driver-loop: over the distinct class labels of one fitted model
-        var label = value[i]
-        _ = py_call(labels.append, label)
-        var boolean = _schema_is_bool(label)
-        all_bool = all_bool and boolean
-        all_int = all_int and not boolean and Bool(py=py_call(b.isinstance, label, numbers.Integral))
-        all_real = all_real and not boolean and Bool(py=py_call(b.isinstance, label, numbers.Real))
-        all_str = all_str and Bool(py=py_call(b.isinstance, label, b.str))
-    if all_int or all_bool or all_real:
-        var items = Python.list()
-        for i in range(count):  # driver-loop: over the distinct class labels of one fitted model
-            _ = py_call(items.append, Python.tuple("const", labels[i]))
-        return _schema_vector(Python.dict(), String("<i8") if all_int or all_bool else String("<f8"), items, name, context)
-    if all_str:
-        return labels
-    raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
+    # The older "classes" schema spelling shares the admitted class-table
+    # owner; it must not revive len/index/ABC callbacks on caller state.
+    return _schema_class_table(value, PythonObject(None), PythonObject(None), context)
 
 
 def _schema_valid_mode(mode: PythonObject) raises -> PythonObject:
     """`ForestProtocol._validated_mode`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if mode is None:
         return mode
     if not Bool(py=py_call(b.isinstance, mode, b.str)):
@@ -581,6 +639,8 @@ def _schema_forest_mode(fields: PythonObject, context: PythonObject) raises -> P
     var requested = _schema_valid_mode(py_get(fields, "numeric_mode"))
     var captured = py_get(fields, "_fit_numeric_mode")
     if captured is not None:
+        if py_type(captured) is not py_type(PythonObject("")):
+            raise Error("TypeError: saved fitted mode requires an exact string")
         if requested is not None and not Bool(py=requested == captured):
             raise Error("ValueError: This forest was fitted with numeric_mode=" + _schema_repr_shown(captured)
                         + "; refit or use set_params before changing numeric_mode")
@@ -592,7 +652,7 @@ def _schema_forest_mode(fields: PythonObject, context: PythonObject) raises -> P
 
 def _schema_forest_engine(fields: PythonObject, context: PythonObject) raises -> String:
     """`ForestProtocol._prediction_engine`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var engine = py_get(fields, "inference_engine", PythonObject("sequential"))
     var valid = Bool(py=py_call(b.isinstance, engine, b.str))
     # str.__str__ (not str()) so a str subclass's own __str__ cannot change the text.
@@ -605,10 +665,9 @@ def _schema_forest_engine(fields: PythonObject, context: PythonObject) raises ->
     return text
 def _schema_label_kind(label: PythonObject, integral: PythonObject, real: PythonObject,
                        context: PythonObject) raises -> Int:
-    """0 bool (`_labels.is_bool`), 1 integer, 2 real, 3 str, 4 another label.
-    Builtin and NumPy scalars are told by type; any other label by the
-    numbers ABCs, as `_labels.label_kind` did."""
-    var b = Python.import_module("builtins")
+    # Exact admitted primitives only. The legacy integral/real metadata stays
+    # in the schema ABI but its Python ABC __instancecheck__ never executes.
+    var b = native_loaded_module("builtins")
     var cls = py_type(label)
     if cls is b.bool:
         return 0
@@ -618,21 +677,22 @@ def _schema_label_kind(label: PythonObject, integral: PythonObject, real: Python
         return 2
     if cls is b.str:
         return 3
-    if String(cls.__name__) == "bool_":
-        return 0
     var scalars = py_get(context, "scalar_types")
-    if scalars is not None and py_contains(scalars, cls):
-        var kind = String(label.dtype.kind)
-        if kind == "i" or kind == "u":
-            return 1
-        if kind == "f":
-            return 2
+    if scalars is not None:
+        for i in range(len(scalars)):  # driver-loop: import-connected native numeric scalar identities
+            if cls is scalars[i]:
+                var kind = String(label.dtype.kind)
+                if kind == "b":
+                    return 0
+                if kind == "i" or kind == "u":
+                    return 1
+                if kind == "f":
+                    return 2
+                return 4
+    # The caller has already refused Python subclasses/protocols. NumPy str_
+    # is an admitted native Unicode subtype and retains its original meaning.
     if Bool(py=py_call(b.isinstance, label, b.str)):
         return 3
-    if Bool(py=py_call(b.isinstance, label, integral)):
-        return 1
-    if Bool(py=py_call(b.isinstance, label, real)):
-        return 2
     return 4
 
 
@@ -652,8 +712,14 @@ def _schema_class_table(value: PythonObject, integral: PythonObject, real: Pytho
     """`_labels.classes_member(value)`: int64 when every label is an integer
     (bools excluded) or every label is a bool, float64 when every label is a
     real number (bools excluded), the list of str when every label is a str."""
-    var b = Python.import_module("builtins")
-    var labels = py_call(b.list, value)
+    var b = native_loaded_module("builtins")
+    var source = classifier_label_list(value, context)
+    classical_admit_value(source, context)
+    var kind = py_type(source)
+    var labels = py_call(b.list, source) if kind is b.list or kind is b.tuple else _label_list(source, context)
+    # Object buffers may contain caller objects: refuse before comparison,
+    # numeric conversion or error formatting can invoke any of their hooks.
+    classical_admit_value(labels, context)
     var count = len(labels)
     var integers = True
     var reals = True
@@ -683,52 +749,59 @@ def _schema_class_table(value: PythonObject, integral: PythonObject, real: Pytho
     raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
 
 
-def _schema_kernel_layout(kernel: PythonObject, table: PythonObject) raises -> PythonObject:
-    """The node layout of `kernel`'s class or its nearest connected ancestor;
-    a class that defines its own `_nodes` first has none."""
-    var b = Python.import_module("builtins")
-    var cls = py_type(kernel)
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for i in range(len(mro)):  # driver-loop: over the kernel class ancestry metadata
-        if py_contains(table, mro[i]):
-            return table[mro[i]]
-        if py_contains(py_call(b.type.__dict__["__dict__"].__get__, mro[i]), "_nodes"):
-            break
-    raise Error("TypeError: mojolearn: a " + String(cls.__name__) + " kernel has no saved node layout")
-
-
 def _schema_kernel_nodes(kernel: PythonObject, table: PythonObject, nodes: PythonObject) raises:
-    """Append `kernel._nodes()`: postfix (kind, param, length scales) tuples,
-    read from the kernels' instance fields."""
-    var b = Python.import_module("builtins")
-    var layout = _schema_kernel_layout(kernel, table)
-    var fields = py_fields(kernel)
-    var name = String(py_type(kernel).__name__)
-    var how = String(layout[0])
-    if how == "pair":
-        _schema_kernel_nodes(_schema_field(fields, layout[1], name), table, nodes)
-        _schema_kernel_nodes(_schema_field(fields, layout[2], name), table, nodes)
-        _ = py_call(nodes.append, Python.tuple(_schema_field(fields, layout[3], name), PythonObject(Float64(0.0)), Python.list()))
-    elif how == "leaf":
-        var param = PythonObject(Float64(0.0)) if layout[2] is None else _schema_field(fields, layout[2], name)
-        var scales = Python.list() if layout[3] is None else py_call(b.list, _schema_field(fields, layout[3], name))
-        _ = py_call(nodes.append, Python.tuple(layout[1], param, scales))
-    elif how == "nodes":
-        var saved = _schema_field(fields, layout[1], name)
-        for i in range(len(saved)):  # driver-loop: over a saved kernel's postfix nodes
-            var node = saved[i]
-            _ = py_call(nodes.append, Python.tuple(node[0], node[1], py_call(b.list, node[2])))
-    else:
-        raise Error("RuntimeError: unknown kernel node layout " + how)
+    # Validate import-connected layout storage before the shared GP owner
+    # hashes a key, indexes a layout or converts any layout scalar.
+    var b = native_loaded_module("builtins")
+    if py_type(table) is not b.dict or py_type(nodes) is not b.list:
+        raise Error("TypeError: saved kernel layouts require native dictionary/list storage")
+    var keys = py_call(b.list, table)
+    for i in range(len(keys)):  # driver-loop: all key identities before dictionary lookup can compare one
+        if py_type(keys[i]) is not b.type:
+            raise Error("TypeError: saved kernel layout keys require native classes")
+    for i in range(len(keys)):  # driver-loop: fixed layout words before shared GP node capture
+        var layout = table[keys[i]]
+        if py_type(layout) is not b.tuple or len(layout) == 0 or py_type(layout[0]) is not b.str:
+            raise Error("TypeError: saved kernel layouts require exact tuples and native names")
+        var how = String(layout[0])
+        if how == "leaf":
+            if len(layout) != 4 or py_type(layout[1]) is not b.int:
+                raise Error("TypeError: saved leaf layouts require native integer kinds")
+            for j in range(2, 4):  # small-loop(leaf parameter and length-scale field names)
+                if layout[j] is not None and py_type(layout[j]) is not b.str:
+                    raise Error("TypeError: saved kernel fields require native names")
+        elif how == "pair" or how == "nodes":
+            if len(layout) != (4 if how == "pair" else 2):
+                raise Error("TypeError: saved kernel layout has an invalid field count")
+            for j in range(1, len(layout)):  # small-loop(pair or saved-node field names)
+                if py_type(layout[j]) is not b.str:
+                    raise Error("TypeError: saved kernel fields require native names")
+        else:
+            raise Error("RuntimeError: unknown saved kernel layout")
+    # Retain Peer5's shared strict node capture for execution and archives.
+    var captured = gp_kernel_nodes(kernel, table)
+    _ = py_call(nodes.extend, captured)
+
+
+def _schema_kernel_snapshot(kernel: PythonObject, table: PythonObject, context: PythonObject) raises -> PythonObject:
+    # This list belongs only to archive_schema_save's local context. The
+    # kernel and kernel_ls steps reuse one capture of the same graph/state.
+    var cache = context["archive_kernel_snapshots"]
+    for i in range(len(cache)):  # driver-loop: identity-only lookup among this archive operation's kernels
+        if cache[i][0] is kernel and cache[i][1] is table:
+            return cache[i][2]
+    var nodes = Python.list()
+    _schema_kernel_nodes(kernel, table, nodes)
+    _ = py_call(cache.append, Python.tuple(kernel, table, nodes))
+    return nodes
 
 
 def _schema_kernel(model_fields: PythonObject, step: PythonObject, values: PythonObject, name: String,
                    context: PythonObject) raises:
     """The four kernel members of a "kernel" step, as `_kernel_arrays` and
     GaussianProcessRegressor.save packed them with Array.from_list."""
-    var b = Python.import_module("builtins")
-    var nodes = Python.list()
-    _schema_kernel_nodes(_schema_value(model_fields, step[1], name), step[2], nodes)
+    var b = native_loaded_module("builtins")
+    var nodes = _schema_kernel_snapshot(_schema_value(model_fields, step[1], name), step[2], context)
     var dtype = String(step[3])
     var code = _store_code(dtype)
     var kinds = Python.list()
@@ -754,7 +827,7 @@ def _schema_elements(fields: PythonObject, field: PythonObject, attr: PythonObje
                      name: String) raises -> PythonObject:
     """`attr` of every element of the list field `field`, from each
     element's instance dictionary."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var items = py_call(b.list, _schema_value(fields, field, name))
     var result = Python.list()
     for i in range(len(items)):  # driver-loop: over a fitted model's sub-model list
@@ -767,7 +840,7 @@ def _schema_stack(fields: PythonObject, step: PythonObject, name: String,
                   context: PythonObject) raises -> PythonObject:
     """`_gpc_impl._stacked`: the elements' storage bytes joined and read as
     one C-order (count, width) array of `dtype`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var parts = _schema_elements(fields, step[2], step[3], name)
     var dtype = String(step[4])
     var width = _schema_whole(fields, step[5], name, context)
@@ -792,7 +865,7 @@ def _schema_stack(fields: PythonObject, step: PythonObject, name: String,
 def _schema_each(fields: PythonObject, step: PythonObject, name: String,
                  context: PythonObject) raises -> PythonObject:
     """`Array.from_list([int|float(e.attr) for e in field], dtype)`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var parts = _schema_elements(fields, step[2], step[3], name)
     var dtype = String(step[4])
     var packed = Python.list()
@@ -805,7 +878,7 @@ def _schema_flatten(fields: PythonObject, step: PythonObject, values: PythonObje
                     context: PythonObject) raises:
     """A "flatten" step: `[int(c) for cl in field for c in cl]` and
     `[len(cl) for cl in field]`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var dtype = String(step[3])
     var elements = _schema_list(_schema_value(fields, step[4], name), _schema_label(step[4]))
     var packed = Python.list()
@@ -828,7 +901,7 @@ def _schema_flatten(fields: PythonObject, step: PythonObject, values: PythonObje
 def _schema_device_array(fields: PythonObject, step: PythonObject, name: String,
                          context: PythonObject) raises -> PythonObject:
     """A "device_array" step's array (see the step table above)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if _schema_has(fields, step[2]):
         return _schema_value(fields, step[2], name)
     var held = py_get(fields, "_resident")
@@ -853,7 +926,7 @@ def _schema_device_array(fields: PythonObject, step: PythonObject, name: String,
 
 def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, values: PythonObject,
                 name: String, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     for k in range(len(steps)):  # driver-loop: over the fixed save steps of one class
         var step = steps[k]
         var kind = String(step[0])
@@ -864,7 +937,7 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
             if not _schema_has(fields, step[1]) or _schema_value(fields, step[1], name) is None:
                 _schema_fail(step[2], step[3], name)
         elif kind == "need_true":
-            if not _schema_has(fields, step[1]) or not _schema_truth(_schema_value(fields, step[1], name)):
+            if not _schema_has(fields, step[1]) or not _schema_truth(_schema_value(fields, step[1], name), context):
                 _schema_fail(step[2], step[3], name)
         elif kind == "need_str":
             if not _schema_has(fields, step[1]) or py_type(_schema_value(fields, step[1], name)) is not b.str:
@@ -873,16 +946,16 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
             if _schema_has(fields, step[1]) and _schema_value(fields, step[1], name) is not None:
                 _schema_fail(step[2], step[3], name)
         elif kind == "refuse_in":
-            if _schema_has(fields, step[1]) and py_contains(step[2], _schema_value(fields, step[1], name)):
+            if _schema_has(fields, step[1]) and py_contains(step[2], _schema_hash_scalar(_schema_value(fields, step[1], name), context)):
                 _schema_fail(step[3], step[4], name)
         elif kind == "need_eq":
-            if not Bool(py=_schema_value(fields, step[1], name) == step[2]):
+            if not _schema_equal(_schema_value(fields, step[1], name), step[2], context):
                 _schema_fail(step[3], _schema_shown(fields, step[4], step[5], name), name)
         elif kind == "need_in":
-            if not py_contains(step[2], _schema_value(fields, step[1], name)):
+            if not py_contains(step[2], _schema_hash_scalar(_schema_value(fields, step[1], name), context)):
                 _schema_fail(step[3], _schema_shown(fields, step[4], step[5], name), name)
         elif kind == "choice":
-            _schema_choice(fields, step, name)
+            _schema_choice(fields, step, name, context)
         elif kind == "check_array":
             var value = _schema_value(fields, step[1], name)
             var parts = _schema_bytes(value, context)
@@ -964,16 +1037,16 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
         elif kind == "each":
             py_setitem(values, step[1], _schema_each(fields, step, name, context))
         elif kind == "when":
-            if _schema_has(fields, step[1]) and Bool(py=_schema_value(fields, step[1], name) == step[2]):
+            if _schema_has(fields, step[1]) and _schema_equal(_schema_value(fields, step[1], name), step[2], context):
                 _schema_run(model, fields, step[3], values, name, context)
         elif kind == "when_set":
             if _schema_has(fields, step[1]) and _schema_value(fields, step[1], name) is not None:
                 _schema_run(model, fields, step[2], values, name, context)
         elif kind == "unless":
-            if _schema_has(fields, step[1]) and not Bool(py=_schema_value(fields, step[1], name) == step[2]):
+            if _schema_has(fields, step[1]) and not _schema_equal(_schema_value(fields, step[1], name), step[2], context):
                 _schema_run(model, fields, step[3], values, name, context)
         elif kind == "when_in":
-            if _schema_has(fields, step[1]) and py_contains(step[2], _schema_value(fields, step[1], name)):
+            if _schema_has(fields, step[1]) and py_contains(step[2], _schema_hash_scalar(_schema_value(fields, step[1], name), context)):
                 _schema_run(model, fields, step[3], values, name, context)
         elif kind == "when_none":
             if not _schema_has(fields, step[1]) or _schema_value(fields, step[1], name) is None:
@@ -993,8 +1066,33 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
             raise Error("RuntimeError: unknown save step " + kind)
 
 
+def _schema_gp_state(fields: PythonObject, steps: PythonObject, context: PythonObject) raises:
+    # Only GP schemas contain a kernel step. Check precisely their consumed
+    # scalar/buffer owners before schema casts or binary-state traversal.
+    var gaussian = False
+    for i in range(len(steps)):  # driver-loop: fixed save-schema operation metadata
+        gaussian = gaussian or String(steps[i][0]) == "kernel"
+    if not gaussian:
+        return
+    _gp_scalar_fields(fields, Python.tuple("numeric_mode", "n_features_in_", "info_", "normalize_y_", "_alpha", "_y_train_mean", "_y_train_std", "log_marginal_likelihood_value_", "_max_iter_predict", "n_classes_"), context)
+    _gp_array_fields(fields, Python.tuple("X_train_", "L_", "alpha_"), context)
+    if py_contains(fields, "estimators_"):
+        var family = py_fields(native_loaded_module("mojolearn._native_family_bridge"))["_CONTEXT"]
+        _gp_admit_binary_class(family)
+        var fits = _schema_list(fields["estimators_"], "estimators_")
+        for i in range(len(fits)):  # driver-loop: one passive stored Laplace state per class
+            if py_type(fits[i]) is not family["family_gp_binary_laplace"]:
+                raise Error("TypeError: GP archives require native-connected binary state")
+            var own = _fields(fits[i])
+            _gp_array_fields(own, Python.tuple("y_train_", "L_", "pi_", "W_sr_"), context)
+            _gp_scalar_fields(own, Python.tuple("log_marginal_likelihood_value_", "n_iter_", "nb_"), context)
+
+
 def archive_schema_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
     """`model.save(path)` for a class with a connected save schema."""
+    # Validate connected class descriptors and dictionary keys before lookup
+    # or reading any saved field; no __dict__ property or metaclass hook runs.
+    var admitted = classical_family_admit(model)
     var cls = py_type(model)
     var steps = archive_schema_lookup(cls, context["archive_save_schemas"])
     if steps is None:
@@ -1002,7 +1100,10 @@ def archive_schema_save(model: PythonObject, path: PythonObject, context: Python
     # A fitted field may be an ndarray when the caller loaded NumPy.
     classical_connect_numpy(context)
     # A shallow copy: "choice" steps add derived fields, never to the model.
-    var fields = py_call(Python.import_module("builtins").dict, py_fields(model))
+    var fields = py_call(native_loaded_module("builtins").dict, admitted)
+    _schema_gp_state(fields, steps, context)
     var values = Python.dict()
-    _schema_run(model, fields, steps, values, String(cls.__name__), context)
+    var operation_context = py_call(native_loaded_module("builtins").dict, context)
+    py_setitem(operation_context, "archive_kernel_snapshots", Python.list())
+    _schema_run(model, fields, steps, values, String(cls.__name__), operation_context)
     return classical_archive_write(path, values, context)

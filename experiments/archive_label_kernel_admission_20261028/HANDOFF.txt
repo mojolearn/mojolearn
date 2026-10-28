@@ -1,0 +1,22 @@
+Archive label/kernel follow-up (2026-10-28)
+
+Branch: lane/archive-label-kernel-admission-20261028
+Frozen executable source: 0d76d5f0a28628c5020e1718f008e12d30b35185.
+Bases: main20ab53ec02, parent archive scalar/path admission68f5140002 and Peer5 GP admission5e7c530779. Both parents are retained. The overlapping archive merge preserves parent scalar/path guards, Peer5 label transport/GP state guards and shared gp_kernel_nodes traversal. The GP helper ABI and gp_common_native call site are unchanged; native_codec was not edited.
+
+Concrete remaining repairs:
+- The legacy classes schema spelling now shares the admitted class_table owner. Removed its direct caller len/index and numbers ABC calls; existing numeric/string archive representations remain owned by that shared code.
+- Archive connection now pins ClassLabels class/MRO/namespace at import, allowing classifier_label_list to copy its native list storage while refusing modified class protocols. The archive context previously lacked this metadata even though the strict helper required it.
+- The saved kernel layout dictionary admits every key and fixed layout word before shared GP traversal hashes keys or consumes indices/scalars.
+- A private per-save context caches captured kernel nodes by kernel/table identity. Kernel members and kernel_ls metadata reuse that same capture; no state survives the public save operation.
+- Peer5's compiled shared kernel walk and Array label snapshot are reused; no duplicate traversal implementation or numerical kernel changes were introduced.
+
+Compilation/evidence:
+- Focused checks/archive_schema_admission_compile.mojo compiles the actual archive_schema_save owner and transitive helpers.
+- Apple CPU, optimization0, identical define, all10 logical cores configured with-j10. This does not establish that every compiler phase saturates all10 cores.
+- Initial controller exited120 during source-byte retention when the filesystem filled. No compiler log or binary was produced. The partial archive held2294 of6391 manifest members, with0 mismatches among retained members; EOF was confirmed. Original partial bytes, controller status and retention audit remain under compile/.
+- Only the agent's completed clean/pushed density and classical lifetime worktrees were removed to recover space. Their branches and complete build evidence remain retained. The retry creates a new complete source archive rather than reusing the incomplete one.
+- Accepted retry PASS: exit0, 63.56s, frozen source0d76d5f0a28628c5020e1718f008e12d30b35185. Retention audit confirms all6391 source members match the manifest. Full command/compiler/binary/source hashes are in compile.json. Python archive bridge syntax compiled. No runtime, identity or vendor verification was run.
+
+Complete local evidence: /Users/andrewhendel/mojolearn-evidence/archive-label-kernel-admission-20261028/
+Remaining: runtime/archive round trips, negative callback fixtures and cross-vendor identity are untested under the current compile-only instruction. This focused batch does not claim an exhaustive audit of all serialization helpers. No rented machine was used.

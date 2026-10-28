@@ -593,11 +593,7 @@ class SVC(NumericModeMixin):
         self.break_ties = break_ties
 
     def __setstate__(self, state):
-        # A model pickled before the parameter checks moved to fit carries
-        # no `_hp_*` working values: derive them from its stored parameters.
-        self.__dict__.update(state)
-        if "_hp_C" not in state and _is_fitted(self):
-            self._validate_params()
+        return _NATIVE(self, "family_svc_public_svc_setstate", (state,), _NATIVE_CONTEXT)
 
     def _validate_params(self):
         """The constructor checks, run at the start of `fit` and in `load`."""
@@ -823,24 +819,7 @@ class SVC(NumericModeMixin):
         for K > 2 classes, float32. Raises `AttributeError` for other
         kernels or before `fit`.
         """
-        if not hasattr(self, "dual_coef_"):
-            raise AttributeError("mojolearn SVC: call fit() first")
-        if self._hp_kernel != "linear":
-            raise AttributeError(
-                "mojolearn SVC: coef_ is only available for kernel='linear'"
-            )
-        pairs = self.__dict__.get("_pairs")
-        if pairs is not None:
-            # one row per pair in scikit-learn's orientation: the negation
-            # of each pair machine's own dual_coef_ @ support_vectors_
-            out = zeros((len(pairs), self.n_features_in_), "<f4")
-            for r, p in enumerate(pairs):           # glue: one gemv call per pair
-                if p["dual"].shape[1]:
-                    self._dual_times_sv(p["dual"], p["sv"], out, r, negate=True)
-            return out
-        if self.n_support_ == 0:
-            return zeros((1, self.n_features_in_), "<f4")
-        return self._dual_times_sv(self.dual_coef_, self.support_vectors_)
+        return _NATIVE(self, "family_svc_svc_coef", (None,), _NATIVE_CONTEXT)
 
     def decision_function(self, X):
         """Evaluate the decision function for the rows of `X`.
@@ -1313,11 +1292,7 @@ class SVR(NumericModeMixin):
         self.output_type = output_type
 
     def __setstate__(self, state):
-        # A model pickled before the parameter checks moved to fit carries
-        # no `_hp_*` working values: derive them from its stored parameters.
-        self.__dict__.update(state)
-        if "_hp_C" not in state and _is_fitted(self):
-            self._validate_params()
+        return _NATIVE(self, "family_svc_public_svr_setstate", (state,), _NATIVE_CONTEXT)
 
     def _validate_params(self):
         """The constructor checks, run at the start of `fit` and in `load`."""
@@ -1488,15 +1463,7 @@ class SVR(NumericModeMixin):
         Only for `kernel='linear'`; raises `AttributeError` for other
         kernels or before `fit`.
         """
-        if not hasattr(self, "dual_coef_"):
-            raise AttributeError("mojolearn SVR: call fit() first")
-        if self._hp_kernel != "linear":
-            raise AttributeError(
-                "mojolearn SVR: coef_ is only available for kernel='linear'"
-            )
-        if self.n_support_ == 0:
-            return zeros((1, self.n_features_in_), "<f4")
-        return self._dual_times_sv(self.dual_coef_, self.support_vectors_)
+        return _NATIVE(self, "family_svc_svr_coef", (None,), _NATIVE_CONTEXT)
 
     # Maintainer note: there is no `decision_function` beside this and no
     # `predict_class` under it: on a regressor the decision value IS the

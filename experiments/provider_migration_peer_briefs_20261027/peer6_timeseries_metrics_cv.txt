@@ -1,0 +1,49 @@
+Peer6 — Time-series, metrics/resampling and cross-validation
+
+Own _x_sequence_autoarima.py and other time-series public orchestration in the
+_x_sequence_* forecast classes; _metrics_impl.py; model_selection.py public
+CV lifecycle/index preparation. Confirmed gaps: AutoARIMA Python search/forecast
+and callback around200,526; metric binding selection around1050,1360,1433; CV
+constructor/index output preparation around1026,1272. Suggested three sublanes:
+time-series; metrics/resampling; CV construction/index/state. Do not edit
+_x_sequence_moe.py (Peer4), _x_sequence_model.py or recurrent wrappers without a
+specific ownership check (shared neural work already integrated; Peer3 owns
+Transformer/Mamba/corpus). Root owns Session/Program/distributed. Inspect whole
+public operations, not just these named examples. Coordinate shared registration
+regions only if edits actually overlap another active lane.
+
+Work independently in a NEW isolated worktree from current main. Read AGENTS.md,
+PROVIDER_MIGRATION_HANDOFF_2026-10-27.txt (current resume section) and the existing
+experiments/provider_boundary_audit_20261027 source inventory. These are source
+findings, not runtime proof. The owner requests whole-operation native migration:
+inputs/settings -> one native call -> validation/preparation/execution -> finished
+result. Include constructors, fitted-state checks, binding selection, dtype/layout,
+output conversion and transitive callees. Exact passive metadata/buffer admission
+must refuse Python protocols before invoking hooks. Do not hide required work in
+caller callbacks, drop supported functionality, or relabel product work as tests.
+Use shared providers and capture input metadata once per public operation. Preserve
+original owner lifetimes. Bitwise identity is within release across GPU vendors;
+outputs may change across versions. No dedicated Apple fast work.
+
+Fan out to disjoint subagents as warranted. You may rent RunPod CPU, use all actual
+allocated cores (respect cgroup), arm60minute deadman, retain logs/results/source
+and binaries on Mac+R2 and archive before teardown. Record pod ownership and never
+touch another peer's pod. No watcher services. Prefer small local focused compiles.
+No runtime/identity/vendor verification campaign or benchmark runs. Compile each
+coherent source batch before requesting merge; one target pass covers only that
+compiled path. Existing checks/push guards remain. Preserve compiler failures.
+
+Commit and push your own branch. Root thread01a18001-c4b5-7ba2-a735-6250b366b07e
+serializes main merges; send a coherent green batch with branch/commit, changes,
+compile scope/status, pending work and evidence paths. Do not mutate main or other
+worktrees. Report only actual blockers/ownership collisions, pod ownership and
+completed batches; keep routine work in your handoff. Resolve routine decisions
+without repeated confirmation. Shared files require a narrow ownership check only
+when another peer is actively editing that same region. Never claim the whole
+library Python-free from a wrapper, grep or successful compilation.
+
+Keep logs out of context: save complete output to files, use targeted rg/grep
+with bounded surrounding lines and short tails, and summarize exit status,
+coverage, failures, and evidence paths. Expand only relevant diagnostic blocks;
+never hide failures or infer full success from filtered output.
+Propagate this reminder to every subagent brief and resumed assignment.
