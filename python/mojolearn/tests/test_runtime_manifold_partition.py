@@ -10,7 +10,7 @@ from mojolearn import _expansion_ann as ann, _expansion_decomp as decomp, _umap_
 
 
 def _arguments(model, x):
-    return (decomp._manifold_binding(model, 'numeric_mode'), _backend.binding(decomp._BINDING), x)
+    return (_backend.binding(decomp._BINDING, model.numeric_mode), _backend.binding(decomp._BINDING), x)
 
 
 def test_manifold_public_modules_share_the_new_native_owner():

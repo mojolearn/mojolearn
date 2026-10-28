@@ -21,10 +21,10 @@ from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_typ
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_arrays import classical_address, classical_wrap_array
-from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_entry, family_as_f32, family_as_f32_dense
+from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_as_f32, family_as_f32_dense
 from core.family_cast_impl import family_all_finite_f32
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
-from bindings.spectral_umap_routes import spectral_umap_entry
+from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_entry as family_entry, spectral_umap_optional_entry
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -356,18 +356,11 @@ struct MKit(Movable):
         self.mode = mode
         self.b = binding
         self.ctx = ctx
-        # `_raw()`: a profiler proxy's wrapped binding, else the binding
-        var raw = binding
-        if py_type(binding) is py_type(native_loaded_module("builtins")):
-            # Exact import-time entry tables have no Python proxy hooks. Read
-            # absent optional attributes without Python's module-error formatter.
-            raw = py_get(_loaded_fields(binding), PythonObject("_b"), binding)
-        else:
-            try:
-                raw = py_call(Python.import_module("builtins").object.__getattribute__, binding, PythonObject("_b"))
-            except:
-                raw = binding
-        self.raw = raw
+        # Proxy resolution is import-time work. A Python __getattr__ or
+        # object descriptor must never select a numerical entry at runtime.
+        if py_type(binding) is not py_type(native_loaded_module("builtins")):
+            raise Error("TypeError: manifold kit requires an exact native module")
+        self.raw = binding
         self.res_known = False
         self.res_ok = False
         self.opt = Python.dict()
@@ -376,17 +369,12 @@ struct MKit(Movable):
 
     def fn(self, name: String) raises -> PythonObject:
         """`self.b.<name>`."""
-        if py_type(self.b) is py_type(native_loaded_module("builtins")):
-            return spectral_umap_entry(self.b, name, self.ctx)
-        return family_entry(self.b, name, self.ctx)
+        return spectral_umap_entry(self.b, name, self.ctx)
 
     def has(self, name: String) -> Bool:
-        """Whether the raw binding exports `name` (any refusal: no)."""
+        """Whether the admitted module exports a compiled optional entry."""
         try:
-            if py_type(self.raw) is py_type(native_loaded_module("builtins")):
-                return py_get(_loaded_fields(self.raw), PythonObject(name)) is not None
-            _ = py_call(Python.import_module("builtins").getattr, self.raw, PythonObject(name))
-            return True
+            return spectral_umap_optional_entry(self.raw, name, self.ctx) is not None
         except:
             return False
 
@@ -412,7 +400,7 @@ struct MKit(Movable):
     def vendor(self) -> String:
         """`_kit_vendor`: the binding's compiled vendor, "" when it cannot say."""
         try:
-            var f = py_call(Python.import_module("builtins").getattr, self.raw, PythonObject("x_decomp_vendor"))
+            var f = spectral_umap_entry(self.raw, "x_decomp_vendor", self.ctx)
             return String(py=py_call(Python.import_module("builtins").str, py_call(f)))
         except:
             return String("")
@@ -420,7 +408,7 @@ struct MKit(Movable):
     def w4_flags(self) -> Int:
         """`w4_flags()`: 0 on a binding without the entry."""
         try:
-            var f = py_call(Python.import_module("builtins").getattr, self.raw, PythonObject("x_decomp_w4_flags"))
+            var f = spectral_umap_entry(self.raw, "x_decomp_w4_flags", self.ctx)
             return Int(py=py_call(Python.import_module("builtins").int, py_call(f)))
         except:
             return 0
@@ -431,9 +419,8 @@ struct MKit(Movable):
         if self.mode != "fast" or self.vendor() != "metal":
             return
         try:
-            var g = Python.import_module("builtins").getattr
-            var mm = py_call(g, self.b, PythonObject("x_decomp_lle_gemm_ordered"))
-            var lu = py_call(g, self.b, PythonObject("x_decomp_lle_lu_ordered"))
+            var mm = spectral_umap_entry(self.b, "x_decomp_lle_gemm_ordered", self.ctx)
+            var lu = spectral_umap_entry(self.b, "x_decomp_lle_lu_ordered", self.ctx)
             self.lle_mm = mm
             self.lle_lu = lu
         except:
