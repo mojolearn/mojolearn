@@ -1,0 +1,21 @@
+{
+  "source_commit": "af07ec0ec95ad638416a1ee86b59680890b669ec",
+  "started": 1793119887.551501,
+  "vendors": {
+    "amd": {
+      "status": "running",
+      "started": 1793119887.551744,
+      "box_id": "613036415",
+      "target": "root@162.243.78.145",
+      "provider": "digitalocean",
+      "last_recipe": {
+        "id": "algos/metric-d2-tweedie-score/taxi/rows=full",
+        "directory": "/root/measure-amd-20261027-r3/campaign/measured/algos.metric-d2-tweedie-score.taxi.rows=full",
+        "status": "process finished",
+        "returncode": 0,
+        "local_archive": "/root/measure-amd-20261027-r3/recipe-logs/algos.metric-d2-tweedie-score.taxi.rows=full.tar.gz"
+      },
+      "completed": 162
+    }
+  }
+}

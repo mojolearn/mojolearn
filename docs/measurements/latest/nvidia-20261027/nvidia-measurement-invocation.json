@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "/root/measure-nvidia-20261027/runtime/cache/venv/bin/python",
+    "/root/measure-nvidia-20261027/source/tools/gpu_gap_campaign.py",
+    "--vendor",
+    "nvidia",
+    "--manifest",
+    "/root/measure-nvidia-20261027/manifest.json",
+    "--out",
+    "/root/measure-nvidia-20261027/campaign",
+    "--cache",
+    "/root/measure-nvidia-20261027/runtime/cache",
+    "--python-env",
+    "/root/measure-nvidia-20261027/runtime/cache/venv/bin/python",
+    "--wheel-manifest",
+    "/root/measure-nvidia-20261027/runtime/setup/wheel-manifest.json",
+    "--cpu-fallback",
+    "--opponent-store",
+    "/root/measure-nvidia-20261027/opponent-store.jsonl",
+    "--keep-going",
+    "--stop-at",
+    "1793723204.78582"
+  ],
+  "frozen_main": "7d881805f7f9173934a062ba8006e663ebf68c8a",
+  "version": "0.8.62",
+  "whole_plan": true
+}

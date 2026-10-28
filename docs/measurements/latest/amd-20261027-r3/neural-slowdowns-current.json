@@ -1,0 +1,540 @@
+[
+  {
+    "recipe": "neural/causal-lm-generate/mojolearn-162m/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-bf16",
+    "ratio": 8.715561362342289,
+    "ours_ms": 4302.456092998909,
+    "opponent_ms": 493.6522059942945,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "INSUFFICIENT"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.causal-lm-generate.mojolearn-162m.shape=full.json"
+  },
+  {
+    "recipe": "neural/mamba1-forward/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "mamba-ssm-fp32",
+    "ratio": 6.256058640216637,
+    "ours_ms": 9.331999994174112,
+    "opponent_ms": 1.4916739964974113,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 1.188965496577979e-07,
+            "opponent": 1.188965496577979e-07,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "rel_fro_vs_torch_eager_fp32",
+            "observed": 7.442349185422313e-09,
+            "opponent": 7.344902420088521e-09,
+            "ours": 7.442349185422313e-09,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.mamba1-forward.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/lm-train-step/bytes/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-bf16",
+    "ratio": 5.126974840650474,
+    "ours_ms": 42.99121700023534,
+    "opponent_ms": 8.38529899920104,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "symmetric-relative",
+            "margin": 0.05,
+            "metric": "loss_last_step",
+            "observed": 3.4273945060454924e-05,
+            "opponent": 8.403165817260742,
+            "ours": 8.402877807617188,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.lm-train-step.bytes.shape=full.json"
+  },
+  {
+    "recipe": "neural/mamba2-decode/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "mamba-ssm-fp32",
+    "ratio": 3.8845634895632855,
+    "ours_ms": 2565.216806004173,
+    "opponent_ms": 660.3616630018223,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 2.2290605296118128e-07,
+            "opponent": 2.2290605296118128e-07,
+            "ours": 0.0,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.mamba2-decode.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/gemm-bf16/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-bf16",
+    "ratio": 3.8395131104541402,
+    "ours_ms": 36.2838750006631,
+    "opponent_ms": 9.450124001887161,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.0027588420144940336,
+            "opponent": 0.0027588420144940336,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_err_vs_fp64",
+            "observed": 0.002758856066062028,
+            "opponent": 0.002758856066062028,
+            "ours": 1.1548914368712009e-07,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.gemm-bf16.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/gemm/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-bf16",
+    "ratio": 3.419235889537182,
+    "ours_ms": 38.03465000237338,
+    "opponent_ms": 11.123727999802213,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.0037514546263206472,
+            "opponent": 0.0037514546263206472,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_err_vs_fp64",
+            "observed": 0.0037515023103755034,
+            "opponent": 0.0037515023103755034,
+            "ours": 2.398716979667606e-07,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.gemm.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/lm-forward/bytes/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-bf16",
+    "ratio": 3.112766264614515,
+    "ours_ms": 34.43136600253638,
+    "opponent_ms": 11.061340002925135,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.00943165591717407,
+            "opponent": 0.00943165591717407,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "absolute",
+            "margin": 0.05,
+            "metric": "mean_nll",
+            "observed": 6.454002889100252e-05,
+            "opponent": 9.014202506919355,
+            "ours": 9.014267046948246,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.lm-forward.bytes.shape=full.json"
+  },
+  {
+    "recipe": "neural/mamba2-forward/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "mamba-ssm-fp32",
+    "ratio": 2.529067268623012,
+    "ours_ms": 5.064657001639716,
+    "opponent_ms": 2.002578999963589,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 3.242269861253546e-07,
+            "opponent": 3.242269861253546e-07,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "rel_fro_vs_torch_eager_fp32",
+            "observed": 1.3721580564925481e-07,
+            "opponent": 7.51407233101831e-08,
+            "ours": 1.3721580564925481e-07,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.mamba2-forward.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/causal-lm-generate-smollm2/smollm2-135m/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-bf16",
+    "ratio": 2.177830927553807,
+    "ours_ms": 2778.3167640009196,
+    "opponent_ms": 1275.7265629988979,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "INSUFFICIENT"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.causal-lm-generate-smollm2.smollm2-135m.shape=full.json"
+  },
+  {
+    "recipe": "neural/program-run/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-bf16",
+    "ratio": 1.4462286548999816,
+    "ours_ms": 0.7603069971082732,
+    "opponent_ms": 0.5257170050754212,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.002871402320498597,
+            "opponent": 0.002871402320498597,
+            "ours": 0.0,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.program-run.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/ops-session-step/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-bf16",
+    "ratio": 0.9284780337141252,
+    "ours_ms": 1.8484539978089742,
+    "opponent_ms": 1.9908430040231906,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "INSUFFICIENT"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.ops-session-step.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/lstm-fit/higgs/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-fp32",
+    "ratio": 0.8288593725640094,
+    "ours_ms": 139.19222600088688,
+    "opponent_ms": 167.93225800211076,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "absolute",
+            "margin": 0.01,
+            "metric": "auc",
+            "observed": 0.0026463776004368444,
+            "opponent": 0.6629615256224521,
+            "ours": 0.665607903222889,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "symmetric-relative",
+            "margin": 0.05,
+            "metric": "rmse",
+            "observed": 0.002323689248812496,
+            "opponent": 0.47910529886126973,
+            "ours": 0.4779920070292567,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.lstm-fit.higgs.shape=full.json"
+  },
+  {
+    "recipe": "neural/mamba1-decode/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "mamba-ssm-fp32",
+    "ratio": 0.8121288645775432,
+    "ours_ms": 494.6166279987665,
+    "opponent_ms": 609.0371239988599,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 5.944827482889895e-08,
+            "opponent": 5.944827482889895e-08,
+            "ours": 0.0,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.mamba1-decode.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/mlp-predict/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-bf16",
+    "ratio": 0.7393756802161673,
+    "ours_ms": 0.31577699701301754,
+    "opponent_ms": 0.4270859935786575,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.003955577456097068,
+            "opponent": 0.003955577456097068,
+            "ours": 0.0,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "not_scored": [
+          "quality not scored (scorer failed): ours: the race recorded no quality for this arm (its scorer did not run)"
+        ],
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "INSUFFICIENT"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.mlp-predict.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/mlp-train-step/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-bf16",
+    "ratio": 0.7368094445232678,
+    "ours_ms": 1.187238005513791,
+    "opponent_ms": 1.611323001270648,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "symmetric-relative",
+            "margin": 0.05,
+            "metric": "loss_last_step",
+            "observed": 8.955593203001864e-05,
+            "opponent": 1.1234614849090576,
+            "ours": 1.1233608722686768,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.mlp-train-step.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/gru-fit/higgs/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-fp32",
+    "ratio": 0.4321845791646041,
+    "ours_ms": 120.9650300006615,
+    "opponent_ms": 279.8920549976174,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "absolute",
+            "margin": 0.01,
+            "metric": "auc",
+            "observed": 0.013461592221259311,
+            "opponent": 0.6689033622531116,
+            "ours": 0.682364954474371,
+            "verdict": "FAIL"
+          },
+          {
+            "comparison": "symmetric-relative",
+            "margin": 0.05,
+            "metric": "rmse",
+            "observed": 0.0056579511524386655,
+            "opponent": 0.4763414699235176,
+            "ours": 0.4736463531548095,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "FAIL"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.gru-fit.higgs.shape=full.json"
+  },
+  {
+    "recipe": "neural/mlp-fit/higgs/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-fp32",
+    "ratio": 0.25949723950491993,
+    "ours_ms": 239.47626299923286,
+    "opponent_ms": 922.8470540037961,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "absolute",
+            "margin": 0.01,
+            "metric": "accuracy",
+            "observed": 0.00034999999999996145,
+            "opponent": 0.71227,
+            "ours": 0.71192,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "absolute",
+            "margin": 0.01,
+            "metric": "auc",
+            "observed": 0.0002954059481066196,
+            "opponent": 0.7844437967506314,
+            "ours": 0.784739202698738,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/amd/boards/neural.mlp-fit.higgs.shape=full.json"
+  }
+]
