@@ -39,3 +39,22 @@ def test_provider_retains_tape_origin_instead_of_rereading_replaced_bindings():
     for family, owner in (('mamba', 'Mamba3ForwardTape'), ('transformer', 'TransformerForwardTape')):
         shell = (ROOT/f'bindings/_mojolearn_{family}.mojo').read_text()
         assert f'tape.downcast_value_ptr[{owner}]()' in shell
+
+
+def test_transformer_resident_table_preserves_packed_and_plain_native_owners():
+    _, failures = audit(ROOT, ('transformer.native_decode_dispatch',))
+    assert not failures, failures
+    native=(ROOT/'transformer/native_decode_dispatch.mojo').read_text()
+    for operation in ('open','open_run_int15','step','forward','export','load'):
+        target = '_session_open_run_int15' if operation == 'open_run_int15' else f'_session_{operation}_run'
+        assert target + '(owner[]' in native
+    assert 'BlockOptions.from_params(p, 9)' in native
+    assert 'owner[].usable = False' in native
+    assert 'owner[].release()' in native
+    provider=(ROOT/'providers/python/transformer_resident_pyapi.mojo').read_text()
+    assert 'neural_descriptor_handle(provider,' in provider
+    assert 'neural_descriptor_reserved_execute(provider, session, handle,' in provider
+    public=(ROOT/'bindings/causal_lm_public.mojo').read_text()
+    for operation in (22,23,24):
+        assert f', {operation},' in public
+    assert '19 if int15 else 18' in public

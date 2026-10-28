@@ -896,6 +896,10 @@ def transformer_decode_step_binding(
     return PythonObject(out_len)
 
 
+def transformer_decode_native_handle_binding(session: PythonObject) raises -> PythonObject:
+    return PythonObject(Int(session.downcast_value_ptr[TransformerDecodeSession]()))
+
+
 def transformer_decode_session_create_binding() raises -> PythonObject:
     """A closed session. Creation performs no GPU operation."""
     return PythonObject(alloc=TransformerDecodeSession())
@@ -1625,6 +1629,7 @@ def build__mojolearn_transformer() -> PythonObject:
         # DEVIATION 2940: the resident decode session.
         _ = m.add_type[TransformerDecodeSession]("_TransformerDecodeSession")
         m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")
+        m.def_function[transformer_decode_native_handle_binding]("transformer_decode_native_handle_v1")
         m.def_function[transformer_decode_session_open_binding]("transformer_decode_session_open")
         # lane/lowbit-default: the resident sessions under numeric_profile="fixed15_v1".
         m.def_function[transformer_decode_session_open_int15_binding]("transformer_decode_session_open_int15")
