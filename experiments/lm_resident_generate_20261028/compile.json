@@ -102,5 +102,57 @@
       "artifact_sha256": "4bceeb69ade0e614c8b50ea647ddc6f42f873ae8d42c6487097ffe65d89ed6fd",
       "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/sm89-d9b2395c/compile_resident_session-on.log"
     }
-  ]
+  ],
+  "remerge_origin_main_45b0630582": {
+    "source_commit": "f37641b724deab75aba1870c45ec25167e6430c9",
+    "controller": "tools/compile_slot.sh",
+    "overall_exit": 0,
+    "roots": [
+      {
+        "leg": "cpu-f37641b7",
+        "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+        "entry": "experiments/lm_resident_generate_20261028/compile_causal_public.mojo",
+        "arm": "off",
+        "define": null,
+        "exit": 0,
+        "seconds": 31,
+        "artifact_sha256": "69cc273e101c35e9fbafb91e50633f78a2980e80c82c276effa2664b515ccb2a",
+        "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/cpu-f37641b7/compile_causal_public-off.log"
+      },
+      {
+        "leg": "cpu-f37641b7",
+        "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+        "entry": "experiments/lm_resident_generate_20261028/compile_causal_public.mojo",
+        "arm": "on",
+        "define": "MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1",
+        "exit": 0,
+        "seconds": 148,
+        "artifact_sha256": "1fbac9d8d0e9ee5859a821c0da0351d72bb215a4354cbbbd783cae0ee1855f68",
+        "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/cpu-f37641b7/compile_causal_public-on.log"
+      },
+      {
+        "leg": "cpu-f37641b7",
+        "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+        "entry": "experiments/lm_resident_generate_20261028/compile_resident_session.mojo",
+        "arm": "off",
+        "define": null,
+        "exit": 0,
+        "seconds": 62,
+        "artifact_sha256": "feab1de1e24e911d690ee7edf2e08b0ab66ab895951428cbc279d7d20e107161",
+        "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/cpu-f37641b7/compile_resident_session-off.log"
+      },
+      {
+        "leg": "cpu-f37641b7",
+        "target_flags": "-D MOJOLEARN_COLUMN_CPU",
+        "entry": "experiments/lm_resident_generate_20261028/compile_resident_session.mojo",
+        "arm": "on",
+        "define": "MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1",
+        "exit": 0,
+        "seconds": 33,
+        "artifact_sha256": "019b7592d247d202536d207d0b3e2be72dddf0257100785b3fd052c00c604ad6",
+        "log": "/Users/andrewhendel/mojolearn-evidence/lm-resident-generate-20261028/cpu-f37641b7/compile_resident_session-on.log"
+      }
+    ],
+    "note": "CPU column only after the merge; the sm_89 leg above is from d9b2395cf9 (pre-merge)"
+  }
 }
