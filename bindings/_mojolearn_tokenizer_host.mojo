@@ -96,7 +96,7 @@ from bindings.samba_config_native import samba_config_c
 from bindings.samba_public_native import samba_public_c
 from bindings.native_transport import transport_c, transport_initialize
 from bindings.cross_vendor_native import cross_vendor_c
-from bindings.parallel_byte_native import parallel_byte_c
+from bindings.parallel_byte_native import parallel_byte_c, ParallelByteOwner
 from bindings.native_codec import codec_c
 from bindings.native_process_pool import process_c
 from bindings.parallel_mlp_native import parallel_mlp_c
@@ -1241,6 +1241,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(transport_c, "native_transport_call")
         module.def_py_c_function(cross_vendor_c, "cross_vendor_call")
         module.def_py_c_function(parallel_byte_c, "parallel_byte_call")
+        # Native owner record of each byte-LM multi-device trainer.
+        _ = module.add_type[ParallelByteOwner]("_ParallelByteOwner")
         module.def_py_c_function(codec_c, "native_codec_call")
         module.def_py_c_function(process_c, "native_process_call")
         module.def_py_c_function(parallel_mlp_c, "parallel_mlp_call")
