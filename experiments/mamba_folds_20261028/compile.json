@@ -1,197 +1,70 @@
 {
  "lane": "mamba-folds",
- "source_commit": "139c65a5dc144b2513052b0328d4cc6e14a8c23f",
+ "source_commit": "b8ffe32a62038d8d8bb5440c4eab85de8c132641",
  "compiler_version": "Mojo 1.0.0 (ed45d567)",
- "host": "Mac arm64 via tools/compile_slot.sh (no RunPod box: the cost hook refused, 4 pods live at the cap 4)",
+ "host": "Mac arm64 via tools/compile_slot.sh (started before the owner moved compiles to RunPod; no pod used)",
  "jobs": 10,
- "command": "bash experiments/mamba_folds_20261028/compile.sh <ev> host oracle | (COLUMN_DEFS=\"-D MOJOLEARN_COLUMN_NVIDIA\" EXTRA=\"--target-accelerator sm_89\") device training",
+ "command": "DEFSETS=\"off bwd\" compile.sh <ev> host | (COLUMN_DEFS=\"-D MOJOLEARN_COLUMN_NVIDIA\" EXTRA=\"--target-accelerator sm_89\") device",
  "flags": "mojo build --optimization-level 0 -j 10 [--emit shared-lib] -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings",
  "overall_exit": 0,
  "runtime_executed": false,
- "sm89_check": "strings | grep -c sm_89: device-both.so 251, training-both.so 352",
- "covered": "Mamba-1/2/3 device binding (_mojolearn_mamba), training binding (_mojolearn_training: Samba train step, Mamba-3 tape), host column binding (_mojolearn_mamba_host, generated mamba/host/gen), host backward oracle check; arms off, each define, both",
+ "sm89_check": "strings | grep -c sm_89: device-bwd.so 248",
+ "covered": "after deleting MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN: _mojolearn_mamba_host (CPU) and _mojolearn_mamba (sm_89), arms off and MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
  "not_covered": [
   "AMD (gfx942) and Apple Metal targets",
-  "_mojolearn_training_host, _mojolearn_tokenizer_host, transformer bindings",
-  "any runtime, identity, gate D or timing run"
+  "_mojolearn_training after the deletion (last compiled green at 139c65a5dc with BWD_FOLDS on and off; the deletion touches no file it imports beyond the Mamba-1 scan/oracle restored to main)",
+  "any runtime, identity or timing run"
  ],
  "roots": [
   {
-   "leg": "cpu-139c65a5dc",
+   "leg": "cpu-b8ffe32a62",
    "target_flags": "-D MOJOLEARN_COLUMN_CPU",
    "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
    "arm": "off",
    "defines": null,
    "exit": 0,
-   "seconds": 12,
-   "artifact_sha256": "03a006c5ddda397051d462c1bae4ca8bdf393f78edcc605603f5dbf4502d2a0e",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-139c65a5dc/host-off.log"
+   "seconds": 125,
+   "artifact_sha256": "f97698822ebd794f5538958a5e0eb315a93330964cf87c458011ff0d661d98dc",
+   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-b8ffe32a62/host-off.log"
   },
   {
-   "leg": "cpu-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_CPU",
-   "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
-   "arm": "m1",
-   "defines": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1",
-   "exit": 0,
-   "seconds": 14,
-   "artifact_sha256": "40227f3a1f64bd3b09e0c6703c9e478b117c7ac5bfe3150e1a853862bc39c053",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-139c65a5dc/host-m1.log"
-  },
-  {
-   "leg": "cpu-139c65a5dc",
+   "leg": "cpu-b8ffe32a62",
    "target_flags": "-D MOJOLEARN_COLUMN_CPU",
    "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
    "arm": "bwd",
    "defines": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
    "exit": 0,
-   "seconds": 13,
-   "artifact_sha256": "e2077cb7a3e735cde821a9be9888ec6331a37ec4f7f662cfe2be2178f087bb11",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-139c65a5dc/host-bwd.log"
+   "seconds": 172,
+   "artifact_sha256": "e7981081d13707d10fec6eb9cb903a38bb9db88e261db42a4c5664768729c886",
+   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-b8ffe32a62/host-bwd.log"
   },
   {
-   "leg": "cpu-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_CPU",
-   "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
-   "arm": "both",
-   "defines": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1 MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
-   "exit": 0,
-   "seconds": 12,
-   "artifact_sha256": "ba777fb3b83a7f3ca54d3c4f523cc068db109a372069b4dbb0e94e3fb05141ea",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-139c65a5dc/host-both.log"
-  },
-  {
-   "leg": "cpu-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_CPU",
-   "entry": "mamba/checks/mamba_backward_host_oracle_check.mojo",
-   "arm": "off",
-   "defines": null,
-   "exit": 0,
-   "seconds": 5,
-   "artifact_sha256": "32b273d2e8654c5fe92c431972354415ff29560feb7f4ace4d51ec7da61255b0",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-139c65a5dc/oracle-off.log"
-  },
-  {
-   "leg": "cpu-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_CPU",
-   "entry": "mamba/checks/mamba_backward_host_oracle_check.mojo",
-   "arm": "m1",
-   "defines": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1",
-   "exit": 0,
-   "seconds": 5,
-   "artifact_sha256": "07081cb13b634a3739a93b77eccf8789a661870ec15ebf5068b02a5c2cf1847a",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-139c65a5dc/oracle-m1.log"
-  },
-  {
-   "leg": "cpu-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_CPU",
-   "entry": "mamba/checks/mamba_backward_host_oracle_check.mojo",
-   "arm": "bwd",
-   "defines": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
-   "exit": 0,
-   "seconds": 5,
-   "artifact_sha256": "769a726ed51963c5e3ccd272ad6c644fa90d3d1dd535bbb69d6dd98af7949d32",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-139c65a5dc/oracle-bwd.log"
-  },
-  {
-   "leg": "cpu-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_CPU",
-   "entry": "mamba/checks/mamba_backward_host_oracle_check.mojo",
-   "arm": "both",
-   "defines": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1 MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
-   "exit": 0,
-   "seconds": 5,
-   "artifact_sha256": "fa3f67e66cfd7c62946c502f8b7db35fa50b2115686e6e2d578774556bddc180",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/cpu-139c65a5dc/oracle-both.log"
-  },
-  {
-   "leg": "sm89-139c65a5dc",
+   "leg": "sm89-b8ffe32a62",
    "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
    "entry": "bindings/entry/entry__mojolearn_mamba.mojo",
    "arm": "off",
    "defines": null,
    "exit": 0,
-   "seconds": 32,
-   "artifact_sha256": "cb96fa892111c969361d7195384bed82c701778fbfb82636a7ffd10cd728b43b",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-139c65a5dc/device-off.log"
+   "seconds": 181,
+   "artifact_sha256": "e488d7f9902d71aca541b8f0b17eaf9ba7ded3413b1e66ec8b8f4fddd5f3baba",
+   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-b8ffe32a62/device-off.log"
   },
   {
-   "leg": "sm89-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
-   "entry": "bindings/entry/entry__mojolearn_mamba.mojo",
-   "arm": "m1",
-   "defines": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1",
-   "exit": 0,
-   "seconds": 31,
-   "artifact_sha256": "7c385204fab7260823415748642ce3239b7cb25b459bdb84caa9778827e726b0",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-139c65a5dc/device-m1.log"
-  },
-  {
-   "leg": "sm89-139c65a5dc",
+   "leg": "sm89-b8ffe32a62",
    "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
    "entry": "bindings/entry/entry__mojolearn_mamba.mojo",
    "arm": "bwd",
    "defines": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
    "exit": 0,
-   "seconds": 28,
-   "artifact_sha256": "e9b4eda5ce628a610ec26cae26f8c9fac44af2848ee45d435efa812d3fc35b9d",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-139c65a5dc/device-bwd.log"
-  },
-  {
-   "leg": "sm89-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
-   "entry": "bindings/entry/entry__mojolearn_mamba.mojo",
-   "arm": "both",
-   "defines": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1 MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
-   "exit": 0,
-   "seconds": 34,
-   "artifact_sha256": "48e6de68ff4e24b75628cb29bfa159404f943e2e7bb21f73cc6e32972b6159d0",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-139c65a5dc/device-both.log"
-  },
-  {
-   "leg": "sm89-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
-   "entry": "bindings/entry/entry__mojolearn_training.mojo",
-   "arm": "off",
-   "defines": null,
-   "exit": 0,
-   "seconds": 43,
-   "artifact_sha256": "3fe2acd2a631ad721c0af6fdf56b5c53e8b1568771617c80c40965ddf10dd7cf",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-139c65a5dc/training-off.log"
-  },
-  {
-   "leg": "sm89-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
-   "entry": "bindings/entry/entry__mojolearn_training.mojo",
-   "arm": "m1",
-   "defines": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1",
-   "exit": 0,
-   "seconds": 45,
-   "artifact_sha256": "4e2c0469758b2535fcc03f1ed35d9a3716180f39f1e74348c219e0a222e75677",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-139c65a5dc/training-m1.log"
-  },
-  {
-   "leg": "sm89-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
-   "entry": "bindings/entry/entry__mojolearn_training.mojo",
-   "arm": "bwd",
-   "defines": "MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
-   "exit": 0,
-   "seconds": 117,
-   "artifact_sha256": "474d26fe29b63d6d0dbcbb0484d1a444760652d7ffea3b8eb8ade5a2e76f88cf",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-139c65a5dc/training-bwd.log"
-  },
-  {
-   "leg": "sm89-139c65a5dc",
-   "target_flags": "-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89",
-   "entry": "bindings/entry/entry__mojolearn_training.mojo",
-   "arm": "both",
-   "defines": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1 MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1",
-   "exit": 0,
-   "seconds": 65,
-   "artifact_sha256": "0c50a6de4a283f8d4578396a7e0b22acb873746fa1e86a5c6b6d0a41f4130ffc",
-   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-139c65a5dc/training-both.log"
+   "seconds": 361,
+   "artifact_sha256": "90419ad3c414ae92e7a68efb17d9ae08ddf389e77795efd356dc0ca38fdf0d46",
+   "log": "/Users/andrewhendel/mojolearn-evidence/mamba-folds-20261028/sm89-b8ffe32a62/device-bwd.log"
   }
  ],
- "note": "final receipt; later commits on the branch merge origin/main Python-only changes (tools/bench_board.py) outside this closure"
+ "prior_receipt": {
+  "source_commit": "139c65a5dc144b2513052b0328d4cc6e14a8c23f",
+  "overall_exit": 0,
+  "roots": 16,
+  "note": "16 roots incl. the since-deleted chunked-scan arms; training binding sm_89 included"
+ }
 }
