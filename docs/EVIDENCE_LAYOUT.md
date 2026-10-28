@@ -40,3 +40,50 @@ R2 (`measurements/<date>/<job>.tar.gz`, `boards/<box>/<root>.tar.gz`, `measureme
 2. Keep only what a reader needs to know what ran and what it showed: summaries, manifests, receipts, one-line
    results. Leave the logs and binaries where they are and make sure they reach R2.
 3. Never keep the only copy of a script in an evidence folder.
+
+## Source archive sharing (2026-10-28)
+
+`tools/bench_board_evidence.py` already captures source once per board context,
+not once per race. Identical source archives across contexts now share local
+storage through hard links to `~/.cache/mojolearn/measurement-sources/v1/`.
+`MOJOLEARN_SOURCE_ARCHIVE_CACHE` overrides that directory; put it on the same
+filesystem as the run outputs for sharing to work. If the cache is unavailable
+or hard links are unsupported, each run retains an ordinary full archive.
+
+Every run still has its original, self-contained `evidence/source/source.tar.gz`:
+archive contents, hashes, receipt schema, remote keys and restore commands are
+unchanged. The snapshot still includes actual working source and external
+drivers, so a dirty checkout is not mistaken for its Git commit. Cache entries
+are checked by SHA-256 before reuse. Archives are read-only and must not be
+edited in place; rebuilding a snapshot atomically replaces its path without
+changing previous runs. Removing a cache entry or one run does not remove the
+bytes retained by another hard link.
+
+This saves allocated disk space for future identical snapshots on the same
+filesystem. It does not prune existing evidence, deduplicate datasets or loaded
+binaries inside run archives, reduce source-capture CPU work, or guarantee that
+an external backup tool preserves hard links. Logical per-directory sizes may
+still count each path. Remote source archives already use content-hash keys.
+
+## Public records in MojoLearn
+
+The `latest/` summaries are not the repository's only evidence. Identity records,
+reference tables and model fixtures, historical benchmark boards, experiment
+receipts, and dated handoffs also live here. Packaging and verification tools
+consume some of those paths directly; do not move them as a storage cleanup.
+
+MojoLearn is the public home for these compact records. Maintainer runners now
+collect current measurement and verification summaries under `latest/auto/`,
+with separate streams for smoke tests and fault injections. Failed, partial and
+source-only results keep their actual status. See [automatic result retention](RESULT_RETENTION.md)
+for the covered runners, size limits and publication behavior.
+
+Raw identity columns are retained at immutable repository paths. Reference
+generation reads those repository files; records and the updated table can be
+committed together. Wheel packaging checks that its verification payload matches
+the selected release commit. Collection does not automatically promote results
+to references, and ordinary verification does not rewrite its expected answers.
+
+Large reusable inputs and artifacts remain in existing local/R2 storage,
+referenced by digest. No separate public evidence repository is needed for this
+workflow. Repository collection preserves the original evidence copies.

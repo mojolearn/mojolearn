@@ -718,3 +718,21 @@ SELF-MERGE 2026-10-28 (lane norm-folds) — MOJOLEARN_IDN_NORM_FIXED_LANES, defa
   that merge touches no lane file, so no recompile).
 - Receipts: experiments/norm_folds_20261028/compile.json and ~/mojolearn-evidence/norm-folds-20261028/pod/.
 - Not done: no GPU runtime, identity or timing. The A/B and ID runs owed are in ~/mojolearn-evidence/norm-folds-20261028/HANDOFF.md.
+
+SELF-MERGE 2026-10-28 (lane overhead-module-lookup, Claude Opus 5.5): admit native module connections once per neural operation. No define.
+- What it does: bindings/native_loaded_module.mojo gains NativeModules, an additive admit-once/reuse view. The first request for a module in an
+  operation runs the full native_loaded_module() check; later requests reuse the admitted handle. mods.released() follows every GIL release
+  window (GILReleased block, lock acquire, native-entry or provider call, file/process I/O) and every exception handler. The next request after
+  a window re-runs the full check: one re-check per window. The transformer, mamba, byte-LM, sequential and causal-LM helpers take `mut mods`
+  from their C entries. Helpers imported by classical/samba/provider code keep their old signatures as wrappers that admit afresh.
+  No arithmetic, fold-order or bit change.
+- Pods (RunPod CPU, 32 vCPU, 60-min lease, all reaped and verified gone): oml-a t9ysrhsm5qmizy, tokenizer + runtime_sequential head and base
+  rc=0; oml-b nb0gksydltfktr, runtime_classical/manifold/model_selection/x_sequence host + x_sequence sm_89 rc=0; oml-c 2629xxt37pzzmo on
+  lane + main ebcd7f9477 (b89184cd87), pod smoke 46/46 families, import smoke rc=0, tier_dir rc=0, classical fit+predict rc=0,
+  test_no_python_runtime rc=0. test_tombstones_preserved was rc=1 on the pod only (no .git) and rc=0 on the full Mac checkout.
+- The later merge of main 7a52a6b7cb touches no lane file. The only lane module it imports is native_loaded_module (native_loaded_module()
+  unchanged), so no recompile was run.
+- Receipts: experiments/overhead-module-lookup/compile.json, experiments/overhead-module-lookup/same_bits.json, and
+  ~/mojolearn-evidence/overhead-module-lookup-20261028/.
+- RUN OWED: the same-bits/same-refusals fixture tools/tests/overhead_module_lookup_fixture.py, base 30928487f1 against head, CPU column. The
+  orchestrator runs it with the end-of-round fixtures. No runtime, identity or GPU verification was run.
