@@ -154,7 +154,7 @@ def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
     if nd != 2:
         var hint = String(". ") + RESHAPE_HINT if nd < 2 else String("")
         raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + text + hint)
-    var result = _cast(snapshot, "X", context)
+    var result = _cast(snapshot^, "X", context)
     _ = view
     _ = prepared
     _ = source
