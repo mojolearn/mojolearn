@@ -642,3 +642,12 @@ d12bd2cab0 (board quality v8 tooling). Fix 2b0dfea245: transformer/native_decode
 Compile: experiments/integration_provider_queue_20261028/compile_tranche3.json — 65 affected roots + byte_lm sm_89/gfx942 +
 transformer sm_89/gfx942/host exit 0 (x86-64-v3 identical; pods 72c9ivaggbj3e2, tk6su34j7e3g9o, 69zjjal284f5d8 reaped).
 Known pre-existing failure NOT fixed: byte_lm_host (byte_lm_host_compat_pyapi.mojo, unchanged). No runtime/identity/GPU execution.
+
+INTEGRATION 2026-10-28 (Claude integrator) — TRANCHE 4
+Merged: a46aa9f011 (native public marks; contains audit gate 1dbfddd1c8), 3a6da76aa (tombstone guard). Debt prune commit
+(16 fixed rows). Fixes: byte_lm_host_compat_pyapi.mojo raises/explicit copies; kernel_methods/native_descriptor_dispatch.mojo:206
+list literal (both GPU-target errors on main 45b0630582).
+Gates on merged tree: test_no_python_runtime OK — prohibited_source 235, unresolved 229; test_tombstones_preserved OK.
+Compile: experiments/integration_provider_queue_20261028/compile_tranche4.json — Mac: sequential_weights, expansion_linear,
+runtime_sequential_host, runtime_classical_host exit 0; pod 422ypcrzb2foqk (reaped): kernel_methods sm_89/gfx942/host and
+byte_lm_host CPU exit 0. Known failing test (not fixed): tools/test_native_full_reset_params_connection.py 84 failed.
