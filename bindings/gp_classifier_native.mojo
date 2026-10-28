@@ -11,6 +11,8 @@
 # gpc_ovr_combine), and stores the fit as `_set_fitted` did. The same entries on
 # the same inputs in the same order: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
+from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
@@ -36,7 +38,7 @@ def _gpc_ext(model: PythonObject, binding: PythonObject, context: PythonObject) 
 
 def _gpc_default_kernel(context: PythonObject) raises -> PythonObject:
     """`ConstantKernel(1.0) * RBF(1.0)` with scikit-learn's default bounds."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var classes = context["family_gp_classes"]
     var pair_bounds = context["family_gp_default_bounds"]
     var const = family_call(b.object.__new__, classes["const"])
@@ -57,14 +59,13 @@ def _gpc_default_kernel(context: PythonObject) raises -> PythonObject:
 
 
 def _gpc_equal(value: PythonObject, text: String) raises -> Bool:
-    """`value == text`, Python's comparison."""
-    var b = Python.import_module("builtins")
-    return Bool(py=family_call(b.bool, family_call(Python.import_module("operator").eq, value, PythonObject(text))))
+    """Compare an admitted native string option without importing operator."""
+    return family_is_str(value) and String(value) == text
 
 
 def gpc_validate(model: PythonObject, context: PythonObject) raises:
     """`GaussianProcessClassifier._validate_params`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var kernel = family_field(fields, "kernel")
     var optimizer = family_field(fields, "optimizer")
@@ -120,7 +121,7 @@ def gpc_validate(model: PythonObject, context: PythonObject) raises:
 def _gpc_binary(context: PythonObject, y01: PythonObject, l_out: PythonObject, pi: PythonObject,
                 wsr: PythonObject, lml: Float64, n_iter: Int, nb: Int) raises -> PythonObject:
     """A `_BinaryLaplace(y_train, L, pi, W_sr, lml, n_iter, nb)`, its fields set."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fit = family_call(b.object.__new__, context["family_gp_binary_laplace"])
     var f = py_fields(fit)
     py_setitem(f, "y_train_", y01)
@@ -173,7 +174,7 @@ def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arr
                     max_iter: PythonObject, k: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_fit_binary(..., k=k)`: one `gpc_fit`, the 0/1 targets `code == k`
     built and written back by the binding."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var n_rows = Int(py=x.shape[0])
     var n_cols = Int(py=x.shape[1])
     var y01 = family_array(Python.tuple(n_rows), "<f4", context)
@@ -206,7 +207,7 @@ def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arr
 def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject, fits: PythonObject,
                     context: PythonObject) raises:
     """`_set_fitted`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var n_classes = len(classes)
     py_setitem(fields, "X_train_", x)
     py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
@@ -515,7 +516,7 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         host_inference_scalar(args[1], context, True)
         if Bool(py=args[1]):
             raise Error("Gradient can only be evaluated for theta!=None")
-        var fields = py_fields(model)
+        var fields = _fields(model)
         if not py_contains(fields, "estimators_"):
             raise Error(String(_NAME) + ": call fit() first")
         # Return the stored native scalar without calling a descriptor or
@@ -538,9 +539,9 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         var pred = _gpc_predict(model, Python.tuple(args[0], args[1], args[2]), context)
         var shape = mc_shape_of(args[3], context)
         var n_truth = 0
-        if Int(py=py_call(Python.import_module("builtins").len, shape)) > 0:
-            n_truth = Int(py=py_call(Python.import_module("builtins").int, shape[0]))
-        var n_pred = Int(py=py_call(Python.import_module("builtins").len, pred))
+        if Int(py=py_call(native_loaded_module("builtins").len, shape)) > 0:
+            n_truth = Int(py=py_call(native_loaded_module("builtins").int, shape[0]))
+        var n_pred = Int(py=pred.shape[0]) if py_type(pred) is context["array_class"] else len(pred)
         if n_truth != n_pred:
             raise Error("mojolearn GaussianProcessClassifier: y has " + String(n_truth) + " entries for "
                         + String(n_pred) + " rows")

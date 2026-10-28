@@ -153,6 +153,11 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.classical_attributes import _type_mro
 from providers.python.array_metadata_pyapi import array_shape_once
+from bindings.gp_kernel_public_native import gp_kernel_nodes
+from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.gp_label_snapshot_native import gp_label_list as _label_list
+from bindings.gp_state_admission_native import _gp_scalar_fields, _gp_array_fields, _gp_admit_binary_class
+from bindings.mode_metadata_native import _fields
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array, classical_input, classical_dtype_str, classical_c_bytes, _store_code
@@ -689,9 +694,8 @@ def _schema_forest_engine(fields: PythonObject, context: PythonObject) raises ->
     return text
 def _schema_label_kind(label: PythonObject, integral: PythonObject, real: PythonObject,
                        context: PythonObject) raises -> Int:
-    """0 bool (`_labels.is_bool`), 1 integer, 2 real, 3 str, 4 another label.
-    Builtin and NumPy scalars are told by type; any other label by the
-    numbers ABCs, as `_labels.label_kind` did."""
+    # Exact admitted primitives only. The legacy integral/real metadata stays
+    # in the schema ABI but its Python ABC __instancecheck__ never executes.
     var b = native_loaded_module("builtins")
     var cls = py_type(label)
     if cls is b.bool:
@@ -702,21 +706,22 @@ def _schema_label_kind(label: PythonObject, integral: PythonObject, real: Python
         return 2
     if cls is b.str:
         return 3
-    if String(cls.__name__) == "bool_":
-        return 0
     var scalars = py_get(context, "scalar_types")
-    if scalars is not None and py_contains(scalars, cls):
-        var kind = String(label.dtype.kind)
-        if kind == "i" or kind == "u":
-            return 1
-        if kind == "f":
-            return 2
+    if scalars is not None:
+        for i in range(len(scalars)):  # driver-loop: import-connected native numeric scalar identities
+            if cls is scalars[i]:
+                var kind = String(label.dtype.kind)
+                if kind == "b":
+                    return 0
+                if kind == "i" or kind == "u":
+                    return 1
+                if kind == "f":
+                    return 2
+                return 4
+    # The caller has already refused Python subclasses/protocols. NumPy str_
+    # is an admitted native Unicode subtype and retains its original meaning.
     if Bool(py=py_call(b.isinstance, label, b.str)):
         return 3
-    if Bool(py=py_call(b.isinstance, label, integral)):
-        return 1
-    if Bool(py=py_call(b.isinstance, label, real)):
-        return 2
     return 4
 
 
@@ -737,7 +742,13 @@ def _schema_class_table(value: PythonObject, integral: PythonObject, real: Pytho
     (bools excluded) or every label is a bool, float64 when every label is a
     real number (bools excluded), the list of str when every label is a str."""
     var b = native_loaded_module("builtins")
-    var labels = py_call(b.list, value)
+    var source = classifier_label_list(value, context)
+    classical_admit_value(source, context)
+    var kind = py_type(source)
+    var labels = py_call(b.list, source) if kind is b.list or kind is b.tuple else _label_list(source, context)
+    # Object buffers may contain caller objects: refuse before comparison,
+    # numeric conversion or error formatting can invoke any of their hooks.
+    classical_admit_value(labels, context)
     var count = len(labels)
     var integers = True
     var reals = True
@@ -767,43 +778,11 @@ def _schema_class_table(value: PythonObject, integral: PythonObject, real: Pytho
     raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
 
 
-def _schema_kernel_layout(kernel: PythonObject, table: PythonObject) raises -> PythonObject:
-    """The node layout of `kernel`'s class or its nearest connected ancestor;
-    a class that defines its own `_nodes` first has none."""
-    var b = native_loaded_module("builtins")
-    var cls = py_type(kernel)
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for i in range(len(mro)):  # driver-loop: over the kernel class ancestry metadata
-        if py_contains(table, mro[i]):
-            return table[mro[i]]
-        if py_contains(py_call(b.type.__dict__["__dict__"].__get__, mro[i]), "_nodes"):
-            break
-    raise Error("TypeError: mojolearn: a " + String(cls.__name__) + " kernel has no saved node layout")
-
-
 def _schema_kernel_nodes(kernel: PythonObject, table: PythonObject, nodes: PythonObject) raises:
-    """Append `kernel._nodes()`: postfix (kind, param, length scales) tuples,
-    read from the kernels' instance fields."""
-    var b = native_loaded_module("builtins")
-    var layout = _schema_kernel_layout(kernel, table)
-    var fields = py_fields(kernel)
-    var name = String(py_type(kernel).__name__)
-    var how = String(layout[0])
-    if how == "pair":
-        _schema_kernel_nodes(_schema_field(fields, layout[1], name), table, nodes)
-        _schema_kernel_nodes(_schema_field(fields, layout[2], name), table, nodes)
-        _ = py_call(nodes.append, Python.tuple(_schema_field(fields, layout[3], name), PythonObject(Float64(0.0)), Python.list()))
-    elif how == "leaf":
-        var param = PythonObject(Float64(0.0)) if layout[2] is None else _schema_field(fields, layout[2], name)
-        var scales = Python.list() if layout[3] is None else py_call(b.list, _schema_field(fields, layout[3], name))
-        _ = py_call(nodes.append, Python.tuple(layout[1], param, scales))
-    elif how == "nodes":
-        var saved = _schema_field(fields, layout[1], name)
-        for i in range(len(saved)):  # driver-loop: over a saved kernel's postfix nodes
-            var node = saved[i]
-            _ = py_call(nodes.append, Python.tuple(node[0], node[1], py_call(b.list, node[2])))
-    else:
-        raise Error("RuntimeError: unknown kernel node layout " + how)
+    # Shared strict node capture for GP public execution and saved models.
+    # No user _nodes/descriptor/sequence callback runs during serialization.
+    var captured = gp_kernel_nodes(kernel, table)
+    _ = py_call(nodes.extend, captured)
 
 
 def _schema_kernel(model_fields: PythonObject, step: PythonObject, values: PythonObject, name: String,
@@ -1077,9 +1056,33 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
             raise Error("RuntimeError: unknown save step " + kind)
 
 
+def _schema_gp_state(fields: PythonObject, steps: PythonObject, context: PythonObject) raises:
+    # Only GP schemas contain a kernel step. Check precisely their consumed
+    # scalar/buffer owners before schema casts or binary-state traversal.
+    var gaussian = False
+    for i in range(len(steps)):  # driver-loop: fixed save-schema operation metadata
+        gaussian = gaussian or String(steps[i][0]) == "kernel"
+    if not gaussian:
+        return
+    _gp_scalar_fields(fields, Python.tuple("numeric_mode", "n_features_in_", "info_", "normalize_y_", "_alpha", "_y_train_mean", "_y_train_std", "log_marginal_likelihood_value_", "_max_iter_predict", "n_classes_"), context)
+    _gp_array_fields(fields, Python.tuple("X_train_", "L_", "alpha_"), context)
+    if py_contains(fields, "estimators_"):
+        var family = py_fields(native_loaded_module("mojolearn._native_family_bridge"))["_CONTEXT"]
+        _gp_admit_binary_class(family)
+        var fits = _schema_list(fields["estimators_"], "estimators_")
+        for i in range(len(fits)):  # driver-loop: one passive stored Laplace state per class
+            if py_type(fits[i]) is not family["family_gp_binary_laplace"]:
+                raise Error("TypeError: GP archives require native-connected binary state")
+            var own = _fields(fits[i])
+            _gp_array_fields(own, Python.tuple("y_train_", "L_", "pi_", "W_sr_"), context)
+            _gp_scalar_fields(own, Python.tuple("log_marginal_likelihood_value_", "n_iter_", "nb_"), context)
+
+
 def archive_schema_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
     """`model.save(path)` for a class with a connected save schema."""
-    var admitted_fields = classical_family_admit(model)
+    # Validate connected class descriptors and dictionary keys before lookup
+    # or reading any saved field; no __dict__ property or metaclass hook runs.
+    var admitted = classical_family_admit(model)
     var cls = py_type(model)
     var steps = archive_schema_lookup(cls, context["archive_save_schemas"])
     if steps is None:
@@ -1087,7 +1090,8 @@ def archive_schema_save(model: PythonObject, path: PythonObject, context: Python
     # A fitted field may be an ndarray when the caller loaded NumPy.
     classical_connect_numpy(context)
     # A shallow copy: "choice" steps add derived fields, never to the model.
-    var fields = py_call(native_loaded_module("builtins").dict, admitted_fields)
+    var fields = py_call(native_loaded_module("builtins").dict, admitted)
+    _schema_gp_state(fields, steps, context)
     var values = Python.dict()
     _schema_run(model, fields, steps, values, String(cls.__name__), context)
     return classical_archive_write(path, values, context)
