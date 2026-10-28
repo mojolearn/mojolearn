@@ -248,3 +248,83 @@ def ovr_scores(model, decisions, n_rows):
                 votes[i] += 1.0
         out.append([votes[c] + conf[c] / (3.0 * (abs(conf[c]) + 1.0)) for c in range(k)])
     return out
+
+
+# Test-only binding glue moved from `_svm_impl` (its runtime no longer calls
+# any of it): the legacy host-inference twin and tools/py_consolidated/svc_equal.py
+# drive the binding entries directly through these.
+import array as _array_mod
+from mojolearn._array import Array
+from mojolearn._buffer import addr, addr_ro, empty
+
+array = _array_mod
+(_EPI_OVO, _EPI_OVR, _EPI_VOTES, _EPI_PROBA, _EPI_LOG_PROBA, _EPI_BINARY,
+ _GLUE_GATHER, _GLUE_SELECT, _GLUE_C_ROWS, _GLUE_FOLD, _GLUE_FOLD_FINISH) = range(11)
+
+
+def _i32(values):
+    """`values` (an int32 Array or a sequence of ints) as an int32 Array."""
+    if isinstance(values, Array):
+        return values
+    # lane py-runtime-b: array('i') converts the ints in C (no Python
+    # comprehension over the indices); integral floats take int() as before
+    try:
+        store = array.array("i", values)
+    except TypeError:
+        store = array.array("i", map(int, values))
+    return Array._owned(store, (len(store),), "<i4", "C")
+
+
+def _gather(binding, x, rows=None, cols=None):
+    """`x[rows][:, cols]`, an exact copy of float32 cells, gathered in the
+    binding (on the device on a GPU install; cgfin-c-svm). An absent index
+    list keeps that axis whole."""
+    n_rows, n_cols = x.shape
+    ra = None if rows is None else _i32(rows)
+    ca = None if cols is None else _i32(cols)
+    nor = n_rows if ra is None else ra.shape[0]
+    noc = n_cols if ca is None else ca.shape[0]
+    out = empty((nor, noc), "<f4")
+    if nor and noc:
+        binding.svc_pair_epilogue(
+            addr_ro(x, name="x"),
+            0 if ra is None else addr_ro(ra, name="row indices"),
+            0 if ca is None else addr_ro(ca, name="column indices"),
+            addr(out, name="gathered"),
+            [_GLUE_GATHER, n_rows, n_cols, nor, noc])
+    return out
+
+
+def _precomputed_columns(binding, q, support):
+    """kernel='precomputed' at predict: `X[:, support_]`, the query's
+    cross-kernel columns at the support vectors, copied exactly (float32
+    bytes, no arithmetic). What the solver's decision reads as its kernel
+    tile."""
+    # `support` is the fitted int32 Array (a fit's own rows, or a load's,
+    # checked against n_features_in_ by the native loader); q has
+    # n_features_in_ columns (`_query`), so every index is in range and no
+    # per-predict Python pass over it runs (lane cpu2-l10-linear)
+    return _gather(binding, q, None, _i32(support))
+
+
+def _native_perm(binding, n, seed):
+    """`tests/_svm_reference.py::_splitmix_perm(n, seed)` in Mojo (`svc_splitmix_perm`): the same
+    integers, an int32 `array.array`."""
+    out = array.array("i", bytes(4 * n))
+    seed &= 0xFFFFFFFFFFFFFFFF
+    if n:
+        binding.svc_splitmix_perm(out.buffer_info()[0], n, seed & 0xFFFFFFFF, seed >> 32)
+    return out
+
+
+def _native_sigmoid_train(binding, dec, labels):
+    """`tests/_svm_reference.py::_sigmoid_train(dec, labels)` in Mojo (`svc_platt_train`): the same
+    binary64 operations in the same order, the same `(A, B)` bits."""
+    d = array.array("d", dec)
+    lab = array.array("d", labels)
+    if len(d) != len(lab):
+        raise ValueError("decision values and labels differ in length")
+    ab = array.array("d", [0.0, 0.0])
+    binding.svc_platt_train(d.buffer_info()[0] if len(d) else 0,
+                            lab.buffer_info()[0] if len(lab) else 0, ab.buffer_info()[0], len(d))
+    return ab[0], ab[1]

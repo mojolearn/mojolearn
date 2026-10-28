@@ -18,7 +18,7 @@ def check(name, ok, detail=""):
 
 # 2. SplitMix perm
 for n, seed in ((1, 0), (2, 5), (50, 3), (1000, 2**64 - 1), (4097, 0x9E3779B97F4A7C15 * 3 % 2**64), (100000, 12345)):
-    check(f"splitmix n={n}", list(S._native_perm(b, n, seed)) == R._splitmix_perm(n, seed))
+    check(f"splitmix n={n}", list(R._native_perm(b, n, seed)) == R._splitmix_perm(n, seed))
 
 # 3. Platt sigmoid_train
 for trial in range(60):
@@ -35,7 +35,7 @@ for trial in range(60):
     except Exception as e:
         ref, rerr = None, type(e).__name__
     try:
-        got = S._native_sigmoid_train(b, dec, labels); gerr = None
+        got = R._native_sigmoid_train(b, dec, labels); gerr = None
     except Exception as e:
         got, gerr = None, type(e).__name__
     ok = (rerr is not None and gerr is not None) or (ref is not None and got is not None and bits(ref[0]) == bits(got[0]) and bits(ref[1]) == bits(got[1]))
