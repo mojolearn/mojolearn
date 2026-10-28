@@ -175,20 +175,22 @@ def _km_chi2_input(x: ArrayMetadata, kernel: Int, where: String) raises:
 def _km_extension(fields: PythonObject, binding: PythonObject, where: String, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, Int]:
     """`_KernelMethodBase._extension`: the binary's own compile-time mode
     must be the one requested."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     if want is None:
         want = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(want) is not py_type(PythonObject("")):
         raise Error("TypeError: numeric_mode must be a native string or None")
-    var native = kernel_method_provider(fields, binding)
+    want = want.strip().lower()
+    var selected = String(want)
+    if selected != "identical" and selected != "fast":
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    var native = kernel_method_provider(fields, binding, selected == "identical")
     var getter = PythonObject(None)
     if native is None:
         getter = neural_descriptor_entry(binding, "kernel_methods_numeric_mode", False)
     if native is not None or getter is not None:
         var got = kernel_method_metadata(native, 13) if native is not None else _km_int(family_call(getter), "numeric mode")
-        if native is not None and got != 1:
-            raise Error("kernel methods native provider candidate requires identical mode")
         var codes = context["family_km_mode_codes"]
         var wanted = py_get(codes, want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
