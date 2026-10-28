@@ -1,0 +1,155 @@
+PROVIDER MIGRATION HANDOFF — 2026-10-27
+
+PRIORITY / OWNER DIRECTION
+The owner asked for this handoff and immediate commit/push before further work.
+Checkpoint current branches; do not claim unfinished work is complete. Keep all
+existing builds and rented boxes. Do not communicate with peer. No teardown.
+
+OBJECTIVE
+One shared provider interface with thin Python/PyTorch/MAX frontends; algorithms
+reuse metadata, ownership, dispatch and error machinery. Capture each input's
+stable metadata once per public operation, retain native descriptors/owners, and
+execute without Python callbacks or internal CPython computation dispatch.
+Refresh at the next public call; do not cache input metadata for object lifetime.
+Preserve algorithms, outputs, supported features, error state, lifetimes and locks.
+Folder moves/source guards alone never prove runtime compliance.
+
+CURRENT STATUS
+The whole-library migration is NOT complete. Main has not received these provider
+changes. Source is committed on integration/lane branches, with selective Mac
+compilation and runtime evidence as described below. Newer lane batches are still
+source-only. Never describe those as compiled, bit-identical or Python-free.
+
+BRANCH SNAPSHOT (before this handoff commit)
+main 5891d958a7546a1ff8a7c309cdeffbce6c60b8b5
+integration/native-neural-boundary-20261027 e58af3adc5938e8288644f850a34e41541ea1414
+integration/provider-library-20261027 ab3ee4fbb527a5090353c87e6a21d4892f9c05a2
+lane/neural-provider-completion-20261027 bd084cc97cdf7e33fe7a23e2d349fa3d2a2bcfb2
+lane/framework-provider-completion-20261027 be0ebabac7c05937b1e98737d3ab0d5028b8c168
+lane/library-provider-completion-20261027 25207fdad896394472d73dba3b052db9b673ee7f
+integration/native-provider-compile-fixes-20261027 fc376f61961d1cf1942549c7948d6c8bafb4180c
+
+WORKTREES
+Compiled/selective snapshot:
+  /Users/andrewhendel/mojolearn-wt/native-neural-integration-20261027
+Broader combined source integration:
+  /Users/andrewhendel/mojolearn-wt/provider-library-integration-20261027
+Lane worktrees:
+  /Users/andrewhendel/mojolearn-wt/neural-provider-completion-20261027
+  /Users/andrewhendel/mojolearn-wt/framework-provider-completion-20261027
+  /Users/andrewhendel/mojolearn-wt/library-provider-completion-20261027
+Main: /Users/andrewhendel/CascadeProjects/mojolearn
+Do not sweep unrelated worktrees/other sessions into this task.
+
+SELECTIVE MAC RESULTS — SOURCE 9929d52f4
+Published baseline: mojolearn 0.8.62 Apple wheel; development replacements are
+explicitly recorded, NOT an unchanged published wheel.
+SmallMLP: passed; 32 output arrays bit-identical to baseline, runtime audits and
+legacy-call poison controls passed. GEMM: passed; 16 output arrays bit-identical.
+Runtime verifier: 7 of 9 groups passed. Passing groups: generation metadata,
+Sequential provider, Program admission, Session provider, generation native
+session probe, neural primitive/state probe and Samba provider probe.
+Failures: recurrent/MLP public fit/predict still inherited Python _mode wrappers;
+ByteLM first resident logits invoked Array.__array_interface__ through pooled
+output addressing. These are real callback/lifecycle defects, not kernel
+numerical failures and not something to hide by relaxing the auditor.
+
+FIXES NOW IN SELECTIVE SNAPSHOT
+4093599484: cherry-pick of 90435450e pooled ByteLM native address fix.
+e58af3adc5: cherry-pick of a68a5b4cd recurrent/MLP native public lifecycle fix.
+The unrelated broad inventory file was omitted from that selective cherry-pick;
+all product fixes and probes were retained. Five focused source checks passed.
+Affected tokenizer host and both estimator groups are rebuilding. Do not infer
+runtime success until the affected public checks rerun.
+
+BUILD STATUS AT HANDOFF
+{
+  "state": "failed",
+  "groups": [
+    {
+      "stem": "_mojolearn_dev_tokenizer_host",
+      "state": "failed",
+      "exit_code": 1,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/apple-runtime-fix-build/host-_mojolearn_dev_tokenizer_host.log"
+    }
+  ]
+}
+
+VERIFICATION POLICY / NEXT STEPS
+1. Finish checkpoint/push of active lanes; retain WIP status accurately.
+2. Inspect apple-runtime-fix-build/result.json and targeted compiler diagnostics.
+   Fix only real failures, preserve passed receipts and retry affected groups.
+3. Stage a NEW development overlay using stage_runtime.py and all accepted build
+   results in chronological order. Use selective source worktree Python files.
+   Keep baseline wheel hash, replacement receipts, removed shadows, source bytes
+   and actual loaded binary hashes; never overwrite old evidence.
+4. Latest owner authorization ALLOWS selective Mac runtime checks while lanes
+   continue (supersedes the earlier wait-until-everything instruction). Rerun
+   failed ByteLM and recurrent/MLP checks after fixes, plus affected lifetime/
+   validation controls. Preserve already passing results; no broad repeated runs.
+5. Integrate delivered lane commits carefully into the combined branch, excluding
+   duplicate shared-helper cherry-picks. Preserve root compiler repairs: String
+   byte_length, explicit List borrows/copies, mut capsule-name storage, no Python
+   default object evaluated at compile time, and raises on session registry init.
+6. Compile coherent frozen source batches on Mac. Lane agents do NOT compile.
+   No extra NVIDIA/AMD verification campaign. Compile evidence covers only paths
+   actually compiled; runtime evidence only actual tested paths.
+7. Finish remaining migration, then final focused Mac before/after verifier using
+   retained prior Mac outputs. Never fabricate cross-vendor identity or speed gains.
+8. Merge validated work to main and push only with honest coverage/pending notes.
+   Existing owner authorization covers commit/push/merge; no new permission needed
+   for routine authorized work. Do not publish a release/site/paper automatically.
+9. Only after the neural migration gate is actually satisfied, build fresh vendor
+   artifacts and launch the requested neural29 measurements on retained boxes.
+   Never resume old frozen-code campaigns or claim old timings measure new code.
+
+REMAINING LANES
+Neural: remaining generation metadata/legacy routes, CPU/packed/resident branches
+and public ownership paths. Many Samba loops/tapes/loss/optimizer and resident
+routes now have source implementations, but newer bytes are uncompiled/unrun.
+Framework: pooled fix and native graph protocols delivered; arbitrary Torch
+capture and changed-weight export/constant-fold refresh remain unresolved.
+A user question is pending: allow Python only for initial Torch capture, or
+require a pre-exported graph (API change). NO ANSWER has been received; do not
+assume permission. Initial capture invokes user Python forward; weight refresh
+requires retained export provenance/native recomputation or a native FX frontend.
+Do not label either a Mojo bug, silently exempt it, or remove supported features.
+Non-neural: remaining SVM labels/targets/base helpers, LinearSVM, broad inherited
+public lifecycle wrappers and metadata/dispatch in other families. Source census
+735 wrapper-risk rows is NOT 735 distinct bugs or public APIs. Shared fixes may
+cover many rows. Do not claim completion from one-call-looking method bodies.
+
+EVIDENCE (full logs stay in files, not chat)
+Root: /Users/andrewhendel/mojolearn-evidence/native-neural-integration-20261027/
+  provider-baseline/ — retained old Mac arrays
+  provider-selective-9929/ — SmallMLP/GEMM passes, ByteLM callback failure
+  runtime-provider-9929/ — full selective verifier, two failed groups
+  apple-runtime-provider-9929/DEVELOPMENT_PROVENANCE.json — staged artifact origin
+  apple-layout-build/, apple-provider-build/, apple-provider-repair-build/,
+  apple-session-repair-build/, apple-runtime-fix-build/ — build receipts/failures
+  stage_runtime.py — exact development overlay assembly
+  source-library-round3/ — integrated source checks, runtime pending
+Tracked result: experiments/native_provider_verification_20261027/mac-9929-summary.json
+Lane evidence:
+  ~/mojolearn-evidence/neural-provider-completion-20261027/handoff.json
+  ~/mojolearn-evidence/framework-provider-completion-20261027/handoff-continued.json
+  ~/mojolearn-evidence/framework-provider-completion-20261027/handoff-graph-and-pooled.json
+  ~/mojolearn-evidence/library-provider-completion-20261027/handoff.json
+Also inspect newer lane checkpoint handoffs and commit logs; base handoffs may
+predate ongoing source batches. Preserve original failure logs.
+
+MEASUREMENTS / MACHINES
+Old AMD and NVIDIA measurement controllers were stopped at explicit owner request.
+Both boxes must remain. State files:
+  ~/mojolearn-evidence/do-amd-steward/state.env
+  ~/mojolearn-evidence/devpods/measure-nv-20261027/state.env
+Old results were retained on Mac AND R2; root old-amd-retention.log and
+old-nvidia-retention.log each record r2 ok. No watcher services may be restarted.
+Main board changes are historical old-source measurements, not refactor results.
+New plan: lane/neural29-refactor-run-plan-20261027 (9ced5e76f); unresolved runtime
+manifest admission and opponent-reference refresh stay pending. Never silently
+rekey opponent input evidence; retain quality and time on both arms.
+
+LOG RULE
+Keep complete build/test/GPU output in files; inspect exits/structured summaries,
+then bounded rg excerpts. Never infer whole success from passing filtered lines.
