@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_prepared_owner import prepared_namespace_admitted, prepared_namespace_admit, prepared_get, prepared_put
+from bindings.native_prepared_owner import prepared_namespace_admitted, prepared_namespace_admit
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 
@@ -69,8 +69,7 @@ def _neural_descriptor_entry_fields(entries: PythonObject) raises -> PythonObjec
         if not raw:
             raise cpy.unsafe_get_error()
         fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
-        # A compiled module's namespace is admitted once per dictionary and
-        # size (an inserted key changes the size), not on every lookup.
+        # Check live keys by native iteration, without a Python key list.
         var mods = NativeModules()
         if prepared_namespace_admitted(mods, entries, fields):
             return fields
@@ -112,26 +111,10 @@ def neural_descriptor_connect(factory: PythonObject, var name: String, operation
     var module = factory.__self__
     if py_type(module) is not py_type(bi):
         raise Error("TypeError: neural native ABI factory must retain its extension module")
-    # Prepared connection: one provider per compiled factory, ABI name and
-    # operation count, reused by every later public call (the descriptor
-    # table is static). A replaced factory or module connects again.
-    var mods = NativeModules()
-    var prepared = prepared_get(mods, _PROVIDER_SLOT, factory)
-    if prepared is not None and String(prepared[0]) == name and Int(py=prepared[1]) == operation_count:
-        var reusable = True
-        try:
-            var held = prepared[2].downcast_value_ptr[NeuralDescriptorProvider]()
-            reusable = held[].module is module and held[].factory is factory
-        except:
-            reusable = False
-        if reusable:
-            return prepared[2]
-    var provider = _neural_descriptor_connect_new(factory, module, name.copy(), operation_count)
-    prepared_put(mods, _PROVIDER_SLOT, factory, Python.list(PythonObject(name), PythonObject(operation_count), provider))
-    return provider
-
-
-comptime _PROVIDER_SLOT = "descriptor_provider_v1"
+    # Lifetime belongs to the execution owner, which can use
+    # neural_descriptor_reuse. A global weak-key record containing this
+    # provider would retain factory through provider.factory and never expire.
+    return _neural_descriptor_connect_new(factory, module, name, operation_count)
 
 
 def _neural_descriptor_connect_new(factory: PythonObject, module: PythonObject, var name: String, operation_count: Int) raises -> PythonObject:

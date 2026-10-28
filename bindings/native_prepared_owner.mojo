@@ -26,7 +26,7 @@ Rules (shared by every site that uses it):
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_loaded_module import NativeModules
+from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 
 
@@ -165,22 +165,14 @@ def prepared_class_stamp(mut mods: NativeModules, cls: PythonObject, extras: Pyt
     return stamp
 
 
-comptime _NAMESPACE_SLOT = "module_namespace_keys_v1"
-
-
 def prepared_namespace_admitted(mut mods: NativeModules, module: PythonObject, fields: PythonObject) raises -> Bool:
-    """True when `fields` (the module's namespace dictionary) already passed
-    its string-key admission and neither the dictionary nor its size changed
-    since (an inserted key changes the size)."""
-    var record = prepared_get(mods, _NAMESPACE_SLOT, module)
-    if record is None or record[0] is not fields:
-        return False
-    ref cpy = Python().cpython()
-    return Int(py=record[1]) == cpy.lib.get_function[Int]("PyDict_Size")(fields._obj_ptr)
+    # A dictionary identity and size cannot establish unchanged keys: deleting
+    # a string and inserting a non-string preserves both. Walk live keys using
+    # native iteration; no Python key list, identity list or weakref cache.
+    return native_namespace_string_keys(fields._obj_ptr, mods.module("builtins").str)
 
 
 def prepared_namespace_admit(mut mods: NativeModules, module: PythonObject, fields: PythonObject) raises:
-    """Record that `fields` passed its string-key admission."""
-    ref cpy = Python().cpython()
-    var size = cpy.lib.get_function[Int]("PyDict_Size")(fields._obj_ptr)
-    prepared_put(mods, _NAMESPACE_SLOT, module, Python.list(fields, PythonObject(size)))
+    # Compatibility entry for existing callers; live native admission above
+    # needs no retained Python record and cannot retain the binding module.
+    pass
