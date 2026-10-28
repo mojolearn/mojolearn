@@ -13,7 +13,7 @@ from bindings.causal_lm_construct import _model_block, _model_profile, _model_bi
 from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, _addr, _native_function, causal_transformer_admin
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
-from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME
+from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.operation_lock_pyapi import OperationLockLease, operation_lock_create
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_reserved_execute,
@@ -383,6 +383,11 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
             native = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
                 _native_function(entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
         py_setitem(fields, "_native_mamba_block_provider_cache", native)
+        var state_provider = PythonObject(None)
+        if native is not None:
+            state_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
+                _native_function(entries, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME), 6)
+        py_setitem(fields, "_native_mamba_state", state_provider)
     return entries
 
 

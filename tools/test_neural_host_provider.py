@@ -68,3 +68,17 @@ def test_host_owned_operations_preserve_failure_state_and_original_counters():
     assert 's.busy != reserved' in original
     for text in ('len(a) != want_a', 'len(p) != want_p', 'op >= 44', 'result == 0'):
         assert text in source
+
+
+def test_cpu_mamba_public_admission_refreshes_both_tables():
+    public=(ROOT/'bindings/mamba_public_native.mojo').read_text()
+    admission=public.split('def _m3_entries(')[1].split('def _m3_canonical(')[0]
+    for factory in ('mamba_block_api_v1','mamba_state_api_v1'):
+        assert factory in admission
+    assert 'py_setitem(fields, "_native_mamba_state", state_provider)' in admission
+    native=(ROOT/'mamba/host/native_block_dispatch.mojo').read_text()
+    state=native.split('def mamba_host_state_operation(')[1].split('def mamba_host_state_v1(')[0]
+    assert '_mamba1_run(a, p[0], length, width, 0)' in state
+    assert '_mamba3_run(a, p[0], length, width, p[tail], p[tail + 1], False)' in state
+    binding=(ROOT/'bindings/_mojolearn_mamba_host.mojo').read_text()
+    assert '[mamba_state_api_binding]("mamba_state_api_v1")' in binding

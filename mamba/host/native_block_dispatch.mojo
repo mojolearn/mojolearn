@@ -2,10 +2,10 @@
 # CPU training siblings use the common provider ABI and their original host
 # numerical owners. No GPU implementation or Python dispatch enters this file.
 from std.ffi import _Global
-from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_BLOCK_ABI_NAME
+from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from mamba.host.mamba_host_shell_impl import (
-    _mamba1_backward_run, _mamba2_backward_run, _mamba3_backward_run, _mamba3_run,
+    _mamba1_run, _mamba2_run, _mamba1_backward_run, _mamba2_backward_run, _mamba3_backward_run, _mamba3_run,
     M3OwnedHostSession, NN40_OWNED_WEIGHTS, _m3_owned_install_run,
     _m3_owned_forward_run, _m3_owned_backward_run, _m3_owned_state_run,
     _m3_owned_export_run, _nn40_host_require,
@@ -143,3 +143,57 @@ struct MambaHostBlockAPI(Defaultable, Movable):
 
 comptime NATIVE_MAMBA_HOST_BLOCK_API = _Global[StorageType=MambaHostBlockAPI,
     name="MojoMambaHostBlockAPIv1", init_fn=MambaHostBlockAPI.__init__]
+
+
+def mamba_host_state_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+    var family = op // 2
+    var step = (op & 1) != 0
+    var counts: List[Int] = [14, 16, 25]
+    if len(a) != counts[family] or len(p) != (2 if step else 3) + family or len(f) != (2 if family == 1 else 0):
+        raise Error("Mamba host state: invalid descriptor arity")
+    for address in a:  # driver-loop: original host buffer address validation
+        if address == 0:
+            raise Error("Mamba host state: null buffer address")
+    var length = 1 if step else p[1]
+    var width = p[1] if step else p[2]
+    var tail = 2 if step else 3
+    if family == 0:
+        _mamba1_run(a, p[0], length, width, 0)
+        return 0
+    if family == 1:
+        return _mamba2_run(a, p[0], length, width, p[tail], Float32(f[0]), Float32(f[1]))
+    return _mamba3_run(a, p[0], length, width, p[tail], p[tail + 1], False)
+
+
+def mamba_host_state_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    try:
+        if op < 0 or op >= 6 or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
+            raise Error("mamba host provider: invalid descriptor span or operation")
+        var a = native_descriptor_words(aa, na)
+        var p = native_descriptor_words(pp, np)
+        if nf != 0 and ff == 0:
+            raise Error("mamba host provider: null float span")
+        var raw = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
+        var f = List[Float64]()
+        for i in range(nf):  # small-loop(at most two admitted floating scalars)
+            f.append(raw[i])
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = mamba_host_state_operation(op, a, p, f)
+        return 0
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+
+
+struct MambaHostStateAPI(Defaultable, Movable):
+    var name: String
+    var entries: List[NativeDescriptorCall]
+
+    def __init__(out self):
+        self.name = String(MAMBA_STATE_ABI_NAME)
+        self.entries = List[NativeDescriptorCall]()
+        self.entries.append(mamba_host_state_v1)
+
+
+comptime NATIVE_MAMBA_HOST_STATE_API = _Global[StorageType=MambaHostStateAPI,
+    name="MojoMambaHostStateAPIv1", init_fn=MambaHostStateAPI.__init__]
