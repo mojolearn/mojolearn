@@ -22,7 +22,8 @@
     "manifold": "PASS batch4 frozen5bfbe8118e including native type registration; complete lifecycle next batch",
     "umap_init": "PASS batch4 frozen5bfbe8118e; main merge requested",
     "jl_rp": "PASS batch4 frozen5bfbe8118e with typed exception correction; main merge requested",
-    "scalers": "FAIL batch4: PythonObject(None) default argument instantiated at compile time; narrow repair underway"
+    "scalers": "PASS22.6s batch5 frozen d5a3291cce including snapshot type registration helper/module init; production builder two-line wiring source delta explicitly recorded",
+    "new_manifold_lifecycle": "FAIL batch5: 2 explicit metadata ownership and 2 String aliasing errors; repair underway"
   },
   "public_runtime_status": "pending_final_integration",
   "vendor_identity_status": "pending_final_integration",
@@ -32,6 +33,11 @@
     "cpu-batch-1": "all three compiler launches failed missing std (launcher repaired); complete Mac/R2 retention; pod deleted verified",
     "cpu-batch-2": "unreachable SSH; no source staged; controller retained Mac/R2; pod deleted verified via reap after automatic retention refusal",
     "cpu-batch-3": "JL/RP passed; other roots failed; original logs plus successful binary/source retained Mac/R2; pod deleted verified",
-    "cpu-batch-4": "Four roots PASS, scalers FAIL; full logs/binaries/source Mac+R2 retained and pod deleted verified"
+    "cpu-batch-4": "Four roots PASS, scalers FAIL; full logs/binaries/source Mac+R2 retained and pod deleted verified",
+    "cpu-batch-5": "Scalers PASS, new manifold lifecycle FAIL; logs/source/binary retained Mac+R2, pod deleted verified"
+  },
+  "main_merged": {
+    "selector": "root receipt ae523b60fb",
+    "four_batch4_groups": "5d490ccbff"
   }
 }
