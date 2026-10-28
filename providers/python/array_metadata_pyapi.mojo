@@ -31,12 +31,15 @@ struct ArrayMetadata(Copyable, Movable):
     # metadata for public error ordering. Their CastIn is NOT executable.
     var castable: Bool
     var strides: List[Int]
+    # Native descriptor spelling, including datetime/timedelta units. Owners
+    # may inspect it without rereading the caller's dtype after admission.
+    var dtype_name: String
 
     def __init__(out self, keep: PythonObject, var shape: List[Int], source: CastIn,
                  count: Int, dtype_number: Int, native_byte_order: Bool,
                  c_order: Bool, is_array: Bool, owner: PythonObject, owned_writable: Bool,
                  readonly: Bool = False, castable: Bool = True,
-                 var strides: List[Int] = List[Int]()):
+                 var strides: List[Int] = List[Int](), dtype_name: String = ""):
         self.keep = keep
         self.shape = shape^
         self.source = source
@@ -51,6 +54,7 @@ struct ArrayMetadata(Copyable, Movable):
         self.readonly = readonly
         self.castable = castable
         self.strides = strides^
+        self.dtype_name = dtype_name
         if len(self.strides) == 0:
             for axis in range(len(self.shape)):  # small-loop(native rank metadata for direct constructors)
                 self.strides.append(source.s0 if axis == 0 else source.s1)
@@ -80,6 +84,7 @@ struct ArrayMetadata(Copyable, Movable):
         for axis in range(len(self.shape)):  # small-loop(replacement matrix/vector stride metadata)
             self.strides.append(self.source.s0 if axis == 0 else self.source.s1)
         self.dtype_number = NPY_FLOAT
+        self.dtype_name = "<f4"
         self.native_byte_order = True
         self.c_order = True
         self.is_array = True
@@ -97,6 +102,7 @@ struct ArrayMetadata(Copyable, Movable):
         for axis in range(len(self.shape)):  # small-loop(replacement matrix/vector stride metadata)
             self.strides.append(self.source.s0 if axis == 0 else self.source.s1)
         self.dtype_number = NPY_DOUBLE
+        self.dtype_name = "<f8"
         self.native_byte_order = True
         self.c_order = True
         self.is_array = True
@@ -141,11 +147,13 @@ def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
     var item = Int(py=item_value)
     var native_order = True
     var code = 0
+    var dtype_name = String()
     var contiguous = False
     var readonly = False
     if array:
         if py_type(dtype) is not py_type(PythonObject("")):
             raise Error("TypeError: Array dtype must be an exact native string")
+        dtype_name = String(dtype)
         var letter = String(dtype[1])
         if letter == "f":
             code = NPY_HALF if item == 2 else (NPY_FLOAT if item == 4 else NPY_DOUBLE)
@@ -156,6 +164,7 @@ def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
             raise Error("TypeError: Array order must be an exact native string")
         contiguous = nd < 2 or String(order) == "C"
     else:
+        dtype_name = String(dtype.str)
         native_order = Bool(py=dtype.isnative)
         if not native_order and not allow_non_native:
             raise Error("TypeError: " + name + " must be in native byte order")
@@ -212,4 +221,4 @@ def array_metadata_once(value: PythonObject, var shape: List[Int], name: String,
     for dimension in shape:  # small-loop(all captured shape metadata, including admission-only higher ranks)
         count *= dimension
     return ArrayMetadata(value, shape^, source, count, code, native_order, contiguous, array, owner, owned_writable,
-                         readonly, castable, captured_strides^)
+                         readonly, castable, captured_strides^, dtype_name)
