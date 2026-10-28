@@ -9,6 +9,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from retain_run_summary import retain_verification, try_retain
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -57,6 +59,10 @@ def main():
         passed = not errors and report['vendor'] == args.vendor
         result = dict(status=('MATCH' if args.expect else 'CAPTURED_UNQUALIFIED') if passed else 'FAILED', errors=errors)
     (args.out/'result.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
+    names = ('clean', 'faulty', 'restored') if args.fault else ('capture',)
+    try_retain(retain_verification, 'light-' + args.vendor + ('-fault-' + args.fault if args.fault else ''),
+               [args.out / (name + '.json') for name in (*names, 'result')],
+               metadata=dict(vendor=args.vendor, cases=cases, fault=args.fault, exit_code=0 if passed else 1))
     print(result['status'])
     return 0 if passed else 1
 

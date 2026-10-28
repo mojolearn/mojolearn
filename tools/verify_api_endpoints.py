@@ -4,6 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
+from retain_run_summary import retain_verification, try_retain
+
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -31,8 +33,12 @@ def main():
     print(json.dumps(dict(expected=len(selected),completed=len(report['endpoints']),failed=len(failed),
         pending=len(report['pending']),faults={k:v['status'] for k,v in report.get('faults',{}).items()},
         differences=len(report.get('differences',[])))))
-    return int(bool(failed or report['pending'] or report.get('differences') or
+    code = int(bool(failed or report['pending'] or report.get('differences') or
         any(r['status']!='CAUGHT_AND_RESTORED' for r in report.get('faults',{}).values())))
+    try_retain(retain_verification, 'api-' + args.family + ('-faults' if args.self_test else ''),
+               [args.out], metadata=dict(family=args.family, public=args.public,
+                                         self_test=args.self_test, exit_code=code))
+    return code
 
 
 if __name__=='__main__':raise SystemExit(main())
