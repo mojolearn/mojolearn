@@ -19,6 +19,7 @@ from providers.python.autoarima_lifecycle_pyapi import _fields
 from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
 from core.cast_in import NPY_DOUBLE
 from providers.python.forecast_initialize_pyapi import forecast_initialize
+from providers.python.forecast_matrix_pyapi import forecast_matrix
 from providers.python.forecast_owner_pyapi import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -331,121 +332,6 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
     return model
 
 
-# ---------------------------------------------------------------- VAR
-
-def _var_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    if args[2] is not None:
-        raise Error("NotImplementedError: VAR.fit: information-criterion order selection (ic=) is not implemented")
-    if not Bool(py=args[1] == PythonObject("ols")):
-        raise Error("VAR.fit: method must be 'ols'")
-    var trend = args[3]
-    var with_c = Bool(py=trend == PythonObject("c"))
-    if not with_c and not Bool(py=trend == PythonObject("n")):
-        raise Error("NotImplementedError: VAR.fit: trend=" + String(py=py_call(b.repr, trend))
-                    + " is not implemented ('c' and 'n' are)")
-    var p = xseq_int(args[0])
-    var kt = 1 if with_c else 0
-    var endog = fields["_endog"]
-    var n = Int(py=endog.shape[0])
-    var neqs = Int(py=endog.shape[1])
-    var m = kt + neqs * p
-    var params = xseq_zeros(Python.tuple(m, neqs), context)
-    var sigma = xseq_zeros(Python.tuple(neqs, neqs), context)
-    var nobs = max(n - p, 1)
-    var resid = xseq_zeros(Python.tuple(nobs, neqs), context)
-    var entries = xseq_entries(fields, context)
-    var code = Int(py=py_call_typed(entries["var_fit"], Python.list(xseq_addr(endog), xseq_addr(params), xseq_addr(sigma),
-                                    xseq_addr(resid)), Python.list(n, neqs, p, kt)))
-    _ = sigma  # keep the Python object alive through the native call above
-    _ = params  # keep the Python object alive through the native call above
-    _ = endog  # keep the Python object alive through the native call above
-    _ = resid  # keep the Python object alive through the native call above
-    if code:
-        raise Error("LinAlgError: VAR.fit: the lagged design is rank deficient (Cholesky pivot of column "
-                    + String(code - 1) + ")")
-        _ = resid  # keep the Python object alive through the native call above
-        _ = sigma  # keep the Python object alive through the native call above
-        _ = params  # keep the Python object alive through the native call above
-        _ = endog  # keep the Python object alive through the native call above
-    _ = resid  # keep the Python object alive through the native calls above
-    _ = sigma  # keep the Python object alive through the native calls above
-    _ = params  # keep the Python object alive through the native calls above
-    _ = endog  # keep the Python object alive through the native calls above
-    # VARResults(endog, params, sigma, resid, p, kt, numeric_mode), its
-    # attributes set here (the same words its constructor derived)
-    var cls = context["xseq_var_results"]
-    var result = py_call(_getattr(b.object, "__new__"), cls)
-    var state = py_fields(result)
-    _store(state, "endog", endog)
-    _store(state, "params", params)
-    _store(state, "sigma_u", sigma)
-    _store(state, "resid", resid)
-    _store(state, "k_ar", PythonObject(p))
-    _store(state, "k_trend", PythonObject(kt))
-    _store(state, "neqs", PythonObject(neqs))
-    var used = n - p
-    _store(state, "nobs", PythonObject(used))
-    _store(state, "df_resid", PythonObject(used - (neqs * p + kt)))
-    var intercept = xseq_zeros(Python.tuple(neqs), context)
-    var coefs = xseq_zeros(Python.tuple(p, neqs, neqs), context)
-    # fittedvalues = (endog[k_ar:] - resid) in float32
-    var rows = max(used, 0)
-    if rows != nobs and rows != 0:
-        raise Error("operands could not be broadcast together")
-    var fitted = xseq_zeros(Python.tuple(rows, neqs), context)
-    xseq_var_blocks(xseq_f32p(params), xseq_f32p(endog), xseq_f32p(resid), xseq_f32p(intercept), xseq_f32p(coefs),
-                    xseq_f32p(fitted), p, kt, neqs, rows)
-    _ = coefs  # keep the Python object alive through the native call above
-    _ = intercept  # keep the Python object alive through the native call above
-    _ = resid  # keep the Python object alive through the native call above
-    _ = params  # keep the Python object alive through the native call above
-    _ = endog  # keep the Python object alive through the native call above
-    _ = fitted  # keep the Python object alive through the native call above
-    _store(state, "intercept", intercept)
-    _store(state, "coefs", coefs)
-    _store(state, "fittedvalues", fitted)
-    _store(state, "_numeric_mode", py_get(fields, "numeric_mode"))
-    return result
-
-
-# ---------------------------------------------------------------- STL
-
-def _stl_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    var robust = xseq_truth(fields["robust"])
-    var inner = (2 if robust else 5) if args[0] is None else xseq_int(args[0])
-    var outer = (15 if robust else 0) if args[1] is None else xseq_int(args[1])
-    var endog = fields["_endog"]
-    var batch = Int(py=endog.shape[0])
-    var n = Int(py=endog.shape[1])
-    var season = xseq_zeros(Python.tuple(batch, n), context)
-    var trend = xseq_zeros(Python.tuple(batch, n), context)
-    var weights = xseq_zeros(Python.tuple(batch, n), context)
-    var resid = xseq_zeros(Python.tuple(batch, n), context)
-    var entries = xseq_entries(fields, context)
-    var degrees = Int(py=fields["seasonal_deg"]) + 2 * Int(py=fields["trend_deg"]) + 4 * Int(py=fields["low_pass_deg"])
-    _ = py_call_typed(entries["stl"], Python.list(xseq_addr(endog), xseq_addr(season), xseq_addr(trend), xseq_addr(weights),
-                      xseq_addr(resid)), Python.list(batch, n, fields["period"], fields["seasonal"], fields["trend"],
-                      fields["low_pass"], degrees, fields["seasonal_jump"], fields["trend_jump"], fields["low_pass_jump"],
-                      inner, outer))
-    _ = weights  # keep the Python object alive through the native call above
-    _ = trend  # keep the Python object alive through the native call above
-    _ = season  # keep the Python object alive through the native call above
-    _ = endog  # keep the Python object alive through the native call above
-    _ = resid  # keep the Python object alive through the native call above
-    var one = xseq_truth(fields["_one"])
-    # DecomposeResult(observed, seasonal, trend, resid, weights)
-    var result = py_call(_getattr(b.object, "__new__"), context["xseq_decompose_result"])
-    var state = py_fields(result)
-    _store(state, "observed", xseq_first(endog, one))
-    _store(state, "seasonal", xseq_first(season, one))
-    _store(state, "trend", xseq_first(trend, one))
-    _store(state, "resid", xseq_first(resid, one))
-    _store(state, "weights", xseq_first(weights, one))
-    return result
-
-
 def _croston_variant(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var records = context["xseq_croston_classes"]
     for i in range(len(records)):  # driver-loop: over connected Croston class metadata
@@ -546,6 +432,8 @@ def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, c
 
 
 def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation.startswith("var_") or operation.startswith("stl_") or operation == "decompose_initialize":
+        return forecast_matrix(model, operation, args, context)
     if operation == "croston_initialize" or operation == "ets_initialize" or operation == "theta_initialize" or operation == "garch_initialize":
         var kind = "croston" if operation == "croston_initialize" else ("ets" if operation == "ets_initialize" else ("theta" if operation == "theta_initialize" else "garch"))
         return forecast_initialize(model, kind, args, context)
@@ -567,8 +455,4 @@ def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, co
         return _ets_predict(model, fields, args, context)
     if operation == "garch_fit":
         return _garch_fit(model, fields, args, context)
-    if operation == "var_fit":
-        return _var_fit(model, fields, args, context)
-    if operation == "stl_fit":
-        return _stl_fit(model, fields, args, context)
     raise Error("RuntimeError: unknown sequence forecaster operation " + operation)

@@ -6,7 +6,6 @@ from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_var')
 
-from . import _backend
 from . import _native_xseq_bridge
 
 # Package-import connection: fit is ONE call into the compiled owner
@@ -45,20 +44,7 @@ class VARResults:
     """
 
     def __init__(self, endog, params, sigma_u, resid, k_ar, k_trend, numeric_mode):
-        self.endog = endog
-        self.params = params
-        self.sigma_u = sigma_u
-        self.resid = resid
-        self.k_ar = k_ar
-        self.k_trend = k_trend
-        self.neqs = int(endog.shape[1])
-        self.nobs = int(endog.shape[0] - k_ar)
-        self.df_resid = self.nobs - (self.neqs * k_ar + k_trend)
-        K = self.neqs
-        self.intercept = params[0].copy() if k_trend else np.zeros(K, dtype=np.float32)
-        self.coefs = np.ascontiguousarray(params[k_trend:].reshape(k_ar, K, K).transpose(0, 2, 1))
-        self.fittedvalues = (endog[k_ar:] - resid).astype(np.float32)
-        self._numeric_mode = numeric_mode
+        return _XSEQ(self, "var_results_initialize", (endog, params, sigma_u, resid, k_ar, k_trend, numeric_mode), _XSEQ_CONTEXT)
 
     def forecast(self, y, steps):
         """Forecast ``steps`` ahead from the last ``k_ar`` rows of ``y``.
@@ -75,17 +61,7 @@ class VARResults:
         -------
         ndarray of shape (steps, neqs), float32
         """
-        y = np.asarray(y)
-        if y.dtype == np.float64:
-            raise TypeError("VARResults.forecast: float64 is refused; pass float32")
-        y = np.ascontiguousarray(np.asarray(y, dtype=np.float32)[-self.k_ar:])
-        if y.shape != (self.k_ar, self.neqs):
-            raise ValueError(f"forecast: y needs at least {self.k_ar} rows of {self.neqs} columns")
-        out = np.zeros((int(steps), self.neqs), dtype=np.float32)
-        p = np.ascontiguousarray(self.params, dtype=np.float32)
-        _backend.binding("_mojolearn_x_sequence", self._numeric_mode).var_forecast(
-            [y.ctypes.data, p.ctypes.data, out.ctypes.data], [self.neqs, self.k_ar, self.k_trend, int(steps)])
-        return out
+        return _XSEQ(self, "var_forecast", (y, steps), _XSEQ_CONTEXT)
 
 
 # The arithmetic is `sequence/vecar.mojo` (a scaled Cholesky solve of the
@@ -120,19 +96,7 @@ class VAR(ParamsMixin):
     """
 
     def __init__(self, endog, exog=None, numeric_mode=None):
-        if exog is not None:
-            raise NotImplementedError("VAR: exog is not implemented")
-        y = np.asarray(endog)
-        if y.dtype == np.float64:
-            raise TypeError("VAR: float64 is refused; pass float32 (no float64 on the device)")
-        y = np.ascontiguousarray(y, dtype=np.float32)
-        if y.ndim != 2 or y.shape[1] < 1:
-            raise ValueError("VAR: endog must be (n_obs, n_variables)")
-        self.endog = endog  # verbatim, as get_params / clone report it
-        self.exog = exog
-        self._endog = y
-        self.neqs = int(y.shape[1])
-        self.numeric_mode = numeric_mode
+        return _XSEQ(self, "var_initialize", (endog, exog, numeric_mode), _XSEQ_CONTEXT)
 
     def fit(self, maxlags=1, method="ols", ic=None, trend="c"):
         """Estimate the VAR with a fixed lag order.
@@ -162,4 +126,4 @@ class VAR(ParamsMixin):
         return _XSEQ(self, "var_fit", (maxlags, method, ic, trend), _XSEQ_CONTEXT)
 
 
-_native_xseq_bridge.register(xseq_var_results=VARResults)
+_native_xseq_bridge.register(xseq_var_results=VARResults, xseq_var_class=VAR)
