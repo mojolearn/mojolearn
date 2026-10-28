@@ -46,7 +46,13 @@ def transformer_decode_operation(op: Int, a: List[Int], words: List[Int]) raises
             expanded.append(a[i])
         while len(expanded) < 13 + BLOCK_OPTION_ADDRS:  # small-loop(absent optional tail slots)
             expanded.append(0)
-        _check_base_addrs(expanded, [1, 2, 10, 11] if packed else [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], String("transformer_decode_session_open"))
+        # Separate assignments: a ternary over list literals of different lengths does not type-check.
+        var base_slots: List[Int]
+        if packed:
+            base_slots = [1, 2, 10, 11]
+        else:
+            base_slots = [1, 2, 3, 4, 5, 6, 8, 9, 10, 11]
+        _check_base_addrs(expanded, base_slots, String("transformer_decode_session_open"))
         var opts = BlockOptions.from_params(p, 9)
         if p[0] <= 0:
             raise Error("transformer_decode_session_open: B must be positive")
