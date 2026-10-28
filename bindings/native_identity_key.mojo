@@ -25,6 +25,8 @@ struct NativeIdentityKey(Movable, Writable):
     var array_getters: List[PythonObject]
     var array_owners: List[PythonObject]
     var array_values: List[PythonObject]
+    var array_views: List[PythonObject]
+    var array_view_owner_getter: PythonObject
     var array_mro: PythonObject
     var array_mro_getter: PythonObject
     var array_rows: List[PythonObject]
@@ -44,6 +46,8 @@ struct NativeIdentityKey(Movable, Writable):
         self.array_getters = List[PythonObject]()
         self.array_owners = List[PythonObject]()
         self.array_values = List[PythonObject]()
+        self.array_views = List[PythonObject]()
+        self.array_view_owner_getter = PythonObject(None)
         self.array_mro = PythonObject(None)
         self.array_mro_getter = PythonObject(None)
         self.array_rows = List[PythonObject]()
@@ -207,6 +211,13 @@ struct NativeIdentityKey(Movable, Writable):
         for i in range(len(self.array_owners)):  # driver-loop: over retained array metadata owners
             for j in range(len(self.array_getters)):  # small-loop(array_getters: native Array slot schema): retain slot values
                 self.array_values.append(py_call(self.array_getters[j], self.array_owners[i], cls))
+        # A released memoryview keeps its identity, but no longer admits a
+        # fresh capture. The snapshot's independent pin must not hide that.
+        self.array_view_owner_getter = bi.memoryview.__dict__["obj"].__get__
+        for i in range(len(self.array_values)):  # driver-loop: over retained Array slot values
+            if py_type(self.array_values[i]) is bi.memoryview:
+                _ = py_call(self.array_view_owner_getter, self.array_values[i])
+                self.array_views.append(self.array_values[i])
         # Keep live mapping proxies, not dictionary copies. On a hit, native
         # lookups compare every admitted class value and namespace size. This
         # detects same-size replacement, descriptor edits and inherited hooks.
@@ -246,6 +257,8 @@ struct NativeIdentityKey(Movable, Writable):
                 var current = PythonObject(from_owned=raw)
                 if current is not self.array_row_values[i][j]:
                     return False
+        for i in range(len(self.array_views)):  # driver-loop: over retained native memoryview owners
+            _ = py_call(self.array_view_owner_getter, self.array_views[i])
         var offset = 0
         for i in range(len(self.array_owners)):  # driver-loop: over retained array metadata owners
             if py_type(self.array_owners[i]) is not self.array_class:
