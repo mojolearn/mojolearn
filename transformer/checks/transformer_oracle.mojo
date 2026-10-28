@@ -107,7 +107,16 @@ from transformer.experiments.norm_profile_contract import (
 )
 from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot, nfl_square, nfl_sum
 from core.host_lanes import all_finite
-from std.math import min
+from std.math import max, min
+# idea 10 (lane/attn-fold, 2026-10-28): the v2 key-axis fold, default OFF.
+from transformer.impl.llama.attn_fold_v2 import (
+    ATTN_FOLD_V2,
+    ATTN_V2_LEAF,
+    AttnFoldV2Tree,
+    attn_v2_denom_row,
+    attn_v2_leaf_count,
+    attn_v2_leaf_visible,
+)
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
@@ -1611,6 +1620,47 @@ def attn_value_sum_lanes(
         d += 1
 
 
+@always_inline
+def _v2p(values: List[Float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    """A raw pointer to a list's cells for the v2 fold helpers."""
+    return MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(values.unsafe_ptr()))
+
+
+def attn_value_sum_v2(
+    weights: List[Float32],
+    wrow: Int,
+    values: List[Float32],
+    vhead: Int,
+    mut output: List[Float32],
+    obase: Int,
+    jlo: Int,
+    jhi: Int,
+    hd: Int,
+):
+    """S19 under `MOJOLEARN_IDN_ATTN_FOLD_V2` for one query row
+    (attn_fold_v2.mojo): `weights[wrow + j]` and `values[vhead + j*hd + d]`
+    at absolute key `j`; each 128-key leaf's partial is
+    `attn_value_sum_lanes`'s chain over the leaf's keys inside
+    `[jlo, jhi]` (`+0.0` for a leaf with none), and `output[obase + d]` is
+    the carry tree over the leaf partials."""
+    var part = List[Float32](length=hd, fill=Float32(0.0))
+    var trees = List[AttnFoldV2Tree]()
+    for _ in range(hd):
+        trees.append(AttnFoldV2Tree())
+    for i in range(attn_v2_leaf_count(jhi)):
+        if attn_v2_leaf_visible(i, jlo, jhi):
+            var a = max(i * ATTN_V2_LEAF, jlo)
+            var z = min(i * ATTN_V2_LEAF + ATTN_V2_LEAF - 1, jhi)
+            attn_value_sum_lanes(weights, wrow + a, values, vhead + a * hd, part, 0, z - a + 1, hd)
+        else:
+            for d in range(hd):
+                part[d] = Float32(0.0)
+        for d in range(hd):
+            trees[d].push(part[d])
+    for d in range(hd):
+        output[obase + d] = trees[d].result()
+
+
 def _set_at(mut xs: List[Float32], i: Int, v: Float32, size: Int):
     """Write-by-index into a stage list, growing it to `size` zeros first.
 
@@ -2144,16 +2194,25 @@ def transformer_block_oracle(
                         aweights[base + j] = Float32(0.0)
                     span_exp_shift(masked, base + jlo, jhi - jlo + 1, mx, aexp, base + jlo)
                     var acc = Float32(0.0)
-                    for j in range(jlo, jhi + 1):
-                        acc = ftz(ftz(acc) + ftz(aexp[base + j]))
-                    acc = ftz(acc)
+                    comptime if ATTN_FOLD_V2:
+                        acc = attn_v2_denom_row(_v2p(aexp), base, jlo, jhi)
+                    else:
+                        for j in range(jlo, jhi + 1):
+                            acc = ftz(ftz(acc) + ftz(aexp[base + j]))
+                        acc = ftz(acc)
                     adenom[r] = acc
                     span_div(aexp, base + jlo, jhi - jlo + 1, acc, aweights, base + jlo)
-                    attn_value_sum_lanes(
-                        aweights, base + jlo,
-                        vcache_f, (bb * nkv + kv) * s * hd + jlo * hd,
-                        actx, (bb * l + qi) * qw + h * hd, jhi - jlo + 1, hd,
-                    )
+                    comptime if ATTN_FOLD_V2:
+                        attn_value_sum_v2(
+                            aweights, base, vcache_f, (bb * nkv + kv) * s * hd,
+                            actx, (bb * l + qi) * qw + h * hd, jlo, jhi, hd,
+                        )
+                    else:
+                        attn_value_sum_lanes(
+                            aweights, base + jlo,
+                            vcache_f, (bb * nkv + kv) * s * hd + jlo * hd,
+                            actx, (bb * l + qi) * qw + h * hd, jhi - jlo + 1, hd,
+                        )
                 u += a_tasks
             _ = qblk^
             _ = cblk^
@@ -2403,9 +2462,12 @@ def transformer_block_oracle(
                 # what one thread will walk. This profile is reference
                 # quality and slow by construction.
                 var acc = Float32(0.0)
-                for j in range(jlo, jhi + 1):
-                    acc = ftz(ftz(acc) + ftz(aexp[base + j]))
-                acc = ftz(acc)
+                comptime if ATTN_FOLD_V2:
+                    acc = attn_v2_denom_row(_v2p(aexp), base, jlo, jhi)
+                else:
+                    for j in range(jlo, jhi + 1):
+                        acc = ftz(ftz(acc) + ftz(aexp[base + j]))
+                    acc = ftz(acc)
                 adenom[r] = acc
                 # S18, ONE DIVISION PER WEIGHT, never a reciprocal
                 # multiplied in (DEVIATION 806). `e * (1/denom)` rounds
@@ -2471,11 +2533,17 @@ def transformer_block_oracle(
                 var bb = r // (l * nh)
                 var kv = h // n_rep
                 var vis = _visible_keys(own0, window, qi, s)
-                attn_value_sum_lanes(
-                    aweights, r * s + vis[0],
-                    vcache, (bb * nkv + kv) * s * hd + vis[0] * hd,
-                    actx, (bb * l + qi) * qw + h * hd, vis[1] - vis[0] + 1, hd,
-                )
+                comptime if ATTN_FOLD_V2:
+                    attn_value_sum_v2(
+                        aweights, r * s, vcache, (bb * nkv + kv) * s * hd,
+                        actx, (bb * l + qi) * qw + h * hd, vis[0], vis[1], hd,
+                    )
+                else:
+                    attn_value_sum_lanes(
+                        aweights, r * s + vis[0],
+                        vcache, (bb * nkv + kv) * s * hd + vis[0] * hd,
+                        actx, (bb * l + qi) * qw + h * hd, vis[1] - vis[0] + 1, hd,
+                    )
 
         if vtasks <= 1:
             _value_rows(0)

@@ -82,6 +82,12 @@ from gemm.host.neural_gemm import (
 )
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, contract_leaf_size, leaf_count
 from gemm.contract import OP_NN
+# idea 10 (lane/attn-fold, 2026-10-28): the v2 key-axis fold, default OFF.
+from transformer.impl.llama.attn_fold_v2 import (
+    ATTN_FOLD_V2,
+    attn_v2_context_cell,
+    attn_v2_denom_row,
+)
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 from gemm.host.neural_gemm import neural_gemm_host_into
 from training.neural_ab_profile_contract import NN54_LOSS_PROFILE,nn_reduce_host_admitted
@@ -747,10 +753,16 @@ def _softmax_head(cell: List[Float32], masks: List[Float32], l: Int, s: Int, sca
             ep.unsafe_store(jv, ftz(identical_exp(ftz(ftz(mp.unsafe_load(jv)) - mx))))
             jv += 1
         # S17, serial ascending from +0.0, scalar, over the visible keys.
+        # Under MOJOLEARN_IDN_ATTN_FOLD_V2: 128-key leaves + carry tree
+        # (transformer/impl/llama/attn_fold_v2.mojo) over keys 0 .. count-1.
         var den = Float32(0.0)
-        for j in range(count):
-            den = ftz(ftz(den) + ftz(ep.unsafe_load(j)))
-        den = ftz(den)
+        comptime if ATTN_FOLD_V2:
+            den = attn_v2_denom_row(
+                MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(ep)), 0, 0, count - 1)
+        else:
+            for j in range(count):
+                den = ftz(ftz(den) + ftz(ep.unsafe_load(j)))
+            den = ftz(den)
         # S18: `identical_div` is `portable_divf`, the flush around ONE
         # correctly rounded division, and every operand here is flushed.
         # The masked keys' weights are `+0.0`, written as such.
@@ -788,6 +800,14 @@ def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: In
         var count = s
         if q_first >= 0 and q_first + qi + 1 < s:
             count = q_first + qi + 1
+        comptime if ATTN_FOLD_V2:
+            # S19 under MOJOLEARN_IDN_ATTN_FOLD_V2 over keys 0 .. count-1:
+            # 128-key leaves + carry tree, the device eager kernel's cell.
+            var awa = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(awp))
+            var vpa = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(vp))
+            for dv2 in range(hd):
+                ctxp.unsafe_store(cbase + dv2, attn_v2_context_cell(awa, wrow, vpa, 0, hd, dv2, 0, count - 1))
+            continue
         comptime if not BYTE_LM_VSUM_HD_GENERIC_OFF:
             var dv0 = 0
             while dv0 + VALUE_SUM_64 * HOST_FW <= hbody:
