@@ -97,10 +97,14 @@ def connect():
     lifecycle.update(classifier_labels_class=ClassLabels,
                      classifier_labels_namespace=dict(vars(ClassLabels)),
                      classifier_labels_mro=ClassLabels.__mro__)
+    from ._native_owner_lifetime import connect_owner_context
+    ownership = dict(lifecycle)
+    connect_owner_context(ownership)
     context = dict(_SEQUENTIAL_CONTEXT)
     context.update(xseq_bindings=bindings, xseq_base=base, optimizer_context=_OPT_CONTEXT,
                    os_urandom=os.urandom, np_asarray=np.asarray, xseq_linalg_error=np.linalg.LinAlgError,
-                   xseq_metrics=metrics, xseq_r2_options=r2_options, xseq_lifecycle_context=lifecycle)
+                   xseq_metrics=metrics, xseq_r2_options=r2_options, xseq_lifecycle_context=lifecycle,
+                   xseq_forecast_ownership=ownership)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
 

@@ -19,6 +19,7 @@ from providers.python.autoarima_lifecycle_pyapi import _fields
 from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
 from core.cast_in import NPY_DOUBLE
 from providers.python.forecast_initialize_pyapi import forecast_initialize
+from providers.python.forecast_owner_pyapi import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common import (
@@ -489,7 +490,10 @@ def _forecast_fields(model: PythonObject, kind: String, context: PythonObject) r
 
 
 def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = _forecast_fields(model, kind, context)
+    var target = _forecast_fields(model, kind, context)
+    # Fit/predict owners stage state in an exact dictionary. Commit only after
+    # every replaced original owner has passed release admission.
+    var fields = py_call(native_loaded_module("builtins").dict, target)
     var lifecycle = context["xseq_lifecycle_context"]
     if kind == "garch":
         _setting(args[0], lifecycle)
@@ -515,7 +519,9 @@ def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, c
         # including zero/negative horizons and the one-series output rank.
         var result = forecast[Python.tuple(py_call(b.slice, PythonObject(None)), py_call(b.slice, PythonObject(None), h))]
         _ = metadata
-        return xseq_first(result, xseq_truth(fields["_one"]))
+        var finished = xseq_first(result, xseq_truth(fields["_one"]))
+        forecast_commit(target, fields, context["xseq_forecast_ownership"])
+        return finished
     _setting(args[1], lifecycle)
     _setting(args[5], lifecycle)
     if xseq_truth(args[5]):
@@ -524,14 +530,19 @@ def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, c
     # forwards X to fit; Croston/ETS historically ignore X and X_future.
     var fit_args = Python.tuple(args[0], args[2] if kind == "theta" else PythonObject(None))
     var predict_args = Python.tuple(args[1], PythonObject(None), args[4])
+    var result = PythonObject(None)
     if kind == "croston":
         _ = _croston_fit(model, fields, fit_args, context)
-        return _croston_predict(model, fields, predict_args, context)
-    if kind == "ets":
+        result = _croston_predict(model, fields, predict_args, context)
+    elif kind == "ets":
         _ = _ets_fit(model, fields, fit_args, context)
-        return _ets_predict(model, fields, predict_args, context)
-    _ = _theta_fit(model, fields, fit_args, context)
-    return _theta_predict(model, fields, predict_args, context)
+        result = _ets_predict(model, fields, predict_args, context)
+    else:
+        _ = _theta_fit(model, fields, fit_args, context)
+        result = _theta_predict(model, fields, predict_args, context)
+    forecast_commit(target, fields, context["xseq_forecast_ownership"])
+    return result
+
 
 
 def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:

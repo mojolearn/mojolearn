@@ -5,6 +5,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_setitem, py_contains
 from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _fields, _integer
+from providers.python.forecast_owner_pyapi import forecast_commit
 
 
 def _scalar(value: PythonObject, context: PythonObject) raises:
@@ -26,12 +27,14 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
     if not found:
         raise Error("TypeError: forecast constructor requires an exact connected model class")
     var fields = _fields(model, cls)
+    var updates = Python.dict()
     var lifecycle = context["xseq_lifecycle_context"]
     for i in range(len(args)):  # driver-loop: over constructor scalar argument words
         _scalar(args[i], lifecycle)
     if kind == "croston":
-        py_setitem(fields, "alias", args[0])
-        py_setitem(fields, "numeric_mode", args[1])
+        py_setitem(updates, "alias", args[0])
+        py_setitem(updates, "numeric_mode", args[1])
+        forecast_commit(fields, updates, context["xseq_forecast_ownership"])
         return PythonObject(None)
     var b = native_loaded_module("builtins")
     if kind == "theta":
@@ -41,13 +44,14 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
         var choice = args[2]
         if choice is not None and not py_contains(context["xseq_theta_codes"], choice):
             raise Error("ValueError: model must be STM, OTM, DSTM, DOTM or None")
-        py_setitem(fields, "season_length", _integer(args[0], lifecycle))
-        py_setitem(fields, "decomposition_type", decomposition)
-        py_setitem(fields, "model", choice if fixed_model is None else fixed_model)
-        py_setitem(fields, "initial_smoothed", args[3])
-        py_setitem(fields, "alpha", args[4])
-        py_setitem(fields, "theta", args[5])
-        py_setitem(fields, "numeric_mode", args[6])
+        py_setitem(updates, "season_length", _integer(args[0], lifecycle))
+        py_setitem(updates, "decomposition_type", decomposition)
+        py_setitem(updates, "model", choice if fixed_model is None else fixed_model)
+        py_setitem(updates, "initial_smoothed", args[3])
+        py_setitem(updates, "alpha", args[4])
+        py_setitem(updates, "theta", args[5])
+        py_setitem(updates, "numeric_mode", args[6])
+        forecast_commit(fields, updates, context["xseq_forecast_ownership"])
         return PythonObject(None)
     if kind == "garch":
         if not Bool(py=args[3] == "Constant") and not Bool(py=args[3] == "Zero"):
@@ -63,13 +67,14 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
             raise Error("ValueError: GARCH: p, o, q >= 0 with at least one term")
         if o > 0 and p == 0:
             raise Error("ValueError: GARCH: o > 0 needs p > 0 (arch refuses it too)")
-        py_setitem(fields, "p", p)
-        py_setitem(fields, "o", o)
-        py_setitem(fields, "q", q)
-        py_setitem(fields, "mean", args[3])
-        py_setitem(fields, "dist", args[4])
-        py_setitem(fields, "power", args[5])
-        py_setitem(fields, "numeric_mode", args[6])
+        py_setitem(updates, "p", p)
+        py_setitem(updates, "o", o)
+        py_setitem(updates, "q", q)
+        py_setitem(updates, "mean", args[3])
+        py_setitem(updates, "dist", args[4])
+        py_setitem(updates, "power", args[5])
+        py_setitem(updates, "numeric_mode", args[6])
+        forecast_commit(fields, updates, context["xseq_forecast_ownership"])
         return PythonObject(None)
     # ETS and its DampedETS constructor share the same complete normalization.
     var damped_ctor = len(args) == 6
@@ -98,14 +103,15 @@ def forecast_initialize(model: PythonObject, kind: String, args: PythonObject, c
         raise Error("NotImplementedError: ETS: season_length above 58 is not implemented (Nelder-Mead over at most 63 coordinates)")
     if e == "A" and season == "M":
         raise Error("ValueError: ETS: Forbidden model combination (additive errors with a multiplicative season)")
-    py_setitem(fields, "season_length", period)
-    py_setitem(fields, "model", text)
-    py_setitem(fields, "damped", damped)
-    py_setitem(fields, "alpha", args[2] if damped_ctor else args[3])
-    py_setitem(fields, "beta", args[3] if damped_ctor else args[4])
-    py_setitem(fields, "phi", args[4] if damped_ctor else args[5])
-    py_setitem(fields, "gamma", PythonObject(None) if damped_ctor else args[6])
-    py_setitem(fields, "numeric_mode", args[5] if damped_ctor else args[7])
+    py_setitem(updates, "season_length", period)
+    py_setitem(updates, "model", text)
+    py_setitem(updates, "damped", damped)
+    py_setitem(updates, "alpha", args[2] if damped_ctor else args[3])
+    py_setitem(updates, "beta", args[3] if damped_ctor else args[4])
+    py_setitem(updates, "phi", args[4] if damped_ctor else args[5])
+    py_setitem(updates, "gamma", PythonObject(None) if damped_ctor else args[6])
+    py_setitem(updates, "numeric_mode", args[5] if damped_ctor else args[7])
     if damped_ctor:
-        py_setitem(fields, "error", error)
+        py_setitem(updates, "error", error)
+    forecast_commit(fields, updates, context["xseq_forecast_ownership"])
     return PythonObject(None)
