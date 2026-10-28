@@ -1,6 +1,6 @@
 Native optimizer state indexes, 2026-10-28
 Branch: lane/optimizer-state-index-20261028
-Source commit: 4f0eb800538643de7dff345f5ed7ee83d7bf9d48
+Final source commit: 8e5bb96200925a52951f8cff6f0dd5f46c67f229
 
 Repeated work removed:
 - _state_of no longer scans every retained optimizer state for every parameter
@@ -16,13 +16,19 @@ Setup/reuse boundary and invalidation:
 - Parameter retirement removes moments with the existing path and rebuilds
   surviving indexes after vector compaction. Ordinary tape reset retains valid
   uploaded-parameter states. Close clears every index with the state storage.
+- Failed control-checkpoint restore can temporarily pop its optimizer before
+  the caller retires partial states. The index remains available for that
+  cleanup and the next optimizer creation reuses the existing table. Storage
+  stays bounded by the optimizer-count high-water mark; repeated restore
+  failures cannot accumulate orphan index tables.
 - Handle generations prevent a reused tensor slot from inheriting retired
   state. The index stores native integers only and adds no borrowed owner.
 - Iteration/update order, kernels, moment initialization and numerical formulas
   are unchanged. This reduces work already written in native code.
 
 Compilation: focused HostExec OpsSession construction, optimizer creation,
-state lookup/allocation, step, free/retirement, reset and close; Apple CPU,
+state lookup/allocation, step, free/retirement, reset, close and control
+checkpoint restore/rollback; Apple CPU,
 identical define, optimization level 0. Final compile exit 0. Exact source
 closure, flags, compiler, binary hash and log locations are in compile.json.
 Initial non-raising nested-Dict compilation refusal is retained; outer indexing
@@ -37,3 +43,8 @@ unmeasured/unqualified. No new numerical/performance default.
 
 Evidence: ~/mojolearn-evidence/optimizer-state-index-20261028/
 No rented boxes or background services.
+
+Source review caught the failed-restore index-table lifetime/growth edge
+before integration. Bounded reuse was compiled with the actual restore path.
+The review and earlier successful compile/source evidence remain retained;
+no runtime failure was observed or runtime check executed.
