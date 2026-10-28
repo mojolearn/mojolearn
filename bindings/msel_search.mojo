@@ -30,14 +30,14 @@ from bindings.msel_common import (
     msel_slice_i64, msel_index_i64, msel_resident_new, msel_resident_take, msel_resident_release,
     msel_resident_close, msel_get_scorer, msel_score, msel_admit, MselRng, MselGroups, msel_apply,
 )
-from bindings.msel_split import msel_truth, msel_cls, msel_sabotage
+from bindings.msel_split import msel_truth, msel_flag_truth, msel_field, msel_cls, msel_sabotage
 from bindings.msel_cv import (
     msel_clone, msel_cv_folds, msel_device_rows_ok, msel_require_serial, msel_scorers, MselFoldRows, MselScores,
     msel_cross_validate_run, msel_seconds, msel_fit, msel_error_value,
 )
 
 from bindings.msel_estimator_native import msel_native_set_params, msel_estimator_plan
-from bindings.msel_search_state import msel_search_fields, msel_parameter_values
+from bindings.msel_search_state import msel_search_fields, msel_parameter_values, msel_search_update
 
 
 # ---------------------------------------------------------------- parameter grids
@@ -289,8 +289,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     if multi is not None and not refit_false and (py_type(refit) is not b.str or not py_contains(multi, refit)):
         raise Error("For multi-metric scoring, refit must be False or a scorer key.")
     var scoring = multi if multi is not None else scoring_in
-    msel_admit(fields["return_train_score"], context)
-    var return_train = msel_truth(fields["return_train_score"])
+    var return_train = msel_flag_truth(fields["return_train_score"], context)
     var got = msel_cv_folds(estimator, x_in, y_in, fields["cv"], groups, True, context)
     var xf = got[0]
     var yf = got[1]
@@ -352,23 +351,25 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
         if k == key_index:
             best_means = _floats(means)
             best_ranks = ranks
-    py_setitem(fields, "cv_results_", results)
-    py_setitem(fields, "n_splits_", PythonObject(n_splits))
-    py_setitem(fields, "multimetric_", PythonObject(multi is not None))
+    var updates = Python.dict()
+    py_setitem(updates, "cv_results_", results)
+    py_setitem(updates, "n_splits_", PythonObject(n_splits))
+    py_setitem(updates, "multimetric_", PythonObject(multi is not None))
     var best_params = PythonObject(None)
     if key_index >= 0:
         var best_index = family_call(best_ranks.index, PythonObject(1))
-        py_setitem(fields, "best_index_", best_index)
-        py_setitem(fields, "best_score_", best_means[best_index])
+        py_setitem(updates, "best_index_", best_index)
+        py_setitem(updates, "best_score_", best_means[best_index])
         best_params = candidates[best_index]
-        py_setitem(fields, "best_params_", best_params)
+        py_setitem(updates, "best_params_", best_params)
     if not refit_false:
         var best = msel_clone(estimator, False, context)
-        _set_params(best, fields["best_params_"], context)
+        _set_params(best, best_params, context)
         var xa = msel_materialize(x_in, "X", context)
         msel_fit(best, xa, y_in, context)
-        py_setitem(fields, "best_estimator_", best)
-        py_setitem(fields, "scorer_", msel_get_scorer(scoring_in, context) if multi is None else multi)
+        py_setitem(updates, "best_estimator_", best)
+        py_setitem(updates, "scorer_", msel_get_scorer(scoring_in, context) if multi is None else multi)
+    msel_search_update(fields, updates, context)
     return model
 
 
@@ -426,9 +427,9 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var b = msel_b()
     var estimator = args[0]
     msel_require_serial(args[7], args[10], "learning_curve", context)
-    msel_admit(args[8], context)
+    var shuffle = msel_flag_truth(args[8], context)
     msel_admit(args[9], context)
-    msel_admit(args[11], context)
+    var return_times = msel_flag_truth(args[11], context)
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
@@ -455,7 +456,6 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var sizes = List[Int]()
     for i in range(len(sizes_py)):  # driver-loop: over train sizes
         sizes.append(Int(py=sizes_py[i]))
-    var shuffle = msel_truth(args[8])
     var orders = Python.list()
     if shuffle:
         var rng = MselRng(args[9], context)
@@ -522,7 +522,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     _ = py_call(out.append, msel_i64_list(sizes, context))
     _ = py_call(out.append, msel_f64_block(tr_s, len(sizes), nf, context))
     _ = py_call(out.append, msel_f64_block(te_s, len(sizes), nf, context))
-    if msel_truth(args[11]):
+    if return_times:
         _ = py_call(out.append, msel_f64_block(ft, len(sizes), nf, context))
         _ = py_call(out.append, msel_f64_block(st, len(sizes), nf, context))
     return py_call(b.tuple, out)
@@ -549,11 +549,11 @@ def _y_free(splitter: PythonObject, context: PythonObject) raises -> Bool:
     for i in range(len(fixed)):  # driver-loop: over the y-free splitter classes
         if t is msel_cls(fixed[i], context):
             return True
-    var seeded = msel_is_integral(py_call(b.getattr, splitter, PythonObject("random_state"), PythonObject(None)), context)
     if t is msel_cls("KFold", context) or t is msel_cls("GroupKFold", context):
-        return not msel_truth(family_call(b.getattr, splitter, PythonObject("shuffle"))) or seeded
+        var seeded = msel_is_integral(msel_field(splitter, "random_state", context), context)
+        return not msel_flag_truth(msel_field(splitter, "shuffle", context), context) or seeded
     if t is msel_cls("ShuffleSplit", context) or t is msel_cls("GroupShuffleSplit", context):
-        return seeded
+        return msel_is_integral(msel_field(splitter, "random_state", context), context)
     return False
 
 

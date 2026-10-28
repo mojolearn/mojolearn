@@ -32,3 +32,7 @@ def connect(context, selection):
         layouts[cls] = dict(parameters=names, mro=mro, hooks=hooks,
                             protected=protected, fields_get=descriptor.__get__)
     context['family_msel_search_layouts'] = layouts
+    # glue: retain the existing native owner-release schemas. Package setup
+    # populates this same dictionary after the final estimator/getter snapshots.
+    from ._native_declared_params import CONTEXT as release_context
+    context['family_msel_release_context'] = release_context

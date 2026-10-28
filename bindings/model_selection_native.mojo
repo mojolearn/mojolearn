@@ -22,7 +22,7 @@ from bindings.msel_search import (
     msel_grid_dicts, msel_grid_list, msel_grid_len, msel_sampler_check, msel_sampler_list, msel_sampler_len, msel_search_fit, msel_validation_curve,
     msel_learning_curve, msel_permutation_test_score,
 )
-from bindings.msel_search_state import msel_search_fields, msel_search_plan, msel_search_initialize
+from bindings.msel_search_state import msel_search_fields, msel_search_plan, msel_search_initialize, msel_search_update
 from bindings.msel_split import (
     msel_split, msel_n_splits, msel_loo_at, msel_lpo_at, msel_logo_at, msel_lpgo_at, msel_check_cv,
     msel_train_test_split, msel_truth, msel_flag_truth, msel_splitter_initialize,
@@ -86,7 +86,7 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
                 raise Error("TypeError: search parameter names must be exact strings")
             if py_contains(msel_search_plan(model, context)["protected"], names[k]):
                 raise Error("TypeError: search parameters cannot override native method or storage hooks")
-        _ = py_call(fields.update, args[0])
+        msel_search_update(fields, args[0], context)
         return model
     if operation == "family_msel_search_estimator_type":
         var plan = msel_estimator_plan(_msel_attr(model, "estimator", context), context)

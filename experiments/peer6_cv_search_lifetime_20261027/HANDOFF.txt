@@ -1,0 +1,40 @@
+Peer6 CV search lifetime batch, 2026-10-27
+Branch: lane/peer6-cv-search-lifetime-20261027
+Base: f9ad32a50ad4df41a5bfa4a34d267017cdf42b7a
+
+Changes
+- Search/ParameterGrid/ParameterSampler reinitialization and search set_params
+  stage replacements and admit old ownership before any dictionary write.
+- Search fit stages completed result fields, including the fitted estimator and
+  scorer, and publishes them together after release admission. A failed refit
+  now preserves the previous result fields instead of publishing partial state.
+- Release admission walks native containers with cycle detection, supports
+  connected scorer and search records, and reuses the declared setter's exact
+  native estimator/archive-finalizer plans and retained module identities.
+  Unchanged/replacement owners held by another field are retained. Callback-
+  bearing old owners refuse before mutation; no Python finalizer is invoked.
+- Search return_train_score and learning_curve shuffle/return_times use the
+  native scalar flag boundary. Permutation scoring reads native splitter
+  random_state/shuffle fields without Python getattr.
+- Import-time _native_msel_search holds the declared release-context dictionary;
+  normal package setup populates it after the final getter/estimator snapshots.
+
+Validation
+- Complete runtime_model_selection host module compiled successfully, CPU
+  column, identical, O0, Apple M1 target, 10 configured compiler workers.
+  195.6148 seconds, exit 0. Configured workers do not prove saturation.
+- Python AST parse and git diff --check pass. No runtime/identity campaign,
+  tests, GPU compilation, benchmark or rented box. Required push guards apply.
+- Machine-readable receipt: compile.json beside this file.
+- Complete source bytes, manifest, log and compiled binary:
+  /Users/andrewhendel/mojolearn-evidence/peer6-cv-search-lifetime-20261027/attempt1/
+
+Pending and limits
+- Compilation is not runtime or bitwise evidence. Installed-wheel, actual
+  reinitialization/refit, native finalizer and callback refusal execution were
+  not run under the owner's compile-only direction.
+- This batch covers search lifecycle replacement and the named flags. Other
+  public model_selection boundaries are separate parent work. Source inventory
+  still needs scalar admission on learning_curve train_sizes and sampler
+  n_iter; broad admitted data objects can reach integer/comparison protocols.
+- No claim that all native model internals or the library are Python-free.
