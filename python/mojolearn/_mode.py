@@ -48,6 +48,12 @@ from . import _sk_validate
 
 
 def _guard_cpu_training(method):
+    # Import-time native-method declaration: the complete operation already
+    # owns its validation and lifecycle. require_training has no runtime
+    # refusal, so adding a Python wrapper would only reintroduce orchestration.
+    if (getattr(method, "_mojolearn_validates", False)
+            and getattr(method, "_mojolearn_tracks_fit", False)):
+        return method
     @functools.wraps(method)
     def guarded(self, *args, **kwargs):
         from ._cpu_reference import require_training

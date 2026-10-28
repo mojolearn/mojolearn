@@ -1,0 +1,92 @@
+Mamba public boundary migration — 2026-10-27
+
+Branch: lane/peer3-neural-tokenizer-20261027
+Worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027
+Base: 7de54456bde166c42fd0d9f7378e402bb0f3be91 (local main)
+
+Changes
+- Mamba1/2/3State constructors delegate scalar conversion/reference storage to
+  mamba_native_call. State input owners are preserved.
+- Decode session state/context/finalizer methods now finish in the native
+  operation. Mamba2/3 step report assignments occur before native return.
+- Exact state/session class and native dictionary/layout admission precedes
+  mutable field reads and scalar conversion. Replaced __dict__/field descriptors,
+  attribute hooks and scalar conversion hooks are refused without invoking them.
+- Mamba3 restore validates exact dictionary/string-key state on a temporary
+  native owner before publishing it to the uninitialized public owner.
+- Mamba3 forward and owned-weight install consume one neural block snapshot.
+  Carried-state and decode-session buffers retain captured Array views/native
+  memoryviews. Cache/session updates publish back on success and failure;
+  carried-state metadata is committed after execution.
+- Narrow optional snapshot arguments were added to _m3_state_call in
+  samba_inference_native and _prefill_mamba3_reports in neural_prefill_native.
+  Existing callers and numerical routes remain unchanged.
+
+Validation
+- 12 source regression checks passed using a direct Python runner, exit 0.
+- _mamba_impl.py and 14 parameterized public runtime controls parsed successfully.
+- git diff --check passed for owned implementation files.
+- Initial pytest command failed before collection: system Python has no pytest.
+  No dependency installation was attempted; the same 12 source test functions
+  were run directly. Both logs are retained.
+- No Mojo compile, product runtime, GPU, or cross-vendor identity checks were run.
+  Source guards and syntax checks do not establish Python-free execution.
+
+Evidence
+/Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/source-tests.log
+/Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/source-tests-direct.log
+
+Integration and pending work
+- Requires peer parent's bindings/neural_block_admission.mojo helpers.
+- Small affected native export: bindings/mamba_public_native.mojo:mamba_native_c,
+  included in _mojolearn_tokenizer_host. Root coordinates compilation before merge.
+- Runtime controls: python/mojolearn/tests/test_mamba_boundary_admission.py;
+  existing test_mamba_native_public.py validates arithmetic/state/checkpoint/session
+  preservation against retained drivers. Execution remains deferred.
+- Mamba1/2 shared forward/backward and constructor admission is peer-parent owned.
+- Shared _native_function still uses attribute lookup on a supplied binding before
+  entry type validation; mutable _prefill_binding admission needs root review.
+- Public neural_inference Mamba backward refusal remains Python and outside this
+  lane's files. No blanket transitive-runtime completion claim is made.
+
+Follow-up source review
+- Replaced _m3_entries isinstance(block, cpu_class) with native PyType_IsSubtype;
+  isinstance could otherwise consult a replaced instance __class__ descriptor.
+- Session release uses nested finally cleanup so refusing a mutated state's
+  dictionary still frees the owned native buffers and device session.
+- The initial branch push was rejected by the repository's shell-loop source
+  guard for three missing loop annotations. Those fixed metadata loops are now
+  annotated; no hook was bypassed. Original failure: push.log in evidence above.
+- Follow-up direct runner: 14 source tests passed, exit 0; 15 parameterized
+  public runtime controls syntax checked only. Log: source-tests-followup.log.
+
+Saved-binding repair (supersedes the corresponding pending item above)
+- Owned-weight release, session info, export and checkpoint export now resolve
+  _prefill_binding by identity against the import-connected native Mamba entry
+  namespaces. Their saved module/proxy object is never queried with getattr or
+  hasattr. Exact SimpleNamespace dictionaries are read through the native C API;
+  selected functions must belong to the connected extension image.
+- The peer parent added info/export symbols to the import-time bridge and is
+  moving inference backward refusals to native, superseding that pending item.
+- Source runner now passes 15 checks, exit 0. The 19 parameterized public runtime
+  control cases are syntax checked only. Log: source-tests-binding.log.
+- Compilation and all product/runtime/vendor qualification remain pending.
+
+2026-10-27 entry-admission follow-up
+- Replaced every remaining builtins runtime import in mamba_public_native with
+  import-connected native_loaded_module access.
+- Replaced all six capability/optional-entry hasattr probes with the shared
+  exact native entry namespace helpers. Canonical image identity uses the raw
+  admitted namespace dictionary, never attribute lookup.
+- Owned-weight revalidation admits the mutable plan record before raw field
+  publication and reads the completed block through neural_block_fields.
+- Added two source controls and an installed-runtime entry-namespace hook refusal
+  test (AST only). Public Mamba admission + typed dispatch closure suite: 17
+  source tests pass, exit0. Full logs: ~/mojolearn-evidence/peer3-mamba-20261027/
+  mamba-entry-source-tests.log, mamba-entry-ast.log, mamba-entry-diff-check.log.
+- Shared causal_lm_public._native_entry_fields/_native_has_entry dependency:
+  parent/Transformer commit 5bc3df9356. Parent compiles compile_mamba.mojo.
+- Transitive callback review still flags causal_lm_construct._model_block's
+  mutable class field/plan/__dict__ lookups and _model_bindings backend default
+  lookup. Exact scope sent to parent/root; this follow-up does not claim those
+  shared constructor routes qualified. No numerical route/arithmetic changed.

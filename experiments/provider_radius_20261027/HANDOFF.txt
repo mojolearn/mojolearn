@@ -1,0 +1,77 @@
+RadiusNeighbors native lifecycle, 2026-10-27
+Branch lane/peer1-radius-native-20261027
+Worktree /Users/andrewhendel/mojolearn-wt/peer1-radius-native-20261027
+Starting main b3239afc49478f01ff338b35121ee749396417aa
+
+Changes
+- RadiusNeighbors.fit now has native_method markers and passes both X and y to
+  family_xn_radius_fit. Existing native constructor installation is retained.
+- New radius_public_lifecycle_pyapi owns model/settings admission, sparse-X
+  refusal, one X snapshot, target admission/length/complex/finite validation,
+  column warning, fit-depth cleanup, feature names and fitted completion.
+- Numeric target buffers retain a memoryview/exporter owner and captured
+  shape/strides/format through fit. No ndarray.tolist/flatten callback runs.
+  Raw numeric target scans use public Py_buffer access plus native scalar
+  decoding, including strided inputs. Native pandas blocks are scanned without
+  a float32 cast, so large finite float64 targets do not become infinities.
+- Ignored string/object/record targets keep the old no-finite-scan semantics;
+  ignored scalar values and integer-first lists also keep the old semantics.
+  Supported native scalar settings are admitted before archive refusal parsing;
+  NumPy primitives decode via the native scalar-buffer reader first.
+- Public fit and the private _check_refusals preserve derived metric field writes.
+- Fit continues storing X without building a ball cover. Existing X nonfinite
+  behavior is preserved: RadiusNeighbors was absent from _SCANS_X_HERE and
+  _SCANS_X_AT_FIT, and its former native fit snapshot did not scan X.
+
+Adjacent operations / remaining paths
+- __init__ is installed by _native_full_reset_params (RadiusNeighbors schema).
+- radius_neighbors already uses _native_query_method and neighbor_query_call;
+  parent owns its implementation and numerical count/fill/sort dispatch.
+- save is one archive_save call. load still gets _mode._loader, which writes the
+  fitted flag and may call a Python _mojolearn_after_fit hook. That shared loader
+  is not repaired here. Exact proposed shared scope: mark archive loaders only
+  after host_archive_native owns fitted state AND refuses after-fit hooks, then
+  skip _mode._loader for those native-complete loaders.
+- Ordinary pandas numeric/object ndarray blocks use native storage access.
+  Unsupported extension-backed pandas targets remain refused by _pd_values;
+  no extension callbacks are introduced. Shared pandas, torch admission,
+  warning/feature and archive helper closures require their own audit coverage.
+- PCS seed callback and lifecycle repairs follow in separate commits per parent;
+  Radius commit does not claim PolynomialCountSketch or x_neighbors complete.
+
+Descriptor audit (source-only; no switch changed)
+- tools/gen_x_neighbors_provider.py --check exited 0: 77 packed operations,
+  CPU/GPU wrapper schemas match generated native owners byte-for-byte.
+- XN ABI has 82 operation IDs: 77 packed, numeric mode, 3 auxiliary entries,
+  capabilities. Mode is queried through the native descriptor, currently requires
+  identical; normal route still returns its module unless
+  MOJOLEARN_CLASSICAL_NATIVE_DISPATCH=1.
+- Both generated executors enforce exact address/float counts and integer ranges
+  (nan_cells permits the existing optional third integer). Numerical owners are
+  the same source functions as extension wrappers. Native descriptor execution
+  releases GIL and retains capsule/module/factory through the provider snapshot.
+- Capability bits cover OCSVM resident (device only), OCSVM alpha initialization,
+  unit_ff. Callers svc_ocsvm_native/neighbors_graph_native use those masks;
+  NearestCentroid uses descriptor presence for softmax64.
+- Normal-route proposal requires coordinated estimator_binding_pyapi scope:
+  propagate requested mode into XN admission and compare one descriptor mode
+  snapshot, avoiding the current legacy mode getter followed by descriptor read.
+  Admit supported identical providers as default; preserve existing fast route
+  without dedicated fast investment. Missing descriptor behavior must be explicit
+  rather than silently treating a numerical extension fallback as native.
+- PCS draw is outside this 82-entry table; descriptor promotion alone would leave
+  its x_neighbors_kfeat_pcs_draw_idn CPython numerical call. ANN numerical entries
+  and base KNN/KDE/query bindings also retain separate provider gaps.
+
+Validation / compile
+- Source AST and git diff checks, plus mandatory push source guards only.
+- No local compilation, runtime, identity, cross-vendor or benchmark execution.
+- Small compile-only shared-library target:
+  experiments/provider_radius_20261027/compile_radius.mojo
+  Parent uses the pinned compiler, -emit shared-lib -I . and CPU column defines.
+  It exports neighbors_operation to instantiate the real owner; do not run it.
+- Production closure: runtime_classical_host; affected entries
+  family_xn_radius_fit and family_xn_radius_refusals.
+- Full evidence: /Users/andrewhendel/mojolearn-evidence/peer1-radius-native-20261027/
+  worktree.log, source-inventory.log, diff-check.log,
+  xn-generated-source-check.log, radius-commit.log, radius-push.log.

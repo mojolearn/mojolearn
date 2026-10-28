@@ -11,7 +11,15 @@ from std.python._cpython import PyObjectPtr
 from sequence.model_device_dispatch import NATIVE_MODEL_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from providers.python.autograd_python_errors_pyapi import graph_python_error
-from providers.python.autograd_ops_frontend_pyapi import ops_session_call_py
+from std.ffi import _Global
+from providers.python.autograd_session_public_request_pyapi import ops_session_public_call_py, ops_session_public_connect_py
+from providers.python.autograd_program_public_request_pyapi import ops_program_public_call_py
+from providers.python.autograd_session_public_dispatch_pyapi import NativeSessionPublicAPI
+from core.native_descriptor_abi import NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_report
+from providers.python.autograd_owned_program_public_pyapi import ops_owned_program_connect_py, ops_owned_program_call_py
+from providers.python.autograd_owned_program_dispatch_pyapi import NativeOwnedProgramPublicAPI, owned_program_public_native_v1
+from providers.python.autograd_owned_program_factory_pyapi import owned_program_create_envelope, owned_program_create_devices, owned_program_create_execute
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
 from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
@@ -207,6 +215,15 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
     return mlp_predict_py(ex, addrs, ip)
 
 
+comptime SESSION_PUBLIC_API = _Global[StorageType=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE],
+    name="MojoSessionPublicOPS_DEVICEAPIv1", init_fn=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE].__init__]
+
+
+def session_public_api_binding() raises -> PythonObject:
+    var api = SESSION_PUBLIC_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def model_native_api_binding() raises -> PythonObject:
     var api = NATIVE_MODEL_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -391,12 +408,63 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
     return distributed_close_py[DeviceExec, OPS_DEVICE](id)
 
 
+comptime OWNED_PROGRAM_PUBLIC_API = _Global[StorageType=NativeOwnedProgramPublicAPI,
+    name="MojoOwnedProgramPublicOPS_DEVICEAPIv1", init_fn=NativeOwnedProgramPublicAPI.__init__]
+
+
+def owned_program_public_native_binding(
+    op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+    result: Int, context: Int, sink: NativeDescriptorError,
+) abi("C") -> Int:
+    if op != 3:
+        return owned_program_public_native_v1[DeviceExec, OPS_DEVICE](op, aa, na, pp, np, ff, nf, result, context, sink)
+    try:
+        var request = owned_program_create_envelope[OPS_DEVICE](aa, na, pp, np, nf, result)
+        var ids = owned_program_create_devices(request[])
+        var executors = device_executors(ids)
+        owned_program_create_execute[DeviceExec, OPS_DEVICE](request[], ids, executors^)
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = 0
+        return 0
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+
+
+def owned_program_public_api_binding() raises -> PythonObject:
+    var api = OWNED_PROGRAM_PUBLIC_API.get_or_create_ptr()
+    if len(api[].entries) == 0:
+        api[].entries.append(owned_program_public_native_binding)
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def ops_owned_program_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 3:
+            raise Error("TypeError: ops_owned_program_call expects three arguments")
+        var answer = ops_owned_program_call_py(args[0], args[1], args[2])
+        return answer.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_program_public_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 3:
+            raise Error("TypeError: ops_program_public_call expects three arguments")
+        var result = ops_program_public_call_py(args[0], args[1], args[2])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
 def ops_session_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_session_call expects three arguments")
-        var result = ops_session_call_py[DeviceExec, OPS_DEVICE](args[0], args[1], args[2])
+        var result = ops_session_public_call_py(args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -418,7 +486,7 @@ def ops_torch_program_run_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) a
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 4:
             raise Error("TypeError: ops_torch_program_run expects 4 arguments")
-        var result = ops_torch_program_run_py[DeviceExec, OPS_DEVICE](args[0], args[1], args[2], Bool(py=args[3]))
+        var result = ops_torch_program_run_py(args[0], args[1], args[2], Bool(py=args[3]))
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -430,7 +498,7 @@ def ops_imported_run_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_imported_run expects 3 arguments")
-        var result = ops_imported_run_py[DeviceExec, OPS_DEVICE](args[0], args[1], args[2])
+        var result = ops_imported_run_py(args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -732,6 +800,12 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)
         m.def_function[model_native_api_binding]("model_native_api_v1")
+        m.def_function[session_public_api_binding]("session_public_api_v1")
+        m.def_function[ops_session_public_connect_py]("ops_session_public_connect")
+        m.def_py_c_function(ops_program_public_call_c_binding, "ops_program_public_call")
+        m.def_function[owned_program_public_api_binding]("owned_program_public_api_v1")
+        m.def_function[ops_owned_program_connect_py]("ops_owned_program_connect")
+        m.def_py_c_function(ops_owned_program_call_c_binding, "ops_owned_program_call")
         m.def_function[model_fit_binding]("model_fit")
         m.def_function[model_predict_binding]("model_predict")
         m.def_function[model_n_params_binding]("model_n_params")

@@ -2,8 +2,8 @@
 # PolynomialCountSketch `fit`, `transform` and `fit_transform`, one native
 # call each (python/mojolearn/_expansion_neighbors.py), and RadiusNeighbors
 # `fit` (python/mojolearn/neighbors.py: its refusals, shared with `load`, then
-# the stored index). The shell hands over
-# the binding `_bind` resolved; this owner reads the parameters with the
+# the stored index). The PCS owner selects the import-connected binding after
+# native admission; this owner reads the parameters with the
 # Python methods' refusals, draws the hash tables with the binding's
 # counter-based generator (`x_neighbors_kfeat_pcs_draw_idn`) and runs the
 # sketch (`xn_pcs_resident`, or `xn_pcs` under the MOJOLEARN_XN_OLD_ITEMS A/B
@@ -11,14 +11,23 @@
 # same inputs: the bits do not move.
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
+from bindings.classical_validate import classical_view
+from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.estimator_binding_pyapi import estimator_arguments
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from core.cast_in import CAST_KIND_SIGNED
+from providers.python.pcs_rng_pyapi import pcs_seed
+from providers.python.pcs_public_lifecycle_pyapi import pcs_public_begin, pcs_feature_names
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    family_repr, family_is_int, family_call, family_call_kw, family_entry, family_array,
-    family_as_f32_dense, family_field, family_owned,
+    family_repr, family_call, family_call_kw, family_array,
+    family_field, family_f32_snapshot, family_owned_snapshot,
 )
-from bindings.host_archive_native import host_archive_radius_refusals
+from providers.python.radius_public_lifecycle_pyapi import radius_fit, radius_refusals
 from bindings.neighbors_knn_native import neighbors_knn_operation, knn_release
 from bindings.neighbors_local_native import neighbors_local_operation
 from bindings.neighbors_semi_native import neighbors_semi_operation
@@ -27,125 +36,118 @@ from bindings.neighbors_ann_native import neighbors_ann_operation
 from bindings.neighbors_kde_native import neighbors_kde_operation
 
 
-def _pcs_seed(seed: PythonObject) raises -> PythonObject:
-    """`_expansion_neighbors._seed_word`: an int as given; None (numpy's
-    global RandomState) or a caller's RandomState gives one draw in
-    [0, 2^31); anything else is refused."""
-    var b = Python.import_module("builtins")
-    if family_is_int(seed):
-        return seed
-    var state = seed
-    if seed is None:
-        var numpy = PythonObject(None)
-        try:
-            numpy = Python.import_module("numpy")
-        except:
-            raise Error("ImportError: mojolearn: _expansion_neighbors requires optional NumPy support. "
-                        + "Install it with: python -m pip install \"mojolearn[numpy]\" "
-                        + "(\"mojolearn[verify]\" also includes NumPy).")
-        state = numpy.random.mtrand._rand
-    elif not (Bool(py=py_call(b.hasattr, seed, PythonObject("randint")))
-              and Bool(py=py_call(b.hasattr, seed, PythonObject("random_sample")))
-              and Bool(py=py_call(b.hasattr, seed, PythonObject("uniform")))):
-        raise Error(family_repr(seed) + " cannot be used to seed a numpy.random.RandomState instance")
-    var keywords = Python.dict()
-    py_setitem(keywords, "size", PythonObject(1))
-    var draw = family_call_kw(py_call(b.getattr, state, PythonObject("randint")), keywords,
-                              PythonObject(0), PythonObject(1 << 31))
-    return family_call(b.int, family_call(py_call(b.getattr, draw, PythonObject("__getitem__")), PythonObject(0)))
+def _pcs_int(value: PythonObject, name: String) raises -> Int:
+    if py_type(value) is not py_type(PythonObject(0)):
+        raise Error("TypeError: PolynomialCountSketch " + name + " must be a native int")
+    return Int(py=value)
 
 
-def _f32_scalar(value: PythonObject) raises -> PythonObject:
-    """`_f32_scalar`: a Python double rounded once to float32."""
-    return PythonObject(Float64(Float32(Float64(py=family_call(Python.import_module("builtins").float, value)))))
+def _pcs_real(value: PythonObject, name: String) raises -> Float64:
+    var cls = py_type(value)
+    if cls is not py_type(PythonObject(0)) and cls is not py_type(PythonObject(0.0)):
+        raise Error("TypeError: PolynomialCountSketch " + name + " must be a native real number")
+    return Float64(py=value)
 
 
-def _pcs_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
-    """`PolynomialCountSketch.fit(X)`: the hash tables."""
-    classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
-    var operator = Python.import_module("operator")
-    var fields = py_fields(model)
-    var x = family_as_f32_dense(args[1], 2, "X", context)
-    var d = Int(py=x.shape[1])
-    _ = x^
-    var nf = d + (1 if Bool(py=family_call(operator.ne, family_field(fields, "coef0"), PythonObject(0))) else 0)
-    var deg = Int(py=family_call(b.int, family_field(fields, "degree")))
-    var nc = Int(py=family_call(b.int, family_field(fields, "n_components")))
-    if deg < 1 or nc < 1:
-        raise Error("degree and n_components must be >= 1")
-    var seed = _pcs_seed(family_field(fields, "random_state"))
+def _pcs_hash(source: PythonObject, degree: Int, name: String, context: PythonObject) raises -> ArrayMetadata:
+    var view = classical_view(source, context, name)
+    var shape = array_shape_once(view, context)
+    if len(shape) != 2 or shape[0] != degree:
+        raise Error("ValueError: PolynomialCountSketch hash tables must match degree")
+    var result = array_metadata_once(view, shape^, name, context)
+    if result.source.kind != CAST_KIND_SIGNED or result.source.itemsize != 4 or not result.c_order:
+        raise Error("TypeError: PolynomialCountSketch hash tables must be contiguous native int32 arrays")
+    return result^
+
+
+def _pcs_fit(fields: PythonObject, settings: PythonObject, binding: PythonObject, x: ArrayMetadata,
+             degree: Int, components: Int, coef0: Float64, context: PythonObject) raises:
+    """Fit hash tables from the operation's single admitted input snapshot."""
+    var d = x.source.cols
+    var nf = d + (1 if coef0 != 0.0 else 0)
+    var seed = pcs_seed(family_field(settings, "random_state"), context)
     if nf > 0:
-        var draw = py_call(b.getattr, args[0], PythonObject("x_neighbors_kfeat_pcs_draw_idn"), PythonObject(None))
+        var draw = neural_descriptor_entry(xn_module(binding), "x_neighbors_kfeat_pcs_draw_idn", False)
         if draw is None:
-            # The MT19937 Python draw behind the _OFF define is deleted; a
-            # binary without the device draw refuses.
             raise Error("NotImplementedError: mojolearn PolynomialCountSketch: this binary lacks "
                         + "x_neighbors_kfeat_pcs_draw_idn (rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
-        if py_type(draw) is not context["family_builtin_type"]:
-            raise Error("TypeError: mojolearn: x_neighbors_kfeat_pcs_draw_idn must be a compiled entry")
-        var ih = family_array(Python.tuple(deg, nf), "<i4", context)
-        var bh = family_array(Python.tuple(deg, nf), "<i4", context)
-        var word = family_call(operator.and_, seed, PythonObject(0xFFFFFFFF))
-        _ = family_call(draw, Python.list(word, PythonObject(nc), PythonObject(deg * nf)),
+        var ih = family_array(Python.tuple(degree, nf), "<i4", context)
+        var bh = family_array(Python.tuple(degree, nf), "<i4", context)
+        if py_type(seed) is not py_type(PythonObject(0)):
+            raise Error("TypeError: PolynomialCountSketch random_state must resolve to a native int")
+        ref cpy = Python().cpython()
+        # Preserve arbitrary-sized integer seeds without Python operator.and_.
+        var raw_seed = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLongMask")(seed._obj_ptr)
+        var word = Int(raw_seed & 0xFFFFFFFF)
+        # Remaining provider work: PCS drawing is not yet in XN's table.
+        # The numerical extension entry below is still CPython-dispatched.
+        _ = family_call(draw, Python.list(word, components, degree * nf),
                         classical_address(ih), classical_address(bh))
-        _ = bh  # keep the Python object alive through the native call above
-        _ = ih  # keep the Python object alive through the native call above
+        _ = ih
+        _ = bh
         py_setitem(fields, "indexHash_", ih)
         py_setitem(fields, "bitHash_", bh)
     else:
-        py_setitem(fields, "indexHash_", family_array(Python.tuple(deg, 0), "<i4", context))
-        py_setitem(fields, "bitHash_", family_array(Python.tuple(deg, 0), "<i4", context))
+        py_setitem(fields, "indexHash_", family_array(Python.tuple(degree, 0), "<i4", context))
+        py_setitem(fields, "bitHash_", family_array(Python.tuple(degree, 0), "<i4", context))
     py_setitem(fields, "n_features_in_", PythonObject(d))
 
 
-def _pcs_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`PolynomialCountSketch.transform(X)`: the count sketches' circular
-    convolution."""
-    classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
-    var fields = py_fields(model)
-    var x = family_as_f32_dense(args[1], 2, "X", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    if d != Int(py=family_field(fields, "n_features_in_")):
+def _pcs_transform(settings: PythonObject, binding: PythonObject, x: ArrayMetadata,
+                   degree: Int, components: Int, gamma: Float64, coef0: Float64,
+                   context: PythonObject) raises -> PythonObject:
+    """Transform with captured input/hash metadata and the admitted provider."""
+    var n = x.source.rows
+    var d = x.source.cols
+    if d != _pcs_int(family_field(settings, "n_features_in_"), "n_features_in_"):
         raise Error("Number of features of test samples does not match that of training samples.")
-    var index_hash = family_field(fields, "indexHash_")
-    var bit_hash = family_field(fields, "bitHash_")
-    var nf = Int(py=index_hash.shape[1])
-    var nc = Int(py=family_call(b.int, family_field(fields, "n_components")))
-    var deg = Int(py=family_call(b.int, family_field(fields, "degree")))
-    var out = family_array(Python.tuple(n, nc), "<f4", context)
-    var old_items = getenv("MOJOLEARN_XN_OLD_ITEMS") == "1"
-    var name = String("xn_pcs_resident")
-    if old_items:
-        name = String("xn_pcs")
-    var op = family_entry(args[0], name, context)
-    # X, indexHash_, bitHash_, out; n, d, nf, nc, degree; gamma, coef0 (float32).
-    _ = family_call(op, Python.list(classical_address(x), classical_address(index_hash), classical_address(bit_hash),
-                                    classical_address(out)),
-                    Python.list(PythonObject(n), PythonObject(d), PythonObject(nf), PythonObject(nc), PythonObject(deg)),
-                    Python.list(_f32_scalar(family_field(fields, "gamma")), _f32_scalar(family_field(fields, "coef0"))))
-    _ = bit_hash  # keep the Python object alive through the native call above
-    _ = index_hash  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = x^
+    var index_hash = _pcs_hash(family_field(settings, "indexHash_"), degree, "indexHash_", context)
+    var bit_hash = _pcs_hash(family_field(settings, "bitHash_"), degree, "bitHash_", context)
+    var nf = index_hash.source.cols
+    if bit_hash.source.cols != nf or nf != d + (1 if coef0 != 0.0 else 0):
+        raise Error("ValueError: PolynomialCountSketch hash tables do not match the fitted features")
+    var out = family_array(Python.tuple(n, components), "<f4", context)
+    var name = String("pcs") if getenv("MOJOLEARN_XN_OLD_ITEMS") == "1" else String("pcs_resident")
+    xn_execute(binding, name,
+               Python.list(x.source.addr, index_hash.source.addr, bit_hash.source.addr, classical_address(out)),
+               Python.list(n, d, nf, components, degree),
+               Python.list(Float64(Float32(gamma)), Float64(Float32(coef0))))
+    _ = out
     _ = index_hash^
     _ = bit_hash^
+    _ = x
     return out
 
 
-def _radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
-    """`RadiusNeighbors.fit(X)`: the refusals (`_check_refusals`, which also
-    resolves the metric), then the points stored as float32."""
-    classical_connect_numpy(context)
-    var fields = py_fields(model)
-    host_archive_radius_refusals(fields, String(py_type(model).__name__), context)
-    var index = family_owned(family_as_f32_dense(args[0], 2, "X", context), context)
-    py_setitem(fields, "_index", index)
-    py_setitem(fields, "n_samples_fit_", PythonObject(Int(py=index.shape[0])))
-    py_setitem(fields, "n_features_in_", PythonObject(Int(py=index.shape[1])))
+def _pcs_operation(model: PythonObject, operation: String, args: PythonObject,
+                   context: PythonObject) raises -> PythonObject:
+    var public = pcs_public_begin(model, operation, args, context)
+    var result = PythonObject(None)
+    try:
+        var admitted = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
+        var settings = public.settings
+        var fields = public.call.fields
+        var degree = _pcs_int(settings["degree"], "degree")
+        var components = _pcs_int(settings["n_components"], "n_components")
+        if degree < 1 or components < 1:
+            raise Error("degree and n_components must be >= 1")
+        var coef0 = _pcs_real(settings["coef0"], "coef0")
+        if public.call.fitting:
+            _pcs_fit(fields, settings, admitted[0], public.x, degree, components, coef0, context)
+            py_setitem(settings, "n_features_in_", fields["n_features_in_"])
+            py_setitem(settings, "indexHash_", fields["indexHash_"])
+            py_setitem(settings, "bitHash_", fields["bitHash_"])
+        if operation == "family_xn_pcs_fit":
+            result = model
+        else:
+            var gamma = _pcs_real(settings["gamma"], "gamma")
+            result = _pcs_transform(settings, admitted[0], public.x, degree, components, gamma, coef0, context)
+    except error:
+        var refused = neighbors_public_refusal(error, public.call, model)
+        raise refused^
+    finally:
+        neighbors_public_end(model, public.call)
+    return neighbors_public_finish(model, operation, result, public.call, context)
 
 
 def neighbors_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -154,19 +156,15 @@ def neighbors_operation(model: PythonObject, operation: String, args: PythonObje
         knn_release(model)
         return PythonObject(None)
     if operation == "family_xn_radius_refusals":
-        host_archive_radius_refusals(py_fields(model), String(py_type(model).__name__), context)
+        radius_refusals(model, context)
         return PythonObject(None)
     if operation == "family_xn_radius_fit":
-        _radius_fit(model, args, context)
-        return model
-    if operation == "family_xn_pcs_fit":
-        _pcs_fit(model, args, context)
-        return model
-    if operation == "family_xn_pcs_transform":
-        return _pcs_transform(model, args, context)
-    if operation == "family_xn_pcs_fit_transform":
-        _pcs_fit(model, args, context)
-        return _pcs_transform(model, args, context)
+        return radius_fit(model, args, context)
+    if operation == "family_xn_pcs_feature_names":
+        return pcs_feature_names(model, context)
+    if (operation == "family_xn_pcs_fit" or operation == "family_xn_pcs_transform"
+            or operation == "family_xn_pcs_fit_transform"):
+        return _pcs_operation(model, operation, args, context)
     if operation.startswith("family_xn_knn_"):
         return neighbors_knn_operation(model, operation, args, context)
     if operation.startswith("family_xn_loc_"):

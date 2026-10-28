@@ -32,7 +32,7 @@ def test_device_metadata_captured_once_and_kept_natively():
     frontend = (ROOT / 'providers/python/autograd_torch_program_pyapi.mojo').read_text()
     assert frontend.count('native_torch_device(inputs[') == 1
     assert 'struct TorchDeviceSnapshot(Movable):' in frontend
-    route = frontend.split('def _torch_route_with_devices(')[1].split('def _torch_run_host[')[0]
+    route = frontend.split('def _torch_route_with_devices(')[1].split('def _torch_run_host(')[0]
     assert 'native_torch_device(' not in route
     assert 'target = devices[0].owner' in frontend
     assert 'native_torch_storage_metadata(value)' in frontend
@@ -45,7 +45,8 @@ def test_python_export_is_replaced_by_explicit_artifact_admission():
     assert 'torch.onnx' not in frontend
     assert 'torch_dynamo_backends' not in (ROOT / 'python/pyproject.toml').read_text()
     public = (ROOT / 'python/mojolearn/importers/_program.py').read_text()
-    assert 'return self._run_torch_native(self, tensors, None, False)' in public
+    assert 'return _TORCH_RUN_NATIVE(self, tensors, None, False)' in public
+    assert 'return _RUN_NATIVE(self, arrays, named)' in public
     assert '_export_torch' not in public
 
 
@@ -240,3 +241,17 @@ def test_onnx_reader_and_resolver_use_common_native_resource():
 def test_cpu_profile_preserves_public_default_shape_independently_of_build_toggle():
     source = (ROOT / 'providers/python/byte_lm_host_compat_pyapi.mojo').read_text()
     assert 'ByteConfig(chunked_lm_head_v2=False).profile()' in source
+
+
+def test_imported_host_execution_routes_through_native_registry_owner():
+    owner = (ROOT / 'autograd/program_host_request.mojo').read_text()
+    for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
+        assert forbidden not in owner
+    assert 'ops_session_registry_token()' in owner
+    assert 'program_execute_prepare[E, KIND]' in owner
+    assert 'program_execute_run[E, KIND]' in owner
+    for filename in ('sequence/model_host_dispatch.mojo', 'sequence/model_device_dispatch.mojo'):
+        assert 'if op == PROGRAM_HOST_RUN:' in (ROOT / filename).read_text()
+    for filename in ('autograd_program_pyapi.mojo', 'autograd_torch_program_pyapi.mojo'):
+        source = (ROOT / 'providers/python' / filename).read_text()
+        assert 'imported_host_provider_request(' in source

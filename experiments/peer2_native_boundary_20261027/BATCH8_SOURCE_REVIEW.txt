@@ -1,0 +1,50 @@
+Peer2 independent coordinator source review, 2026-10-28
+Frozen source: 36a66a688574fbc5cce6bfaede71f8e7b584f7f9
+Source review only. No product operation executed; compilation receipt separate.
+
+9a0f043190 (lane9fbfadd): UMAP scalar conversion repair.
+UMAP public aliases reach _umap_impl; fit/fit_transform/transform call the dedicated
+manifold entry. UMAP inherited validation/output wrappers remain outstanding;
+this chunk does not claim a complete UMAP public boundary. Native manifold owner
+captures ManifoldSettings, chooses umap_operation, then _umap_fit/_umap_transform
+calls umap_parameters_fields before numerical execution. Constructor/set_params
+use full_reset_constructor_c/full_reset_params_c -> umap_parameters_fields;
+constructor validates after original field writes, reset before clearing fitted
+state. Those existing ordering rules remain unchanged.
+classical_connect_numpy scalar_types admits bool, signed/unsigned integers,
+f16/f32/f64; integer_types also includes builtin int. No complex/text NumPy scalar
+is newly admitted. Exact builtin parsing is unchanged. Admitted NumPy numbers
+now read dtype and native buffer bytes, decode via NativeScalarBuffer, and publish
+only an ordinary builtin number. Existing range/finite/float32 checks remain.
+Original scalar owner survives decoding; exporter acquired/released in finally.
+Array branches unchanged. Compile manifold actual module builder + constructor/
+reset roots; no installed loader/public runtime/identity claim.
+Remaining UMAP work includes numerical setting snapshots/truth conversion,
+categorical .tolist/set/sorted, inherited public lifecycle, buffer copied metadata
+reread, shared admission/provider context integrity and consumed-output review.
+
+c7694b3277 (lane01342): assigned arena_cache_get integer temporal repair.
+DeviceCache.get -> _ROWS_CALL(cache_get) -> arena_rows_c -> arena_cache_get ->
+arena_cache_key -> _integer. Day count is Int64; original code narrowed before
+checking Python timedelta range, possibly wrapping. New range check precedes any
+narrowing and preserves raw integer route outside +/-999999999 days.
+No runtime reproduction; source contract NumPy timedelta day field is int64.
+Actual arena_rows_c exported forwarding root compiles transitive helper. No
+claim of complete DeviceCache migration; this is the explicitly assigned fix.
+
+808a23e786 (lane7082): temporal_object_kind helper retained for future scalar
+callers. No caller in this freeze. Do not infer helper compilation from manifold
+or arena targets, and do not include it in merge-ready product list yet.
+
+e8a10e89c0 (lane9608): Normalizer object/string width-check error order source
+repair integrated but excluded from this compile/merge. Prep lane still repairing
+longdouble outer failure and pandas extension/common-dtype compatibility.
+
+PCA fit pending review: original void terminal patch373 reviewed, but integer-
+versus-float structured-void refusal, array.array parser wrapper, temporal tol/
+count conversion, whiten supported truth and initial scalar admission remain
+with decomposition lane. Full public class native flag bypasses inherited
+wrappers. State/result owner lifetimes retained in fields and native snapshots;
+concurrent mutation across GIL-releasing preparation still requires admission.
+
+No new tests per owner. Required git/push hooks only. Runtime/cross-vendor pending.

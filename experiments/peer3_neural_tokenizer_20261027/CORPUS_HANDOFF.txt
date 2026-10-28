@@ -1,0 +1,60 @@
+Peer 3 corpus public native migration — 2026-10-27
+Branch: lane/peer3-neural-tokenizer-20261027
+Worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027
+Initial lane base: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Corpus followup base: f8f1e59cd0 (subsequent parent helper commit bd9be9afad).
+
+Changed scope
+- python/mojolearn/lm_corpus.py: all 21 callable bodies, including constructors,
+  properties and private iterator methods, are one native dispatch call.
+- bindings/lm_corpus_public_native.mojo: source validation, vocabulary cache
+  training/export, token cache orchestration, manifest/result construction,
+  batch construction/gather, lazy iteration, schedule and vocabulary matching.
+- bindings/lm_corpus_metadata.mojo: passive field/descriptor admission, scalar
+  conversion admission, native mmap lifetime and original int32 Array ownership.
+- Dedicated compile probe, source controls and installed-runtime negative controls.
+
+Behavior and retained routes
+The existing tokenizer train/encode/document-cut/gather native algorithms are
+called directly. Cache keys, ordered manifest fields, canonical rank identity,
+atomic sibling publication and readonly mmap ownership are retained. Public
+prefetch remains lazy; native field errors occur at the requested step and close
+that iterator. Checkpoint matching reads only schedule/vocabulary metadata, not
+unrelated model weights. Scalar/path/buffer hooks, replaced __dict__ descriptors,
+progress callbacks and overridden prefetch ids methods are refused before calls.
+Python runtime progress callbacks are intentionally unsupported; returned manifest
+counters/timings are the native alternative.
+
+Source validation (not runtime qualification)
+- tools/test_lm_corpus_public_native_source.py: 9 tests, exit 0; covers 21 wrappers,
+  native closure/routes, cache recipe, mmap admission, metadata capture and lazy
+  iteration/error closure, plus no untagged shell loops in the new two files.
+- python/mojolearn/tests/test_lm_corpus_native_boundary.py: 9 installed-runtime
+  controls added and AST parsed only; none executed by lane.
+- Public Python module AST passed; git diff --check passed.
+- Initial source-control failure (expected wrapper count 24 vs actual 21) was
+  corrected to 21. Full initial failure and final pass logs retained below.
+- Parent reported successful full corpus C-entry/type-registration compile before
+  the final connection-replacement and single-capture fixes. Parent must recompile
+  that affected probe for the final source before merging. No lane compilation.
+
+Remaining callbacks and dependencies
+No intentional Python callback is invoked by the new corpus implementation.
+It uses admitted native CPython scalar/container/storage entries plus parent
+filesystem and tokenizer helpers. This is source review, not a Python-free or
+runtime-success claim. Parent owns host registration, filesystem helper,
+shared mmap exporter admission and local compile. Runtime and cross-vendor
+verification remain pending final integration.
+The existing mixed test_numpy_free_features.py test that installs a Python ids
+callback into prefetch is incompatible with native callback refusal; parent was
+notified, and a dedicated refusal/lazy-native-failure test is supplied here.
+
+Small affected compile target
+experiments/peer3_neural_tokenizer_20261027/compile_corpus_public.mojo
+Parent also has compile_lm_corpus.mojo with complete iterator type registration;
+reuse that one target instead of duplicate compilation.
+
+Evidence
+/Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/corpus-source-tests-initial.log
+/Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/corpus-source-tests-final.log
+Parent: corpus-public-compile-1.log (location in parent compile handoff).

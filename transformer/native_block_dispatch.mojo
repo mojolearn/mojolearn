@@ -5,6 +5,7 @@ from std.ffi import _Global
 from transformer.native_lm_resident_dispatch import transformer_lm_resident_operation
 from transformer.native_decode_dispatch import transformer_decode_operation
 from transformer.native_tape_dispatch import transformer_tape_operation
+from transformer.session_tape_dispatch import transformer_session_tape_operation
 from transformer.session_native_dispatch import transformer_session_forward_native
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -19,6 +20,8 @@ from transformer.transformer_binding_impl import (
 # backward; 4 ephemeral fresh, 5 ephemeral backward. Session operations prepend
 # Tape operations 6..10 reserve/release/forward/backward/close their own owner.
 # one checked opaque owner handle to their integer vector. All spans borrowed.
+# Session-ticket ops36..40 reserve/release/forward/backward/discard the original
+# budget-aware session tape; <=35 and standalone tape ops6..10 are unchanged.
 
 
 def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
@@ -26,6 +29,8 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
         return transformer_lm_resident_operation(op, a, words, f)
     if len(f) != 0:
         raise Error("transformer block: unexpected floating scalars")
+    if op >= 36 and op < 41:
+        return transformer_session_tape_operation(op - 36, a, words)
     if op >= 15 and op < 25:
         return transformer_decode_operation(op - 15, a, words)
     if op == 14:
@@ -161,7 +166,7 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
 def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 36 or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 28:
+        if op < 0 or op >= 41 or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 28:
             raise Error("transformer block native ABI: unknown operation or scalar span")
         if result == 0:
             raise Error("transformer block native ABI: null result")

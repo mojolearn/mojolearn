@@ -28,7 +28,7 @@ issues a DeprecationWarning).
 #   where it names a GPT-2 thing: the pre-tokenization pattern and the
 #   `encoder.json` + `vocab.bpe` format `from_files` reads.
 # - The GPT-2 pattern is the only one the compiled binding cuts;
-#   `mojolearn.models.tokenizer` cuts Llama 3 and Qwen 2 in Python (see
+#   `mojolearn.models.tokenizer` cuts Llama 3 and Qwen 2 in native code (see
 #   `tokenizer/README.md`). GPT-2's files are published under
 #   https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/
 # - The arithmetic is `tokenizer/encoding.mojo` (integers and tables only),
@@ -91,20 +91,18 @@ VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
 
 def _identity_from_tokens_text(text, n_ranks):
     # the digest is the Mojo SHA-256 (core/sha256.mojo), the same hex as hashlib's
-    return dict(schema=VOCABULARY_SCHEMA, sha256=str(_binding().sha256_hex(text.encode("ascii"))),
-                n_ranks=n_ranks, n_vocab=n_ranks + 1, endoftext_id=n_ranks)
+    return _TOKENIZER_NATIVE.tokenizer_public_call('identity_text', (text, n_ranks), _TOKENIZER_CONTEXT)
 
 
 def _identity_of_ranks_file(path):
     """`_identity_from_tokens_text` over the canonical rendering of a rank
     file. The binding loads (and refuses) the file and renders the canonical
     text (`tokenizer/impl/vocab_build.mojo::ranks_text`)."""
-    m = _binding()
-    return _identity_of_handle(m, _native(m.bpe_load, os.fspath(path)))
+    return _TOKENIZER_NATIVE.tokenizer_public_call('identity_file', (path,), _TOKENIZER_CONTEXT)
 
 
 def _identity_of_handle(m, handle):
-    return _identity_from_tokens_text(m.bpe_ranks_text(handle), int(m.bpe_n_vocab(handle)) - 1)
+    return _TOKENIZER_NATIVE.tokenizer_public_call('identity_handle', (handle,), _TOKENIZER_CONTEXT)
 
 
 def _native(fn, *args, prefix="mojolearn: "):
@@ -149,9 +147,10 @@ _FAST_EXTENSION = "_mojolearn_tokenizer_fast"
 _NO_FAST = (None, False, False, 0)
 
 
-def _fast_binding():
+def _fast_binding(*, connect_all=False):
     """`(module, train_device, encode_device, max_vocab)`, or `_NO_FAST`."""
-    if _backend.default_mode() != "fast":
+    selected = _backend.default_mode()
+    if not connect_all and selected != "fast":
         return _NO_FAST
     try:
         path = os.path.join(_backend.tier_dir("fast"), _FAST_EXTENSION + ".so")
@@ -235,32 +234,14 @@ class BpeTokenizer:
     ENDOFTEXT = "<|endoftext|>"
 
     def __init__(self, ranks_file=None):
-        if ranks_file is None:
-            raise ValueError(_NO_VOCABULARY)
-        path = os.path.abspath(os.fspath(ranks_file))
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"mojolearn: BpeTokenizer rank file {path} does not exist")
-        m = _binding()
-        self._adopt(m, _native(m.bpe_load, path), path)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_init', (self, ranks_file), _TOKENIZER_CONTEXT)
 
     def _adopt(self, m, handle, source):
-        self._source = source
-        self._m = m
-        self._handle = handle
-        text = m.bpe_ranks_text(handle)
-        self._n_vocab = int(m.bpe_n_vocab(handle))
-        self._identity = _identity_from_tokens_text(text, self._n_vocab - 1)
-        self._max_token_bytes = int(m.bpe_max_token_bytes(handle))
-        # Fast mode with the device encoder compiled in: the Apple GPU binding's
-        # own handle over the same table (its canonical rank text).
-        fast, _train, encode, _max = _fast_binding()
-        self._fast = (fast, _native(fast.bpe_fast_load, text)) if encode else None
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_adopt', (self, handle, source), _TOKENIZER_CONTEXT)
 
     @classmethod
     def _from_handle(cls, m, handle, source):
-        tok = cls.__new__(cls)
-        tok._adopt(m, handle, source)
-        return tok
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_handle', (cls, handle, source), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ loading
 
@@ -276,7 +257,7 @@ class BpeTokenizer:
         -------
         BpeTokenizer
         """
-        return cls(path)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_ranks', (cls, path), _TOKENIZER_CONTEXT)
 
     @classmethod
     def from_token_bytes(cls, tokens):
@@ -294,16 +275,7 @@ class BpeTokenizer:
         -------
         BpeTokenizer
         """
-        if isinstance(tokens, (str, bytes, bytearray, memoryview)):
-            raise TypeError(f"mojolearn: tokens must be a sequence of bytes, got {type(tokens).__name__}")
-        try:
-            toks = list(tokens)
-        except TypeError:
-            raise TypeError(f"mojolearn: tokens must be a sequence of bytes, got {type(tokens).__name__}") from None
-        blob, lengths = _blob(toks, "every token")
-        m = _binding()
-        handle = _native(m.bpe_load_tokens, [_ro(blob, "tokens"), _ro(lengths, "lengths")], [len(toks)])
-        return cls._from_handle(m, handle, "<token bytes>")
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_tokens', (cls, tokens), _TOKENIZER_CONTEXT)
 
     @classmethod
     def from_files(cls, encoder_json, vocab_bpe):
@@ -330,20 +302,7 @@ class BpeTokenizer:
             a multi-byte token no merge makes. These are the conditions under which
             merging by rank reproduces the merge list.
         """
-        with open(encoder_json, "r", encoding="utf-8") as fh:
-            encoder = json.load(fh)
-        if not isinstance(encoder, dict):
-            raise ValueError(f"mojolearn: {encoder_json} is not a JSON object of spelling to id")
-        eot_id = encoder.pop(cls.ENDOFTEXT, None)
-        n = len(encoder)
-        if eot_id is not None and eot_id != n:
-            raise ValueError(f"mojolearn: {encoder_json}: {cls.ENDOFTEXT} is id {eot_id}, not {n} (after the ranks)")
-        with open(vocab_bpe, "r", encoding="utf-8") as fh:
-            merges = fh.read()
-        m = _binding()
-        handle = _native(m.bpe_load_spelled, encoder, merges,
-                         prefix=f"mojolearn: {encoder_json} + {vocab_bpe}: ")
-        return cls._from_handle(m, handle, f"{os.path.abspath(encoder_json)} + {os.path.abspath(vocab_bpe)}")
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_files', (cls, encoder_json, vocab_bpe), _TOKENIZER_CONTEXT)
 
     @classmethod
     def _synthetic(cls):
@@ -356,17 +315,17 @@ class BpeTokenizer:
     @property
     def n_vocab(self):
         """Number of ids: the ranks plus ``<|endoftext|>``."""
-        return self._n_vocab
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_fact', (self, 'n_vocab'), _TOKENIZER_CONTEXT)
 
     @property
     def eot_token(self):
         """The id of ``<|endoftext|>``, ``n_vocab - 1``."""
-        return self._n_vocab - 1
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_fact', (self, 'eot_token'), _TOKENIZER_CONTEXT)
 
     @property
     def vocabulary_source(self):
         """Where the vocabulary was loaded from."""
-        return self._source
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_fact', (self, 'source'), _TOKENIZER_CONTEXT)
 
     @property
     def identity(self):
@@ -379,7 +338,7 @@ class BpeTokenizer:
         :mod:`mojolearn.lm_corpus` record it, so their ids are never decoded with
         another table.
         """
-        return dict(self._identity)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_fact', (self, 'identity'), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ encode
 
@@ -415,19 +374,7 @@ class BpeTokenizer:
         -------
         list of int
         """
-        if isinstance(data, str):
-            raise TypeError("mojolearn: encode_bytes takes bytes; use encode for str")
-        raw = self._text_bytes(data)
-        allow = self._flag(allow_endoftext)
-        n = len(raw)
-        if n == 0:
-            return []
-        out = array.array("i", bytes(4 * n))
-        count = int(self._m.bpe_encode(
-            self._handle, addr_ro(raw, name="text"), n, addr(out, name="ids"), n, allow))
-        if not 0 <= count <= n:
-            raise RuntimeError(f"mojolearn: bpe_encode returned {count} ids for {n} bytes")
-        return out[:count].tolist()
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_encode', (self, data, allow_endoftext, True, False), _TOKENIZER_CONTEXT)
 
     def encode(self, text, allow_endoftext=False):
         """Encode text.
@@ -443,7 +390,7 @@ class BpeTokenizer:
         -------
         list of int
         """
-        return self.encode_bytes(self._text_bytes(text), allow_endoftext)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_encode', (self, text, allow_endoftext, False, False), _TOKENIZER_CONTEXT)
 
     # The ids of each document, as a list of lists of int, in order.
     #
@@ -469,64 +416,14 @@ class BpeTokenizer:
         -------
         list of list of int
         """
-        if isinstance(documents, (str, bytes, bytearray, memoryview)):
-            raise TypeError(
-                f"mojolearn: encode_batch takes a sequence of documents, got {type(documents).__name__}"
-            )
-        try:
-            docs = list(documents)
-        except TypeError:
-            raise TypeError(
-                f"mojolearn: encode_batch takes a sequence of documents, got {type(documents).__name__}"
-            ) from None
-        allow = self._flag(allow_endoftext)
-        raws = []
-        for k, d in enumerate(docs):  # cpu-route: packs the text documents for the native encoder (text input)
-            if not isinstance(d, (str, bytes, bytearray, memoryview)):
-                raise TypeError(
-                    f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}"
-                )
-            raws.append(self._text_bytes(d))
-        n_docs = len(raws)
-        if n_docs == 0:
-            return []
-        text, lengths = _blob(raws, "every document")
-        n = len(text)
-        counts = array.array("q", bytes(8 * n_docs))
-        ids = array.array("i", bytes(4 * max(n, 1)))
-        text_buf = text if n > 0 else b"\0"
-        # The binding: the fast device encoder when it is loaded (it does not
-        # recognize <|endoftext|>), else the host binding. Same arguments.
-        m, handle = (self._m, self._handle) if allow or self._fast is None else self._fast
-        total = int(m.bpe_encode_batch(
-            handle, addr_ro(text_buf, name="text"), addr_ro(lengths, name="lengths"),
-            addr(ids, name="ids"), addr(counts, name="counts"), [n_docs, n, n, allow]))
-        if not 0 <= total <= n or sum(counts) != total:  # glue: checks the native token counts (counts-sized: per-document token counts)
-            raise RuntimeError(
-                f"mojolearn: bpe_encode_batch returned {total} ids for {n} bytes (counts sum {sum(counts)})"
-            )
-        out, at = [], 0
-        for c in counts:  # glue: splits the native token output per document (counts-sized: per-document token counts)
-            out.append(ids[at:at + c].tolist())
-            at += c
-        return out
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_encode', (self, documents, allow_endoftext, False, True), _TOKENIZER_CONTEXT)
 
     def _encode_corpus(self, data, points, document_bytes):
         """`lm_corpus._tokenize`'s work in one call (`bpe_encode_corpus`):
         `data` cut into documents by the corpus rule, each encoded alone.
         Returns `(ids int32 array, {point: id offset}, n_documents, max_id,
         ids_above_255)`."""
-        n = len(data)
-        pts = array.array("q", points)
-        ids = array.array("i", bytes(4 * max(n, 1)))
-        bounds = array.array("q", bytes(8 * max(len(pts), 1)))
-        stats = array.array("q", bytes(24))
-        total = int(_native(self._m.bpe_encode_corpus, self._handle,
-                            [_ro(data, "corpus"), addr_ro(pts, name="points"), addr(ids, name="ids"),
-                             addr(bounds, name="bounds"), addr(stats, name="stats")],
-                            [n, len(pts), int(document_bytes), n]))
-        del ids[total:]
-        return ids, dict(zip(points, bounds)), int(stats[0]), int(stats[1]), int(stats[2])
+        return _TOKENIZER_NATIVE.tokenizer_public_call('encode_corpus', (self, data, points, document_bytes), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ decode
 
@@ -552,13 +449,7 @@ class BpeTokenizer:
         -------
         bytes
         """
-        seq = self._id_list(ids)
-        if not seq:
-            return b""
-        cap = len(seq) * self._max_token_bytes
-        out = bytearray(cap)
-        count = int(_native(self._m.bpe_decode_seq, self._handle, seq, addr(out, name="text"), cap))
-        return bytes(out[:count])
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_decode', (self, ids, True, False, 'replace'), _TOKENIZER_CONTEXT)
 
     def decode(self, ids, errors="replace"):
         """Decode ids to text.
@@ -573,7 +464,7 @@ class BpeTokenizer:
         -------
         str
         """
-        return self.decode_bytes(ids).decode("utf-8", errors)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_decode', (self, ids, False, False, errors), _TOKENIZER_CONTEXT)
 
     def decode_bytes_batch(self, batch):
         """Decode several id sequences to bytes in one call.
@@ -585,26 +476,14 @@ class BpeTokenizer:
         -------
         list of bytes
         """
-        if isinstance(batch, (str, bytes, bytearray)):
-            raise TypeError(f"mojolearn: decode_bytes_batch takes a sequence of id sequences, got {type(batch).__name__}")
-        seqs = self._id_list(batch)
-        cap = sum(map(len, seqs)) * self._max_token_bytes  # glue: output capacity of the native decode (seqs-sized: token sequences)
-        out = bytearray(max(cap, 1))
-        lengths = array.array("q", bytes(8 * max(len(seqs), 1)))
-        _native(self._m.bpe_decode_batch, self._handle, seqs, addr(out, name="text"), cap,
-                addr(lengths, name="lengths"))
-        result, at = [], 0
-        for k in range(len(seqs)):  # glue: splits the native decode output per sequence (seqs-sized: token sequences)
-            result.append(bytes(out[at:at + lengths[k]]))
-            at += lengths[k]
-        return result
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_decode', (self, batch, True, True, 'replace'), _TOKENIZER_CONTEXT)
 
     def decode_batch(self, batch, errors="replace"):
         """Decode several id sequences to text: ``[decode(ids, errors) for ids in batch]``."""
-        return [b.decode("utf-8", errors) for b in self.decode_bytes_batch(batch)]  # cpu-route: decodes bytes to str per sequence (text output)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_decode', (self, batch, False, True, errors), _TOKENIZER_CONTEXT)
 
     def __repr__(self):
-        return f"BpeTokenizer(n_vocab={self._n_vocab}, vocabulary={self._source!r})"
+        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_fact', (self, 'repr'), _TOKENIZER_CONTEXT)
 
 
 class TrainedBpeVocabulary:
@@ -622,69 +501,57 @@ class TrainedBpeVocabulary:
     """
 
     def __init__(self, tokens, merges, stats):
-        self.tokens = tokens
-        self.merges = merges
-        self.stats = dict(stats)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_init', (self, tokens, merges, stats), _TOKENIZER_CONTEXT)
 
     @property
     def n_tokens(self):
         """Number of ranks; ``<|endoftext|>`` takes the id after the last one."""
-        return len(self.tokens)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'n_tokens'), _TOKENIZER_CONTEXT)
 
     @property
     def n_ties_broken(self):
         """How many merge selections had two or more pairs at the top count."""
-        return self.stats["n_ties_broken"]
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'n_ties_broken'), _TOKENIZER_CONTEXT)
 
     @property
     def tie_break(self):
         """The rule that settles equal counts, as text."""
-        return self.stats["tie_break"]
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'tie_break'), _TOKENIZER_CONTEXT)
 
     def _render(self, which):
-        blob, lengths = _blob(self.tokens, "every token")
-        left = array.array("q", map(operator.itemgetter(0), self.merges))
-        right = array.array("q", map(operator.itemgetter(1), self.merges))
-        m = _binding()
-        return _native(m.bpe_render, [_ro(blob, "tokens"), _ro(lengths, "lengths"), _ro(left, "merge_left"),
-                                      _ro(right, "merge_right")], [len(self.tokens), len(self.merges), which])
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_render', (self, which), _TOKENIZER_CONTEXT)
 
     # OUR format as text: `rank<TAB>hex_of_token_bytes` per line
     # (`tokenizer/train/emit.mojo::render_ranks`).
     def render_ranks(self):
         """The vocabulary as rank-file text: ``rank<TAB>hex_of_token_bytes`` per line."""
-        return self._render(0)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_render', (self, 0), _TOKENIZER_CONTEXT)
 
     # A `tokenizer.json` Hugging Face `tokenizers` loads, as text
     # (`tokenizer/train/emit.mojo::render_tokenizer_json`).
     def render_tokenizer_json(self):
         """The vocabulary as Hugging Face ``tokenizer.json`` text, loadable by the ``tokenizers`` library."""
-        return self._render(1)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_render', (self, 1), _TOKENIZER_CONTEXT)
 
     def write_ranks(self, path):
         """Write :meth:`render_ranks` to ``path`` and return ``path``."""
-        with open(path, "w", encoding="ascii", newline="\n") as fh:
-            fh.write(self.render_ranks())
-        return path
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_write', (self, 0, path), _TOKENIZER_CONTEXT)
 
     def write_tokenizer_json(self, path):
         """Write :meth:`render_tokenizer_json` to ``path`` and return ``path``."""
-        with open(path, "w", encoding="ascii", newline="\n") as fh:
-            fh.write(self.render_tokenizer_json())
-        return path
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_write', (self, 1, path), _TOKENIZER_CONTEXT)
 
     @property
     def identity(self):
         """The :attr:`BpeTokenizer.identity` of this vocabulary, without loading it."""
-        return _identity_from_tokens_text(self.render_ranks(), self.n_tokens)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'identity'), _TOKENIZER_CONTEXT)
 
     def tokenizer(self):
         """A :class:`BpeTokenizer` over this vocabulary, without writing a file."""
-        return BpeTokenizer.from_token_bytes(self.tokens)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_tokenizer', (self,), _TOKENIZER_CONTEXT)
 
     def __repr__(self):
-        return (f"TrainedBpeVocabulary(n_tokens={self.n_tokens}, "
-                f"n_merges={len(self.merges)}, n_ties_broken={self.n_ties_broken})")
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'repr'), _TOKENIZER_CONTEXT)
 
 
 # Train a byte-level BPE vocabulary, deterministically.
@@ -749,24 +616,7 @@ class BpeVocabularyTrainer:
     _BACKENDS = ("auto", "mojo")
 
     def __init__(self, vocab_size=32000, min_frequency=2, backend="auto"):
-        if not isinstance(vocab_size, int) or isinstance(vocab_size, bool):
-            raise TypeError(f"mojolearn: vocab_size must be an int, got {type(vocab_size).__name__}")
-        if vocab_size < 256:
-            raise ValueError(
-                f"mojolearn: vocab_size {vocab_size} is below the 256 single-byte tokens; "
-                "byte-level BPE needs every byte")
-        if not isinstance(min_frequency, int) or isinstance(min_frequency, bool):
-            raise TypeError(f"mojolearn: min_frequency must be an int, got {type(min_frequency).__name__}")
-        if min_frequency < 1:
-            raise ValueError(f"mojolearn: min_frequency {min_frequency} must be at least 1")
-        if backend == "python":
-            raise ValueError("mojolearn: backend='python' is gone: the Python BPE trainer is a verification "
-                             "oracle (mojolearn._bpe_trainer.train), not a run-time route; use backend='auto'")
-        if backend not in self._BACKENDS:
-            raise ValueError(f"mojolearn: backend must be one of {self._BACKENDS}, got {backend!r}")
-        self.vocab_size = vocab_size
-        self.min_frequency = min_frequency
-        self.backend = backend
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trainer_init', (self, vocab_size, min_frequency, backend), _TOKENIZER_CONTEXT)
 
     def train(self, documents):
         """Train on ``documents``.
@@ -780,117 +630,40 @@ class BpeVocabularyTrainer:
         -------
         TrainedBpeVocabulary
         """
-        if isinstance(documents, (str, bytes, bytearray, memoryview)):
-            raise TypeError(
-                f"mojolearn: train takes a sequence of documents, got {type(documents).__name__}; "
-                "wrap a single document in a list")
-        try:
-            docs = list(documents)
-        except TypeError:
-            raise TypeError(
-                f"mojolearn: train takes a sequence of documents, got {type(documents).__name__}"
-            ) from None
-        if not docs:
-            raise ValueError("mojolearn: train needs at least one document")
-        raws = []
-        for k, d in enumerate(docs):  # cpu-route: packs the text documents for the native encoder (text input)
-            if isinstance(d, str):
-                raws.append(d.encode("utf-8"))
-            elif isinstance(d, (bytes, bytearray, memoryview)):
-                raws.append(bytes(d))
-            else:
-                raise TypeError(
-                    f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}")
-        # The binding: the fast device trainer when it is loaded and takes this
-        # vocab_size (outside the sabotage arm), else the host binding.
-        fast, train, _encode, max_vocab = _fast_binding()
-        sabotaged = _bpe_trainer.sabotaged()
-        native = fast if train and not sabotaged and self.vocab_size <= max_vocab else _native_trainer(required=True)
-        tokens, merges, stats = _train_native(native, raws, self.vocab_size, self.min_frequency, sabotaged)
-        stats["backend"] = "mojo"
-        return TrainedBpeVocabulary(tokens, merges, stats)
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trainer_train', (self, documents), _TOKENIZER_CONTEXT)
 
     def __repr__(self):
-        return (f"BpeVocabularyTrainer(vocab_size={self.vocab_size}, "
-                f"min_frequency={self.min_frequency}, backend={self.backend!r})")
+        return _TOKENIZER_NATIVE.tokenizer_public_call('trainer_repr', (self,), _TOKENIZER_CONTEXT)
 
 
 def _native_trainer(required):
     """The binding when it exports `bpe_train`, else None (or the reason,
     raised, when `required`)."""
-    try:
-        module = _backend.load_host_module(_EXTENSION)  # cpu-route: tokenizer host binding module loaded once by load_host_module (vocabulary training on text)
-    except (ImportError, AttributeError) as exc:
-        if required:
-            raise ImportError(f"mojolearn: backend='mojo' needs the tokenizer host binding: {exc}") from exc
-        return None
-    if not all(hasattr(module, n) for n in ("bpe_train", "bpe_trained_sizes", "bpe_trained_copy")):  # glue: checks three trainer binding entries
-        if required:
-            raise ImportError("mojolearn: backend='mojo': this tokenizer binding predates bpe_train; rebuild it")
-        return None
-    return module
+    return _TOKENIZER_NATIVE.tokenizer_public_call('native_trainer', (required,), _TOKENIZER_CONTEXT)
 
 
 def _train_native(module, raws, vocab_size, min_frequency, break_ties_high):
     """`(tokens, merges, stats)` from the Mojo trainer: one crossing in (the
     documents back to back with int64 lengths), one out (the token bytes,
     lengths and merge ids)."""
-    text, lengths = _blob(raws, "every document")
-    n = len(text)
-    handle = _native(module.bpe_train, addr_ro(text, name="documents") if n else 0,
-                     addr_ro(lengths, name="lengths"),
-                     [len(raws), n, int(vocab_size), int(min_frequency), bool(break_ties_high)])
-    return _read_trained(module, handle, vocab_size, min_frequency)
+    return _TOKENIZER_NATIVE.tokenizer_public_call('train_native', (module, raws, vocab_size, min_frequency, break_ties_high), _TOKENIZER_CONTEXT)
 
 
 def _read_trained(module, handle, vocab_size, min_frequency):
-    n_tokens, arena_bytes, n_merges, n_ties, n_groups = (int(x) for x in module.bpe_trained_sizes(handle))  # glue: unpacks five trainer sizes
-    arena = bytearray(max(arena_bytes, 1))
-    lengths = array.array("q", [0]) * n_tokens
-    left = array.array("q", [0]) * max(n_merges, 1)
-    right = array.array("q", [0]) * max(n_merges, 1)
-    module.bpe_trained_copy(handle, addr(arena, name="arena"), addr(lengths, name="lengths"),
-                            addr(left, name="merge_left"), addr(right, name="merge_right"))
-    # The result as the public shape: token bytes by rank, merges as
-    # (left, right, new) ids.
-    tokens, at = [], 0
-    for m in lengths:  # glue: splits the native trained token arena (lengths-sized: trained token lengths)
-        tokens.append(bytes(arena[at:at + m]))
-        at += m
-    merges = list(zip(left[:n_merges], right[:n_merges], range(256, 256 + n_merges)))
-    stats = {
-        "n_tokens": n_tokens,
-        "n_merges": n_merges,
-        "n_groups": n_groups,
-        "n_ties_broken": n_ties,
-        "tie_break": _bpe_trainer.TIE_BREAK,
-        "vocab_size": vocab_size,
-        "min_frequency": min_frequency,
-    }
-    return tokens, merges, stats
+    return _TOKENIZER_NATIVE.tokenizer_public_call('read_trained', (module, handle, vocab_size, min_frequency), _TOKENIZER_CONTEXT)
 
 
 def _train_corpus(data, points, lo, hi, document_bytes, vocab_size, min_frequency):
     """`lm_corpus`'s vocabulary: the documents of `data[lo:hi]` (cut by the
     corpus rule in Mojo, `bpe_train_corpus`) trained in the same call.
     `points` are the corpus's sorted split points."""
-    module = _native_trainer(required=True)
-    pts = array.array("q", points)
-    n = len(data)
-    handle = _native(module.bpe_train_corpus, [_ro(data, "corpus"), _ro(pts, "points")],
-                     [n, len(pts), int(lo), int(hi), int(document_bytes), int(vocab_size), int(min_frequency),
-                      bool(_bpe_trainer.sabotaged())])
-    tokens, merges, stats = _read_trained(module, handle, vocab_size, min_frequency)
-    stats["backend"] = "mojo"
-    return TrainedBpeVocabulary(tokens, merges, stats)
+    return _TOKENIZER_NATIVE.tokenizer_public_call('train_corpus', (data, points, lo, hi, document_bytes, vocab_size, min_frequency), _TOKENIZER_CONTEXT)
 
 
 def _gather_rows(ids_all, out, batch, length, lo, modulus, base):
     """`out[b] = ids_all[lo + (base + b*length) % modulus : + length + 1]`
     for every row b, in one binding call (int32 buffers by address)."""
-    m = _binding()
-    return _native(m.tokens_gather_rows, [addr_ro(ids_all, name="ids"), addr(out, name="out")],
-                   [int(ids_all.size), int(batch), int(length), int(lo), int(modulus), int(base)])
+    return _TOKENIZER_NATIVE.tokenizer_public_call('gather_rows', (ids_all, out, batch, length, lo, modulus, base), _TOKENIZER_CONTEXT)
 
 
 #: Renamed classes still importable under their old name, {old: new}.
@@ -910,3 +683,21 @@ def __getattr__(name):
             DeprecationWarning, stacklevel=2)
         return globals()[new]
     raise AttributeError(f"module 'mojolearn.tokenizer' has no attribute {name!r}")
+
+
+# Import-time binding connection, shared by all public operations. Fast's
+# existing optional route is retained; no Python mode lookup runs per call.
+import _codecs as _tokenizer_codecs
+from ._native_loaded_modules import connect_module as _connect_tokenizer_module
+from ._array import Array as _Array
+from ._native_classical_bridge import _numpy_free_context
+_connect_tokenizer_module("_codecs", _tokenizer_codecs, ("lookup_error",))
+_TOKENIZER_NATIVE = _binding()._module
+_TOKENIZER_FAST = _fast_binding(connect_all=True)
+_TOKENIZER_FAST_ENTRIES = tuple(
+    getattr(_TOKENIZER_FAST[0], name, None) for name in
+    ("bpe_fast_load", "bpe_encode_batch", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy"))
+_TOKENIZER_CONTEXT = (BpeTokenizer, TrainedBpeVocabulary, BpeVocabularyTrainer,
+                      _TOKENIZER_NATIVE, _TOKENIZER_FAST, _TOKENIZER_FAST_ENTRIES,
+                      vars(_backend), _numpy_free_context())
+_TOKENIZER_NATIVE.tokenizer_public_call("connect_bpe", (), _TOKENIZER_CONTEXT)

@@ -1,0 +1,219 @@
+[
+  {
+    "file": "python/mojolearn/_x_sequence_var.py",
+    "cls": "VARResults",
+    "operation": "__init__",
+    "line": 46,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_var.py",
+    "cls": "VARResults",
+    "operation": "forecast",
+    "line": 49,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_var.py",
+    "cls": "VAR",
+    "operation": "__init__",
+    "line": 98,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_var.py",
+    "cls": "VAR",
+    "operation": "fit",
+    "line": 101,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_stl.py",
+    "cls": "DecomposeResult",
+    "operation": "__init__",
+    "line": 26,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_stl.py",
+    "cls": "STL",
+    "operation": "__init__",
+    "line": 86,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_stl.py",
+    "cls": "STL",
+    "operation": "config",
+    "line": 92,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_stl.py",
+    "cls": "STL",
+    "operation": "fit",
+    "line": 96,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "__init__",
+    "line": 445,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "fit",
+    "line": 474,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "mu_",
+    "line": 503,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "beta_",
+    "line": 507,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "ar_",
+    "line": 511,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "ma_",
+    "line": 515,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "sar_",
+    "line": 519,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "sma_",
+    "line": 523,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "sigma2_",
+    "line": 527,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "predict",
+    "line": 554,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "forecast",
+    "line": 593,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "save",
+    "line": 629,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "load",
+    "line": 646,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_arima_impl.py",
+    "cls": "ARIMA",
+    "operation": "__repr__",
+    "line": 666,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_autoarima.py",
+    "cls": "AutoARIMA",
+    "operation": "__init__",
+    "line": 81,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution",
+    "note": "constructor delegates as a single expression statement"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_autoarima.py",
+    "cls": "AutoARIMA",
+    "operation": "search",
+    "line": 84,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_autoarima.py",
+    "cls": "AutoARIMA",
+    "operation": "fit",
+    "line": 145,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_autoarima.py",
+    "cls": "AutoARIMA",
+    "operation": "predict",
+    "line": 176,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  },
+  {
+    "file": "python/mojolearn/_x_sequence_autoarima.py",
+    "cls": "AutoARIMA",
+    "operation": "forecast",
+    "line": 195,
+    "one_native_call": true,
+    "coverage": "source AST only; no installed/runtime execution"
+  }
+]

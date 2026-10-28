@@ -2834,6 +2834,9 @@ class _PLS(RegressorScoreMixin, _Base):
     `_get_first_singular_vectors_power_method`, `_center_scale_xy`,
     `_get_first_singular_vectors_svd` (PLSCanonical algorithm='svd'),
     `_svd_flip_1d`, `transform`, `inverse_transform`, `predict`."""
+    # The native PLS envelope preserves _mode/_sk_validate lifecycle and
+    # public result handling; no Python decorators surround these operations.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"
     _sklearn_target_tags = {"multi_output": True}
@@ -2959,7 +2962,7 @@ class _PLS(RegressorScoreMixin, _Base):
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
         return _PLS_CALL(self, "score",
-                         (X, y, sample_weight, _get_binding(getattr(self, "numeric_mode", None))), _PLS_CONTEXT)
+                         (X, y, sample_weight), _PLS_CONTEXT)
 
 
 # NIPALS, mode A, regression deflation.
@@ -4102,7 +4105,7 @@ class Isomap(_Base):
         self
         """
         return _NATIVE(self, "family_mani_iso_fit",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the model and return ``embedding_``.
@@ -4117,7 +4120,7 @@ class Isomap(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_iso_fit_transform",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new points.
@@ -4140,7 +4143,7 @@ class Isomap(_Base):
             With ``radius``, if a query has no training point within it.
         """
         return _NATIVE(self, "family_mani_iso_transform",
-                       (_manifold_binding(self, "numeric_mode_"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X), _NATIVE_CONTEXT)
 
     def reconstruction_error(self):
         """Return the reconstruction error of the embedding.
@@ -4154,7 +4157,7 @@ class Isomap(_Base):
         float
         """
         return _NATIVE(self, "family_mani_iso_reconstruction_error",
-                       (_manifold_binding(self, "numeric_mode_"), _backend.binding(_BINDING)), _NATIVE_CONTEXT)
+                       (None, None), _NATIVE_CONTEXT)
 # Reference: scikit-learn `manifold/_classical_mds.py`.
 class ClassicalMDS(_Base):
     """Classical (Torgerson) multidimensional scaling.
@@ -4214,7 +4217,7 @@ class ClassicalMDS(_Base):
         self
         """
         return _NATIVE(self, "family_mani_cmds_fit",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
@@ -4229,7 +4232,7 @@ class ClassicalMDS(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_cmds_fit_transform",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 # Reference: scikit-learn `manifold/_mds.py`, `_smacof_single`, `smacof`.
 # Random starts come from the Philox stream. init='random' is the default
 # sklearn's FutureWarning names. Non-metric: the disparities are the
@@ -4327,7 +4330,7 @@ class MDS(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_mds_fit_transform",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X, init), _NATIVE_CONTEXT)
+                       (None, None, X, init, y), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, init=None):
         """Compute the embedding.
@@ -4344,7 +4347,7 @@ class MDS(_Base):
         self
         """
         return _NATIVE(self, "family_mani_mds_fit",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X, init), _NATIVE_CONTEXT)
+                       (None, None, X, init, y), _NATIVE_CONTEXT)
 # LocallyLinearEmbedding's shift-invert route (`_lle_smallest`) and its
 # policy run in the compiled owner (bindings/mani_decomp_native.mojo).
 
@@ -4444,7 +4447,7 @@ class LocallyLinearEmbedding(_Base):
         self
         """
         return _NATIVE(self, "family_mani_lle_fit",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
@@ -4459,7 +4462,7 @@ class LocallyLinearEmbedding(_Base):
         ndarray of shape (n_samples, n_components), float32
         """
         return _NATIVE(self, "family_mani_lle_fit_transform",
-                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new points.
@@ -4477,14 +4480,7 @@ class LocallyLinearEmbedding(_Base):
         ndarray of shape (n_queries, n_components), float32
         """
         return _NATIVE(self, "family_mani_lle_transform",
-                       (_manifold_binding(self, "numeric_mode_"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
-
-
-def _manifold_binding(model, field):
-    """The decomp binding of a manifold estimator's numeric mode (`field`:
-    "numeric_mode" for a fit, the fitted "numeric_mode_" after one; None is
-    the default mode). Binding acquisition only."""
-    return _backend.binding(_BINDING, getattr(model, field, None))
+                       (None, None, X), _NATIVE_CONTEXT)
 
 
 # The compiled family owner, connected once at import: every public method
@@ -5101,10 +5097,12 @@ _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibat
 
 # The native PLS owner (bindings/pls_native.mojo): PLSRegression, PLSCanonical, CCA.
 # `score` runs R^2 through the native metrics owner (family_mcls_r2) inside
-# the same call; `_get_binding` resolves the metrics binding, as r2_score did.
-from ._metrics_impl import _get_binding  # noqa: E402
+# the same call. Import connects the metrics tables; the native PLS owner
+# selects and checks the current binding after entering compiled code.
+from . import _metrics_impl as _pls_metrics  # noqa: E402,F401
+_native_family_bridge.connect_bindings("_mojolearn_metrics")
 _PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_class=PLSRegression,
-                                              pls_canonical_class=PLSCanonical,
+                                              pls_canonical_class=PLSCanonical, pls_cca_class=CCA,
                                               pls_metric_owner=_native_family_bridge.connect())
 
 
@@ -5130,3 +5128,9 @@ _DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({
     "FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis,
     "LatentDirichletAllocation": LatentDirichletAllocation,
     "GaussianRandomProjection": GaussianRandomProjection, "SparseRandomProjection": SparseRandomProjection})
+# Import-time connection of the complete native manifold lifecycle envelopes.
+# Keep these at EOF so retained constructor injection locations remain stable.
+_native_runtime_manifold_bridge.connect_lifecycle(Isomap)
+_native_runtime_manifold_bridge.connect_lifecycle(ClassicalMDS)
+_native_runtime_manifold_bridge.connect_lifecycle(MDS)
+_native_runtime_manifold_bridge.connect_lifecycle(LocallyLinearEmbedding)

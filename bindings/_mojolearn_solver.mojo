@@ -37,6 +37,8 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from hierarchy.solver_descriptor_device import HIERARCHY_SOLVER_DEVICE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from checks.vendor import COMPILED_VENDOR
 
@@ -51,6 +53,11 @@ comptime _DEVCTX_SLOT = "MojoSolverContextIdentical" if _DEVCTX_MODE == _DEVCTX_
 
 from hierarchy.estimator import linkage_fit_host
 from solver.estimator import cd_fit_host, cd_predict_host
+
+
+def hierarchy_solver_native_api_v1_binding() raises -> PythonObject:
+    var api = HIERARCHY_SOLVER_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -283,6 +290,7 @@ def build__mojolearn_solver() -> PythonObject:
         m.def_function[cd_fit_binding]("cd_fit")
         m.def_function[cd_predict_binding]("cd_predict")
         m.def_function[linkage_fit_binding]("linkage_fit")
+        m.def_function[hierarchy_solver_native_api_v1_binding]("hierarchy_solver_native_api_v1")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_solver: ", e))

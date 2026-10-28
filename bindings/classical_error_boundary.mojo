@@ -9,6 +9,8 @@ from bindings.native_error_class import error_without_class
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.py_balanced import py_type, py_get, py_contains
+from bindings.native_loaded_module import native_loaded_module
+from bindings.classical_exceptions import classical_not_fitted_class
 
 
 def _classical_error_class(args_ptr: PyObjectPtr, key: String) raises -> PyObjectPtr:
@@ -18,10 +20,14 @@ def _classical_error_class(args_ptr: PyObjectPtr, key: String) raises -> PyObjec
     var host = py_get(context, "classical_host_context")
     if host is not None:
         var model = PythonObject(from_borrowed=cpy.PyTuple_GetItem(args_ptr, 0))
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var cls = model if py_type(model) is b.type else py_type(model)
         if py_contains(host["classical_kinds"], cls):
             root = causal_borrowed_item(root, "classical_host_context")
+    if key == "active_not_fitted_class":
+        # Recheck at the exception construction boundary too: some owners
+        # emit the fitted-state error directly, without selecting a class.
+        _ = classical_not_fitted_class(PythonObject(from_borrowed=root))
     # The active call owns its root/host dictionaries and the returned class.
     return causal_borrowed_item(root, key)
 

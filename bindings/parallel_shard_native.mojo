@@ -37,7 +37,7 @@ from bindings.classifier_public_lifecycle import classifier_after_fit, classifie
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.parallel_public_result import parallel_public_result
 from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit
-from bindings.family_common import family_call, family_as_f32, family_view
+from bindings.family_common import family_call, family_as_f32, family_view, family_f32_snapshot
 from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
     process_pool_close,
@@ -124,13 +124,14 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
     var rps = args[3]
     if py_type(rps) is not b.int or Int(py=rps) < 1:
         raise Error("ValueError: rows_per_shard must be a positive int")
-    var x = family_as_f32(args[1], 2, "X", context)
+    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = x_meta.keep
     var d = Int(py=x.shape[1])
     if d != Int(py=fields["n_features_in_"]):
         raise Error("ValueError: X has " + String(d) + " features, the fit had " + String(Int(py=fields["n_features_in_"])))
     var rows = Int(py=x.shape[0])
     if rows == 0:
-        return _rbf_transform(estimator, Python.tuple(args[4], x), context)
+        return _rbf_transform(estimator, Python.tuple(args[4], x), context, x_meta)
     var n_devices = shard_devices(args[2])
     var ranges = shard_ranges(rows, rps, "rows_per_shard", "")
     var state = shard_state(fields, b.frozenset(Python.list("_resident_holder")), context)
@@ -1113,7 +1114,8 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var args = request[2]
     if operation == "rbf_rows":
         var model = shard_model(_t("rbf_class"), state)
-        return _rbf_transform(model, Python.tuple(_worker_binding("_mojolearn_kernel_methods"), args[0]), context)
+        var rows_meta = family_f32_snapshot(args[0], 2, "X", context, True)
+        return _rbf_transform(model, Python.tuple(_worker_binding("_mojolearn_kernel_methods"), rows_meta.keep), context, rows_meta)
     if operation == "scaler_fit":
         var kind = String(state[0])
         var model = py_call(b.object.__new__, _t(kind + "_class"))

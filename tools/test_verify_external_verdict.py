@@ -14,25 +14,17 @@ fail three ways at once:
   * the floor was `ident > 0`, so ONE IDENTICAL cell among forty ONE-COLUMN
     prints read PASS.
 
-Each test below builds the input that SHOULD fail. They run the verdict
-script exactly as the shell runs it, lifted out of the heredoc, so they
-cannot drift from the shipped text.
+Each test below builds the input that SHOULD fail. They call the same
+verdict function as the external runner, without executing ML workloads.
 """
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-SH = Path(__file__).resolve().parent / "verify_external.sh"
-
-
-def _verdict_source():
-    m = re.search(r"<<'PY'\n(.*?)\nPY\n", SH.read_text(), re.S)
-    assert m, "verify_external.sh no longer carries its verdict heredoc"
-    return m.group(1)
+TOOLS = Path(__file__).resolve().parent
 
 
 def _verdict(tmp_path, column, diff_text, diff_rc=0):
@@ -40,9 +32,10 @@ def _verdict(tmp_path, column, diff_text, diff_rc=0):
     col.write_text(json.dumps(column))
     txt = tmp_path / "diff.txt"
     txt.write_text(diff_text)
-    script = tmp_path / "verdict.py"
-    script.write_text(_verdict_source())
-    p = subprocess.run([sys.executable, str(script), str(col), str(txt), str(diff_rc)],
+    code = ("import sys; sys.path.insert(0, sys.argv[1]); "
+            "from verify_external import verdict; "
+            "raise SystemExit(verdict(sys.argv[2], sys.argv[3], int(sys.argv[4])))")
+    p = subprocess.run([sys.executable, "-c", code, str(TOOLS), str(col), str(txt), str(diff_rc)],
                        capture_output=True, text=True)
     return p.returncode, p.stdout + p.stderr
 
@@ -71,6 +64,11 @@ def test_a_clean_column_still_passes(tmp_path):
     rc, out = _verdict(tmp_path, _column(), _clean_diff())
     assert rc == 0, out
     assert "VERDICT: PASS" in out
+
+
+def test_an_empty_column_cannot_pass(tmp_path):
+    rc, out = _verdict(tmp_path, _column(0), _clean_diff(0))
+    assert rc == 1 and "no cells" in out
 
 
 def test_a_divergent_train_cell_still_fails(tmp_path):
@@ -129,15 +127,15 @@ def test_a_nonzero_diff_exit_fails(tmp_path):
     assert "the diff itself exited 1" in out
 
 
-def test_neither_run_nor_diff_output_goes_through_a_pipe():
-    """`$?` after `cmd | tee FILE` is TEE's. This is `#!/bin/sh`, where
-    neither `pipefail` nor `PIPESTATUS` is portable, so the shipped text must
-    not pipe either command at all."""
-    text = SH.read_text()
-    piped = [l for l in text.splitlines()
-             if "identity_break.py" in l and "| tee" in l]
-    assert not piped, piped
-    assert "DIFF_RC=$?" in text and "RUN_RC=$?" in text
+def test_logged_process_retains_failure_status_and_complete_output(tmp_path):
+    sys.path.insert(0, str(TOOLS))
+    from verify_external import run_logged
+    log = tmp_path / "run.log"
+    rc = run_logged([sys.executable, "-c",
+                     "import sys; print('retained stdout'); "
+                     "print('retained stderr', file=sys.stderr); sys.exit(17)"], log)
+    assert rc == 17
+    assert "retained stdout" in log.read_text() and "retained stderr" in log.read_text()
 
 
 def test_an_incomplete_or_partial_column_fails(tmp_path):

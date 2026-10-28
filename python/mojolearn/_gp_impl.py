@@ -168,10 +168,10 @@ class Kernel:
     """
 
     def __add__(self, other):
-        return _Combined(self, other, _K_SUM, "+")
+        return _NATIVE(self, "family_gp_kernel_add", (other,), _NATIVE_CONTEXT)
 
     def __mul__(self, other):
-        return _Combined(self, other, _K_PROD, "*")
+        return _NATIVE(self, "family_gp_kernel_mul", (other,), _NATIVE_CONTEXT)
 
     def _nodes(self):
         """Postfix list of `(kind, param, length_scales)` tuples."""
@@ -205,7 +205,7 @@ class Kernel:
     @property
     def n_dims(self):
         """Number of free hyperparameters (the length of `theta`)."""
-        return len(self._free_values())
+        return _NATIVE(self, "family_gp_kernel_n_dims", (), _NATIVE_CONTEXT)
 
     @property
     def theta(self):
@@ -213,19 +213,16 @@ class Kernel:
 
         On a fitted ``kernel_`` this is the optimizer's own theta.
         """
-        fitted = getattr(self, "_theta_fit", None)
-        if fitted is not None:
-            return list(fitted)
-        return [math.log(v) for v in self._free_values()]  # glue: sklearn theta API, log of free kernel hyperparameters (n_dims entries)
+        return _NATIVE(self, "family_gp_kernel_theta", (), _NATIVE_CONTEXT)
 
     @property
     def bounds(self):
         """Natural log of each free hyperparameter's ``(low, high)`` bounds,
         as a list of ``[low, high]`` pairs."""
-        return [[math.log(lo), math.log(hi)] for lo, hi in self._free_bounds()]  # glue: sklearn bounds API, log of kernel hyperparameters (n_dims entries) bounds
+        return _NATIVE(self, "family_gp_kernel_bounds", (), _NATIVE_CONTEXT)
 
     def __repr__(self):
-        return self._name()
+        return _NATIVE(self, "family_gp_kernel_repr", (), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `kernels.py:1187`.
@@ -251,8 +248,7 @@ class ConstantKernel(Kernel):
     """
 
     def __init__(self, constant_value=1.0, constant_value_bounds=_DEFAULT_BOUNDS):
-        self.constant_value = float(constant_value)
-        self.constant_value_bounds = _as_bounds(constant_value_bounds, 1, "ConstantKernel")
+        _NATIVE(self, "family_gp_kernel_initialize", (constant_value, constant_value_bounds), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(_K_CONST, self.constant_value, [])]
@@ -294,8 +290,7 @@ class WhiteKernel(Kernel):
     """
 
     def __init__(self, noise_level=1.0, noise_level_bounds=_DEFAULT_BOUNDS):
-        self.noise_level = float(noise_level)
-        self.noise_level_bounds = _as_bounds(noise_level_bounds, 1, "WhiteKernel")
+        _NATIVE(self, "family_gp_kernel_initialize", (noise_level, noise_level_bounds), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(_K_WHITE, self.noise_level, [])]
@@ -338,8 +333,7 @@ class RBF(Kernel):
     """
 
     def __init__(self, length_scale=1.0, length_scale_bounds=_DEFAULT_BOUNDS):
-        self.length_scale = _as_length_scale(length_scale, "RBF")
-        self.length_scale_bounds = _as_bounds(length_scale_bounds, len(self.length_scale), "RBF")
+        _NATIVE(self, "family_gp_kernel_initialize", (length_scale, length_scale_bounds), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(_K_RBF, 0.0, list(self.length_scale))]
@@ -389,9 +383,7 @@ class Matern(Kernel):
     """
 
     def __init__(self, length_scale=1.0, length_scale_bounds=_DEFAULT_BOUNDS, nu=1.5):
-        self.length_scale = _as_length_scale(length_scale, "Matern")
-        self.length_scale_bounds = _as_bounds(length_scale_bounds, len(self.length_scale), "Matern")
-        self.nu = float(nu)
+        _NATIVE(self, "family_gp_kernel_initialize", (length_scale, length_scale_bounds, nu), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(_K_MATERN, self.nu, list(self.length_scale))]
@@ -412,14 +404,7 @@ class Matern(Kernel):
 
 class _Combined(Kernel):
     def __init__(self, a, b, op, sym):
-        if not isinstance(a, Kernel) or not isinstance(b, Kernel):
-            raise TypeError(
-                "mojolearn gaussian process kernels compose only with each "
-                "other; sklearn's magnitude-scaling shorthand "
-                "`2.0 * RBF(...)` is spelled ConstantKernel(2.0) * RBF(...) "
-                "here, so the constant that runs is one you constructed"
-            )
-        self.a, self.b, self.op, self.sym = a, b, op, sym
+        _NATIVE(self, "family_gp_kernel_initialize", (a, b, op, sym), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return self.a._nodes() + self.b._nodes() + [(self.op, 0.0, [])]
@@ -441,7 +426,7 @@ class _SavedKernel(Kernel):
     handed it (the neighbors and density inference lane, 2026-09-15)."""
 
     def __init__(self, nodes):
-        self.__nodes = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]  # glue: copies the kernel's postfix nodes
+        _NATIVE(self, "family_gp_kernel_initialize", (nodes,), _NATIVE_CONTEXT)
 
     def _nodes(self):
         return [(k, p, list(ls)) for k, p, ls in self.__nodes]  # glue: copies the kernel's postfix nodes
@@ -477,6 +462,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # GaussianProcessRegressor's fit, predict, sample_y, log_marginal_likelihood
 # and score are one native call each (bindings/gp_regressor_native.mojo).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.connect_bindings("_mojolearn_gp")
 
 #: Each kernel class's postfix node layout, the fields its `_nodes()` reads:
 #: ("leaf", kind, param field or None for 0.0, length-scale field or None),
@@ -658,6 +644,10 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     _BINDING = "_mojolearn_gp"
 
+    # The native public owner replaces _mode lifecycle/output decorators.
+    # The shared full-reset installer still owns the field-only constructor.
+    _mojolearn_native_public = True
+
     def __init__(
         self,
         kernel=None,
@@ -669,6 +659,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         copy_X_train=True,
         n_targets=None,
         random_state=None,
+        numeric_mode=None,
     ):
         # Stored verbatim, as scikit-learn requires; `_validate_params`
         # checks them when `fit` (or `load`) runs.
@@ -680,6 +671,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         self.copy_X_train = copy_X_train
         self.n_targets = n_targets
         self.random_state = random_state
+        self.numeric_mode = numeric_mode
 
     # -- the binding, and the tier it really is -----------------------------
 
@@ -730,7 +722,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             The fitted model. Check ``info_ == 0``: a failed Cholesky
             factorization is reported there rather than raised.
         """
-        return _NATIVE(self, "family_gp_gpr_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_fit", (None, X, y), _NATIVE_CONTEXT)
 
     # -- the optimizer (DEVIATIONS 2880, 2881) -------------------------------
 
@@ -778,7 +770,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         ``normalize_y=True`` the mean, standard deviation and covariance are
         scaled back to the units of y.
         """
-        return _NATIVE(self, "family_gp_gpr_predict", (self._bind(), X, return_std, return_cov), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_predict", (None, X, return_std, return_cov), _NATIVE_CONTEXT)
 
     # -- saved models -----------------------------------------------------------
 
@@ -847,7 +839,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         gradient : list of float
             Only with ``eval_gradient=True``.
         """
-        return _NATIVE(self, "family_gp_gpr_lml", (self._bind(), theta, eval_gradient, clone_kernel), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_lml", (None, theta, eval_gradient, clone_kernel), _NATIVE_CONTEXT)
 
     # DEVIATION 2793 (`gaussian_process/checks/sample_y.mojo`) names the
     # stream, the jitter and the order: the covariance `k(X, X) - V^T V` is
@@ -886,7 +878,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             If the model is not fitted (sampling the unfitted prior is not
             supported).
         """
-        return _NATIVE(self, "family_gp_gpr_sample_y", (self._bind(), X, n_samples, random_state), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_sample_y", (None, X, n_samples, random_state), _NATIVE_CONTEXT)
 
     # Host float64 summary of float32 predictions, outside the identity
     # claim (the SVR.score rule).
@@ -907,7 +899,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         -------
         float
         """
-        return _NATIVE(self, "family_gp_gpr_score", (self._bind(), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_gp_gpr_score", (None, X, y), _NATIVE_CONTEXT)
 
 
 # The file: see `_GP_FORMAT`. The kernel step comes first: `save` read the
@@ -941,3 +933,7 @@ _native_family_bridge.tables(
     family_gp_seed_bound=2 ** 64,
     family_gp_scaler=(StandardScaler, _STANDARD_CONTEXT),
 )
+
+# Import-time native owner identities for constructor reinitialization.
+from ._native_owner_lifetime import connect_owner_context as _connect_kernel_owners
+_connect_kernel_owners(_NATIVE_CONTEXT)

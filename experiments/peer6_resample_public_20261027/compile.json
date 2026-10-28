@@ -1,0 +1,42 @@
+{
+  "base_commit": "3e1defd3a0f7633057f6d098a23a8c1d303d4fda",
+  "exit_code": 0,
+  "target": "apple-m1 CPU column",
+  "workers": 10,
+  "cpu_allocation": 10,
+  "flags": [
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "fixture": "checks/resample_public_compile.mojo",
+  "scope": "rs_operation with bootstrap, permutation_test, monte_carlo_integrate, resample_indices binding/admission/input/result paths; compile only. Legacy row resample compiled but not migrated.",
+  "runtime_executed": false,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-20261027/resample-public.so",
+  "artifact_sha256": "1aa00786f0819e148361fb1991093b5385bf899c9a6b22eb792ace6362562114",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-20261027/source-bytes.tgz",
+  "source_archive_sha256": "a63fc00b5adc0858601cd3d1aebc24e5af45d8105b7ba6bae7f40a702d9d5d8f",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-20261027/source-manifest.json",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-resample-20261027/compile.log",
+  "earlier_attempt_logs": [
+    "/Users/andrewhendel/mojolearn-evidence/peer6-resample-20261027/compile-attempt1.log",
+    "/Users/andrewhendel/mojolearn-evidence/peer6-resample-20261027/compile-attempt2.log"
+  ],
+  "pending": [
+    "GPU compilation",
+    "Runtime/identity verification excluded by owner",
+    "General resample row gather native conversion preserving pandas/object dtype semantics",
+    "Public result constructors",
+    "Transitive metadata capture-once audit beyond direct numeric buffers"
+  ]
+}

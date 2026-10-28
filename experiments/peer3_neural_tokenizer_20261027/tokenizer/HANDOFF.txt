@@ -1,0 +1,78 @@
+Tokenizer public operations source repair, 2026-10-27
+
+Worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027
+Branch: lane/peer3-neural-tokenizer-20261027
+Base: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+
+Public scope: BpeTokenizer constructors/factories, metadata, encode/decode and
+batch operations, repr; TrainedBpeVocabulary constructor, metadata, rendering,
+file writes, tokenizer factory and repr; BpeVocabularyTrainer construction,
+train and repr; models.Tokenizer construction/loading, metadata, pretokenize,
+encode/decode and repr, plus standalone pattern_name and pretokenize.
+Deprecated GPT2Tokenizer remains an alias of BpeTokenizer.
+
+All 40 public class operations now hand their inputs to one module-global
+native entry. Dedicated bindings/tokenizer_public_native.mojo owns validation,
+native container/buffer admission, metadata, orchestration, finished results
+and native file writing. Existing typed tokenizer functions own arithmetic.
+Batch sabotage and the trainer sabotage environment/build arms remain in the
+existing typed implementation; optional fast routes are retained, not tuned.
+UTF-8 exceptions retain their original CPython exception identity.
+
+Admission refuses user iterators, scalar subclasses, buffer hooks, altered
+class layouts and descriptors before reading or converting them. Exact builtin
+list/tuple/range iterators remain usable; arbitrary generators must be
+materialized by application code. Existing native bytes, bytearray, memoryview,
+array and ndarray buffers are admitted before acquisition. Buffer layout is
+captured once and the owner is held through its native copy. Mutable scalar
+metadata, integer sequences and complete JSON/config trees are checked before
+conversion, keyed lookup, equality or formatting.
+
+Shared root wiring (not edited by this lane):
+  bindings/_mojolearn_tokenizer_host.mojo:
+    from bindings.tokenizer_public_native import tokenizer_public_c
+    module.def_py_c_function(tokenizer_public_c, "tokenizer_public_call")
+Old low-level exports are retained for existing consumers.
+
+Validation:
+  python3 tools/test_tokenizer_public_native_source.py: exit 0, 6 tests.
+  Python AST parse: exit 0, both wrappers plus source/runtime test modules.
+  git diff --check (owned tracked Python files): exit 0.
+  Full logs:
+    /Users/andrewhendel/mojolearn-evidence/peer3-tokenizer-20261027/source-tests-final.log
+    /Users/andrewhendel/mojolearn-evidence/peer3-tokenizer-20261027/python-syntax.log
+  Public runtime controls are authored in
+    python/mojolearn/tests/test_tokenizer_public_admission.py, UNRUN.
+  Mojo compilation, actual public execution, identity and vendors: UNRUN.
+  Source tests establish structure only, never Python-free runtime.
+
+Small affected compile targets for root:
+  Import/typecheck bindings.tokenizer_public_native (imports existing host
+  tokenizer arithmetic and provider borrowed-buffer admission).
+  bindings/build_tokenizer_host.sh for the shared binding/export assembly.
+  No GPU algorithm change or new arithmetic lane is intended.
+
+Remaining outside this public wrapper chunk (not silently qualified):
+  tokenizer.py private _encode_corpus, _train_corpus, _read_trained and
+  _identity_of_ranks_file retain Python preparation/result work. Their consumer
+  is lm_corpus.py and should be migrated with that complete corpus operation.
+  Shared tokenizer-host legacy vocab_* consumers: follow-up adds native
+  tokenizer_vocab_encode/decode/pretokenize/fingerprint helpers and retains
+  their context once through models.Tokenizer import-time setup. Root wires
+  these into legacy host wrappers and four causal_lm_public call sites, removing
+  tokenizer._m lookups. Fingerprint settings serialization and hash are retained.
+  That source integration is not checkpoint/runtime qualification.
+  No root-owned recurrent, LayerNorm, Session, trainer, imported-model,
+  adapter or shared-provider files were changed by this lane.
+
+Push attempt: pre-push failed on 44 untagged boundary loops across four
+in-progress files; complete output is push.log under the evidence directory.
+Tokenizer follow-up classifies its admission/marshaling/result loops; parent
+coordinates other files and the final push. No compile or runtime was hidden
+by this source-tag repair. A first attempted shell checker used the wrong path
+(tools/no_compute_in_shells.py, exit 2); the actual checker is under tools/hooks.
+
+Default-mode semantics are retained: import connects the optional providers,
+then native construction/training reads the connected backend dictionary's
+current admitted _DEFAULT_MODE. Existing instances retain their chosen encoder
+as before. This is route preservation, with no fast build, tuning or campaign.

@@ -347,3 +347,6 @@ _native_xseq_bridge.register(
 from ._native_full_reset_params import connect_module as _connect_full_reset
 _connect_full_reset(globals())
 del _connect_full_reset
+# glue: reuse the final native owner storage contract for public operations.
+from ._native_full_reset_params import _CONTEXT as _XSEQ_OWNER_CONTEXT
+_native_xseq_bridge.register(xseq_owner_context=_XSEQ_OWNER_CONTEXT)

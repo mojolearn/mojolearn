@@ -80,6 +80,12 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
         raise Error("TypeError: Session provider belongs to another compiled module")
     if provider.downcast_value_ptr[NeuralDescriptorProvider]()[].factory is not neural_descriptor_entry(module, "model_native_api_v1"):
         raise Error("TypeError: Session provider factory changed; reconnect the compiled binding")
+    var public_provider = connection["public_provider"]
+    if not neural_descriptor_matches(public_provider, module):
+        raise Error("TypeError: Session public provider belongs to another compiled module")
+    var public_owner = public_provider.downcast_value_ptr[NeuralDescriptorProvider]()
+    if public_owner[].name != "mojolearn.session.public.v1" or public_owner[].factory is not neural_descriptor_entry(module, "session_public_api_v1"):
+        raise Error("TypeError: Session public provider requires its connected native ABI")
     # Admit the selected public doors once, before any session is allocated.
     # These are retained entry identities; no Python/extension callable runs.
     var names = Python.tuple("call", "execute", "inspect", "control", "fit")
@@ -94,6 +100,7 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     # Direct dictionary writes cannot invoke a Python __setattr__ callback.
     py_setitem(fields, "_id", PythonObject(None))
     py_setitem(fields, "_session_native", connection["call"])
+    py_setitem(fields, "_public_provider", connection["public_provider"])
     py_setitem(fields, "record", recording)
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "_b", connection["binding"])

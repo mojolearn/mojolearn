@@ -34,3 +34,27 @@ def test_common_feature_and_caller_boundary_are_reused():
     assert 'xseq_lifecycle_context=lifecycle' in bridge
     assert 'classifier_labels_namespace=dict(vars(ClassLabels))' in bridge
     assert '"all_finite_f64"' in bridge
+
+
+def test_finite_validation_walks_admitted_bytes_without_packed_dispatch():
+    source = (ROOT/'providers/python/xseq_public_lifecycle_pyapi.mojo').read_text()
+    finite = source.split('def _finite(', 1)[1].split('\n\n\nstruct ', 1)[0]
+    assert 'host_inference_nd_finite(' in finite
+    assert 'xseq_base(' not in finite
+    assert 'py_call(' not in finite
+    assert 'byte_strides = view.strides' in finite
+
+
+def test_recurrent_state_is_one_native_call_with_atomic_native_packing():
+    tree = ast.parse((ROOT/'python/mojolearn/_x_sequence_rnn.py').read_text())
+    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == '_RecurrentBase')
+    for method in ('state_dict', 'load_state_dict'):
+        function = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == method)
+        body = [node for node in function.body if not isinstance(node, ast.Expr)]
+        assert len(body) == 1 and isinstance(body[0], ast.Return)
+        assert isinstance(body[0].value, ast.Call) and body[0].value.func.id == '_XSEQ'
+    source = (ROOT/'providers/python/recurrent_state_pyapi.mojo').read_text()
+    assert 'memcpy(dest=' in source
+    assert 'state[PythonObject(names[i])]' in source
+    assert source.index('py_setitem(fields, "params_", packed)') > source.index('for i in range(len(names)):', source.index('var offset = 0'))
+    assert '_state_fields(model, context)' in source

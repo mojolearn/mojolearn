@@ -13,19 +13,20 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setat
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import family_repr, family_is_str, family_isinstance, family_call
-from bindings.msel_common import msel_get_scorer, msel_score, msel_admit
-from bindings.msel_scorer_native import msel_metric_plan, msel_scorer_call
+from bindings.msel_common import msel_get_scorer, msel_score, msel_admit, msel_flatten
+from bindings.msel_scorer_native import msel_metric_plan, msel_scorer_call, msel_scorer_create
 from bindings.msel_estimator_native import msel_estimator_call, msel_estimator_plan, msel_native_clone
 from bindings.parallel_cv_native import msel_parallel_operation
 from bindings.msel_cv import msel_cross_validate, msel_cross_val_score, msel_cross_val_predict, msel_split_descriptor
 from bindings.msel_search import (
     msel_grid_dicts, msel_grid_list, msel_grid_len, msel_sampler_check, msel_sampler_list, msel_sampler_len, msel_search_fit, msel_validation_curve,
-    msel_learning_curve, msel_permutation_test_score,
+    msel_learning_curve, msel_permutation_test_score, _search_index,
 )
-from bindings.msel_search_state import msel_search_fields, msel_search_plan, msel_search_initialize
+from bindings.msel_public_metadata import msel_splitter_repr, msel_scorer_repr, msel_estimator_classes
+from bindings.msel_search_state import msel_search_fields, msel_search_plan, msel_search_initialize, msel_search_update
 from bindings.msel_split import (
     msel_split, msel_n_splits, msel_loo_at, msel_lpo_at, msel_logo_at, msel_lpgo_at, msel_check_cv,
-    msel_train_test_split, msel_truth,
+    msel_train_test_split, msel_truth, msel_flag_truth, msel_splitter_initialize,
 )
 
 
@@ -68,6 +69,12 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_sampler_init":
         _ = msel_sampler_check(args[0], context)
         return msel_search_initialize(model, args, context)
+    if operation == "family_msel_search_classes":
+        return msel_estimator_classes(_msel_best(model, context), context)
+    if operation == "family_msel_splitter_repr":
+        return msel_splitter_repr(model, context)
+    if operation == "family_msel_scorer_repr":
+        return msel_scorer_repr(model, context)
     if operation == "family_msel_search_get_params":
         var plan = msel_search_plan(model, context)
         var fields = msel_search_fields(model, context)
@@ -86,7 +93,7 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
                 raise Error("TypeError: search parameter names must be exact strings")
             if py_contains(msel_search_plan(model, context)["protected"], names[k]):
                 raise Error("TypeError: search parameters cannot override native method or storage hooks")
-        _ = py_call(fields.update, args[0])
+        msel_search_update(fields, args[0], context)
         return model
     if operation == "family_msel_search_estimator_type":
         var plan = msel_estimator_plan(_msel_attr(model, "estimator", context), context)
@@ -98,19 +105,8 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_scorer_call":
         return msel_scorer_call(model, args[0], args[1], args[2], args[3], args[4], context)
     if operation == "family_msel_make_scorer":
-        _ = msel_metric_plan(args[0], context)
-        msel_admit(args[1], context)
-        msel_admit(args[2], context)
-        msel_admit(args[3], context)
-        # `_Scorer(score_func, sign, kwargs, response_method, None)`, its
-        # slots filled directly.
-        var scorer = native_storage_allocate(context["family_msel_scorer_class"])
-        py_setattr(scorer, "_score_func", args[0])
-        py_setattr(scorer, "_sign", PythonObject(1 if Bool(py=py_call(b.bool, args[2])) else -1))
-        py_setattr(scorer, "_kwargs", args[3])
-        py_setattr(scorer, "_response_method", args[1])
-        py_setattr(scorer, "_name", PythonObject(None))
-        return scorer
+        var sign = 1 if msel_flag_truth(args[2], context) else -1
+        return msel_scorer_create(args[0], args[1], sign, args[3], context)
     if operation == "family_msel_delegate":
         var best = _msel_best(model, context)
         if py_type(args[0]) is not b.str:
@@ -122,7 +118,7 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         var scorer: PythonObject
         var multimetric = _msel_attr(model, "multimetric_", context)
         msel_admit(multimetric, context)
-        if not Bool(py=py_call(b.bool, multimetric)):
+        if not msel_flag_truth(multimetric, context):
             scorer = msel_get_scorer(_msel_attr(model, "scoring", context), context)
         else:
             var scorers = _msel_attr(model, "scorer_", context)
@@ -132,6 +128,8 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
             scorer = scorers[refit]
         var best = _msel_best(model, context)
         return msel_score(best, args[0], args[1], scorer, context)
+    if operation == "family_msel_splitter_init":
+        return msel_splitter_initialize(model, args, context)
     if operation == "family_msel_split":
         # Preserve the public iterator contract without a Python generator
         # wrapper resuming around every native fold. Lazy native splitters
@@ -148,7 +146,11 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_split_lpgo_at":
         return msel_lpgo_at(args, context)
     if operation == "family_msel_check_cv":
-        return msel_check_cv(args[0], args[1], msel_truth(args[2]), args[3], args[4], context)
+        var classifier = msel_flag_truth(args[2], context)
+        _ = msel_flag_truth(args[3], context)
+        msel_admit(args[4], context)
+        var labels = msel_flatten(args[1], context) if classifier and args[1] is not None else args[1]
+        return msel_check_cv(args[0], labels, classifier, args[3], args[4], context)
     if operation == "family_msel_train_test_split":
         return msel_train_test_split(args[0], args[1], args[2], args[3], args[4], args[5], context)
     if operation == "family_msel_cross_validate":
@@ -165,9 +167,9 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_grid_len":
         return PythonObject(msel_grid_len(msel_grid_dicts(_msel_attr(model, "param_grid", context), context), context))
     if operation == "family_msel_grid_item":
-        msel_admit(args[0], context)
+        var index = _search_index(args[0], "ParameterGrid index", context)
         var grid = msel_grid_list(msel_grid_dicts(_msel_attr(model, "param_grid", context), context), context)
-        return family_call(py_attr(grid, "__getitem__"), args[0])
+        return family_call(py_attr(grid, "__getitem__"), index)
     if operation == "family_msel_sampler" or operation == "family_msel_sampler_iter":
         var result = msel_sampler_list(_msel_attr(model, "param_distributions", context), _msel_attr(model, "n_iter", context),
                                        _msel_attr(model, "random_state", context), context)

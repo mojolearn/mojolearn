@@ -2,11 +2,12 @@
 # ABI serialization only: every counter originates in a native executor.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setitem
+from bindings.native_loaded_module import native_loaded_module
 from sequence.execution_profile import ExecutionProfile
 
 
 def execution_profile_object(p: ExecutionProfile) raises -> PythonObject:
-    var out = Python.import_module("builtins").dict()
+    var out = Python.dict()
     py_setitem(out, "format", "mojolearn-execution-profile/1")
     py_setitem(out, "device", p.device)
     py_setitem(out, "complete", p.opaque_calls == 0)
@@ -43,7 +44,7 @@ def execution_profile_object(p: ExecutionProfile) raises -> PythonObject:
     py_setitem(out, "fill_bytes", p.fill_bytes)
     var rows = Python.list()
     for i in range(len(p.ops)):  # driver-loop: over native operation profile rows
-        var row = Python.import_module("builtins").dict()
+        var row = Python.dict()
         py_setitem(row, "code", p.ops[i])
         py_setitem(row, "calls", p.calls[i])
         py_setitem(row, "elements", p.elements[i])

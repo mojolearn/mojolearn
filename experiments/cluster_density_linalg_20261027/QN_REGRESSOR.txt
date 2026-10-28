@@ -1,0 +1,17 @@
+QNRegressor public lifecycle — 2026-10-27
+
+Frozen source: 340adaa532964ce562b25fdbeca69bbac6409f9b.
+The constructor and former _mode wrappers now run inside qn_c: scalar validation,
+X/y and feature metadata, fitted-state checks, fit tracking and external float64
+regression-result publication. Reinitialization and refitting admit every replaced
+owner before mutation. Fitted coefficient buffers require contiguous float32
+storage matching fitted width. Connected numerical and metric entry tables are
+checked against their exact native modules before calls; no Python callable can
+replace a called table entry. Native fitted-state and warning exception classes
+are preserved at the C boundary. Existing solver kernels are unchanged.
+
+Compile PASS: actual qn_c, Mac CPU O0, ten workers, 90.29s. The earlier 83.11s
+compile is retained as superseded by the native exception-class follow-up.
+Receipt qn_public_compile.json; full evidence under
+~/mojolearn-evidence/cluster-density-linalg-20261027/qn-public-exception-compile/.
+No runtime/identity/GPU qualification is claimed.

@@ -7,6 +7,7 @@ from bindings.classical_attributes import classical_check_layout
 from bindings.classical_pandas import classical_admit_value
 from bindings.sequential_admission import _one_of
 from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
 
 
 def _parameter(name: PythonObject, value: PythonObject, context: PythonObject, configure: Bool = False) raises:
@@ -58,6 +59,25 @@ def logistic_fields(model: PythonObject, context: PythonObject, copy_state: Bool
     return fields
 
 
+def logistic_release_admit(value: PythonObject, context: PythonObject) raises:
+    if py_type(value) is py_get(context, "classifier_labels_class"):
+        # ClassLabels is the fixed slots-only list subclass exposed by the
+        # classifier boundary. Its native copier checks the frozen class/MRO;
+        # inspect its retained elements and weakrefs without invoking list hooks.
+        var labels = classifier_label_list(value, context)
+        native_release_weakrefs(value, context)
+        native_release_admit(labels, context)
+        return
+    native_release_admit(value, context)
+
+
+def logistic_fit_replacements_admit(fields: PythonObject, context: PythonObject) raises:
+    var names = Python.tuple("_l1_ratio", "input_copied_", "classes_", "_w", "coef_", "intercept_", "n_iter_", "objective_", "retcode_", "n_features_in_", "feature_names_in_", "_mojolearn_fitted")
+    for i in range(len(names)):  # driver-loop: every owner changed by fit and classifier_after_fit, before either mutates state
+        if py_contains(fields, names[i]):
+            logistic_release_admit(fields[names[i]], context)
+
+
 def logistic_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = logistic_storage(model, context)
     var names = context["lr_parameters"]
@@ -65,6 +85,11 @@ def logistic_initialize(model: PythonObject, args: PythonObject, context: Python
         raise Error("TypeError: native LogisticRegression requires its full constructor configuration")
     for i in range(len(names)):  # driver-loop: refusal before publishing any constructor parameters
         _parameter(names[i], args[i], context, True)
+    for i in range(len(names)):  # driver-loop: retain all prior constructor owners until complete release admission
+        var name = names[i]
+        var replacing = String(name) != "numeric_mode" or args[i] is not None or not py_contains(fields, name)
+        if replacing and py_contains(fields, name) and fields[name] is not args[i]:
+            logistic_release_admit(fields[name], context)
     for i in range(len(names)):  # driver-loop: unchanged native constructor assignments
         if String(names[i]) != "numeric_mode" or args[i] is not None or not py_contains(fields, names[i]):
             py_setitem(fields, names[i], args[i])
@@ -105,6 +130,14 @@ def logistic_set_params(model: PythonObject, values: PythonObject, context: Pyth
     # Preserve ParamsMixin's successful reconstruction: a new configuration
     # removes fitted state. A rejected update leaves the original model alone.
     var fields = logistic_storage(model, context)
+    var old = py_call(b.list, fields.items())
+    for i in range(len(old)):  # driver-loop: admit names before keyed checks against the replacement configuration
+        if py_type(old[i][0]) is not b.str:
+            raise Error("TypeError: native LogisticRegression state requires exact string keys")
+    for i in range(len(old)):  # driver-loop: successful reset removes all non-parameter state, including unknown user owners
+        var key = old[i][0]
+        if not py_contains(params, key) or params[key] is not old[i][1]:
+            logistic_release_admit(old[i][1], context)
     _ = py_call(fields.clear)
     _ = py_call(fields.update, params)
     return model

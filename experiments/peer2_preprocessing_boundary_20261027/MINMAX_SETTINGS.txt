@@ -1,0 +1,47 @@
+MinMaxScaler operation-local settings capture (2026-10-27)
+
+Base: local main 7de54456bde166c42fd0d9f7378e402bb0f3be91.
+Branch: lane/peer2-preprocessing-20261027. Requires metadata API eafa5a610c.
+
+The public MinMaxScaler/HostMinMaxScaler shell calls one minmax lifecycle entry;
+these classes already opt out of inherited Python lifecycle/output wrappers.
+The native owner now captures normalized mode, float32 range endpoints, copy
+and clip once per fit/fit_transform operation. Combined and fallback fit and
+transform paths share that immutable native-scalar tuple. Fitted publication
+and copy-back use the captured flags. Partial-fit reuses captured constructor
+range/clip values for its temporary native batch and retains the original
+fitted mode used by the prior implementation.
+
+Range arrays capture shape/dtype/strides/address/read-only flag and independent
+owners through ArrayMetadata. Exact Arrays bypass the ndarray conversion before
+capture. Native rank/count/bool/object handling retains its prior ordering;
+unsupported descriptors are rejected through cast_in_kind on captured metadata
+before any typed pointer access. Scalar preparation still uses the established
+native classical input provider, then captures its completed buffer once.
+
+Settings cannot invoke user conversions: flags require exact builtin/NumPy bool,
+mode requires exact str, range containers require exact list/tuple/Array/ndarray,
+and endpoint values require exact native scalar types. Object-dtype ndarray
+indexing returns stored object references, which are admitted before numeric
+conversion. Shared native _fields refuses dictionary properties, dict subclasses
+and non-exact state keys before field lookup; custom metaclasses are refused
+before host-map lookup. set_params requires an exact kwargs dictionary.
+Native builtin string, tuple/list/dict and admitted buffer access remains ABI
+work. No new user callback or Python numerical routine is introduced.
+
+Compile target: bindings/_mojolearn_runtime_classical_host.mojo via
+bindings/build_runtime_classical_host.sh, including minmax_native,
+minmax_metadata and shared ArrayMetadata closure. Numerical preprocessing/x_prep
+kernels and launch ordering are unchanged. Root coordinates compilation/merges;
+no lane compilation or main changes were performed.
+
+Validation: no new tests or runtime verification run, following the owner's
+latest compile-and-merge steering. Previously recorded source results remain
+in SCALER_SNAPSHOT.txt and ADMISSION_METADATA.txt. Commit/push output is retained
+under ~/mojolearn-evidence/peer2-preprocessing-20261027/minmax-settings-*.log.
+Compile and runtime/cross-vendor coverage remain pending at lane handoff.
+
+Remaining scope: existing connected numerical py_call/py_call_typed dispatch,
+weight/statistic snapshot coverage, archive paths and broader preprocessing
+_mode wrappers are not repaired by this settings chunk. This is no assertion
+of complete preprocessing-family runtime compliance.

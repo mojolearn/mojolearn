@@ -97,3 +97,46 @@ def test_native_exception_admission_refuses_modified_sklearn_class_before_python
     monkeypatch.setitem(sys.modules, "sklearn.exceptions", module)
     clean_error(audit_native_call(native_predict, Ridge(), np.ones((2, 1), dtype="f4")), TypeError)
     assert calls == []
+
+
+@pytest.mark.parametrize("target", ["own", "cached_bridge"])
+@pytest.mark.parametrize("hook", ["__new__", "__init__", "__getattribute__"])
+def test_public_unfitted_refuses_changed_exception_hooks(monkeypatch, target, hook):
+    model, x = Ridge(), np.ones((2, 1), dtype="f4")
+    if target == "cached_bridge":
+        module = ModuleType("sklearn.exceptions")
+        module.NotFittedError = type("NotFittedError", (ValueError, AttributeError), {})
+        monkeypatch.setitem(sys.modules, "sklearn.exceptions", module)
+        with pytest.raises(exceptions.NotFittedError) as first:
+            model.predict(x)
+        cls = type(first.value)
+    else:
+        monkeypatch.delitem(sys.modules, "sklearn.exceptions", raising=False)
+        cls = exceptions.NotFittedError
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        calls.append(hook)
+        raise AssertionError("Python exception hook reached")
+
+    monkeypatch.setattr(cls, hook, forbidden, raising=False)
+    clean_error(audit_native_call(model.predict, x), TypeError)
+    assert calls == []
+
+
+def test_public_unfitted_rejects_module_key_protocol_before_lookup(monkeypatch):
+    calls = []
+
+    class Key(str):
+        __hash__ = str.__hash__
+
+        def __eq__(self, other):
+            calls.append(other)
+            raise AssertionError("Python module key comparison reached")
+
+    module = ModuleType("sklearn.exceptions")
+    module.__dict__[Key("NotFittedError")] = type("NotFittedError", (ValueError, AttributeError), {})
+    monkeypatch.setitem(sys.modules, "sklearn.exceptions", module)
+    model, x = Ridge(), np.ones((2, 1), dtype="f4")
+    clean_error(audit_native_call(model.predict, x), TypeError)
+    assert calls == []

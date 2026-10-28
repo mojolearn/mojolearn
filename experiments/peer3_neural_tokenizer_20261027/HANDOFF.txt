@@ -1,0 +1,105 @@
+Peer 3 — Transformer, Mamba and tokenizer native public operations
+
+Branch: lane/peer3-neural-tokenizer-20261027
+Worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027
+Base: local main 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Main and other worktrees were not modified.
+
+Source changes
+- Dedicated native public doors own TransformerState construction, capacity,
+  live unwindowed cache views and copied chronological ring views; Transformer
+  training tickets own admission, retained owners, lifecycle, execution and
+  completed gradient results. Decode session admission now retains captured
+  native module entries, immutable configuration and buffer owners.
+- Mamba1/2/3 state constructors, session property/context/finalizer operations,
+  carried-state/report publication, owned-weight/checkpoint handling and saved
+  binding admission execute through native doors. Shared Mamba-only helpers
+  accept optional operation snapshots, preserving their old callers/routes.
+- BPE construction/from-files/from-tokens, batch/single encode/decode, trainer,
+  trained-vocabulary rendering/writing/metadata and models.Tokenizer operations
+  use one module-global native door. Legacy vocabulary encode/decode/fingerprint
+  consumers delegate to the admitted native implementation.
+- neural_block_owner and constructor/backward/checkpoint paths inspect native
+  record layout before dictionary/scalar access. Scalar and input hooks are
+  refused before execution. Native Array metadata is captured through native
+  member descriptors, storage span is checked and owners retained. C Array
+  inputs remain views; F/foreign inputs use byte-preserving preparation.
+  Standalone forward/state execution uses operation-local metadata snapshots
+  and publishes supported state/session changes on success/failure.
+- Native subtype checks avoid replaced __class__ hooks. Private plan/model
+  holders use exact native SimpleNamespace objects. CPU inference backward
+  refusals now also use a single native call.
+- No numerical kernel, arithmetic order, decoding algorithm, performance
+  default, measurement board, retired mode or Apple fast campaign was changed.
+
+Audit scope
+OWNED_OPERATIONS.tsv retains 82 frozen audit groups from the requested files
+(Transformer 15, Mamba 27, tokenizer 30, models.Tokenizer 10), including aliases.
+These are source-review groups, not runtime qualification or completion counts.
+
+Validation
+- 33 focused source checks passed, exit 0 (5 neural admission, 15 Mamba,
+  6 tokenizer, 7 Transformer including decode).
+- 11 changed Python implementation/control files parsed, exit 0.
+- Public runtime hook/semantics controls were authored and syntax checked only.
+- First source-test attempts using system pytest failed before collection:
+  pytest is absent. Original failures retained; direct unittest/function
+  runners executed the source checks without product imports.
+- Initial pushes were rejected by the shell-loop source guard for missing
+  metadata/marshalling annotations. Those annotations were fixed; no hook was
+  bypassed. Source guards passed on the pushed 58e8cf4f5a batch.
+- This peer ran NO Mojo compilation, product runtime, GPU work or benchmarks.
+  Root accepted 58e8cf4f5a into its CPU compile queue. Small compile success must
+  precede any main merge. Later decode/private-holder followups require their
+  changed closure checks too. Compile status is pending until root records it.
+
+Small compile roots
+experiments/peer3_neural_tokenizer_20261027/compile_neural.mojo
+experiments/peer3_neural_tokenizer_20261027/compile_transformer.mojo
+experiments/peer3_neural_tokenizer_20261027/compile_transformer_decode.mojo
+experiments/peer3_neural_tokenizer_20261027/compile_mamba.mojo
+experiments/peer3_neural_tokenizer_20261027/compile_tokenizer.mojo
+Each exports the exact C doors without running them. Use the standard CPU
+IDENTICAL flags (-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I .
+-I bindings), compiler/dependencies and generated Unicode table. Shared product
+registration is in bindings/_mojolearn_tokenizer_host.mojo.
+
+Remaining integration evidence and limits
+- Actual public state/checkpoint/alias/tape/batch behavior and hook refusal must
+  run against affected compiled bindings after integration. Cross-vendor checks
+  remain the coordinator's focused final verification; none are claimed here.
+- Budget-aware Transformer session tickets preserve their existing verified
+  compiled session entries. A matching provider descriptor transport for that
+  precise route remains pending; no different retained-tape route was substituted.
+- Private tokenizer lm_corpus helpers remain Python testing/corpus preparation
+  outside the repaired public methods. Existing low-level native exports remain.
+- Shared CausalLM/model-construction/provider paths beyond the narrow standalone
+  snapshots and tokenizer consumers changed here remain their owners' scope.
+- Source guards do not prove Python-free runtime. No blanket transitive-runtime,
+  numerical identity, speed or release qualification is asserted.
+
+Evidence
+/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261027/
+  source-summary-final.log, neural-admission-source.log, syntax.log,
+  diff-check.log, shell-guard.log, push.log
+/Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/
+/Users/andrewhendel/mojolearn-evidence/peer3-tokenizer-20261027/
+experiments/peer3_neural_tokenizer_20261027/transformer/
+The three lane handoffs retain individual commits, failures and narrower limits.
+
+Root CPU compile feedback and repair
+- Root's batch4 compile_neural, compile_mamba, compile_transformer and
+  compile_tokenizer failed. Full failure logs are retained on the Mac and R2:
+  ~/mojolearn-evidence/provider-migration-resume-20261027/runpod-provider-cpu/
+  retained/batch4/compile_{neural,mamba,transformer,tokenizer}.log
+- e02c3fd828 repairs all distinct reported diagnostics: explicit copying of
+  BorrowedBufferLayout metadata; module-scope imports; owned exception
+  temporaries; tokenizer Int64 ABI lengths/counts; UInt64 shift amounts; and a
+  temporary for the String slice assignment. The new decode root received the
+  same explicit layout-copy repair. No numerical algorithm/route changed.
+- All 33 source checks passed again after the repair (exit 0):
+  ~/mojolearn-evidence/peer3-neural-tokenizer-20261027/
+  source-after-compile-fixes.log
+- Root was notified to rerun the affected five roots. This record does not
+  claim that the repaired compile has passed; success remains pending root's
+  actual compiler result. Original failed evidence is preserved.

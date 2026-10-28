@@ -1,0 +1,56 @@
+Johnson-Lindenstrauss native scalar boundary, 2026-10-27
+
+Branch: lane/peer2-decomposition-20261027
+Base local main: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+
+Actual public path:
+mojolearn.johnson_lindenstrauss_min_dim ->
+_expansion_decomp.johnson_lindenstrauss_min_dim -> import-connected _JL_CALL ->
+host_surface legacy alias -> runtime_classical_host.jl_native_call -> jl_c ->
+jl_min_dim -> providers.python.jl_scalar_pyapi + pinned native log/cube ->
+CPython publishes the finished integer.
+
+The former owner invoked mutable operator.lt/le and builtin float/int with
+unadmitted caller values. The scalar provider now admits exact builtin real
+scalars, exact native NumPy real scalars (longdouble included), and exact
+zero-dimensional numeric ndarrays. It captures native scalar bytes once and
+rejects object dtype/custom scalar subclasses before their comparison, truth,
+or conversion hooks. Original source owners remain live throughout the call.
+Predicates use native values at original precision; binary64 conversion occurs
+after bound validation. The exact builtin integer predicate uses the public
+CPython comparison API only after exact int/bool admission, preserving negative
+arbitrary-size integer errors before float narrowing. The existing pinned log,
+correctly rounded cube and expression order are unchanged. Native CPython
+PyLong_FromDouble publishes the completed bound and preserves nonfinite errors.
+
+Import setup connects existing optional NumPy admission metadata. The shared
+RP auto-dimension caller passes its existing context to the same helper; the
+rest of the RP public operation is still incomplete migration work.
+
+Validation:
+- 18 source checks passed, exit 0 (4 JL + 10 PLS + 1 manifold + 3 existing
+  decomp parameter connection tests). Manifold checks include separately staged
+  y forwarding shells, whose companion is delivered only with its native owner.
+- Python syntax + git diff --check passed.
+- Full outputs: ~/mojolearn-evidence/peer2-decomposition-20261027/
+  jl-source-tests.log and jl-syntax.log.
+- 23 public runtime controls added at
+  python/mojolearn/tests/test_jl_native_boundary.py: ordinary/native/endian
+  scalar inputs, invalid bounds, arbitrary-size integer behavior, callback
+  negative controls, nonfinite publication, original-precision validation.
+  These are UNRUN; no runtime verification is claimed.
+
+Compile targets pending under root coordination:
+bindings.jl_native.jl_c and its dedicated jl_scalar_pyapi dependency;
+bindings.rp_native import closure for the helper signature change. The supported
+host group is bindings/build_runtime_classical_host.sh. No lane compile.
+Minimal exported forwarding roots for the coordinator are in
+experiments/peer2_decomposition_20261027/jl_rp_compile.mojo: jl_c and rp_fit,
+without full decomp_c dispatch. Owner steering subsequently stopped further
+verification runs; retained results above precede that instruction.
+
+Remaining verification/debt:
+No source test or grep is runtime qualification. Native compile, focused public
+runtime and cross-vendor verification remain pending. No broad benchmarks,
+GPU campaign, publication or main merge was launched by this lane. Other random
+projection/decomposition operations remain separate unfinished migrations.

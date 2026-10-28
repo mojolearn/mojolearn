@@ -1,0 +1,31 @@
+Peer6 standalone ARIMA construction and parameter metadata — 2026-10-28
+Branch lane/peer6-timeseries-20261027; follows a1755b5b79 AutoARIMA search.
+
+ARIMA.__init__, mu_/beta_/ar_/ma_/sar_/sma_/sigma2_ and __repr__ now each
+perform one native call. Constructor validation, order/trend/method
+normalization and finished state occur in arima_lifecycle_pyapi.mojo.
+Exact ordinary native sequences, native numeric scalars and captured numeric
+array metadata are admitted before reading order words; arbitrary user
+iteration/conversion hooks are refused. Already normalized exact builtin-int
+tuples retain identity for clone. Numerical kernel order bounds remain the
+kernel's decision. Constructor updates are staged, and all replaced old
+owners are admitted before the first write. Unchanged references are retained.
+
+Parameter properties capture fitted buffer metadata once, validate offsets,
+and copy the selected block through the existing native strided byte helper.
+No user descriptor, slicing or reshape method is invoked. Repr admits its
+native metadata before builtin repr formatting. Ordinary native instance
+storage uses the established documented GenericGetDict owner.
+
+Compile: actual TSA dispatcher plus the new constructor/properties/repr,
+Mac CPU identical O0, all 10 available logical compiler workers configured.
+Exit and timing in compile.json. The failed first List constructor syntax
+attempt is retained. No runtime or identity campaign; no rented box.
+Full evidence/source bytes/manifest/binary:
+~/mojolearn-evidence/peer6-arima-metadata-20261028/
+
+Pending: ARIMA.forecast still Python; legacy fit/predict native owners need
+transitive passive metadata and release admission repair. Archive load/save
+are prior native owners, not requalified by this compilation. VAR/STL still
+pending; parent owns Prophet and cv_review owns legacy TSA/Holt-Winters.
+Do not claim complete standalone ARIMA or whole-library runtime coverage.

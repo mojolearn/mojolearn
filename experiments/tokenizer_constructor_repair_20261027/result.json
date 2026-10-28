@@ -1,0 +1,93 @@
+{
+  "schema": "mojolearn.tokenizer-compile-repair.v1",
+  "date": "2026-10-27",
+  "main_source_commit_at_final_check": "7de54456bde166c42fd0d9f7378e402bb0f3be91",
+  "repair_commit": "3d0fcd06e6",
+  "original_repair_commit": "80621bc80d046064fa1c120c25d859757c0f457e",
+  "problem": "LinBuf used PythonObject(None) as a default argument; Mojo tried to initialize that runtime object during compile-time evaluation and failed while instantiating the tokenizer host binding.",
+  "repair": "Provide an explicit three-argument constructor that initializes the empty pin and None owner in its body; keep the five-argument pinned-owner constructor explicit.",
+  "localized_compile": {
+    "group": "_mojolearn_dev_tokenizer_host",
+    "mode": "host",
+    "status": "passed",
+    "exit_code": 0,
+    "compiler_seconds": 1097.194556250004,
+    "group_seconds": 1117.8590366661083,
+    "build_source_commit": "80621bc80d046064fa1c120c25d859757c0f457e",
+    "artifact_key": "7d1383eee9f7388a24ed342ecd2a1004bc13c5cf31f453477c79410d431ede65",
+    "binary": "/Users/andrewhendel/.cache/mojolearn-development/artifacts/7d1383eee9f7388a24ed342ecd2a1004bc13c5cf31f453477c79410d431ede65/_mojolearn_dev_tokenizer_host.so",
+    "binary_sha256": "114b662c9fc17db9301beb2e5e0b21284d47ba10316d076134cfbfc862029f88",
+    "binary_bytes": 17608272,
+    "compiler_version": "Mojo 1.0.0 (ed45d567)",
+    "target": "apple-m1 host binding",
+    "source_files_checked": 476,
+    "source_files_changed_on_main": [],
+    "reuse": "All keyed source, compiler, flag, dependency and target fields match main; checkout path is the sole key difference. No duplicate compile performed."
+  },
+  "controller": {
+    "state": "incomplete",
+    "meaning": "The requested group compiled successfully. Unselected library groups are incomplete, so this selected build did not activate a complete library set.",
+    "runtime_validated": false,
+    "release_qualified": false,
+    "expected_exit_code": 3,
+    "exit_code_basis": "development_build.py returns 3 for an incomplete selected set; the compiler exit code is directly retained in its execution receipt."
+  },
+  "source_checks": {
+    "tests": 7,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "exit_code": 0,
+    "files": [
+      "tools/test_lowbit_provider.py",
+      "tools/test_linalg_host_provider.py"
+    ],
+    "scope": "Source guards only; not runtime or identity validation."
+  },
+  "prior_sequence_compilation": [
+    {
+      "stem": "_mojolearn_dev_x_sequence_m1",
+      "prior_state": "built",
+      "exit_code": 0,
+      "prior_key": "1289cd6fadf67e99ac498832d772e7c6cb5964feb19c97451c079d5d52f7fb41",
+      "differing_fields": [
+        "repo",
+        "source"
+      ],
+      "unchanged_compile_inputs_except_checkout": false,
+      "changed_source_file": "providers/python/autograd_torch_program_pyapi.mojo",
+      "change": "Only existing loop annotation moved between two lines; all other bytes match after removing that exact comment.",
+      "recompile_required_for_this_change": false,
+      "prior_compilation_reusable": true
+    },
+    {
+      "stem": "_mojolearn_dev_x_sequence_host",
+      "prior_state": "built",
+      "exit_code": 0,
+      "prior_key": "4d4d16572f85a845c67265cf5ed88f72b69a5b6d3abca65e75ece9cc72c31ec4",
+      "differing_fields": [
+        "repo",
+        "source"
+      ],
+      "unchanged_compile_inputs_except_checkout": false,
+      "changed_source_file": "providers/python/autograd_torch_program_pyapi.mojo",
+      "change": "Only existing loop annotation moved between two lines; all other bytes match after removing that exact comment.",
+      "recompile_required_for_this_change": false,
+      "prior_compilation_reusable": true
+    }
+  ],
+  "evidence": {
+    "root": "/Users/andrewhendel/mojolearn-evidence/tokenizer-main-compile-repair-20261027",
+    "input_equivalence": "/Users/andrewhendel/mojolearn-evidence/tokenizer-main-compile-repair-20261027/input-equivalence.json",
+    "original_failure": "/Users/andrewhendel/mojolearn-evidence/tokenizer-main-compile-repair-20261027/original-failure/host-_mojolearn_dev_tokenizer_host.log",
+    "passed_compile_log": "/Users/andrewhendel/mojolearn-evidence/tokenizer-main-compile-repair-20261027/passed-build/host-_mojolearn_dev_tokenizer_host.log",
+    "build_result": "/Users/andrewhendel/mojolearn-evidence/tokenizer-main-compile-repair-20261027/passed-build/result.json",
+    "artifact_receipt": "/Users/andrewhendel/mojolearn-evidence/tokenizer-main-compile-repair-20261027/passed-build/artifact-receipt.json",
+    "source_check_log": "/Users/andrewhendel/mojolearn-evidence/tokenizer-main-compile-repair-20261027/source-checks.log"
+  },
+  "pending": [
+    "Focused public runtime verification of the integrated provider changes.",
+    "NVIDIA/AMD builds and required within-release identity checks for affected paths.",
+    "No claim that all 29 neural recipes are Python-free or measurement-ready from this compile."
+  ]
+}

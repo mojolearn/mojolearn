@@ -70,6 +70,13 @@ from kernel_methods.host.km_host_oracle import (
 
 
 from providers.python.svm_host_scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+from kernel_methods.descriptor_host import KERNEL_METHOD_HOST_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+
+
+def kernel_methods_api_v1_binding() raises -> PythonObject:
+    var api = KERNEL_METHOD_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 def kernel_methods_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
@@ -362,6 +369,7 @@ def rbf_sampler_transform_binding(
 def build__mojolearn_kernel_methods_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_kernel_methods_host")
+        module.def_function[kernel_methods_api_v1_binding]("kernel_methods_api_v1")
         module.def_function[kernel_methods_host_numeric_mode_binding]("kernel_methods_host_numeric_mode")
         module.def_function[kernel_methods_host_vendor_binding]("kernel_methods_host_vendor")
         module.def_function[kernel_methods_host_column_binding]("kernel_methods_host_column")

@@ -11,6 +11,7 @@ kept every array built here, and the caller's buffers, alive for ever.
 """
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setattr, py_type
 from core.generation_buffers_impl import generation_ids_into
 from std.memory import memcpy
@@ -41,8 +42,8 @@ comptime GENERATION_BOUNDARY = _Global[
 
 def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    g[].bi = Python.import_module("builtins")
-    g[].arrays = Python.import_module("array").array
+    g[].bi = native_loaded_module("builtins")
+    g[].arrays = native_loaded_module("array").array
     g[].array_cls = classes[0]
     g[].state_cls = classes[1]
     g[].layer_classes = classes[2]

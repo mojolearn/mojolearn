@@ -1,0 +1,21 @@
+Peer6 CV scalar flags and group snapshot follow-up — 2026-10-27
+Branch: lane/peer6-timeseries-metrics-cv-20261027
+Parent: a9eaa0001d1730f0b2dd6b056c3a2113dce3027c
+
+Changes: cross_validate return flags and train_test_split shuffle use the
+native scalar truth boundary. Serial-worker admission compares only admitted
+native scalars; Array equality hooks cannot run through tuple membership.
+Scoring/error strings use exact native types before comparisons. CV fold
+preparation retains materialized group labels and passes that prepared value
+to fold generation. split_descriptor reuses its prepared group value for fold
+generation and hashing, instead of preparing the original object twice.
+
+Compilation: compile.json records the full runtime_model_selection host
+module CPU-column/identical/O0 build, Apple M1 target, 10 compiler workers.
+Full sources/log/binary: ~/mojolearn-evidence/peer6-cv-flags-20261027/.
+No runtime, GPU, identity or benchmark execution.
+
+Remaining: stable metadata snapshot for an already C-contiguous caller-owned
+Array in msel_input (shared arena _prepare currently returns that mutable
+owner); search lifetime and scalar-search repairs are a separate green/active
+sublane. Compilation does not establish whole-library callback freedom.

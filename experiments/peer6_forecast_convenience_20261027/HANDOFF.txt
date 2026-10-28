@@ -1,0 +1,28 @@
+Peer6 time-series batch 2 — 2026-10-27
+Branch: lane/peer6-timeseries-20261027 (after AutoARIMA e12e1212d5)
+
+Croston, ETS, Theta forecast convenience methods and GARCH.forecast now
+use one native call. Native forecast admission refuses model subclass hooks,
+non-passive settings and foreign state dictionaries; it owns fit/predict
+sequencing, GARCH horizon reuse/refit and native ndarray result views.
+Original accepted exogenous behavior is retained: Theta forwards X to fit;
+Croston/ETS historically ignore X and X_future in the convenience method.
+
+Shared forecast input packing now captures ArrayMetadata once, preserves
+already contiguous float32 storage when copy=False, and uses the existing
+native conversion kernel when packing. Class variant choices come from
+import-time exact identities, avoiding a runtime class descriptor read.
+The narrow shared xseq_native_common builtins import replacement was
+coordinated with root; native_loaded_module avoids runtime import callbacks.
+No arithmetic algorithm or performance switch changed.
+
+Compile receipt: compile.json, Mac CPU identical O0, all 10 logical cores
+configured, actual xseq C public dispatcher instantiated. Nothing executed.
+Full evidence: ~/mojolearn-evidence/peer6-forecast-convenience-20261027/
+No rented box. GPU compilation, runtime correctness, identity and performance
+remain unqualified; no runtime/identity campaign was run (owner instruction).
+
+Pending: forecasting constructors; older independent fit/predict state
+admission; AutoARIMA.search; _arima_impl.py and _tsa_impl.py remaining public
+lifecycle/properties/forecast; Prophet/VAR/STL public lifecycle. This batch
+does not claim the entire xseq family or library is migrated.

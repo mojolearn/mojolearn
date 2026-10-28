@@ -19,7 +19,7 @@ def connect(context, selection):
             raise TypeError(f'native scorer metric {name} is not the connected public function')
         fields = function.__globals__
         entry = fields['_NATIVE']
-        metrics[function] = dict(recipe, code=function.__code__, entry=entry if type(entry) is BuiltinFunctionType else None,
+        metrics[function] = dict(recipe, name=name, code=function.__code__, entry=entry if type(entry) is BuiltinFunctionType else None,
                                  context=fields['_NATIVE_CONTEXT'])
     bindings = {}
     for mode in ('identical', 'fast'):  # glue: retain existing compiled metric bindings by mode once
@@ -36,7 +36,7 @@ def connect(context, selection):
     descriptor = vars(cls)['__dict__']
     if type(descriptor) is not GetSetDescriptorType:
         raise TypeError('native scorers require native instance dictionary storage')
-    hooks = tuple((name, vars(cls).get(name)) for name in ('__call__', '__init__', '__getattribute__',  # glue: fixed scorer class method/protocol identities
+    hooks = tuple((name, vars(cls).get(name)) for name in ('__call__', '__new__', '__init__', '__repr__', '_score_func', '_sign', '_kwargs', '_response_method', '_name', '__getattribute__',  # glue: fixed scorer class method/protocol identities
                                                         '__getattr__', '__setattr__', '__del__', '__dict__'))
     context.update(family_msel_metric_plans=metrics, family_msel_metric_bindings=bindings,
                    family_msel_metric_function_type=FunctionType, family_msel_scorer_fields=descriptor.__get__,
