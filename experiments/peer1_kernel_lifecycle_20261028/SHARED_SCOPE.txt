@@ -1,0 +1,82 @@
+KernelRidge score and label metadata: exact remaining shared scope
+Source reviewed from kernel branch cfd17fd9ab plus dedicated lifecycle repairs.
+No shared source edited. No compile/runtime/identity verification performed.
+
+A. Scalar and weighted score descriptor
+Current call chain:
+  kernel_methods_native._kernel_methods_operation family_km_krr_score
+  -> mcls_cluster_operation(family_mcls_r2) -> mcls_cluster._r2
+  -> family_call(mc_entry(binding, r2_score or r2_score_weighted), ...)
+The packed functions in bindings/_mojolearn_metrics.mojo call existing typed
+metrics.estimator.r2_score_host / r2_score_weighted_host. CPU packed functions
+in bindings/_mojolearn_metrics_host.mojo call host_r2_score / host_weighted_r2;
+unweighted CPU also calls its _check_float_pair before the numerical owner.
+
+Proposed narrowly owned shared changes:
+1. Add a versioned R2 descriptor to metrics/ dedicated native files, with
+   operations unweighted, weighted and compiled numeric-mode readback. Inputs
+   are captured float32 target/prediction/optional weight addresses + row count;
+   output is one native float64 slot containing Float64(the existing Float32
+   score), exactly the current packed entry's widening. No new R2 arithmetic.
+2. Register the capsule factory in the two _mojolearn_metrics binding files.
+   Device descriptor calls the existing metrics.estimator functions. CPU
+   descriptor calls the existing host functions and preserves _check_float_pair;
+   move/expose that typed validation rather than dropping it or duplicating a
+   numerical implementation. Missing descriptor is an explicit identical-mode
+   capability refusal; existing fast support stays explicit legacy debt.
+3. Add a shared native r2_score_captured helper in mcls_cluster or dedicated
+   providers/python metrics owner, taking truth: ArrayMetadata,
+   prediction: ArrayMetadata, optional captured weight metadata, captured mode,
+   binding/provider and context. Preserve shape, warning, weight and result
+   semantics. Kernel score currently accepts y through family_f32, so a generic
+   metrics dtype refusal must not newly reject its supported wide inputs.
+4. After that helper exists, kernel owner will capture y once before predict,
+   retain its owner, expose the produced prediction descriptor once, capture
+   sample_weight once, and call r2_score_captured. Do not remove current early
+   input admission and simply pass raw y into the older helpers: they reread
+   metadata and are not a safe replacement boundary.
+
+B. Multioutput R2 program (required for the same public score)
+Current path:
+  mcls_cluster._r2 -> metrics_reg_native._r2_options
+  -> _reg_new/_reg_target/_reg_weights -> _reg_run -> arena_prog_native._metrics_run
+  -> _entry_call(x_metrics_run_ranges / x_metrics_run_out / x_metrics_run).
+The program builds mean, residual, total and assembly stages, retaining its
+current Float32 column mean and final result semantics. It also rereads targets
+and weights after the kernel score's preparation. _metrics_run reads size and
+addresses again from PythonObjects. Optional ranges/resident handling can call
+additional packed device put/take/free entries through shared arena owners.
+
+Proposed shared scope:
+- metrics_reg_native: a captured-input _Reg constructor and an R2 helper that
+  consumes the admitted snapshots without another classical_view/cast/shape
+  sequence. Keep the existing stage order, force_finite and uniform_average.
+- arena_prog_native + its metrics residency helpers: a captured native program
+  runner and descriptor dispatch for the currently selected run/range/output
+  and retained device-resource operations. Preserve source owners until their
+  last upload/consumption and preserve the selected supported route.
+- bindings/_mojolearn_x_metrics.mojo and _host: capsule registration over the
+  existing x_metrics.device run_program/run_program_out/run_program_ranges
+  and x_metrics.host.program.run_program_host owners, retaining their existing
+  output-range validation. No CPython call from the numerical descriptor.
+- Never replace multioutput R2 with the average of scalar R2 calls: that changes
+  numerical stages/rounding and is not the same migration.
+These shared APIs need their own exact source audit and parent compile. Scalar
+score repair alone cannot qualify KernelRidge.score.
+
+C. Ignored target / feature-name label materialization
+Dedicated kernel helper currently calls labels_shape_of + _flatten_labels for
+ignored y. The shared _label_list path uses ndarray.tolist / array.array.tolist /
+memoryview.tolist; ndarray conversion remains CPython-dispatched conversion,
+not a native numerical migration. Shape is captured separately and then read
+again during list materialization. _feature_names also calls _flatten_labels
+for its string index. The dedicated change only fixes capture timing/lifetime.
+
+Proposed shared scope: bindings/classical_labels.mojo plus existing native
+buffer metadata helpers. Expose a label snapshot containing shape, native
+format/strides and retained owners, and flatten/validate from that single
+snapshot in compiled code. Preserve numeric, categorical, string, object,
+column-vector, sparse ignored-y and native NumPy scalar semantics; reject
+unsupported protocols before hooks. Do not coerce ignored categorical y to
+float32 or substitute a new Python helper. Kernel lifecycle can adopt that
+shared snapshot API once available.
