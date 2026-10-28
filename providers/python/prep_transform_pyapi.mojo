@@ -39,6 +39,10 @@ def prep_shape(shape: List[Int], numeric: Bool, name: String) raises:
 
 
 def prep_finite(snapshot: ArrayMetadata, name: String) raises:
+    if snapshot.dtype_number == 13:
+        # describe recognizes PEP3118 long-double 'g' as floating, but the
+        # former _all_finite materializer refused that format before casting.
+        raise Error("TypeError: mojolearn: unsupported buffer format '" + ("g" if snapshot.native_byte_order else "=g") + "'")
     if snapshot.dtype_number != 11 and snapshot.dtype_number != 12:
         return
     if snapshot.source.itemsize != (4 if snapshot.dtype_number == 11 else 8):
