@@ -1,0 +1,18 @@
+{
+  "commit": "b16c6374a03ad9739253c438fcab4998e7044b66",
+  "parent_native_commit": "8dc73e4c130425bc9a60a8004b9d9ef2e5343a04",
+  "branch": "lane/gbdt-cpu-ranking-20261027",
+  "native_changed_after_parent": false,
+  "compiled": false,
+  "product_runtime_executed": false,
+  "identity_campaign_executed": false,
+  "static_tests": 6,
+  "static_tests_exit": 0,
+  "source_lane_accounting_exit": 0,
+  "files": {
+    "tools/identity_break.py": "589a7441f72a535c8ef411d33003ed5c3b84c339c09e4675dd31c0499713e2f0",
+    "python/mojolearn/host_surface.py": "ce3bfd35d84212a77b77b5fea77f4e8e6e3d731ebbc4fe770f36234f7762b786",
+    "tools/test_gbdt_cpu_ranking_registration.py": "10c678dae7ff4b8ad84eaad2d8ee788b90373c1aae8da4856bc6c2f84551a77d",
+    "docs/GBDT_CPU_RANKING_DRAFT_20261027.md": "b9e639e6d14bc4c4d7a3604de39bc993510a4d1b454d03615453864c085b37fe"
+  }
+}

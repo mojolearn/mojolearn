@@ -1,0 +1,134 @@
+board	race	mode/op	opponent	ours_ms	opponent_ms	clock	quality	failed_preflight	updated
+algos.adaboost-clf.istella.rows=full	algos/adaboost-clf/istella/rows=full	identical/fit	None				-	0	2026-10-27T17:43:05Z
+algos.adaboost-clf.istella.rows=full	algos/adaboost-clf/istella/rows=full	identical/infer	None				-	0	2026-10-27T17:43:05Z
+algos.adaboost-clf.taxi.rows=full	algos/adaboost-clf/taxi/rows=full	identical/fit	None				-	0	2026-10-27T17:43:43Z
+algos.adaboost-clf.taxi.rows=full	algos/adaboost-clf/taxi/rows=full	identical/infer	None				-	0	2026-10-27T17:43:43Z
+algos.adaboost-reg.istella.rows=full	algos/adaboost-reg/istella/rows=full	identical/fit	None				-	0	2026-10-27T17:44:46Z
+algos.adaboost-reg.istella.rows=full	algos/adaboost-reg/istella/rows=full	identical/infer	None				-	0	2026-10-27T17:44:46Z
+algos.adaboost-reg.taxi.rows=full	algos/adaboost-reg/taxi/rows=full	identical/fit	None				-	0	2026-10-27T17:45:26Z
+algos.adaboost-reg.taxi.rows=full	algos/adaboost-reg/taxi/rows=full	identical/infer	None				-	0	2026-10-27T17:45:26Z
+algos.adafactor.synthetic.rows=full	algos/adafactor/synthetic/rows=full	identical/fit	torch-compile-fp32	84.37378704547882	14.620217960327864	kernel/kernel	PASS	0	2026-10-27T17:47:50Z
+algos.adagrad.synthetic.rows=full	algos/adagrad/synthetic/rows=full	identical/fit	torch-compile-fp32	534.383810008876	9.130286052823067	kernel/kernel	PASS	0	2026-10-27T17:50:36Z
+algos.adam.synthetic.rows=full	algos/adam/synthetic/rows=full	identical/fit	torch-eager-fp32	113.77324408385903	22.837055032141507	kernel/kernel	PASS	0	2026-10-27T17:53:31Z
+algos.adamax.synthetic.rows=full	algos/adamax/synthetic/rows=full	identical/fit	torch-eager-fp32	164.13465689402074	16.098245978355408	kernel/kernel	PASS	0	2026-10-27T17:55:52Z
+algos.adamw.synthetic.rows=full	algos/adamw/synthetic/rows=full	identical/fit	torch-eager-fp32	100.57547595351934	22.888955078087747	kernel/kernel	PASS	0	2026-10-27T17:58:33Z
+algos.additive-chi2.istella.rows=full	algos/additive-chi2/istella/rows=full	identical/fit	sklearn-cpu	257.18298100400716	1032.7180470339954	whole/whole	PASS	0	2026-10-27T17:59:42Z
+algos.additive-chi2.istella.rows=full	algos/additive-chi2/istella/rows=full	identical/infer	sklearn-cpu	25.02708206884563	2.9567889869213104	whole/whole	PASS	0	2026-10-27T17:59:42Z
+algos.additive-chi2.taxi.rows=full	algos/additive-chi2/taxi/rows=full	identical/fit	sklearn-cpu	44.5912970462814	35.914481966756284	whole/whole	PASS	0	2026-10-27T18:00:28Z
+algos.additive-chi2.taxi.rows=full	algos/additive-chi2/taxi/rows=full	identical/infer	sklearn-cpu	24.14509793743491	0.631771981716156	whole/whole	PASS	0	2026-10-27T18:00:28Z
+algos.affinity-prop.istella.rows=full	-	-	-				no-races	0	2026-10-27T18:00:47Z
+algos.affinity-prop.taxi.rows=full	-	-	-				no-races	0	2026-10-27T18:01:02Z
+algos.als.taxi-zones.rows=full	algos/als/taxi-zones/rows=full	identical/fit	implicit-gpu	24783.773451927118	816.5674030315131	whole/whole	PASS	0	2026-10-27T18:03:01Z
+algos.ann-refine.istella.rows=full	algos/ann-refine/istella/rows=full	identical/fit	cuvs-gpu	575.3307059640065	1182.053363067098	whole/whole	INSUFFICIENT	0	2026-10-27T18:04:06Z
+algos.ann-refine.taxi.rows=full	algos/ann-refine/taxi/rows=full	identical/fit	cuvs-gpu	47.00368200428784	198.74472508672625	whole/whole	INSUFFICIENT	0	2026-10-27T18:04:47Z
+algos.ard.istella.rows=full	algos/ard/istella/rows=full	identical/fit	sklearn-cpu	711.0166549682617	64989.06804609578	whole/whole	PASS	0	2026-10-27T18:08:18Z
+algos.ard.istella.rows=full	algos/ard/istella/rows=full	identical/infer	sklearn-cpu	29.918207903392613	11.15802803542465	whole/whole	PASS	0	2026-10-27T18:08:18Z
+algos.ard.taxi.rows=full	algos/ard/taxi/rows=full	identical/fit	sklearn-cpu	154.8729119822383	203.98409897461534	whole/whole	PASS	0	2026-10-27T18:09:00Z
+algos.ard.taxi.rows=full	algos/ard/taxi/rows=full	identical/infer	sklearn-cpu	19.969712011516094	0.9832929354161024	whole/whole	PASS	0	2026-10-27T18:09:00Z
+algos.auto-theta.synthetic.rows=full	algos/auto-theta/synthetic/rows=full	identical/fit	statsforecast-cpu	140.76222595758736	2271.941564977169	whole/whole	PASS	0	2026-10-27T18:10:44Z
+algos.auto-theta.taxi-hourly.rows=full	algos/auto-theta/taxi-hourly/rows=full	identical/fit	statsforecast-cpu	757.0395149523392	6161.455937894061	whole/whole	PASS	0	2026-10-27T18:12:57Z
+algos.autoarima.synthetic.rows=full	-	-	-				no-races	0	2026-10-27T18:13:12Z
+algos.autoarima.taxi-hourly.rows=full	-	-	-				no-races	0	2026-10-27T18:13:27Z
+algos.avgpool1d.synthetic.rows=full	algos/avgpool1d/synthetic/rows=full	identical/fit	torch-compile-bf16	1.6261639539152384	1.0065219830721617	kernel/kernel	PASS	0	2026-10-27T18:15:40Z
+algos.avgpool1d.synthetic.rows=full	algos/avgpool1d/synthetic/rows=full	identical/infer	torch-eager-fp32	0.29440096113830805	0.16476097516715527	kernel/kernel	PASS	0	2026-10-27T18:15:40Z
+algos.avgpool2d.synthetic.rows=full	algos/avgpool2d/synthetic/rows=full	identical/fit	torch-compile-fp32	3.2922690734267235	1.2831329368054867	kernel/kernel	PASS	0	2026-10-27T18:18:51Z
+algos.avgpool2d.synthetic.rows=full	algos/avgpool2d/synthetic/rows=full	identical/infer	torch-eager-fp32	0.482570962049067	0.37517095915973186	kernel/kernel	PASS	0	2026-10-27T18:18:51Z
+algos.bagging-clf.istella.rows=full	algos/bagging-clf/istella/rows=full	identical/fit	None				-	0	2026-10-27T18:19:44Z
+algos.bagging-clf.istella.rows=full	algos/bagging-clf/istella/rows=full	identical/infer	None				-	0	2026-10-27T18:19:44Z
+algos.bagging-clf.taxi.rows=full	algos/bagging-clf/taxi/rows=full	identical/fit	None				-	0	2026-10-27T18:20:23Z
+algos.bagging-clf.taxi.rows=full	algos/bagging-clf/taxi/rows=full	identical/infer	None				-	0	2026-10-27T18:20:23Z
+algos.bagging-reg.istella.rows=full	algos/bagging-reg/istella/rows=full	identical/fit	None				-	0	2026-10-27T18:21:20Z
+algos.bagging-reg.istella.rows=full	algos/bagging-reg/istella/rows=full	identical/infer	None				-	0	2026-10-27T18:21:20Z
+algos.bagging-reg.taxi.rows=full	algos/bagging-reg/taxi/rows=full	identical/fit	None				-	0	2026-10-27T18:21:59Z
+algos.bagging-reg.taxi.rows=full	algos/bagging-reg/taxi/rows=full	identical/infer	None				-	0	2026-10-27T18:21:59Z
+algos.batchnorm1d.synthetic.rows=full	algos/batchnorm1d/synthetic/rows=full	identical/fit	torch-compile-fp32	2.700238022953272	1.5020639402791858	kernel/kernel	PASS	0	2026-10-27T18:25:17Z
+algos.batchnorm1d.synthetic.rows=full	algos/batchnorm1d/synthetic/rows=full	identical/infer	torch-eager-fp32	1.1692930711433291	0.25644106790423393	kernel/kernel	PASS	0	2026-10-27T18:25:17Z
+algos.batchnorm2d.synthetic.rows=full	algos/batchnorm2d/synthetic/rows=full	identical/fit	torch-compile-fp32	2.4335969937965274	1.4577138936147094	kernel/kernel	PASS	0	2026-10-27T18:28:30Z
+algos.batchnorm2d.synthetic.rows=full	algos/batchnorm2d/synthetic/rows=full	identical/infer	torch-eager-fp32	1.1392029700800776	0.19863992929458618	kernel/kernel	PASS	0	2026-10-27T18:28:30Z
+algos.bayesian-gmm.istella.rows=full	-	-	-				no-races	0	2026-10-27T18:28:49Z
+algos.bayesian-gmm.taxi.rows=full	-	-	-				no-races	0	2026-10-27T18:29:05Z
+algos.bayesian-ridge.istella.rows=full	-	-	-				no-races	0	2026-10-27T18:29:23Z
+algos.bayesian-ridge.taxi.rows=full	-	-	-				no-races	0	2026-10-27T18:29:37Z
+algos.bernoulli-nb.istella.rows=full	algos/bernoulli-nb/istella/rows=full	identical/fit	cuml-gpu	3573.4189769718796	836.4807051839307	whole/whole	PASS	0	2026-10-27T18:30:51Z
+algos.bernoulli-nb.istella.rows=full	algos/bernoulli-nb/istella/rows=full	identical/infer	cuml-gpu	759.6500740619376	103.41151605825871	whole/whole	PASS	0	2026-10-27T18:30:51Z
+algos.bernoulli-nb.taxi.rows=full	algos/bernoulli-nb/taxi/rows=full	identical/fit	cuml-gpu	230.09838396683335	77.54167297389358	whole/whole	PASS	0	2026-10-27T18:31:36Z
+algos.bernoulli-nb.taxi.rows=full	algos/bernoulli-nb/taxi/rows=full	identical/infer	cuml-gpu	76.20659994427115	11.441881069913507	whole/whole	PASS	0	2026-10-27T18:31:36Z
+algos.binarizer.istella.rows=full	algos/binarizer/istella/rows=full	identical/fit	cuml-gpu	970.5949350027367	775.6543980212882	whole/whole	PASS	0	2026-10-27T18:32:52Z
+algos.binarizer.istella.rows=full	algos/binarizer/istella/rows=full	identical/infer	cuml-gpu	113.3232630090788	113.68099297396839	whole/whole	PASS	0	2026-10-27T18:32:52Z
+algos.binarizer.taxi.rows=full	algos/binarizer/taxi/rows=full	identical/fit	cuml-gpu	73.42862198129296	78.83983699139208	whole/whole	PASS	0	2026-10-27T18:33:36Z
+algos.binarizer.taxi.rows=full	algos/binarizer/taxi/rows=full	identical/infer	cuml-gpu	20.470157032832503	11.735102045349777	whole/whole	PASS	0	2026-10-27T18:33:36Z
+algos.bisecting-kmeans.istella.rows=full	algos/bisecting-kmeans/istella/rows=full	identical/fit	sklearn-cpu	4259.6304879989475	1965.405056020245	whole/whole	FAIL	0	2026-10-27T18:34:49Z
+algos.bisecting-kmeans.istella.rows=full	algos/bisecting-kmeans/istella/rows=full	identical/infer	sklearn-cpu	425.4267030628398	85.5564660159871	whole/whole	FAIL	0	2026-10-27T18:34:49Z
+algos.bisecting-kmeans.taxi.rows=full	algos/bisecting-kmeans/taxi/rows=full	identical/fit	sklearn-cpu	329.42369708325714	634.8272190662101	whole/whole	FAIL	0	2026-10-27T18:35:41Z
+algos.bisecting-kmeans.taxi.rows=full	algos/bisecting-kmeans/taxi/rows=full	identical/infer	sklearn-cpu	44.556662905961275	17.376567935571074	whole/whole	FAIL	0	2026-10-27T18:35:41Z
+algos.bootstrap.istella.rows=full	algos/bootstrap/istella/rows=full	identical/fit	scipy-cpu	5.0845639780163765	1627.4344340199605	whole/whole	PASS	0	2026-10-27T18:36:34Z
+algos.bootstrap.taxi.rows=full	algos/bootstrap/taxi/rows=full	identical/fit	scipy-cpu	5.199544015340507	925.3420099848881	whole/whole	PASS	0	2026-10-27T18:37:17Z
+algos.cagra.istella.rows=full	algos/cagra/istella/rows=full	identical/fit	None				-	0	2026-10-27T18:39:04Z
+algos.cagra.istella.rows=full	algos/cagra/istella/rows=full	identical/infer	None				-	0	2026-10-27T18:39:04Z
+algos.cagra.taxi.rows=full	algos/cagra/taxi/rows=full	identical/fit	cuvs-gpu	9315.027908072807	3181.88101996202	whole/whole	FAIL	0	2026-10-27T18:40:39Z
+algos.cagra.taxi.rows=full	algos/cagra/taxi/rows=full	identical/infer	cuvs-gpu	169.62966590654105	1207.8789550578222	whole/whole	FAIL	0	2026-10-27T18:40:39Z
+algos.calibrated.istella.rows=full	-	-	-				no-races	0	2026-10-27T18:40:58Z
+algos.calibrated.taxi.rows=full	-	-	-				no-races	0	2026-10-27T18:41:15Z
+algos.categorical-nb.istella.rows=full	algos/categorical-nb/istella/rows=full	identical/fit	cuml-gpu	207.58303499314934	62.10777896922082	whole/whole	PASS	0	2026-10-27T18:42:14Z
+algos.categorical-nb.istella.rows=full	algos/categorical-nb/istella/rows=full	identical/infer	cuml-gpu	72.0643529202789	9.176330990158021	whole/whole	PASS	0	2026-10-27T18:42:14Z
+algos.categorical-nb.taxi.rows=full	algos/categorical-nb/taxi/rows=full	identical/fit	cuml-gpu	152.49027404934168	51.245342125184834	whole/whole	PASS	0	2026-10-27T18:43:00Z
+algos.categorical-nb.taxi.rows=full	algos/categorical-nb/taxi/rows=full	identical/infer	cuml-gpu	63.99515306111425	11.00561604835093	whole/whole	PASS	0	2026-10-27T18:43:00Z
+algos.cca.istella.rows=full	algos/cca/istella/rows=full	identical/fit	sklearn-cpu	17828.438413096592	343702.3488099221	whole/whole	PASS	0	2026-10-27T18:55:53Z
+algos.cca.istella.rows=full	algos/cca/istella/rows=full	identical/infer	sklearn-cpu	451.5858869999647	182.26538505405188	whole/whole	PASS	0	2026-10-27T18:55:53Z
+algos.cca.taxi.rows=full	algos/cca/taxi/rows=full	identical/fit	sklearn-cpu	366.0571239888668	2073.893547989428	whole/whole	PASS	0	2026-10-27T18:56:44Z
+algos.cca.taxi.rows=full	algos/cca/taxi/rows=full	identical/infer	sklearn-cpu	50.7474800106138	10.637274943292141	whole/whole	PASS	0	2026-10-27T18:56:44Z
+algos.cholesky.synthetic.rows=full	algos/cholesky/synthetic/rows=full	identical/fit	torch-gpu	273.9745469298214	13.88878293801099	kernel/kernel	PASS	0	2026-10-27T19:01:18Z
+algos.classical-mds.istella.rows=full	-	-	-				no-races	0	2026-10-27T19:01:36Z
+algos.classical-mds.taxi.rows=full	-	-	-				no-races	0	2026-10-27T19:01:51Z
+algos.clip-grad-norm.synthetic.rows=full	algos/clip-grad-norm/synthetic/rows=full	identical/fit	torch-compile-fp32			MIXED ours whole / arm kernel	PASS	0	2026-10-27T19:02:43Z
+algos.cnn-clf.synthetic.rows=full	algos/cnn-clf/synthetic/rows=full	identical/fit	torch-eager-tf32	203.48247000947595	525.3664819756523	kernel/kernel	PASS	0	2026-10-27T19:04:26Z
+algos.cnn-clf.synthetic.rows=full	algos/cnn-clf/synthetic/rows=full	identical/infer	torch-compile-fp32	18.30035401508212	1.1445119744166732	kernel/kernel	PASS	0	2026-10-27T19:04:26Z
+algos.complement-nb.istella.rows=full	algos/complement-nb/istella/rows=full	identical/fit	cuml-gpu	3196.485969936475	800.0895200530067	whole/whole	PASS	0	2026-10-27T19:05:37Z
+algos.complement-nb.istella.rows=full	algos/complement-nb/istella/rows=full	identical/infer	cuml-gpu	678.8824440445751	96.17658704519272	whole/whole	PASS	0	2026-10-27T19:05:37Z
+algos.complement-nb.taxi.rows=full	algos/complement-nb/taxi/rows=full	identical/fit	cuml-gpu	307.2578660212457	71.31941895931959	whole/whole	PASS	0	2026-10-27T19:06:20Z
+algos.complement-nb.taxi.rows=full	algos/complement-nb/taxi/rows=full	identical/infer	cuml-gpu	89.06225999817252	7.629248080775142	whole/whole	PASS	0	2026-10-27T19:06:20Z
+algos.connected-components.istella.rows=full	algos/connected-components/istella/rows=full	identical/fit	None				-	0	2026-10-27T19:07:06Z
+algos.connected-components.taxi.rows=full	algos/connected-components/taxi/rows=full	identical/fit	None				-	0	2026-10-27T19:07:50Z
+algos.conv1d.synthetic.rows=full	algos/conv1d/synthetic/rows=full	identical/fit	torch-compile-bf16	18.61996401567012	3.0542570166289806	kernel/kernel	PASS	0	2026-10-27T19:15:17Z
+algos.conv1d.synthetic.rows=full	algos/conv1d/synthetic/rows=full	identical/infer	torch-compile-bf16	2.9465369880199432	0.9619320044294	kernel/kernel	PASS	0	2026-10-27T19:15:17Z
+algos.conv2d.synthetic.rows=full	algos/conv2d/synthetic/rows=full	identical/fit	torch-compile-bf16	9.204423055052757	1.9137350609526038	kernel/kernel	PASS	0	2026-10-27T19:17:48Z
+algos.conv2d.synthetic.rows=full	algos/conv2d/synthetic/rows=full	identical/infer	torch-eager-bf16	1.7445749836042523	0.3339609829708934	kernel/kernel	PASS	0	2026-10-27T19:17:48Z
+algos.cross-entropy.synthetic.rows=full	algos/cross-entropy/synthetic/rows=full	identical/fit	torch-compile-fp32			MIXED ours whole / arm kernel	PASS	0	2026-10-27T19:19:02Z
+algos.cross-val-predict.istella.rows=full	algos/cross-val-predict/istella/rows=full	identical/fit	sklearn-cpu	24214.2774569802	28248.733701067977	whole/whole	INSUFFICIENT	0	2026-10-27T19:21:44Z
+algos.cross-val-predict.taxi.rows=full	algos/cross-val-predict/taxi/rows=full	identical/fit	sklearn-cpu	1319.2331349710003	1304.0950370486826	whole/whole	INSUFFICIENT	0	2026-10-27T19:22:31Z
+algos.cross-val-score.istella.rows=full	algos/cross-val-score/istella/rows=full	identical/fit	sklearn-cpu	22791.825745953247	8532.22384606488	whole/whole	FAIL	0	2026-10-27T19:24:25Z
+algos.cross-val-score.taxi.rows=full	algos/cross-val-score/taxi/rows=full	identical/fit	sklearn-cpu	1338.3804219774902	1324.8779990244657	whole/whole	PASS	0	2026-10-27T19:25:11Z
+algos.cross-validate.istella.rows=full	algos/cross-validate/istella/rows=full	identical/fit	sklearn-cpu	36632.37700401805	26383.44206090551	whole/whole	INSUFFICIENT	0	2026-10-27T19:28:09Z
+algos.cross-validate.taxi.rows=full	algos/cross-validate/taxi/rows=full	identical/fit	sklearn-cpu	2162.0500299613923	1352.9014490777627	whole/whole	INSUFFICIENT	0	2026-10-27T19:28:55Z
+algos.croston-optimized.synthetic.rows=full	algos/croston-optimized/synthetic/rows=full	identical/fit	statsforecast-cpu-serial	28.43409008346498	7.230357965454459	whole/whole	PASS	0	2026-10-27T19:29:37Z
+algos.croston-optimized.taxi-hourly.rows=full	algos/croston-optimized/taxi-hourly/rows=full	identical/fit	statsforecast-cpu-serial	23.379867081530392	7.296908064745367	whole/whole	PASS	0	2026-10-27T19:30:20Z
+algos.croston-sba.synthetic.rows=full	algos/croston-sba/synthetic/rows=full	identical/fit	statsforecast-cpu-serial	16.816052026115358	2.2760449210181832	whole/whole	PASS	0	2026-10-27T19:31:05Z
+neural.causal-lm-generate-smollm2.smollm2-135m.shape=full	neural/causal-lm-generate-smollm2/smollm2-135m/shape=full	identical/fit	torch-eager-bf16	1306.948819081299	2267.4393869237974	whole/whole	INSUFFICIENT	0	2026-10-27T16:41:40Z
+neural.causal-lm-generate.mojolearn-162m.shape=full	neural/causal-lm-generate/mojolearn-162m/shape=full	identical/fit	torch-eager-fp32	6092.542249010876	893.6613739933819	whole/whole	INSUFFICIENT	0	2026-10-27T16:43:49Z
+neural.gemm-bf16.gaussian.shape=full	neural/gemm-bf16/gaussian/shape=full	identical/fit	torch-eager-bf16	74.91880794987082	42.948352987878025	whole/whole	PASS	0	2026-10-27T16:45:31Z
+neural.gemm-int8.gaussian.shape=full	neural/gemm-int8/gaussian/shape=full	identical/fit	torch-compile-int8	67.66029505524784	40.862528956495225	whole/whole	PASS	0	2026-10-27T16:46:59Z
+neural.gemm.gaussian.shape=full	neural/gemm/gaussian/shape=full	identical/fit	torch-compile-tf32	80.14276693575084	45.978669077157974	whole/whole	PASS	0	2026-10-27T16:50:35Z
+neural.gru-fit.higgs.shape=full	neural/gru-fit/higgs/shape=full	identical/fit	torch-compile-tf32	144.37784696929157	240.2335200458765	whole/whole	FAIL	0	2026-10-27T16:52:06Z
+neural.lm-forward.bytes.shape=full	neural/lm-forward/bytes/shape=full	identical/fit	torch-compile-bf16	57.96608899254352	39.83130701817572	whole/whole	PASS	0	2026-10-27T16:56:40Z
+neural.lm-train-step.bytes.shape=full	neural/lm-train-step/bytes/shape=full	identical/fit	torch-compile-bf16	35.97533400170505	12.331941979937255	whole/whole	PASS	0	2026-10-27T17:00:04Z
+neural.lstm-fit.higgs.shape=full	neural/lstm-fit/higgs/shape=full	identical/fit	torch-eager-tf32	171.264145988971	252.61022988706827	whole/whole	PASS	0	2026-10-27T17:01:33Z
+neural.mamba1-decode.gaussian.shape=full	neural/mamba1-decode/gaussian/shape=full	identical/fit	mamba-ssm-fp32	360.19435292109847	1133.8463430292904	whole/whole	PASS	0	2026-10-27T17:02:42Z
+neural.mamba1-forward.gaussian.shape=full	neural/mamba1-forward/gaussian/shape=full	identical/fit	mamba-ssm-tf32	11.63675100542605	3.2783460337668657	whole/whole	PASS	0	2026-10-27T17:03:49Z
+neural.mamba2-decode.gaussian.shape=full	neural/mamba2-decode/gaussian/shape=full	identical/fit	mamba-ssm-tf32	2273.185365018435	1316.2112480495125	whole/whole	PASS	0	2026-10-27T17:05:06Z
+neural.mamba2-forward.gaussian.shape=full	neural/mamba2-forward/gaussian/shape=full	identical/fit	mamba-ssm-tf32	15.777957974933088	2.3273939732462168	whole/whole	PASS	0	2026-10-27T17:10:05Z
+neural.mamba3-decode.gaussian.shape=full	neural/mamba3-decode/gaussian/shape=full	identical/fit	None				-	0	2026-10-27T17:10:59Z
+neural.mamba3-forward.gaussian.shape=full	neural/mamba3-forward/gaussian/shape=full	identical/fit	mamba-ssm-tf32	16.787859960459173	4.041179898194969	whole/whole	PASS	0	2026-10-27T17:14:16Z
+neural.mlp-fit.higgs.shape=full	neural/mlp-fit/higgs/shape=full	identical/fit	torch-compile-tf32	185.87589799426496	1451.7386769875884	whole/whole	PASS	0	2026-10-27T17:16:11Z
+neural.mlp-predict.gaussian.shape=full	neural/mlp-predict/gaussian/shape=full	identical/fit	torch-eager-fp32	0.3521509934216738	0.4653010983020067	whole/whole	INSUFFICIENT	0	2026-10-27T17:17:14Z
+neural.mlp-train-step.gaussian.shape=full	neural/mlp-train-step/gaussian/shape=full	identical/fit	torch-eager-bf16	0.8359019411727786	2.074124990031123	whole/whole	PASS	0	2026-10-27T17:18:18Z
+neural.ops-session-step.gaussian.shape=full	neural/ops-session-step/gaussian/shape=full	identical/fit	torch-eager-bf16	2.5949160335585475	2.705916063860059	whole/whole	INSUFFICIENT	0	2026-10-27T17:19:22Z
+neural.program-run.gaussian.shape=full	neural/program-run/gaussian/shape=full	identical/fit	torch-eager-bf16	1.2223629746586084	0.8840820519253612	whole/whole	PASS	0	2026-10-27T17:20:26Z
+neural.rnn-fit.higgs.shape=full	neural/rnn-fit/higgs/shape=full	identical/fit	torch-eager-fp32	83.25394592247903	236.8762990226969	whole/whole	PASS	0	2026-10-27T17:21:53Z
+neural.samba-decode.bytes.shape=full	neural/samba-decode/bytes/shape=full	identical/fit	None				-	0	2026-10-27T17:22:43Z
+neural.samba-forward.bytes.shape=full	neural/samba-forward/bytes/shape=full	identical/fit	torch-eager-bf16	12.050178949721158	6.056095007807016	whole/whole	PASS	0	2026-10-27T17:26:35Z
+neural.samba-train-step.bytes.shape=full	neural/samba-train-step/bytes/shape=full	identical/fit	torch-eager-tf32	49.06120395753533	15.987802995368838	whole/whole	PASS	0	2026-10-27T17:33:27Z
+neural.sequential-fit.synthetic.shape=full	neural/sequential-fit/synthetic/shape=full	identical/fit	torch-compile-fp32	283.2292029634118	1670.0526209315285	whole/whole	PASS	0	2026-10-27T17:35:28Z
+neural.sequential-predict.synthetic.shape=full	neural/sequential-predict/synthetic/shape=full	identical/fit	torch-compile-tf32	11.71373890247196	1.6309049678966403	whole/whole	PASS	0	2026-10-27T17:37:10Z
+neural.tape-user-model.higgs.shape=full	neural/tape-user-model/higgs/shape=full	identical/fit	torch-compile-tf32	252.73950095288455	1939.2956270603463	whole/whole	PASS	0	2026-10-27T17:39:23Z
+neural.transformer-decode.gaussian.shape=full	neural/transformer-decode/gaussian/shape=full	identical/fit	torch-eager-fp32	2200.954698957503	1267.7757109049708	whole/whole	PASS	0	2026-10-27T17:40:42Z
+neural.transformer-forward.gaussian.shape=full	neural/transformer-forward/gaussian/shape=full	identical/fit	torch-compile-bf16	13.868796057067811	2.9536100337281823	whole/whole	PASS	0	2026-10-27T17:42:03Z

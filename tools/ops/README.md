@@ -1,6 +1,6 @@
 # Ops tools (copies; git is the source of truth)
 lq and compile_slot.sh were lost when ~/mojolearn-evidence top-level files were wiped (2026-10-05 ~23:46) and restored from the T9 backup.
-Live copies: ~/mojolearn-evidence/lq/lq, ~/mojolearn-evidence/compile_slot.sh, and ~/mojolearn-ops/. Never keep the only copy of a script in a logs or evidence folder.
+Live copies: ~/mojolearn-evidence/lq/lq and ~/mojolearn-ops/. compile_slot.sh now lives at tools/compile_slot.sh (2026-10-28); tools/ops/compile_slot.sh and ~/mojolearn-evidence/compile_slot.sh forward to it. Never keep the only copy of a script in a logs or evidence folder.
 
 ## Incremental development builds
 
@@ -104,3 +104,23 @@ Final releases still go through the existing release builder and qualification
 gates. Plan/build exit **0** means controller success, **1** means failure, and
 **3** means an incomplete selected build with no activation; it is not a release
 qualification result.
+
+## Scripts adopted from ~/mojolearn-evidence (2026-10-28)
+
+Scripts that current rules, tools or docs still reference were copied into the repo so they are versioned.
+The originals stay in place; edit the repo copy first.
+
+| Repo path | Origin | Purpose |
+|---|---|---|
+| `tools/compile_slot.sh` | `~/mojolearn-evidence/compile_slot.sh` | Mac compile semaphore: 4 machine-wide slots (mkdir locks under `~/mojolearn-evidence/compile-slots`), `nice -n 19`; refuses dedicated Apple `fast` builds unless `MOJOLEARN_INTEG_BUILD=1`. The origin path is now a shim that execs the main checkout's copy (falling back to `~/mojolearn-evidence/compile_slot.legacy-20261028.sh` until this lands on main). `tools/ops/compile_slot.sh` forwards to it. |
+| `tools/ops/archive_all_boxes.sh` | `~/mojolearn-evidence/archive_all_boxes.sh` | Archives every live rented box (from `devpods/*/state.env` and `do-amd-steward/state.env`) through `tools/box_archive.sh`, then prunes R2-confirmed local copies to 3 per box. Named in `tools/box_archive.sh`. Its launchd job is not installed at present. |
+| `tools/ops/lq` | `~/mojolearn-ops/lq` (refreshed 2026-10-28 from the 2026-10-24 live copy) | Box job queue CLI named in CLAUDE.md. `~/mojolearn-ops/lq` stays the live copy. |
+| `tools/apple_fast_ops/apple_watch.sh`, `tools/apple_fast_ops/m2_bq.sh` | `~/mojolearn-evidence/` | Already versioned, byte-identical; nothing copied. |
+
+### Not adopted (one-off)
+
+Not named by CLAUDE.md, AGENTS.md, current tools or the current briefs, or superseded by a repo tool:
+
+- `archive_box.sh`: hard-coded addresses of released boxes; superseded by `tools/box_archive.sh`.
+- `box-watch.sh`, `m2compile.sh`: named only in Oct 3-4 state notes.
+- One-off release chains, watchers, wave and build helpers: `algos-trees-push.sh`, `anc2-build.sh`, `anc2-record.sh`, `build-trees-io-all.sh`, `cloudmac-newmac-bootstrap.sh`, `cloudmac-release-2116.sh`, `err1.sh`, `errs.sh`, `gfs_syms.sh`, `hosts_readonly_check.sh`, `hotaisle_stock_watch.sh`, `lanes.sh`, `lean_worktree-identical-experiments.sh`, `lease_steward.sh`, `mac_release.sh`, `ni_at.sh`, `night_chain.sh`, `nmu-compile.sh`, `nomatrix_filter.sh`, `ols-admit-run.sh`, `pull.sh`, `r2ls.sh`, `ref-all-host.sh`, `release-0837-chain.sh`, `release-0837-chain10.sh`, `release-0837-chain2.sh`, `release-0837-chain3.sh`, `release-0837-chain4.sh`, `release-0837-chain5.sh`, `release-0837-chain6.sh`, `release-0837-chain7.sh`, `release-0837-chain8.sh`, `release-0837-chain9.sh`, `release-three-2116.sh`, `release-ultra-0900.sh`, `release-ultra-when-idle.sh`, `release_0839.sh`, `release_nv_when_idle.sh`, `repo_audit.sh`, `rerun_failed_20261010.sh`, `sm_fix_test.sh`, `sm_pin_experiment.sh`, `stage_softmax_mcd.sh`, `stop_compiles.sh`, `symhist_builds.sh`, `symiter_builds.sh`, `thin-neural-count.sh`, `watch_release_0839.sh`, `wave-v2-identity-summary.sh`, `wave-v2-stage-harness.sh`, `wave-v2-timing.sh`, `wave-v2-wait-all.sh`, `wave-v2-wait-identity.sh`, `wave-v2-xv.sh`, `wip_snapshot_loop.sh`, `wt-reclaim.sh`, `wt_idle_pixi_scan.sh`.

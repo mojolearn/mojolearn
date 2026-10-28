@@ -1,0 +1,101 @@
+{
+  "registered_cpu_lanes": [
+    "gbdt-query-rmse-pointwise",
+    "gbdt-pair-logit-pointwise",
+    "gbdt-yeti-rank-pointwise"
+  ],
+  "device_resource_exclusions": {
+    "training-device-cross-entropy": "the CPU training binding has no device array pool",
+    "optim-resident-io": "the CPU training binding has no resident parameter or gradient buffers",
+    "sequence-device-release": "the CPU sequence binding has no resident tensor pool to release"
+  },
+  "query_greedy_lane_unchanged": true,
+  "new_runtime_evidence": false,
+  "table_evidence_is_historical": true,
+  "retained_table": {
+    "gbdt-query-rmse": {
+      "fixtures": 9,
+      "parts": {
+        "train": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 9
+        },
+        "infer": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 9
+        },
+        "model": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 9
+        },
+        "batch": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 9
+        }
+      }
+    },
+    "gbdt-query-rmse-pointwise": {
+      "fixtures": 0,
+      "parts": {
+        "train": {
+          "cells_with_reference": 0,
+          "cells_with_cpu_column": 0
+        },
+        "infer": {
+          "cells_with_reference": 0,
+          "cells_with_cpu_column": 0
+        },
+        "model": {
+          "cells_with_reference": 0,
+          "cells_with_cpu_column": 0
+        },
+        "batch": {
+          "cells_with_reference": 0,
+          "cells_with_cpu_column": 0
+        }
+      }
+    },
+    "gbdt-pair-logit-pointwise": {
+      "fixtures": 9,
+      "parts": {
+        "train": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 0
+        },
+        "infer": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 0
+        },
+        "model": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 0
+        },
+        "batch": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 0
+        }
+      }
+    },
+    "gbdt-yeti-rank-pointwise": {
+      "fixtures": 9,
+      "parts": {
+        "train": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 0
+        },
+        "infer": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 0
+        },
+        "model": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 0
+        },
+        "batch": {
+          "cells_with_reference": 9,
+          "cells_with_cpu_column": 0
+        }
+      }
+    }
+  }
+}

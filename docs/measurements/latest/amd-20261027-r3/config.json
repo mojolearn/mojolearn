@@ -1,0 +1,37 @@
+{
+  "repo": "/Users/andrewhendel/CascadeProjects/mojolearn",
+  "out": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3",
+  "source_commit": "af07ec0ec95ad638416a1ee86b59680890b669ec",
+  "source_bundle": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/source.tar.gz",
+  "remote_runner": "/Users/andrewhendel/CascadeProjects/mojolearn/tools/full_do_measurement_worker.py",
+  "manifest": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/manifest.json",
+  "version": "0.8.62",
+  "r2_credentials": "/Users/andrewhendel/.mojolearn_r2",
+  "lease_minutes": 480,
+  "commit_boards": true,
+  "data_keys": [
+    "gbm-bench/taxi/taxi_speed.npz",
+    "gbm-bench/istella/istella_speed.npz",
+    "gbm-bench/higgs/higgs_speed.npz",
+    "gbm-bench/istella/istella_rank.npz"
+  ],
+  "vendors": [
+    {
+      "vendor": "amd",
+      "state_dir": "/Users/andrewhendel/mojolearn-evidence/do-amd-steward",
+      "expected_id": "613036415",
+      "remote_root": "/root/measure-amd-20261027-r3",
+      "python": "/root/measure-smoke-20261027/run/cache/venv/bin/python",
+      "cache": "/root/measure-smoke-20261027/run/cache",
+      "wheel_manifest": "/root/measure-smoke-20261027/run/setup/wheel-manifest-0862.json",
+      "bootstrap": false,
+      "hours": 168,
+      "opponent_store": "/Users/andrewhendel/mojolearn-evidence/full-measurement-amd-20261027-r3/opponent-store.jsonl",
+      "board_box": "amd",
+      "board_column": "amd-mi325x",
+      "neural_smoke": false,
+      "release_after_archive": false
+    }
+  ],
+  "previous_attempt": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/controller.json"
+}

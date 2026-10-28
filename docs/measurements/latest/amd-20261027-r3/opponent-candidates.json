@@ -1,0 +1,9 @@
+{
+  "records": 350,
+  "retained_successful_candidates": 157,
+  "by_library": {
+    "torch": 153,
+    "hipvs": 4
+  },
+  "actual_reuse_requires_current_complete_key_match": true
+}

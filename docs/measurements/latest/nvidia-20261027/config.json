@@ -1,0 +1,39 @@
+{
+  "repo": "/Users/andrewhendel/CascadeProjects/mojolearn",
+  "out": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027",
+  "source_commit": "7d881805f7f9173934a062ba8006e663ebf68c8a",
+  "source_bundle": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/source.tar.gz",
+  "remote_runner": "/Users/andrewhendel/CascadeProjects/mojolearn/tools/full_do_measurement_worker.py",
+  "manifest": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/manifest.json",
+  "version": "0.8.62",
+  "r2_credentials": "/Users/andrewhendel/.mojolearn_r2",
+  "lease_minutes": 480,
+  "commit_boards": true,
+  "data_keys": [
+    "gbm-bench/taxi/taxi_speed.npz",
+    "gbm-bench/istella/istella_speed.npz",
+    "gbm-bench/higgs/higgs_speed.npz",
+    "gbm-bench/istella/istella_rank.npz"
+  ],
+  "vendors": [
+    {
+      "vendor": "nvidia",
+      "provider": "runpod",
+      "state_key": "measure-nv-20261027",
+      "state_dir": "/Users/andrewhendel/mojolearn-evidence/devpods/measure-nv-20261027",
+      "expected_id": "qgaa5w4513drfh",
+      "remote_root": "/root/measure-nvidia-20261027",
+      "bootstrap": true,
+      "hours": 168,
+      "neural_smoke": true,
+      "release_after_archive": false,
+      "opponent_store": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027/nvidia-opponent-store.jsonl",
+      "board_box": "nv-6000ada",
+      "board_column": "nvidia-rtx6000ada",
+      "provider_env": {
+        "MOJOLEARN_DEVPOD_MAX_LEASE_MIN": "480"
+      }
+    }
+  ],
+  "previous_attempt": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027/controller.json"
+}

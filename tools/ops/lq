@@ -5,32 +5,38 @@
 #   lq add <box> RACE <branch> <lane[,lane]> <dataset[,dataset]> [ARMS=ours,sklearn] [BUILDS=build_x,build_x_host] [ENV=VALUE ...]   (nv/amd)
 #   lq add <box> ID   <branch> <lane[,lane]> <dataset[,dataset]>   SAME-BITS CHECK: device vs host digests on 50k-row
 #                                                        data; refuses when the branch changes no .mojo/bindings file
-#   lq add <box> CMD  <branch> <tag> <command...>        (runs in the branch tree with its bindings built)
+#   lq add <box> CMD  <branch> <tag> <command...>        (runs in the branch tree with its bindings built; BUILDS=none: no build)
+#   lq add --front <box> ...                             run NEXT: after the running job, before every plain queued line
+#                                                        (front lines keep their order). For the release smoke only.
 #   lq results <box> [grep pattern]                      (last 40 matching result lines)
 #   lq log <box> <job id|tag> [grep pattern]             (last 40 matching lines of that job's logs)
-#   lq status                                            (queue depth per box)
+#   lq status [box]                                      (queue depth per box; with a box, only that one)
 #
 # Boxes: nv  = RunPod L40S (sm_89)       amd = DigitalOcean MI325X (gfx942)
+#        nv2 = a second RunPod L40S (sm_89), same gpu-queue setup as nv; its job ids are v#### (nv: n####), so
+#              the two NVIDIA boxes never share a job id in the (vendor, id)-keyed grid collector
 #        apple = the M2 Pro for every lane (the M3 belongs to the Apple FAST peer; only lane/apple-fast* may use m3)
 # A CMD and the RACE lines that rely on its builds must go to the SAME Mac (always the M2 for gap lanes).
 # The branch must be pushed to GitHub first. On nv/amd one RACE line = one build + every lane x dataset: batch them.
 # Mac RACE lines take ONE lane, ONE dataset, at most one ENV, arms "ours" (Macs cache the build per head).
 # Scripts a CMD runs must be committed in the branch (e.g. tools/), never only on the laptop.
-# LQ_FRONT=1 lq add m3 ...: put the line next in the Mac queue (apple-fast lane only).
+# lq add --front (or LQ_FRONT=1): next in the queue on nv (gpu-queue GQ_FRONT=1), amd (inserted after pos under
+# /root/lq/queue.lock, which amd_runner.sh takes too) and the Macs (after pos). Release smoke and apple-fast only.
 # Use MOJOLEARN_VENDOR=cpu only for the host DIGEST column, never for timing.
 set -u
 PEM=$HOME/.ssh/mambik-l8.pem; SO="-o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=no"
-NV="-p 32448 root@81.27.69.178"; AMD="root@107.170.16.163"
+NV="-p 11578 root@66.92.198.226"; NV2="-p 18458 root@202.181.159.230"; AMD="root@107.170.70.57"
 M3="-i $PEM ec2-user@54.157.1.251"; M2="-i $PEM ec2-user@54.237.205.45"
 REPO=$HOME/CascadeProjects/mojolearn
 die() { echo "lq: $*" >&2; exit 2; }
-target() { case $1 in nv) echo "$NV";; amd) echo "$AMD";; m3) echo "$M3";; m2) echo "$M2";; *) die "unknown box '$1' (nv, amd, m3, m2)";; esac; }
+target() { case $1 in nv) echo "$NV";; nv2) echo "$NV2";; amd) echo "$AMD";; m3) echo "$M3";; m2) echo "$M2";; *) die "unknown box '$1' (nv, nv2, amd, m3, m2)";; esac; }
 qfile() { case $1 in m3|m2) echo '~/mq/queue.txt';; *) echo /root/lq/queue.txt;; esac; }
 rfile() { case $1 in m3|m2) echo '~/mq/results.txt';; *) echo /root/lq/results.txt;; esac; }
 cmd=${1:-}; shift || true
 case $cmd in
 add)
-  box=${1:-}; kind=${2:-}; br=${3:-}; [ $# -ge 5 ] || die "usage: lq add <box> RACE|CMD <branch> ..."
+  if [ "${1:-}" = --front ]; then export LQ_FRONT=1; shift; fi
+  box=${1:-}; kind=${2:-}; br=${3:-}; [ $# -ge 5 ] || die "usage: lq add [--front] <box> RACE|CMD <branch> ..."
   # Oct 2: the M3 belongs to the Apple FAST peer (lane/apple-fast*); every other lane's Apple work goes to the M2
   if [ "$box" = apple ]; then
     case $br in lane/apple-fast*) box=m3;; *) box=m2;; esac; echo "apple -> $box"
@@ -63,12 +69,18 @@ add)
       ssh $SO $T "echo $(printf '%q' "$line") >> ~/mq/queue.txt; echo queued \$(wc -l < ~/mq/queue.txt) pos \$(cat ~/mq/pos)"
     fi
   elif [ $box = amd ]; then
-    ssh $SO $T "echo $(printf '%q' "$kind $*") >> /root/lq/queue.txt; echo queued \$(wc -l < /root/lq/queue.txt) pos \$(cat /root/lq/pos)"
-  else
-    ssh $SO $T "set -e; mkdir -p /root/lq/jobs; n=\$(ls /root/lq/jobs | grep -c '\.line\$' || true); id=\$(printf 'n%04d' \$((n+1)));
+    # every write to queue.txt holds /root/lq/queue.lock (amd_runner.sh takes it to read a line and bump pos)
+    if [ "${LQ_FRONT:-0}" = 1 ]; then  # run next: insert right after the running line (after earlier front lines)
+      ssh $SO $T "cd /root/lq && exec 9> queue.lock && flock 9 && p=\$(cat pos) && f=\$(cat front_end 2>/dev/null || echo 0) && { [ \$f -gt \$p ] && p=\$f; true; } && echo \$((p+1)) > front_end && { head -n \$p queue.txt; echo $(printf '%q' "$kind $*"); tail -n +\$((p+1)) queue.txt; } > queue.new && mv queue.new queue.txt && echo queued-front at \$((p+1)) pos \$(cat pos)"
+    else
+      ssh $SO $T "cd /root/lq && exec 9> queue.lock && flock 9 && echo $(printf '%q' "$kind $*") >> queue.txt; echo queued \$(wc -l < /root/lq/queue.txt) pos \$(cat /root/lq/pos)"
+    fi
+  else   # nv and nv2 (gpu-queue boxes); nv2 ids are v####
+    jp=n; [ $box = nv2 ] && jp=v
+    ssh $SO $T "set -e; mkdir -p /root/lq/jobs; n=\$(ls /root/lq/jobs | grep -c '\.line\$' || true); id=\$(printf '$jp%04d' \$((n+1)));
       echo $(printf '%q' "$kind $*") > /root/lq/jobs/\$id.line
       printf '#!/bin/bash\nbash /root/lq/box_job.sh nvidia %s \$(cat /root/lq/jobs/%s.line)\n' \$id \$id > /root/lq/jobs/\$id.sh
-      /root/gpu-queue/bin/nvq ensure > /dev/null; q=\$(/root/gpu-queue/bin/nvq submit pr80b 1 240 /root/lq/jobs/\$id.sh lq-\$id); echo \"queued \$id (gpu-queue \$q)\""
+      /root/gpu-queue/bin/nvq ensure > /dev/null; q=\$(GQ_FRONT=${LQ_FRONT:-0} /root/gpu-queue/bin/nvq submit pr80b 1 600 /root/lq/jobs/\$id.sh lq-\$id); echo \"queued \$id (gpu-queue \$q)$([ "${LQ_FRONT:-0}" = 1 ] && echo ' FRONT')\""
   fi ;;
 results)
   box=${1:-}; pat=${2:-.}; T=$(target $box)
@@ -79,12 +91,13 @@ log)
   case $box in m3|m2) where="~/mq/out/$id.log ~/mqf/out/$id.log ~/mq/out/race-*$id*/race.log";; *) where="/root/lq/out/$id/*.log /root/lq/out/$id/*.txt";; esac
   ssh $SO $T "setopt nullglob 2>/dev/null; grep -h -E $(printf '%q' "$pat") $where 2>/dev/null | tail -40" | cut -c1-400 ;;
 status)
-  for b in nv amd m3 m2; do
+  bs="nv nv2 amd m3 m2"; [ -n "${1:-}" ] && { target "$1" > /dev/null; bs=$1; }
+  for b in $bs; do
     T=$(target $b)
     case $b in
       m3|m2) s=$(ssh $SO $T 'echo "$(wc -l < ~/mq/queue.txt) lines, done through $(cat ~/mq/pos)"' 2>&1 | tail -1);;
       amd) s=$(ssh $SO $T 'echo "$(wc -l < /root/lq/queue.txt) lines, done through $(cat /root/lq/pos)"' 2>&1 | tail -1);;
-      nv) s=$(ssh $SO $T 'for d in /root/gpu-queue/0*; do cat $d/status; done | sort | uniq -c | tr "\n" " "' 2>&1 | tail -1);;
+      nv|nv2) s=$(ssh $SO $T 'for d in /root/gpu-queue/0*; do [ -f $d/status ] && cat $d/status; done | sort | uniq -c | tr "\n" " "' 2>&1 | tail -1);;
     esac
     echo "$b: $s"
   done ;;

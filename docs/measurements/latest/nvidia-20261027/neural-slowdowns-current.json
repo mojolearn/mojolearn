@@ -1,0 +1,654 @@
+[
+  {
+    "recipe": "neural/causal-lm-generate/mojolearn-162m/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-fp32",
+    "ratio": 6.817506525750318,
+    "ours_ms": 6092.542249010876,
+    "opponent_ms": 893.6613739933819,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "INSUFFICIENT"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.causal-lm-generate.mojolearn-162m.shape=full.json"
+  },
+  {
+    "recipe": "neural/mamba2-forward/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "mamba-ssm-tf32",
+    "ratio": 6.779238133424489,
+    "ours_ms": 15.777957974933088,
+    "opponent_ms": 2.3273939732462168,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.00017427200504237808,
+            "opponent": 0.00017427200504237808,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "rel_fro_vs_torch_eager_fp32",
+            "observed": 9.071260074887053e-05,
+            "opponent": 9.071260074887053e-05,
+            "ours": 1.4969642609371176e-07,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.mamba2-forward.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/mamba3-forward/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "mamba-ssm-tf32",
+    "ratio": 4.154197631230827,
+    "ours_ms": 16.787859960459173,
+    "opponent_ms": 4.041179898194969,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.0006018045462979738,
+            "opponent": 0.0006018045462979738,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "rel_fro_vs_torch_eager_fp32",
+            "observed": 0.00019929921360786255,
+            "opponent": 0.00019929921360786255,
+            "ours": 5.5507336564737145e-08,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.mamba3-forward.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/mamba1-forward/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "mamba-ssm-tf32",
+    "ratio": 3.5495798447045748,
+    "ours_ms": 11.63675100542605,
+    "opponent_ms": 3.2783460337668657,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 1.9023447945247664e-06,
+            "opponent": 1.9023447945247664e-06,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "rel_fro_vs_torch_eager_fp32",
+            "observed": 6.397751325686387e-07,
+            "opponent": 6.397751325686387e-07,
+            "ours": 6.376624036789903e-09,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.mamba1-forward.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/lm-train-step/bytes/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-bf16",
+    "ratio": 2.9172480749774086,
+    "ours_ms": 35.97533400170505,
+    "opponent_ms": 12.331941979937255,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "symmetric-relative",
+            "margin": 0.05,
+            "metric": "loss_last_step",
+            "observed": 0.0003034823521720892,
+            "opponent": 8.400327682495117,
+            "ours": 8.402877807617188,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.lm-train-step.bytes.shape=full.json"
+  },
+  {
+    "recipe": "neural/gemm-bf16/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-bf16",
+    "ratio": 1.7443930380989539,
+    "ours_ms": 74.91880794987082,
+    "opponent_ms": 42.948352987878025,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.0027588420144940336,
+            "opponent": 0.0027588420144940336,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_err_vs_fp64",
+            "observed": 0.002758856066062028,
+            "opponent": 0.002758856066062028,
+            "ours": 1.1548914368712009e-07,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.gemm-bf16.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/gemm/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-tf32",
+    "ratio": 1.7430423399437949,
+    "ours_ms": 80.14276693575084,
+    "opponent_ms": 45.978669077157974,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.0002784513192924475,
+            "opponent": 0.0002784513192924475,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_err_vs_fp64",
+            "observed": 0.00027840572214456524,
+            "opponent": 0.00027840572214456524,
+            "ours": 2.398716980845031e-07,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.gemm.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/mamba2-decode/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "mamba-ssm-tf32",
+    "ratio": 1.7270672685612267,
+    "ours_ms": 2273.185365018435,
+    "opponent_ms": 1316.2112480495125,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 2.0264186632834662e-07,
+            "opponent": 2.0264186632834662e-07,
+            "ours": 0.0,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.mamba2-decode.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/gemm-int8/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-int8",
+    "ratio": 1.6558029271091659,
+    "ours_ms": 67.66029505524784,
+    "opponent_ms": 40.862528956495225,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.0,
+            "opponent": 0.0,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_err_vs_fp64",
+            "observed": 0.0,
+            "opponent": 0.0,
+            "ours": 0.0,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.gemm-int8.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/lm-forward/bytes/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-bf16",
+    "ratio": 1.4552896535906437,
+    "ours_ms": 57.96608899254352,
+    "opponent_ms": 39.83130701817572,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.00890268768272044,
+            "opponent": 0.00890268768272044,
+            "ours": 0.0,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "absolute",
+            "margin": 0.05,
+            "metric": "mean_nll",
+            "observed": 7.029376043021784e-05,
+            "opponent": 9.014196753187816,
+            "ours": 9.014267046948246,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.lm-forward.bytes.shape=full.json"
+  },
+  {
+    "recipe": "neural/program-run/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-bf16",
+    "ratio": 1.3826352112867084,
+    "ours_ms": 1.2223629746586084,
+    "opponent_ms": 0.8840820519253612,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 0.0029801860349581563,
+            "opponent": 0.0029801860349581563,
+            "ours": 0.0,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.program-run.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/ops-session-step/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-bf16",
+    "ratio": 0.9589787607294933,
+    "ours_ms": 2.5949160335585475,
+    "opponent_ms": 2.705916063860059,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "INSUFFICIENT"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.ops-session-step.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/mlp-predict/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-fp32",
+    "ratio": 0.7568239032891942,
+    "ours_ms": 0.3521509934216738,
+    "opponent_ms": 0.4653010983020067,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 1.1004068424177787e-07,
+            "opponent": 1.1004068424177787e-07,
+            "ours": 0.0,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "not_scored": [
+          "quality not scored (scorer failed): ours: the race recorded no quality for this arm (its scorer did not run)"
+        ],
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "INSUFFICIENT"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.mlp-predict.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/lstm-fit/higgs/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-tf32",
+    "ratio": 0.6779778715435879,
+    "ours_ms": 171.264145988971,
+    "opponent_ms": 252.61022988706827,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "absolute",
+            "margin": 0.01,
+            "metric": "auc",
+            "observed": 0.002648278955270311,
+            "opponent": 0.6629596242676187,
+            "ours": 0.665607903222889,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "symmetric-relative",
+            "margin": 0.05,
+            "metric": "rmse",
+            "observed": 0.0023263155368954498,
+            "opponent": 0.47910656006376157,
+            "ours": 0.4779920070292567,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.lstm-fit.higgs.shape=full.json"
+  },
+  {
+    "recipe": "neural/gru-fit/higgs/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-tf32",
+    "ratio": 0.6009895993769739,
+    "ours_ms": 144.37784696929157,
+    "opponent_ms": 240.2335200458765,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "absolute",
+            "margin": 0.01,
+            "metric": "auc",
+            "observed": 0.013455939544727236,
+            "opponent": 0.6689090149296437,
+            "ours": 0.682364954474371,
+            "verdict": "FAIL"
+          },
+          {
+            "comparison": "symmetric-relative",
+            "margin": 0.05,
+            "metric": "rmse",
+            "observed": 0.0056576289881611844,
+            "opponent": 0.4763413155901512,
+            "ours": 0.4736463531548095,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "FAIL"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.gru-fit.higgs.shape=full.json"
+  },
+  {
+    "recipe": "neural/causal-lm-generate-smollm2/smollm2-135m/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-bf16",
+    "ratio": 0.5763985695134359,
+    "ours_ms": 1306.948819081299,
+    "opponent_ms": 2267.4393869237974,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "INSUFFICIENT"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.causal-lm-generate-smollm2.smollm2-135m.shape=full.json"
+  },
+  {
+    "recipe": "neural/mlp-train-step/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-bf16",
+    "ratio": 0.4030142567060221,
+    "ours_ms": 0.8359019411727786,
+    "opponent_ms": 2.074124990031123,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "symmetric-relative",
+            "margin": 0.05,
+            "metric": "loss_last_step",
+            "observed": 7.724824764260207e-05,
+            "opponent": 1.1234476566314697,
+            "ours": 1.1233608722686768,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.mlp-train-step.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/rnn-fit/higgs/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-eager-fp32",
+    "ratio": 0.35146591814363765,
+    "ours_ms": 83.25394592247903,
+    "opponent_ms": 236.8762990226969,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "absolute",
+            "margin": 0.01,
+            "metric": "auc",
+            "observed": 0.005191418127044156,
+            "opponent": 0.6780193823083969,
+            "ours": 0.6728279641813527,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "symmetric-relative",
+            "margin": 0.05,
+            "metric": "rmse",
+            "observed": 0.0014772544574621106,
+            "opponent": 0.4749586693522269,
+            "ours": 0.4756613421902198,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.rnn-fit.higgs.shape=full.json"
+  },
+  {
+    "recipe": "neural/mamba1-decode/gaussian/shape=full",
+    "phase": "identical/fit",
+    "opponent": "mamba-ssm-fp32",
+    "ratio": 0.31767474943630314,
+    "ours_ms": 360.19435292109847,
+    "opponent_ms": 1133.8463430292904,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "both-reference-errors-at-most",
+            "margin": 0.01,
+            "metric": "max_rel_diff_vs_ours",
+            "observed": 5.944827482889895e-08,
+            "opponent": 5.944827482889895e-08,
+            "ours": 0.0,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.mamba1-decode.gaussian.shape=full.json"
+  },
+  {
+    "recipe": "neural/mlp-fit/higgs/shape=full",
+    "phase": "identical/fit",
+    "opponent": "torch-compile-tf32",
+    "ratio": 0.12803674720574665,
+    "ours_ms": 185.87589799426496,
+    "opponent_ms": 1451.7386769875884,
+    "quality": [
+      {
+        "batch": null,
+        "checks": [
+          {
+            "comparison": "absolute",
+            "margin": 0.01,
+            "metric": "accuracy",
+            "observed": 0.0008299999999999974,
+            "opponent": 0.71109,
+            "ours": 0.71192,
+            "verdict": "PASS"
+          },
+          {
+            "comparison": "absolute",
+            "margin": 0.01,
+            "metric": "auc",
+            "observed": 0.0010540604960795896,
+            "opponent": 0.7857932631948176,
+            "ours": 0.784739202698738,
+            "verdict": "PASS"
+          }
+        ],
+        "failures": [],
+        "interpretation": "engineering margin; not a statistical equivalence claim",
+        "policy": "mojolearn.quality-parity.v7",
+        "verdict": "PASS"
+      }
+    ],
+    "file": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia/boards/neural.mlp-fit.higgs.shape=full.json"
+  }
+]

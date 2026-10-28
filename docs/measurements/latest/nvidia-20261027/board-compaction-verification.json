@@ -1,0 +1,7 @@
+{
+  "original_canonical_sha256": "fa89d62acb67276fa47a040e97d64a737335e100ab804032d80908c5365be1bb",
+  "restored_canonical_sha256": "fa89d62acb67276fa47a040e97d64a737335e100ab804032d80908c5365be1bb",
+  "exact_value_preservation": true,
+  "committed_bytes": 50577142,
+  "unchanged_audit_fingerprints": 1616
+}

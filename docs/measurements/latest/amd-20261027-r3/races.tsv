@@ -1,0 +1,206 @@
+board	race	mode/op	opponent	ours_ms	opponent_ms	clock	quality	failed_preflight	updated
+algos.adafactor.synthetic.rows=full	algos/adafactor/synthetic/rows=full	identical/fit	torch-eager-fp32	36.89764499722514	7.241821999969034	kernel/kernel	PASS	0	2026-10-27T17:32:57Z
+algos.adagrad.synthetic.rows=full	algos/adagrad/synthetic/rows=full	identical/fit	torch-compile-fp32	268.8675690005766	2.5757020000582997	kernel/kernel	PASS	0	2026-10-27T17:34:10Z
+algos.adam.synthetic.rows=full	algos/adam/synthetic/rows=full	identical/fit	torch-fused-fp32	52.81883299903711	3.9928339999733	kernel/kernel	PASS	0	2026-10-27T17:35:35Z
+algos.adamax.synthetic.rows=full	algos/adamax/synthetic/rows=full	identical/fit	torch-eager-fp32	62.413631996605545	5.60305499993774	kernel/kernel	PASS	0	2026-10-27T17:36:52Z
+algos.adamw.synthetic.rows=full	algos/adamw/synthetic/rows=full	identical/fit	torch-fused-fp32	53.37142299686093	3.456466999978147	kernel/kernel	PASS	0	2026-10-27T17:38:20Z
+algos.additive-chi2.istella.rows=full	algos/additive-chi2/istella/rows=full	identical/fit	sklearn-cpu	123.37314699834678	197.89968600525754	whole/whole	PASS	0	2026-10-27T17:38:53Z
+algos.additive-chi2.istella.rows=full	algos/additive-chi2/istella/rows=full	identical/infer	sklearn-cpu	13.968803999887314	1.5843660003156401	whole/whole	PASS	0	2026-10-27T17:38:53Z
+algos.additive-chi2.taxi.rows=full	algos/additive-chi2/taxi/rows=full	identical/fit	sklearn-cpu	21.84690199646866	15.440551003848668	whole/whole	PASS	0	2026-10-27T17:39:17Z
+algos.additive-chi2.taxi.rows=full	algos/additive-chi2/taxi/rows=full	identical/infer	sklearn-cpu	12.967672999366187	0.34944700018968433	whole/whole	PASS	0	2026-10-27T17:39:17Z
+algos.als.taxi-zones.rows=full	algos/als/taxi-zones/rows=full	identical/fit	implicit-cpu	98880.28835000296	9580.914170001051	whole/whole	PASS	0	2026-10-27T17:43:25Z
+algos.als.text.rows=full	algos/als/text/rows=full	identical/fit	implicit-cpu	120460.61123000254	11540.259282999614	whole/whole	PASS	0	2026-10-27T17:48:37Z
+algos.ard.istella.rows=full	algos/ard/istella/rows=full	identical/fit	sklearn-cpu	2217.8868300034082	14242.902313999366	whole/whole	PASS	0	2026-10-27T17:49:34Z
+algos.ard.istella.rows=full	algos/ard/istella/rows=full	identical/infer	sklearn-cpu	14.020807000633795	6.609788004425354	whole/whole	PASS	0	2026-10-27T17:49:34Z
+algos.ard.taxi.rows=full	algos/ard/taxi/rows=full	identical/fit	sklearn-cpu	54.515201001777314	14.102715998888016	whole/whole	PASS	0	2026-10-27T17:49:56Z
+algos.ard.taxi.rows=full	algos/ard/taxi/rows=full	identical/infer	sklearn-cpu	10.83093600027496	0.2556670006015338	whole/whole	PASS	0	2026-10-27T17:49:56Z
+algos.auto-theta.synthetic.rows=full	algos/auto-theta/synthetic/rows=full	identical/fit	statsforecast-cpu	220.68927399959648	769.2787910054903	whole/whole	PASS	0	2026-10-27T17:50:46Z
+algos.auto-theta.taxi-hourly.rows=full	algos/auto-theta/taxi-hourly/rows=full	identical/fit	statsforecast-cpu	1377.064580003207	2521.2370209992514	whole/whole	PASS	0	2026-10-27T17:51:52Z
+algos.avgpool1d.synthetic.rows=full	algos/avgpool1d/synthetic/rows=full	identical/fit	torch-eager-fp32	0.46046500210650265	0.7065090001106	kernel/kernel	PASS	0	2026-10-27T17:52:46Z
+algos.avgpool1d.synthetic.rows=full	algos/avgpool1d/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T17:52:46Z
+algos.avgpool2d.synthetic.rows=full	algos/avgpool2d/synthetic/rows=full	identical/fit	torch-eager-bf16	0.6681339946226217	0.792048999983308	kernel/kernel	PASS	0	2026-10-27T17:53:55Z
+algos.avgpool2d.synthetic.rows=full	algos/avgpool2d/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T17:53:55Z
+algos.batchnorm1d.synthetic.rows=full	algos/batchnorm1d/synthetic/rows=full	identical/fit	torch-eager-bf16	1.2736670032609254	0.8954160002758726	kernel/kernel	PASS	0	2026-10-27T17:55:05Z
+algos.batchnorm1d.synthetic.rows=full	algos/batchnorm1d/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T17:55:05Z
+algos.batchnorm2d.synthetic.rows=full	algos/batchnorm2d/synthetic/rows=full	identical/fit	torch-eager-fp32	1.2693870012299158	0.9996339999815973	kernel/kernel	PASS	0	2026-10-27T17:56:04Z
+algos.batchnorm2d.synthetic.rows=full	algos/batchnorm2d/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T17:56:04Z
+algos.binarizer.istella.rows=full	algos/binarizer/istella/rows=full	identical/fit	sklearn-cpu	280.1537840059609	642.4119010043796	whole/whole	PASS	0	2026-10-27T17:56:34Z
+algos.binarizer.istella.rows=full	algos/binarizer/istella/rows=full	identical/infer	sklearn-cpu	35.080799003480934	66.98805899941362	whole/whole	PASS	0	2026-10-27T17:56:34Z
+algos.binarizer.taxi.rows=full	algos/binarizer/taxi/rows=full	identical/fit	sklearn-cpu	24.858063996362034	42.72944100375753	whole/whole	PASS	0	2026-10-27T17:56:58Z
+algos.binarizer.taxi.rows=full	algos/binarizer/taxi/rows=full	identical/infer	sklearn-cpu	10.328803000447806	4.396876000100747	whole/whole	PASS	0	2026-10-27T17:56:58Z
+algos.bisecting-kmeans.istella.rows=full	algos/bisecting-kmeans/istella/rows=full	identical/fit	sklearn-cpu	2520.2590839980985	902.6818669954082	whole/whole	PASS	0	2026-10-27T17:57:33Z
+algos.bisecting-kmeans.istella.rows=full	algos/bisecting-kmeans/istella/rows=full	identical/infer	sklearn-cpu	226.79765599605162	42.5813250039937	whole/whole	PASS	0	2026-10-27T17:57:33Z
+algos.bisecting-kmeans.taxi.rows=full	algos/bisecting-kmeans/taxi/rows=full	identical/fit	sklearn-cpu	210.94588399864733	338.80771499389084	whole/whole	FAIL	0	2026-10-27T17:57:57Z
+algos.bisecting-kmeans.taxi.rows=full	algos/bisecting-kmeans/taxi/rows=full	identical/infer	sklearn-cpu	24.733966994972434	9.208105999277905	whole/whole	FAIL	0	2026-10-27T17:57:57Z
+algos.bootstrap.istella.rows=full	algos/bootstrap/istella/rows=full	identical/fit	scipy-cpu	3.1278489987016656	501.83614999696147	whole/whole	PASS	0	2026-10-27T17:58:23Z
+algos.bootstrap.taxi.rows=full	algos/bootstrap/taxi/rows=full	identical/fit	scipy-cpu	2.9527910010074265	549.9938159991871	whole/whole	PASS	0	2026-10-27T17:58:44Z
+algos.bpe-train.enwik8.rows=full	algos/bpe-train/enwik8/rows=full	identical/fit	hf-tokenizers-cpu	47.76971400133334	397.9098230047384	whole/whole	PASS	0	2026-10-27T17:59:08Z
+algos.cca.istella.rows=full	algos/cca/istella/rows=full	identical/fit	sklearn-cpu	14265.086462997715	24228.619308996713	whole/whole	PASS	0	2026-10-27T18:00:53Z
+algos.cca.istella.rows=full	algos/cca/istella/rows=full	identical/infer	sklearn-cpu	245.87532699661097	49.05403299926547	whole/whole	PASS	0	2026-10-27T18:00:53Z
+algos.cca.taxi.rows=full	algos/cca/taxi/rows=full	identical/fit	sklearn-cpu	225.03486000641715	632.9052659930312	whole/whole	PASS	0	2026-10-27T18:01:17Z
+algos.cca.taxi.rows=full	algos/cca/taxi/rows=full	identical/infer	sklearn-cpu	27.002367001841776	4.474813998967875	whole/whole	PASS	0	2026-10-27T18:01:17Z
+algos.connected-components.istella.rows=full	algos/connected-components/istella/rows=full	identical/fit	None				-	0	2026-10-27T18:01:41Z
+algos.connected-components.taxi.rows=full	algos/connected-components/taxi/rows=full	identical/fit	None				-	0	2026-10-27T18:02:01Z
+algos.conv1d.synthetic.rows=full	algos/conv1d/synthetic/rows=full	identical/fit	torch-eager-bf16	7.163078000303358	1.3937610001448775	kernel/kernel	PASS	0	2026-10-27T18:03:33Z
+algos.conv1d.synthetic.rows=full	algos/conv1d/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T18:03:33Z
+algos.conv2d.synthetic.rows=full	algos/conv2d/synthetic/rows=full	identical/fit	torch-eager-fp32	5.9216309964540415	1.1634510001385934	kernel/kernel	PASS	0	2026-10-27T18:04:44Z
+algos.conv2d.synthetic.rows=full	algos/conv2d/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T18:04:44Z
+algos.cross-val-predict.istella.rows=full	algos/cross-val-predict/istella/rows=full	identical/fit	sklearn-cpu	13287.438510000356	12193.391721004446	whole/whole	INSUFFICIENT	0	2026-10-27T18:06:06Z
+algos.cross-val-predict.taxi.rows=full	algos/cross-val-predict/taxi/rows=full	identical/fit	sklearn-cpu	695.0652129962691	657.9500880034175	whole/whole	INSUFFICIENT	0	2026-10-27T18:06:31Z
+algos.cross-val-score.istella.rows=full	algos/cross-val-score/istella/rows=full	identical/fit	sklearn-cpu	12878.253631002735	4408.371536999766	whole/whole	FAIL	0	2026-10-27T18:07:32Z
+algos.cross-val-score.taxi.rows=full	algos/cross-val-score/taxi/rows=full	identical/fit	sklearn-cpu	738.4620689990697	716.3441490047262	whole/whole	PASS	0	2026-10-27T18:07:55Z
+algos.cross-validate.istella.rows=full	algos/cross-validate/istella/rows=full	identical/fit	sklearn-cpu	21249.20137200388	12214.96621699771	whole/whole	INSUFFICIENT	0	2026-10-27T18:09:27Z
+algos.cross-validate.taxi.rows=full	algos/cross-validate/taxi/rows=full	identical/fit	sklearn-cpu	1155.6746239948552	663.727117003873	whole/whole	INSUFFICIENT	0	2026-10-27T18:09:53Z
+algos.croston-optimized.synthetic.rows=full	algos/croston-optimized/synthetic/rows=full	identical/fit	statsforecast-cpu-serial	16.72174499981338	4.605522997735534	whole/whole	PASS	0	2026-10-27T18:10:17Z
+algos.croston-optimized.taxi-hourly.rows=full	algos/croston-optimized/taxi-hourly/rows=full	identical/fit	statsforecast-cpu-serial	22.88071400107583	4.881182001554407	whole/whole	PASS	0	2026-10-27T18:10:44Z
+algos.croston-sba.synthetic.rows=full	algos/croston-sba/synthetic/rows=full	identical/fit	statsforecast-cpu-serial	9.511365002254024	1.257217998499982	whole/whole	PASS	0	2026-10-27T18:11:07Z
+algos.croston-sba.taxi-hourly.rows=full	algos/croston-sba/taxi-hourly/rows=full	identical/fit	statsforecast-cpu-serial	9.596964999218471	0.9193209989462048	whole/whole	PASS	0	2026-10-27T18:11:32Z
+algos.croston.synthetic.rows=full	algos/croston/synthetic/rows=full	identical/fit	statsforecast-cpu-serial	9.449277000385337	1.163298002211377	whole/whole	PASS	0	2026-10-27T18:11:55Z
+algos.croston.taxi-hourly.rows=full	algos/croston/taxi-hourly/rows=full	identical/fit	statsforecast-cpu-serial	9.627884996007197	0.9671799998614006	whole/whole	PASS	0	2026-10-27T18:12:22Z
+algos.dynamic-optimized-theta.synthetic.rows=full	algos/dynamic-optimized-theta/synthetic/rows=full	identical/fit	statsforecast-cpu	178.7938839988783	365.4417719953926	whole/whole	PASS	0	2026-10-27T18:12:57Z
+algos.dynamic-optimized-theta.taxi-hourly.rows=full	algos/dynamic-optimized-theta/taxi-hourly/rows=full	identical/fit	statsforecast-cpu	1257.1041170012904	810.2750230027596	whole/whole	PASS	0	2026-10-27T18:13:36Z
+algos.dynamic-theta.synthetic.rows=full	algos/dynamic-theta/synthetic/rows=full	identical/fit	statsforecast-cpu	50.32629299967084	116.83902799995849	whole/whole	PASS	0	2026-10-27T18:14:03Z
+algos.dynamic-theta.taxi-hourly.rows=full	algos/dynamic-theta/taxi-hourly/rows=full	identical/fit	statsforecast-cpu	120.35122400266118	396.5575900001568	whole/whole	PASS	0	2026-10-27T18:14:33Z
+algos.embedding.synthetic.rows=full	algos/embedding/synthetic/rows=full	identical/fit	None				-	0	2026-10-27T18:15:19Z
+algos.enet-cv.istella.rows=full	algos/enet-cv/istella/rows=full	identical/fit	sklearn-cpu	876.240099001734	1691.9041040018783	whole/whole	PASS	0	2026-10-27T18:15:55Z
+algos.enet-cv.istella.rows=full	algos/enet-cv/istella/rows=full	identical/infer	sklearn-cpu	13.923471997259185	3.7010740052210167	whole/whole	PASS	0	2026-10-27T18:15:55Z
+algos.enet-cv.taxi.rows=full	algos/enet-cv/taxi/rows=full	identical/fit	sklearn-cpu	248.46358400100144	265.2788370032795	whole/whole	PASS	0	2026-10-27T18:16:17Z
+algos.enet-cv.taxi.rows=full	algos/enet-cv/taxi/rows=full	identical/infer	sklearn-cpu	10.777344003145117	0.38483599928440526	whole/whole	PASS	0	2026-10-27T18:16:17Z
+algos.gamma.istella.rows=full	algos/gamma/istella/rows=full	identical/fit	sklearn-cpu	335.3710490046069	1082.8640680047101	whole/whole	PASS	0	2026-10-27T18:16:47Z
+algos.gamma.istella.rows=full	algos/gamma/istella/rows=full	identical/infer	sklearn-cpu	13.960923002741765	3.59477500023786	whole/whole	PASS	0	2026-10-27T18:16:47Z
+algos.gamma.taxi.rows=full	algos/gamma/taxi/rows=full	identical/fit	sklearn-cpu	61.14388800051529	536.8863559997408	whole/whole	FAIL	0	2026-10-27T18:17:11Z
+algos.gamma.taxi.rows=full	algos/gamma/taxi/rows=full	identical/infer	sklearn-cpu	12.652395002078265	3.139409003779292	whole/whole	FAIL	0	2026-10-27T18:17:11Z
+algos.garch.synthetic.rows=full	algos/garch/synthetic/rows=full	identical/fit	arch-cpu	46.55081099917879	31.86543600168079	whole/whole	PASS	0	2026-10-27T18:17:34Z
+algos.garch.taxi-hourly.rows=full	algos/garch/taxi-hourly/rows=full	identical/fit	arch-cpu	85.81466600298882	36.29239399742801	whole/whole	FAIL	0	2026-10-27T18:17:58Z
+algos.gaussian-rp.istella.rows=full	algos/gaussian-rp/istella/rows=full	identical/fit	sklearn-cpu	1856.002073000127	61.03307000012137	whole/whole	INSUFFICIENT	0	2026-10-27T18:18:31Z
+algos.gaussian-rp.istella.rows=full	algos/gaussian-rp/istella/rows=full	identical/infer	sklearn-cpu	208.3905399995274	4.380197002319619	whole/whole	INSUFFICIENT	0	2026-10-27T18:18:31Z
+algos.gaussian-rp.taxi.rows=full	algos/gaussian-rp/taxi/rows=full	identical/fit	sklearn-cpu	109.77485100011108	4.265368996129837	whole/whole	INSUFFICIENT	0	2026-10-27T18:18:53Z
+algos.gaussian-rp.taxi.rows=full	algos/gaussian-rp/taxi/rows=full	identical/infer	sklearn-cpu	15.136131005419884	0.8395709955948405	whole/whole	INSUFFICIENT	0	2026-10-27T18:18:53Z
+algos.global-avgpool.synthetic.rows=full	algos/global-avgpool/synthetic/rows=full	identical/fit	torch-eager-bf16	0.288488001388032	0.451343999884557	kernel/kernel	PASS	0	2026-10-27T18:19:36Z
+algos.global-avgpool.synthetic.rows=full	algos/global-avgpool/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T18:19:36Z
+algos.global-maxpool.synthetic.rows=full	algos/global-maxpool/synthetic/rows=full	identical/fit	torch-eager-bf16	0.35704699985217303	0.4664530006266432	kernel/kernel	PASS	0	2026-10-27T18:20:20Z
+algos.global-maxpool.synthetic.rows=full	algos/global-maxpool/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T18:20:20Z
+algos.grid-search-cv.istella.rows=full	algos/grid-search-cv/istella/rows=full	identical/fit	sklearn-cpu	55249.91507600498	18862.661418999778	whole/whole	INSUFFICIENT	0	2026-10-27T18:23:15Z
+algos.grid-search-cv.taxi.rows=full	algos/grid-search-cv/taxi/rows=full	identical/fit	sklearn-cpu	2859.9070080017555	259.02605599549133	whole/whole	INSUFFICIENT	0	2026-10-27T18:23:43Z
+algos.huber.istella.rows=full	algos/huber/istella/rows=full	identical/fit	sklearn-cpu	848.7065200024517	48200.59860699985	whole/whole	PASS	0	2026-10-27T18:25:45Z
+algos.huber.istella.rows=full	algos/huber/istella/rows=full	identical/infer	sklearn-cpu	14.413308002986014	15.710896004748065	whole/whole	PASS	0	2026-10-27T18:25:45Z
+algos.huber.taxi.rows=full	algos/huber/taxi/rows=full	identical/fit	sklearn-cpu	288.70232599729206	2217.4322780047078	whole/whole	PASS	0	2026-10-27T18:26:11Z
+algos.huber.taxi.rows=full	algos/huber/taxi/rows=full	identical/infer	sklearn-cpu	10.550136998062953	0.9351400003652088	whole/whole	PASS	0	2026-10-27T18:26:11Z
+algos.jl-min-dim.synthetic.rows=full	algos/jl-min-dim/synthetic/rows=full	identical/fit	sklearn-cpu	15.346150001278147	164.52319500240264	whole/whole	INSUFFICIENT	0	2026-10-27T18:26:36Z
+algos.kernel-shap.istella.rows=full	algos/kernel-shap/istella/rows=full	identical/fit	shap-cpu	10015.679233998526	7842.554333001317	whole/whole	INSUFFICIENT	0	2026-10-27T18:27:52Z
+algos.kernel-shap.taxi.rows=full	algos/kernel-shap/taxi/rows=full	identical/fit	shap-cpu	469.8811900016153	932.2424450001563	whole/whole	INSUFFICIENT	0	2026-10-27T18:28:19Z
+algos.knn-imputer.istella.rows=full	algos/knn-imputer/istella/rows=full	identical/fit	None				-	0	2026-10-27T18:40:41Z
+algos.knn-imputer.istella.rows=full	algos/knn-imputer/istella/rows=full	identical/infer	None				-	0	2026-10-27T18:40:41Z
+algos.knn-imputer.taxi.rows=full	algos/knn-imputer/taxi/rows=full	identical/fit	None				-	0	2026-10-27T18:41:44Z
+algos.knn-imputer.taxi.rows=full	algos/knn-imputer/taxi/rows=full	identical/infer	None				-	0	2026-10-27T18:41:44Z
+algos.kpss.synthetic.rows=full	algos/kpss/synthetic/rows=full	identical/fit	statsmodels-cpu	2.6122130002477206	2.075866999803111	whole/whole	PASS	0	2026-10-27T18:42:07Z
+algos.kpss.taxi-hourly.rows=full	algos/kpss/taxi-hourly/rows=full	identical/fit	statsmodels-cpu	2.6122530034626834	2.0304190038586967	whole/whole	PASS	0	2026-10-27T18:42:29Z
+algos.label-binarizer.istella.rows=full	algos/label-binarizer/istella/rows=full	identical/fit	sklearn-cpu	41.2011939988588	51.66201499378076	whole/whole	PASS	0	2026-10-27T18:42:57Z
+algos.label-binarizer.istella.rows=full	algos/label-binarizer/istella/rows=full	identical/infer	sklearn-cpu	6.2148849974619225	4.363394997199066	whole/whole	PASS	0	2026-10-27T18:42:57Z
+algos.label-binarizer.taxi.rows=full	algos/label-binarizer/taxi/rows=full	identical/fit	sklearn-cpu	515.8877689973451	142.15902300202288	whole/whole	PASS	0	2026-10-27T18:44:02Z
+algos.label-binarizer.taxi.rows=full	algos/label-binarizer/taxi/rows=full	identical/infer	sklearn-cpu	54.86846300482284	13.19175399839878	whole/whole	PASS	0	2026-10-27T18:44:02Z
+algos.label-encoder.istella.rows=full	algos/label-encoder/istella/rows=full	identical/fit	None				-	0	2026-10-27T18:44:28Z
+algos.label-encoder.istella.rows=full	algos/label-encoder/istella/rows=full	identical/infer	None				-	0	2026-10-27T18:44:28Z
+algos.label-encoder.taxi.rows=full	algos/label-encoder/taxi/rows=full	identical/fit	None				-	0	2026-10-27T18:44:51Z
+algos.label-encoder.taxi.rows=full	algos/label-encoder/taxi/rows=full	identical/infer	None				-	0	2026-10-27T18:44:51Z
+algos.label-propagation.istella.rows=full	algos/label-propagation/istella/rows=full	identical/fit	sklearn-cpu	2607.3067460019956	18230.672118996154	whole/whole	PASS	0	2026-10-27T18:46:02Z
+algos.label-propagation.istella.rows=full	algos/label-propagation/istella/rows=full	identical/infer	sklearn-cpu	364.1960420063697	1376.8801819969667	whole/whole	PASS	0	2026-10-27T18:46:02Z
+algos.label-propagation.taxi.rows=full	algos/label-propagation/taxi/rows=full	identical/fit	sklearn-cpu	1457.5627699960023	12422.735248997924	whole/whole	PASS	0	2026-10-27T18:46:55Z
+algos.label-propagation.taxi.rows=full	algos/label-propagation/taxi/rows=full	identical/infer	sklearn-cpu	443.2444820049568	965.3243790016859	whole/whole	PASS	0	2026-10-27T18:46:55Z
+algos.label-spreading.istella.rows=full	algos/label-spreading/istella/rows=full	identical/fit	sklearn-cpu	1961.6572219965747	12981.422672004555	whole/whole	PASS	0	2026-10-27T18:47:57Z
+algos.label-spreading.istella.rows=full	algos/label-spreading/istella/rows=full	identical/infer	sklearn-cpu	364.65425200003665	1380.1191599995946	whole/whole	PASS	0	2026-10-27T18:47:57Z
+algos.label-spreading.taxi.rows=full	algos/label-spreading/taxi/rows=full	identical/fit	sklearn-cpu	810.350464998919	19586.907461998635	whole/whole	PASS	0	2026-10-27T18:48:53Z
+algos.label-spreading.taxi.rows=full	algos/label-spreading/taxi/rows=full	identical/infer	sklearn-cpu	442.99945200327784	2642.911627997819	whole/whole	PASS	0	2026-10-27T18:48:53Z
+algos.lasso-cv.istella.rows=full	algos/lasso-cv/istella/rows=full	identical/fit	sklearn-cpu	825.46724799613	1694.795111005078	whole/whole	PASS	0	2026-10-27T18:49:28Z
+algos.lasso-cv.istella.rows=full	algos/lasso-cv/istella/rows=full	identical/infer	sklearn-cpu	13.718180998694152	3.454004996456206	whole/whole	PASS	0	2026-10-27T18:49:28Z
+algos.lasso-cv.taxi.rows=full	algos/lasso-cv/taxi/rows=full	identical/fit	sklearn-cpu	242.1690600021975	182.68068399629556	whole/whole	PASS	0	2026-10-27T18:49:50Z
+algos.lasso-cv.taxi.rows=full	algos/lasso-cv/taxi/rows=full	identical/infer	sklearn-cpu	10.86588999896776	0.3773459975491278	whole/whole	PASS	0	2026-10-27T18:49:50Z
+algos.layernorm.synthetic.rows=full	algos/layernorm/synthetic/rows=full	identical/fit	torch-eager-bf16	3.0886589956935495	0.7623599999533326	kernel/kernel	PASS	0	2026-10-27T18:50:59Z
+algos.layernorm.synthetic.rows=full	algos/layernorm/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T18:50:59Z
+algos.learning-curve.istella.rows=full	algos/learning-curve/istella/rows=full	identical/fit	sklearn-cpu	64567.733425996266	14575.85620899772	whole/whole	INSUFFICIENT	0	2026-10-27T18:54:04Z
+algos.learning-curve.taxi.rows=full	algos/learning-curve/taxi/rows=full	identical/fit	sklearn-cpu	3515.727763995528	202.20890000200598	whole/whole	INSUFFICIENT	0	2026-10-27T18:54:33Z
+algos.lle.istella.rows=full	algos/lle/istella/rows=full	identical/fit	sklearn-cpu	94877.70732799981	4024.4695610017516	whole/whole	FAIL	0	2026-10-27T18:58:18Z
+algos.lle.taxi.rows=full	algos/lle/taxi/rows=full	identical/fit	sklearn-cpu	99168.82282900042	4080.304610004532	whole/whole	FAIL	0	2026-10-27T19:02:10Z
+algos.louvain.istella.rows=full	algos/louvain/istella/rows=full	identical/fit	networkx-cpu	371.6760829993291	1770.1913900018553	whole/whole	PASS	0	2026-10-27T19:02:37Z
+algos.louvain.taxi.rows=full	algos/louvain/taxi/rows=full	identical/fit	networkx-cpu	84.25290200102609	1076.6873480024515	whole/whole	PASS	0	2026-10-27T19:03:01Z
+algos.lr-constant.synthetic.rows=full	algos/lr-constant/synthetic/rows=full	identical/fit	torch-cpu	25935.733949001587	102.07166300097015	whole/whole	PASS	0	2026-10-27T19:04:31Z
+algos.lr-exponential.synthetic.rows=full	algos/lr-exponential/synthetic/rows=full	identical/fit	torch-cpu	26734.51439899509	91.74409799743444	whole/whole	PASS	0	2026-10-27T19:06:02Z
+algos.lr-onecycle.synthetic.rows=full	algos/lr-onecycle/synthetic/rows=full	identical/fit	torch-cpu	27602.119588002097	136.32683000469115	whole/whole	PASS	0	2026-10-27T19:07:37Z
+algos.lr-step.synthetic.rows=full	algos/lr-step/synthetic/rows=full	identical/fit	torch-cpu	26964.828304000548	105.80081599619007	whole/whole	PASS	0	2026-10-27T19:09:07Z
+algos.lr-warmup-cosine.synthetic.rows=full	algos/lr-warmup-cosine/synthetic/rows=full	identical/fit	torch-cpu	25195.67701000051	126.35254499764415	whole/whole	PASS	0	2026-10-27T19:10:34Z
+algos.lr-warmup-linear.synthetic.rows=full	algos/lr-warmup-linear/synthetic/rows=full	identical/fit	torch-cpu	25529.683157001273	109.92670900304802	whole/whole	PASS	0	2026-10-27T19:12:06Z
+algos.maxabs-scaler.istella.rows=full	algos/maxabs-scaler/istella/rows=full	identical/fit	sklearn-cpu	22.914353998203296	125.67951500386698	whole/whole	PASS	0	2026-10-27T19:12:40Z
+algos.maxabs-scaler.istella.rows=full	algos/maxabs-scaler/istella/rows=full	identical/infer	sklearn-cpu	24.803266998787876	13.291415001731366	whole/whole	PASS	0	2026-10-27T19:12:40Z
+algos.maxabs-scaler.taxi.rows=full	algos/maxabs-scaler/taxi/rows=full	identical/fit	sklearn-cpu	7.2192520019598305	27.82128600665601	whole/whole	PASS	0	2026-10-27T19:13:01Z
+algos.maxabs-scaler.taxi.rows=full	algos/maxabs-scaler/taxi/rows=full	identical/infer	sklearn-cpu	5.517328005225863	1.1022389953723177	whole/whole	PASS	0	2026-10-27T19:13:01Z
+algos.maxpool1d.synthetic.rows=full	algos/maxpool1d/synthetic/rows=full	identical/fit	torch-eager-fp32	0.4948759960825555	0.8070490000591235	kernel/kernel	PASS	0	2026-10-27T19:13:54Z
+algos.maxpool1d.synthetic.rows=full	algos/maxpool1d/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T19:13:54Z
+algos.maxpool2d.synthetic.rows=full	algos/maxpool2d/synthetic/rows=full	identical/fit	torch-eager-fp32	0.6928840011823922	0.8630289999018714	kernel/kernel	PASS	0	2026-10-27T19:14:53Z
+algos.maxpool2d.synthetic.rows=full	algos/maxpool2d/synthetic/rows=full	identical/infer	None				-	0	2026-10-27T19:14:53Z
+algos.metric-accuracy-score.istella.rows=full	algos/metric-accuracy-score/istella/rows=full	identical/fit	sklearn-cpu	3.234099000110291	1.1810799987870269	whole/whole	PASS	0	2026-10-27T19:15:19Z
+algos.metric-accuracy-score.taxi.rows=full	algos/metric-accuracy-score/taxi/rows=full	identical/fit	sklearn-cpu	3.1913790007820353	1.1829790018964559	whole/whole	PASS	0	2026-10-27T19:15:42Z
+algos.metric-adjusted-mutual-info-score.istella.rows=full	algos/metric-adjusted-mutual-info-score/istella/rows=full	identical/fit	sklearn-cpu	179.4764660007786	11.790827993536368	whole/whole	PASS	0	2026-10-27T19:16:08Z
+algos.metric-adjusted-mutual-info-score.taxi.rows=full	algos/metric-adjusted-mutual-info-score/taxi/rows=full	identical/fit	sklearn-cpu	132.3949139987235	35.033345004194416	whole/whole	PASS	0	2026-10-27T19:16:32Z
+algos.metric-adjusted-rand-score.istella.rows=full	algos/metric-adjusted-rand-score/istella/rows=full	identical/fit	sklearn-cpu	4.889593001280446	7.140919995435979	whole/whole	PASS	0	2026-10-27T19:16:58Z
+algos.metric-adjusted-rand-score.taxi.rows=full	algos/metric-adjusted-rand-score/taxi/rows=full	identical/fit	sklearn-cpu	3.8825539959361777	3.7734440047643147	whole/whole	PASS	0	2026-10-27T19:17:22Z
+algos.metric-auc.istella.rows=full	algos/metric-auc/istella/rows=full	identical/fit	sklearn-cpu	11.080794996814802	0.17158799892058596	whole/whole	PASS	0	2026-10-27T19:17:53Z
+algos.metric-auc.taxi.rows=full	algos/metric-auc/taxi/rows=full	identical/fit	sklearn-cpu	11.122693002107553	0.1705980030237697	whole/whole	PASS	0	2026-10-27T19:18:13Z
+algos.metric-average-precision-score.istella.rows=full	algos/metric-average-precision-score/istella/rows=full	identical/fit	sklearn-cpu	11.966946003667545	9.690127000794746	whole/whole	PASS	0	2026-10-27T19:18:37Z
+algos.metric-average-precision-score.taxi.rows=full	algos/metric-average-precision-score/taxi/rows=full	identical/fit	sklearn-cpu	12.065893999533728	9.61850699968636	whole/whole	PASS	0	2026-10-27T19:19:00Z
+algos.metric-balanced-accuracy-score.istella.rows=full	algos/metric-balanced-accuracy-score/istella/rows=full	identical/fit	sklearn-cpu	11.463839997304603	1.4381660002982244	whole/whole	PASS	0	2026-10-27T19:19:25Z
+algos.metric-balanced-accuracy-score.taxi.rows=full	algos/metric-balanced-accuracy-score/taxi/rows=full	identical/fit	sklearn-cpu	11.299581005005166	1.3962969969725236	whole/whole	PASS	0	2026-10-27T19:19:49Z
+algos.metric-brier-score-loss.istella.rows=full	algos/metric-brier-score-loss/istella/rows=full	identical/fit	sklearn-cpu	7.161820998589974	2.453765999234747	whole/whole	PASS	0	2026-10-27T19:20:15Z
+algos.metric-brier-score-loss.taxi.rows=full	algos/metric-brier-score-loss/taxi/rows=full	identical/fit	sklearn-cpu	7.203031003882643	2.456506001180969	whole/whole	PASS	0	2026-10-27T19:20:37Z
+algos.metric-calinski-harabasz-score.istella.rows=full	algos/metric-calinski-harabasz-score/istella/rows=full	identical/fit	sklearn-cpu	9.808664995944127	4.1327200015075505	whole/whole	PASS	0	2026-10-27T19:21:08Z
+algos.metric-calinski-harabasz-score.taxi.rows=full	algos/metric-calinski-harabasz-score/taxi/rows=full	identical/fit	sklearn-cpu	3.3453380019636825	0.9831310017034411	whole/whole	PASS	0	2026-10-27T19:21:30Z
+algos.metric-class-likelihood-ratios.istella.rows=full	algos/metric-class-likelihood-ratios/istella/rows=full	identical/fit	sklearn-cpu	10.90034500521142	1.9181509996997193	whole/whole	PASS	0	2026-10-27T19:21:55Z
+algos.metric-class-likelihood-ratios.taxi.rows=full	algos/metric-class-likelihood-ratios/taxi/rows=full	identical/fit	sklearn-cpu	11.007294000592083	1.8739619990810752	whole/whole	PASS	0	2026-10-27T19:22:16Z
+algos.metric-classification-report.istella.rows=full	algos/metric-classification-report/istella/rows=full	identical/fit	sklearn-cpu	22.967147000599653	13.304850996064488	whole/whole	PASS	0	2026-10-27T19:22:41Z
+algos.metric-classification-report.taxi.rows=full	algos/metric-classification-report/taxi/rows=full	identical/fit	sklearn-cpu	22.581732002436183	12.924734997795895	whole/whole	PASS	0	2026-10-27T19:23:04Z
+algos.metric-cohen-kappa-score.istella.rows=full	algos/metric-cohen-kappa-score/istella/rows=full	identical/fit	sklearn-cpu	10.69458599522477	1.4523360005114228	whole/whole	PASS	0	2026-10-27T19:23:26Z
+algos.metric-cohen-kappa-score.taxi.rows=full	algos/metric-cohen-kappa-score/taxi/rows=full	identical/fit	sklearn-cpu	10.676286998204887	1.4302060008049011	whole/whole	PASS	0	2026-10-27T19:23:49Z
+algos.metric-completeness-score.istella.rows=full	algos/metric-completeness-score/istella/rows=full	identical/fit	sklearn-cpu	5.5789070029277354	7.368077996943612	whole/whole	PASS	0	2026-10-27T19:24:16Z
+algos.metric-completeness-score.taxi.rows=full	algos/metric-completeness-score/taxi/rows=full	identical/fit	sklearn-cpu	6.858274005935527	4.069450995302759	whole/whole	PASS	0	2026-10-27T19:24:34Z
+algos.metric-confusion-matrix.istella.rows=full	algos/metric-confusion-matrix/istella/rows=full	identical/fit	sklearn-cpu	5.8517739962553605	1.8587509985081851	whole/whole	PASS	0	2026-10-27T19:24:58Z
+algos.metric-confusion-matrix.taxi.rows=full	algos/metric-confusion-matrix/taxi/rows=full	identical/fit	sklearn-cpu	5.740934000641573	1.8705309994402342	whole/whole	PASS	0	2026-10-27T19:25:20Z
+algos.metric-contingency-matrix.istella.rows=full	algos/metric-contingency-matrix/istella/rows=full	identical/fit	sklearn-cpu	10.757235002529342	4.521677001321223	whole/whole	PASS	0	2026-10-27T19:25:45Z
+algos.metric-contingency-matrix.taxi.rows=full	algos/metric-contingency-matrix/taxi/rows=full	identical/fit	sklearn-cpu	10.726464999606833	1.5402749995701015	whole/whole	PASS	0	2026-10-27T19:26:13Z
+algos.metric-coverage-error.istella.rows=full	algos/metric-coverage-error/istella/rows=full	identical/fit	sklearn-cpu	26.231745003315154	20.640079994336702	whole/whole	PASS	0	2026-10-27T19:26:40Z
+algos.metric-coverage-error.taxi.rows=full	algos/metric-coverage-error/taxi/rows=full	identical/fit	sklearn-cpu	19.620728999143466	15.400331001728773	whole/whole	PASS	0	2026-10-27T19:27:02Z
+algos.metric-d2-absolute-error-score.istella.rows=full	algos/metric-d2-absolute-error-score/istella/rows=full	identical/fit	sklearn-cpu	3.039741000975482	0.8997810000437312	whole/whole	PASS	0	2026-10-27T19:28:21Z
+algos.metric-d2-absolute-error-score.taxi.rows=full	algos/metric-d2-absolute-error-score/taxi/rows=full	identical/fit	sklearn-cpu	3.0689300037920475	1.4756360033061355	whole/whole	PASS	0	2026-10-27T19:28:41Z
+algos.metric-d2-log-loss-score.istella.rows=full	algos/metric-d2-log-loss-score/istella/rows=full	identical/fit	sklearn-cpu	7.426857999234926	13.842845997714903	whole/whole	PASS	0	2026-10-27T19:29:05Z
+algos.metric-d2-log-loss-score.taxi.rows=full	algos/metric-d2-log-loss-score/taxi/rows=full	identical/fit	sklearn-cpu	7.245847999001853	11.854293996293563	whole/whole	PASS	0	2026-10-27T19:29:25Z
+algos.metric-d2-pinball-score.istella.rows=full	algos/metric-d2-pinball-score/istella/rows=full	identical/fit	sklearn-cpu	3.0476600004476495	0.8869719968060963	whole/whole	PASS	0	2026-10-27T19:29:53Z
+algos.metric-d2-pinball-score.taxi.rows=full	algos/metric-d2-pinball-score/taxi/rows=full	identical/fit	sklearn-cpu	3.094239997153636	1.5143560012802482	whole/whole	PASS	0	2026-10-27T19:30:13Z
+algos.metric-d2-tweedie-score.istella.rows=full	algos/metric-d2-tweedie-score/istella/rows=full	identical/fit	sklearn-cpu	3.0828099988866597	0.7832019982743077	whole/whole	PASS	0	2026-10-27T19:30:36Z
+algos.metric-d2-tweedie-score.taxi.rows=full	algos/metric-d2-tweedie-score/taxi/rows=full	identical/fit	sklearn-cpu	3.1049499957589433	0.8177519994205795	whole/whole	PASS	0	2026-10-27T19:30:58Z
+neural.causal-lm-generate-smollm2.smollm2-135m.shape=full	neural/causal-lm-generate-smollm2/smollm2-135m/shape=full	identical/fit	torch-eager-bf16	2778.3167640009196	1275.7265629988979	whole/whole	INSUFFICIENT	0	2026-10-27T16:58:20Z
+neural.causal-lm-generate.mojolearn-162m.shape=full	neural/causal-lm-generate/mojolearn-162m/shape=full	identical/fit	torch-eager-bf16	4302.456092998909	493.6522059942945	whole/whole	INSUFFICIENT	0	2026-10-27T16:59:36Z
+neural.gemm-bf16.gaussian.shape=full	neural/gemm-bf16/gaussian/shape=full	identical/fit	torch-compile-bf16	36.2838750006631	9.450124001887161	whole/whole	PASS	0	2026-10-27T17:01:11Z
+neural.gemm-int8.gaussian.shape=full	neural/gemm-int8/gaussian/shape=full	identical/fit	None				-	0	2026-10-27T17:01:46Z
+neural.gemm.gaussian.shape=full	neural/gemm/gaussian/shape=full	identical/fit	torch-eager-bf16	38.03465000237338	11.123727999802213	whole/whole	PASS	0	2026-10-27T17:03:37Z
+neural.gru-fit.higgs.shape=full	neural/gru-fit/higgs/shape=full	identical/fit	torch-compile-fp32	120.9650300006615	279.8920549976174	whole/whole	FAIL	0	2026-10-27T17:04:43Z
+neural.lm-forward.bytes.shape=full	neural/lm-forward/bytes/shape=full	identical/fit	torch-compile-bf16	34.43136600253638	11.061340002925135	whole/whole	PASS	0	2026-10-27T17:06:55Z
+neural.lm-train-step.bytes.shape=full	neural/lm-train-step/bytes/shape=full	identical/fit	torch-compile-bf16	42.99121700023534	8.38529899920104	whole/whole	PASS	0	2026-10-27T17:08:42Z
+neural.lstm-fit.higgs.shape=full	neural/lstm-fit/higgs/shape=full	identical/fit	torch-eager-fp32	139.19222600088688	167.93225800211076	whole/whole	PASS	0	2026-10-27T17:09:49Z
+neural.mamba1-decode.gaussian.shape=full	neural/mamba1-decode/gaussian/shape=full	identical/fit	mamba-ssm-fp32	494.6166279987665	609.0371239988599	whole/whole	PASS	0	2026-10-27T17:10:50Z
+neural.mamba1-forward.gaussian.shape=full	neural/mamba1-forward/gaussian/shape=full	identical/fit	mamba-ssm-fp32	9.331999994174112	1.4916739964974113	whole/whole	PASS	0	2026-10-27T17:11:54Z
+neural.mamba2-decode.gaussian.shape=full	neural/mamba2-decode/gaussian/shape=full	identical/fit	mamba-ssm-fp32	2565.216806004173	660.3616630018223	whole/whole	PASS	0	2026-10-27T17:13:00Z
+neural.mamba2-forward.gaussian.shape=full	neural/mamba2-forward/gaussian/shape=full	identical/fit	mamba-ssm-fp32	5.064657001639716	2.002578999963589	whole/whole	PASS	0	2026-10-27T17:14:23Z
+neural.mamba3-decode.gaussian.shape=full	neural/mamba3-decode/gaussian/shape=full	identical/fit	None				-	0	2026-10-27T17:15:09Z
+neural.mamba3-forward.gaussian.shape=full	neural/mamba3-forward/gaussian/shape=full	identical/fit	None				-	0	2026-10-27T17:16:17Z
+neural.mlp-fit.higgs.shape=full	neural/mlp-fit/higgs/shape=full	identical/fit	torch-eager-fp32	239.47626299923286	922.8470540037961	whole/whole	PASS	0	2026-10-27T17:17:37Z
+neural.mlp-predict.gaussian.shape=full	neural/mlp-predict/gaussian/shape=full	identical/fit	torch-compile-bf16	0.31577699701301754	0.4270859935786575	whole/whole	INSUFFICIENT	0	2026-10-27T17:18:30Z
+neural.mlp-train-step.gaussian.shape=full	neural/mlp-train-step/gaussian/shape=full	identical/fit	torch-compile-bf16	1.187238005513791	1.611323001270648	whole/whole	PASS	0	2026-10-27T17:19:27Z
+neural.ops-session-step.gaussian.shape=full	neural/ops-session-step/gaussian/shape=full	identical/fit	torch-compile-bf16	1.8484539978089742	1.9908430040231906	whole/whole	INSUFFICIENT	0	2026-10-27T17:20:28Z
+neural.program-run.gaussian.shape=full	neural/program-run/gaussian/shape=full	identical/fit	torch-compile-bf16	0.7603069971082732	0.5257170050754212	whole/whole	PASS	0	2026-10-27T17:21:22Z
+neural.rnn-fit.higgs.shape=full	neural/rnn-fit/higgs/shape=full	identical/fit	torch-eager-fp32	80.865879994235	159.22554400458466	whole/whole	PASS	0	2026-10-27T17:22:37Z
+neural.samba-decode.bytes.shape=full	neural/samba-decode/bytes/shape=full	identical/fit	None				-	0	2026-10-27T17:23:11Z
+neural.samba-forward.bytes.shape=full	neural/samba-forward/bytes/shape=full	identical/fit	None				-	0	2026-10-27T17:24:13Z
+neural.samba-train-step.bytes.shape=full	neural/samba-train-step/bytes/shape=full	identical/fit	None				-	0	2026-10-27T17:25:19Z
+neural.sequential-fit.synthetic.shape=full	neural/sequential-fit/synthetic/shape=full	identical/fit	torch-compile-fp32	430.57877199316863	930.0630300058401	whole/whole	PASS	0	2026-10-27T17:26:44Z
+neural.sequential-predict.synthetic.shape=full	neural/sequential-predict/synthetic/shape=full	identical/fit	torch-eager-fp32	4.206010002235416	0.8728730026632547	whole/whole	PASS	0	2026-10-27T17:28:01Z
+neural.tape-user-model.higgs.shape=full	neural/tape-user-model/higgs/shape=full	identical/fit	torch-eager-fp32	418.2063569969614	1055.7440999982646	whole/whole	PASS	0	2026-10-27T17:29:24Z
+neural.transformer-decode.gaussian.shape=full	neural/transformer-decode/gaussian/shape=full	identical/fit	torch-eager-fp32	3023.614120000275	568.9627370011294	whole/whole	PASS	0	2026-10-27T17:30:29Z
+neural.transformer-forward.gaussian.shape=full	neural/transformer-forward/gaussian/shape=full	identical/fit	torch-eager-bf16	4.744602003484033	1.571216998854652	whole/whole	PASS	0	2026-10-27T17:31:39Z

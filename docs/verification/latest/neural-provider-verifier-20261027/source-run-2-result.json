@@ -1,0 +1,737 @@
+{
+  "checks": [
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/check_neural_native_boundary.py"
+      ],
+      "elapsed_seconds": 0.046425791922956705,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/check_neural_native_boundary.py.log",
+      "name": "check_neural_native_boundary.py",
+      "phase": "source",
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/check_generation_native_boundary.py"
+      ],
+      "elapsed_seconds": 0.14360820804722607,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/check_generation_native_boundary.py.log",
+      "name": "check_generation_native_boundary.py",
+      "phase": "source",
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/check_neural_provider_layout.py"
+      ],
+      "elapsed_seconds": 0.01072100002784282,
+      "exit_code": 2,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/check_neural_provider_layout.py.log",
+      "name": "check_neural_provider_layout.py",
+      "phase": "source",
+      "status": "failed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_generation_metadata_boundary.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_generation_metadata_boundary.py"
+      ],
+      "elapsed_seconds": 0.19327816704753786,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_generation_metadata_boundary.py.log",
+      "name": "test_generation_metadata_boundary.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_generation_metadata_boundary",
+            "message": null,
+            "name": "test_native_metadata_dependency_closure_is_enforced",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_metadata_boundary",
+            "message": null,
+            "name": "test_layer_inner_execution_uses_native_dimensions_and_weight_addresses",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_metadata_boundary",
+            "message": null,
+            "name": "test_native_template_keeps_mutable_progress_out_of_snapshot",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_metadata_boundary",
+            "message": null,
+            "name": "test_snapshot_is_lazy_and_scoped_to_one_public_operation",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_metadata_boundary",
+            "message": null,
+            "name": "test_exact_array_owners_pin_addresses_and_foreign_copies_still_refresh",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_metadata_boundary",
+            "message": null,
+            "name": "test_prepared_embedding_head_and_layer_loop_do_not_read_model_metadata",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_metadata_boundary",
+            "message": null,
+            "name": "test_existing_standalone_and_profile_routes_remain_available",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 7,
+        "status": "passed"
+      },
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_neural_metadata_boundary.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_neural_metadata_boundary.py"
+      ],
+      "elapsed_seconds": 0.18970833392813802,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_neural_metadata_boundary.py.log",
+      "name": "test_neural_metadata_boundary.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_native_execution_closures_have_no_provider_dependencies",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_transitive_provider_dependency_is_rejected[std.python]",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_transitive_provider_dependency_is_rejected[bindings.py_balanced]",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_transitive_provider_dependency_is_rejected[autograd.program_arrays_pyapi]",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_transitive_provider_dependency_is_rejected[adapters.torch]",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_transitive_provider_dependency_is_rejected[providers.python.buffers]",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_dependency_parser_ignores_comments_and_documentation",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_sequential_snapshot_is_reused_after_admission",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_program_input_reads_provider_fields_before_native_rank_loop",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_samba_dropout_consumes_native_metadata_in_both_directions",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_mlp_packing_reuses_destination_address",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_metadata_boundary",
+            "message": null,
+            "name": "test_inventory_covers_every_current_gpu_neural_recipe",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 12,
+        "status": "passed"
+      },
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_generation_native_abi.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_generation_native_abi.py"
+      ],
+      "elapsed_seconds": 0.3121189168887213,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_generation_native_abi.py.log",
+      "name": "test_generation_native_abi.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_generation_native_abi",
+            "message": null,
+            "name": "test_native_dependency_closure_has_no_python_or_provider_backedge",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_native_abi",
+            "message": null,
+            "name": "test_guard_finds_transitive_and_aliased_python_imports",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_native_abi",
+            "message": null,
+            "name": "test_guard_rejects_direct_cpython_symbol_without_a_python_import",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_native_abi",
+            "message": null,
+            "name": "test_guard_rejects_provider_helpers_and_missing_local_dependencies",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_native_abi",
+            "message": null,
+            "name": "test_connection_copies_table_once_and_retains_both_owners",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_native_abi",
+            "message": null,
+            "name": "test_busy_is_reserved_before_gil_release_and_finalized_on_both_outcomes",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_native_abi",
+            "message": null,
+            "name": "test_old_and_direct_doors_share_the_exact_numerical_execution_function",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_generation_native_abi",
+            "message": null,
+            "name": "test_candidate_stays_opt_in_and_uses_native_vectors",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 8,
+        "status": "passed"
+      },
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_neural_native_descriptors.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_neural_native_descriptors.py"
+      ],
+      "elapsed_seconds": 0.3633494160603732,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_neural_native_descriptors.py.log",
+      "name": "test_neural_native_descriptors.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_neural_native_descriptors",
+            "message": null,
+            "name": "test_native_closure_includes_shared_numerical_owners_without_cpython",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_native_descriptors",
+            "message": null,
+            "name": "test_connection_and_hot_execution_remain_separate",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_native_descriptors",
+            "message": null,
+            "name": "test_both_doors_share_numerical_functions_and_original_float_casts",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_native_descriptors",
+            "message": null,
+            "name": "test_native_descriptors_are_checked_named_private_operations",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_native_descriptors",
+            "message": null,
+            "name": "test_coverage_lists_actual_twenty_nine_plan_rows_and_pending_runtime",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_native_descriptors",
+            "message": null,
+            "name": "test_result_and_error_share_stable_caller_owned_storage",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 6,
+        "status": "passed"
+      },
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_neural_provider_reuse.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_neural_provider_reuse.py"
+      ],
+      "elapsed_seconds": 0.1791635419940576,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_neural_provider_reuse.py.log",
+      "name": "test_neural_provider_reuse.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_neural_provider_reuse",
+            "message": null,
+            "name": "test_reuse_checks_exact_factory_module_and_session_admission_identity",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_provider_reuse",
+            "message": null,
+            "name": "test_existing_mode_vendor_and_factory_admission_precedes_reuse",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_neural_provider_reuse",
+            "message": null,
+            "name": "test_default_recipe_does_not_require_owned_snapshot_or_dropout_abi",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 3,
+        "status": "passed"
+      },
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_native_execution_boundary.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_native_execution_boundary.py"
+      ],
+      "elapsed_seconds": 0.1449787919409573,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_native_execution_boundary.py.log",
+      "name": "test_native_execution_boundary.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_native_execution_boundary.NativeExecutionConnectionTests",
+            "message": null,
+            "name": "test_connection_rejects_python_entries",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_execution_boundary.NativeExecutionConnectionTests",
+            "message": null,
+            "name": "test_connection_resolves_lazy_proxy_only_once",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_execution_boundary.NativeExecutionConnectionTests",
+            "message": null,
+            "name": "test_missing_binding_is_deferred_without_runtime_loader",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_execution_boundary.NativeExecutionConnectionTests",
+            "message": null,
+            "name": "test_shard_wrappers_forward_without_touching_user_objects",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_execution_boundary.NativeExecutionConnectionTests",
+            "message": null,
+            "name": "test_torch_connection_refuses_a_python_execution_entry",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_execution_boundary.NativeExecutionConnectionTests",
+            "message": null,
+            "name": "test_torch_connection_requires_native_factories",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 6,
+        "status": "passed"
+      },
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_native_metadata_snapshot.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_native_metadata_snapshot.py"
+      ],
+      "elapsed_seconds": 0.19417929090559483,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_native_metadata_snapshot.py.log",
+      "name": "test_native_metadata_snapshot.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_native_metadata_snapshot.NativeMetadataSnapshotSourceTests",
+            "message": null,
+            "name": "test_admission_reads_shape_and_strides_once",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_metadata_snapshot.NativeMetadataSnapshotSourceTests",
+            "message": null,
+            "name": "test_binary_stacking_output_uses_supplied_shape_and_option",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_metadata_snapshot.NativeMetadataSnapshotSourceTests",
+            "message": null,
+            "name": "test_known_array_lengths_do_not_reappear_in_glue",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_metadata_snapshot.NativeMetadataSnapshotSourceTests",
+            "message": null,
+            "name": "test_prepared_helpers_use_native_metadata_and_retain_owners",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_metadata_snapshot.NativeMetadataSnapshotSourceTests",
+            "message": null,
+            "name": "test_stacking_member_loop_reuses_metadata",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 5,
+        "status": "passed"
+      },
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_native_prep_plans.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_native_prep_plans.py"
+      ],
+      "elapsed_seconds": 0.24745262507349253,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_native_prep_plans.py.log",
+      "name": "test_native_prep_plans.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_native_prep_plans",
+            "message": null,
+            "name": "test_restored_fit_plans_match_public_native_argument_order",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_prep_plans",
+            "message": null,
+            "name": "test_native_plans_preserve_posterior_and_weight_semantics",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_prep_plans",
+            "message": null,
+            "name": "test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_prep_plans",
+            "message": null,
+            "name": "test_posterior_is_native_prediction_and_existing_draw_algorithm",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_prep_plans",
+            "message": null,
+            "name": "test_meta_owners_do_not_call_member_methods_or_python_constructors",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_native_prep_plans",
+            "message": null,
+            "name": "test_native_clone_bounds_recursive_configurations",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 6,
+        "status": "passed"
+      },
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_runtime_fallback_scope.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_runtime_fallback_scope.py"
+      ],
+      "elapsed_seconds": 0.8165016659768298,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_runtime_fallback_scope.py.log",
+      "name": "test_runtime_fallback_scope.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_runtime_fallback_scope",
+            "message": null,
+            "name": "test_exception_is_limited_to_exact_connected_owner_and_methods",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_runtime_fallback_scope",
+            "message": null,
+            "name": "test_modified_length_body_is_not_implicitly_authorized",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_runtime_fallback_scope",
+            "message": null,
+            "name": "test_modified_public_method_is_not_implicitly_authorized",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_runtime_fallback_scope",
+            "message": null,
+            "name": "test_exception_registry_is_imported_only_by_verification",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 4,
+        "status": "passed"
+      },
+      "status": "passed"
+    },
+    {
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/cache/venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_verify_neural_provider.py.xml",
+        "/Users/andrewhendel/mojolearn-wt/native-metadata-once-20261027/tools/test_verify_neural_provider.py"
+      ],
+      "elapsed_seconds": 0.2523445419501513,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/test_verify_neural_provider.py.log",
+      "name": "test_verify_neural_provider.py",
+      "phase": "source",
+      "pytest": {
+        "cases": [
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_pinned_candidate_rejects_missing_native_files_and_changed_bytes",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_loaded_paths_outside_supplied_candidate_and_no_binary_are_rejected",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_pytest_refusals_and_failures_cannot_be_reported_as_passed[skipped]",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_pytest_refusals_and_failures_cannot_be_reported_as_passed[failure]",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_pytest_refusals_and_failures_cannot_be_reported_as_passed[error]",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_empty_collection_is_failure",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_incomplete_build_records_preserve_success_and_failure_groups",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_process_exception_and_timeout_are_recorded_not_raised",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_source_only_runs_remaining_checks_and_never_claims_runtime",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_source_success_still_reports_runtime_pending",
+            "outcome": "passed"
+          },
+          {
+            "classname": "tools.test_verify_neural_provider",
+            "message": null,
+            "name": "test_runtime_failure_does_not_cancel_other_independent_probes",
+            "outcome": "passed"
+          }
+        ],
+        "failed": 0,
+        "passed": 11,
+        "status": "passed"
+      },
+      "status": "passed"
+    }
+  ],
+  "expected_runtime_checks": [
+    "test_neural_metadata_snapshot.py",
+    "test_generation_metadata_snapshot.py",
+    "experiments/native_dispatch_20261027/public_runtime_probe.py",
+    "experiments/neural_native_dispatch_20261027/public_runtime_probe.py",
+    "experiments/samba_native_dispatch_20261027/public_provider_probe.py"
+  ],
+  "expected_source_checks": [
+    "check_neural_native_boundary.py",
+    "check_generation_native_boundary.py",
+    "check_neural_provider_layout.py",
+    "test_generation_metadata_boundary.py",
+    "test_neural_metadata_boundary.py",
+    "test_generation_native_abi.py",
+    "test_neural_native_descriptors.py",
+    "test_neural_provider_reuse.py",
+    "test_native_execution_boundary.py",
+    "test_native_metadata_snapshot.py",
+    "test_native_prep_plans.py",
+    "test_runtime_fallback_scope.py",
+    "test_verify_neural_provider.py"
+  ],
+  "failed_checks": [
+    "check_neural_provider_layout.py"
+  ],
+  "mode": "source-only",
+  "pending": [
+    "ALL candidate compiled/public runtime checks: source-only mode requested",
+    "Full 29-recipe runtime qualification (mapping/source checks are not execution)",
+    "Other vendors/devices and within-release cross-vendor identity",
+    "Full-workload performance, concurrency and remaining mixed/provider paths",
+    "Resident, fixed15, distributed and optional training paths beyond selected probes"
+  ],
+  "runtime_scope": "selected bounded public probes on local Mac only",
+  "schema": "mojolearn.neural-provider-verification.v1",
+  "selected_runtime_checks_passed": false,
+  "source_commit": "0d2dc992576a14ed6e94b86a89ae7d40de63d9c3",
+  "source_provenance": "/Users/andrewhendel/mojolearn-evidence/neural-provider-verifier-20261027/source-run-2/source-provenance.json",
+  "status": "failed"
+}

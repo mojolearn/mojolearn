@@ -32,7 +32,7 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
   targets, on the cheap fast-CPU build boxes), fixes what breaks, then merges to main. A lane makes its code easy to
   compile instead: read the call path and Mojo syntax carefully, keep each switch's code self-contained, and list in its
   final reply every binding the orchestrator must build.
-- **Orchestrator compiles go through the slot semaphore:** `bash ~/mojolearn-evidence/compile_slot.sh <command>`. It allows 4 compiles machine-wide at `nice -n 19`. Use `-j 1` and `MOJOLEARN_COMPILE_JOBS=1`.
+- **Orchestrator compiles go through the slot semaphore:** `bash tools/compile_slot.sh <command>` (versioned in the repo; `~/mojolearn-evidence/compile_slot.sh` is a shim that execs the main checkout's copy). It allows 4 compiles machine-wide at `nice -n 19`. Use `-j 1` and `MOJOLEARN_COMPILE_JOBS=1`.
 - **Never `git push --no-verify`.** The pre-push host-route fence judges a branch push only on what the branch adds over
   its merge-base with main (`--branch` mode); main's own findings are main's to fix and never block a lane. A push to main
   is judged on the whole tree. If main itself is red, fix main first (Andrew, 2026-10-07).
