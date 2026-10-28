@@ -11,8 +11,7 @@ from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from bindings.neural_block_public import neural_block_fields, neural_block_snapshot, neural_block_f32, neural_training_entries, _neural_input
-from bindings.neural_block_admission import neural_native_scalar, neural_array_slots, neural_record_fields
-from bindings.causal_lm_public import _native_function, causal_transformer_admin
+from bindings.neural_block_admission import neural_native_scalar, neural_array_slots, neural_record_fields, neural_string_keys
 from bindings.causal_lm_construct import _model_shape
 from providers.python.operation_lock_pyapi import OperationLockLease
 
@@ -320,7 +319,27 @@ def _transformer_block_snapshot(block: PythonObject, neural: PythonObject) raise
     return neural_block_snapshot(block, neural)
 
 
-def _transformer_old_binding(binding: PythonObject, neural: PythonObject) raises:
+def _transformer_entry_fields(entries: PythonObject) raises -> PythonObject:
+    var types = Python.import_module("types")
+    if py_type(entries) is not types.SimpleNamespace:
+        raise Error("TypeError: Transformer tape requires its connected native entry record")
+    # Exact SimpleNamespace has native member storage, unlike ordinary model
+    # __dict__ getset descriptors. Read that descriptor directly after type
+    # admission; never use a module/instance attribute lookup as an entry probe.
+    var fields = py_call(types.SimpleNamespace.__dict__["__dict__"].__get__, entries, types.SimpleNamespace)
+    neural_string_keys(fields)
+    return fields
+
+
+def _transformer_native_entry(entries: PythonObject, name: String) raises -> PythonObject:
+    var fields = _transformer_entry_fields(entries)
+    var entry = py_get(fields, name)
+    if py_type(entry) is not py_type(Python.import_module("builtins").len):
+        raise Error("NotImplementedError: Transformer tape lacks its connected compiled " + name + " entry")
+    return entry
+
+
+def _transformer_old_binding(binding: PythonObject, neural: PythonObject) raises -> PythonObject:
     # Session cache fields are mutable. A replaced binding must not reach
     # _native_function's attribute lookup before proving it is connected.
     var registered = neural["training_bindings"]
@@ -328,9 +347,10 @@ def _transformer_old_binding(binding: PythonObject, neural: PythonObject) raises
     for i in range(len(keys)):  # driver-loop: import-time compiled binding identities
         var entries = registered[keys[i]]["transformer"]
         if py_type(entries) is not Python.import_module("builtins").str:
-            if binding is _fields(entries)["canonical"]:
-                return
+            if binding is _transformer_entry_fields(entries)["canonical"]:
+                return entries
     raise Error("TypeError: Transformer session binding is not an admitted native module")
+
 
 def _transformer_tape_entries(block: PythonObject, fields: PythonObject, neural: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
@@ -341,7 +361,7 @@ def _transformer_tape_entries(block: PythonObject, fields: PythonObject, neural:
     if py_get(fields, "_int15") is not None or Bool(py=fields["_extended"]):
         raise Error("NotImplementedError: Transformer training tape requires default FP32 block options")
     var entries = neural_training_entries(fields, neural)
-    if Int(py=_native_function(entries, "transformer_numeric_mode")()) != 1:
+    if Int(py=_transformer_native_entry(entries, "transformer_numeric_mode")()) != 1:
         raise Error("NotImplementedError: Transformer training tape requires identical mode")
     var live = fields["_neural_live_fields"]
     for key in [String("_arithmetic_profile"), String("_arithmetic_profile_mode"), String("_arithmetic_profile_changed")]:  # driver-loop: binding profile bookkeeping on the live owner
@@ -365,8 +385,8 @@ def _transformer_tape_publish(tape: PythonObject, block: PythonObject, fields: P
     if py_type(profile) is not bi.str:
         raise Error("TypeError: Transformer tape requires a native arithmetic profile")
     var owner = TransformerPublicTapeOwner(block, fields["_native_session"], entries.canonical,
-        _native_function(entries, "transformer_session_backward_tape"),
-        _native_function(entries, "transformer_session_discard_tape"), token.copy(), shape.copy(),
+        _transformer_native_entry(entries, "transformer_session_backward_tape"),
+        _transformer_native_entry(entries, "transformer_session_discard_tape"), token.copy(), shape.copy(),
         _transformer_configuration(fields), String(profile), String(fields["numeric_profile"]), weight_shapes^)
     py_setitem(slots, "_native_owner", PythonObject(alloc=owner^))
     py_setitem(slots, "_block", block)
@@ -435,13 +455,13 @@ def transformer_forward_with_tape(block: PythonObject, input: PythonObject, budg
         var session = live["_native_session"]
         var binding = live["_session_binding"]
         if session is not None and binding is not entries.canonical:
-            _transformer_old_binding(binding, neural)
-            causal_transformer_admin(binding, session, 13)
+            var previous = _transformer_old_binding(binding, neural)
+            _ = py_call(_transformer_native_entry(previous, "transformer_session_close"), session)
             session = PythonObject(None)
             py_setitem(live, "_native_session", session)
             py_setitem(live, "_session_binding", PythonObject(None))
         if session is None:
-            session = _native_function(entries, "transformer_session_create")()
+            session = _transformer_native_entry(entries, "transformer_session_create")()
             py_setitem(live, "_native_session", session)
             py_setitem(live, "_session_binding", entries.canonical)
         py_setitem(fields, "_native_session", session)
@@ -449,7 +469,7 @@ def transformer_forward_with_tape(block: PythonObject, input: PythonObject, budg
         # currently exposes standalone retained tapes, which have different
         # activation-budget/replay semantics; substituting it would change the
         # algorithm route. This verified native entry owns its numerical run.
-        var token = py_call(_native_function(entries, "transformer_session_forward_tape"),
+        var token = py_call(_transformer_native_entry(entries, "transformer_session_forward_tape"),
             fields["_native_session"], py_ints(addresses), py_ints(params))
         tape = py_call(Python.import_module("builtins").object.__new__, context["tape_class"])
         _transformer_tape_publish(tape, block, fields, entries, token, shape.copy(), weight_shapes^, context)

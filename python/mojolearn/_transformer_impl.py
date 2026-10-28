@@ -1346,11 +1346,8 @@ class TransformerDecodeSession:
             "exit", (self,), _native_neural_bridge.CONTEXT)
 
     def __del__(self):
-        try:
-            _native_neural_bridge.RUNTIME.transformer_decode_native_call(
-                "drop", (self,), _native_neural_bridge.CONTEXT)
-        except Exception:
-            pass
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "drop", (self,), _native_neural_bridge.CONTEXT)
 
     def __repr__(self):
         return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
