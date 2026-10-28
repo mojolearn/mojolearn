@@ -1,0 +1,29 @@
+{
+  "status": "passed",
+  "source_commit": "62d693f53748aa7017b0d5345624d222e64aa1c4",
+  "entry": "checks/tree_boost_public_compile.mojo",
+  "closure": "trees_public_operation (complete tree public dispatcher incl. forest/iforest/boost/bagging/RTE/GBDT adapter/meta routes) + public_attributes_native _lookup (Bagging estimators_ schema)",
+  "command": "pixi run --locked --no-install --executable .pixi/envs/default/bin/mojo build --optimization-level 0 -j 32 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/tree_boost_public_compile.mojo",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+  "jobs": 32,
+  "allocation": {
+    "machine": "Linux-6.8.0-147-generic-x86_64-with-glibc2.35",
+    "affinity": 32,
+    "cgroup_cpus": [],
+    "jobs": 32
+  },
+  "exit_code": 0,
+  "seconds": 54,
+  "binary_sha256": "8bcbb1e6afdb9296b223d04aa14396961082b3dad056773fe65943945b803d3c",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer5-boost-iforest-20261028/pod-boost/remote/leg_out/compile.log",
+  "source_hashes": "/Users/andrewhendel/mojolearn-evidence/peer5-boost-iforest-20261028/pod-boost/remote/leg_out/source-hashes.json",
+  "box": "RunPod CPU pod 2gwq69lclpm0f6 (32 vCPU), deleted and verified gone (HTTP 404)",
+  "earlier_mac_compile": "~/mojolearn-evidence/peer5-tree-boost-lifecycle-20261028/attempt4 exit 0 (pre-merge draft, apple-m1, 241.97 s)",
+  "not_covered": [
+    "runtime/import/identity/GPU not run",
+    "NVIDIA/AMD GPU targets not compiled",
+    "FAST define not compiled",
+    "Python changes are source-only (ast parse)"
+  ]
+}
