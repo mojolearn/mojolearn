@@ -49,3 +49,16 @@ Remaining transitive work (this routing chunk is NOT runtime compliance)
 - SpectralEmbedding constructor is replaced at import by the shared full-reset
   owner; spectral operations reach shared cluster/spectral native owners, which
   are reserved to root and have not been runtime-qualified here.
+
+Input snapshot source increment
+- MKit dense/sparse admission now captures family_f32_snapshot once; copying
+  and finiteness checks use native rows/columns/address while retaining the
+  caller and captured storage owner through the copy.
+- TSNE captures X once and passes the same address to PCA initialization and
+  its optimizer, preserving the original finite-input error.
+- Six manifold source tests now pass. Log: snapshot-source-tests.log.
+- Shared snapshot original-owner retention and copied provenance remain root
+  dependencies; UMAP and TSNE user-supplied initialization still need review.
+- Initial push was refused by no_compute_in_shells for an incorrectly formatted
+  fixed-loop annotation. The annotation-only follow-up fixes it; retry passed.
+  Both routes-push.log and routes-push-retry.log retain the evidence.
