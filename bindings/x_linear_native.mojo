@@ -2441,17 +2441,19 @@ def _xl_dispatch(model: PythonObject, operation: String, args: PythonObject, con
 
 
 def _xl_method(operation: String) -> String:
-    """The public method an x_linear operation serves ("" for operations
-    another owner's lifecycle wraps: the coordinate-descent door)."""
-    if operation.startswith("fit_") or operation == "isotonic_fit":
+    """The public method an x_linear operation serves ("" for none). The
+    coordinate-descent door (ElasticNet/Lasso `cd_*`) runs the same native
+    lifecycle as the other linear estimators, so those classes carry
+    `_mojolearn_native_public` and get no `_mode` class-creation wrappers."""
+    if operation.startswith("fit_") or operation == "isotonic_fit" or operation == "cd_fit":
         return "fit"
     if operation == "isotonic_fit_transform":
         return "fit_transform"
-    if operation == "regressor_predict" or operation == "classifier_predict" or operation == "one_class_predict" or operation == "isotonic_predict":
+    if operation == "regressor_predict" or operation == "classifier_predict" or operation == "one_class_predict" or operation == "isotonic_predict" or operation == "cd_predict":
         return "predict"
     if operation == "decision_function" or operation == "one_class_decision_function":
         return "decision_function"
-    if operation == "classifier_score" or operation == "isotonic_score":
+    if operation == "classifier_score" or operation == "isotonic_score" or operation == "cd_score":
         return "score"
     if operation == "sgd_predict_proba" or operation == "lrcv_predict_proba":
         return "predict_proba"
@@ -2536,7 +2538,8 @@ def _xl_public_operation(model: PythonObject, operation: String, args: PythonObj
         return py_call(b.tuple, members)
     if py_type(result) is not context["array_class"]:
         return result
-    if (method == "predict" and (operation == "regressor_predict" or operation == "isotonic_predict")) or (
+    if (method == "predict" and (operation == "regressor_predict" or operation == "isotonic_predict"
+                                 or operation == "cd_predict")) or (
             operation == "one_class_decision_function" or operation == "one_class_score_samples"):
         return _xl_widen(result, context)
     return native_array_ndarray_view(result, context)

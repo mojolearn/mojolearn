@@ -4,6 +4,11 @@
 # The per-operation ops (mojolearn_matmul, mojolearn_relu, mojolearn_operation0..3)
 # were removed on 2026-10-24 (docs/TOMBSTONES.md) and must not come back: between
 # per-op calls MAX would compute with its own bits.
+# TOMBSTONE: torch.ops.mojolearn.operation, the MAX ops mojolearn_matmul / mojolearn_relu / mojolearn_operation0..3 and the
+# native mojolearn_adapter_operation* entries over run_operation (removed API: whole-model only) deleted 2026-10-24 by
+# 761a927d6 and the commits after it on lane/adapters-whole-model-20261024; code recoverable at 761a927d6^ (= b022e2ea5).
+# Restore: no patch (removed API, not an experiment define); check the files out of b022e2ea5 (docs/TOMBSTONES.md,
+# "Framework adapter per-operation surfaces").
 import extensibility
 from extensibility import InputTensor, OutputTensor
 from max.gpu.host import DeviceContext

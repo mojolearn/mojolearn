@@ -95,6 +95,11 @@ class VAR(ParamsMixin):
     (5, 3)
     """
 
+    # Every public method is one xseq_native_call; none needs a fitted
+    # guard (the native forecast refuses an unfitted model itself), so no
+    # `_mode` class-creation wrappers are installed.
+    _mojolearn_native_public = True
+
     def __init__(self, endog, exog=None, numeric_mode=None):
         return _XSEQ(self, "var_initialize", (endog, exog, numeric_mode), _XSEQ_CONTEXT)
 
