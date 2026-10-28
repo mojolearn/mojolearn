@@ -29,7 +29,9 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_contains, py_setitem, py_fields, py_type
 from bindings.classical_arrays import classical_address
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
+from bindings.classical_pandas import classical_admit_value
+from bindings.host_inference_scalars import host_inference_scalar
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_call, family_array, family_as_f32, family_sample_weight,
     family_field, family_is_str,
@@ -39,6 +41,30 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_labels import _any_contiguous_address
 from bindings.neighbors_knn_native import knn_door
 from core.family_cast_impl import family_all_finite_f32
+
+
+def _kde_admit_state(model: PythonObject, context: PythonObject) raises:
+    classical_check_layout(model, context)
+    var fields = py_fields(model)
+    var names = Python.tuple("bandwidth", "algorithm", "kernel", "metric", "atol", "rtol", "breadth_first",
+        "leaf_size", "n_features_in_", "n_samples_fit_")
+    for i in range(len(names)):  # small-loop(fixed KDE settings and fitted metadata)
+        var value = py_get(fields, names[i])
+        if value is not None:
+            host_inference_scalar(value, context, True)
+    var params = py_get(fields, "metric_params")
+    if params is not None:
+        if py_type(params) is not native_loaded_module("builtins").dict:
+            raise Error("TypeError: KernelDensity metric_params must be an exact native dictionary")
+        classical_admit_value(params, context)
+        var values = py_call(native_loaded_module("builtins").tuple, params.values())
+        for i in range(len(values)):  # driver-loop: admitted metric-parameter scalar values
+            host_inference_scalar(values[i], context)
+    var arrays = Python.tuple("_x", "_w")
+    for i in range(len(arrays)):  # small-loop(fitted KDE buffer owners)
+        var value = py_get(fields, arrays[i])
+        if value is not None:
+            classical_admit_value(value, context)
 
 
 def _kde_sparse_f32(source: PythonObject, format: String) raises -> Bool:
@@ -171,15 +197,19 @@ def _kde_release(fields: PythonObject) raises:
     var cached = py_get(fields, PythonObject("_resident"), PythonObject(None))
     if cached is None:
         return
-    py_setitem(fields, "_resident", PythonObject(None))
     var b = native_loaded_module("builtins")
+    if py_type(cached) is not b.tuple or len(cached) != 3 or py_type(cached[1]) is not b.int:
+        raise Error("TypeError: KDE resident state must retain its native handle and module")
+    var release = knn_door(cached[2], "kde_fit_release")
+    py_setitem(fields, "_resident", PythonObject(None))
     try:
-        _ = py_call(py_call(b.getattr, cached[2], PythonObject("kde_fit_release")), cached[1])
+        if release is not None:
+            _ = py_call(release, cached[1])
     except:
         pass
 
 
-def _kde_handle(fields: PythonObject, binding: PythonObject) raises -> PythonObject:
+def _kde_handle(fields: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """`KernelDensity._resident_fit_handle(binding)`: the handle of the
     device-resident fit set, prepared on the first call and reused while the
     key (fit array address and shape, weights address, kernel, metric,
@@ -200,6 +230,11 @@ def _kde_handle(fields: PythonObject, binding: PythonObject) raises -> PythonObj
                            family_call(b.str, family_field(fields, "metric")),
                            family_call(b.float, family_field(fields, "bandwidth")))
     var cached = py_get(fields, PythonObject("_resident"), PythonObject(None))
+    if cached is not None:
+        if py_type(cached) is not b.tuple or len(cached) != 3 or py_type(cached[1]) is not b.int:
+            raise Error("TypeError: KDE resident state must retain its native handle and module")
+        classical_admit_value(cached[0], context)
+        _ = knn_door(cached[2], "kde_fit_release")
     if cached is not None and _kde_truth(family_call(op.eq, cached[0], key)):
         return cached[1]
     if cached is not None:
@@ -242,7 +277,7 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # Opt-in immutable snapshot: transport-only copy of caller bytes.
     # Residency never relies on external mutable pointer identity.
     var immutable = False
-    var probe = family_call(b.getattr, binding, PythonObject("kde_fast_immutable_fit"), PythonObject(None))
+    var probe = knn_door(binding, "kde_fast_immutable_fit")
     if probe is not None:
         immutable = _kde_truth(family_call(probe))
     if immutable:
@@ -288,10 +323,10 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
     # validates and uploads it, every later call scores the device copy
     # through `kde_score_samples_resident`, validating and uploading the
     # queries only. A binding without that entry takes the per-call path.
-    var handle = _kde_handle(fields, binding)
+    var handle = _kde_handle(fields, binding, context)
     var got = PythonObject(None)
     if handle is not None:
-        var resident = family_call(b.getattr, binding, PythonObject("kde_score_samples_resident"))
+        var resident = knn_door(binding, "kde_score_samples_resident")
         # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_score_samples_resident_binding.
         got = family_call(resident, handle, classical_address(q), classical_address(out),
                           Python.list(family_call(b.int, q.shape[0]), family_call(b.int, features),
@@ -304,7 +339,7 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
         var w_address = PythonObject(0)
         if w is not None:
             w_address = classical_address(w)
-        var entry = family_call(b.getattr, binding, PythonObject("kde_score_samples"))
+        var entry = knn_door(binding, "kde_score_samples")
         # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_score_samples_binding.
         got = family_call(entry, classical_address(x), classical_address(q), w_address, classical_address(out),
                           Python.list(family_call(b.int, x.shape[0]), family_call(b.int, q.shape[0]),
@@ -323,6 +358,11 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
 
 def neighbors_kde_operation(model: PythonObject, operation: String, var args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
+    _kde_admit_state(model, context)
+    for i in range(1, len(args)):  # small-loop(public input owners before sparse/native preparation)
+        if host_sparse_format(args[i]).byte_length() == 0:
+            classical_admit_value(args[i], context)
     if operation != "family_xn_kde_release":
         args = estimator_arguments(model, "_mojolearn_estimators", args, context)
     if operation == "family_xn_kde_fit":
