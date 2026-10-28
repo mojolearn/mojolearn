@@ -26,8 +26,10 @@ the GPU defaults `train` itself uses (`TCatFeatureParams.default()`,
 others): simple CTRs Borders at the three default priors (ParamId 0, the
 Uniform-15 grid) and FeatureFreq at prior (0, 1) (the MinEntropy-15 grid),
 the target grid MinEntropy with one border, `one_hot_max_size` 2 and
-`counter_calc_method` SkipTest. Refused by the binding by name: an eval set
-with CTR columns, and every option the symmetric Logloss oracle refuses.
+`counter_calc_method` SkipTest. Held-out rows use the learn pool's final
+CTR tables before quantization against the training grid. They never join
+the CTR counts, target grid or permutation histories. The binding retains
+the categorical arm's other option restrictions.
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
 
@@ -57,7 +59,10 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
      every non-float column `AsIs`.
   4. One compressed index per permutation (`:1745-1778`), the dependent
      columns from that permutation's values, the rest shared.
-  5. `fit_with_test` over the permutations: `gbdt_host_boost`.
+  5. Held-out raw columns through the shared `expand_raw_columns`, as in
+     `train`'s eval prelude, then `_binarize_columns` with the model grid
+     and layout. `fit_with_test` over the permutations: `gbdt_host_boost`,
+     including the held-out curve, detector and best-model shrink.
   6. `model_text` (`gbdt/models/model_text.mojo:374-670`): the
      `ctr_columns` header, `type ctr` / `type cat` feature records, the
      `ctr_table` and `ctr_entry` records in column order, the trees
@@ -130,6 +135,7 @@ from gbdt.models.ctr_value_table import (
     TCtrValueTable,
     build_ctr_tables,
     dense_category_code,
+    expand_raw_columns,
 )
 
 #: `one_hot_max_size`, their GPU default (`catboost_options.mojo:1031`).
@@ -340,6 +346,7 @@ def gbdt_ctr_host_fit(
     flags: List[UInt32],
     permutation_count: Int,
     ctr_estimation_permutation_id: Int,
+    eval: GbdtHostEval = GbdtHostEval.none(),
 ) raises -> GbdtCtrHostFit:
     """`train` with categorical columns on the covered configuration (see
     the module docstring for what that is and what mirrors what)."""
@@ -351,6 +358,13 @@ def gbdt_ctr_host_fit(
         raise Error("y size mismatch")
     if len(flags) != n_features:
         raise Error("cat flags must be one per feature")
+    if eval.n_rows < 0:
+        raise Error("eval_set row count must not be negative")
+    if eval.has_test():
+        if len(eval.x_colmajor) != eval.n_rows * n_features:
+            raise Error("eval_set x_colmajor size mismatch")
+        if len(eval.y) != eval.n_rows:
+            raise Error("eval_set y size mismatch")
     var kinds = gbdt_ctr_column_kinds(flags, x_colmajor, n_rows, n_features)
 
     # ---- the CTR prelude (`gbdt/train.mojo:1336-1491`) ----
@@ -560,9 +574,27 @@ def gbdt_ctr_host_fit(
                     flat.append(columns[c][r])
         cindexes.append(_binarize_columns(flat, n_rows, n_columns, grid, layout))
 
+    # COMPILE REQUIRED BEFORE MERGE (2026-10-27, lane/gbdt-cpu-ctr-eval):
+    # this newly connected held-out path has source review only. Compile
+    # the GBDT host binding before integration; runtime/identity evidence
+    # remains pending. See docs/plans/gbdt-cpu-ctr-eval-20261027.md.
+    # Match `train`'s eval prelude: use final learn-only CTR statistics,
+    # not the ordered training columns or an eval-pool target histogram.
+    # `expand_raw_columns` is the same host helper the GPU path calls; its
+    # table lookups also implement the unseen-category prior. SkipTest is
+    # the only counter mode this entry exposes. Supporting Full would
+    # require admitting that option and carrying its counts explicitly.
+    var test_cindex = List[UInt32]()
+    if eval.has_test():
+        var eval_expanded = expand_raw_columns(
+            tables, n_columns, eval.x_colmajor, eval.n_rows
+        )
+        test_cindex = _binarize_columns(
+            eval_expanded, eval.n_rows, n_columns, grid, layout
+        )
     var fit = gbdt_host_boost(
         cindexes, est_perm, y, n_rows, n_columns, grid^, layout, params,
-        -1, Float32(1.0), Float32(0.0), GbdtHostEval.none(), List[UInt32](),
+        -1, Float32(1.0), Float32(0.0), eval, test_cindex,
     )
     return GbdtCtrHostFit(fit^, one_hot^, tables^, ctr_column_count)
 

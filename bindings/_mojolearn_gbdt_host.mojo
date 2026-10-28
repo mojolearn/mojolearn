@@ -1601,21 +1601,24 @@ def gbdt_fit_binding(
         ):
             # the CTR categorical arm (gbdt-categorical-ctr-tables):
             # gbdt/host/gbdt_oracle_ctr.mojo, every permutation
-            if n_eval_rows != 0:
-                raise Error(
-                    "no CPU implementation of _mojolearn_gbdt.gbdt_fit for"
-                    " eval_set with a CTR categorical column (the held-out"
-                    " rows need the CTR tables applied; not restated on the"
-                    " host)"
-                )
+            # COMPILE REQUIRED BEFORE MERGE: the CTR eval owner and this
+            # route are uncompiled on lane/gbdt-cpu-ctr-eval (2026-10-27).
+            # The owner expands eval rows with its final learn-only tables
+            # and reuses the existing held-out boost/detector/shrink arm.
+            var ev = _gbdt_host_eval_arm(
+                eval_x_address, eval_y_address, n_eval_rows, n_features,
+                od_kind, od.auto_stop_p_value, od.iterations_wait,
+                use_best_model, best_model_min_trees,
+            )
             var ctr_fit = gbdt_ctr_host_fit(
                 x, y, n_rows, n_features, p, flags, permutation_count,
-                ctr_permutation_id,
+                ctr_permutation_id, ev^,
             )
             text = gbdt_ctr_host_model_text(ctr_fit)
             losses = ctr_fit.fit.model.losses.copy()
             best_iteration = ctr_fit.fit.eval.best_iteration
             stopped_early = ctr_fit.fit.eval.stopped_early
+            test_losses = ctr_fit.fit.eval.test_losses.copy()
         elif grow_code == 0 and len(flags) != 0:
             # the one-hot categorical arm (gbdt-categorical-ctr):
             # gbdt/host/gbdt_oracle_onehot.mojo
