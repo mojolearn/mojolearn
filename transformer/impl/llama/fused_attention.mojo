@@ -2814,15 +2814,15 @@ struct LlamaDeferredChecks(Movable):
             raise Error("deferred checks: readback not enqueued before the wait")
         var hi = self.host_i.unsafe_ptr()
         var n_slots = self.nf_used
-        for slot in range(n_slots):  # small-loop(n_slots: deferred refusal slots, at most DEFER_NF_SLOTS)
+        for slot in range(n_slots):  # small-loop(n_slots: deferred refusal slots, at most DEFER_NF_SLOTS): one folded word per named scan
             if hi.unsafe_load(slot) != NONFINITE_NONE:
                 return False
         var hf = self.host_f.unsafe_ptr()
         var lo = 0
         var n_attn = self.attn_used
-        for a in range(n_attn):  # small-loop(n_attn: deferred fused forwards, one per layer, at most DEFER_ATTN_SLOTS)
+        for a in range(n_attn):  # small-loop(n_attn: deferred fused forwards, at most DEFER_ATTN_SLOTS): one regime verdict per layer call
             var maxima = StaticTuple[Float64, 3](0.0, 0.0, 0.0)
-            for which in range(3):  # small-loop(3: q_rope, k_cache, v_cache partial slices)
+            for which in range(3):  # small-loop(3: the q_rope, k_cache and v_cache slices): one maximum per scanned operand
                 var kb = self.attn_blocks[a * 3 + which]
                 var m = Float32(0.0)
                 for i in range(lo, lo + kb):  # small-loop(kb: one operand partials, at most ABSMAX_BLOCKS): max fold of the device reduction partials
