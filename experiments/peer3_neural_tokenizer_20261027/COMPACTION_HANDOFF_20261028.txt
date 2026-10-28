@@ -1,0 +1,292 @@
+PEER 3 SELF-HANDOFF — 2026-10-28
+
+IMMEDIATE CONTEXT
+Andrew requested a handoff before manually compacting. Source mutations are
+paused; agents have saved checkpoints. Resume the existing migration after
+compaction, not a new audit from scratch. This file records the state BEFORE
+its own documentation commit. Do not claim completion or Python-free runtime.
+
+We are /root in this Peer3 agent tree, but a separate coordinating root task
+owns main integration across peers. Its thread ID is:
+01a18001-c4b5-7ba2-a735-6250b366b07e
+Use the discovered mcp__codex_tui__send_message_to_thread tool (1000-byte
+messages) for coordination. Do not modify another worktree or merge main
+independently. Root requested our latest checkpoint for its own compaction.
+
+USER AUTHORIZATION AND LIMITS
+- Complete native Transformer, Mamba and tokenizer operations, including
+  constructors, validation, preparation, state checks, orchestration and
+  finished outputs. Follow actual public paths and transitive callees.
+- Later scope explicitly expanded with root approval to lm_corpus, budget-aware
+  Transformer tapes, model config/catalog/checkpoint/CausalLM and necessary
+  generation/parallel/codec caller closures. Exact shared scopes are below.
+- Andrew requested local compilation and main merges once affected code
+  compiles. Runtime/cross-vendor verification is deferred/skipped at his request.
+- No broad benchmarks, publication, arithmetic/decoding substitutions or
+  unsupported compiler workarounds. Preserve state/checkpoint and alias behavior.
+- Inspect mutable dictionaries, descriptors and protocols BEFORE reading them.
+  Capture metadata once per operation and retain original input/state owners.
+- Agents do not compile. Peer3 parent freezes and compiles; coordinating root
+  serializes main merges. User explicitly authorized fanout and RunPod CPU if
+  needed. This followup used only the Mac; no owned pod exists.
+- Read AGENTS.md and experiments/provider_boundary_audit_20261027/{
+  UNIVERSAL_AUDIT.txt,operations.tsv}. Existing 82-row OWNED_OPERATIONS.tsv is
+  an inventory, not a completion count.
+- Keep logs out of context: save complete output to files, use targeted rg/grep
+  with bounded surrounding lines and short tails, and summarize exit status,
+  coverage, failures, and evidence paths. Expand only relevant diagnostic blocks;
+  never hide failures or infer full success from filtered output. Propagate this
+  reminder in every resumed/delegated assignment. Add --max-columns 240
+  --max-columns-preview to compiler diagnostic searches.
+
+WORKTREES AND EXACT STATE
+Development: /Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027
+Branch: lane/peer3-neural-tokenizer-20261027
+HEAD before this handoff: 22f3790f7c159b6f4d5d8bd96b9af0096b617c02
+Original base: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Origin tracking ref before handoff push: 8c5bd2e618483751f457dedb1bfe8cee7c68c002
+
+Frozen compile worktree (ours, clean tracked source, detached):
+/Users/andrewhendel/CascadeProjects/mojolearn-peer3-compile-20261027
+HEAD: 551c553300e134c73f5bc66df9fa089ed400e220
+Do not edit it while compilation is running. It is separate so agents can
+continue source changes in development without contaminating frozen builds.
+
+Main worktree (read-only to this peer):
+/Users/andrewhendel/CascadeProjects/mojolearn
+Last observed main: 20ab53ec02; main advances independently, so recheck.
+Verified merge-base --is-ancestor 3116bf923e main returned exit 0.
+
+Uncommitted state before this documentation file:
+ M bindings/neural_block_public.mojo
+ ?? experiments/peer3_neural_tokenizer_20261027/transformer/commit-causal-operation-owner.log
+The source diff is parent-owned and intentional, one line at _neural_plain:
+  py_call(_native_function(e["block_binding"], "transformer_native_session_handle_v1"), session_owner)
+becomes:
+  py_call(e["transformer_native_session_handle_v1"], session_owner)
+It consumes the entry captured by admission in 22f3790f7c, avoiding a mutable
+module relookup. Preserve and commit after reviewing dependency. Backup patch:
+/Users/andrewhendel/mojolearn-evidence/peer3-corpus-tape-moe-20261027/compaction-neural-session-handle.patch
+The untracked log is retained commit evidence, not source debt.
+
+WHAT IS ALREADY COMPILED AND IN MAIN
+Original Peer3 repair: merge 06400fd63b, receipt d2b7370c2b, root pushed through
+f8f1e59cd0. Five original focused CPU roots green, no runtime qualification.
+
+First followup frozen batch: source b53d4aeb11, then corpus-only compile fix
+e8b197a3f2 cherry-picked as 309a184dbc. Receipt commit 3116bf923e on pushed
+lane/peer3-corpus-tape-freeze-20261027 is NOW AN ANCESTOR OF MAIN.
+Receipt in that branch/main:
+experiments/peer3_neural_tokenizer_20261027/FOLLOWUP_COMPILE.json
+Coverage: model_config, neural, Mamba, Transformer public, tokenizer, corpus;
+supplemental actual CPU Transformer session tape dispatcher/numerics compile.
+Do not rerun unchanged accepted roots merely because main/commit name changes.
+
+LATER SOURCE IS COMMITTED BUT NOT FULLY COMPILED OR READY FOR MAIN
+Key later commits (full history is on development branch):
+3662cf292d CausalLM/State/GenerationStream one-call wrappers, native repr/state
+2c6be3fbcb checkpoint/config snapshots
+1d5502a31c checkpoint/CausalLM host wiring and probes, corrected corpus handoff
+4f5f63bd62 CausalLM constructor plan/options/weight and packed snapshots
+5267972b9f native catalog and narrowly approved imported-run lookup repairs
+ffd1c6bfcb corpus NumPy scalar compatibility with native typed arithmetic
+cd1acb73c1 native Array snapshot extraction, generation buffers, catalog probe
+f1b4be6e59 generation class registry keys and identities pinned
+b3a660d16a generation metadata snapshots/refresh/alias publication
+16d0ffc784 adjusted existing generation source controls
+a114e24b51 catalog compiler syntax fixes
+f2eae98261 neural descriptor cache dictionary/entry/flag admission
+8327df3675 parallel parent+worker compile probe
+4098ff3ebf retain original weight/option identities for parameters
+90f3d3e95b parallel model/state/pool snapshots and lifecycle publication
+00fa440e61 generation deferred _causal_admission_failure sentinel
+e464446363 native codec admission/publication and UNRUN behavioral fixtures
+7c405e31f7 generation consumes captured session-handle entry
+22f3790f7c complete CausalLM operation owner/public snapshots and source controls
+
+AGENT CHECKPOINTS / REMAINING IMPLEMENTATION
+All three agents are paused/completed; use followup_task with a resumed brief.
+They used disjoint files within the same DEVELOPMENT worktree. Coordinate
+commit slots; never git add -A or capture another lane's changes accidentally.
+
+1. /root/transformer
+Latest commit 22f3790f7c159b6f4d5d8bd96b9af0096b617c02.
+No uncommitted owned source. Constructor followup has NOT STARTED.
+Remaining exact scope: bindings/causal_lm_construct.mojo,
+_causal_model_prepare_snapshot and causal_model_init_binding still read/set
+actual model attributes after numerical entries that can release the GIL.
+Replace with retained checked raw live dictionary writes plus private captured
+construction dictionary/namespace. Preserve incremental publication and same
+numerical functions. Keep _causal_model_prepare_snapshot signature/return
+compatible with parallel callers (optional trailing captured-fields argument
+if useful). Final causal_lm_admit_binding should receive private native
+namespace, then publish resulting entries/vendor/pin to original raw dictionary.
+Revalidate native Array descriptors before post-kernel metadata reads.
+
+22f379 source controls: 11 passed, 2 AST syntax checks passed, diff check 0.
+Earlier 10-pass/1-fail source-control run was a bad test delimiter matching a
+call rather than function definition; evidence retained. No compile/runtime.
+Streams now recapture model+state from retained original owners per read or
+checkpoint operation; do not retain stale metadata across public reads.
+Resume op12 publishes restored state before recapture. Original model/state
+arguments identify registry entries, captured payloads carry actual metadata.
+Original _w/_wopt markers preserve returned parameter identities.
+Evidence: experiments/peer3_neural_tokenizer_20261027/transformer/HANDOFF.txt
+
+2. /root/tokenizer
+Latest owned changes e464446363 and 7c405e31f7. No uncommitted owned files.
+Pending tokenizer UTF-8 error-handler identity fix has NOT STARTED.
+bindings/tokenizer_public_native.mojo::_text_result currently checks builtin
+function type and allowed policy string, which does not establish canonical
+handler identity. _codecs.register_error("replace", print) supplies a builtin
+function that could invoke stdout hooks on malformed UTF-8.
+Plan: add private error_handlers to TokenizerPublicConnection. At first
+import-time connect_bpe/connect_vocab, capture six canonical handlers once;
+require exact builtin type, canonical __name__, __self__ is None and __module__
+is None. Runtime lookup_error(policy) must be the saved handler before using
+the existing raw.decode('utf-8', policy) route. Do not alter decoding semantics.
+Canonical names: strict_errors, ignore_errors, replace_errors,
+backslashreplace_errors, surrogateescape, surrogatepass.
+Add meaningful public negative fixtures in test_tokenizer_public_admission.py:
+BPE single/batch and model decode with print registered as replace, stdout hook
+sentinel, finally restoring registry; record runtime UNRUN. Existing source
+control should ensure identity check precedes decode. Source checks permitted.
+Full plan:
+/Users/andrewhendel/mojolearn-evidence/peer3-tokenizer-corpus-20261027/HANDLER_CONTINUATION.txt
+
+3. /root/mamba
+Completed ffd1c6bfcb corpus scalar semantics and 90f3d3e95b parallel snapshots.
+No remaining owned draft known. Parallel source checks 19/19 and 24 one-call
+wrappers passed; compile/runtime unrun by lane. Corpus scalar full root passed
+at frozen 551c553300. Typed arithmetic preserves NumPy/Python multiply-before-int
+behavior, including FP16 round at each multiply and NEP50/version promotion.
+Rejects overflow before possible seterrcall; no NumPy arithmetic callbacks.
+Independent legacy-expression oracle fixtures exist but runtime UNRUN.
+Evidence:
+/Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/parallel-handoff.txt
+/Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/generation-semantic-review.txt
+/Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/generation-registry-array-review.txt
+
+SEMANTICS AND SHARED SCOPE TO PRESERVE
+- Generation [S,T,S] alias partial-failure behavior: publish each original state
+  from native.state_counters, not stale per-layer cached fields. Retain snapshots
+  and original owners through native calls. Preserve foreign refresh/writeback
+  timing and exception/profile behavior. Failed native Array may be partially
+  mutated; failed foreign scratch is not copied back.
+- native_array_snapshot allows empty borrowed multidimensional buffers with
+  zero strides. It verifies actual Array descriptors, mutable _mv metadata,
+  exporter/span/read-only consistency and retains real exporters. Default
+  neural dtype scope unchanged; generation all_dtypes=True supports Array's
+  actual storage codes. No test-only shadow conversion or arithmetic route.
+- Canonical generation class tuples/identity are pinned; rejects removal,
+  replacement and growth. Mamba3 separate entry is intentional.
+- CausalLM private _CpuPrimitives/_GpuPrimitives methods remain independent
+  test-oracle compatibility; native product construction only raw-allocates
+  _prims and _T/_ext, with no numerical _prims callbacks. Source reachability
+  evidence is not runtime proof.
+- Catalog verify requires explicitly exported graph/native inputs per owner
+  permission. No user forward/export/serialization callbacks. Native import/run
+  owns execution/digest/report. Artifact SHA only when artifact bytes exist.
+- Root approved shared native_array_snapshot, generation_buffers,
+  generation_metadata_pyapi, narrow neural_descriptor cache admission,
+  parallel_causal_native snapshot payload arguments, native_codec admission,
+  borrowed_buffer mmap import connection and _native_loaded_modules
+  SimpleNamespace connection. Do not expand into RNN/LayerNorm/Session.
+- Root approved provider Transformer ops36..40 (reserve/release, budget-aware
+  forward/backward/discard), count41, existing<=35 preserved. Uses original
+  provider budget route/numerics, not substituted retained-tape arithmetic.
+- Root approved four native_loaded_module substitutions only in
+  providers/python/autograd_program_pyapi.mojo: _result, _imported_repr,
+  _imported_tuple, ops_imported_run_py. Root owns the rest of Program.
+- Coordinating root's latest note: Program lane is moving pooled/offloaded
+  training and may add a NEW private schedule descriptor/factory in
+  _mojolearn_byte_lm.mojo. It will leave our generation/catalog/codec helpers
+  alone. No known actual collision; reconcile host wiring carefully.
+
+COMPILATION RECEIPTS AND FAILURES
+Base evidence directory:
+/Users/andrewhendel/mojolearn-evidence/peer3-corpus-tape-moe-20261027/
+All per-root full logs, source snapshots/manifests, results.json, binary hashes
+and compiler/command metadata retained below it. Never load whole logs.
+
+freeze-b53d/ (b53d4aeb11):
+  model_config PASS 26.1s; neural PASS 113.8s; mamba PASS 79.4s;
+  transformer PASS 54.5s; tokenizer PASS 169.2s; corpus FAIL 26.8s.
+  Corpus failure: PythonObject(None) defaults evaluated at compile time.
+freeze-corpus-fix/ (309a184dbc): corpus PASS 52.8s after three-line fix.
+These underpin merged receipt3116bf923e.
+
+freeze-models-b3a/ (b3a660d16a): generation_buffers PASS28.9s,
+  model_config PASS30.9s, checkpoint PASS94.3s, catalog FAIL11.9s.
+  Controller stopped at catalog; later corpus was NOT ATTEMPTED in this batch.
+  Failures: reserved match= keyword in Python.dict and String self-slice alias.
+freeze-catalog-fix/ (551c553300 = a114e24b51 cherry atop b3a):
+  catalog PASS46.2s, lm_corpus PASS152.2s.
+These compiles DO NOT qualify subsequent owner/parallel/codec/neural changes.
+
+Supplemental accepted files in base evidence:
+corpus-files-compile-4.log
+transformer-tape-host-compile-2.log (actual CPU dispatcher/numerics)
+transformer-public-compile-1.log, tokenizer-compile-2.log
+corpus-public-compile-1.log, generation-buffers-compile-1.log
+Older partial compile results apply only to their retained snapshots.
+
+Compile-only controller: base evidence/compile_frozen.py
+Usage: python3 <controller> --source <clean frozen worktree> --out <new evidence
+directory> <repo-relative-root.mojo> ...
+It refuses tracked dirty source, generates Unicode table, snapshots tracked
+source/compiler/flags, compiles sequentially, and STOPS ON FIRST FAILURE.
+Compiler: Mac arm64 Mojo1.0.0 ed45d567, main Pixi environment, 10 logical CPUs,
+optimization0, --emit shared-lib, MOJOLEARN_NUMERIC_IDENTICAL=1,
+MOJOLEARN_COLUMN_CPU, -j10. It DOES NOT IMPORT OR RUN generated binaries.
+
+Focused compile roots under experiments/peer3_neural_tokenizer_20261027/:
+compile_neural.mojo, compile_mamba.mojo, compile_transformer.mojo,
+compile_transformer_decode.mojo, compile_tokenizer.mojo,
+compile_corpus_files.mojo, compile_lm_corpus.mojo, compile_model_config.mojo,
+compile_checkpoint.mojo, compile_catalog.mojo, compile_generation_buffers.mojo,
+compile_causal_model.mojo, compile_parallel_causal.mojo.
+Prefer compile_lm_corpus over alternate corpus probe: it includes iterator type
+registration/C door. Parallel root includes parent+worker dispatch/lifetime type.
+Under compile_roots/: compile_transformer_session_tape_host.mojo,
+compile_transformer_session_tape_gpu.mojo (UNCOMPILED),
+compile_causal_public_metadata.mojo, compile_causal_construct.mojo,
+compile_causal_execution.mojo, compile_causal_generation.mojo,
+compile_native_codec.mojo.
+Do not put probes next to the transformer/ handoff directory: package shadowing
+was the reason session tape probes moved into compile_roots/.
+
+OTHER RETAINED HANDOFFS
+Repo: FOLLOWUP_HANDOFF.txt, CORPUS_HANDOFF.txt, MAMBA_HANDOFF.txt,
+transformer/HANDOFF.txt, tokenizer/HANDOFF.txt. Historical HANDOFF.txt corrected:
+corpus helpers were product debt, never a testing-only runtime exception.
+External:
+/Users/andrewhendel/mojolearn-evidence/peer3-model-config-checkpoint-20261027/HANDOFF.txt
+/Users/andrewhendel/mojolearn-evidence/peer3-generation-metadata-20261027/HANDOFF.txt
+/Users/andrewhendel/mojolearn-evidence/peer3-native-codec-20261027/HANDOFF.txt
+/Users/andrewhendel/mojolearn-evidence/peer3-tokenizer-corpus-20261027/REVIEW_HANDOFF.txt
+
+RESUME ORDER
+1. Read this handoff and current git status. Preserve parent one-line source
+   diff. Agents are paused; do not infer task done from their completed status.
+2. Resume Transformer constructor and tokenizer handler tasks with disjoint
+   files and log reminder. Parent reviews owner/public/parallel/codec closure
+   and commits captured session-handle line after dependent source review.
+3. Finish coherent commits/push. Reconcile latest main in our OWN worktree,
+   coordinate root changes, resolve only owned scopes. No independent main edit.
+4. Freeze clean committed source in dedicated compile worktree. Compile newly
+   affected public construct/execution/generation, parallel parent+worker,
+   codec and tokenizer paths; include neural/Transformer/Mamba roots where
+   changed helpers invalidate their closure. Reuse unchanged accepted receipts.
+5. Preserve failures, fix source and rerun affected roots only. No runtime,
+   broad benchmarks or vendor campaign in this assignment.
+6. Push green freeze and compile receipt; send coordinating root exact commit,
+   affected scopes, logs/receipts and pending coverage. Root merges main; verify
+   ancestry. No claim entire repository is native from source guards/compile.
+
+CURRENT LIMITS
+No full extension/wheel assembly, public runtime execution, GPU followup
+compile, cross-vendor identity or performance verification is claimed. Several
+adversarial/behavioral fixtures are authored but UNRUN. Latest full public
+owner/codec/parallel closure still needs focused compilation after remaining
+implementation. No rented box, active compile or watcher owned by this peer.
