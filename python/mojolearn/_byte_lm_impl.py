@@ -1541,6 +1541,15 @@ def _connect_trainer():
     from ._native_classical_bridge import _state_context
     from types import MethodType
     context = _state_context()
+    # glue: the native trainer builds its token/output Arrays through the shared
+    # array materializer (tsa_array -> arena_materialize_native._owned), which reads
+    # the exact storage descriptors; connect them once, as the TSA bridge does.
+    from ._native_owner_lifetime import connect_owner_context
+    ownership = dict(context)
+    connect_owner_context(ownership)
+    context.update(owner_array_slots=ownership["owner_array_slots"],
+                   arena_native_types=ownership["owner_native_types"], arena_memoryview=memoryview,
+                   owner_mmap_class=ownership["owner_mmap_class"])
     _numeric_profile.default_profile("training")  # glue: connect the training profile before public construction
     context.update(byte_lm_source_root=str(Path(__file__).resolve().parents[2]), byte_lm_wrapper_file=__file__,
                    byte_lm_source_names=('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',

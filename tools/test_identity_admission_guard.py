@@ -128,8 +128,18 @@ def test_gpu_saved_file_model_na_passes_only_on_the_model_part():
 def test_gpu_only_declarations_are_read_from_the_harness_source():
     lanes, prefixes = GUARD.gpu_only_declarations()
     assert "par-" in prefixes
-    # one dict entry in identity_break.py, one added by a lane module
-    assert {"gbdt-pair-logit-pointwise", "optim-resident-io"} <= lanes
+    assert 'optim-resident-io' in lanes
+    # Ranking now has CPU routes; its older GPU-only exemption must not return.
+    assert 'gbdt-pair-logit-pointwise' not in lanes
+
+
+def test_gpu_only_reader_combines_harness_and_lane_declarations(tmp_path):
+    (tmp_path/'identity_break.py').write_text(
+        'GPU_ONLY_LANES = {"harness-lane": "GPU operation"}\nRECORD_EXCLUDED_PREFIXES = ("cooperative-",)\n')
+    (tmp_path/'identity_lanes').mkdir()
+    (tmp_path/'identity_lanes/example.py').write_text('GPU_ONLY_LANES["module-lane"] = "GPU operation"\n')
+    assert GUARD.gpu_only_declarations(tmp_path) == (
+        frozenset({'harness-lane', 'module-lane'}), ('cooperative-',))
 
 
 def test_gpu_only_declarations_absent_harness_reads_strict(tmp_path):
@@ -243,6 +253,7 @@ def wrapper_fixture(tmp_path, candidate, base, fail_selftest=False):
     table = repo / "python/mojolearn/verify_reference/table.json"
     table.parent.mkdir(parents=True)
     table.write_text(json.dumps(base))
+    shutil.copyfile(ROOT / 'python/mojolearn/_verify_reference.py', table.parent.parent / '_verify_reference.py')
     for name in (".libs/libMojolearnMath.so", ".dylibs/libMojolearnMath.dylib"):
         path = table.parent.parent / name
         path.parent.mkdir(parents=True)
@@ -250,25 +261,47 @@ def wrapper_fixture(tmp_path, candidate, base, fail_selftest=False):
     incoming = tmp_path / "incoming"
     incoming.mkdir()
     raw = incoming / "apple.identical.json"
-    raw.write_text(json.dumps({"vendor": "apple-inert", "commit": "1" * 40,
+    def git(*args):
+        return subprocess.check_output(['git', *args], cwd=repo, stderr=subprocess.STDOUT, text=True).strip()
+    git('init', '-b', 'main')
+    git('config', 'user.name', 'Admission test')
+    git('config', 'user.email', 'admission@example.invalid')
+    git('add', '.')
+    git('commit', '-m', 'source fixture')
+    source_commit = git('rev-parse', 'HEAD')
+    raw.write_text(json.dumps({"vendor": "apple-inert", "commit": source_commit,
                                "cells": {"selected/base": {}, "held/base": {"verdict": "DIVERGENT"}}}))
+    retained = repo / 'bench/results/identity_break/retained/fixture' / raw.name
+    retained.parent.mkdir(parents=True)
+    retained.write_bytes(raw.read_bytes())
+    git('add', 'bench/results/identity_break')
+    git('commit', '-m', 'retain input')
     stub = tmp_path / "candidate.json"
     stub.write_text(json.dumps(candidate))
     shim = tmp_path / "inert_python.py"
-    shim.write_text('''import json, os, pathlib, sys
+    shim.write_text('''import json, os, pathlib, runpy, sys
 a = sys.argv[1:]
 if a[0].endswith("identity_host_preflight.py"):
     raise SystemExit(0)
 if a[0].endswith("identity_columns.py"):
     if a[1] == "check":
         for path in a[2:]:
-            print("IDCOLUMN " + path + " admissible=yes class=apple vendor=apple-inert commit=" + "1"*40 + " repeats=1")
+            print("IDCOLUMN " + path + " admissible=yes class=apple vendor=apple-inert commit=" + json.loads(pathlib.Path(path).read_text())["commit"] + " repeats=1")
     else:
         pathlib.Path(a[a.index("--out")+1]).write_text("{}")
     raise SystemExit(0)
 if a[:3] == ["-m", "mojolearn", "verify"]:
     if "--emit-reference" in a:
         assert "--reference-table" in a and a[a.index("--lanes")+1] == "selected"
+        inputs = []
+        for index, arg in enumerate(a):
+            if arg == "--records":
+                path = pathlib.Path(a[index+1])
+                inputs.extend(path.rglob("*.json") if path.is_dir() else [path])
+        checker = runpy.run_path("python/mojolearn/_verify_reference.py")["require_committed_records"]
+        checker(inputs, pathlib.Path.cwd())
+        with open(os.environ["EMIT_CALLS"], "a") as log:
+            log.write(json.dumps([str(p) for p in inputs]) + "\\n")
         pathlib.Path(a[a.index("--emit-reference")+1]).write_bytes(pathlib.Path(os.environ["STUB_CANDIDATE"]).read_bytes())
         print("{}")
     if "--self-test" in a and os.environ.get("FAIL_SELFTEST") == "1":
@@ -276,14 +309,10 @@ if a[:3] == ["-m", "mojolearn", "verify"]:
     raise SystemExit(0)
 os.execv(sys.executable, [sys.executable] + a)
 ''')
-    bindir = tmp_path / "bin"
-    bindir.mkdir()
-    git = bindir / "git"
-    git.write_text('#!/bin/sh\ncase "$1" in\ncat-file) exit 0;;\nlog) echo 1; exit 0;;\n*) exit 91;;\nesac\n')
-    git.chmod(0o755)
     evidence = tmp_path / "evidence"
-    env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ["PATH"],
+    env = dict(os.environ,
                PYTHON=f"{sys.executable} {shim}", STUB_CANDIDATE=str(stub),
+               EMIT_CALLS=str(tmp_path/'emit-calls.jsonl'),
                EVIDENCE=str(evidence), ADMIT_DATE="2026-10-23", REF_TAG="inert",
                FAIL_SELFTEST="1" if fail_selftest else "0")
     return repo, table, raw, env
@@ -320,11 +349,40 @@ def test_wrapper_checks_candidate_and_preserves_original_unselected_record(tmp_p
     assert raw.read_bytes() == original
     if check_only:
         assert table.read_bytes() == before
-        assert not (repo / "bench").exists()
+        assert not (repo / 'bench/results/reference_admissions').exists()
     else:
         assert json.loads(table.read_text()) == candidate
-        retained = repo / "bench/results/identity_break/2026-10-23-inert/apple-inert" / raw.name
+        retained = repo / 'bench/results/identity_break/retained/fixture' / raw.name
         assert retained.read_bytes() == original
+        assert (repo / 'bench/results/reference_admissions/2026-10-23-inert/agreement-summary.json').exists()
+    calls = Path(env['EMIT_CALLS']).read_text().splitlines()
+    assert len(calls) == 1
+    assert len(list((repo/'bench/results/identity_break').rglob('*.identical.json'))) == 1
+    assert all(Path(p).is_relative_to(repo/'bench/results/identity_break') for p in json.loads(calls[0]))
+
+
+@pytest.mark.parametrize('change', ['uncommitted', 'modified', 'symlink'])
+def test_admission_requires_exact_committed_input_without_mutating_table(tmp_path, change):
+    base, candidate = tables()
+    repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base)
+    retained = repo/'bench/results/identity_break/retained/fixture'/raw.name
+    if change == 'uncommitted':
+        data = json.loads(raw.read_text())
+        data['new_uncommitted_value'] = True
+        raw.write_text(json.dumps(data))
+        retained.write_bytes(raw.read_bytes())
+    elif change == 'modified':
+        retained.write_text('{}')
+    else:
+        retained.unlink()
+        retained.symlink_to(raw)
+    before = table.read_bytes()
+    result = subprocess.run(['bash', str(repo/'tools/admit_identity_columns.sh'), '--lanes', 'selected', str(raw.parent)],
+                            env=env, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'commit incoming identity records' in result.stderr
+    assert table.read_bytes() == before
+    assert not Path(env['EMIT_CALLS']).exists()
 
 
 def test_source_derived_host_only_cpu_is_sufficient(monkeypatch):

@@ -2,6 +2,7 @@
 """Validate scoped reference admission without importing or running the product."""
 import argparse
 import ast
+import hashlib
 import json
 import os
 import subprocess
@@ -240,6 +241,39 @@ def publish(candidate_path, base_path, destination, lanes):
     return report
 
 
+def committed_inputs(root, incoming):
+    """Resolve returned columns to their exact, already committed repo copies.
+
+    Keep the filename: admission interprets sabotage/before-picture labels too.
+    No copy, commit, or reference mutation is performed here.
+    """
+    root = Path(root).resolve()
+    raw = subprocess.check_output(['git', '-C', str(root), 'ls-tree', '-r', '-z', 'HEAD'])
+    index = {}
+    for row in raw.split(b'\0'):
+        if not row:
+            continue
+        meta, name = row.split(b'\t', 1)
+        mode, kind, oid = meta.decode().split()
+        name = name.decode()
+        if (mode in ('100644', '100755') and kind == 'blob'
+                and name.startswith('bench/results/identity_break/') and name.endswith('.identical.json')):
+            index.setdefault((Path(name).name, oid), []).append(root / name)
+    resolved = []
+    for filename in incoming:
+        path = Path(filename)
+        data = path.read_bytes()
+        oid = hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest()
+        matches = index.get((path.name, oid), [])
+        matches.sort(key=lambda p: (p != path.absolute(), p.as_posix()))
+        match = next((p for p in matches if p.resolve() == p and p.is_file() and p.read_bytes() == data), None)
+        if match is None:
+            raise ValueError(f'{path}: no unchanged committed copy under bench/results/identity_break; '
+                             'retain this column with tools/retain_run_summary.py identity and commit it first')
+        resolved.append(match)
+    return resolved
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -248,6 +282,9 @@ def main(argv=None):
     selection = sub.add_parser("lanes")
     selection.add_argument("--lanes", default="")
     selection.add_argument("records", nargs="+")
+    inputs = sub.add_parser('inputs')
+    inputs.add_argument('--source-root', type=Path, default=HERE.parent)
+    inputs.add_argument('records', nargs='+')
     for name in ("check", "publish"):
         check = sub.add_parser(name)
         check.add_argument("--base", required=True)
@@ -257,6 +294,10 @@ def main(argv=None):
             check.add_argument("--destination", required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == 'inputs':
+            for path in committed_inputs(args.source_root, args.records):
+                sys.stdout.buffer.write(str(path).encode() + b'\0')
+            return 0
         if args.command == "host-only":
             print(json.dumps(sorted(host_only_declarations(args.source_root / "tools"))))
             return 0
@@ -271,8 +312,9 @@ def main(argv=None):
                               json.loads(Path(args.candidate).read_text()), lanes)
         print(json.dumps(report, sort_keys=True))
         return 0 if report["admissible"] else 1
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        print(json.dumps({"admissible": False, "problems": [str(exc)]}))
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        print(json.dumps({"admissible": False, "problems": [str(exc)]}),
+              file=sys.stderr if args.command == 'inputs' else sys.stdout)
         return 1
 
 
