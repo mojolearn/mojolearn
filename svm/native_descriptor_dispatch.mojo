@@ -9,11 +9,14 @@ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from svm.operation_metadata import SVC_ABI_NAME
 from svm.native_epilogue_dispatch import svc_native_epilogue, svc_native_platt, svc_native_splitmix
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from svm.native_auxiliary_dispatch import svc_native_auxiliary
 from svm.native_svr_dispatch import native_svr_fit, native_svr_predict
 from svm.estimator import svc_fit_host_borrowed, svc_predict_host
 
 
 def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+    if op >= 8:
+        return svc_native_auxiliary(op, a, p)
     if op == 2:
         return svc_native_epilogue(a[0], a[1], a[2], a[3], p, f)
     if op == 3:
@@ -80,7 +83,7 @@ def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) 
 def svc_binary_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                   result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op > 7:
+        if op < 0 or op > 11:
             raise Error("SVC native ABI: unknown operation")
         var expected_a = 7 if op == 0 else (4 if op == 1 or op == 2 else (3 if op == 3 else (1 if op == 4 else 0)))
         var expected_p = 6 if op < 2 else (5 if op == 2 else (1 if op == 3 else (3 if op == 4 else 0)))
@@ -97,6 +100,24 @@ def svc_binary_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
             expected_a = 4
             expected_p = np
             expected_f = np
+        elif op == 8:
+            expected_a = 0
+            expected_p = 0
+            expected_f = 0
+        elif op == 9:
+            expected_a = 2
+            expected_p = 1
+            expected_f = 0
+        elif op == 10:
+            if np < 4 or (np - 4) % 3 != 0:
+                raise Error("svc_ovo_layout: malformed class-pair descriptor")
+            expected_a = 3 + 2 * ((np - 4) // 3)
+            expected_p = np
+            expected_f = 0
+        elif op == 11:
+            expected_a = 3
+            expected_p = 3
+            expected_f = 0
         if na != expected_a or np != expected_p or nf != expected_f:
             raise Error("SVC native ABI: descriptor span differs from the named operation")
         if result == 0 or (nf > 0 and ff == 0):
