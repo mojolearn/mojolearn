@@ -25,6 +25,8 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.scaler_native import _stage, _ptr, _input
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
+from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.classical_validate import classical_estimator_name
 from bindings.prep_stateless_native import _fam, _int_like, _repr, _name, _take_f, _select_transform
 from bindings.classical_labels import (
     LabelsView, ClassicalLabels, labels_view, labels_vector, labels_address, labels_cast, labels_all_finite,
@@ -3057,6 +3059,90 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, inverse:
     raise Error("TypeError: the native encode owner does not transform this class")
 
 
+def _encode_dispatch(model: PythonObject, kind: String, operation: String, args: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    var result = PythonObject(None)
+    if (operation == "fit" or operation == "fit_transform") and kind == "target":
+        # TargetEncoder: fit(X, y); fit_transform(X, y, splits or None)
+        _target_check(py_fields(model), context)
+        var values = xprep_values(args[0], _entries(_default_mode(context), context), context)
+        if operation == "fit":
+            _target_fit(model, values, args[1], context)
+            result = model
+        else:
+            # fit_transform(X, y, None): a cv that is neither None nor an
+            # integer is a user splitter, its folds read here once
+            var cv = py_fields(model)["cv"]
+            var splits = PythonObject(None)
+            if cv is not None and not Bool(py=py_call(Python.import_module("builtins").isinstance, cv,
+                                                      Python.import_module("numbers").Integral)):
+                splits = _target_splitter_folds(model, args[0], args[1], Int(py=values[3]), context)
+            result = _target_fit_transform(model, values, args[1], splits, context)
+        _ = values^
+    elif (operation == "fit" or operation == "fit_transform") and kind == "select_kbest":
+        # SelectKBest: fit(X, y); fit_transform(X, y) keeps the support's columns
+        var values = xprep_values(args[0], _entries(_default_mode(context), context), context)
+        var x = args[0] if Int(py=values[0]) == 1 else values[1]
+        _select_fit(model, x, values, args[1], context)
+        result = model
+        if operation == "fit_transform":
+            result = _select_transform(model, values, context)
+        _ = values^
+    elif operation == "fit" or operation == "fit_transform":
+        var weights = PythonObject(None)
+        if kind == "kbins":
+            weights = _fit_weights(model, args, operation)
+        elif kind == "spline":
+            # fit(X, y, sample_weight) and fit_transform(X, y, sample_weight)
+            weights = args[2]
+        elif operation == "fit_transform":
+            _no_fit_params(model, args)
+        _precheck(model, kind, context)
+        var mode = _default_mode(context)
+        var entries = _entries(mode, context)
+        var values = xprep_values(args[0], entries, context)
+        # The C08 fit_transform (OneHotEncoder bit 2, OrdinalEncoder bit
+        # 4, categories='auto'): the fit's inverse is the transform's codes.
+        var fields = py_fields(model)
+        var auto = py_contains(fields, "categories") and _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
+        var capture = operation == "fit_transform" and auto and (
+            (kind == "onehot" and _c08_route(mode, entries, 2)) or (kind == "ordinal" and _c08_route(mode, entries, 4)))
+        var fused = False
+        if kind == "spline" and operation == "fit_transform":
+            # with x_prep_spline_fused one program fits and applies; 'error'
+            # extrapolation and order 'F' keep fit + transform
+            var extrap = fields["extrapolation"]
+            var order = fields["order"]
+            fused = not (_is_str(extrap) and String(extrap) == "error") and _is_str(order) and String(order) == "C" and _spline_fused(mode, entries)
+        var inverse = PythonObject(None)
+        if fused:
+            result = _spline_fit(model, values, weights, True, context)
+        else:
+            inverse = _fit(model, kind, values, weights, capture, context)
+            result = model
+        if operation == "fit_transform" and not fused:
+            # The X converted for the fit is the transform's input.
+            result = _transform(model, kind, values, inverse, context)
+        _ = values^
+    elif operation == "transform" or operation == "inverse_transform":
+        _fitted(model)
+        var values = xprep_values(args[0], _entries(py_fields(model)["numeric_mode_"], context), context)
+        if operation == "transform":
+            result = _transform(model, kind, values, PythonObject(None), context)
+        elif kind == "kbins":
+            result = _kbins_inverse(model, values, context)
+        elif kind == "ordinal":
+            result = _ordinal_inverse(model, values, context)
+        elif kind == "onehot":
+            result = _onehot_inverse(model, values, context)
+        else:
+            raise Error("TypeError: the native encode owner does not invert this class")
+        _ = values^
+    else:
+        raise Error("unknown native encode prep operation")
+    return result
+
+
 def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -3066,86 +3152,22 @@ def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
         var context = call[3]
         classical_connect_numpy(context)
         var kind = _kind(model, context)
+        # The public fit/transform methods run the former `_mode` wrappers'
+        # lifecycle (bindings/public_lifecycle_owner.mojo) around the owner.
+        if not (operation == "fit" or operation == "fit_transform" or operation == "transform"
+                or operation == "inverse_transform"):
+            return _encode_dispatch(model, kind, operation, args, context).steal_data()
+        var depth = lifecycle_begin(model, operation, args[0], True, False, True, context)
         var result = PythonObject(None)
-        if (operation == "fit" or operation == "fit_transform") and kind == "target":
-            # TargetEncoder: fit(X, y); fit_transform(X, y, splits or None)
-            _target_check(py_fields(model), context)
-            var values = xprep_values(args[0], _entries(_default_mode(context), context), context)
-            if operation == "fit":
-                _target_fit(model, values, args[1], context)
-                result = model
-            else:
-                # fit_transform(X, y, None): a cv that is neither None nor an
-                # integer is a user splitter, its folds read here once
-                var cv = py_fields(model)["cv"]
-                var splits = PythonObject(None)
-                if cv is not None and not Bool(py=py_call(Python.import_module("builtins").isinstance, cv,
-                                                          Python.import_module("numbers").Integral)):
-                    splits = _target_splitter_folds(model, args[0], args[1], Int(py=values[3]), context)
-                result = _target_fit_transform(model, values, args[1], splits, context)
-            _ = values^
-        elif (operation == "fit" or operation == "fit_transform") and kind == "select_kbest":
-            # SelectKBest: fit(X, y); fit_transform(X, y) keeps the support's columns
-            var values = xprep_values(args[0], _entries(_default_mode(context), context), context)
-            var x = args[0] if Int(py=values[0]) == 1 else values[1]
-            _select_fit(model, x, values, args[1], context)
-            result = model
-            if operation == "fit_transform":
-                result = _select_transform(model, values, context)
-            _ = values^
-        elif operation == "fit" or operation == "fit_transform":
-            var weights = PythonObject(None)
-            if kind == "kbins":
-                weights = _fit_weights(model, args, operation)
-            elif kind == "spline":
-                # fit(X, y, sample_weight) and fit_transform(X, y, sample_weight)
-                weights = args[2]
-            elif operation == "fit_transform":
-                _no_fit_params(model, args)
-            _precheck(model, kind, context)
-            var mode = _default_mode(context)
-            var entries = _entries(mode, context)
-            var values = xprep_values(args[0], entries, context)
-            # The C08 fit_transform (OneHotEncoder bit 2, OrdinalEncoder bit
-            # 4, categories='auto'): the fit's inverse is the transform's codes.
-            var fields = py_fields(model)
-            var auto = py_contains(fields, "categories") and _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
-            var capture = operation == "fit_transform" and auto and (
-                (kind == "onehot" and _c08_route(mode, entries, 2)) or (kind == "ordinal" and _c08_route(mode, entries, 4)))
-            var fused = False
-            if kind == "spline" and operation == "fit_transform":
-                # with x_prep_spline_fused one program fits and applies; 'error'
-                # extrapolation and order 'F' keep fit + transform
-                var extrap = fields["extrapolation"]
-                var order = fields["order"]
-                fused = not (_is_str(extrap) and String(extrap) == "error") and _is_str(order) and String(order) == "C" and _spline_fused(mode, entries)
-            var inverse = PythonObject(None)
-            if fused:
-                result = _spline_fit(model, values, weights, True, context)
-            else:
-                inverse = _fit(model, kind, values, weights, capture, context)
-                result = model
-            if operation == "fit_transform" and not fused:
-                # The X converted for the fit is the transform's input.
-                result = _transform(model, kind, values, inverse, context)
-            _ = values^
-        elif operation == "transform" or operation == "inverse_transform":
-            _fitted(model)
-            var values = xprep_values(args[0], _entries(py_fields(model)["numeric_mode_"], context), context)
-            if operation == "transform":
-                result = _transform(model, kind, values, PythonObject(None), context)
-            elif kind == "kbins":
-                result = _kbins_inverse(model, values, context)
-            elif kind == "ordinal":
-                result = _ordinal_inverse(model, values, context)
-            elif kind == "onehot":
-                result = _onehot_inverse(model, values, context)
-            else:
-                raise Error("TypeError: the native encode owner does not invert this class")
-            _ = values^
-        else:
-            raise Error("unknown native encode prep operation")
-        return result.steal_data()
+        try:
+            if kind == "target" and depth == 0 and (operation == "fit" or operation == "fit_transform") and args[1] is None:
+                # TargetEncoder's target tag `required` (`_sk_validate._check_y`).
+                raise Error(classical_estimator_name(model) + " requires y to be passed, but the target y is None.")
+            result = _encode_dispatch(model, kind, operation, args, context)
+        finally:
+            lifecycle_end(model, operation, depth)
+        lifecycle_complete(model, operation, args[0], False, context)
+        return lifecycle_result(model, operation, result, "", context).steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error^)

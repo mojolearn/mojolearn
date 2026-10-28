@@ -18,6 +18,8 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32
 from bindings.decomp_inputs import decomp_input
+from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
+from bindings.public_lifecycle_owner import lifecycle_end
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -246,6 +248,29 @@ def _project(model: PythonObject, fields: PythonObject, x: PythonObject, inverse
     return out
 
 
+def _ipca_dispatch(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var result = PythonObject(None)
+    if operation == "fit":
+        _ = ipca_fit(model, args[0], context)
+        result = model
+    elif operation == "fit_transform":
+        # the transform projects the X the fit converted: one conversion
+        var x = ipca_fit(model, args[0], context)
+        result = _project(model, py_fields(model), x, False, context)
+        _ = x^
+    elif operation == "partial_fit":
+        result = ipca_partial_fit(model, args[0], context)
+    elif operation == "transform" or operation == "inverse_transform":
+        var fields = py_fields(model)
+        _check(model, fields)
+        var x = decomp_input(args[0], "IncrementalPCA", context)
+        result = _project(model, fields, x, operation == "inverse_transform", context)
+        _ = x^
+    else:
+        raise Error("unknown private IncrementalPCA operation")
+    return result
+
+
 def ipca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -263,25 +288,14 @@ def ipca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if not _admitted(model, context):
             raise Error("TypeError: the native IncrementalPCA owner requires an IncrementalPCA instance")
         classical_connect_numpy(context)
+        var method = decomp_public_method(operation)
+        var depth = decomp_public_begin(model, method, args, True, True, context)
         var result = PythonObject(None)
-        if operation == "fit":
-            _ = ipca_fit(model, args[0], context)
-            result = model
-        elif operation == "fit_transform":
-            # the transform projects the X the fit converted: one conversion
-            var x = ipca_fit(model, args[0], context)
-            result = _project(model, py_fields(model), x, False, context)
-            _ = x^
-        elif operation == "partial_fit":
-            result = ipca_partial_fit(model, args[0], context)
-        elif operation == "transform" or operation == "inverse_transform":
-            var fields = py_fields(model)
-            _check(model, fields)
-            var x = decomp_input(args[0], "IncrementalPCA", context)
-            result = _project(model, fields, x, operation == "inverse_transform", context)
-            _ = x^
-        else:
-            raise Error("unknown private IncrementalPCA operation")
+        try:
+            result = _ipca_dispatch(model, operation, args, context)
+        finally:
+            lifecycle_end(model, method, depth)
+        result = decomp_public_finish(model, method, args, result, "", context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:

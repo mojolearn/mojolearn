@@ -22,6 +22,7 @@ from bindings.prep_iterimp_native import prep_iterimp_call
 from bindings.prep_select_native import prep_rfe_call, prep_mutual_info_call
 from bindings.prep_composition_lifecycle import composition_before, composition_after_fit
 from bindings.parallel_public_result import parallel_public_result
+from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 
 
 def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
@@ -55,7 +56,20 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         classical_connect_numpy(context)
         var result = PythonObject(None)
         if kind == "label_encoder" or kind == "label_binarizer" or kind == "multilabel_binarizer":
-            result = prep_labels_call(model, kind, operation, args, context)
+            # The label encoders' public lifecycle (the former `_mode`
+            # wrappers): NotFittedError, fit bookkeeping and NumPy results;
+            # their input is y, so no X table checks.
+            var public = (operation == "fit" or operation == "fit_transform" or operation == "transform"
+                          or operation == "inverse_transform")
+            var depth = lifecycle_begin(model, operation, args[0], False, False, True, context) if public else 0
+            try:
+                result = prep_labels_call(model, kind, operation, args, context)
+            finally:
+                if public:
+                    lifecycle_end(model, operation, depth)
+            if public:
+                lifecycle_complete(model, operation, PythonObject(None), False, context)
+                result = lifecycle_result(model, operation, result, "", context)
         elif kind == "iterative_imputer":
             var prepared = composition_before(model, kind, operation, args, context)
             result = prep_iterimp_call(model, operation, prepared, context)

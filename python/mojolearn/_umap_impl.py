@@ -1,16 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Python surface for the supported dense, Euclidean UMAP slice."""
 
-from . import _portable_math as math
-import operator
 
 from . import _native_archive_bridge, _native_family_bridge
 
 from ._mode import NumericModeMixin
-from .linear_model import _round_f32
 
-#: `np.finfo(np.float32).max`, as a literal: the largest finite float32.
-_F32_MAX = 3.4028234663852886e+38
 
 #: The saved-model format tag (`UMAP.save`, lane/inference-forecast-umap-pca).
 _UMAP_FORMAT = "mojolearn-umap-1"
@@ -28,21 +23,6 @@ _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 _NATIVE_CONTEXT["family_spectral_umap_bindings"] = _native_spectral_umap_bridge.connect()
 
 
-def _integer(value, name, minimum, maximum=(1 << 63) - 1):
-    # A bool is an int to `operator.index` and is refused by name here; the
-    # NumPy bool scalar is caught by its type name so a caller who still
-    # passes one gets the same answer (DEVIATION 2370).
-    if isinstance(value, bool) or type(value).__name__ == "bool_":
-        raise ValueError(f"UMAP {name} must be an integer")
-    try:
-        result = operator.index(value)
-    except TypeError as exc:
-        raise ValueError(f"UMAP {name} must be an integer") from exc
-    if not minimum <= result <= maximum:
-        raise ValueError(f"UMAP {name} must be in [{minimum}, {maximum}]")
-    return result
-
-
 #: scikit-learn / umap-learn metric names -> the kNN's cuVS DistanceType
 #: (-1 is the legacy euclidean sentinel, so a euclidean fit keeps its bits).
 _METRICS = {
@@ -53,17 +33,6 @@ _METRICS = {
     "chebyshev": 7, "linf": 7, "linfinity": 7, "infinity": 7,
     "minkowski": 9,
 }
-
-
-def _scalar(value, name):
-    try:
-        result = float(value)
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError(f"UMAP {name} must be a finite float32 value") from exc
-    if not math.isfinite(result) or abs(result) > _F32_MAX:
-        raise ValueError(f"UMAP {name} must be a finite float32 value")
-    # `float(np.float32(result))`: one round-to-nearest-even to binary32.
-    return _round_f32(result)
 
 
 # Maintainer notes (moved from the docstring):
@@ -149,6 +118,9 @@ class UMAP(NumericModeMixin):
     output_metric : str, default "euclidean"
         Only ``"euclidean"`` (or ``"l2"``) is supported; any other value raises
         ``NotImplementedError``.
+    numeric_mode : {'fast', 'identical'} or None, default None
+        Numeric mode for this estimator; None uses the package default.
+        ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -181,13 +153,21 @@ class UMAP(NumericModeMixin):
 
     _BINDING = "_mojolearn_metrics"
 
+    #: Every public operation is one native call: the constructor and
+    #: set_params are the full-reset native constructor, which validates the
+    #: parameters (bindings/umap_parameters_native.mojo); fit, fit_transform
+    #: and transform run the whole lifecycle in the manifold owner
+    #: (bindings/manifold_native.mojo). The `_mode` class-creation wrappers
+    #: leave this class unwrapped.
+    _mojolearn_native_public = True
+
     def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.1,
                  spread=1.0, n_epochs=None, random_state=0,
                  set_op_mix_ratio=1.0, local_connectivity=1.0,
                  metric="euclidean", init="spectral", learning_rate=1.0,
                  repulsion_strength=1.0, negative_sample_rate=5, a=None, b=None,
                  metric_kwds=None, target_n_neighbors=-1, target_metric="categorical",
-                 target_weight=0.5, densmap=False, output_metric="euclidean"):
+                 target_weight=0.5, densmap=False, output_metric="euclidean", numeric_mode=None):
         self.n_neighbors = n_neighbors
         self.n_components = n_components
         self.min_dist = min_dist
@@ -209,75 +189,7 @@ class UMAP(NumericModeMixin):
         self.target_weight = target_weight
         self.densmap = densmap
         self.output_metric = output_metric
-        self._parameters()
-
-    def _parameters(self):
-        neighbors = _integer(self.n_neighbors, "n_neighbors", 2)
-        components = _integer(self.n_components, "n_components", 1, 32)
-        epochs = 0 if self.n_epochs is None else _integer(
-            self.n_epochs, "n_epochs", 1)
-        seed = _integer(self.random_state, "random_state", 0)
-        min_dist = _scalar(self.min_dist, "min_dist")
-        spread = _scalar(self.spread, "spread")
-        mix = _scalar(self.set_op_mix_ratio, "set_op_mix_ratio")
-        connectivity = _scalar(self.local_connectivity, "local_connectivity")
-        rate = _scalar(self.learning_rate, "learning_rate")
-        repulsion = _scalar(self.repulsion_strength, "repulsion_strength")
-        negatives = _integer(self.negative_sample_rate, "negative_sample_rate",
-                             0, (1 << 31) - 1)
-        if rate <= 0:
-            raise ValueError("UMAP learning_rate must be positive")
-        if repulsion < 0:
-            raise ValueError("UMAP repulsion_strength must be nonnegative")
-        if not 0 <= min_dist <= spread or spread <= 0:
-            raise ValueError("UMAP requires 0 <= min_dist <= spread and spread > 0")
-        if not 0 <= mix <= 1:
-            raise ValueError("UMAP set_op_mix_ratio must be in [0, 1]")
-        if connectivity < 0:
-            raise ValueError("UMAP local_connectivity must be >= 0")
-        self._extras()
-        return [neighbors, components, epochs, min_dist, spread, mix,
-                connectivity, seed, rate, repulsion, negatives]
-
-    def _extras(self):
-        """(metric code, metric_arg, a, b) of the option-parity controls
-        (lane/algos-decomp, 2026-09-27), validated; the legacy defaults are
-        (-1, 2.0, 0.0, 0.0)."""
-        if getattr(self, "densmap", False):
-            raise NotImplementedError(
-                "UMAP densmap=True is not implemented: the density-augmented "
-                "objective (umap-learn's densMAP) is a different optimizer")
-        if getattr(self, "output_metric", "euclidean") not in ("euclidean", "l2"):
-            raise NotImplementedError(
-                f"UMAP output_metric={self.output_metric!r} is not implemented; the layout "
-                "optimizer's gradient is the euclidean one")
-        if not isinstance(self.metric, str) or self.metric not in _METRICS:
-            raise ValueError(
-                f"UMAP metric={self.metric!r} is not supported; the kNN computes "
-                f"{sorted(_METRICS)} (a callable, and every other name, is refused by name)")
-        code = _METRICS[self.metric]
-        kw = dict(getattr(self, "metric_kwds", None) or {})
-        p = 2.0
-        if code == 9:
-            p = _scalar(kw.pop("p", 2.0), "metric_kwds['p']")
-            if not p > 0:
-                raise ValueError("UMAP minkowski p must be positive")
-        if kw:
-            raise ValueError(f"UMAP metric_kwds {sorted(kw)} are not used by metric={self.metric!r}")
-        a, b = getattr(self, "a", None), getattr(self, "b", None)
-        if (a is None) != (b is None):
-            raise ValueError("UMAP a and b must be given together")
-        if a is None:
-            a = b = 0.0
-        else:
-            a, b = _scalar(a, "a"), _scalar(b, "b")
-            if not (a > 0 and b > 0):
-                raise ValueError("UMAP a and b must be positive")
-        init = self.init
-        if isinstance(init, str):
-            if init not in ("spectral", "random", "pca"):
-                raise ValueError(f"UMAP init={init!r} must be 'spectral', 'random', 'pca' or an array")
-        return (code, p, a, b)
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y=None):
         """Fit the embedding to ``X``.

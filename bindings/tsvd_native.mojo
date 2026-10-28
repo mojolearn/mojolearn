@@ -22,6 +22,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32
 from bindings.decomp_inputs import decomp_input, decomp_copied
+from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N (`_linalg_impl._TS_MAX_N`): the widest X the TSQR takes
 comptime _TS_MAX_N = 512
@@ -352,21 +353,31 @@ def tsvd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if not _admitted(model, context):
             raise Error("TypeError: the native TruncatedSVD owner requires a TruncatedSVD instance")
         classical_connect_numpy(context)
-        var result = PythonObject(None)
-        if operation == "fit":
-            _ = tsvd_fit(model, args[0], context)
-            result = model
-        elif operation == "fit_transform":
-            # the transform projects the X the fit converted: one conversion
-            var x = tsvd_fit(model, args[0], context)
-            result = _project(model, py_fields(model), x, context)
-            _ = x^
-        elif operation == "transform":
-            result = tsvd_transform(model, args[0], context)
-        elif operation == "inverse_transform":
-            result = tsvd_inverse_transform(model, args[0], context)
-        else:
+        if operation != "fit" and operation != "fit_transform" and operation != "transform" and operation != "inverse_transform":
             raise Error("unknown private TruncatedSVD operation")
+        # The whole public lifecycle (the former `_mode` wrappers): fitted
+        # check (NotFittedError), X refusals, width and feature-name checks,
+        # fit bookkeeping, NumPy results for callers outside the package. A
+        # scipy.sparse X is densified by decomp_input (documented).
+        var depth = lifecycle_begin(model, operation, args[0], True, True, True, context)
+        var result = PythonObject(None)
+        try:
+            if operation == "fit":
+                _ = tsvd_fit(model, args[0], context)
+                result = model
+            elif operation == "fit_transform":
+                # the transform projects the X the fit converted: one conversion
+                var x = tsvd_fit(model, args[0], context)
+                result = _project(model, py_fields(model), x, context)
+                _ = x^
+            elif operation == "transform":
+                result = tsvd_transform(model, args[0], context)
+            else:
+                result = tsvd_inverse_transform(model, args[0], context)
+        finally:
+            lifecycle_end(model, operation, depth)
+        lifecycle_complete(model, operation, args[0], False, context)
+        result = lifecycle_result(model, operation, result, "", context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
