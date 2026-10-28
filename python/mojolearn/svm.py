@@ -143,6 +143,9 @@ class LinearSVC(_LinearSVMBase):
     >>> clf = mojolearn.LinearSVC(C=10.0).fit(X, y)
     >>> labels = clf.predict(X)
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
@@ -153,11 +156,12 @@ class LinearSVC(_LinearSVMBase):
     def __init__(self, *, penalty="l2", loss="squared_hinge", C=1.0,
                  fit_intercept=True, penalized_intercept=False,
                  class_weight=None, tol=1e-4, max_iter=1000,
-                 linesearch_max_iter=100, lbfgs_memory=5, multi_class="ovr"):
+                 linesearch_max_iter=100, lbfgs_memory=5, multi_class="ovr", numeric_mode=None):
         self._init_common(penalty, loss, C, fit_intercept, penalized_intercept,
                           tol, max_iter, linesearch_max_iter, lbfgs_memory)
         self.class_weight = class_weight
         self.multi_class = multi_class
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the classifier.
@@ -307,6 +311,9 @@ class LinearSVR(_LinearSVMBase):
     >>> model = mojolearn.LinearSVR(penalty="l2", epsilon=0.1).fit(X, y)
     >>> pred = model.predict(X)
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
@@ -318,10 +325,11 @@ class LinearSVR(_LinearSVMBase):
     def __init__(self, *, epsilon=0.0, penalty="l1", loss="epsilon_insensitive",
                  C=1.0, fit_intercept=True, penalized_intercept=False,
                  tol=1e-4, max_iter=1000, linesearch_max_iter=100,
-                 lbfgs_memory=5):
+                 lbfgs_memory=5, numeric_mode=None):
         self._init_common(penalty, loss, C, fit_intercept, penalized_intercept,
                           tol, max_iter, linesearch_max_iter, lbfgs_memory)
         self.epsilon = epsilon
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the regressor.

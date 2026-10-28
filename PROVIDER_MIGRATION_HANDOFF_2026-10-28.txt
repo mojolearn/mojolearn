@@ -753,3 +753,14 @@ SELF-MERGE RECEIPT lane/decode-resident-20261028 (MOJOLEARN_IDN_DECODE_RESIDENT_
 - Receipts: experiments/decode_resident_20261028/compile.json; evidence ~/mojolearn-evidence/decode-resident-20261028/.
 - RUN OWED (ab-runner), one run per arm, A = define off, B = define on, NVIDIA and AMD: transformer-decode and mamba2-decode for
   MOJOLEARN_IDN_DECODE_RESIDENT_IO, lm-train-step for MOJOLEARN_IDN_TRAIN_ONE_WAIT (lines in ~/mojolearn-evidence/decode-resident-20261028/HANDOFF.md).
+
+INTEGRATION 2026-10-28 (Claude integrator) — TRANCHE 5c + HOTFIXES (byte LM trainer, Python-bound types)
+Merged: 0c8504b210 lifecycle-prep-decomp, 908e32d073 lifecycle-neighbors-cluster (decomp_native.mojo: KernelPCA
+lifecycle in _kpca_public), 5bab7a2feb runtime probe; tools/pod_smoke.sh (declared per-family cache outputs,
+empty host dir, import smoke, tier_dir probe, matmul/Ridge/KMeans, LanguageModelTrainer construct,
+TransformerBlock and Mamba2Block host forwards). Hotfixes: _byte_lm_impl.py trainer context carries the array
+materializer descriptors (arena_native_types); add_type for CausalExecutionEntries (tokenizer host),
+CompiledBindingSnapshot and TreeShapOwner (classical host), M3OwnedHostSession (mamba host).
+Gates: test_no_python_runtime OK — prohibited_source 0, unresolved 229; test_tombstones_preserved OK.
+Receipt experiments/integration_provider_queue_20261028/compile_tranche5c.json: pod 2spgh1zrl6d4kr (32 cores,
+4x8) 46/46 host families, 7/7 roots, POD_SMOKE PASS. No identity or GPU execution.

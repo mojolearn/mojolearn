@@ -26,6 +26,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.prep_support_native import prep_support
 from bindings.prep_normalizer_lifecycle import normalizer_transform
 from bindings.prep_normalizer_fit import normalizer_fit
+from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 alias I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -850,6 +851,63 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
     return result
 
 
+def _stateless_dispatch(model: PythonObject, kind: String, operation: String, args: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    var result = PythonObject(None)
+    if operation == "get_support" and (kind == "variance_threshold" or kind == "selector"):
+        result = prep_support(model, args[0], context)
+    elif operation == "transform" and kind == "normalizer":
+        result = normalizer_transform(model, args[0], context)
+    elif (operation == "fit" or operation == "fit_transform") and kind == "normalizer":
+        result = normalizer_fit(model, args[0], args[1], operation == "fit_transform", context)
+    elif operation == "inverse_transform" and (kind == "quantile" or kind == "power"):
+        var fields = py_fields(model)
+        if not py_contains(fields, "n_features_in_"):
+            raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+        var values = xprep_values(args[0], _entries(fields["numeric_mode_"], context), context)
+        result = _quantile_apply(model, values, True, context) if kind == "quantile" else _power_apply(model, values, True, context)
+        _ = values^
+    elif operation == "fit" or operation == "fit_transform" or operation == "transform":
+        var mode = context["backend_fields"]["_DEFAULT_MODE"]
+        if operation == "transform":
+            var fields = py_fields(model)
+            if not py_contains(fields, "n_features_in_"):
+                raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+            mode = fields["numeric_mode_"]
+        var values = xprep_values(args[0], _entries(mode, context), context)
+        var selector = kind == "variance_threshold" or kind == "selector"
+        if operation == "transform" and kind == "quantile":
+            result = _quantile_apply(model, values, False, context)
+        elif operation == "transform" and kind == "power":
+            result = _power_apply(model, values, False, context)
+        elif operation == "transform":
+            result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
+        elif kind == "selector":
+            raise Error("TypeError: this selector's fit is not a native stateless operation")
+        else:
+            if kind == "variance_threshold":
+                _variance_fit(model, values, context)
+            elif kind == "quantile":
+                _quantile_fit(model, values, context)
+            elif kind == "power":
+                _power_fit(model, values, context)
+            else:
+                _fit(model, kind, values, context)
+            result = model
+            if operation == "fit_transform":
+                # The X converted for the fit is the transform's input.
+                if kind == "quantile":
+                    result = _quantile_apply(model, values, False, context)
+                elif kind == "power":
+                    result = _power_apply(model, values, False, context)
+                else:
+                    result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
+        _ = values^
+    else:
+        raise Error("unknown native stateless prep operation")
+    return result
+
+
 def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -862,59 +920,21 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
         var context = prep_operation_context(call[3])
         classical_connect_numpy(context)
         var kind = _kind(model, context)
+        # Every public method except Normalizer's (its own lifecycle,
+        # bindings/prep_normalizer_lifecycle.mojo) and get_support runs the
+        # former `_mode` wrappers' lifecycle here (bindings/public_lifecycle_owner.mojo).
+        var public = kind != "normalizer" and (operation == "fit" or operation == "fit_transform"
+                                               or operation == "transform" or operation == "inverse_transform")
+        if not public:
+            return _stateless_dispatch(model, kind, operation, args, context).steal_data()
+        var depth = lifecycle_begin(model, operation, args[0], True, False, True, context)
         var result = PythonObject(None)
-        if operation == "get_support" and (kind == "variance_threshold" or kind == "selector"):
-            result = prep_support(model, args[0], context)
-        elif operation == "transform" and kind == "normalizer":
-            result = normalizer_transform(model, args[0], context)
-        elif (operation == "fit" or operation == "fit_transform") and kind == "normalizer":
-            result = normalizer_fit(model, args[0], args[1], operation == "fit_transform", context)
-        elif operation == "inverse_transform" and (kind == "quantile" or kind == "power"):
-            var fields = py_fields(model)
-            if not py_contains(fields, "n_features_in_"):
-                raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
-            var values = xprep_values(args[0], _entries(fields["numeric_mode_"], context), context)
-            result = _quantile_apply(model, values, True, context) if kind == "quantile" else _power_apply(model, values, True, context)
-            _ = values^
-        elif operation == "fit" or operation == "fit_transform" or operation == "transform":
-            var mode = context["backend_fields"]["_DEFAULT_MODE"]
-            if operation == "transform":
-                var fields = py_fields(model)
-                if not py_contains(fields, "n_features_in_"):
-                    raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
-                mode = fields["numeric_mode_"]
-            var values = xprep_values(args[0], _entries(mode, context), context)
-            var selector = kind == "variance_threshold" or kind == "selector"
-            if operation == "transform" and kind == "quantile":
-                result = _quantile_apply(model, values, False, context)
-            elif operation == "transform" and kind == "power":
-                result = _power_apply(model, values, False, context)
-            elif operation == "transform":
-                result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
-            elif kind == "selector":
-                raise Error("TypeError: this selector's fit is not a native stateless operation")
-            else:
-                if kind == "variance_threshold":
-                    _variance_fit(model, values, context)
-                elif kind == "quantile":
-                    _quantile_fit(model, values, context)
-                elif kind == "power":
-                    _power_fit(model, values, context)
-                else:
-                    _fit(model, kind, values, context)
-                result = model
-                if operation == "fit_transform":
-                    # The X converted for the fit is the transform's input.
-                    if kind == "quantile":
-                        result = _quantile_apply(model, values, False, context)
-                    elif kind == "power":
-                        result = _power_apply(model, values, False, context)
-                    else:
-                        result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
-            _ = values^
-        else:
-            raise Error("unknown native stateless prep operation")
-        return result.steal_data()
+        try:
+            result = _stateless_dispatch(model, kind, operation, args, context)
+        finally:
+            lifecycle_end(model, operation, depth)
+        lifecycle_complete(model, operation, args[0], False, context)
+        return lifecycle_result(model, operation, result, "", context).steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error^)

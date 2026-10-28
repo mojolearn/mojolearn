@@ -24,6 +24,8 @@ from bindings.family_common import (
     family_type_name, family_call, family_call_kw, family_entry, family_array, family_view,
     family_cast_f32, family_f32, family_nonfinite, family_sample_weight, family_field,
 )
+from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 
 comptime _INIT_ARRAY = 2
 comptime _HOLDER = "_resident_holder"
@@ -321,8 +323,8 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     return out
 
 
-def kmeans_operation(model: PythonObject, operation: String, args: PythonObject,
-                     context: PythonObject) raises -> PythonObject:
+def _kmeans_operation_route(model: PythonObject, operation: String, args: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
     """The KMeans public operations: args[0] is the resolved binding."""
     if operation == "family_kmeans_fit":
         _ = _kmeans_fit(model, args, context)
@@ -348,3 +350,24 @@ def kmeans_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_kmeans_transform":
         return _kmeans_inference(model, args[0], args[1], True, context)
     raise Error("unknown KMeans operation " + operation)
+
+
+def kmeans_operation(model: PythonObject, operation: String, args: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """The public operation: the estimators that formerly took the `_mode`
+    class-creation wrappers run their whole lifecycle around the owner
+    (providers/python/family_public_lifecycle_pyapi.mojo); every other
+    operation goes straight to the owner."""
+    var lifecycle = family_lifecycle_spec(operation)
+    if lifecycle.method.byte_length() == 0:
+        return _kmeans_operation_route(model, operation, args, context)
+    var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
+    var result = PythonObject(None)
+    try:
+        result = _kmeans_operation_route(model, operation, call.args, context)
+    except error:
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
+    finally:
+        neighbors_public_end(model, call)
+    return family_lifecycle_finish(model, lifecycle, result, call, context)

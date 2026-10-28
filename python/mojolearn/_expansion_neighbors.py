@@ -853,11 +853,14 @@ class OneClassSVM(_XNeighbors):
     >>> model = mojolearn.OneClassSVM(nu=0.1).fit(X)
     >>> labels = model.predict(X)
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "outlier_detector"
 
     def __init__(self, *, kernel="rbf", degree=3, gamma="scale", coef0=0.0, tol=1e-3, nu=0.5,
-                 shrinking=True, cache_size=200, verbose=False, max_iter=-1):
+                 shrinking=True, cache_size=200, verbose=False, max_iter=-1, numeric_mode=None):
         self.kernel = kernel
         self.degree = degree
         self.gamma = gamma
@@ -868,6 +871,7 @@ class OneClassSVM(_XNeighbors):
         self.cache_size = cache_size
         self.verbose = verbose
         self.max_iter = max_iter
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y=None, sample_weight=None):
         """Fit the one-class SVM.
@@ -1049,11 +1053,14 @@ class KernelPCA(_XNeighbors):
     >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
     >>> Z = mojolearn.KernelPCA(n_components=2, kernel="rbf").fit_transform(X)
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
 
     def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
                  kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver="auto",
                  tol=0, max_iter=None, iterated_power="auto", remove_zero_eig=False,
-                 random_state=None, copy_X=True, n_jobs=None):
+                 random_state=None, copy_X=True, n_jobs=None, numeric_mode=None):
         self.n_components = n_components
         self.kernel = kernel
         self.gamma = gamma
@@ -1070,6 +1077,7 @@ class KernelPCA(_XNeighbors):
         self.random_state = random_state
         self.copy_X = copy_X
         self.n_jobs = n_jobs
+        self.numeric_mode = numeric_mode
 
     def _k(self, A, B):
         if self.kernel == "precomputed":
@@ -1345,13 +1353,17 @@ class AdditiveChi2Sampler(_XNeighbors):
     >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
     >>> Z = mojolearn.AdditiveChi2Sampler(sample_steps=2).fit_transform(X)
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`: stateless, non-negative input
     _sklearn_input_tags = {"positive_only": True}
     _sklearn_requires_fit = False
 
-    def __init__(self, *, sample_steps=2, sample_interval=None):
+    def __init__(self, *, sample_steps=2, sample_interval=None, numeric_mode=None):
         self.sample_steps = sample_steps
         self.sample_interval = sample_interval
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y=None):
         """Validate the input and the sampling settings.
@@ -1468,11 +1480,15 @@ class SkewedChi2Sampler(_XNeighbors):
     >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
     >>> Z = mojolearn.SkewedChi2Sampler(n_components=64, random_state=0).fit_transform(X)
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
 
-    def __init__(self, *, skewedness=1.0, n_components=100, random_state=None):
+    def __init__(self, *, skewedness=1.0, n_components=100, random_state=None, numeric_mode=None):
         self.skewedness = skewedness
         self.n_components = n_components
         self.random_state = random_state
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y=None):
         """Draw the random weights and offsets.
@@ -1565,6 +1581,9 @@ class SkewedChi2Sampler(_XNeighbors):
 # where theirs is float64; the neighbor ties go to the lower index.
 class _LabelPropagationBase(_XNeighbors):
     """Shared implementation of LabelPropagation and LabelSpreading."""
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "classifier"
 
@@ -1696,13 +1715,15 @@ class LabelPropagation(_LabelPropagationBase):
 
     _variant = "propagation"
 
-    def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, max_iter=1000, tol=1e-3, n_jobs=None):
+    def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, max_iter=1000, tol=1e-3, n_jobs=None,
+                 numeric_mode=None):
         self.kernel = kernel
         self.gamma = gamma
         self.n_neighbors = n_neighbors
         self.max_iter = max_iter
         self.tol = tol
         self.n_jobs = n_jobs
+        self.numeric_mode = numeric_mode
 
 
 class LabelSpreading(_LabelPropagationBase):
@@ -1768,7 +1789,8 @@ class LabelSpreading(_LabelPropagationBase):
 
     _variant = "spreading"
 
-    def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, alpha=0.2, max_iter=30, tol=1e-3, n_jobs=None):
+    def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, alpha=0.2, max_iter=30, tol=1e-3, n_jobs=None,
+                 numeric_mode=None):
         self.kernel = kernel
         self.gamma = gamma
         self.n_neighbors = n_neighbors
@@ -1776,6 +1798,7 @@ class LabelSpreading(_LabelPropagationBase):
         self.max_iter = max_iter
         self.tol = tol
         self.n_jobs = n_jobs
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y):
         """Fit the model and spread labels to the unlabeled samples.
@@ -2040,9 +2063,12 @@ class PageRank(_XNeighbors):
     >>> A = (np.random.default_rng(0).random((500, 500)) < 0.01).astype(np.float32)
     >>> scores = mojolearn.PageRank(alpha=0.85).fit(A).pagerank_
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
 
     def __init__(self, alpha=0.85, *, personalization=None, max_iter=100, tol=1e-6, nstart=None, weight=True,
-                 dangling=None):
+                 dangling=None, numeric_mode=None):
         self.alpha = alpha
         self.personalization = personalization
         self.max_iter = max_iter
@@ -2050,6 +2076,7 @@ class PageRank(_XNeighbors):
         self.nstart = nstart
         self.weight = weight
         self.dangling = dangling
+        self.numeric_mode = numeric_mode
 
     def fit(self, A, y=None):
         """Compute the PageRank scores of the graph.
@@ -2179,12 +2206,16 @@ class Louvain(_XNeighbors):
     >>> A = (M | M.T).astype(np.float32)
     >>> labels = mojolearn.Louvain().fit_predict(A)
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
 
-    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None):
+    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None, numeric_mode=None):
         self.resolution = resolution
         self.threshold = threshold
         self.max_level = max_level
         self.seed = seed
+        self.numeric_mode = numeric_mode
 
     def fit(self, A, y=None):
         """Detect communities in the graph.
@@ -2291,17 +2322,21 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
     >>> model = mojolearn.SVGP(n_inducing=32, lengthscale=0.3, noise_variance=0.01).fit(X, y)
     >>> mean, var = model.predict_y(X)
     """
+    # One-call native public methods: the family owner runs the whole lifecycle
+    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"
 
     def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0,
-                 noise_variance=1.0, jitter=1e-6):
+                 noise_variance=1.0, jitter=1e-6, numeric_mode=None):
         self.n_inducing = n_inducing
         self.inducing_points = inducing_points
         self.kernel_variance = kernel_variance
         self.lengthscale = lengthscale
         self.noise_variance = noise_variance
         self.jitter = jitter
+        self.numeric_mode = numeric_mode
 
     def _gamma_value(self):
         ls = float(self.lengthscale)

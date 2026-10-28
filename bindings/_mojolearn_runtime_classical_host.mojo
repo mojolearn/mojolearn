@@ -9,6 +9,8 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.trees_lifetime import TreesResident
+from bindings.trees_explainer_native import TreeShapOwner
+from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from bindings.classical_native import classical_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.host_archive_lifetime import host_archive_finalize_c
@@ -97,6 +99,12 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")
         module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
         _ = module.add_type[TreesResident]("_TreesResident")
+        # Values this host allocates with PythonObject(alloc=...): the Tree SHAP owner and the
+        # compiled-binding snapshots of the SVM, hierarchy and x_neighbors descriptor owners.
+        # Registered once per process here (the manifold and tokenizer hosts allocate snapshots
+        # through the same x_neighbors admission and must not register them a second time).
+        _ = module.add_type[TreeShapOwner]("_TreeShapOwner")
+        _ = module.add_type[CompiledBindingSnapshot]("_CompiledBindingSnapshot")
         register_scaler_snapshot(module)
         register_lin_buffer_pin(module)
         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")

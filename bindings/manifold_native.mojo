@@ -19,6 +19,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.sequence_array_native import sequence_array_release
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.manifold_errors_native import manifold_error
+from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end
 
 
 def manifold_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -33,7 +34,21 @@ def manifold_operation(model: PythonObject, operation: String, args: PythonObjec
     py_setitem(context, "family_mani_numpy_release", PythonObject(release))
     var settings = ManifoldSettings(model, operation, context)
     if operation.startswith("family_mani_umap_"):
-        return umap_operation(model, settings, operation, args, context)
+        # UMAP's whole public lifecycle (the former `_mode` wrappers): the
+        # fitted check (NotFittedError), X refusals, width and feature-name
+        # checks, fit depth, then manifold_finish's fit bookkeeping and NumPy
+        # results for callers outside the package.
+        var umap_method = manifold_method(operation)
+        manifold_require_fitted(model, settings, umap_method, context)
+        var umap_source = args[0]
+        var umap_names = _feature_names(umap_source, context)
+        var depth = lifecycle_begin(model, umap_method, umap_source, True, False, True, context)
+        var umap_result: PythonObject
+        try:
+            umap_result = umap_operation(model, settings, operation, args, context)
+        finally:
+            lifecycle_end(model, umap_method, depth)
+        return manifold_finish(settings, umap_result, umap_method, umap_names, context)
     var method = manifold_method(operation)
     if method == "reconstruction_error":
         return mani_decomp_operation(model, settings, operation, args, Optional[ArrayMetadata](), context)

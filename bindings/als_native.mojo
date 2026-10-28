@@ -15,6 +15,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array
+from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
+from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
     decomp_input, XD_SCALE, XD_SQ, XD_SQRT, XD_DIV,
@@ -208,11 +210,21 @@ def als_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var context = call[3]
         classical_connect_numpy(context)
         var operation = String(py=call[1])
+        var model = call[0]
+        var args = call[2]
+        # user_items is the estimator's own interaction matrix (dense or
+        # sparse), not a feature table: no X refusals or width checks
+        var method = decomp_public_method(operation)
+        var depth = decomp_public_begin(model, method, args, False, True, context)
         var result = PythonObject(None)
-        if operation == "fit":
-            result = als_fit(call[0], call[2], context)
-        else:
-            result = als_query(call[0], operation, call[2], context)
+        try:
+            if operation == "fit":
+                result = als_fit(model, args, context)
+            else:
+                result = als_query(model, operation, args, context)
+        finally:
+            lifecycle_end(model, method, depth)
+        result = decomp_public_finish(model, method, args, result, "", context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
