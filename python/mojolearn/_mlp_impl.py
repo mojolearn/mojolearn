@@ -13,7 +13,7 @@ SHA-256 as before, so files written by earlier releases load here and files
 written here load there.
 
 The module-level helpers below (`_validate_state`, `_decode_state`, ...) serve
-`MLPInference.from_checkpoint` and the parallel worker, not the trainer.
+legacy callers; the public trainer and MLPInference now use native validation.
 """
 import json
 from . import _portable_math as math
@@ -258,39 +258,34 @@ class SmallMLPTrainer:
 
     # Every method below is the API shell: one call into the native owner
     # (bindings/small_mlp_native.mojo), which checks the arguments, chooses the
-    # route and builds the result. The object holds only `_handle` and passes
-    # that, never itself, so no native call can retain the trainer
-    # (docs/MODULAR_ASKS.md, PythonObject references).
+    # route and builds the result. The object holds only `_handle`; native admission reads it from passive
+    # instance storage and balanced calls retain no extra owner references.
 
     def __init__(self, weight1, bias1, weight2, bias2, *, data_schedule,
                  lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
-        self._handle = _NATIVE('create', (weight1, bias1, weight2, bias2, data_schedule,
-                                          lr, betas, eps, weight_decay))
+        return _NATIVE('owner_create', (self, (weight1, bias1, weight2, bias2, data_schedule,
+                                              lr, betas, eps, weight_decay)))
 
     def __del__(self):
-        try:
-            _NATIVE('close', (self._handle,))
-        except Exception:
-            pass
+        return _NATIVE('owner_close', (self,))
 
     @property
     def step_(self):
         """Number of optimizer steps taken."""
-        return _NATIVE('step', (self._handle,))
+        return _NATIVE('owner_step', (self,))
 
     @property
     def weights_(self):
         """Current parameters as a dict: `weight1`, `bias1`, `weight2`, `bias2`."""
-        return _NATIVE('weights', (self._handle,))
+        return _NATIVE('owner_weights', (self,))
 
     def state_dict(self):
         """Return an independent snapshot of the full resumable state (weights, optimizer moments, settings, data schedule)."""
-        return _NATIVE('state_dict', (self._handle,))
+        return _NATIVE('owner_state_dict', (self,))
 
     def load_state_dict(self, state):
         """Restore a snapshot from `state_dict`. The snapshot is validated and copied before any live state changes."""
-        _NATIVE('load_state_dict', (self._handle, state))
-        return self
+        return _NATIVE('owner_load_state_dict', (self, state))
 
     def train_steps(self, X, targets, k):
         """Run `k` consecutive training steps in one call.
@@ -302,7 +297,7 @@ class SmallMLPTrainer:
 
         Available only on builds that provide it; otherwise raises `RuntimeError`.
         """
-        return _NATIVE('train_steps', (self._handle, X, targets, k))
+        return _NATIVE('owner_train_steps', (self, X, targets, k))
 
     @staticmethod
     def _binding():
@@ -322,11 +317,11 @@ class SmallMLPTrainer:
         inputs : list of buffers
             float32 batches, each (rows_i, 8).
         """
-        return _NATIVE('predict_logits_sessions', (self._handle, inputs))
+        return _NATIVE('owner_predict_logits_sessions', (self, inputs))
 
     def predict_logits(self, X):
         """Logits (n_rows, 3) of `X` (n_rows, 8) with the current weights."""
-        return _NATIVE('predict_logits', (self._handle, X))
+        return _NATIVE('owner_predict_logits', (self, X))
 
     def loss_and_grads(self, X, targets):
         """Mean cross-entropy loss and parameter gradients of a batch, without a step.
@@ -339,7 +334,7 @@ class SmallMLPTrainer:
         gradients : sequence of Arrays
             Gradients of `weight1`, `bias1`, `weight2`, `bias2`, in that order.
         """
-        return _NATIVE('loss_and_grads', (self._handle, X, targets))
+        return _NATIVE('owner_loss_and_grads', (self, X, targets))
 
     def apply_gradients(self, gradients):
         """Apply one already-combined gradient with AdamW; returns the new step count.
@@ -348,7 +343,7 @@ class SmallMLPTrainer:
         `bias1`, `weight2`, `bias2`, otherwise `ValueError`.
         The update either completes or leaves the state unchanged.
         """
-        return _NATIVE('apply_gradients', (self._handle, gradients))
+        return _NATIVE('owner_apply_gradients', (self, gradients))
 
     def train_step(self, X, targets, *, return_input_grad=False):
         """One AdamW training step on a batch.
@@ -368,11 +363,11 @@ class SmallMLPTrainer:
             `step` (the new step count), `loss` and `logits` from before the update,
             `gradients` (the four parameter gradients), and `input_grad` when requested.
         """
-        return _NATIVE('train_step', (self._handle, X, targets, return_input_grad))
+        return _NATIVE('owner_train_step', (self, X, targets, return_input_grad))
 
     def save_checkpoint(self, path):
         """Atomically save the full state to `path` in a bounded, pickle-free MLP checkpoint format."""
-        return _NATIVE('save_checkpoint', (self._handle, path))
+        return _NATIVE('owner_save_checkpoint', (self, path))
 
     @classmethod
     def from_checkpoint(cls, path):
@@ -487,10 +482,17 @@ def _connect():
             modes[mode] = entries
         except Exception as error:
             modes[mode] = type(error).__name__ + ': ' + str(error)
-    return dict(trainer=SmallMLPTrainer, array=Array, modes=modes,
+    return dict(trainer=SmallMLPTrainer, trainer_finalizer=vars(SmallMLPTrainer)["__del__"], array=Array, modes=modes,
                 backend=vars(_backend), environ=os.environ._data, admission=_state_context())
 
 
 from .tokenizer import _binding as _small_mlp_tokenizer_binding
-_NATIVE = _small_mlp_tokenizer_binding()._module.small_mlp_call
+_SMALL_MLP_MODULE = _small_mlp_tokenizer_binding()._module
+_NATIVE = _SMALL_MLP_MODULE.small_mlp_call
+# glue: native state cleanup must also stay native when a constructed owner is
+# decref'd inside another public operation or while unwinding an error.
+from types import MethodType as _MethodType
+SmallMLPTrainer.__del__ = _SMALL_MLP_MODULE.classical_attribute_descriptor(
+    _MethodType(_SMALL_MLP_MODULE.small_mlp_finalize, {}))
+
 _NATIVE('initialize', (_connect(),))
