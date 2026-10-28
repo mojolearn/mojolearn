@@ -9,6 +9,7 @@
 # itself (`_mean_error`, `_r2_options`), as `regression_error_options` and
 # `r2_score_options` did. Same kernels, same operands: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import classical_address
 from bindings.family_common import (
@@ -69,7 +70,7 @@ def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
     _ = yp  # keep the Python object alive through the native call above
     var b = mc_b()
     var total = nt + npred
-    var classes = family_call(Python.import_module("array").array, PythonObject("q"),
+    var classes = family_call(native_loaded_module("array").array, PythonObject("q"),
                               py_call(b.bytes, PythonObject(8 * total)))
     var codes = family_array(Python.tuple(total), "<i4", context)
     var k = Int(py=family_call(mc_base("prepare_targets", context), classical_address(both), PythonObject(2),
@@ -148,7 +149,7 @@ def _entropy(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if bottom == 0.0:
         # `result / log(base)` with log(base) == 0: Python's own
         # ZeroDivisionError, restored unchanged at the door
-        return family_call(Python.import_module("operator").truediv, PythonObject(top), PythonObject(bottom))
+        return family_call(native_loaded_module("operator").truediv, PythonObject(top), PythonObject(bottom))
     return PythonObject(top / bottom)
 
 
@@ -182,7 +183,7 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
         raise Error("mojolearn " + caller + ": labels has " + String(n_lab) + " entries and X has "
                     + String(rows) + " rows")
     # `_labels.encode_labels(lab)`: prepare_targets over the int32 labels.
-    var store = family_call(Python.import_module("array").array, PythonObject("q"),
+    var store = family_call(native_loaded_module("array").array, PythonObject("q"),
                             py_call(b.bytes, PythonObject(8 * n_lab)))
     var mapped = family_array(Python.tuple(n_lab), "<i4", context)
     var k = Int(py=family_call(mc_base("prepare_targets", context), classical_address(lab), PythonObject(2),
@@ -351,7 +352,7 @@ def mcls_cluster_operation(operation: String, args: PythonObject, context: Pytho
     if operation == "family_mcls_fowlkes_mallows":
         # args = (binding, labels_true, labels_pred, sparse)
         if not (mc_is_str(args[3]) and String(args[3]) == "deprecated"):
-            if Bool(py=family_call(Python.import_module("operator").ne, args[3], PythonObject("deprecated"))):
+            if Bool(py=family_call(native_loaded_module("operator").ne, args[3], PythonObject("deprecated"))):
                 raise Error("NotImplementedError: mojolearn fowlkes_mallows_score: sparse= is refused; scikit-learn "
                             + "deprecated and ignores it, and this surface has no sparse arm")
         var empty = False
