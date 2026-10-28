@@ -43,3 +43,26 @@ are only part of the work: the shared native implementation still selects
 mutable owner._entries callables and reads owner/buffer protocols. Do not call
 that migration finished after wrapper edits alone. Existing GPU numerical
 engines and the deliberate CPU unsupported-driver refusal must be preserved.
+
+Post-compile source guard: the first push refused an unannotated import-time
+ops_owned_program_connect alias. Added a glue comment identifying provider and
+storage-layout registration; Python AST and all Mojo sources remain unchanged.
+The original refusal, exact diff, before/after bytes and hashes are retained
+locally under distributed/source-guard and in the separate R2 receipt recorded
+in compile.json. No rebuild was necessary for this comment-only change.
+
+Next-scope continuation (read-only investigation; no pooled/offloaded source
+edits in this batch): preserve ByteModelPool/ByteOffloadedReplay algorithms and
+the CPU unsupported-driver refusal. Add a private native schedule descriptor
+and factory narrowly in _mojolearn_byte_lm.mojo, dispatching directly to its
+existing replica/model_pool/offload entry implementations. Replace mutable
+instance _entries dispatch and protocol-based owner/buffer access in
+parallel_byte_native.mojo with retained provider/owner descriptors, exact
+configuration and storage admission, once-captured buffers, and native release
+admission before mutation. Then close the Python state_dict/ownership wrappers.
+
+Root assigned this lane the NEW private schedule descriptor/factory only in
+_mojolearn_byte_lm.mojo. Peer3 owns existing generation/catalog/codec
+registrations there and native_codec.mojo. Preserve those exports; coordinate
+only actual overlapping edits. No box is owned by this lane. Further design
+notes are in the retained distributed/WIP.txt; do not read agent transcripts.

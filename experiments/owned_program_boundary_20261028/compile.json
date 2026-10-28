@@ -98,7 +98,7 @@
     "log": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/distributed/attempt3/source-tests.log",
     "sources": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/distributed/attempt3/source-checks"
   },
-  "compile_source_manifest_unchanged": true,
+  "compile_source_manifest_unchanged": false,
   "attempts": [
     {
       "directory": "attempt1",
@@ -119,5 +119,26 @@
   "pending": [
     "Pooled/offloaded byte-LM trainers and shared parallel_byte_native provider migration",
     "GPU compilation, all product runtime and identity execution, and installed-wheel smoke (not run in this compile-only work)"
-  ]
+  ],
+  "post_compile_source_guard": {
+    "source_commit": "0388451c5d081f805361c1c8620156184b069e22",
+    "file": "python/mojolearn/_distributed_program.py",
+    "before_sha256": "a495be822c55be04acc4903dc8adc6b99f83927a5e6c39877afd85591be477f1",
+    "after_sha256": "a9e2117b453f614b4b9bb66f4ff01fc3a2c5b82d0473964f89edd905ec0f39ad",
+    "python_ast_unchanged": true,
+    "compiled_manifest_changed_paths": [
+      "python/mojolearn/_distributed_program.py"
+    ],
+    "mojo_source_unchanged": true,
+    "reason": "Comment-only glue annotation for the import-time native provider/storage-layout connection; required no-host-routes push guard refused the unannotated alias. No product runtime source semantics changed; retained compile remains applicable.",
+    "r2": {
+      "local_archive": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/distributed/owned-program-source-guard-evidence.tgz",
+      "r2_key": "measurements/provider-migration/owned-program-public-20261028/6f3634f294861fe1c7bde4abcfbef55b5aa6eedab69718b6be3fe6f9db2c4c35/owned-program-source-guard-evidence.tgz",
+      "sha256": "6f3634f294861fe1c7bde4abcfbef55b5aa6eedab69718b6be3fe6f9db2c4c35",
+      "bytes": 2490,
+      "put_status": 200,
+      "get_status": 200,
+      "readback_verified": true
+    }
+  }
 }

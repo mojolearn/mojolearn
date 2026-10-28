@@ -54,7 +54,7 @@ def _connect_owned_programs(connections):
     from types import SimpleNamespace
     records = tuple(vars(value) for value in connections.values() if type(value) is SimpleNamespace)  # glue: installed native mode connections
     for destination in records:  # glue: connect every native image during import
-        connect = destination["native_module"].ops_owned_program_connect
+        connect = destination["native_module"].ops_owned_program_connect  # glue: import-time provider and storage-layout registration
         for source in records:  # glue: retain every available native registry provider
             connect(DistributedProgram, _partitioned_program.PartitionedProgram,
                     source["distributed"], source["native_module"])
