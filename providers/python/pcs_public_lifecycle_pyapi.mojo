@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # PolynomialCountSketch public fit/transform envelope. One X snapshot feeds
 # finite/width checks and both fit_transform stages; target owners survive it.
-from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
@@ -11,7 +10,10 @@ from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_validate import classical_estimator_name, classical_check_width
 from bindings.public_attributes_native import _plan, _lookup
 from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
-from bindings.family_common import FAMILY_F32P, family_f32_snapshot
+from bindings.family_common import family_input_snapshot, family_snapshot_f32
+from bindings.native_numpy_metadata import native_numpy_dtype
+from core.native_scalar_decode import native_scalar_real
+from core.cast_in import CAST_KIND_FLOAT
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.radius_public_lifecycle_pyapi import radius_target
 from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall
@@ -30,6 +32,59 @@ struct PCSPublicCall(Movable):
         self.settings = settings
         self.x = x^
         self.target_owner = target_owner
+
+
+def _pcs_finite_policy(source: PythonObject, context: PythonObject) raises -> Int:
+    # Match _sk_validate.describe/_check_X after native admission, without
+    # rereading an exporter's metadata. 0 skips; 1 is an ordinary buffer;
+    # 2 is a nested sequence whose first leaf is a real floating scalar.
+    var b = native_loaded_module("builtins")
+    var cls = py_type(source)
+    if cls is b.list or cls is b.tuple:
+        var first = source
+        var depth = 0
+        while py_type(first) is b.list or py_type(first) is b.tuple:  # driver-loop: first-element sequence kind, never buffer metadata
+            if len(first) == 0:
+                return 0
+            first = first[0]
+            depth += 1
+            if depth > 64:
+                raise Error("TypeError: native PCS input nesting exceeds the supported depth")
+        var first_cls = py_type(first)
+        if first_cls is b.float:
+            return 2
+        if py_get(context, "ndarray") is not None:
+            var dtype = native_numpy_dtype(context)
+            var codes = Python.tuple("e", "f", "d", "g")
+            for i in range(len(codes)):  # small-loop(four exact native NumPy floating scalar identities)
+                if first_cls is py_call(dtype, codes[i]).type:
+                    return 2
+        return 0
+    if (cls is context["array_class"] or cls is py_get(context, "ndarray")
+            or cls is b.memoryview or cls is context["array_type"] or cls is b.bytearray):
+        return 1
+    # Sparse, pandas, Torch and other admitted frame inputs did not run the
+    # old buffer/list-only finite check. Their native preparation still runs.
+    return 0
+
+
+def _pcs_check_finite(source: PythonObject, snapshot: ArrayMetadata,
+                      context: PythonObject) raises:
+    var policy = _pcs_finite_policy(source, context)
+    var data = snapshot.source
+    if policy == 0 or data.kind != CAST_KIND_FLOAT:
+        return
+    # _all_finite accepted only the materialized f4/f8 Array. A direct half
+    # buffer stayed f2 and skipped the scan; a list of half scalars materialized
+    # as f8 and was scanned. Preserve that distinction before the f32 cast.
+    if policy == 1 and data.itemsize == 2:
+        return
+    var code = String("e") if data.itemsize == 2 else String("f") if data.itemsize == 4 else String("d")
+    var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=data.addr)
+    for row in range(data.rows):  # driver-loop: finite check over the captured pre-cast input
+        for column in range(data.cols):
+            if native_scalar_real(bytes, row * data.s0 + column * data.s1, code, data.itemsize, True).special != 0:
+                raise Error("Input X contains NaN or infinity (PolynomialCountSketch).")
 
 
 def pcs_public_begin(model: PythonObject, operation: String, args: PythonObject,
@@ -72,11 +127,9 @@ def pcs_public_begin(model: PythonObject, operation: String, args: PythonObject,
         var learned = Python.tuple("indexHash_", "bitHash_", "n_features_in_")
         for i in range(len(learned)):  # small-loop(three fitted sketch input owners)
             py_setitem(settings, learned[i], _lookup(model, learned[i], fields, plan, attributes))
-    var x = family_f32_snapshot(args[1], 2, "X", context, True)
-    var data = FAMILY_F32P(unsafe_from_address=x.source.addr)
-    for i in range(x.count):  # driver-loop: the public PCS finite-input check, once for fit_transform
-        if not isfinite(data[i]):
-            raise Error("Input X contains NaN or infinity (PolynomialCountSketch).")
+    var x = family_input_snapshot(args[1], 2, "X", context, True)
+    _pcs_check_finite(args[1], x, context)
+    family_snapshot_f32(x, context)
     var target = PythonObject(None)
     if Int(py=depth) == 0:
         if fitting:

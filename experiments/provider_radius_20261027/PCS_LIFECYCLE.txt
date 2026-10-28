@@ -45,3 +45,26 @@ metadata without requesting a PEP3118 buffer. Floating ndarrays retain their
 native storage and captured address/shape/strides, including non-native byte
 order. This avoids introducing buffer-export refusals for ignored string targets
 and avoids NumPy's unsupported formatted export of byte-swapped longdouble.
+
+Pre-cast finite-policy repair (2026-10-28)
+The first lifecycle source scanned the packed float32 input; source review found
+that this changed accepted finite float64 overflow, sparse/frame nonfinite input,
+and direct float16 behavior. The follow-up uses the authorized shared split:
+family_input_snapshot captures once, the dedicated PCS owner checks that retained
+pre-cast storage, and family_snapshot_f32 packs the same snapshot for execution.
+No second exporter shape/dtype/stride/address read is introduced.
+
+The policy follows _sk_validate.describe/_check_X and _all_finite: only ordinary
+buffer input with f4/f8 storage or nested lists/tuples whose first scalar is a
+real float receives the finite scan. A direct half buffer stays unchecked, while
+a list beginning with a half scalar is checked (its old materialization was f8).
+Integer-first lists, sparse, pandas and Torch/frame inputs preserve their old
+skip. The native decoder checks exponent categories without narrowing finite
+float64 values. Negative and non-unit strides use the captured CastIn offsets.
+
+Shared scope: bindings/family_common.mojo only, parent applies the exact proposal
+at evidence/family_snapshot_split.patch (external evidence directory above).
+Source patch applicability and diff checks passed. No product/runtime tests,
+compilation or vendor execution was performed; original failed policy retained
+in the earlier commit and SELF_HANDOFF.txt. Existing dtype/admission limits,
+error ordering and tag/feature/warning helper transitive scope remain unqualified.
