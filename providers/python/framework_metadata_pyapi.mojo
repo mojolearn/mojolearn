@@ -53,6 +53,8 @@ def framework_metadata_operation(operation: PythonObject, args: PythonObject,
     if py_type(operation) is not bi.str or py_type(args) is not bi.tuple or py_type(context) is not bi.dict:
         raise Error("TypeError: framework metadata requires native descriptors")
     var op = String(py=operation)
+    if op == "torch_capture":
+        raise Error("TypeError: implicit Torch capture was removed; export the model first, then use mojolearn.import_model(path).run_torch(*inputs)")
     if op == "directory":
         return _directory(context)
     if op == "path":

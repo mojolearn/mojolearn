@@ -24,11 +24,12 @@ def run():
         path = Path(folder) / 'model.onnx'
         onnx.save(model, path)
         audit = audit_native_call(mojolearn.import_model, str(path), numeric_mode='identical')
+        audit.assert_native()
         imported = audit.result
         actual = np.asarray(imported.run(x))
         assert actual.tobytes() == np.maximum(x, 0).tobytes()
         # Old internal Python/extension call doors must no longer execute. The
-        # public source-kind dispatcher remains recorded debt in audit.report().
+        # source-kind admission is now inside the public native boundary.
         called = []
         def old_door(*args):
             called.append(args)
@@ -49,9 +50,8 @@ def run():
         finally:
             entries.update(previous)
         assert not called
-    return {'status': 'selected_behavior_passed_public_dispatch_pending', 'runtime_audit': audit.report(),
-            'pending': ['Public Python source-kind dispatcher and arbitrary Torch/ModelProto export',
-                        'Reader-object source route not covered by this probe']}
+    return {'status': 'selected_behavior_passed', 'runtime_audit': audit.report(),
+            'pending': ['Reader-object source route not covered by this probe']}
 
 
 def main():

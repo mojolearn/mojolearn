@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """External qualification controller, never imported by product execution.
 
-The torch-compile phase of the adapter smoke. Builds (or, with --installed,
+The exported Torch model phase of the adapter smoke. Builds (or, with --installed,
 loads the shipped) PyTorch registration and checks the WHOLE-MODEL PyTorch
 surface on one device:
 
-  * torch.compile(model, backend="mojolearn") on several models: the output is
+  * import_model(path).run_torch on several exported models: the output is
     close to eager PyTorch (torch sums in another order) and BIT FOR BIT the
-    output of mojolearn.import_model(model, example_inputs=x).run(x), on the
+    output of mojolearn.import_model(path).run(x), on the
     input's device, the same bits on every repeated call, re-imported after an
-    in-place weight change;
+    explicitly exported weight change;
   * a model with an operation the import does not support is refused, nothing
     runs eagerly;
   * the registration defines torch.ops.mojolearn.train and nothing else: the
@@ -159,9 +159,6 @@ def main():
         checked("registration_is_whole_model_only", registration)
 
         import numpy as np
-        if not args.installed:  # --installed: importing mojolearn.adapters.torch registered the backend
-            from mojolearn.adapters import _torch_compile
-            _torch_compile.register()
         from mojolearn import import_model
 
         def words(t):
@@ -194,11 +191,19 @@ def main():
             "two_outputs": (TwoHeads(), (10, 6)),
         }
 
+        def export_artifact(name, net, x):
+            # Test fixture preparation, outside all product operations.
+            artifact = out / (name + ".onnx")
+            torch.onnx.export(net, (x,), str(artifact), opset_version=17,
+                              input_names=["input"], dynamo=False)
+            return artifact
+
         def whole_model(name, net, shape):
             net = net.eval().to(device)
             x = torch.from_numpy(rng.standard_normal(shape, dtype=np.float32)).to(device)
-            torch._dynamo.reset()
-            compiled = torch.compile(net, backend="mojolearn", fullgraph=True, dynamic=False)
+            artifact = export_artifact(name, net, x)
+            imported = import_model(str(artifact))
+            compiled = imported.run_torch
             with torch.no_grad():
                 got = compiled(x)
                 eager = net(x)
@@ -206,7 +211,7 @@ def main():
             got = got if isinstance(got, tuple) else (got,)
             eager = eager if isinstance(eager, tuple) else (eager,)
             again = again if isinstance(again, tuple) else (again,)
-            direct = import_model(net, example_inputs=x).run(x.detach().cpu().numpy())
+            direct = imported.run(x.detach().cpu().numpy())
             direct = direct if isinstance(direct, tuple) else (direct,)
             assert len(got) == len(eager) == len(direct), (len(got), len(eager), len(direct))
             for k, (g, e, d, r) in enumerate(zip(got, eager, direct, again)):
@@ -219,13 +224,18 @@ def main():
             np.savez(out / f"torch-compile-{name}.npz", x=x.cpu().numpy(),
                      **{f"compiled_{k}": g.cpu().numpy() for k, g in enumerate(got)},
                      **{f"import_model_{k}": np.asarray(d) for k, d in enumerate(direct)})
-            # an in-place weight change re-imports: the compiled output follows import_model on the new weights
+            # Artifact weights are a snapshot; source mutations cannot change it.
             with torch.no_grad():
                 first = next(net.parameters())
                 first.mul_(0.5)
-                changed = compiled(x)
+                unchanged = compiled(x)
+            unchanged = unchanged if isinstance(unchanged, tuple) else (unchanged,)
+            for k, (u, g) in enumerate(zip(unchanged, got)):
+                same_bits(u, g, f"{name} output {k}: retained artifact snapshot")
+            updated = import_model(str(export_artifact(name + "-updated", net, x)))
+            changed = updated.run_torch(x)
             changed = changed if isinstance(changed, tuple) else (changed,)
-            fresh = import_model(net, example_inputs=x).run(x.detach().cpu().numpy())
+            fresh = updated.run(x.detach().cpu().numpy())
             fresh = fresh if isinstance(fresh, tuple) else (fresh,)
             for k, (c, f) in enumerate(zip(changed, fresh)):
                 same_bits(c, f, f"{name} output {k}: after an in-place weight change")
@@ -236,12 +246,10 @@ def main():
             class TopK(torch.nn.Module):
                 def forward(self, x):
                     return torch.topk(x, 2, dim=1).values
-            torch._dynamo.reset()
-            compiled = torch.compile(TopK(), backend="mojolearn", fullgraph=True, dynamic=False)
+            artifact = export_artifact("unsupported-topk", TopK(), torch.ones(4, 5, device=device))
             try:
-                with torch.no_grad():
-                    compiled(torch.ones(4, 5, device=device))
-            except Exception as error:  # torch wraps the backend's UnsupportedModel
+                import_model(str(artifact))
+            except Exception as error:
                 text = "%s: %s" % (type(error).__name__, error)
                 assert "UnsupportedModel" in text or "TopK" in text or "topk" in text, text
                 return
@@ -251,7 +259,7 @@ def main():
         def negative_control():
             net = torch.nn.Sequential(torch.nn.Linear(3, 4), torch.nn.ReLU()).eval()
             x = torch.from_numpy(rng.standard_normal((4, 3), dtype=np.float32))
-            direct = import_model(net, example_inputs=x).run(x.numpy())
+            direct = import_model(str(export_artifact("negative-control", net, x))).run(x.numpy())
             changed = np.array(direct, copy=True)
             changed.view(np.uint32).flat[0] ^= 1
             try:

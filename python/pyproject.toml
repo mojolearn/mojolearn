@@ -139,14 +139,9 @@ verify = ["numpy>=1.26.4"]
 # were built against (packaging/adapters/pins.json is the one source and
 # packaging/adapters/test_adapters.py holds this file to it). On AMD the
 # ROCm build of torch comes from PyTorch's own index.
-# torch.compile(..., backend="mojolearn") and import_model(torch_module) export
-# through torch.onnx, which needs onnx and onnxscript at runtime.
+# ONNX export is explicit caller preparation; these extras also supply its tools.
 torch = ["torch>=2.13,<2.14", "onnx>=1.18", "onnxscript>=0.5"]
 max = ["max==26.5.0"]
-
-# torch.compile(model, backend="mojolearn"): TorchDynamo finds the backend here without an import.
-[project.entry-points.torch_dynamo_backends]
-mojolearn = "mojolearn.adapters._torch_compile:backend"
 
 [project.urls]
 Paper = "https://mojolearn.org/paper.pdf"

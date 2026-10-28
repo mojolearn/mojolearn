@@ -38,10 +38,15 @@ def test_device_metadata_captured_once_and_kept_natively():
     assert 'native_torch_storage_metadata(value)' in frontend
 
 
-def test_python_export_debt_is_not_declared_migrated():
+def test_python_export_is_replaced_by_explicit_artifact_admission():
     frontend = (ROOT / 'python/mojolearn/adapters/_torch_compile.py').read_text()
-    assert 'Still prohibited runtime debt' in frontend
-    assert 'self._program, self._versions = self._import(gm)' in frontend
+    assert 'return _IMPORT_NATIVE("torch_capture",' in frontend
+    assert 'self._import(gm)' not in frontend
+    assert 'torch.onnx' not in frontend
+    assert 'torch_dynamo_backends' not in (ROOT / 'python/pyproject.toml').read_text()
+    public = (ROOT / 'python/mojolearn/importers/_program.py').read_text()
+    assert 'return self._run_torch_native(self, tensors, None, False)' in public
+    assert '_export_torch' not in public
 
 
 def test_import_and_cleanup_use_the_same_session_provider():

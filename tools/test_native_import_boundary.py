@@ -15,24 +15,23 @@ PACKAGE = ROOT / 'python/mojolearn'
 def test_artifact_setup_passes_raw_values_to_one_native_owner():
     source = (PACKAGE / 'importers/_program.py').read_text()
     tree = ast.parse(source)
-    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_import')
-    assert len(node.body) == 1 and isinstance(node.body[0], ast.Return)
+    node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'import_model')
+    assert len(node.body) == 2 and isinstance(node.body[1], ast.Return)
     calls = [n for n in ast.walk(node) if isinstance(n, ast.Call)]
     assert len(calls) == 1 and calls[0].func.id == '_IMPORT_NATIVE'
     seen = []
     context = object()
     namespace = {'_IMPORT_CONTEXT': context, '_IMPORT_NATIVE': lambda *args: seen.append(args) or 'native'}
     exec(compile(ast.Module(body=[node], type_ignores=[]), '<import boundary>', 'exec'), namespace)
-    args = tuple(object() for _ in range(4))
-    assert namespace['_import'](*args) == 'native'
-    assert seen == [args + (context,)]
+    source_arg, shapes, mode = (object() for _ in range(3))
+    assert namespace['import_model'](source_arg, shapes=shapes, numeric_mode=mode) == 'native'
+    assert seen == [(source_arg, None, shapes, mode, context)]
     assert 's.close()' not in ast.get_source_segment(source, node)
-    # Preserve supported Torch and ModelProto behavior visibly; don't turn
-    # the native helper into a false claim about the whole public boundary.
-    public = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'import_model')
-    assert any(isinstance(n, ast.If) for n in ast.walk(public))
-    assert '_export_torch(source, path, shapes, example_inputs)' in source
-    assert 'source.SerializeToString()' in source
+    # Owner-authorized artifact-only API: no implicit export or serialization.
+    assert '_export_torch' not in source
+    assert 'SerializeToString' not in source
+    with pytest.raises(TypeError, match='example_inputs'):
+        namespace['import_model'](source_arg, example_inputs=object())
 
 
 def test_both_sequence_bindings_register_the_same_native_setup():
@@ -62,7 +61,7 @@ def test_import_connections_retain_only_native_entries_and_real_class_layouts(mo
     session, program, imported, graph, reader = [type(name, (), {}) for name in
         ('Session', 'Program', 'ImportedProgram', 'GraphIR', '_Native')]
     binding = types.SimpleNamespace(**{name: len for name in ('ops_import_model', 'onnx_import_file',
-        'onnx_import', 'onnx_buffers', 'ops_imported_run', 'ops_imported_run_device')})
+        'onnx_import', 'onnx_buffers', 'ops_imported_run', 'ops_imported_run_device', 'ops_torch_program_run')})
     ops = types.ModuleType(package.__name__ + '.ops')
     ops._SESSION_CONNECTIONS = {'identical': types.SimpleNamespace(binding=binding),
                                 'fast': 'ImportError: optional mode absent'}

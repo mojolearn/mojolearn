@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-27",
+  "owner_direction": "API changes allowed; no Python graph capture in product execution; metadata once per public operation; identity across vendors within a release, not across releases",
+  "api": {
+    "import_model": "exported ONNX path or native reader GraphIR; removed implicit nn.Module/ModelProto export and example_inputs",
+    "run_torch": "one native call over the same imported graph, explicit artifact snapshot; updated weights require explicit import",
+    "torch_compile": "automatic backend registration removed; direct old backend calls receive native migration refusal"
+  },
+  "arithmetic_change": false,
+  "validation": {
+    "source_checks": "37 passed before final test-controller edits; /Users/andrewhendel/mojolearn-evidence/provider-migration-resume-20261027/integration-source-tests.log",
+    "compile": "pending",
+    "runtime": "pending"
+  },
+  "remaining": [
+    "compile and audit actual public import/run_torch, exported weight snapshots, refusals and callback controls",
+    "adapt remaining documentation and transfer controller",
+    "focused installed adapter smokes on each vendor; no new adapter identity lane",
+    "whole-library migration remains incomplete"
+  ]
+}

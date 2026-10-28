@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native Torch whole-program execution. Graph capture/export is deliberately
-# outside this entry and remains unresolved Python execution in _torch_compile.
+# Native Torch whole-program execution of an already imported artifact. Graph
+# capture/export is the caller's explicit preparation, never product execution.
 # Tensor admission, routing, contiguous copies, output allocation, stream order,
 # replay and result packing are owned here. MPS retains its supported host-copy
 # route; no integer is reinterpreted as a Metal buffer. Host inputs use their
@@ -154,10 +154,49 @@ def _torch_run_host[E: Exec & Movable & Deinitable, KIND: Int](
     _ = outputs
 
 
+def _torch_artifact_context(program: PythonObject) raises -> PythonObject:
+    # Resolve only loaded framework native entries. No capture, model callbacks,
+    # weight-version polling or export runs when executing an artifact snapshot.
+    var torch = native_loaded_module("torch")
+    var native = native_loaded_module("torch._C")
+    var b = native_loaded_module("builtins")
+    var fields = py_fields(native)
+    var variables = fields["_VariableFunctions"]
+    var flags = b.type.__dict__["__flags__"].__get__
+    if (Int(py=py_call(flags, py_type(variables))) & 512) != 0:
+        raise Error("TypeError: Torch allocation requires its native function container")
+    var context = Python.dict()
+    py_setitem(context, "empty", variables.empty)
+    _ = _torch_entry(context, "empty")
+    for pair in [Python.tuple("get_device", "_cuda_getDevice"),
+                 Python.tuple("set_device", "_cuda_setDevice"),
+                 Python.tuple("synchronize", "_cuda_synchronize"),
+                 Python.tuple("synchronize_mps", "_mps_deviceSynchronize")]:  # small-loop(fixed native framework entries)
+        py_setitem(context, pair[0], py_get(fields, pair[1]))
+    var public = py_fields(torch)
+    var device_type = public["device"]
+    if py_type(device_type) is not b.type or (Int(py=py_call(flags, device_type)) & 512) != 0:
+        raise Error("TypeError: Torch device requires its native type")
+    py_setitem(context, "cpu", py_call(device_type, "cpu"))
+    py_setitem(context, "f32", public["float32"])
+    py_setitem(context, "i32", public["int32"])
+    var model = py_fields(program)
+    var count = len(model["inputs"])
+    var free = Python.list()
+    for index in range(count):  # driver-loop: declared graph input positions
+        py_call(free.append, index)
+    py_setitem(context, "free", free)
+    py_setitem(context, "n_args", count)
+    py_setitem(context, "sequence", len(model["outputs"]) != 1)
+    return context
+
+
 def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
-    program: PythonObject, args: PythonObject, context: PythonObject, route_only: Bool = False,
+    program: PythonObject, args: PythonObject, var context: PythonObject, route_only: Bool = False,
 ) raises -> PythonObject:
     var b = native_loaded_module("builtins")
+    if context is None:
+        context = _torch_artifact_context(program)
     var profile = Bool(py=py_get(context, "profile", False))
     var started = perf_counter_ns() if profile else 0
     native_torch_modes_admit()

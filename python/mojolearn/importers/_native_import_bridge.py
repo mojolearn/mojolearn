@@ -11,7 +11,7 @@ def _layout(cls):
     names = ('__getattribute__', '__setattr__', '__getattr__', '__del__', '__dict__',
              '_id', '_b', '_native', 'source', 'h', 'b', '_session_native', '_lifetime',
              '_program_execute', '_program_inspect', '_program_control', '_program_fit',
-             '_program_class', 'inputs', 'outputs')
+             '_program_class', '_run_torch_native', 'inputs', 'outputs')
     hooks = tuple((base, name, row.get(name)) for base, row in zip(mro, fields) for name in names)  # glue: fixed storage hooks
     return dict(cls=cls, mro=mro, fields_get=descriptor.__get__, hooks=hooks)
 
@@ -49,7 +49,7 @@ def connect(session, program, imported, graph, unsupported):
             binding = connection.binding
             connected = {name: getattr(binding, name) for name in  # glue: fixed native import exports
                          ('ops_import_model', 'onnx_import_file', 'onnx_import', 'onnx_buffers',  # cpu-route: import-time connection of existing native artifact I/O entries
-                          'ops_imported_run')}
+                          'ops_imported_run', 'ops_torch_program_run')}
             connected['ops_imported_run_device'] = getattr(binding, 'ops_imported_run_device', None)
             for name, function in connected.items():  # glue: compiled export admission at import
                 if function is not None and type(function) is not BuiltinFunctionType:

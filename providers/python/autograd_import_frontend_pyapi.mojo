@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native artifact setup around the existing ONNX reader/lowering. Torch graph
 # export is deliberately absent: a native call to that exporter still runs
-# Python forward. The public source-kind/export dispatcher remains separate debt.
+# Python forward. The public API now requires an already exported artifact
+# (owner authorization 2026-10-27); it never performs an implicit export.
 from std.python import Python, PythonObject
 from providers.python.autograd_graph_metadata_pyapi import graph_record_bound
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
@@ -38,6 +39,7 @@ def _initialize(program: PythonObject, session: PythonObject, info: PythonObject
     py_setattr(target, "outputs", py_call(b.list, outputs))
     py_setattr(target, "_run_native", entries["ops_imported_run"])
     py_setattr(target, "_run_device", entries["ops_imported_run_device"])
+    py_setattr(target, "_run_torch_native", entries["ops_torch_program_run"])
 
 
 def _construct(program: PythonObject, session: PythonObject, info: PythonObject,
@@ -51,6 +53,7 @@ def _construct(program: PythonObject, session: PythonObject, info: PythonObject,
     var binding = fields["_b"]
     py_setitem(entries, "ops_imported_run", neural_descriptor_entry(binding, "ops_imported_run"))
     py_setitem(entries, "ops_imported_run_device", neural_descriptor_entry(binding, "ops_imported_run_device", False))
+    py_setitem(entries, "ops_torch_program_run", neural_descriptor_entry(binding, "ops_torch_program_run"))
     # Build detached metadata so a failed constructor call cannot partly
     # overwrite an already constructed public program.
     var pending = native_storage_allocate(context["imported"])

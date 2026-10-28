@@ -1,40 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Run a PyTorch model as one mojolearn program, and train mojolearn models from PyTorch.
+"""Train whole mojolearn models through PyTorch native registration.
 
-Importing this module registers:
+Use ``mojolearn.import_model("model.onnx").run_torch(inputs)`` to execute
+an exported model with PyTorch tensors. Export is explicit caller preparation.
+``torch.ops.mojolearn.train`` trains a whole mojolearn Sequential model and
+returns parameters, optimizer state and its loss curve.
 
-* the ``torch.compile`` backend ``"mojolearn"`` (also :data:`backend`):
-  ``torch.compile(model, backend="mojolearn")`` runs every operation of the
-  model inside one mojolearn program call, so PyTorch only holds the input
-  and output tensors. A model with an operation the import does not support
-  is refused with the names of those nodes; nothing runs in PyTorch instead.
-* ``torch.ops.mojolearn.train(inputs, model, options, scalars)``, which fits a
-  whole mojolearn Sequential model and returns its parameters, optimizer
-  state and loss curve.
-
-In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD
-GPUs.
-
-Requires PyTorch: ``pip install "mojolearn[torch]"`` (on Linux,
-``pip install mojolearn "mojolearn-core[torch]"``; on AMD, install PyTorch's
-ROCm build first).
-
-Examples
---------
->>> import torch
->>> import mojolearn.adapters.torch
->>> model = torch.nn.Sequential(torch.nn.Linear(3, 4), torch.nn.ReLU(), torch.nn.Linear(4, 2))
->>> compiled = torch.compile(model, backend="mojolearn", fullgraph=True, dynamic=False)
->>> compiled(torch.ones(8, 3)).shape
-torch.Size([8, 2])
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 """
 import platform as _platform
 
 from . import _shipped
-from ._torch_compile import backend, register as _register_backend
 
-__all__ = ["backend", "ops", "library_path", "native_library_path"]
+__all__ = ["ops", "library_path", "native_library_path"]
 
 
 def _import_torch():
@@ -49,11 +28,6 @@ def _import_torch():
 
 
 _torch = _import_torch()
-
-# torch.compile(model, backend="mojolearn"): registered before the operator library loads, since the
-# backend runs through the mojolearn bindings and needs no registration library.
-_register_backend()
-
 
 def _torch_cxx11_abi(series):
     """The C++ ABI (0 or 1) of the installed torch. torch reports it through
