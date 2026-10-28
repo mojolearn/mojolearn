@@ -1,0 +1,313 @@
+{
+ "scope": "norm-folds MOJOLEARN_IDN_NORM_FIXED_LANES",
+ "machine": "Mac (M-series), tools/compile_slot.sh, -j 10, -O0",
+ "note": "sm_89 = --target-accelerator sm_89 cross-compiled on the Mac (RunPod CPU box refused: pod cap 4/4). AMD (gfx942) and Linux x86 host NOT compiled.",
+ "runs": {
+  "final-cpu": {
+   "source_commit": "61076ab98c10992fac9e5621ee6d6428435a49b0",
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "results": [
+    {
+     "fam": "norm_folds_host",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "125",
+     "sha256": "cc6e78d1eea9e122ae8c2aff33907d49d1e20c52f2b269609255cde46611b0ba",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/final-cpu/norm_folds_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings experiments/norm_folds_20261028/compile_norm_folds_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/final-cpu/_mojolearn_norm_folds_host.on.so"
+    },
+    {
+     "fam": "norm_folds_host",
+     "arm": "off",
+     "exit": "0",
+     "seconds": "3",
+     "sha256": "c2ee06e471aa1eb2ad2dae4461c3f3982e38292bf843450a085e17eab3279313",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/final-cpu/norm_folds_host.off.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU  -I . -I bindings experiments/norm_folds_20261028/compile_norm_folds_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/final-cpu/_mojolearn_norm_folds_host.off.so"
+    },
+    {
+     "fam": "transformer_host",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "9",
+     "sha256": "419b5c1e835ee8678a5cae1d9f8573e0a34fe5dcfafcd24cf75534769c8a1b4f",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/final-cpu/transformer_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_transformer_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/final-cpu/_mojolearn_transformer_host.on.so"
+    },
+    {
+     "fam": "training_host",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "11",
+     "sha256": "31e1d3449ef0b96ea38704762c6d5ce444ef41a3edea6730b2129cae91d00489",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/final-cpu/training_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_training_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/final-cpu/_mojolearn_training_host.on.so"
+    },
+    {
+     "fam": "core_host",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "16",
+     "sha256": "651fac509e1e6fc0d89bca1fb1995b922b03d2b39d04b8fea59613216f415490",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/final-cpu/core_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_core_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/final-cpu/_mojolearn_core_host.on.so"
+    }
+   ]
+  },
+  "final-dev": {
+   "source_commit": "61076ab98c10992fac9e5621ee6d6428435a49b0",
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "results": [
+    {
+     "fam": "transformer",
+     "arm": "on.sm_89",
+     "exit": "0",
+     "seconds": "99",
+     "sha256": "d76d109d8c628e4c74168b475a180e62b202972ce9df158d0eaf3501686b5c76",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/final-dev/transformer.on.sm_89.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 --target-accelerator sm_89 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_transformer.mojo -o ~/mojolearn-evidence/norm-folds-20261028/final-dev/_mojolearn_transformer.on.sm_89.so"
+    },
+    {
+     "fam": "transformer",
+     "arm": "off.sm_89",
+     "exit": "0",
+     "seconds": "329",
+     "sha256": "055f205fae76e66bf0680b8e15a9865d274b95934140475512530bb2f731bd42",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/final-dev/transformer.off.sm_89.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 --target-accelerator sm_89 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1   -I . -I bindings bindings/entry/entry__mojolearn_transformer.mojo -o ~/mojolearn-evidence/norm-folds-20261028/final-dev/_mojolearn_transformer.off.sm_89.so"
+    },
+    {
+     "fam": "byte_lm",
+     "arm": "on.sm_89",
+     "exit": "0",
+     "seconds": "836",
+     "sha256": "ce0936eebc4ce24f9e19c9541ec2091ac3154aa433cb9707664c3945112d2629",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/final-dev/byte_lm.on.sm_89.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 --target-accelerator sm_89 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_byte_lm.mojo -o ~/mojolearn-evidence/norm-folds-20261028/final-dev/_mojolearn_byte_lm.on.sm_89.so"
+    },
+    {
+     "fam": "training",
+     "arm": "on.sm_89",
+     "exit": "0",
+     "seconds": "83",
+     "sha256": "b26c31e54d22e73a5254d2ae3aa16f57dfd74076db9c43de1d9c64a2d981371d",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/final-dev/training.on.sm_89.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 --target-accelerator sm_89 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_training.mojo -o ~/mojolearn-evidence/norm-folds-20261028/final-dev/_mojolearn_training.on.sm_89.so"
+    }
+   ]
+  },
+  "mac": {
+   "source_commit": "52ef935c2c1b19990b8a2b1ef7729e52c99eedfb",
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "results": [
+    {
+     "fam": "transformer_host",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "58",
+     "sha256": "3fab9889716651035609bf2b9bf50e84aec6af127d371aa4cc3b8ee9e6958844",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/transformer_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_transformer_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_transformer_host.on.so"
+    },
+    {
+     "fam": "byte_lm_host",
+     "arm": "on",
+     "exit": "1",
+     "seconds": "6",
+     "sha256": "none",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/byte_lm_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_byte_lm_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_byte_lm_host.on.so"
+    },
+    {
+     "fam": "neural_host",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "44",
+     "sha256": "db2fcecd83b650d9d8d332a2eb60656836f6cfa1f9b840a9a58715f401833e1f",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/neural_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_neural_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_neural_host.on.so"
+    },
+    {
+     "fam": "core_host",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "84",
+     "sha256": "5190cd8ee1feffa324e48248dd533692556e162576db4b036495e8d383f61392",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/core_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_core_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_core_host.on.so"
+    },
+    {
+     "fam": "training_host",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "49",
+     "sha256": "ecc8b9a03fb4c9bac7217b3003bc6ffe7f559e169b34c5e3fa4eaa688cd01ee2",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/training_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_training_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_training_host.on.so"
+    },
+    {
+     "fam": "transformer_host",
+     "arm": "off",
+     "exit": "0",
+     "seconds": "43",
+     "sha256": "32893481d2dbc38658425165228cf45c78f6f3efb728e93fe94bdfdfcc6ba561",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/transformer_host.off.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU  -I . -I bindings bindings/entry/entry__mojolearn_transformer_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_transformer_host.off.so"
+    },
+    {
+     "fam": "byte_lm_host",
+     "arm": "off",
+     "exit": "1",
+     "seconds": "11",
+     "sha256": "none",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/byte_lm_host.off.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU  -I . -I bindings bindings/entry/entry__mojolearn_byte_lm_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_byte_lm_host.off.so"
+    },
+    {
+     "fam": "neural_host",
+     "arm": "off",
+     "exit": "0",
+     "seconds": "80",
+     "sha256": "e85b85940ec08477940bc6d17f7f48f49a2dc35679146d004ff78caa0d3196d8",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/neural_host.off.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU  -I . -I bindings bindings/entry/entry__mojolearn_neural_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_neural_host.off.so"
+    },
+    {
+     "fam": "core_host",
+     "arm": "off",
+     "exit": "0",
+     "seconds": "159",
+     "sha256": "2a6e2183b49ee6ad871ca2112e7379cc592bc47f192c7435528e3f063a599166",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/core_host.off.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU  -I . -I bindings bindings/entry/entry__mojolearn_core_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_core_host.off.so"
+    },
+    {
+     "fam": "training_host",
+     "arm": "off",
+     "exit": "0",
+     "seconds": "76",
+     "sha256": "96d99dc2432e54666c4281c98b0f5cdd829f4ee84b0922950e6ed80b19d5e83b",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac/training_host.off.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU  -I . -I bindings bindings/entry/entry__mojolearn_training_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac/_mojolearn_training_host.off.so"
+    }
+   ]
+  },
+  "mac-probe": {
+   "source_commit": "1536a1dea29d26122fac195958a90516f6684a0a",
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "results": [
+    {
+     "fam": "norm_folds_host",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "70",
+     "sha256": "4bbc97f090f3818a7e346792c1fcd929b7fb7fde9430f39e2df969bf2fc7d371",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-probe/norm_folds_host.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings experiments/norm_folds_20261028/compile_norm_folds_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-probe/_mojolearn_norm_folds_host.on.so"
+    },
+    {
+     "fam": "norm_folds_host",
+     "arm": "off",
+     "exit": "0",
+     "seconds": "26",
+     "sha256": "e8abc1bd68514a33c92c8a054449a10647385dc98eff869579211554c77477bf",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-probe/norm_folds_host.off.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU  -I . -I bindings experiments/norm_folds_20261028/compile_norm_folds_host.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-probe/_mojolearn_norm_folds_host.off.so"
+    }
+   ]
+  },
+  "mac-dev": {
+   "source_commit": "6006950188f8209d042bdc9ff8831b2c2048ab27",
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "results": [
+    {
+     "fam": "transformer",
+     "arm": "on.sm_89",
+     "exit": "1",
+     "seconds": "92",
+     "sha256": "none",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-dev/transformer.on.sm_89.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 --target-accelerator sm_89 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_transformer.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-dev/_mojolearn_transformer.on.sm_89.so"
+    },
+    {
+     "fam": "transformer",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "586",
+     "sha256": "bd4fec8817013bf009864ed0d4467d35d8907d937307033615f99c80d85cc7a7",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-dev/transformer.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_transformer.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-dev/_mojolearn_transformer.on.so"
+    },
+    {
+     "fam": "byte_lm",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "833",
+     "sha256": "a4b1c87bb0b043571c7cb1325412a90d2bd14dd701407c55bc51950a2f2e985b",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-dev/byte_lm.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_byte_lm.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-dev/_mojolearn_byte_lm.on.so"
+    },
+    {
+     "fam": "training",
+     "arm": "on",
+     "exit": "0",
+     "seconds": "387",
+     "sha256": "77529e58011918c57d1393b7decb1f6a63ed4f3134c393f0d1877c941ae90feb",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-dev/training.on.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_training.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-dev/_mojolearn_training.on.so"
+    },
+    {
+     "fam": "transformer",
+     "arm": "off",
+     "exit": "0",
+     "seconds": "204",
+     "sha256": "413ab6361cb7c4449a3bd75ffcf882d016408d8870d2686b648871414758a6ec",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-dev/transformer.off.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1  -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1   -I . -I bindings bindings/entry/entry__mojolearn_transformer.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-dev/_mojolearn_transformer.off.so"
+    }
+   ]
+  },
+  "mac-sm89": {
+   "source_commit": "1536a1dea29d26122fac195958a90516f6684a0a",
+   "compiler": "Mojo 1.0.0 (ed45d567)",
+   "results": [
+    {
+     "fam": "transformer",
+     "arm": "on.sm_89",
+     "exit": "0",
+     "seconds": "683",
+     "sha256": "eedc19009afa8110d864aa11030711a26be28691cc32fec34218c704e398386a",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-sm89/transformer.on.sm_89.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 --target-accelerator sm_89 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_transformer.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-sm89/_mojolearn_transformer.on.sm_89.so"
+    },
+    {
+     "fam": "byte_lm",
+     "arm": "on.sm_89",
+     "exit": "0",
+     "seconds": "339",
+     "sha256": "fe5a799a6e2fe07079e08b582fd5b8eba7aae954a0b0d8cf34c884a21f824b72",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-sm89/byte_lm.on.sm_89.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 --target-accelerator sm_89 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_byte_lm.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-sm89/_mojolearn_byte_lm.on.sm_89.so"
+    },
+    {
+     "fam": "training",
+     "arm": "on.sm_89",
+     "exit": "0",
+     "seconds": "287",
+     "sha256": "79eb7dea90adfda5a033dce55dd79e89aa5ae953487e10fe6f54eaf11623b147",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-sm89/training.on.sm_89.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 --target-accelerator sm_89 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1  -D MOJOLEARN_IDN_NORM_FIXED_LANES=1 -I . -I bindings bindings/entry/entry__mojolearn_training.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-sm89/_mojolearn_training.on.sm_89.so"
+    },
+    {
+     "fam": "transformer",
+     "arm": "off.sm_89",
+     "exit": "0",
+     "seconds": "145",
+     "sha256": "ceace73a10857d0ed20f0e34732f8a2c64edb58da3c2a6995569b092f418e2c7",
+     "log": "~/mojolearn-evidence/norm-folds-20261028/mac-sm89/transformer.off.sm_89.log",
+     "command": "~/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 --target-accelerator sm_89 -Xlinker -platform_version -Xlinker macos -Xlinker 11.0 -Xlinker 26.5 -D MOJOLEARN_NUMERIC_IDENTICAL=1   -I . -I bindings bindings/entry/entry__mojolearn_transformer.mojo -o ~/mojolearn-evidence/norm-folds-20261028/mac-sm89/_mojolearn_transformer.off.sm_89.so"
+    }
+   ]
+  }
+ }
+}
