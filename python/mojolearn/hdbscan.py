@@ -164,6 +164,7 @@ class HDBSCAN(NumericModeMixin):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
 
+    _mojolearn_native_public = True
     _BINDING = "_mojolearn_hdbscan"
 
     def __init__(
@@ -177,30 +178,12 @@ class HDBSCAN(NumericModeMixin):
         cluster_selection_method="eom",
         allow_single_cluster=False,
         prediction_data=False,
+        *, numeric_mode=None,
     ):
-        self.min_cluster_size = min_cluster_size
-        self.min_samples = min_samples
-        self.cluster_selection_epsilon = cluster_selection_epsilon
-        self.max_cluster_size = max_cluster_size
-        self.metric = metric
-        self.alpha = alpha
-        self.cluster_selection_method = cluster_selection_method
-        self.allow_single_cluster = allow_single_cluster
-        self.prediction_data = prediction_data
+        return _NATIVE(self, "family_hdbscan_public_initialize", (min_cluster_size, min_samples, cluster_selection_epsilon, max_cluster_size, metric, alpha, cluster_selection_method, allow_single_cluster, prediction_data, numeric_mode,), _NATIVE_CONTEXT)
 
     def _extension(self):
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "hdbscan_numeric_mode", None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    f"mojolearn HDBSCAN: numeric_mode={want!r} was requested but "
-                    f"{mod.__name__} reports compile-time mode code {got}; rebuild "
-                    "it with bash bindings/build_hdbscan.sh"
-                )
-        return mod
+        return _NATIVE(self, "family_hdbscan_public_binding", (), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Cluster `X`.
@@ -227,7 +210,7 @@ class HDBSCAN(NumericModeMixin):
             For an unknown `metric` or `cluster_selection_method`, or a
             negative or non-finite `cluster_selection_epsilon`.
         """
-        return _NATIVE(self, "family_cfa_hdbscan_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_hdbscan_public_fit", (X, y), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Cluster `X` and return `labels_`.
@@ -236,7 +219,7 @@ class HDBSCAN(NumericModeMixin):
         -------
         labels : Array of shape (n_samples,), int32
         """
-        return _NATIVE(self, "family_cfa_hdbscan_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_hdbscan_public_fit_predict", (X, y), _NATIVE_CONTEXT)
 
     def save(self, path):
         """Save the fitted model to `path` as an `.npz` file.
@@ -377,39 +360,7 @@ def approximate_predict(clusterer, points_to_predict):
     >>> model = mojolearn.HDBSCAN(prediction_data=True).fit(X)
     >>> labels, strengths = mojolearn.hdbscan.approximate_predict(model, X[:10])
     """
-    pd = _check_clusterer(clusterer, "approximate_predict")
-    if clusterer.n_clusters_ == 0:
-        warnings.warn(
-            "Clusterer does not have any defined clusters, new data will be "
-            "automatically predicted as outliers."
-        )
-    q, _ = as_f32_c(points_to_predict, ndim=2, name="points_to_predict")
-    nq, d = q.shape
-    if d != clusterer.n_features_in_:
-        raise ValueError(
-            f"mojolearn approximate_predict: points_to_predict has {d} features, "
-            f"the clusterer was fit on {clusterer.n_features_in_}"
-        )
-    # cuML: `clusterer.min_samples or clusterer.min_cluster_size` (hdbscan.pyx:1322)
-    min_samples = clusterer.min_samples or clusterer.min_cluster_size
-    labels = empty((nq,), "<i4")
-    probs = empty((nq,), "<f4")
-    clusterer._extension().hdbscan_approximate_predict(
-        # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_approximate_predict_binding.
-        [addr_ro(clusterer._raw_data, name="training data"),
-         addr_ro(clusterer.core_distances_, name="core_distances_"),
-         addr_ro(clusterer.labels_, name="labels_"),
-         addr_ro(pd["lambdas"], name="tree lambdas"),
-         addr_ro(pd["deaths"], name="deaths"),
-         addr_ro(pd["selected_clusters"], name="selected_clusters"),
-         addr_ro(pd["index_into_children"], name="index_into_children"),
-         addr_ro(q, name="points_to_predict"),
-         addr(labels, name="labels"), addr(probs, name="probabilities")],
-        # m, d, n_edges, n_clusters (condensed), n_selected, nq, min_samples
-        [int(clusterer._raw_data.shape[0]), d, pd["n_edges"], pd["n_condensed"],
-         clusterer.n_clusters_, nq, int(min_samples)],
-    )
-    return labels, probs
+    return _NATIVE(clusterer, "family_hdbscan_public_approximate_predict", (points_to_predict,), _NATIVE_CONTEXT)
 
 
 def _check_batch_size(batch_size, where):
@@ -478,38 +429,7 @@ def membership_vector(clusterer, points_to_predict, batch_size=4096):
     >>> model = mojolearn.HDBSCAN(prediction_data=True).fit(X)
     >>> soft = mojolearn.hdbscan.membership_vector(model, X[:10])
     """
-    pd = _check_clusterer(clusterer, "membership_vector")
-    _check_batch_size(batch_size, "membership_vector")
-    q, _ = as_f32_c(points_to_predict, ndim=2, name="points_to_predict")
-    nq, d = q.shape
-    if d != clusterer.n_features_in_:
-        raise ValueError(
-            f"mojolearn membership_vector: points_to_predict has {d} features, "
-            f"the clusterer was fit on {clusterer.n_features_in_}"
-        )
-    n_sel = clusterer.n_clusters_
-    out = empty((nq, n_sel), "<f4")
-    if n_sel == 0 or nq == 0:
-        return out
-    # cuML: `clusterer.min_samples or clusterer.min_cluster_size` (hdbscan.pyx:1238)
-    min_samples = clusterer.min_samples or clusterer.min_cluster_size
-    m = int(clusterer._raw_data.shape[0])
-    tree = _soft_tree_addrs(pd)
-    ext = clusterer._extension()
-    q_addr = addr_ro(q, name="points_to_predict")
-    o_addr = addr(out, name="membership_vectors")
-    for s in range(0, nq, batch_size):  # glue: one Mojo call per user batch
-        cnt = min(batch_size, nq - s)
-        ext.hdbscan_membership_vector(
-            # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_membership_vector_binding.
-            [addr_ro(clusterer._raw_data, name="training data"),
-             addr_ro(clusterer.core_distances_, name="core_distances_"),
-             addr_ro(clusterer.labels_, name="labels_")] + tree
-            + [q_addr + s * d * 4, o_addr + s * n_sel * 4],
-            # m, d, n_edges, n_clusters (condensed), n_selected, n_exemplars, nq, min_samples
-            [m, d, pd["n_edges"], pd["n_condensed"], n_sel, pd["n_exemplars"], cnt, int(min_samples)],
-        )
-    return out
+    return _NATIVE(clusterer, "family_hdbscan_public_membership_vector", (points_to_predict, batch_size), _NATIVE_CONTEXT)
 
 
 # cuML `all_points_membership_vectors` (`hdbscan.pyx:1114`,
@@ -552,26 +472,20 @@ def all_points_membership_vectors(clusterer, batch_size=4096):
     >>> model = mojolearn.HDBSCAN(prediction_data=True).fit(X)
     >>> soft = mojolearn.hdbscan.all_points_membership_vectors(model)
     """
-    pd = _check_clusterer(clusterer, "all_points_membership_vectors")
-    _check_batch_size(batch_size, "all_points_membership_vectors")
-    x = clusterer._raw_data
-    m, d = x.shape
-    n_sel = clusterer.n_clusters_
-    out = empty((m, n_sel), "<f4")
-    if n_sel == 0:
-        return out
-    tree = _soft_tree_addrs(pd)
-    ext = clusterer._extension()
-    o_addr = addr(out, name="membership_vectors")
-    for s in range(0, m, batch_size):  # glue: one Mojo call per user batch
-        cnt = min(batch_size, m - s)
-        ext.hdbscan_all_points_membership_vectors(
-            # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_all_points_membership_vectors_binding.
-            [addr_ro(x, name="training data")] + tree + [o_addr + s * n_sel * 4],
-            # m, d, n_edges, n_clusters (condensed), n_selected, n_exemplars, row0, count
-            [int(m), int(d), pd["n_edges"], pd["n_condensed"], n_sel, pd["n_exemplars"], s, cnt],
-        )
-    return out
+    return _NATIVE(clusterer, "family_hdbscan_public_all_points_membership_vectors", (batch_size,), _NATIVE_CONTEXT)
 
 
 __all__ = ["HDBSCAN", "approximate_predict", "membership_vector", "all_points_membership_vectors"]
+
+# Import-time setup only; runtime selection and batching belong to Mojo.
+from ._native_owner_lifetime import connect_owner_context as _connect_hdbscan_owner_context
+_connect_hdbscan_owner_context(_NATIVE_CONTEXT)
+_native_family_bridge.connect_bindings("_mojolearn_hdbscan")
+_native_family_bridge.tables(
+    hdbscan_public_class=HDBSCAN,
+    hdbscan_public_parameters=(
+        "min_cluster_size", "min_samples", "cluster_selection_epsilon",
+        "max_cluster_size", "metric", "alpha", "cluster_selection_method",
+        "allow_single_cluster", "prediction_data", "numeric_mode",
+    ),
+)

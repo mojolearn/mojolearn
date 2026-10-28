@@ -151,11 +151,13 @@ axis existed, and the flat/legacy behaviour is a supported layout, not a
 deprecation. `gpu_arch()` and `gpu_arch_how()` report what was picked and
 why.
 
-THERE IS NO CPU PATH, so when the wheel layout is present and no vendor can
-be picked the import RAISES, naming every path and library it looked for
-and what it found, rather than importing a package whose every fit would
-fail. `vendor()` reports what was picked, cross-checked against the loaded
-binaries; `NumericModeMixin.vendor_used()` reports it per estimator.
+CPU bindings cover the families and operations declared in `host_surface`.
+MOJOLEARN_VENDOR=cpu selects them explicitly, including on a machine with a
+GPU. Automatic CPU-only selection requires an available host binding set;
+missing GPU plugins still refuse as described above. Unsupported host entries
+or configurations refuse by name. `vendor()` reports what was picked,
+cross-checked against the loaded binaries; `NumericModeMixin.vendor_used()`
+reports it per estimator.
 """
 
 import contextlib
@@ -1401,14 +1403,11 @@ def requested_mode():
 # ===================================================================
 # A CPU-ONLY INSTALL (DEVIATION 2615)
 # ===================================================================
-# The no-GPU refusal below is deliberate and stays the rule for every GPU
-# binding. The ONE exception is a box where no GPU set loads but a CPU
-# binding under mojolearn/host/ (`_mojolearn_byte_lm_host.so`, DEVIATION
-# 2610, or `_mojolearn_forest_host.so`, the forest host lane) is built. Then
-# the package imports, every GPU binding is a `_NoGpuBinding` stub that
-# raises BY NAME on use with the original refusal attached, and `vendor()`
-# answers 'cpu'. Nothing falls back: a GPU estimator on that box fails
-# exactly as loudly as before, only at use instead of at import.
+# CPU selection serves the host families declared by `host_surface`, including
+# public training. The byte LM and forest were the first host families; the
+# mapping now covers the wider estimator set. Only unmapped or unavailable
+# entries use a `_NoGpuBinding` refusal. The selected vendor reports 'cpu';
+# this is explicit CPU execution, never host arithmetic under a GPU label.
 #
 # THE HOST BINDING SET (the CPU training lane, 2026-09-13). `_HOST_MODULES`
 # maps a `_MODULES` name to the host binding that exports the SAME function

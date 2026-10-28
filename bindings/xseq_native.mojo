@@ -19,6 +19,7 @@ from bindings.xseq_neural_native import xseq_rnn, xseq_mlp
 from bindings.xseq_forecast_native import xseq_forecast
 from bindings.xseq_score_native import xseq_regressor_score, xseq_classifier_score
 from bindings.xseq_prophet_native import prophet_fit, prophet_predict
+from providers.python.prophet_lifecycle_pyapi import prophet_initialize, prophet_add_seasonality
 from bindings.py_balanced import py_fields
 from providers.python.xseq_public_lifecycle_pyapi import XseqPublicLifecycle
 from providers.python.recurrent_state_pyapi import recurrent_state
@@ -79,6 +80,10 @@ def _xseq_execute(model: PythonObject, operation: String, args: PythonObject, co
         var prediction = (xseq_rnn(model, "rnn_predict", predict_args, context) if operation == "rnn_classifier_score"
                           else xseq_mlp(model, "mlp_predict", predict_args, context))
         result = xseq_classifier_score(model, prediction, args, context)
+    elif operation == "prophet_initialize":
+        result = prophet_initialize(model, args, context)
+    elif operation == "prophet_add_seasonality":
+        result = prophet_add_seasonality(model, args, context)
     elif operation == "prophet_fit":
         result = prophet_fit(model, args, context)
     elif operation == "prophet_predict":
@@ -102,7 +107,7 @@ def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var result = PythonObject(None)
         if operation == "rnn_state_dict" or operation == "rnn_load_state_dict":
             result = recurrent_state(model, operation, args, context)
-        elif (operation.startswith("rnn_") or operation.startswith("mlp_")) and operation != "rnn_hidden_sequence":
+        elif operation.startswith("rnn_") or operation.startswith("mlp_"):
             var lifecycle = XseqPublicLifecycle(model, operation, args, context)
             if lifecycle.fitting:
                 var depth = estimator_fit_begin(py_fields(model))

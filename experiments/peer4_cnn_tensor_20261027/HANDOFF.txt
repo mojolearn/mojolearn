@@ -1,0 +1,19 @@
+Peer4 CNN tensor batch (2026-10-27)
+Native DeviceTensor construction, allocation/wrapping, size/rank, host readback,
+array-protocol dtype conversion, reshape, finalization and to_device. Reuses the
+existing shared sequence dtype conversion owner. Connected slot identities and
+native buffer addresses refuse Python metadata/conversion hooks. CNN mode
+admission and shape/reshape helpers now require native metadata. NumPy import
+happens at package connection, never in a public CNN operation.
+
+Compiled actual xcnn_c dispatcher, Mac CPU column O0, 10 workers, 50.44 seconds.
+Receipt compile.json; full logs, binary and source archive under
+~/mojolearn-evidence/peer4-neural-20261027/shared-attempt3/.
+Original failures retained in shared-attempt1/2 (layout copy and default argument
+instantiation respectively). Neither was merged as a successful compile.
+
+No runtime, GPU or identity checks. CNN layer constructors/backward/state remain
+separate ongoing batches. Existing CNN arithmetic still crosses connected native
+extension entries; descriptor-provider conversion and full transitive model
+coverage are not established by this batch. Device/model mutation, lifetime and
+dtype behavior need later public-runtime coverage when owner authorizes it.

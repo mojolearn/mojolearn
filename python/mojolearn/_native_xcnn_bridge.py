@@ -3,8 +3,8 @@
 (bindings/xcnn_native.mojo). A migrated layer method is one call,
 `_XCNN(self, "<operation>", args, _XCNN_CONTEXT)`; Python here only connects
 the compiled `_mojolearn_x_cnn` entries of both numeric modes, the switch
-words the binary reports and the layer classes, once, at import. NumPy is
-not imported here: the native call connects it when a layer runs."""
+words the binary reports and the layer classes, once, at import. NumPy is optional during setup; native host-array
+operations require its already loaded native metadata."""
 
 _ENTRY = None
 _CONTEXT = None
@@ -128,8 +128,17 @@ def connect():
         entry = _binding()._module.xcnn_native_call
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("the CNN layers require the compiled xcnn_native_call entry")
+        # Import setup is outside product execution; the native owner only
+        # connects already loaded native NumPy metadata.
+        try:
+            import numpy
+        except ImportError:
+            pass  # glue: scalar-only metadata operations do not require NumPy
         from ._native_classical_bridge import _state_context
         context = _state_context()
+        # Shared neural metadata admission expects its native scalar tables
+        # under admission_context; retain a separate setup snapshot, no cycle.
+        context["admission_context"] = dict(context)
     except (ImportError, AttributeError, TypeError) as error:
         _ENTRY, _CONTEXT = _unavailable(error), {"xcnn_unavailable": str(error)}
         return _ENTRY, _CONTEXT
@@ -151,6 +160,32 @@ def register(**tables):
     _, context = connect()
     if "xcnn_unavailable" not in context:
         context.update(tables)
+        cls = tables.get("xcnn_tensor_class")
+        if cls is not None:
+            context["xcnn_tensor_slots"] = {
+                name: vars(cls)[name] for name in ("b", "shape", "h", "_host", "_base")  # glue: connect fixed native slot identities at import
+            }  # glue: retain native slot identities during package connection
+            import sys
+            from types import ModuleType
+            from ._native_classical_bridge import _numpy_free_context
+            from ._native_array_protocol_bridge import connect_array_protocol
+            input_context = _numpy_free_context()
+            input_context["native_module_type"] = ModuleType
+            array_context = connect_array_protocol(cls.__array__, cls.__module__,
+                                                   warning_lineno=cls.__array__.__code__.co_firstlineno)
+            array_context.update(module_type=ModuleType, modules=sys.modules,
+                                 input_context=input_context,
+                                 container_types=(list, tuple, dict, set, frozenset, memoryview),
+                                 scalar_types=(type(None), bool, int, float, complex, str, bytes))
+            context["xcnn_array_context"] = array_context
+            from types import BuiltinFunctionType, MethodType
+            from .tokenizer import _binding
+            descriptor = _binding()._module.classical_attribute_descriptor
+            if type(descriptor) is not BuiltinFunctionType:
+                raise TypeError("CNN storage requires its native finalizer descriptor")
+            cls.__del__ = descriptor(MethodType(_ENTRY, (context, "tensor_finalize")))
+            tables["xcnn_dev_class"].__del__ = descriptor(MethodType(_ENTRY, (context, "dev_finalize")))
+            context["xcnn_tensor_finalizer"] = vars(cls)["__del__"]
 
 
 def connect_classifier():
@@ -168,10 +203,12 @@ def connect_classifier():
     labels = {}
     for mode in ("identical", "fast"):  # glue: the two numeric modes, connected once
         try:
-            entry = getattr(_backend.binding("_mojolearn_x_sequence", mode), "model_labels")
-            if not isinstance(entry, BuiltinFunctionType):
-                raise TypeError("CNNClassifier requires the compiled model_labels")
-            labels[mode] = {"model_labels": entry}
+            module = _backend.binding("_mojolearn_x_sequence", mode)
+            entry = getattr(module, "model_labels")
+            provider = getattr(module, "model_native_api_v1")
+            if not isinstance(entry, BuiltinFunctionType) or not isinstance(provider, BuiltinFunctionType):
+                raise TypeError("CNNClassifier requires the compiled label provider")
+            labels[mode] = {"model_labels": entry, "model_native_api_v1": provider}
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             labels[mode] = type(error).__name__ + ": " + str(error)
     context.update(xcnn_label_bindings=labels, os_urandom=os.urandom,

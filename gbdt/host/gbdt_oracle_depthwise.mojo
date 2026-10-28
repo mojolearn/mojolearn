@@ -1069,7 +1069,7 @@ def gbdt_host_fit_non_symmetric(
     )
     if len(weights) > 0 and not plain_newton:
         raise Error(
-            "no CPU implementation of _mojolearn_gbdt.gbdt_fit for class_weights"
+            "no CPU implementation of _mojolearn_gbdt.gbdt_fit for sample_weight or class_weights"
             " outside Logloss with Newton leaves and no bootstrap on a"
             " Depthwise or Lossguide tree"
         )

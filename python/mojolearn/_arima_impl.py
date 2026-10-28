@@ -591,75 +591,7 @@ class ARIMA(NumericModeMixin):
         verbose=False,
         output_type=None,
     ):
-        p, d, q = _as_order(order, 3, "order")
-        P, D, Q, s = _as_order(seasonal_order, 4, "seasonal_order")
-        # NOTHING ABOUT THE ORDER IS VALIDATED HERE. `p > 8`, `d + D > 2`,
-        # `s < 2` beside a seasonal term, `rd > 8`, `r > 5` and an order
-        # with no parameters at all are every one of them refused by
-        # `arima/impl/tsa/arima_common.mojo::validate_order`, with the reference's
-        # messages, before any device context exists. A copy of those
-        # bounds here would be a second place for them to be wrong.
-        # The caller's own tuple when it already is the normalized one, so
-        # `get_params` hands `clone` back the object it was given.
-        self.order = order if _plain_order(order, (p, d, q)) else (p, d, q)
-        self.seasonal_order = (seasonal_order if _plain_order(seasonal_order, (P, D, Q, s))
-                               else (P, D, Q, s))
-
-        if trend is None:
-            k = 0 if (d + D) else 1
-        elif isinstance(trend, str) and trend.lower() in ("n", "c"):
-            k = 1 if trend.lower() == "c" else 0
-        elif isinstance(trend, str) and trend.lower() in ("t", "ct"):
-            raise NotImplementedError(
-                f"mojolearn ARIMA: trend={trend!r} is refused. cuML has no "
-                "time trend (its only switch is fit_intercept), so there is no "
-                "reference to hold one to; a time trend is a regressor, so "
-                "pass the time index as an exog column to fit, predict and "
-                "forecast. This class carries trend=None, 'n' and 'c'; 'c' is "
-                "cuML's fit_intercept=True"
-            )
-        else:
-            raise NotImplementedError(
-                f"mojolearn ARIMA: trend={trend!r} is refused. This class "
-                "carries None (statsmodels' rule: 'c' when d + D == 0, "
-                "otherwise 'n'), 'n' and 'c'. A polynomial trend "
-                "specification is a list of regressors: pass them as exog"
-            )
-        self.trend = trend
-        self.k_ = k
-
-        # THE METHOD IS TRANSLATED, NOT JUDGED. Only the spelling is checked
-        # here (cuML checks the same three strings at arima.pyx:944-946);
-        # WHICH of them this implementation carries is `arima/estimator.mojo::
-        # _refuse_method`'s decision, and the code goes down untouched so
-        # that decision stays reachable (DEVIATION 992).
-        if not isinstance(method, str):
-            raise ValueError("mojolearn ARIMA: method is a name")
-        m = method if method == method.lower() else method.lower()
-        if m not in _METHODS:
-            raise ValueError(
-                f"mojolearn ARIMA: unknown method {method!r}; cuML's three "
-                f"are {sorted(_METHODS)} and this implementation offers 'ml'"
-            )
-        self.method = m
-        maxiter = int(maxiter)
-        self.maxiter = maxiter
-        if verbose:
-            raise NotImplementedError(
-                "mojolearn ARIMA: verbose is refused; upstream it selects "
-                "log lines and this implementation prints none, so honoring it is "
-                "impossible and accepting it would be accepting-and-ignoring"
-            )
-        self.verbose = False
-        if output_type is not None:
-            raise NotImplementedError(
-                "mojolearn ARIMA: output_type is a cuML-internal array-type "
-                "selector; this package returns mojolearn.Array (zero-copy "
-                "under numpy.asarray)"
-            )
-        self.output_type = None
-        self.n_exog_ = 0
-        self.complexity_ = p + q + P + Q + k + 1
+        return _TSA(self, "arima_initialize", (order, seasonal_order, trend, method, maxiter, verbose, output_type), _TSA_CONTEXT)
 
     # -- the binding, and the tier it really is -----------------------------
 
@@ -800,45 +732,31 @@ class ARIMA(NumericModeMixin):
 
     @property
     def mu_(self):
-        if self.k_ == 0:
-            raise AttributeError(
-                "mojolearn ARIMA: there is no mu_ because this model has no "
-                "intercept (trend resolved to 'n', k = 0). Construct it with "
-                "trend='c' to fit one"
-            )
-        return self._block("mu_", 0, 1).ravel()
+        return _TSA(self, "arima_parameter", ("mu_",), _TSA_CONTEXT)
 
     @property
     def beta_(self):
-        if getattr(self, "n_exog_", 0) == 0:
-            raise AttributeError(
-                "mojolearn ARIMA: there is no beta_ because this model was fit "
-                "without exogenous regressors; pass exog to fit"
-            )
-        return self._block("beta_", self.k_, self.n_exog_)
+        return _TSA(self, "arima_parameter", ("beta_",), _TSA_CONTEXT)
 
     @property
     def ar_(self):
-        return self._block("ar_", self.k_ + self.n_exog_, self.order[0])
+        return _TSA(self, "arima_parameter", ("ar_",), _TSA_CONTEXT)
 
     @property
     def ma_(self):
-        return self._block("ma_", self.k_ + self.n_exog_ + self.order[0], self.order[2])
+        return _TSA(self, "arima_parameter", ("ma_",), _TSA_CONTEXT)
 
     @property
     def sar_(self):
-        off = self.k_ + self.n_exog_ + self.order[0] + self.order[2]
-        return self._block("sar_", off, self.seasonal_order[0])
+        return _TSA(self, "arima_parameter", ("sar_",), _TSA_CONTEXT)
 
     @property
     def sma_(self):
-        off = (self.k_ + self.n_exog_ + self.order[0] + self.order[2]
-               + self.seasonal_order[0])
-        return self._block("sma_", off, self.seasonal_order[2])
+        return _TSA(self, "arima_parameter", ("sma_",), _TSA_CONTEXT)
 
     @property
     def sigma2_(self):
-        return self._block("sigma2_", self.complexity_ - 1, 1).ravel()
+        return _TSA(self, "arima_parameter", ("sigma2_",), _TSA_CONTEXT)
 
     # -- predict and forecast -----------------------------------------------
 
@@ -1040,10 +958,7 @@ class ARIMA(NumericModeMixin):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     def __repr__(self):
-        return (
-            "ARIMA(order={}, seasonal_order={}, trend={!r}, method={!r})"
-            .format(self.order, self.seasonal_order, self.trend, self.method)
-        )
+        return _TSA(self, "arima_repr", (), _TSA_CONTEXT)
 
 
 def _archive_members(fmt, extra):

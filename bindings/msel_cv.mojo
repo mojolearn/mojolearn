@@ -31,7 +31,7 @@ from bindings.msel_common import (
     msel_new, msel_f64_list, msel_index_i64, msel_resident_new, msel_resident_op, msel_resident_take,
     msel_resident_release, msel_resident_close, msel_get_scorer, msel_score, msel_lazy,
 )
-from bindings.msel_split import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_cls, msel_sabotage
+from bindings.msel_split import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_flag_truth, msel_cls, msel_sabotage
 
 #: model_selection's CV_FAST bits of the resample binding's define mask.
 comptime MSEL_CV_SLICE_BIT = 32
@@ -142,9 +142,10 @@ def msel_cv_folds(estimator: PythonObject, x_in: PythonObject, y_in: PythonObjec
     """`_cv_folds`: (X, y, folds), every fold validated before any fit."""
     var x = msel_materialize(x_in, "X", context)
     var y = PythonObject(None) if y_in is None else msel_materialize_y(y_in, context)
+    var group_values = PythonObject(None) if groups is None else msel_materialize_y(groups, context)
     var splitter = msel_check_cv(cv, y, msel_classifier(estimator, pinned, context), PythonObject(False), PythonObject(None), context)
     var n = msel_n_samples(x, context)
-    var folds = msel_checked_folds(msel_splits_of(splitter, x, y, groups, context), n, context)
+    var folds = msel_checked_folds(msel_splits_of(splitter, x, y, group_values, context), n, context)
     return Python.tuple(x, y, folds)
 
 
@@ -186,7 +187,7 @@ def msel_prepare_folds(estimator: PythonObject, x_in: PythonObject, y_in: Python
     """`_prepare_folds`: (X, y, folds, scoring), every fold validated
     before the first fit."""
     var b = msel_b()
-    if not family_is_str(error_score) or not msel_cmp("eq", error_score, PythonObject("raise")):
+    if py_type(error_score) is not b.str or not msel_cmp("eq", error_score, PythonObject("raise")):
         raise Error("NotImplementedError: cross_val_score supports error_score='raise' only")
     var scoring = msel_get_scorer(scoring_in, context)
     var x = msel_materialize(x_in, "X", context)
@@ -198,14 +199,15 @@ def msel_prepare_folds(estimator: PythonObject, x_in: PythonObject, y_in: Python
     var n = msel_n_samples(x, context)
     if msel_n_samples(y, context) != n:
         raise Error("y must be a 1-D buffer array matching X rows")
+    var group_values = PythonObject(None)
     if groups is not None:
-        var group_values = msel_materialize_y(groups, context)
+        group_values = msel_materialize_y(groups, context)
         if (msel_is_array(group_values, context) and Int(py=group_values.ndim) != 1) or msel_n_samples(group_values, context) != n:
             raise Error("groups must be 1-D and match X rows")
     if msel_fast_on(MSEL_CV_TRUST_FOLDS_BIT, context) and msel_native_default_cv(cv, groups, context):
         var trusted = msel_default_folds(y, PythonObject(5) if cv is None else cv, msel_classifier(estimator, False, context), context)
         return Python.tuple(x, y, trusted, scoring)
-    var folds = msel_checked_folds(msel_fold_source(cv, estimator, x, y, groups, context), n, context)
+    var folds = msel_checked_folds(msel_fold_source(cv, estimator, x, y, group_values, context), n, context)
     return Python.tuple(x, y, folds, scoring)
 
 
@@ -460,9 +462,9 @@ def msel_require_serial(n_jobs: PythonObject, error_score: PythonObject, caller:
     """`_require_serial`."""
     msel_admit(n_jobs, context)
     msel_admit(error_score, context)
-    if not py_contains(Python.tuple(PythonObject(None), PythonObject(1)), n_jobs):
+    if n_jobs is not None and (not msel_is_real(n_jobs, context) or msel_cmp("ne", n_jobs, PythonObject(1))):
         raise Error("NotImplementedError: " + caller + " supports n_jobs=1 (or None) only")
-    if not (family_is_str(error_score) and msel_cmp("eq", error_score, PythonObject("raise"))) and not msel_is_real(error_score, context):
+    if not (py_type(error_score) is msel_b().str and msel_cmp("eq", error_score, PythonObject("raise"))) and not msel_is_real(error_score, context):
         raise Error("error_score must be 'raise' or a number")
 
 
@@ -480,9 +482,9 @@ def msel_cross_validate(args: PythonObject, context: PythonObject) raises -> Pyt
     msel_admit(args[7], context)
     msel_admit(args[8], context)
     msel_admit(args[9], context)
-    var rt = msel_truth(args[7])
-    var re = msel_truth(args[8])
-    var ri = msel_truth(args[9])
+    var rt = msel_flag_truth(args[7], context)
+    var re = msel_flag_truth(args[8], context)
+    var ri = msel_flag_truth(args[9], context)
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
     var result = PythonObject(None)
     try:
@@ -604,7 +606,7 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
     if msel_is_bool(n_jobs, context) or not msel_is_integral(n_jobs, context) or msel_cmp("ne", n_jobs, PythonObject(1)):
         raise Error("NotImplementedError: cross_val_score supports n_jobs=1 only")
     var scoring = args[4]
-    if family_is_str(scoring):
+    if py_type(scoring) is msel_b().str:
         scoring = msel_get_scorer(scoring, context)
     var got = msel_prepare_folds(estimator, args[1], args[2], cv, scoring, groups, args[7], context)
     var x = got[0]
@@ -882,7 +884,7 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
     var b = msel_b()
     var estimator = args[2]
     var cv = args[3]
-    var groups = args[4]
+    var groups = PythonObject(None) if args[4] is None else msel_materialize_y(args[4], context)
     if (cv is None or (not msel_is_bool(cv, context) and msel_is_integral(cv, context))) and estimator is None:
         raise Error("split_descriptor: the default folds are stratified for a classifier "
                     + "and plain KFold otherwise, so estimator is required when cv is None "

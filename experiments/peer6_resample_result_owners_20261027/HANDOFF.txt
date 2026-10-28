@@ -1,0 +1,9 @@
+Required repair for d227702710 result-constructor batch. Prepare every incoming
+field/interval first, admit every replaced old owner with native_release_admit
+before any instance mutation, then commit. Identity-preserving replacement
+drops no owner. ConfidenceInterval uses exact retained tuple-subtype admission,
+finalizer/weakref checks and recursive element release admission. Import setup
+connects owner metadata; the documented native instance dictionary accessor
+reads old fields. Compile-only constructor fixture passed on Mac CPU, O0, 10
+workers. No runtime verification. Pair this commit with d227 before main merge.
+Full source/log/binary receipt in compile.json. Row resample work remains open.

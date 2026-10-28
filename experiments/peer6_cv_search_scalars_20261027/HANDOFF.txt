@@ -1,0 +1,49 @@
+Peer6 search scalar boundary batch, 2026-10-27
+Branch: lane/peer6-cv-search-lifetime-20261027
+Base: dcb4433dc41a2b65f1e55621702a72518dd7e557
+
+Changes
+- Sampler iteration/length admit integer n_iter before comparing, rendering or
+  slicing. Ordinary arbitrary-precision integers keep native clipping/slicing
+  behavior. Python conversion callbacks are refused before invocation.
+- Native scalar decoding covers builtins and primitive NumPy scalar/array
+  bytes, including integer aliases, float16 and long double. One-element
+  numeric Array/object-ndarray leaves use the existing native materializer;
+  object leaves must be admitted native numbers before conversion.
+- learning_curve resolves admitted numeric train_sizes, treating native floats
+  as the documented fractions and integers as row counts. Mixed native scalar
+  lists retain per-element integer/fraction semantics.
+- Sampler/learning/permutation seeds become admitted native integer values
+  before RNG comparison and bit operations. Permutation count conversion is
+  admitted once and passed to the fallback; public n_jobs uses the existing
+  serial-policy boundary.
+- Permutation numeric preparation uses exact source types before operations,
+  accepts float16 through existing float32 preparation, and its fallback mean
+  uses native materialization/cast instead of the Python Array.from_list method.
+- Parameter-value iteration of a one-dimensional float16 Array now publishes
+  numeric scalar values through the existing native cast, rather than uint16
+  backing words. Higher-rank parameter row views keep their source dtype.
+
+Compilation scope
+1. Full runtime_model_selection host module, CPU column, identical, O0,
+   apple-m1, 10 workers: exit0, 163.4801s. This emitted the scalar/search changes
+   before the final helper-only float16 parameter-value repair.
+2. Actual msel_parameter_values provider and reachable preparation through the
+   checked-in compile-only fixture: CPU/identical/O0/apple-m1, 10 workers,
+   exit0, 59.5426s. This qualifies the final helper change. It does not re-emit
+   the whole dispatcher. Both source closures and binaries are retained.
+Configured workers do not prove every compilation phase saturated the CPUs.
+No runtime, identity, GPU, benchmark, installed-wheel checks or rented machines.
+git diff --check passed; push uses the required source guards.
+
+Evidence
+- full_host_compile.json and parameter_values_compile.json beside this file.
+- Complete source bytes/manifests, outputs and binary bytes:
+  /Users/andrewhendel/mojolearn-evidence/peer6-cv-search-scalars-20261027/attempt1/
+  /Users/andrewhendel/mojolearn-evidence/peer6-cv-search-scalars-20261027/parameter-values/
+
+Pending
+- Actual runtime behavior and cross-vendor bits are untested by owner direction.
+- Parent owns shared msel_common label leaf admission and scalar/splitter fixes;
+  these separate batches must be integrated before assessing combined coverage.
+- No claim that the complete search/CV stack or library is Python-free.

@@ -46,7 +46,7 @@ def _arima_entries(model: PythonObject, fields: PythonObject, context: PythonObj
     tier with the binary's own mode read back; a host inference class's
     loaded forecast host binding."""
     var b = _b()
-    if Bool(py=py_call(b.getattr, py_type(model), "_HOST_INFERENCE_ONLY", False)):
+    if py_type(model) is not context["arima_class"] and Bool(py=py_call(b.getattr, py_type(model), "_HOST_INFERENCE_ONLY", False)):
         var saved = py_get(fields, "numeric_mode")
         if saved is not None and not Bool(py=saved == "identical"):
             raise Error("ValueError: mojolearn: " + String(py=py_type(model).__name__)

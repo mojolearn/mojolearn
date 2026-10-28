@@ -17,6 +17,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from providers.python.autograd_python_errors_pyapi import graph_python_error
 from std.ffi import _Global
 from providers.python.autograd_session_public_request_pyapi import ops_session_public_call_py, ops_session_public_connect_py
+from providers.python.autograd_program_public_request_pyapi import ops_program_public_call_py
 from providers.python.autograd_session_public_dispatch_pyapi import NativeSessionPublicAPI
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
@@ -340,6 +341,17 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
     return distributed_close_py[HostExec, OPS_HOST](id)
 
 
+def ops_program_public_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 3:
+            raise Error("TypeError: ops_program_public_call expects three arguments")
+        var result = ops_program_public_call_py(args[0], args[1], args[2])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
 def ops_session_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=packed)
@@ -625,6 +637,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[model_native_api_binding]("model_native_api_v1")
         m.def_function[session_public_api_binding]("session_public_api_v1")
         m.def_function[ops_session_public_connect_py]("ops_session_public_connect")
+        m.def_py_c_function(ops_program_public_call_c_binding, "ops_program_public_call")
         m.def_function[model_fit_binding]("model_fit")
         m.def_function[model_predict_binding]("model_predict")
         m.def_function[model_n_params_binding]("model_n_params")

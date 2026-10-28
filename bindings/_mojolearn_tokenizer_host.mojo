@@ -100,7 +100,7 @@ from bindings.parallel_byte_native import parallel_byte_c
 from bindings.native_codec import codec_c
 from bindings.native_process_pool import process_c
 from bindings.parallel_mlp_native import parallel_mlp_c
-from bindings.small_mlp_native import small_mlp_c
+from bindings.small_mlp_native import small_mlp_c, small_mlp_finalize_c
 from bindings.parallel_neural_native import parallel_neural_c
 from bindings.parallel_forecast_native import parallel_forecast_c
 from bindings.parallel_shard_native import parallel_shard_c
@@ -110,6 +110,7 @@ from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
+from bindings.sequence_device_native import sequence_tensor_finalize_c
 from bindings.runtime_sequential_forward import runtime_sequential_forward_c
 from bindings.runtime_classical_unavailable import runtime_classical_unavailable_c
 from bindings.xseq_native import xseq_c
@@ -1244,6 +1245,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(process_c, "native_process_call")
         module.def_py_c_function(parallel_mlp_c, "parallel_mlp_call")
         module.def_py_c_function(small_mlp_c, "small_mlp_call")
+        module.def_py_c_function(small_mlp_finalize_c, "small_mlp_finalize")
         module.def_py_c_function(parallel_neural_c, "parallel_neural_call")
         module.def_py_c_function(parallel_forecast_c, "parallel_forecast_call")
         module.def_py_c_function(parallel_shard_c, "parallel_shard_call")
@@ -1256,6 +1258,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(optimizer_native_c, "optimizer_native")
         module.def_py_c_function(embedding_layer_lifetime_c, "embedding_layer_lifetime")
         module.def_py_c_function(device_finalize_c, "optimizer_device_finalize")
+        module.def_py_c_function(sequence_tensor_finalize_c, "sequence_tensor_finalize")
         module.def_py_c_function(runtime_sequential_forward_c, "sequential_native_call")
         module.def_py_c_function(xseq_c, "xseq_native_call")
         module.def_py_c_function(byte_lm_host_trainer_c, "byte_lm_host_trainer_call")

@@ -1,0 +1,30 @@
+Peer6 corrective owner batch — 2026-10-27
+Branch: lane/peer6-timeseries-20261027; follows b9d86435b6.
+Pair this with the forecast constructor batch before integration.
+
+Integration review found that repeated native constructors could drop a
+previous field holding an arbitrary finalizer or weakref callback. The same
+issue affected replacement of fitted state in forecast convenience methods.
+
+AutoARIMA.__init__ and Croston/Theta/ETS/DampedETS/GARCH constructors now
+stage the complete updates, retain old values, admit every changed old owner
+using native_release_admit, and only then commit. Identical old/new references
+are retained without release checks. Import-only bridges connect owner contexts;
+loaded NumPy ownership metadata is connected natively when needed.
+
+Croston/Theta/ETS/GARCH forecast conveniences likewise execute fit/predict
+against a scratch native state dictionary and perform the same admitted commit
+only after a finished result. Failure preserves the original model fields.
+AutoARIMA's constructor models list contains order-spec tuples; actual fitted
+ARIMA models live in _fitted, which the constructor does not replace.
+
+Scope: actual constructor and forecast providers compiled in one focused
+module on Mac CPU identical O0, configured compiler workers 10. CPU availability
+is sysctl hw.logicalcpu; concurrent peer jobs may exist. This does not claim
+all compiler phases saturated CPUs. No runtime or identity execution.
+Evidence: compile.json and ~/mojolearn-evidence/peer6-forecast-owner-20261027/.
+An earlier successful constructor-only compile is retained under constructors-only.
+
+Pending: AutoARIMA.search/fit/predict migration and admission; remaining ARIMA,
+ExponentialSmoothing, Prophet, VAR and STL public lifecycle. Search work-in-progress
+is intentionally excluded from this corrective commit. No rented box.

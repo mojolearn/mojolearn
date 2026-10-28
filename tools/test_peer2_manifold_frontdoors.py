@@ -22,5 +22,13 @@ def test_manifold_shells_pass_inputs_without_inspection_or_binding_selection():
             call = calls[0]
             assert isinstance(call.func, ast.Name) and call.func.id == "_NATIVE"
             assert all(isinstance(v, ast.Constant) and v.value is None for v in call.args[2].elts[:2])
+            payload = call.args[2].elts
+            if method.name in {"fit", "fit_transform"}:
+                expected = ["X", "init", "y"] if cls.name == "MDS" else ["X", "y"]
+            elif method.name == "transform":
+                expected = ["X"]
+            else:
+                expected = []
+            assert [v.id for v in payload[2:]] == expected, (cls.name, method.name)
             checked.add((cls.name, method.name))
     assert len(checked) == 11

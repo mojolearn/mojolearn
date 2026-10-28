@@ -271,21 +271,42 @@ def test_ordered_and_feature_freq_fit_on_the_host_when_built():
     assert outs[0] == outs[1], "two one-hot host fits returned different bytes"
     assert "type cat" in outs[0][0] and "ctr_" not in outs[0][0]
     # A CTR column (above one_hot_max_size) trains on the host since
-    # gbdt-categorical-ctr-tables (98b823c46, gbdt/host/gbdt_oracle_ctr.mojo);
-    # what still refuses by name is an eval set beside a CTR column.
+    # gbdt-categorical-ctr-tables (98b823c46, gbdt/host/gbdt_oracle_ctr.mojo).
     outs = []
     for _ in range(2):
         c = mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss", cat_features=[1],
                                        **det).fit(coded, yc)
         outs.append((c.model_, np.asarray(c.predict(coded)).tobytes()))
     assert outs[0] == outs[1], "two CTR host fits returned different bytes"
-    try:
-        mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss", cat_features=[1],
-                                   **det).fit(coded, yc, eval_set=(coded[:300], yc[:300]))
-    except Exception as exc:
-        assert "no CPU implementation of" in str(exc), str(exc)
-    else:
-        raise AssertionError("a CTR fit with an eval set did not refuse on the host binding")
+    # Added with the CTR eval route on 2026-10-27. The full CPU binding
+    # compiled for x86-64-v3 on 2026-10-28; this fixture remains unexecuted.
+    # SkipTest must leave the learn model unchanged even when evaluation
+    # contains unseen categories and a different target distribution.
+    ex_ctr = coded[:300].copy()
+    ex_ctr[::7, 1] = 31
+    ey_ctr = 1 - yc[:300]
+    heldout = mojolearn.GradientBoosting(
+        n_estimators=2, max_depth=3, loss="Logloss", cat_features=[1],
+        use_best_model=False, **det,
+    ).fit(coded, yc, eval_set=(ex_ctr, ey_ctr))
+    assert heldout.model_ == outs[0][0], "CTR eval rows changed the learn model"
+    curve = np.asarray(heldout.test_loss_curve_)
+    assert curve.shape == (2,) and np.isfinite(curve).all(), curve
+    # The evaluation cursor must use final CTR tables, as public predict
+    # does, rather than the ordered learn-only training columns.
+    margins = np.asarray(heldout.predict(ex_ctr), dtype=np.float64)
+    expected_loss = np.mean(np.logaddexp(0.0, margins) - ey_ctr * margins)
+    np.testing.assert_allclose(curve[-1], expected_loss, rtol=2e-6, atol=1e-7)
+
+    best = mojolearn.GradientBoosting(
+        n_estimators=4, max_depth=3, loss="Logloss", cat_features=[1],
+        use_best_model=True, best_model_min_trees=2, **det,
+    ).fit(coded, yc, eval_set=(ex_ctr, ey_ctr))
+    best_curve = np.asarray(best.test_loss_curve_)
+    assert best_curve.shape == (4,), best_curve
+    expected_trees = int(np.argmin(best_curve[1:])) + 2
+    tree_record = re.search(r"^trees (\d+)$", best.model_, re.M)
+    assert tree_record is not None and int(tree_record[1]) == expected_trees
 
 
 if __name__ == "__main__":

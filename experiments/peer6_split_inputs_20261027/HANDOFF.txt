@@ -1,0 +1,25 @@
+Peer6 split input snapshot and admission batch — 2026-10-27
+Branch: lane/peer6-timeseries-metrics-cv-20261027
+Parent: 377d9445cdaebaad7f495f047bf1fe1cebc1ef08
+
+Native public split captures X's consumed row count into an immutable range
+once and captures only the labels/groups the selected splitter actually uses.
+Repeated folds consume those private snapshots. Ignored X/y/groups retain
+existing semantics. train_test_split prepares each input once and uses the
+same retained source for both outputs; list/tuple inputs keep row-reference
+semantics through an immutable outer tuple, numeric/pandas inputs use the
+existing native materializer. No new numerical algorithms are introduced.
+
+Splitter configuration fields require passive native scalars before numeric
+conversion. Invalid train/test-size errors no longer call rejected values'
+str. Object-array labels are admitted after native tolist and before exact
+native-container flattening; scalar labels are checked before hashing,
+comparison or error formatting. This closes the custom __class__/repr path
+in the old shared flattening routine without changing other owners' helpers.
+
+Compile receipt: complete runtime_model_selection host CPU column, identical,
+O0, Apple M1 target, 10 workers, exit0. No runtime/identity/GPU/benchmark run.
+Full logs/source/binary: ~/mojolearn-evidence/peer6-split-inputs-20261027/.
+Pending: scorer construction/public check_cv metadata and internal splitter
+container admission; search scalar changes are an independent active lane.
+No whole-library callback-free or runtime claim.

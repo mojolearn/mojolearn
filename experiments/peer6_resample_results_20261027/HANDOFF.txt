@@ -1,0 +1,8 @@
+Public resampling result constructors now make one native call. The native
+owner admits the connected exact result class, refuses replacement field
+descriptors, writes ordinary instance storage and constructs ConfidenceInterval
+through tuple's native allocator. Argument values retain their identity.
+Full resampling owner plus constructors compiled on Mac CPU column, O0, 10
+workers, exit 0. No runtime execution, GPU qualification or identity claim.
+Complete source/log/binary paths and hashes in compile.json.
+General row resample and deeper shared capture-once audit remain pending.

@@ -17,3 +17,68 @@ def resample_arguments(operation: String, args: PythonObject,
     for i in range(1, len(args)):  # driver-loop: fixed public resampling arguments
         _ = py_call(values.append, args[i])
     return py_call(py_type(Python.tuple()), values)
+
+
+def resample_result_initialize(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    from bindings.mode_metadata_native import _fields, _class_fields
+    from bindings.py_balanced import py_contains, py_setitem, py_get
+    from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
+    from bindings.native_instance_item import native_instance_item
+    from bindings.classical_attributes import classical_connect_numpy
+    from bindings.py_attr import py_attr
+    from bindings.native_loaded_module import native_loaded_module
+    var b = native_loaded_module("builtins")
+    var model = args[0]
+    if py_type(args[1]) is not b.str:
+        raise Error("TypeError: resampling result kind must be a native string")
+    var kind = String(args[1])
+    var classes = context["family_rs_result_classes"]
+    var index = 0 if kind == "bootstrap" else 1 if kind == "permutation" else 2
+    if kind != "bootstrap" and kind != "permutation" and kind != "monte_carlo":
+        raise Error("ValueError: unknown resampling result kind")
+    if py_type(model) is not classes[index]:
+        raise Error("TypeError: resampling result initialization requires the connected result class")
+    var names = (Python.tuple("point_estimate", "distribution", "sorted_distribution", "standard_error", "confidence_interval", "order_low", "order_high")
+                 if index == 0 else (Python.tuple("statistic", "null_distribution", "pvalue", "count_less", "count_greater")
+                 if index == 1 else Python.tuple("integral", "mean", "volume", "closed_form")))
+    var namespace = _class_fields(classes[index])
+    for i in range(len(names)):  # driver-loop: fixed result fields cannot invoke replacement descriptors
+        if py_contains(namespace, names[i]):
+            raise Error("TypeError: resampling result fields require ordinary instance storage")
+    var fields = _fields(model)
+    var replacements = Python.list()
+    # Prepare every incoming owner, including the interval, before examining
+    # releases. A late refusal cannot leave a partially initialized result.
+    if index == 0:
+        for i in range(4):  # driver-loop: fixed BootstrapResult fields
+            py_call(replacements.append, args[i + 2])
+        var interval = py_call(b.tuple.__new__, classes[3], Python.tuple(args[6], args[7]))
+        py_call(replacements.append, interval)
+        py_call(replacements.append, args[8])
+        py_call(replacements.append, args[9])
+    else:
+        for i in range(len(names)):  # driver-loop: fixed PermutationTestResult/MonteCarloResult fields
+            py_call(replacements.append, args[i + 2])
+    classical_connect_numpy(context)
+    for i in range(len(names)):  # driver-loop: admit every replaced owner before the first field mutation
+        if not py_contains(fields, names[i]):
+            continue
+        var previous = native_instance_item(fields, names[i])
+        if previous is replacements[i]:
+            continue
+        if py_type(previous) is classes[3]:
+            # ConfidenceInterval is the package's tuple subclass. Inspect its
+            # native tuple storage and class finalizer rather than invoking
+            # its Python namedtuple accessors or broadening owner admission.
+            var interval_fields = _class_fields(classes[3])
+            if py_get(interval_fields, "__del__") is not None:
+                raise Error("TypeError: resampling result replacement cannot release interval finalizers")
+            native_release_weakrefs(previous, context)
+            var count = Int(py=py_call(py_attr(b.tuple, "__len__"), previous))
+            for j in range(count):  # driver-loop: native interval elements can own callback-bearing values
+                native_release_admit(py_call(py_attr(b.tuple, "__getitem__"), previous, j), context)
+        else:
+            native_release_admit(previous, context)
+    for i in range(len(names)):  # driver-loop: commit only after all old owners passed release admission
+        py_setitem(fields, names[i], replacements[i])
+    return PythonObject(None)

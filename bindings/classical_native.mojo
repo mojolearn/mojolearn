@@ -222,7 +222,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
                 sequential_admit_value(fields[names[k]], context)
         var result = PythonObject(None)
         if operation == "initialize":
-            result = classical_initialize(model, args, ridge)
+            result = classical_initialize(model, args, ridge, context)
             return result.steal_data()
         if operation == "validate_params":
             if not ridge:
@@ -233,7 +233,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             result = classical_get_params(model, ridge)
             return result.steal_data()
         if operation == "set_params":
-            result = classical_set_params(model, args[0], ridge)
+            result = classical_set_params(model, args[0], ridge, context)
             return result.steal_data()
         if operation == "is_fitted":
             result = classical_is_fitted(model)
