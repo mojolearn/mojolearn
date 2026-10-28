@@ -195,7 +195,8 @@ def _catalog_capture(value: PythonObject, context: PythonObject, mut digest: Sha
         if format.startswith(">") or format.startswith("!"):
             raise Error("TypeError: catalog buffers require native little-endian storage")
         if format.startswith("@") or format.startswith("=") or format.startswith("<"):
-            format = String(format[byte=1:])
+            var normalized_format = String(format[byte=1:])
+            format = normalized_format^
         result = _catalog_copy(pin.layout.value(), format, digest)
     except error:
         pin.release()
@@ -299,8 +300,9 @@ def _catalog_verify(args: PythonObject, context: PythonObject) raises -> PythonO
         expected = PythonObject(model_string(py_call(bi.list, digests.values())[0]))
     var matched = PythonObject(None) if expected is None else PythonObject(Bool(py=digest == expected))
     var report = Python.dict(name=name, version=version, numeric_mode=mode, vendor=context["vendor"],
-        digest=digest, expected=expected, match=matched, input_digest=input_digest, run_ms=PythonObject(elapsed),
+        digest=digest, expected=expected, input_digest=input_digest, run_ms=PythonObject(elapsed),
         source=Python.dict(artifact=artifact, sha256=artifact_hash, catalog=py_get(entry, "source")))
+    py_setitem(report, "match", matched)
     _ = source
     _ = supplied
     _ = inputs
