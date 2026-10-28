@@ -1,0 +1,65 @@
+Peer4 CNN pooling batch — 2026-10-27
+Branch: lane/peer4-cnn-pool-20261027
+Base: 765a269fc4
+
+Changes
+- MaxPool2d/AvgPool2d/MaxPool1d/AvgPool1d constructors, backward,
+  MaxPool indices getter/setter and pool fit now make one native operation call.
+- Native owner normalizes settings without Python conversion/iteration hooks;
+  scalar, tuple/list and admitted native numeric buffer settings remain accepted.
+- Backward owns fitted-state/gradient shape checks, host/resident route choice,
+  allocations, lazy max-index download and 1D finished-result reshaping.
+- Forward/native row preparation now uses native MRO/type metadata and passive
+  shape admission. Instance dictionaries use the shared native accessor.
+- Arithmetic kernels/operand residency bits remain the existing ones; this
+  source statement is not runtime or identity evidence.
+
+Integration
+Existing xcnn_native.mojo fallback routes all new pool_* operations; no shared
+registration edit is required. Changes in _expansion_cnn.py are limited to the
+Pool2d through AvgPool1d region. xcnn_pool_native.mojo retains Dropout/Adaptive
+code; dictionary accessor/class checks and row-input admission are shared there.
+Parent owns remaining xcnn_common.mojo repairs: stable DeviceTensor slot
+admission, numeric mode metadata, host reads, output reshape and device state.
+This batch must not be called transitively callback-free before those repairs.
+
+Compilation and source checks
+Mac CPU column compile PASS (17.46 sec, O0, apple-m1, 10 configured workers).
+Compile entry reaches xcnn_pool_layers and all its existing/new branches.
+No runtime execution, GPU compilation, bitwise verification or benchmarks.
+Attempt 1 compile-fixture signature failure retained; attempt 2 passed before
+final native buffer setting support; attempt 3 is final source.
+Python AST parse and git diff --check pass. Source/push guards run on branch push.
+Full output, source archive/manifest, binary, compiler hash and command:
+  ~/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-3/
+Receipt: experiments/peer4_cnn_pool_20261027/compile.json
+No pod rented; no other session resources changed.
+
+Second batch: Dropout2d and AdaptivePool lifecycle/reverse operations
+Base ae297a075ef9fd38909dad8ddf454d2b126de435 (first batch pushed, guards passed).
+- Dropout constructor, train/eval, mask property and backward are one native call.
+  Native probability/seed/counter metadata replaces Python scalar arithmetic;
+  native memcpy replaces host-copy methods. Existing dropout/multiply entries
+  own the numerical work; host and resident output types remain route-specific.
+- Adaptive constructors, device-I/O property, indices state and backward are
+  native. Dividing adaptive windows compose native plain-pool backward directly;
+  other windows keep existing adaptive entries. Native numeric index casts
+  preserve ordinary supplied integer/float and strided arrays without NumPy
+  conversion methods; invalid native-endian/int32 fit is refused.
+- Pool buffers now receive exact native-type admission before direct
+  sequential_input use. Resident plain-max backward checks saved index shape
+  before using it, catching stale index storage after settings change.
+- Native cache/MRO metadata avoids Python instance/subclass/descriptor hooks.
+  Passive builtin truth settings (including None) preserve bool semantics.
+- Only Dropout2d/_AdaptivePool Python regions changed beyond the first batch.
+  No shared registration/dispatcher change is needed for these operation names.
+
+Final second-batch compile PASS attempt-5: Mac CPU/O0/apple-m1/10 configured
+workers, 74.13 sec. Attempt-4 also passed before the passive-bool adjustment.
+Full source bytes, command, compiler/binary hashes, warnings and outputs:
+  ~/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-5/
+Receipt: experiments/peer4_cnn_pool_20261027/dropout_adaptive_compile.json
+Python AST and affected public one-call source checks plus diff whitespace pass.
+No runtime/GPU/identity/measurement execution. No pod rented.
+Shared parent admission review still owns xcnn_c's unconditional xcnn_numpy call
+before lifecycle dispatch (including optional-dependency/constructor behavior).

@@ -1,0 +1,65 @@
+{
+  "exit_code": 0,
+  "seconds": 17.462128415936604,
+  "command": [
+    "/Users/andrewhendel/.pixi/bin/pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-pool",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-pool/bindings",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-pool/experiments/peer4_cnn_pool_20261027/compile.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-3/pool_compile.so"
+  ],
+  "cores": 10,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "runtime_executed": false,
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-3/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-3/source_manifest.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-3/source_bytes.tgz",
+  "scope": "Mac CPU column; xcnn_pool_layers with constructors, backward, index state, all existing forward/transform owner branches; no runtime execution",
+  "artifact_sha256": "63a0bceb9897f339c6c594ea54aa5528c9206207098ea089fd35553161a46b1e",
+  "source_archive_sha256": "2faf599549ee6c2ecbec353703cc1aa73a17b73cd280f87cea2b9818a2b1f7ea",
+  "base_commit": "765a269fc4",
+  "pending": [
+    "Parent common helpers must complete DeviceTensor slot, entry mode, host download and reshape admission repairs",
+    "GPU-specific compilation, public runtime behavior and within-release identity are untested; no runtime campaign authorized",
+    "Other CNN layers remain outside this pooling batch"
+  ],
+  "prior_attempts": [
+    {
+      "attempt": 1,
+      "exit_code": 1,
+      "cause": "Compile fixture registered String argument directly; fixed with PythonObject conversion wrapper",
+      "path": "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-1"
+    },
+    {
+      "attempt": 2,
+      "exit_code": 0,
+      "scope": "Before native numeric buffer configuration admission follow-up",
+      "path": "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-2"
+    }
+  ]
+}

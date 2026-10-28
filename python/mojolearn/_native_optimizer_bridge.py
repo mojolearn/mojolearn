@@ -153,7 +153,8 @@ def connect_sequence_optimizers(training, optim, device):
 
 def connect_sequence_device(training, device):
     # glue: connect sequence buffer/optimizer ABI symbols once at module import
-    from types import BuiltinFunctionType
+    from types import BuiltinFunctionType, MethodType
+    from .tokenizer import _binding
     from _contextvars import ContextVar
     from . import _backend
     from ._native_classical_warnings import connect_warnings
@@ -177,7 +178,14 @@ def connect_sequence_device(training, device):
     context["sequence_device_class"] = device.SequenceDeviceTensor
     context["sequence_finalizer_types"] = (tuple, dict, int, BuiltinFunctionType)
     slots = tuple(device.SequenceDeviceTensor.__slots__)
-    names = slots + ("__dict__", "__getattribute__", "__getattr__", "__setattr__")
+    module = _binding()._module
+    finalizer = module.sequence_tensor_finalize
+    descriptor = module.classical_attribute_descriptor
+    if not isinstance(finalizer, BuiltinFunctionType) or not isinstance(descriptor, BuiltinFunctionType):
+        raise TypeError("sequence device ownership requires compiled finalizer descriptors")
+    device.SequenceDeviceTensor.__del__ = descriptor(MethodType(finalizer, context))
+    context["sequence_finalizer_descriptor"] = vars(device.SequenceDeviceTensor)["__del__"]
+    names = slots + ("__dict__", "__getattribute__", "__getattr__", "__setattr__", "__del__")
     guarded = (device.SequenceDeviceTensor,)
     context["guards"] += tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: connect fixed native descriptor identities at import
                                 for cls in guarded)  # glue: snapshot sequence native owner layouts
@@ -190,7 +198,7 @@ def connect_sequence_device(training, device):
                 "optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move", "optimizer_resident_step", "optimizer_resident_step_dev",
                 "adafactor_resident_open", "adafactor_resident_step", "adafactor_resident_step_dev",
                 "lamb_resident_open", "lamb_resident_step", "lamb_resident_step_dev",
-                "layer_norm", "layer_norm_dev", "moe_forward", "moe_forward_dev", "moe_weights_put", "moe_weights_free")
+                "layer_norm", "layer_norm_dev", "moe_forward", "moe_backward", "moe_forward_dev", "moe_weights_put", "moe_weights_free")
     for mode in ("identical", "fast"):  # glue: connect supported sequence numeric-mode ABI symbols at import
         try:
             binding = _backend.binding("_mojolearn_x_sequence", mode)

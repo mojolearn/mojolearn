@@ -110,6 +110,7 @@ from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
+from bindings.sequence_device_native import sequence_tensor_finalize_c
 from bindings.runtime_sequential_forward import runtime_sequential_forward_c
 from bindings.runtime_classical_unavailable import runtime_classical_unavailable_c
 from bindings.xseq_native import xseq_c
@@ -1256,6 +1257,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(optimizer_native_c, "optimizer_native")
         module.def_py_c_function(embedding_layer_lifetime_c, "embedding_layer_lifetime")
         module.def_py_c_function(device_finalize_c, "optimizer_device_finalize")
+        module.def_py_c_function(sequence_tensor_finalize_c, "sequence_tensor_finalize")
         module.def_py_c_function(runtime_sequential_forward_c, "sequential_native_call")
         module.def_py_c_function(xseq_c, "xseq_native_call")
         module.def_py_c_function(byte_lm_host_trainer_c, "byte_lm_host_trainer_call")
