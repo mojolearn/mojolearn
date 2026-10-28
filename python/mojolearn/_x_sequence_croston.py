@@ -83,9 +83,7 @@ class _Croston(ParamsMixin):
         dict
             ``{"mean": forecasts}``, as returned by :meth:`predict`.
         """
-        if fitted:
-            raise NotImplementedError("Croston: fitted values are not implemented")
-        return self.fit(y).predict(h, level=level)
+        return _XSEQ(self, "croston_forecast", (y, h, X, X_future, level, fitted), _XSEQ_CONTEXT)
 
 
 class CrostonClassic(_Croston):
@@ -209,3 +207,5 @@ class CrostonSBA(_Croston):
 from ._native_full_reset_params import connect_module as _connect_full_reset
 _connect_full_reset(globals())
 del _connect_full_reset
+
+_native_xseq_bridge.register(xseq_croston_classes=((CrostonClassic, 0), (CrostonOptimized, 1), (CrostonSBA, 2)))
