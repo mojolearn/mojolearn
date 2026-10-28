@@ -15,6 +15,7 @@ first imported, after the package, so both may rely on every module existing:
                                its `_HostBound`; never import it at module level
 """
 from . import _native_archive_bridge, _native_family_bridge
+from ._native_robust_bridge import native_method as _native_ann_method
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
@@ -392,6 +393,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         """
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
+    @_native_ann_method
     def fit(self, X, y=None):
         """Build the index from `X`.
 
@@ -407,7 +409,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self : IVFPQIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_pq_fit", (None, X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_pq_fit", (None, X, y), _FAMILY_CONTEXT)
 
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
@@ -730,6 +732,7 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return ([addr_ro(self.dataset_, name="dataset_"), addr_ro(self.graph_.reshape((n * deg,)), name="graph_")],
                 [n, self.n_features_in_, deg])
 
+    @_native_ann_method
     def fit(self, X, y=None):
         """Build the search graph from `X`.
 
@@ -745,7 +748,7 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self : CagraIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_cagra_fit", (None, X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_cagra_fit", (None, X, y), _FAMILY_CONTEXT)
 
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
@@ -954,6 +957,7 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
                  addr_ro(self.codes_.reshape((n * dim,)), name="codes_")],
                 [n, dim, self.n_lists_])
 
+    @_native_ann_method
     def fit(self, X, y=None):
         """Build the index from `X`.
 
@@ -969,7 +973,7 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self : IVFSQIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_sq_fit", (None, X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_sq_fit", (None, X, y), _FAMILY_CONTEXT)
 
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
@@ -1131,6 +1135,7 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
                  addr_ro(self.ip_factors_, name="ip_factors_")],
                 [n, dim, self.n_lists_, self.seed_])
 
+    @_native_ann_method
     def fit(self, X, y=None):
         """Build the index from `X`.
 
@@ -1146,7 +1151,7 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self : IVFRaBitQIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_rabitq_fit", (None, X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_rabitq_fit", (None, X, y), _FAMILY_CONTEXT)
 
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
@@ -1263,7 +1268,7 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
     (10, 5)
     """
     return _FAMILY(None, "family_xn_ann_refine",
-                   (_backend.binding("_mojolearn_x_ann", numeric_mode), dataset, queries, candidates, k, metric),
+                   (None, dataset, queries, candidates, k, metric, numeric_mode),
                    _FAMILY_CONTEXT)
 
 

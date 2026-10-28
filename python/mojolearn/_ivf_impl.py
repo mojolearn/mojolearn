@@ -260,6 +260,7 @@ class IVFIndex(NumericModeMixin):
     # the binding's resident handle that `search` names, and `list_data_` is
     # made on first read. On a CPU-only install fit refuses outside the
     # internal reference context.
+    @_native_query_method
     def fit(self, X, y=None):
         """Build the index from `X`.
 
@@ -278,7 +279,7 @@ class IVFIndex(NumericModeMixin):
         self : IVFIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_ivf_fit", (None, X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_ivf_fit", (None, X, y), _FAMILY_CONTEXT)
 
     # -- the resident index (lane/py-dn-ann, 2026-09-28; ivf/resident.mojo,
     # the closure of DEVIATION 1804) --
