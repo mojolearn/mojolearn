@@ -424,7 +424,7 @@ struct LinAdmission(Movable):
     def __init__(out self, value: PythonObject, context: PythonObject) raises:
         classical_admit_value(value, context)
         self.keep = value
-        self.view = TensorView()
+        var view = TensorView()
         self.pin = None
         self.owner = PythonObject(None)
         if classical_is_array(value, context):
@@ -447,37 +447,40 @@ struct LinAdmission(Movable):
                 raise Error("TypeError: Array metadata must contain native integer, boolean, string and tuple values")
             if len(shape) != len(strides):
                 raise Error("TypeError: Array shape and stride ranks differ")
-            self.view.is_array = True
-            self.view.addr = Int(py=address)
-            self.view.itemsize = Int(py=item)
-            self.view.readonly = Bool(py=readonly)
-            self.view.dtype = String(py=dtype)
-            self.view.fmt = _array_code(self.view.dtype)
+            view.is_array = True
+            view.addr = Int(py=address)
+            view.itemsize = Int(py=item)
+            view.readonly = Bool(py=readonly)
+            view.dtype = String(py=dtype)
+            view.fmt = _array_code(view.dtype)
             for axis in range(len(shape)):  # small-loop(Array rank metadata admitted once)
                 if py_type(shape[axis]) is not py_type(PythonObject(0)) or py_type(strides[axis]) is not py_type(PythonObject(0)):
                     raise Error("TypeError: Array dimensions and strides must be native integers")
-                self.view.shape.append(Int(py=shape[axis]))
-                self.view.strides.append(Int(py=strides[axis]))
-            self.view.nbytes = self.view.count() * self.view.itemsize
-            self.view.has_strides = True
-            self.view.c_contig = _contiguous(self.view.shape, self.view.strides, True, self.view.itemsize)
+                view.shape.append(Int(py=shape[axis]))
+                view.strides.append(Int(py=strides[axis]))
+            view.nbytes = view.count() * view.itemsize
+            view.has_strides = True
+            view.c_contig = _contiguous(view.shape, view.strides, True, view.itemsize)
+            self.view = view^
             return
         self.pin = AdmittedBorrowedBuffer(value)
         ref layout = self.pin.value().layout.value()
-        self.view.addr = layout.address
-        self.view.itemsize = layout.itemsize
-        self.view.readonly = layout.readonly
-        self.view.nbytes = layout.count * layout.itemsize
-        self.view.shape = layout.shape.copy()
-        self.view.strides = layout.strides.copy()
-        self.view.has_strides = True
-        self.view.fmt = self.pin.value().format
-        if self.view.fmt.startswith(">") or self.view.fmt.startswith("!"):
+        view.addr = layout.address
+        view.itemsize = layout.itemsize
+        view.readonly = layout.readonly
+        view.nbytes = layout.count * layout.itemsize
+        view.shape = layout.shape.copy()
+        view.strides = layout.strides.copy()
+        view.has_strides = True
+        view.fmt = self.pin.value().format
+        if view.fmt.startswith(">") or view.fmt.startswith("!"):
             raise Error("TypeError: mojolearn: big-endian buffers are not supported")
-        self.view.c_contig = _contiguous(self.view.shape, self.view.strides, True, layout.itemsize)
+        view.c_contig = _contiguous(view.shape, view.strides, True, layout.itemsize)
         for axis in range(len(layout.suboffsets)):  # small-loop(buffer rank)
             if layout.suboffsets[axis] >= 0:
                 raise Error("TypeError: mojolearn: indirect buffers are not supported")
+
+        self.view = view^
 
 
 
