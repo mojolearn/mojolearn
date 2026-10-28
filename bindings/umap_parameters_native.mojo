@@ -8,6 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_instance_item import native_instance_item
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.sequential_admission import _one_of
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, cast_w64_bits
@@ -82,7 +83,7 @@ def umap_integer(value: PythonObject, name: String, minimum: Int, maximum: Int,
         raise Error("ValueError: UMAP " + name + " must be an integer")
     var result: Int
     try:
-        result = Int(py=value)
+        result = Int(py=value) if cls is b.int else Int(py=native_scalar_buffer(value).to_python_number(True))
     except:
         raise Error("ValueError: UMAP " + name + " must be in [" + String(minimum) + ", " + String(maximum) + "]")
     if result < minimum or result > maximum:
@@ -107,9 +108,14 @@ def umap_scalar(value: PythonObject, name: String, context: PythonObject) raises
         if not _scalar_admitted(value, context):
             raise Error("ValueError: UMAP " + name + " must be a finite float32 value")
         try:
-            # Scalar marshaling only, after exact native-type admission. No
-            # Python-defined __float__ or string-subclass parser can run here.
-            result = Float64(py=py_call(native_loaded_module("builtins").float, value))
+            var b = native_loaded_module("builtins")
+            var cls = py_type(value)
+            if cls is b.int or cls is b.float or cls is b.bool or cls is b.str:
+                # Exact builtin scalar transport/text parsing only. NumPy's
+                # numeric slots are computation even without Python frames.
+                result = Float64(py=py_call(b.float, value))
+            else:
+                result = Float64(py=native_scalar_buffer(value).to_python_number(False))
         except:
             raise Error("ValueError: UMAP " + name + " must be a finite float32 value")
     if not (result - result == 0.0) or abs(result) > UMAP_F32_MAX:
