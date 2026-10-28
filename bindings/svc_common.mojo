@@ -23,10 +23,9 @@ from bindings.classical_arrays import classical_address, classical_is_array, cla
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_pandas import _pd_class
-from bindings.classical_labels import (
-    _flatten_labels, _pandas_values, labels_shape_of, labels_type_name, labels_real_type, labels_integral_type,
-    labels_bool_type, labels_text_type,
-)
+from bindings.classical_labels import _pandas_values, labels_type_name
+from bindings.classical_labels import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
+from bindings.label_admission_native import classifier_label_list
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call,
     family_entry, family_array, family_view, family_cast_view, family_as_f32, family_shape_repr, family_f32_snapshot,
@@ -192,37 +191,14 @@ def svc_shape_of(obj: PythonObject, context: PythonObject) raises -> PythonObjec
         var ndarray = py_get(context, "ndarray")
         if ndarray is not None and py_type(values) is ndarray:
             return py_call(svc_builtins().tuple, values.shape)
-    var dims = labels_shape_of(obj, context)
-    var out = Python.list()
-    for i in range(len(dims)):  # driver-loop: over admitted rank metadata
-        _ = py_call(out.append, PythonObject(dims[i]))
-    return py_call(svc_builtins().tuple, out)
-
-
-def svc_plain_labels(labels: PythonObject, context: PythonObject) raises -> String:
-    """`_labels._plain_labels`: "number" when every label is exactly an int,
-    float or bool, "str" when every one is exactly a str, else ""."""
-    var b = svc_builtins()
-    var n = len(labels)
-    if n == 0:
-        return ""
-    var numbers = True
-    var strings = True
-    for i in range(n):  # cpu-route: Python label objects, the explicit label input step
-        var t = py_type(labels[i])
-        numbers = numbers and (t is b.int or t is b.float or t is b.bool)
-        strings = strings and t is b.str
-    if numbers:
-        return "number"
-    if strings:
-        return "str"
-    return ""
+    var shape = labels_shape_of(obj, context)
+    var dimensions = Python.list()
+    for dimension in shape:  # driver-loop: publish captured native shape words
+        _ = py_call(dimensions.append, dimension)
+    return py_call(svc_builtins().tuple, dimensions)
 
 
 def svc_flatten_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_labels.flatten_labels(y)`: a flat Python list of the label objects,
-    through the shared admitted label reader (C `tolist` of connected array
-    types, exact nested lists and tuples; never an arbitrary `tolist`)."""
     return _flatten_labels(y, context)
 
 
@@ -237,74 +213,24 @@ def svc_labels_1d(y: PythonObject, context: PythonObject) raises -> PythonObject
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
 
 
-def _svc_check_label_kinds(labels: PythonObject, context: PythonObject) raises:
-    """`_labels._check_label_kinds`: the first label that is neither a number
-    nor a str (or a NaN before it), then a mix of the two kinds. Exact native
-    label types only: no subclass comparison or numbers ABC hook runs."""
-    var has_str = False
-    var has_number = False
-    for i in range(len(labels)):  # cpu-route: Python label objects, the explicit label input step
-        var item = labels[i]
-        var t = py_type(item)
-        if labels_text_type(t, context):
-            has_str = True
-        elif labels_real_type(t, context):
-            if Bool(py=item != item):
-                raise Error(_NAN_LABEL)
-            has_number = True
-        else:
-            raise Error("mojolearn: label of type " + labels_type_name(t) + " is neither a number nor a str")
-    if has_str and has_number:
-        raise Error("mojolearn: y mixes numeric and str labels; encode one kind before fitting")
-
-
 def svc_sorted_classes(labels: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`encode_labels` of a flat label list: (classes list, int32 codes) under
-    the ORDER RULE (first-seen representative of equal labels, sorted by
-    Python's comparison; a NaN label refused)."""
-    var b = svc_builtins()
-    var operator = Python.import_module("operator")
-    var n = len(labels)
-    if n == 0:
-        raise Error("mojolearn: y is empty")
-    var kind = svc_plain_labels(labels, context)
-    if kind == "number":
-        if Bool(py=family_call(b.any, family_call(b.map, operator.ne, labels, labels))):
-            raise Error(_NAN_LABEL)
-    elif kind.byte_length() == 0:
-        _svc_check_label_kinds(labels, context)
-    var classes = family_call(b.sorted, family_call(b.dict.fromkeys, labels))
-    var index = family_call(b.dict, family_call(b.zip, classes, family_call(b.range, PythonObject(len(classes)))))
-    var store = family_call(context["array_type"], PythonObject("i"), family_call(b.map, py_attr(index, "__getitem__"), labels))
-    var codes = classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i4", "C", context)
-    return Python.tuple(classes, codes)
+    # Preserve the shared first-seen representative and sorted-class rule.
+    var encoded = _sorted_classes(labels, context)
+    return Python.tuple(encoded.classes, encoded.codes)
 
 
 def svc_label_kind(classes: PythonObject, context: PythonObject) raises -> Int:
-    """`_labels.label_kind`: 0 'int' (every class Integral, no bool), 1
-    'float' (every class Real, no bool), 2 'object'."""
-    var integral = True
-    var real = True
-    for i in range(len(classes)):  # driver-loop: over the fitted classes
-        var t = py_type(classes[i])
-        var boolean = labels_bool_type(t, context)
-        if boolean or not labels_integral_type(t, context):
-            integral = False
-        if boolean or not labels_real_type(t, context):
-            real = False
-    if integral:
-        return 0
-    if real:
-        return 1
-    return 2
+    var kind = labels_label_kind(classes, context)
+    return 0 if kind == "int" else 1 if kind == "float" else 2
 
 
-def svc_decode(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
+def svc_decode(var classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.decode_labels(classes, codes)` for an int64 code Array this
     owner made: an int64 Array for int classes, a float64 Array for real
     classes (the base binding's `gather_i64` / `gather_f64`), the list of
     label objects otherwise."""
     var b = svc_builtins()
+    classes = classifier_label_list(classes, context)
     var kind = svc_label_kind(classes, context)
     var n = Int(py=codes.size)
     var k = len(classes)
@@ -422,29 +348,8 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
 
 
 def _svc_classification_labels(values: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`_metrics_impl._classification_labels`: (labels list, kind)."""
-    var b = svc_builtins()
-    if len(svc_shape_of(values, context)) != 1:
-        raise Error(name + " must be one-dimensional single-label data")
-    var labels = svc_flatten_labels(values, context)
-    if len(labels) == 0:
-        raise Error(name + " must contain at least one label")
-    # `all(isinstance(v, str))` and `all(isinstance(v, Integral) or
-    # is_bool(v))`, asked once per distinct label type.
-    var strings = True
-    var integers = True
-    for i in range(len(labels)):  # cpu-route: Python label objects, the explicit label input step
-        var t = py_type(labels[i])
-        if not labels_text_type(t, context):
-            strings = False
-        if not (labels_integral_type(t, context) or labels_bool_type(t, context)):
-            integers = False
-    if strings:
-        return Python.tuple(family_call(b.list, family_call(b.map, b.str, labels)), PythonObject("string"))
-    if integers:
-        return Python.tuple(family_call(b.list, family_call(b.map, b.int, labels)), PythonObject("integer"))
-    raise Error("TypeError: " + name + " must contain only strings or only integers; "
-                + "floating labels, missing labels and mixed types are unsupported")
+    var labels = _classification_labels(values, name, context)
+    return Python.tuple(labels.values, PythonObject(labels.kind))
 
 
 def svc_accuracy(y_true: PythonObject, y_pred: PythonObject, n_pred: Int, context: PythonObject) raises -> Float64:
