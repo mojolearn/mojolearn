@@ -1494,6 +1494,18 @@ class EndpointConnections:
                 return self.value(alias, mod, func, env, depth + 1)
         if isinstance(expr, (ast.Tuple, ast.List)):
             return ("sequence", [self.value(e, mod, func, env, depth + 1) for e in expr.elts])
+        if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
+            # `(base,) + tuple(classes)`: a concatenation of known sequences
+            left = self.value(expr.left, mod, func, env, depth + 1)
+            right = self.value(expr.right, mod, func, env, depth + 1)
+            if left and right and left[0] == right[0] == "sequence":
+                return ("sequence", left[1] + right[1])
+            return None
+        if (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name) and expr.func.id in ("tuple", "list")
+                and len(expr.args) == 1 and not expr.keywords):
+            inner = self.value(expr.args[0], mod, func, env, depth + 1)
+            if inner and inner[0] == "sequence":
+                return inner
         if isinstance(expr, ast.Attribute):
             if (isinstance(expr.value, ast.Name) and expr.value.id == "object"
                     and expr.attr in ("__getattribute__", "__setattr__", "__delattr__", "__new__", "__init__")):
@@ -1527,6 +1539,10 @@ class EndpointConnections:
                     return args[2]
                 return found
             if _final(expr.func) == "unwrap" and args:
+                return args[0]
+            if (isinstance(expr.func, ast.Name) and expr.func.id in ("classmethod", "staticmethod")
+                    and len(args) == 1 and args[0] and args[0][0] == "func"):
+                # `cls.load = classmethod(inspect.unwrap(loader.__func__))`: the same source body
                 return args[0]
             called = self.index.resolve_expr(expr.func, mod.name, func)
             if called and called[0] == "func":
