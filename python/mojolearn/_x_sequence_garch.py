@@ -80,6 +80,11 @@ class GARCH(ParamsMixin):
     (5,)
     """
 
+    # Every public method is one xseq_native_call; none needs a fitted
+    # guard (the native forecast refuses an unfitted model itself), so no
+    # `_mode` class-creation wrappers are installed.
+    _mojolearn_native_public = True
+
     def __init__(self, p=1, o=0, q=1, mean="Constant", dist="normal", power=2.0, numeric_mode=None):
         _XSEQ(self, "garch_initialize", (p, o, q, mean, dist, power, numeric_mode), _XSEQ_CONTEXT)
 
