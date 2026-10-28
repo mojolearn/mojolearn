@@ -16,7 +16,9 @@ outside this increment. No Python wrapper performs result conversion.
 
 The dedicated operation uses classical_family_admit before model fields,
 a private exact-dict settings snapshot and retained original scalar/buffer
-references. Each consumed setting is converted once before numerical execution,
+references. Mutable scalar arrays/buffers are captured into native records
+before input preparation can release the GIL. Reused option objects share one
+snapshot. Each consumed setting is converted once before numerical execution,
 at its original validation point; solver/refusal ordering, exact/full/fraction/
 MLE/randomized behavior, ignored y admission and native host-only refusal are
 retained. Scalars use the shared native decoder/parser/warning provider with a
@@ -40,7 +42,8 @@ corresponding core/estimators_host_impl.mojo owners. The metadata reader
 bindings return fixed constants without releasing the GIL. Existing numerical
 implementations, dimensions, dtype, seeded arithmetic and algorithms are
 unchanged. Native memcpy trims the packed result prefix when rank selection
-changes the kept count. Only completed owned C-float32 arrays and the noise
+changes the kept count. MLE may select zero; a projection retains explicit
+(rows, 0) matrix shape in that case. Only completed owned C-float32 arrays and the noise
 scalar are committed to the original admitted model dictionary; no setting is
 reread from the live model after execution.
 
@@ -80,7 +83,9 @@ Evidence
 ~/mojolearn-evidence/peer2-decomposition-20261027/
   scalar-captured-dtype-commit.log
   pca-fit-commit.log
-  pca-fit-push.log
+  pca-fit-push.log (initial push refused an unrecognized loop annotation)
+  pca-fit-scalar-snapshot-commit.log
+  pca-fit-scalar-snapshot-push.log
   pca-connection-annotation-push.log
 Full hook output stays in those files. Compiler/runtime evidence belongs to
 the coordinator's frozen compile batch and final integration run.

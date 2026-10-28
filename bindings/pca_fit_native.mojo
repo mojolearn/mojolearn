@@ -11,7 +11,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.pca_exact import pca_too_small, pca_whiten_entries, pca_refusal
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from providers.python.pca_input_pyapi import pca_input_snapshot
-from providers.python.pca_fit_model_pyapi import pca_fit_fields, pca_fit_entries, pca_fit_host_only, pca_fit_preflight, pca_fit_number
+from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_capture
+from providers.python.pca_fit_model_pyapi import pca_fit_fields, pca_fit_entries, pca_fit_host_only, pca_fit_preflight
 
 
 struct PCAFitOutput(Copyable, Movable):
@@ -53,6 +54,15 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var whiten = Bool(py=fields["whiten"])
     if whiten:
         pca_whiten_entries(entries)
+    # Freeze mutable scalar storage before Torch/native input preparation
+    # can release the GIL. Conversion/errors stay at their prior stages.
+    var settings = List[PCAFitScalar]()
+    var count_setting = pca_fit_scalar_capture(fields["n_components"], settings, context)
+    var extra_setting = -1
+    var power_setting = -1
+    if solver == "randomized":
+        extra_setting = pca_fit_scalar_capture(fields["n_oversamples"], settings, context)
+        power_setting = pca_fit_scalar_capture(fields["iterated_power"], settings, context)
     var source = args[0]
     var x = pca_input_snapshot(source, context)
     var rows = x.shape[0]
@@ -85,14 +95,14 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
             raise Error("n_components='mle' is only supported if n_samples >= n_features")
         keep_mode = 2
     elif not randomized and (py_type(requested) is b.float or py_type(requested) is context["float64"].type):
-        requested = pca_fit_number(requested, operation, context, False)
+        requested = settings[count_setting].convert(operation, context, False)
         fraction = Float64(py=requested)
         if not (fraction > 0 and fraction < 1):
             raise Error("mojolearn PCA: a float n_components must be in (0, 1)")
         keep_mode = 1
     else:
         if requested is not None:
-            requested = pca_fit_number(requested, operation, context, True)
+            requested = settings[count_setting].convert(operation, context, True)
             count = Int(py=requested)
         if count < 1 or count > cols:
             raise Error("mojolearn n_components must be in [1, " + String(cols) + "], got " + String(count))
@@ -113,14 +123,14 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
             seed = PythonObject(0)
         elif py_type(seed) is not b.int:
             raise Error("TypeError: random_state must be None or an int (the counter-based RNG takes an integer seed)")
-        var extra = pca_fit_number(fields["n_oversamples"], operation, context, True)
+        var extra = settings[extra_setting].convert(operation, context, True)
         oversamples = Int(py=extra)
         if oversamples < 0:
             raise Error("n_oversamples must be nonnegative")
         var power = fields["iterated_power"]
         auto = py_type(power) is b.str and String(power) == "auto"
         if not auto:
-            power = pca_fit_number(power, operation, context, True)
+            power = settings[power_setting].convert(operation, context, True)
             iterations = Int(py=power)
         if py_get(entries, "pca_fit_randomized") is None:
             raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not export "
@@ -163,11 +173,15 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
             ratio = ratio.prefix(keep, 0, context)
             singular = singular.prefix(keep, 0, context)
             if project:
-                var cropped = PCAFitOutput(rows, keep, context)
-                memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=cropped.address),
-                       src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=projection_address),
-                       count=rows * keep * 4)
-                projection = cropped.keep
+                # MLE returns zero below two eigenvalues. Keep the public
+                # projection a matrix even when its component axis is empty.
+                var cropped = sequential_array(Python.tuple(rows, keep), context["float32"], context)
+                var cropped_address = Int(py=sequential_address(cropped))
+                if keep > 0:
+                    memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=cropped_address),
+                           src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=projection_address),
+                           count=rows * keep * 4)
+                projection = cropped
     # Publish only after the solver and all finished-output allocations pass.
     # Writes target the admitted original dict; no live settings are reread.
     py_setitem(state, "input_copied_", copied)
@@ -181,6 +195,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     py_setitem(state, "n_features_in_", cols)
     py_setitem(state, "n_samples_", rows)
     py_setitem(state, "_mojolearn_fitted", True)
+    _ = settings^
     _ = fields^
     _ = x^
     return projection if project else model

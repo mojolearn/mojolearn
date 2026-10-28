@@ -54,12 +54,6 @@ def pca_fit_preflight(fields: PythonObject, operation: String, context: PythonOb
     return text
 
 
-def pca_fit_number(value: PythonObject, operation: String, context: PythonObject, integer: Bool) raises -> PythonObject:
-    # Convert an already captured setting exactly once, at its established
-    # refusal point. Neither this helper nor the solver rereads model fields.
-    return training_scalar_number(value, operation, context["pca_fit_scalar_context"], integer)
-
-
 def pca_fit_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var mode = py_call(py_call(fields["numeric_mode"].strip).lower)
     if String(mode) != "identical" and String(mode) != "fast":
@@ -84,7 +78,7 @@ def pca_fit_entries(fields: PythonObject, context: PythonObject) raises -> Pytho
     var names = Python.tuple("estimators_vendor", "estimators_numeric_mode", "pca_fit_owned", "pca_fit_randomized",
                              "pca_fit_full", "pca_whiten_transform", "pca_whiten_inverse_transform")
     var builtin_type = py_type(native_loaded_module("builtins").len)
-    for index in range(7):  # small-loop: admit every consumed compiled entry before readers execute
+    for index in range(7):  # small-loop(seven consumed compiled entry identities)
         var entry = py_get(entries, names[index])
         if index >= 2 and entry is None:
             continue
