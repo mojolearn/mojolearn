@@ -1,18 +1,43 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native Signature.bind/apply_defaults for the six registered forest/tree
+# Native Signature.bind/apply_defaults shared by registered tree
 # constructors. Preserve parameter object identities and defer value checks
 # until fit, exactly as the public constructor contract requires.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.mode_metadata_native import _fields
+from bindings.params_metadata_native import _resolved
+from bindings.trees_public_state import _release_tree_values
 
 
-def forest_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def tree_parameter_storage(model: PythonObject, names: PythonObject) raises:
+    for i in range(len(names)):  # driver-loop: refuse parameter setters before direct constructor storage writes
+        var declared = _resolved(py_type(model), names[i], PythonObject(None))
+        if declared is not None:
+            var cls = py_type(declared)
+            if _resolved(cls, "__set__", PythonObject(None)) is not None or _resolved(cls, "__delete__", PythonObject(None)) is not None:
+                raise Error("TypeError: native tree lifecycle requires ordinary parameter storage, not descriptor setters")
+
+
+def tree_store_parameters(fields: PythonObject, values: PythonObject,
+                          context: PythonObject, reset: Bool) raises:
+    var b = Python.import_module("builtins")
+    var previous = py_call(b.dict, fields)
+    var replacement = Python.dict() if reset else py_call(b.dict, previous)
+    _ = py_call(replacement.update, values)
+    _release_tree_values(py_call(b.list, previous.values()), py_call(b.list, replacement.values()), context)
+    if reset:
+        _ = py_call(fields.clear)
+    _ = py_call(fields.update, replacement)
+    _ = previous
+
+
+def tree_constructor_values(model: PythonObject, args: PythonObject, constructors: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var owner = args[0]
     var cls = py_type(model)
     if py_type(owner) is not b.type or py_type(cls) is not b.type:
         raise Error("TypeError: native forest constructors require ordinary class metadata")
-    var plan = py_get(context["trees_constructors"], owner)
+    var plan = py_get(constructors, owner)
     if plan is None:
         raise Error("TypeError: the forest constructor is not connected")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
@@ -25,7 +50,7 @@ def forest_construct(model: PythonObject, args: PythonObject, context: PythonObj
     # base initializer. Validate the actual class's connected native slots;
     # its descriptor intentionally differs from the base's descriptor.
     # Unregistered subclasses still inherit the base's strict hook identities.
-    var actual_plan = py_get(context["trees_constructors"], cls)
+    var actual_plan = py_get(constructors, cls)
     var hooks = plan[2] if actual_plan is None else actual_plan[2]
     for i in range(len(hooks)):  # driver-loop: fixed storage hook identities before native dictionary access
         var actual = PythonObject(None)
@@ -73,7 +98,16 @@ def forest_construct(model: PythonObject, args: PythonObject, context: PythonObj
         if not py_contains(values, names[i]):
             raise Error("TypeError: got an unexpected keyword argument '" + String(names[i]) + "'")
     var fields = py_call(plan[1], model, cls)
-    for i in range(len(rows)):  # driver-loop: constructor assignments after argument binding succeeds
-        py_setitem(fields, rows[i][0], values[rows[i][0]])
-    py_setitem(fields, "_has_constructor_parameters", PythonObject(True))
+    tree_parameter_storage(model, py_call(b.list, values))
+    return Python.tuple(fields, values, rows)
+
+
+def forest_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = _fields(model)
+    var prepared = tree_constructor_values(model, args, context["trees_constructors"])
+    if fields is not prepared[0]:
+        raise Error("TypeError: native forest constructor requires stable instance storage")
+    var values = prepared[1]
+    py_setitem(values, "_has_constructor_parameters", PythonObject(True))
+    tree_store_parameters(fields, values, context, False)
     return PythonObject(None)
