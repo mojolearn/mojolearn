@@ -1,5 +1,17 @@
 # Agent working rules
 
+## Provider migration delivery (Andrew, 2026-10-27)
+
+- Move the whole public operation into native code: validation, fitted-state
+  checks, argument preparation, execution and finished-result conversion. A
+  native numerical call surrounded by Python work is an incomplete migration.
+- Merge completed provider repairs incrementally into main after a successful
+  small local compile of the affected code. Do not require broad runtime or
+  cross-vendor verification before these development merges; perform the
+  focused final verification after integration. Keep pending coverage explicit.
+- The initial provider integration was merged locally with a tokenizer compile
+  failure; that exception is not permission to merge future compile failures.
+
 ## Exported graph boundary (Andrew, 2026-10-27)
 
 - The provider migration may change the API to require an already exported
