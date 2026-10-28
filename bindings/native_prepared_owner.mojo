@@ -328,16 +328,29 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
             raise cpy.unsafe_get_error()
         var iterator = PythonObject(from_owned=raw_iterator)
         var field_count = len(fields)
-        for field_index in range(field_count):  # small-loop(field_count: class fields): compare class metadata identities only
+        var row_offset = offset
+        var string_type = bi.str
+        # Admit ALL live keys before any keyed value lookup. A later foreign
+        # key can collide with an earlier ordinary key, so interleaving the
+        # two checks could invoke its __eq__ before reaching its own position.
+        for field_index in range(field_count):  # small-loop(field_count: class fields): admit every namespace key first
             var raw_key = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")(iterator._obj_ptr)
             if not raw_key:
                 if cpy.PyErr_Occurred():
                     raise cpy.unsafe_get_error()
                 return False
             var key = PythonObject(from_owned=raw_key)
-            if not _class_stamp_identity(stamp, key, offset):
+            if py_type(key) is not string_type or not _class_stamp_identity(stamp, key, offset):
                 return False
-            var raw_value = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(fields._obj_ptr, key._obj_ptr)
+            offset += 1  # skip the retained value in the alternating stamp
+        # No user callback or GIL release occurs between passes. All live
+        # keys now match exact retained strings. Read keys directly from the
+        # retained stamp to avoid another iterator or temporary Python list.
+        offset = row_offset
+        for field_index in range(field_count):  # small-loop(field_count: class fields): compare admitted namespace values second
+            var raw_key = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")(stamp._obj_ptr, offset)
+            offset += 1
+            var raw_value = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(fields._obj_ptr, raw_key)
             if not raw_value:
                 raise cpy.unsafe_get_error()
             var value = PythonObject(from_owned=raw_value)

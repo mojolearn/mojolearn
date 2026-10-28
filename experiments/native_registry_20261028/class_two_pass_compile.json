@@ -1,0 +1,19 @@
+{
+  "base_commit": "826b6e5fcf",
+  "changed_source": "bindings/native_prepared_owner.mojo",
+  "changed_source_sha256": "6ba0c0dc50e43b0d58773e2ad0e8eab6d56934a3479ab8a8bc7fda411634c843",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "Mac arm64 native default CPU",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run mojo build --emit shared-lib -I . -I bindings experiments/native_registry_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/native-registry-20261028/class-two-pass.dylib",
+  "exit_code": 0,
+  "binary_sha256": "1322fb4533f21063e01087238fcf3f6a9ac69c6bce7899bbec7987505d86e3f9",
+  "coverage": [
+    "classical family/layout admission including prepared_class_matches",
+    "native prepared registry cleanup",
+    "native module/descriptor/XN admission"
+  ],
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-registry-20261028/class-two-pass-compile.log",
+  "runtime": "not run",
+  "identity": "not run",
+  "performance": "not measured"
+}

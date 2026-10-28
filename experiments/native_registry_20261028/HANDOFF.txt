@@ -52,3 +52,13 @@ Native registry followup b504e2cc87:
   inference and ExceptionType spelling failures; compile3 and final compile4 pass.
   Obsolete method-layout probe was cancelled while queued (no build/run).
   No runtime, identity or performance run. Registry receipt beside this handoff.
+
+Class admission collision-safety followup:
+- Inspect every live namespace key by native iteration and require exact string
+  type and retained identity before performing any keyed value lookup. A foreign
+  later key cannot execute equality by colliding with an earlier string lookup.
+- Second pass uses native indexes into the existing retained stamp, avoiding a
+  second iterator or temporary Python key list. GIL held across both passes.
+- Scoped actual-consumer compile rc=0; class_two_pass_compile.json records source
+  and binary hashes. Logs/binary retained in native-registry evidence directory.
+  No runtime, identity or performance execution.
