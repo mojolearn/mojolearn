@@ -42,16 +42,23 @@ def _pca_scalar_bytes(value: PythonObject) raises -> PythonObject:
     return result
 
 
-def _pca_builtin_number(value: PythonObject, integer: Bool, context: PythonObject) raises -> PythonObject:
+def _pca_builtin_number(value: PythonObject, integer: Bool, context: PythonObject, error_repr: String = "") raises -> PythonObject:
     # Only already-admitted native builtins/buffer wrappers reach this
     # parser. NumPy temporal/numeric conversion slots never do.
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if value is not None and cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.complex and cls is not b.str and cls is not b.bytes and cls is not b.bytearray and cls is not b.memoryview and cls is not b.list and cls is not b.tuple and cls is not b.dict and cls is not b.set and cls is not b.frozenset and cls is not context["array_type"]:
         raise Error("TypeError: PCA scalar conversion requires native numbers or text without Python conversion hooks")
+    var value_error = b.ValueError
     ref cpy = Python().cpython()
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_Long" if integer else "PyNumber_Float")(value._obj_ptr)
     if not pointer:
+        if not integer and error_repr.byte_length() > 0 and cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(value_error._obj_ptr) != 0:
+            # CPython floatobject.c uses the original object's repr for a
+            # text parse refusal. A private memoryview has a different address;
+            # preserve the exact native original repr captured before copying.
+            var message = "could not convert string to float: " + error_repr
+            cpy.PyErr_SetString(value_error._obj_ptr, message.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
         var error = stash_python_error()
         raise error^
     return PythonObject(from_owned=pointer)
@@ -158,6 +165,7 @@ struct PCAFitScalar(Copyable, Movable):
     var scalar_complex: Bool
     var truth_ready: Bool
     var truth_value: Bool
+    var buffer_repr: String
 
     def __init__(out self, source: PythonObject, context: PythonObject, truth_mode: Bool = False,
                  operation: String = "", depth: Int = 0) raises:
@@ -177,6 +185,7 @@ struct PCAFitScalar(Copyable, Movable):
         self.scalar_complex = False
         self.truth_ready = False
         self.truth_value = False
+        self.buffer_repr = String("")
         var scalar_context = context["pca_fit_scalar_context"]
         var b = native_loaded_module("builtins")
         var seen_arrays = Python.list()
@@ -209,6 +218,7 @@ struct PCAFitScalar(Copyable, Movable):
                 break
             if cls is b.memoryview:
                 sequential_admit_value(value, context)
+                self.buffer_repr = String(py_call(b.repr, value))
                 if Bool(py=value.c_contiguous):
                     self.value = py_call(b.memoryview, _pca_scalar_bytes(value))
                 else:
@@ -376,7 +386,7 @@ struct PCAFitScalar(Copyable, Movable):
                 training_scalar_warning("Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)",
                                         b.DeprecationWarning, operation, scalar)
             if array.kind == "c":
-                if integer or array.char != "G":
+                if array.char != "G":
                     var name = String("int") if integer else String("float")
                     var bytes = String(", a bytes-like object") if integer else String("")
                     raise Error("TypeError: " + name + "() argument must be a string" + bytes + " or a real number, not 'complex'")
@@ -404,7 +414,7 @@ struct PCAFitScalar(Copyable, Movable):
             var function = String("int") if integer else String("float")
             var bytes = String(", a bytes-like object") if integer else String("")
             raise Error("TypeError: " + function + "() argument must be a string" + bytes + " or a real number, not '" + name + "'")
-        return _pca_builtin_number(self.value, integer, context)
+        return _pca_builtin_number(self.value, integer, context, self.buffer_repr)
 
 
     def truth(self, operation: String, context: PythonObject) raises -> Bool:

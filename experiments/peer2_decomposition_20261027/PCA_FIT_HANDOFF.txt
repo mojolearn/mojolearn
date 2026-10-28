@@ -126,3 +126,22 @@ from a filtered log or reconstructed Python callback.
 Source-only status remains unchanged: no tests/runtime/compile were run.
 The coordinator must compile pca_fit_compile.mojo before merging; runtime,
 negative-control, error-precedence and cross-vendor coverage remain pending.
+
+Additional source compatibility decisions
+Extended complex (G/clongdouble) scalar-array integer and float conversion both
+preserve the native real-part conversion plus ComplexWarning; F/D arrays box
+builtin complex and retain integer-/float-specific refusals. Manifold confirmed
+the NumPy2.3 source contract (its shared training scalar comment had retained it).
+A copied memoryview's float parsing error preserves the original native repr,
+including its identity address, captured before input work. Only the native
+ValueError text from this exact buffer parser is rewritten, using CPython's
+floatobject.c wording; other native exceptions are retained unchanged.
+
+Explicit remaining shared callback dependency
+Root identified CPython's huge-decimal conversion route (>6000 digits) entering
+Python _pylong from native integer text parsing. This lane does not cap or drop
+supported values. _pca_builtin_number still uses the ordinary CPython native
+parser pending root's coordinated shared repair. This callback closure remains
+unresolved; do not label this operation Python-free/compliant before integrating
+that repair and its affected source/compile closure. The same caveat applies to
+large-int representation paths where CPython selects its Python implementation.
