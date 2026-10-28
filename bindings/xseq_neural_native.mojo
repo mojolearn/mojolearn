@@ -31,6 +31,7 @@ from bindings.xseq_native_common import (
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
     XseqStream, xseq_neural_provider, xseq_output_provider,
 )
+from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 
 
@@ -403,7 +404,7 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
         return out
     var rows = Int(py=out.shape[0])
     var codes = xseq_argmax(out, rows, Int(py=out.shape[1]), context)
-    return xseq_take(fields["classes_"], codes, context)
+    return xseq_take(xseq_public_labels(fields, context), codes, context)
 
 
 # ---------------------------------------------------------------- multi-layer perceptrons
@@ -685,5 +686,5 @@ def xseq_mlp(model: PythonObject, operation: String, args: PythonObject, context
             _ = neural_descriptor_execute(xseq_output_provider(context), MODEL_THRESHOLD, addresses, options, List[Float64]())
             _ = out  # keep the Python object alive through the native call above
             _ = codes  # keep the Python object alive through the native call above
-        return xseq_take(fields["classes_"], codes, context)
-    return xseq_take(fields["classes_"], xseq_argmax(out, rows, Int(py=out.shape[1]), context), context)
+        return xseq_take(xseq_public_labels(fields, context), codes, context)
+    return xseq_take(xseq_public_labels(fields, context), xseq_argmax(out, rows, Int(py=out.shape[1]), context), context)

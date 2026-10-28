@@ -13,52 +13,12 @@ from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_after_fit, _feature_names
 from bindings.prep_lda_admission import lda_native_labels
 from bindings.metrics_native_support import metric_warn
-from bindings.native_caller_frame import native_caller_globals
+from providers.python.estimator_lifecycle_pyapi import estimator_outside as _outside, estimator_feature_check as _feature_check
 from bindings.sequential_inputs import sequential_input
 from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_kind, forest_get_params, forest_check_fit_device
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast
 from bindings.trees_public_auxiliary import forest_auxiliary
-
-
-def _outside() raises -> Bool:
-    # One Python public wrapper hands over to this owner; inspect its caller
-    # using CPython frame storage, preserving the established marker order.
-    var globals = native_caller_globals(1)
-    if globals is None:
-        return True
-    var name = py_get(globals, "__name__")
-    var outside = True
-    if py_type(name) is py_type(PythonObject("")):
-        var module = String(name)
-        outside = module != "mojolearn" and not module.startswith("mojolearn.") and not module.startswith("mojolearn_verify_all_")
-    if py_get(globals, "__mojolearn_user_boundary__") is PythonObject(True):
-        return True
-    if py_get(globals, "__mojolearn_internal__") is PythonObject(True):
-        return False
-    return outside
-
-
-def _feature_check(model: PythonObject, fields: PythonObject, source: PythonObject,
-                   context: PythonObject) raises:
-    var names = _feature_names(source, context)
-    var fitted = py_get(fields, "feature_names_in_")
-    var b = Python.import_module("builtins")
-    var name = classical_estimator_name(model)
-    if fitted is None:
-        if names is not None:
-            metric_warn("X has feature names, but " + name + " was fitted without feature names", b.UserWarning, context)
-        return
-    if names is None:
-        metric_warn("X does not have valid feature names, but " + name + " was fitted with feature names", b.UserWarning, context)
-        return
-    classical_admit_value(fitted, context)
-    var before = _flatten_labels(fitted, context)
-    var after = _flatten_labels(names, context)
-    classical_admit_value(before, context)
-    classical_admit_value(after, context)
-    if not Bool(py=before == after):
-        raise Error("The feature names should match those that were passed during fit.")
 
 
 def _set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:

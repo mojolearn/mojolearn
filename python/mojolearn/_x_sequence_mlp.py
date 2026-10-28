@@ -32,6 +32,8 @@ _LR = {"constant": 0, "invscaling": 1, "adaptive": 2}
 
 
 class _BaseMLP(ParamsMixin):
+    # The xseq public native lifecycle owns the former fit/validation/output wrappers.
+    _mojolearn_native_public = True
     _LOSS = None
 
     def __init__(self, hidden_layer_sizes=(100,), activation="relu", *, solver="adam", alpha=0.0001,

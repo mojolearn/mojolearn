@@ -19,11 +19,22 @@ from bindings.xseq_neural_native import xseq_rnn, xseq_mlp
 from bindings.xseq_forecast_native import xseq_forecast
 from bindings.xseq_score_native import xseq_regressor_score, xseq_classifier_score
 from bindings.xseq_prophet_native import prophet_fit, prophet_predict
+from bindings.py_balanced import py_fields
+from providers.python.xseq_public_lifecycle_pyapi import XseqPublicLifecycle
+from providers.python.estimator_lifecycle_pyapi import estimator_fit_begin, estimator_fit_end
 
 
 def _xseq_raise(error: Error, args_ptr: PyObjectPtr) -> PyObjectPtr:
     """The Python exception a native refusal names in its prefix."""
     var text = String(error)
+    if text.startswith("NotFittedError:"):
+        try:
+            ref cpy = Python().cpython()
+            var lifecycle = causal_borrowed_item(cpy.PyTuple_GetItem(args_ptr, 3), "xseq_lifecycle_context")
+            var cls = causal_borrowed_item(lifecycle, "active_not_fitted_class")
+            return causal_set_exception(error_without_class(error, "NotFittedError"), cls)
+        except nested:
+            return raise_python_exception(nested)
     if text.startswith("LinAlgError:"):
         try:
             ref cpy = Python().cpython()
@@ -52,6 +63,34 @@ def _xseq_raise(error: Error, args_ptr: PyObjectPtr) -> PyObjectPtr:
     return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
 
 
+def _xseq_execute(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var result: PythonObject
+    if operation == "rnn_score" or operation == "mlp_score":
+        # predict, then R^2 against y, in this one call
+        var predict_args = Python.tuple(args[0])
+        var prediction = (xseq_rnn(model, "rnn_predict", predict_args, context) if operation == "rnn_score"
+                          else xseq_mlp(model, "mlp_predict", predict_args, context))
+        result = xseq_regressor_score(model, prediction, args, context)
+    elif operation == "rnn_classifier_score" or operation == "mlp_classifier_score":
+        # `ClassifierScoreMixin.score`: predict, then the accuracy of it
+        # against y, in this one call
+        var predict_args = Python.tuple(args[0])
+        var prediction = (xseq_rnn(model, "rnn_predict", predict_args, context) if operation == "rnn_classifier_score"
+                          else xseq_mlp(model, "mlp_predict", predict_args, context))
+        result = xseq_classifier_score(model, prediction, args, context)
+    elif operation == "prophet_fit":
+        result = prophet_fit(model, args, context)
+    elif operation == "prophet_predict":
+        result = prophet_predict(model, args, context)
+    elif operation.startswith("rnn_"):
+        result = xseq_rnn(model, operation, args, context)
+    elif operation.startswith("mlp_"):
+        result = xseq_mlp(model, operation, args, context)
+    else:
+        result = xseq_forecast(model, operation, args, context)
+    return result
+
+
 def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -59,30 +98,22 @@ def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var operation = String(py=call[1])
         var args = call[2]
         var context = call[3]
-        var result: PythonObject
-        if operation == "rnn_score" or operation == "mlp_score":
-            # predict, then R^2 against y, in this one call
-            var predict_args = Python.tuple(args[0])
-            var prediction = (xseq_rnn(model, "rnn_predict", predict_args, context) if operation == "rnn_score"
-                              else xseq_mlp(model, "mlp_predict", predict_args, context))
-            result = xseq_regressor_score(model, prediction, args, context)
-        elif operation == "rnn_classifier_score" or operation == "mlp_classifier_score":
-            # `ClassifierScoreMixin.score`: predict, then the accuracy of it
-            # against y, in this one call
-            var predict_args = Python.tuple(args[0])
-            var prediction = (xseq_rnn(model, "rnn_predict", predict_args, context) if operation == "rnn_classifier_score"
-                              else xseq_mlp(model, "mlp_predict", predict_args, context))
-            result = xseq_classifier_score(model, prediction, args, context)
-        elif operation == "prophet_fit":
-            result = prophet_fit(model, args, context)
-        elif operation == "prophet_predict":
-            result = prophet_predict(model, args, context)
-        elif operation.startswith("rnn_"):
-            result = xseq_rnn(model, operation, args, context)
-        elif operation.startswith("mlp_"):
-            result = xseq_mlp(model, operation, args, context)
+        var result = PythonObject(None)
+        if (operation.startswith("rnn_") or operation.startswith("mlp_")) and operation != "rnn_hidden_sequence":
+            var lifecycle = XseqPublicLifecycle(model, operation, args, context)
+            if lifecycle.fitting:
+                var depth = estimator_fit_begin(py_fields(model))
+                try:
+                    result = _xseq_execute(model, operation, lifecycle.arguments, context)
+                except problem:
+                    raise lifecycle.refusal(problem)
+                finally:
+                    estimator_fit_end(model, depth)
+            else:
+                result = _xseq_execute(model, operation, lifecycle.arguments, context)
+            result = lifecycle.finish(model, result, context)
         else:
-            result = xseq_forecast(model, operation, args, context)
+            result = _xseq_execute(model, operation, args, context)
         return result.steal_data()
     except error:
         return _xseq_raise(error, args_ptr)

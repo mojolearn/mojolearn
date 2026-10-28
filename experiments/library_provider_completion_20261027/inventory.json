@@ -328,7 +328,17 @@
       "RNN/LSTM/GRU.fit via _mode._track_fit",
       "MLPClassifier/Regressor predict via _mode._needs_fit"
     ],
-    "status": "repair_in_progress",
-    "requirement": "Preserve shared fit tracking, native validation, NotFittedError, and output semantics; a native marker alone does not qualify the public path"
+    "status": "source_repair_authored_runtime_pending",
+    "requirement": "Preserve shared fit tracking, native validation, NotFittedError, and output semantics; a native marker alone does not qualify the public path",
+    "source_repair": [
+      "shared native lifecycle helper reused by forest feature/caller boundary",
+      "RNN/MLP entry owns validation, fit-depth cleanup, NotFittedError mapping, labels/features and external regression widening",
+      "public base classes use native marker only after adding native lifecycle envelope"
+    ],
+    "pending": [
+      "compile and actual public runtime audit",
+      "remaining xseq input metadata repetition and legacy base-helper dispatch",
+      "other families inherited public wrappers"
+    ]
   }
 }
