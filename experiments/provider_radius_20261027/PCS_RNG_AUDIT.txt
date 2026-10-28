@@ -71,3 +71,11 @@ The follow-up registers connect_module('numpy.random.mtrand', mtrand,
 ('RandomState',)); mutable _rand is deliberately excluded. The original failure
 finding is retained and earlier syntax checks are not claimed to cover module
 registration. Read-only source checks confirmed the fix; runtime remains unrun.
+
+The same independent review identified capsule-name lifetime and allocation in
+lock cleanup. The capsule name now stays alive through both public capsule calls,
+and a single native call envelope is allocated before acquiring the RNG lock and
+reused for release. Allocation failure cannot skip release through py_call's
+tuple creation. The uint32 function pointer takes an opaque native pointer, with
+compile-time pointer-size ABI assertions. Source review confirmed NumPy 1.26.4
+uses the same masked uint32 draw path; no draw or runtime check was executed.
