@@ -15,6 +15,7 @@
 # in place drops the copy that went stale (`wrote_device` / `wrote_host`).
 from std.python import Python, PythonObject
 from std.memory import memcpy
+from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.py_balanced import py_call, py_get, py_type, py_contains
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_host_f32, classical_kind
 from bindings.classical_validate import classical_view
@@ -182,6 +183,7 @@ def decomp_shape(source: PythonObject, name: String, context: PythonObject) rais
 
 struct DecompMatrix(Copyable, Movable):
     var host: PythonObject   # a float32 Array of rows * cols words (at least one), or None
+    var host_address: Int    # -1 until captured, otherwise operation-local native address
     var device: Int          # an x_decomp device buffer id, or -1
     var rows: Int
     var cols: Int
@@ -191,6 +193,7 @@ struct DecompMatrix(Copyable, Movable):
 
     def __init__(out self, host: PythonObject, device: Int, rows: Int, cols: Int, on_device: Bool):
         self.host = host
+        self.host_address = -1
         self.device = device
         self.rows = rows
         self.cols = cols
@@ -202,6 +205,7 @@ struct DecompKit(Movable):
     var context: PythonObject   # the NumPy-free output context: every buffer is an Array
     var matrices: List[DecompMatrix]
     var allocations: List[Int]
+    var input_owners: List[PythonObject]
     var resident: Bool
     var one_device: Int
     var one_host: Int
@@ -211,6 +215,7 @@ struct DecompKit(Movable):
         self.context = context
         self.matrices = List[DecompMatrix]()
         self.allocations = List[Int]()
+        self.input_owners = List[PythonObject]()
         self.resident = py_get(entries, "x_decomp_dev_ew") is not None
         self.one_device = -1
         self.one_host = -1
@@ -262,6 +267,14 @@ struct DecompKit(Movable):
         # never written (every operation writes a fresh output).
         return self.add(array, rows, cols)
 
+    def input_snapshot(mut self, snapshot: ArrayMetadata, rows: Int, cols: Int) -> Int:
+        # The provider admitted shape/dtype/address once. Preserve the original
+        # storage owner independently of mutable caller Array slots.
+        self.input_owners.append(snapshot.owner)
+        var index = self.add(snapshot.keep, rows, cols)
+        self.matrices[index].host_address = snapshot.source.addr
+        return index
+
     def const(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:
         # `_M.of([v] * (r * c), r, c)`: the value rounded once to float32.
         var out = self.zeros(rows, cols)
@@ -297,7 +310,10 @@ struct DecompKit(Movable):
         return self.matrices[a].host
 
     def address(mut self, a: Int) raises -> PythonObject:
-        return classical_address(self.host(a))
+        var owner = self.host(a)
+        if self.matrices[a].host_address < 0:
+            self.matrices[a].host_address = Int(py=classical_address(owner))
+        return PythonObject(self.matrices[a].host_address)
 
     def device(mut self, a: Int) raises -> Int:
         # `_Kit._did`: a host matrix goes up once.
@@ -307,7 +323,7 @@ struct DecompKit(Movable):
             var handle = Int(py=py_call(self.entries["x_decomp_dev_alloc"], max(n, 1)))
             self.allocations.append(handle)
             if n:
-                _ = py_call(self.entries["x_decomp_dev_upload"], handle, classical_address(owner), n)
+                _ = py_call(self.entries["x_decomp_dev_upload"], handle, self.address(a), n)
                 _ = owner  # keep the Python object alive through the native call above
             self.matrices[a].device = handle
             _ = owner^
@@ -326,6 +342,7 @@ struct DecompKit(Movable):
     def wrote_device(mut self, a: Int):
         # The device copy was written in place: the host words are stale.
         self.matrices[a].host = PythonObject(None)
+        self.matrices[a].host_address = -1
 
     def wrote_host(mut self, a: Int):
         # The host copy was written in place: the device words are stale.
@@ -357,7 +374,7 @@ struct DecompKit(Movable):
         if n:
             var source = self.host(a)
             memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
-                   src=DecompF32(unsafe_from_address=Int(py=classical_address(source))), count=n)
+                   src=DecompF32(unsafe_from_address=Int(py=self.address(a))), count=n)
             _ = result  # keep the Python object alive through the native call above
             _ = source  # keep the Python object alive through the native call above
             _ = source^
@@ -380,7 +397,7 @@ struct DecompKit(Movable):
         if n:
             var source = self.host(a)
             memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
-                   src=DecompF32(unsafe_from_address=Int(py=classical_address(source))), count=n)
+                   src=DecompF32(unsafe_from_address=Int(py=self.address(a))), count=n)
             _ = source  # keep the Python object alive through the native call above
             _ = source^
         return out
@@ -1159,7 +1176,7 @@ struct DecompKit(Movable):
         if n:
             var source = self.host(a)
             memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
-                   src=DecompF32(unsafe_from_address=Int(py=classical_address(source))), count=n)
+                   src=DecompF32(unsafe_from_address=Int(py=self.address(a))), count=n)
             _ = source  # keep the Python object alive through the native call above
             _ = source^
         return out

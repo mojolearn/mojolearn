@@ -2959,7 +2959,7 @@ class _PLS(RegressorScoreMixin, _Base):
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
         return _PLS_CALL(self, "score",
-                         (X, y, sample_weight, _get_binding(getattr(self, "numeric_mode", None))), _PLS_CONTEXT)
+                         (X, y, sample_weight), _PLS_CONTEXT)
 
 
 # NIPALS, mode A, regression deflation.
@@ -5094,8 +5094,10 @@ _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibat
 
 # The native PLS owner (bindings/pls_native.mojo): PLSRegression, PLSCanonical, CCA.
 # `score` runs R^2 through the native metrics owner (family_mcls_r2) inside
-# the same call; `_get_binding` resolves the metrics binding, as r2_score did.
-from ._metrics_impl import _get_binding  # noqa: E402
+# the same call. Import connects the metrics tables; the native PLS owner
+# selects and checks the current binding after entering compiled code.
+from . import _metrics_impl as _pls_metrics  # noqa: E402,F401
+_native_family_bridge.connect_bindings("_mojolearn_metrics")
 _PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_class=PLSRegression,
                                               pls_canonical_class=PLSCanonical,
                                               pls_metric_owner=_native_family_bridge.connect())
