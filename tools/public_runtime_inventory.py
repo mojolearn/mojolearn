@@ -1511,11 +1511,21 @@ class EndpointConnections:
             entry = scope.entry_of(expr)
             if entry:
                 return ("native", entry)
+        literal = self.literal_test(expr, mod, func, env, depth)
+        if literal is not None:
+            return literal
         if isinstance(expr, ast.Call):
             args = [self.value(a, mod, func, env, depth + 1) for a in expr.args]
             if (_final(expr.func) in ("getattr", "getattr_static") and len(args) >= 2
                     and args[0] and args[0][0] == "class" and args[1] and args[1][0] == "literal"):
-                return self.index.lookup(args[0][1], args[1][1])
+                found = self.index.lookup(args[0][1], args[1][1])
+                if (found is None and len(args) == 3 and args[2] and args[2][0] == "literal"
+                        and isinstance(args[1][1], str) and not args[1][1].startswith("__")
+                        and self.complete_mro(args[0][1])):
+                    # `getattr(cls, "decision_function", None)` on a class whose whole MRO is
+                    # package source that never defines the name: the default.
+                    return args[2]
+                return found
             if _final(expr.func) == "unwrap" and args:
                 return args[0]
             called = self.index.resolve_expr(expr.func, mod.name, func)
@@ -1528,6 +1538,58 @@ class EndpointConnections:
                            for n in _own_nodes(callee.node) if isinstance(n, ast.Return)]
                 if returns and returns[0] and all(r == returns[0] for r in returns):
                     return returns[0]
+        return None
+
+    def complete_mro(self, cls):
+        """Every base on the MRO resolves to package source (or is `object`)."""
+        for klass in self.index.mro(cls):
+            for base in klass.node.bases:
+                if isinstance(base, ast.Name) and base.id == "object":
+                    continue
+                resolved = self.index.resolve_expr(base, klass.mod.name, None)
+                if not resolved or resolved[0] != "class":
+                    return False
+            if klass.node.keywords:
+                return False
+        return True
+
+    def literal_test(self, expr, mod, func, env, depth):
+        """A condition decided by literal values only: `kind == "iforest"`, `kind in _KINDS`,
+        `inspect.isfunction(method)` on a looked-up function or a literal default, `not x`.
+        None when anything in it is not a known literal, so both branches stay walked."""
+        if isinstance(expr, ast.Compare) and len(expr.ops) == 1:
+            left = self.value(expr.left, mod, func, env, depth + 1)
+            right = self.value(expr.comparators[0], mod, func, env, depth + 1)
+            if not left or left[0] != "literal" or not right:
+                return None
+            op = expr.ops[0]
+            if right[0] == "literal" and isinstance(op, (ast.Eq, ast.NotEq, ast.Is, ast.IsNot)):
+                same = left[1] == right[1] if isinstance(op, (ast.Eq, ast.NotEq)) else left[1] is right[1]
+                return ("literal", same if isinstance(op, (ast.Eq, ast.Is)) else not same)
+            if (right[0] == "sequence" and isinstance(op, (ast.In, ast.NotIn))
+                    and all(v and v[0] == "literal" for v in right[1])):
+                inside = any(left[1] == v[1] for v in right[1])
+                return ("literal", inside if isinstance(op, ast.In) else not inside)
+            return None
+        if isinstance(expr, ast.UnaryOp) and isinstance(expr.op, ast.Not):
+            inner = self.value(expr.operand, mod, func, env, depth + 1)
+            if inner and inner[0] == "literal":
+                return ("literal", not inner[1])
+            return None
+        if isinstance(expr, ast.BoolOp):
+            values = [self.value(v, mod, func, env, depth + 1) for v in expr.values]
+            if all(v and v[0] == "literal" for v in values):
+                truth = [bool(v[1]) for v in values]
+                return ("literal", all(truth) if isinstance(expr.op, ast.And) else any(truth))
+            return None
+        if (isinstance(expr, ast.Call) and _final(expr.func) in ("isfunction", "callable")
+                and len(expr.args) == 1 and not expr.keywords):
+            arg = self.value(expr.args[0], mod, func, env, depth + 1)
+            if arg and arg[0] == "literal":
+                return ("literal", callable(arg[1]))
+            if (arg and arg[0] == "func" and not arg[1].node.decorator_list
+                    and isinstance(arg[1].node, ast.FunctionDef)):
+                return ("literal", True)
         return None
 
     def record(self, cls, name, value, mod, node, reason="import-time class-slot replacement"):
@@ -1584,6 +1646,13 @@ class EndpointConnections:
                     self.walk(node.body, mod, func, dict(env))
                 self.walk(node.orelse, mod, func, dict(env))
                 continue
+            if isinstance(node, ast.If):
+                test = self.value(node.test, mod, func, env)
+                if test and test[0] == "literal":
+                    # a branch decided by literals (`elif kind == "iforest":` for one registered
+                    # class): the installers of the other branch never run for it
+                    self.walk(node.body if test[1] else node.orelse, mod, func, dict(env))
+                    continue
             if isinstance(node, (ast.If, ast.Try, ast.With)):
                 self.walk(node.body, mod, func, dict(env))
                 self.walk(getattr(node, "orelse", []), mod, func, dict(env))
