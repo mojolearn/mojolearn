@@ -28,8 +28,8 @@ from bindings.metrics_native_support import metric_float, metric_is_real, metric
 from bindings.host_inference_scalars import host_inference_primitive_number
 from core.cast_in import CAST_KIND_SIGNED
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
-from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
-from providers.python.kernel_public_lifecycle_pyapi import kernel_public_admit, kernel_public_finite, kernel_public_ignored_target, kernel_public_result, kernel_public_column_target, kernel_public_refusal
+from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end
+from providers.python.kernel_public_lifecycle_pyapi import kernel_public_admit, kernel_public_finite, kernel_public_ignored_target, kernel_public_result, kernel_public_column_target, kernel_public_refusal, kernel_public_feature_snapshot, kernel_public_fit_complete
 from providers.python.kernel_method_descriptor_pyapi import kernel_method_provider, kernel_method_execute, kernel_method_metadata
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_close,
@@ -972,6 +972,7 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
         kernel_public_finite(x, "X")
     if fitting and not operation.startswith("family_km_krr_"):
         kernel_public_ignored_target(args[2] if len(args) > 2 else PythonObject(None), x.source.rows, context)
+    var feature_names = kernel_public_feature_snapshot(args[1], context) if fitting else PythonObject(None)
     var admitted = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
     var outside = estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0
@@ -985,7 +986,8 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
         if fitting:
             estimator_fit_end(model, depth)
     if fitting:
-        estimator_fit_complete(model, args[1], False, context)
+        kernel_public_fit_complete(model, feature_names)
+    _ = feature_names^
     _ = x^
     return kernel_public_result(result, method == "predict", outside, context)
 

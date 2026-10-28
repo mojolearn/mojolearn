@@ -15,7 +15,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
 from bindings.native_mode_recipe import mode_recipe_call
-from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.optimizer_public_words import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 
@@ -44,7 +44,10 @@ def _outside() raises -> Bool:
                 raise cpy.unsafe_get_error()
             var code = PythonObject(from_owned=pointer)
             var name = String(code.co_name)
-            skip = name == "public" or name == "guarded" or name == "tracked" or name == "load"
+            # __getattribute__ is the generic one-call slot below
+            # (PublicOutputsMixin.__getattribute__): its caller decides.
+            skip = (name == "public" or name == "guarded" or name == "tracked" or name == "load"
+                    or name == "__getattribute__")
         if not skip:
             if py_get(fields, "__mojolearn_user_boundary__") is PythonObject(True):
                 return True
@@ -337,4 +340,49 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("ValueError:"):
             return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
+        return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+
+
+# Generic public attribute slot (PublicOutputsMixin.__getattribute__) of every
+# class without a connected native descriptor plan: application subclasses,
+# private package classes and the built-ins whose property owners are pending.
+# The lookup is CPython's own generic attribute operation, exactly
+# object.__getattribute__: it runs no package Python. A property or other
+# descriptor declared by the class is that class's own public operation and is
+# audited as its own endpoint (pending owners 2026-10-28: RandomProjection
+# components_, SkewedChi2Sampler.random_weights_, Bagging estimators_). The
+# fitted-output rule then matches public_attribute_c: a public trailing-
+# underscore name holding a mojolearn Array reads as a zero-copy NumPy view for
+# callers outside the package once NumPy is loaded. Its admission context is
+# the public attributes context, connected at package import
+# (_native_public_attributes.connect_classes); before that connection no
+# caller outside the package holds an estimator, so the value is returned.
+def public_attribute_generic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        if len(args) != 3:
+            raise Error("TypeError: generic public attribute expects model, name and native context")
+        var model = args[0]
+        var name = args[1]
+        var context = args[2]
+        ref cpy = Python().cpython()
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(model._obj_ptr, name._obj_ptr)
+        if not raw:
+            var failure = stash_python_error()
+            raise failure^
+        var result = PythonObject(from_owned=raw)
+        if py_type(name) is not py_type(PythonObject("")):
+            return result.steal_data()
+        var attributes = py_get(context, "attributes")
+        if attributes is None or py_type(result) is not attributes["array_class"]:
+            return result.steal_data()
+        var text = String(name)
+        if text.byte_length() > 0 and text.endswith("_") and not text.startswith("_"):
+            classical_connect_numpy(attributes)
+            if py_get(attributes, "ndarray") is not None and _outside():
+                result = _array_view(result, attributes)
+        return result.steal_data()
+    except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error)
         return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
