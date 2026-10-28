@@ -16,7 +16,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from bindings.py_typed_call import py_call_typed
 from checks.numerics import NUMERIC_IDENTICAL
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_reserved_execute
 from providers.python.generation_session_pyapi import (
     generation_reuse_native_provider, generation_connect_native_session,
     generation_native_session_matches, generation_native_forward,
@@ -60,6 +60,7 @@ def causal_lm_admit_binding(
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var entries = g[].bi.dict()
     var requested_gpu = String(model.device) == "gpu"
+    py_setitem(entries, "cpu", PythonObject(not requested_gpu))
     var kind = String(model.kind)
     var block_prefix = ("transformer" if kind == "transformer" else "mamba") if requested_gpu else "neural_host"
     var primitive_prefix = "training" if requested_gpu else "neural_host"
@@ -150,7 +151,7 @@ def causal_lm_admit_binding(
         py_setitem(entries, "native_primitives", primitive_provider)
         if kind == "transformer":
             var block_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_block_provider_cache"),
-                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 35)
+                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
             py_setitem(owner_fields, "_native_block_provider_cache", block_provider)
             py_setitem(entries, "native_block_operations", block_provider)
         if kind == "mamba1" or kind == "mamba2":
@@ -452,7 +453,7 @@ def causal_transformer_admin(binding: PythonObject, session: PythonObject, opera
     # Administration intentionally holds the GIL, matching the raw public API.
     if String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
         var provider = neural_descriptor_reuse(PythonObject(None),
-            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 35)
+            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
         var handle = neural_descriptor_handle(provider,
             _native_function(binding, "transformer_native_session_handle_v1"), session)
         _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)
@@ -509,9 +510,18 @@ def _causal_layer_run_prepared(
         a_words[11] = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
         var native_provider = py_get(e, "native_session_provider")
         var block_provider = py_get(e, "native_block_operations")
-        if String(model.device) == "cpu" and block_provider is not None:
+        if Bool(py=e["cpu"]) and block_provider is not None:
             py_setattr(st, "cached_tokens", PythonObject(neural_descriptor_execute(block_provider,
                 34 if head_profile else 33, a_words, p_words, [])))
+        elif device15 and block_provider is not None:
+            if blk["_native_session"] is None:
+                py_setitem(blk, "_native_session", e["create"]())
+                py_setitem(blk, "_session_binding", e["block_binding"])
+            var session = blk["_native_session"]
+            var handle = neural_descriptor_handle(block_provider,
+                _native_function(e["block_binding"], "transformer_native_session_handle_v1"), session)
+            py_setattr(st, "cached_tokens", PythonObject(neural_descriptor_reserved_execute(block_provider,
+                session, handle, 0, 1, 35, a_words, p_words, [])))
         elif native_provider is not None and not head_profile and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
             if blk["_native_session"] is None:
                 py_setitem(blk, "_native_session", e["create"]())

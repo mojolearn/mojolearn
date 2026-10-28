@@ -37,6 +37,7 @@ struct NativeSambaLayer(Movable):
     var report_sizes: List[Int]
     var reports: List[List[Float32]]
     var input: List[Float32]
+    var scratch: List[List[Float32]]
     var refresh_layouts: List[BorrowedBufferLayout]
     var refresh_addresses: List[Int]
     var prepare_operation: Int
@@ -83,6 +84,7 @@ struct NativeSambaLayer(Movable):
         self.report_sizes = report_sizes^
         self.reports = List[List[Float32]]()
         self.input = List[Float32]()
+        self.scratch = List[List[Float32]]()
         self.refresh_layouts = List[BorrowedBufferLayout]()
         self.refresh_addresses = List[Int]()
         self.prepare_operation = -1

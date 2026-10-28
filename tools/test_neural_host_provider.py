@@ -29,7 +29,7 @@ def test_host_binding_and_provider_share_relocated_numerical_functions():
 
 def test_cpu_session_and_causal_frontdoors_use_the_common_provider():
     causal=(ROOT/'bindings/causal_lm_public.mojo').read_text()
-    assert 'String(model.device) == "cpu" and block_provider is not None' in causal
+    assert 'Bool(py=e["cpu"]) and block_provider is not None' in causal
     assert '34 if head_profile else 33, a_words, p_words' in causal
     mamba=(ROOT/'bindings/mamba_public_native.mojo').read_text()
     assert '2 * kind - 1, _neural_int_words(addresses), p, f' in mamba
