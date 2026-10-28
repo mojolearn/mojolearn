@@ -2,7 +2,7 @@
 # Native public model attribute lookup. Only connected function/native
 # descriptors may bind; arbitrary Python properties/hooks are never called.
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same, prepared_class_stamp
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same, prepared_class_stamp, prepared_class_matches
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -59,11 +59,12 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     # descriptor checks run on first use per class and again whenever the
     # class stamp changes; instance keys are admitted on every call.
     var mods = NativeModules()
-    var stamp = prepared_class_stamp(mods, cls, Python.list(plan, py_get(context, "host_archive_finalizer_descriptor"),
-                                                            py_get(context, "host_archive_peer_finalizer_descriptor")))
+    var finalizer = py_get(context, "host_archive_finalizer_descriptor")
+    var peer_finalizer = py_get(context, "host_archive_peer_finalizer_descriptor")
     var admitted = prepared_get(mods, _LAYOUT_CLASS_SLOT, cls)
-    if admitted is None or not prepared_key_same(admitted, stamp):
+    if admitted is None or not prepared_class_matches(mods, cls, [plan, finalizer, peer_finalizer], admitted):
         _classical_check_class(model, context, cls, plan)
+        var stamp = prepared_class_stamp(mods, cls, Python.list(plan, finalizer, peer_finalizer))
         prepared_put(mods, _LAYOUT_CLASS_SLOT, cls, stamp)
     _classical_check_instance(model, context, cls, plan)
 
