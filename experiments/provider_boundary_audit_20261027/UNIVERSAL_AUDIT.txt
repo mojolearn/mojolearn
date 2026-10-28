@@ -1,0 +1,129 @@
+Universal public boundary worklist — 2026-10-27
+
+This extends AUDIT.txt after the owner asked for universal boundary repairs.
+The worklist source snapshot is main dcd2a307c1. No product execution, builds,
+GPU runs or identity verification were performed by this audit lane. Repair
+owners compile their affected groups; final runtime verification stays pending.
+
+Artifacts and coverage
+----------------------
+operations.tsv covers ALL 3808 endpoints from the existing public source
+inventory, conservatively deduplicated into 1812 source implementation groups:
+  1149 native_boundary, 386 prohibited_source, 259 unresolved,
+  11 allowed_tag_metadata, 7 refusal_only.
+These are classifications, not counts of proven defects. Different installed
+replacement connection records remain separate, and unknown source definitions
+are not silently collapsed. Therefore the 645 prohibited/unresolved worklist
+groups differ from the old inventory's 579 more aggressively grouped frontier
+sites. Each worklist row retains every associated endpoint and qualification debt.
+
+tools/provider_boundary_worklist.py produces this small source-review index from
+the existing inventory, without importing the product. It adds direct-call and
+phase hints for validation, fitted-state checks, preparation, binding selection,
+loops/resource orchestration and post-native result processing. AST hashes are
+checked before analyzing a body; changed sources demand a fresh inventory.
+Hints are triage, not proof. All native-boundary rows still require transitive
+native review; installed replacements may make retained Python bodies unreachable.
+Not all 1812 groups have been individually audited. No rows are marked runtime
+qualified by this tool. Tag-only metadata stays an explicitly allowed category.
+
+worklist_summary.json records the source ref, input hash, counts and limitations.
+Full endpoint source inventory and logs remain in:
+  /Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/
+  endpoints-main-dcd2a307.json / endpoints-main-dcd2a307.log
+  worklist-generation.log / worklist-tests-final.log
+The inventory gate remains exit 1 (1189 alias-inclusive endpoint classifications).
+Worklist generation: exit 0, zero AST mismatches against this frozen source.
+Worklist tests: 5 source-only tests; result recorded in worklist-tests-final.log.
+
+Concrete outstanding paths sent to repair owners
+------------------------------------------------
+Classical repair lane:
+- AffinityPropagation fit/predict/fit_predict and related cluster operations
+  select their binding in Python through self._bind before the native call.
+  _expansion_cluster.py:919,942,960 -> _mode.py:674 -> _backend.py:2424.
+- MiniBatchKMeans callable initialization explicitly calls Python/NumPy from
+  native code: cluster_fit_a_native.mojo:193–226, reached from _mbk_fit:257.
+  Exact native data/configuration must replace this protocol. There is no
+  inline approved bug exception on the reviewed callback path.
+- Generic mutable scalar/attribute admission in the same family remains work:
+  _attr/_float/_seed and _affinity_fit, as detailed in AUDIT.txt.
+
+Non-classical public-wrapper lane:
+- RNN/GRU/LSTM state_dict/load_state_dict share _x_sequence_rnn.py:96,106.
+  Python loops build parameter views and call np.prod, reshape/copy,
+  concatenate/ascontiguousarray. This is state preparation/result processing.
+- TransformerBlock forward_with_tape/backward_from_tape at
+  _transformer_impl.py:1137,1197 perform validation, allocation, native binding
+  selection, session/lock orchestration and completed gradient/tape handling.
+- TransformerState constructor/capacity/keys/values at
+  _transformer_impl.py:523,535,563,572 call _packed:539, whose Python head loop
+  copies ring-cache slices. Output processing is still part of the operation.
+- LayerNorm.to_device and backward at _x_sequence_norm.py:299,337 perform
+  preparation/route selection, fitted-state checks and output reshaping/field
+  assignment. A native forward does not qualify the unchanged backward method.
+- Tokenizer encode/encode_batch and associated decode/construction/render/write
+  methods retain Python preparation/result processing. Examples tokenizer.py:432
+  calls _text_bytes and encode_bytes, while encode_batch:455 packs documents and
+  processes output. These need whole public operation review, not private kernel
+  evidence alone. No blanket import-time replacement was found on these bodies.
+
+Shared neural owner, coordinated with root/public-wrapper lane:
+- TransformerBlock.forward is classified native_boundary, but its transitive
+  owner has a pre-admission hook path. _transformer_impl.py:1105 ->
+  tokenizer_host.neural_block_c[2] -> neural_block_public.mojo:652,661 ->
+  neural_block_forward_binding:309 -> neural_block_owner:25 reads
+  object.__getattribute__(block, '__dict__') before exact layout admission.
+  Mutable d_model is subsequently coerced at :313. A changed __dict__ descriptor
+  or scalar hook can run before later causal_lm admission. This illustrates why
+  one-call wrapper classification and pure-kernel grep are insufficient.
+
+Repair-lane update after the frozen inventory: public-wrapper owner reports RNN
+state migration commits 972d865e / 3fb9732d46 / 92ef9cc2d7 and LayerNorm boundary
+commit 2bf61322e2 ready for root compilation. This audit has not independently
+reviewed or executed those commits. The lane explicitly retains packed CPython
+arithmetic dispatch in sequence_layers_native as incomplete provider work.
+Transformer and tokenizer findings remain unaddressed by that lane at handoff.
+
+Root imported-program review and repaired findings
+--------------------------------------------------
+Reviewed source commits 77ff078f54 and 00ccdd63f3 in the root-owned
+imported-provider-dispatch worktree. The module-global run/run_torch entries
+remove the old mutable-instance callable lookup. NativeProgramHostRun carries
+typed native plan/input/result state; PROGRAM_HOST_RUN validates registry token,
+executor kind and prepare/replay phase and dispatches through the selected
+provider image. The owner and snapshot are retained. No CPython computational
+entry or new concrete request-level flaw was identified in that review.
+
+The initial review of 77ff078f54 found another concrete gap: ImportedProgram.run
+admitted its program metadata but inspected array inputs through isinstance,
+shape, len/index and hasattr before exact input admission. ndarray/list
+subclasses and arbitrary array-like hooks could run. Shape metadata was reread
+by descriptor preparation. This was sent to root and source-repaired in
+00ccdd63f3: _imported_capture_input calls program_native_input first, captures
+one ndarray descriptor, and derives sequence dimensions/native values in one
+conversion pass; exact keyword containers/string keys precede comparisons.
+The old hasattr path is removed. Compilation/runtime qualification is still
+required; a source review cannot establish binary behavior or identity.
+
+The public test_provider_boundary_audit_controls.py now contains 22 runtime
+cases, all UNRUN by this lane: the previous 17 plus ndarray-shape, list-length,
+array-protocol, nested-scalar and keyword-key hooks in public run. Its syntax
+is checked. These are intentionally small boundary controls; they add no GPU
+identity lane or performance campaign.
+
+Allowed exceptions and scope
+----------------------------
+_runtime_fallbacks.py records a narrow Array.__len__ callback exception for exact
+Voting/Stacking/MultiOutput/OneVsRest/CalibratedClassifier public owners and
+methods. It pins original callback code identities and explicitly calls this an
+incomplete migration. Preserve or replace it with supported native handling;
+never extend the exception to unrelated work or call it Python-free. Tag-only
+scikit-learn metadata remains allowed. Native instance dictionary access and
+passive Python/buffer ownership are boundary handling, not computational Python.
+
+No broad compliance claim, completion count, remote-main status or all-vendor
+claim follows from this worklist. Remaining validation, preparation, fitted-state
+checks, native callback admission and completed-result processing stay pending
+until the actual public operations and transitive native owners are repaired
+and their relevant evidence exists.

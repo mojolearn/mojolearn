@@ -1,0 +1,36 @@
+{
+  "schema": "mojolearn.provider-boundary-audit-artifacts.v1",
+  "source_ref": "dcd2a307c1",
+  "reviewed_followup_refs": [
+    "77ff078f54",
+    "00ccdd63f3"
+  ],
+  "runtime_executed": false,
+  "artifacts": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/endpoints-main-dcd2a307.json",
+      "bytes": 6475255,
+      "sha256": "60a5f42d2ed7af814bbf9e3d6a7108587ea51f5414c992344c1b707af40082fa"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/endpoints-main-dcd2a307.log",
+      "bytes": 8115,
+      "sha256": "d75d41eecc89640a30e304985d44c02666457a23c0a498f137b7b8627b63cb96"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/worklist-generation.log",
+      "bytes": 88,
+      "sha256": "1e8e99f1069a77c9adf2e77a6defd67799518d13875538dd78e64d9e8e42d52b"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/worklist-tests-final.log",
+      "bytes": 98,
+      "sha256": "1ccafd8e67328198f09639d51973b1537731591146acaca71578cfcbe74b267b"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/probe-syntax-universal.log",
+      "bytes": 100,
+      "sha256": "e28cdd0ee4532c4bf68e2aa9000f7cc5612f49e05299ff367840cdd1b5db8924"
+    }
+  ]
+}
