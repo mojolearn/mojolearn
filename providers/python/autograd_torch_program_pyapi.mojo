@@ -169,10 +169,10 @@ def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
     var context = Python.dict()
     py_setitem(context, "empty", variables.empty)
     _ = _torch_entry(context, "empty")
-    for pair in [Python.tuple("get_device", "_cuda_getDevice"),
+    for pair in [Python.tuple("get_device", "_cuda_getDevice"),  # small-loop(fixed native framework entries)
                  Python.tuple("set_device", "_cuda_setDevice"),
                  Python.tuple("synchronize", "_cuda_synchronize"),
-                 Python.tuple("synchronize_mps", "_mps_deviceSynchronize")]:  # small-loop(fixed native framework entries)
+                 Python.tuple("synchronize_mps", "_mps_deviceSynchronize")]:
         py_setitem(context, pair[0], py_get(fields, pair[1]))
     var public = py_fields(torch)
     var device_type = public["device"]
