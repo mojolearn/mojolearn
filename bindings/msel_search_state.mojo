@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.msel_inputs import msel_input, msel_admit
-from bindings.arena_materialize_native import _array
+from bindings.arena_materialize_native import _array, _cast
 from bindings.msel_estimator_native import msel_estimator_plan
 from bindings.msel_scorer_native import msel_scorer_fields
 from bindings.native_owner_lifetime import native_release_weakrefs
@@ -161,6 +161,11 @@ def msel_parameter_values(value: PythonObject, context: PythonObject) raises -> 
         if rank == 0:
             raise Error("TypeError: iteration over a 0-d Array")
         if rank == 1:
+            # Float16 Array storage is a native uint16 memoryview. Iteration
+            # must publish its numeric values, not the backing bit patterns.
+            if String(packed.dtype) == "<f2":
+                var scalars = _cast(packed, "<f8", context["family_msel_resident_context"])
+                return py_call(b.list, scalars._mv)
             return py_call(b.list, packed._mv)
         var shape = py_slice_from(packed.shape, 1)
         var n = Int(py=packed.shape[0])
