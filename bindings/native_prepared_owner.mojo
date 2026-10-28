@@ -12,7 +12,8 @@ Rules (shared by every site that uses it):
   message and position.
 - The registry entry lives outside the object's own dictionary (no pickling,
   copy or `__getstate__` change) and holds a weak reference to the object; the
-  entry is dropped when the object dies, so it never extends a lifetime.
+  entry is dropped promptly when the object dies. Callers must not store a
+  record that strongly retains its own owner; a weak key cannot break that cycle.
 - The validity key is a flat list of the exact objects the setup read
   (container objects and their items, recursively, bounded depth). Any
   reassignment, in-place container edit, insertion or removal changes the key
@@ -26,71 +27,183 @@ Rules (shared by every site that uses it):
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 
 
+struct PreparedEntry(Movable):
+    var slot: String
+    var owner_address: Int
+    var weak: PythonObject
+    var record: PythonObject
+
+    def __init__(out self, var slot: String, owner_address: Int, weak: PythonObject, record: PythonObject):
+        self.slot = slot^
+        self.owner_address = owner_address
+        self.weak = weak
+        self.record = record
+
+
 struct PreparedOwners(Defaultable, Movable):
-    var tables: PythonObject
+    var slots: Dict[String, Dict[Int, Int]]
+    var entries: Dict[Int, PreparedEntry]
+    var next_id: Int
+    var cleanup_module: PythonObject
+    var cleanup_function: PythonObject
+    var weakref_get_ref: Bool
 
     def __init__(out self):
-        self.tables = PythonObject(None)
+        self.slots = Dict[String, Dict[Int, Int]]()
+        self.entries = Dict[Int, PreparedEntry]()
+        self.next_id = 1
+        self.cleanup_module = PythonObject(None)
+        self.cleanup_function = PythonObject(None)
+        self.weakref_get_ref = False
 
 
 comptime PREPARED_OWNERS = _Global[
-    StorageType=PreparedOwners, name="MojolearnPreparedOwnersV1",
+    StorageType=PreparedOwners, name="MojolearnPreparedOwnersV2",
     init_fn=PreparedOwners.__init__,
 ]
 
 
-def _prepared_table(mut mods: NativeModules, slot: String) raises -> PythonObject:
+def _prepared_release(identifier: Int) raises:
     var g = PREPARED_OWNERS.get_or_create_ptr()
-    var bi = mods.module("builtins")
-    if g[].tables is None:
-        g[].tables = bi.dict()
-    var name = PythonObject(slot)
-    var table = py_get(g[].tables, name)
-    if table is None:
-        table = bi.dict()
-        py_setitem(g[].tables, name, table)
-    return table
+    if identifier not in g[].entries:
+        return
+    # Move the entry OUT before releasing any Python references. Its record
+    # may release buffers or trigger another owner's weakref callback; that
+    # reentrant cleanup must see fully updated maps and no live Dict borrow.
+    var released = g[].entries.pop(identifier)
+    if released.slot in g[].slots:
+        if released.owner_address in g[].slots[released.slot]:
+            if g[].slots[released.slot][released.owner_address] == identifier:
+                ref slot_entries = g[].slots[released.slot]
+                _ = slot_entries.pop(released.owner_address)
+    # released is destroyed only after both maps have been updated. A stale
+    # callback cannot erase a replacement: every record gets a unique ID.
 
 
-def _prepared_id(value: PythonObject) raises -> PythonObject:
-    return PythonObject(Int(value._obj_ptr))
+def _prepared_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    # A native C entry constructed by the supported Mojo module builder.
+    # PyMethod_New binds an opaque integer ID; weakref supplies its own object
+    # as argument two. No Python function implementation is invoked.
+    try:
+        ref cpy = Python().cpython()
+        if cpy.lib.get_function[Int]("PyTuple_Size")(args_ptr) != 2:
+            raise Error("prepared owner cleanup requires its native ID and weakref")
+        var raw_id = cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")(args_ptr, 0)
+        var identifier = cpy.lib.get_function[Int64]("PyLong_AsLongLong")(raw_id)
+        if cpy.PyErr_Occurred():
+            raise cpy.unsafe_get_error()
+        _prepared_release(Int(identifier))
+        return PythonObject(None).steal_data()
+    except error:
+        return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+
+
+def _prepared_cleanup_function() raises -> PythonObject:
+    var g = PREPARED_OWNERS.get_or_create_ptr()
+    if g[].cleanup_function is None:
+        # The standard builder owns the method definition and creates the
+        # native C callable. Keep its finalized module alive in this native
+        # global; no sys.modules write, import, Python function, custom ABI
+        # struct layout or borrowed temporary PyMethodDef is involved.
+        var module = PythonModuleBuilder("_mojolearn_prepared_lifetime")
+        module.def_py_c_function(_prepared_finalize_c, "release")
+        var native_module = module.finalize()
+        ref cpy = Python().cpython()
+        var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(native_module._obj_ptr)
+        var name = String("release")
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemString")(fields, name.as_c_string_slice().unsafe_ptr())
+        if not raw:
+            raise Error("prepared owner native cleanup entry is absent")
+        g[].cleanup_module = native_module
+        g[].cleanup_function = PythonObject(from_owned=cpy.Py_NewRef(raw))
+        var version_ptr = cpy.lib.get_function[Pointer[Int8, MutUntrackedOrigin]]("Py_GetVersion")()
+        var version = String(unsafe_from_utf8_ptr=version_ptr)
+        # GetRef entered the Stable ABI in 3.13. GetObject is available at
+        # the 3.10 floor but removed in 3.15; select once during cold setup.
+        g[].weakref_get_ref = not (version.startswith("3.10.") or version.startswith("3.11.") or version.startswith("3.12."))
+    return g[].cleanup_function
 
 
 def prepared_get(mut mods: NativeModules, slot: String, owner: PythonObject) raises -> PythonObject:
-    """The record stored for `owner` under `slot`, or None."""
-    var table = _prepared_table(mods, slot)
-    var entry = py_get(table, _prepared_id(owner))
-    if entry is None:
+    # Native slot/address lookup: no Python dict, boxed identity integer,
+    # temporary record list or Python-object method dispatch on a cache hit.
+    var g = PREPARED_OWNERS.get_or_create_ptr()
+    var address = Int(owner._obj_ptr)
+    if slot not in g[].slots or address not in g[].slots[slot]:
         return PythonObject(None)
-    # The weak reference is a native type: calling it never runs Python code.
-    if py_call(entry[0]) is not owner:
-        return PythonObject(None)
-    return entry[1]
+    var identifier = g[].slots[slot][address]
+    ref cpy = Python().cpython()
+    # Weakref admission uses public native APIs, never Python-object call
+    # dispatch. Keep this check even with prompt cleanup: an exceptional
+    # failure invoking a destruction callback must not admit a recycled address.
+    var weak = g[].entries[identifier].weak._obj_ptr
+    if g[].weakref_get_ref:
+        var raw = PyObjectPtr()
+        var status = cpy.lib.get_function[Int32]("PyWeakref_GetRef")(weak, Pointer(to=raw))
+        if status < 0:
+            raise cpy.unsafe_get_error()
+        if status == 0:
+            return PythonObject(None)
+        var held = PythonObject(from_owned=raw)
+        if held is not owner:
+            return PythonObject(None)
+    else:
+        # <=3.12 only. Borrowed referent is safe while GIL is held and the
+        # public call strongly owns the supplied owner argument.
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyWeakref_GetObject")(weak)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        if raw != owner._obj_ptr:
+            return PythonObject(None)
+    return g[].entries[identifier].record
 
 
 def prepared_put(mut mods: NativeModules, slot: String, owner: PythonObject, record: PythonObject) raises:
-    """Store `record` for `owner`; silently skip objects without weak references."""
-    var table = _prepared_table(mods, slot)
-    var key = _prepared_id(owner)
+    var g = PREPARED_OWNERS.get_or_create_ptr()
+    if g[].next_id == 9223372036854775807:
+        raise Error("prepared owner registry exhausted native record IDs")
+    var identifier = g[].next_id
+    g[].next_id += 1
     ref cpy = Python().cpython()
-    # On the owner's death CPython calls table.pop(key, ref): a native method
-    # bound with MethodType, so the entry goes away without Python code.
-    var callback = py_call(mods.module("types").MethodType, table.pop, key)
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyWeakref_NewRef")(owner._obj_ptr, callback._obj_ptr)
-    if not raw:
+    var function = _prepared_cleanup_function()
+    var token = PythonObject(identifier)
+    # Documented public APIs: PyMethod_New binds an object without executing
+    # it; PyWeakref_NewRef invokes the native callback promptly on owner death.
+    # https://docs.python.org/3/c-api/method.html#c.PyMethod_New
+    # https://docs.python.org/3/c-api/weakref.html#c.PyWeakref_NewRef
+    var raw_callback = cpy.lib.get_function[PyObjectPtr]("PyMethod_New")(function._obj_ptr, token._obj_ptr)
+    if not raw_callback:
+        raise cpy.unsafe_get_error()
+    var callback = PythonObject(from_owned=raw_callback)
+    var raw_weak = cpy.lib.get_function[PyObjectPtr]("PyWeakref_NewRef")(owner._obj_ptr, callback._obj_ptr)
+    if not raw_weak:
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return
-    var weak = PythonObject(from_owned=raw)
-    py_setitem(table, key, Python.list(weak, record))
+    var weak = PythonObject(from_owned=raw_weak)
+    var address = Int(owner._obj_ptr)
+    var previous = 0
+    if slot not in g[].slots:
+        g[].slots[slot] = Dict[Int, Int]()
+    elif address in g[].slots[slot]:
+        previous = g[].slots[slot][address]
+    g[].entries[identifier] = PreparedEntry(slot.copy(), address, weak, record)
+    g[].slots[slot][address] = identifier
+    # Publish replacement before destroying the old record, matching mapping
+    # replacement behavior even if that destruction reenters this registry.
+    if previous != 0:
+        _prepared_release(previous)
 
 
 def prepared_drop(mut mods: NativeModules, slot: String, owner: PythonObject) raises:
-    var table = _prepared_table(mods, slot)
-    _ = py_call(table.pop, _prepared_id(owner), PythonObject(None))
+    var g = PREPARED_OWNERS.get_or_create_ptr()
+    var address = Int(owner._obj_ptr)
+    if slot in g[].slots and address in g[].slots[slot]:
+        _prepared_release(g[].slots[slot][address])
 
 
 def prepared_key_add(mut mods: NativeModules, key: PythonObject, value: PythonObject, depth: Int = 0, limit: Int = 4) raises:
