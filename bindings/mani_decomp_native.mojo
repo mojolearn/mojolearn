@@ -3,8 +3,8 @@
 # (python/mojolearn/_expansion_decomp.py): Isomap (`fit`, `fit_transform`,
 # `transform`, `reconstruction_error`), ClassicalMDS (`fit`, `fit_transform`),
 # MDS (`fit`, `fit_transform`) and LocallyLinearEmbedding (`fit`,
-# `fit_transform`, `transform`). The shell hands over the decomp binding of the
-# model's numeric mode and the default-mode one (`_host_kit()`'s); this owner
+# `fit_transform`, `transform`). The native provider selects the decomp binding
+# for the requested or fitted mode and the process-default helper kit; this owner
 # makes the Python methods' refusals (same wording, same order) and runs their
 # steps statement for statement on the kit (bindings/mani_kit.mojo): the same
 # x_decomp entries, operands, float32 scalars and order, every matrix where the
@@ -17,6 +17,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_attributes import classical_connect_numpy
+from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_call_kw,
     family_field,
@@ -99,7 +100,7 @@ def _mani_host_kit(binding: PythonObject, context: PythonObject) raises -> MKit:
 
 def _mani_check(model: PythonObject, attr: String) raises:
     """`_check(attr)`."""
-    if not Bool(py=py_call(Python.import_module("builtins").hasattr, model, PythonObject(attr))):
+    if not py_contains(py_fields(model), PythonObject(attr)):
         raise Error("RuntimeError: " + family_type_name(model) + " is not fitted; call fit first")
 
 
@@ -806,9 +807,35 @@ def _lle_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     return mk_out2(k.lle_apply(wb, idm, family_field(fields, "embedding_m_")), context)
 
 
-def mani_decomp_operation(model: PythonObject, operation: String, args: PythonObject,
+def _mani_arguments(model: PythonObject, operation: String, args: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
+    # Public shells hand over settings and buffers only. Resolve both legacy
+    # binding slots after crossing the native boundary. Explicit modules remain
+    # supported for internal/legacy callers and are admitted by MKit.
+    if len(args) < 2:
+        raise Error("TypeError: manifold operation requires two binding slots")
+    var fields = py_fields(model)
+    var requested = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
+    if operation.endswith("_transform") or operation == "family_mani_iso_reconstruction_error":
+        # A fit_transform is a fit, while transform uses the mode saved by fit.
+        if not operation.endswith("_fit_transform"):
+            requested = py_get(fields, PythonObject("numeric_mode_"), PythonObject(None))
+    var binding = args[0]
+    if binding is None:
+        binding = estimator_binding_mode(requested, "_mojolearn_x_decomp", context)
+    var default_binding = args[1]
+    if default_binding is None:
+        default_binding = estimator_binding_mode(PythonObject(None), "_mojolearn_x_decomp", context)
+    var resolved = Python.list(binding, default_binding)
+    for i in range(2, len(args)):  # small-loop: fixed public operation argument envelope
+        _ = py_call(resolved.append, args[i])
+    return py_call(Python.import_module("builtins").tuple, resolved)
+
+
+def mani_decomp_operation(model: PythonObject, operation: String, var args: PythonObject,
                           context: PythonObject) raises -> PythonObject:
-    """args = (decomp binding, default-mode decomp binding, X[, init])."""
+    """args = (optional decomp binding, optional default binding, X[, init])."""
+    args = _mani_arguments(model, operation, args, context)
     if operation == "family_mani_cmds_fit":
         _ = _cmds_fit(model, args, context)
         return model
