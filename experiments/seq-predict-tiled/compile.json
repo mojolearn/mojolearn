@@ -86,5 +86,39 @@
    }
   ],
   "note": "CPU root only; the sm_89 results above are at bdaa8554f8 (pre-merge)"
+ },
+ "selfmerge_gate_6742b64c68": {
+  "source_commit": "6742b64c68 (lane merged with origin/main 55dc4e4af3; main changed autograd/transformer_primitives_ops.mojo and gemm/checks/gemm_identical.mojo inside the x_sequence closure)",
+  "pod": "59idk6xdif9a2l (16 vCPU, affinity 16, cgroup max; stopped on request 18:10Z by TERM -> normal teardown, VERIFIED gone HTTP 404, $0.18)",
+  "roots": [
+   {
+    "name": "x_sequence_host_cpu_on",
+    "exit": 0,
+    "seconds": 192,
+    "jobs": 16,
+    "binary_sha256": "5f0aa84632bc3647148ce34b6684b5bc134fb93f858d82d6bb73b7c65bd30932"
+   },
+   {
+    "name": "x_sequence_sm89_on",
+    "exit": 0,
+    "seconds": 170,
+    "jobs": 16,
+    "binary_sha256": "2d6d1b11be41964427b93090612555a1ff027c87fddd758bcfb071199933a9d6"
+   },
+   {
+    "name": "x_sequence_sm89_off",
+    "exit": 0,
+    "seconds": 165,
+    "jobs": 16,
+    "binary_sha256": "824339a54ec03943ef9e4826835ab86cc4c366d1d9966e8750f762974281449f"
+   }
+  ],
+  "roots_entries": {
+   "x_sequence_host_cpu_on": "bindings/entry/entry__mojolearn_x_sequence_host.mojo -O0 x86-64-v3 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1",
+   "x_sequence_sm89_on": "bindings/entry/entry__mojolearn_x_sequence.mojo x86-64-v3 sm_89 -D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1",
+   "x_sequence_sm89_off": "bindings/entry/entry__mojolearn_x_sequence.mojo x86-64-v3 sm_89"
+  },
+  "host_families": "INCOMPLETE and NOT green: stopped at 28/46; x_sequence host family (define off CPU root) rc=0 170 s; mamba and resample rc=1 \"ln: File exists\" (undeclared MOJOLEARN_BINCACHE_OUTPUTS run, the neighbour-.so cache issue); import + tier_dir never reached",
+  "log_dir": "/Users/andrewhendel/mojolearn-evidence/seq-predict-tiled-20261028/selfmerge/leg_out/remote/leg_out"
  }
 }
