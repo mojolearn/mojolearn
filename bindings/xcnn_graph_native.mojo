@@ -136,10 +136,25 @@ def _graph_new(src: PythonObject, dst: PythonObject, n: Int, entries: PythonObje
     return Python.dict(n=n, nnz=nnz, src=src, dst=dst, csr_f=f[0], order_f=f[1], csr_t=t[0], order_t=t[1])
 
 
-def _graph_admit(g: PythonObject) raises:
+def _graph_admit(g: PythonObject, context: PythonObject) raises:
     neural_string_keys(g)
     neural_plain_value(g["n"], 0, PythonObject(None))
     neural_plain_value(g["nnz"], 0, PythonObject(None))
+    var n = Int(py=g["n"])
+    var count = Int(py=g["nnz"])
+    if n < 0 or count < 0:
+        raise Error("graph cache dimensions must be nonnegative")
+    for name in ["src", "dst", "csr_f", "csr_t", "order_f", "order_t"]:  # small-loop(cached CSR buffer metadata)
+        var array = g[PythonObject(name)]
+        if py_type(array) is not context["ndarray"]:
+            raise Error("TypeError: cached graph storage requires exact native arrays")
+        var dtype = array.dtype
+        if Int(py=dtype.num) != 5 or not Bool(py=dtype.isnative):
+            raise Error("TypeError: cached graph indices require native int32 storage")
+        var expected = n + 1 + 2 * count if name.startswith("csr_") else count
+        if not _same_shape(xcnn_shape(array), [expected]):
+            raise Error("cached graph index layout differs from its node/edge metadata")
+        _ = xcnn_addr(array)
 
 
 def _gather(entries: PythonObject, values: PythonObject, order: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -434,7 +449,7 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
         g = gv[0]
         vals = gv[1]
         py_setitem(fields, "_gcache", Python.tuple(key, Python.tuple(g, vals)))
-    _graph_admit(g)
+    _graph_admit(g, context)
     if xcnn_mixed(entries):
         return _gcn_forward_dev(layer, fields, entries, x, g, vals, context)
     py_setitem(fields, "_xdev", PythonObject(None))
@@ -564,7 +579,7 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
         var edges = _edges(edge_index, n, context)
         g = _graph_new(edges[0], edges[1], n, entries, context)
         py_setitem(fields, "_gcache", Python.tuple(key, g))
-    _graph_admit(g)
+    _graph_admit(g, context)
     if _sage_res_form(fields, entries):
         return _sage_forward_dev(layer, fields, entries, x, g, context)
     py_setitem(fields, "_xdev", PythonObject(None))
@@ -747,7 +762,7 @@ def _graph_gradient(layer: PythonObject, gradient: PythonObject, context: Python
     var fields = _graph_layer_fields(layer, context)
     if py_get(fields, "_x") is None or py_get(fields, "_g") is None:
         raise Error("RuntimeError: graph backward requires a prior forward")
-    _graph_admit(fields["_g"])
+    _graph_admit(fields["_g"], context)
     var g = gradient if xcnn_is_t(gradient, context) else _snapshot(gradient, "grad_out", context)
     var xs = xcnn_shape(fields["_x"])
     if len(xs) != 2 or not _same_shape(xcnn_shape(g), [xs[0], Int(py=fields["out_channels"])]):
@@ -768,6 +783,17 @@ def _resident_saved(fields: PythonObject, entries: PythonObject, context: Python
     return _fields(saved[0])["b"] is entries["module"]
 
 
+def _resident_ones(layer: PythonObject, entries: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+    # Preserve the existing resident bias-gradient operand: upload only when
+    # its allocation size changes, rather than adding an upload per backward.
+    var n = max(count, 1)
+    var dev = xcnn_dev(layer, entries, context)
+    var cached = py_get(xcnn_dev_fields(dev, context)["h"], "ones")
+    if cached is not None and Int(py=cached[1]) == n:
+        return cached[0]
+    return xcnn_dev_upload(layer, entries, "ones", _ones(n, context), context)
+
+
 def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject, grad: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     var saved = fields["_xdev"]
@@ -781,9 +807,9 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
     var gh = grad.h if gt else xcnn_dev_upload(layer, entries, "G", grad, context)
     var gb = xcnn_host_f32([f], context)
     if Bool(py=fields["bias"]):
-        var ones = _ones(n, context)
         var resident = not xcnn_device_io_off(entries, context)
-        var address = xcnn_dev_upload(layer, entries, "ones", ones, context) if resident else xcnn_addr(ones)
+        var ones = PythonObject(None) if resident else _ones(n, context)
+        var address = _resident_ones(layer, entries, n, context) if resident else xcnn_addr(ones)
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_gemm_m"), Python.list(gh, address, xcnn_addr(gb)),
                           PythonObject(3 if resident else 1), Python.list(f, 1, n, 2))
         _ = ones
@@ -840,6 +866,11 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
     var gh = grad.h if gt else xcnn_dev_upload(layer, entries, "G", grad, context)
     if Bool(py=fields["normalize"]):
         var yd = fields["_ydev"]
+        var b = xcnn_builtins()
+        if py_type(yd) is not b.tuple or len(yd) != 3 or py_type(yd[0]) is not b.int or py_type(yd[1]) is not b.int:
+            raise Error("TypeError: SAGE normalization requires native saved handle metadata")
+        if yd[2] is not None and not xcnn_is_t(yd[2], context):
+            raise Error("TypeError: SAGE normalization requires a native retained tensor")
         var normg = xcnn_dev_get(layer, entries, "G2", n * f, context)
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_graph_op_m"), Python.list(yd[0], gh, yd[1], normg, 0),
                           PythonObject(15), Python.list(n, f, 0, 3))

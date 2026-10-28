@@ -1,0 +1,29 @@
+CNN owned source review follow-up — 2026-10-27
+Branch: lane/peer4-cnn-graph-20261027, following 9782068178d8.
+
+Changes: admit Conv configuration in both internal native forward entries,
+including direct BasicBlock host paths; validate cached graph index arrays as
+exact native int32 buffers with the expected CSR layout; validate retained
+SAGE normalization handles before native calls; preserve resident bias-gradient
+ones reuse instead of uploading ones every backward. Arithmetic bodies unchanged.
+
+Review: no additional concrete bypass found in installed CNN public attribute
+handling or retained native owner paths. Parent handles the independent shallow
+admission_context snapshot needed for NumPy scalar BN configuration. This is
+source-review evidence, not runtime verification or a whole-library proof.
+
+Compilation: graph attempt5 exit0, 64.54s; Conv attemptreview1 exit0, 59.29s.
+Both compile-only native public owner fixtures used local Mac CPU apple-m1,
+identical, O0, 10 compiler workers (full logical CPU allocation); configured
+workers do not prove CPU saturation. No runtime or identity tests executed.
+Shared BN/common files came from parent as uncommitted compile dependencies;
+only owned Conv/graph edits and receipts are committed. Source archive contains
+the exact shared dependencies used. Parent owns dispatcher integration.
+
+Evidence: review_compile.json records compiler/binary/source hashes and logs;
+/Users/andrewhendel/mojolearn-evidence/peer4-cnn-graph-20261027/attempt5/
+contains graph output, binary and exact source archive for both builds;
+/Users/andrewhendel/mojolearn-evidence/peer4-cnn-conv-20261027/attemptreview1/
+contains Conv output and binary. Source guards and push output are retained in
+the graph evidence root review-guards/ and review-push.log. No claim of runtime,
+installed-loader or uncompiled GPU coverage.

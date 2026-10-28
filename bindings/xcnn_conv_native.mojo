@@ -633,7 +633,7 @@ def _pad_t(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: 
 
 def _conv_forward_t(layer: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Conv2d._forward_t(x)`: x and the output resident."""
-    var fields = _fields(layer)
+    var fields = _conv_admit(layer, context)
     var entries = xcnn_entries(fields, context)
     var xs = xcnn_shape(x)
     _check_x(fields, xs)
@@ -691,7 +691,7 @@ def xcnn_conv2d_forward(layer: PythonObject, x: PythonObject, context: PythonObj
     """`Conv2d.forward(x)`."""
     if xcnn_is_t(x, context):
         return _conv_forward_t(layer, x, context)
-    var fields = _fields(layer)
+    var fields = _conv_admit(layer, context)
     var a = x
     var xs = xcnn_shape(a)
     _check_x(fields, xs)
