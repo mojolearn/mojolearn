@@ -19,6 +19,7 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import subprocess
+import sys
 import zipfile
 
 MAX_WHEEL = 8 * 1024**3
@@ -131,6 +132,17 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
     require(sum(map(len, replacements.values())) <= 64 * 1024**2 and len(replacements) <= MAX_FILES,
             'Python source overlay exceeds bounds')
     replacements['mojolearn/_version.py'] = ('__version__ = ' + repr(version) + '\n').encode()
+    root = python_root.resolve().parent
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from verification_repository import validate_payload
+    verification_commit = subprocess.check_output(
+        ['git', '-C', str(root), 'rev-parse', source_commit or 'HEAD']).decode().strip()
+    verification = validate_payload(root, verification_commit)
+    for member, source in verification.items():
+        replacements[member] = source.read_bytes()
+    replacements['mojolearn/identity_columns/COMMIT'] = (verification_commit + '\n').encode()
+    source_hashes.update({name: hashlib.sha256(raw).hexdigest()
+                         for name, raw in replacements.items() if name.endswith('.py')})
     if source_commit is not None:
         require(re.fullmatch('[0-9a-f]{40}', source_commit), 'invalid package source commit')
         root = python_root.resolve().parent
@@ -271,11 +283,16 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
             documentation_source_sha256=doc_hashes,
             inherited_non_python_sha256={n: h for n, h in hashes.items()
                 if not n.endswith('.py') and not n.startswith(dist + '/') and n not in replacements
+                and not n.startswith(('mojolearn/verify_reference/', 'mojolearn/reference_cards/',
+                                      'mojolearn/identity_columns/'))
                 and not (n.startswith('mojolearn/') and any(p in ('tests', '__pycache__') for p in PurePosixPath(n).parts))},
             overlay_python_sha256={n: hashlib.sha256(v).hexdigest() for n, v in replacements.items() if n.endswith('.py')},
             missing_optional_native_modules_by_present_directory=missing,
             required_module_registry=list(expected), availability='file inventory only; absent vendor/tier directories remain absent',
             current_numerical_qualification='NOT INHERITED; requires separate root validation')
+        provenance['verification_source_commit'] = verification_commit
+        provenance['verification_source_sha256'] = {
+            name: hashlib.sha256(replacements[name]).hexdigest() for name in verification}
         if reuse is not None:
             provenance['native_reuse'] = reuse
             provenance['resource_overlay_sha256'] = {n: hashlib.sha256(replacements[n]).hexdigest()
@@ -299,6 +316,9 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
                 target = new_dist + name[len(dist):] if name.startswith(dist + '/') else name
                 if target in replacements:
                     continue
+                if name.startswith(('mojolearn/verify_reference/', 'mojolearn/reference_cards/',
+                                    'mojolearn/identity_columns/')) and name != 'mojolearn/identity_columns/COMMIT':
+                    continue  # Never inherit stale verification data from the base wheel.
                 if name.startswith('mojolearn/') and any(p in ('tests', '__pycache__') for p in PurePosixPath(name).parts):
                     continue
                 # Omit stale Python modules from the base API tree.
