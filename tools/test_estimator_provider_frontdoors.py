@@ -137,3 +137,13 @@ def test_cluster_context_lookup_cannot_enter_module_getattr():
     assert 'native_loaded_module("mojolearn._native_public_attributes")._CONTEXT' not in source
     assert 'py_get(module_fields, "_CONTEXT")' in source
     assert 'py_type(attributes) is not b.dict' in source
+
+
+def test_cluster_learned_scalars_have_numeric_dtype_admission():
+    source = (ROOT / 'providers/python/cluster_public_lifecycle_pyapi.mojo').read_text()
+    learned = source.split('var learned =', 1)[1].split('return fields', 1)[0]
+    for name in ('n_features_in_', '_partial_batch', '_partial_init', '_partial_state', 'n_steps_', 'lower_bound_'):
+        assert name in learned
+    assert 'host_inference_scalar(value, context)' in learned
+    assert '_scalar_state(value, context)' in learned
+    assert '_scalar_state(value[0], context)' in learned

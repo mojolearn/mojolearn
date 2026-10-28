@@ -89,3 +89,28 @@ def test_cluster_missing_context_does_not_invoke_module_hook(monkeypatch):
     with pytest.raises(TypeError, match='connected dictionary'):
         fit(np.ones((4, 2), dtype=np.float32))
     assert calls == []
+
+
+@pytest.mark.parametrize('field,wrap', [
+    ('n_features_in_', lambda value: value),
+    ('_partial_batch', lambda value: value),
+    ('n_steps_', lambda value: value),
+    ('_partial_init', lambda value: (0, value)),
+    ('_partial_state', lambda value: ((0, value), 0)),
+    ('_warm', lambda value: ((2, value, 'full'), np.ones(1, dtype=np.float32))),
+    ('lower_bound_', lambda value: value),
+])
+def test_cluster_learned_scalar_object_arrays_refused_before_hooks(field, wrap):
+    calls = []
+    class Hostile:
+        __int__ = _poison(calls)
+        __float__ = _poison(calls)
+        __eq__ = _poison(calls)
+        __ne__ = _poison(calls)
+    value = np.empty((), dtype=object)
+    value[()] = Hostile()
+    model = ml.MiniBatchKMeans(n_clusters=2, numeric_mode='identical')
+    vars(model)[field] = wrap(value)
+    with pytest.raises(TypeError, match='scalar model state'):
+        model.partial_fit(np.ones((4, 2), dtype=np.float32))
+    assert calls == []
