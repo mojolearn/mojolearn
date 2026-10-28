@@ -14,6 +14,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
 from bindings.host_inference_scalars import host_inference_scalar
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 
 
 def _string_keys(fields: PythonObject) raises:
@@ -156,8 +157,8 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
             if py_type(condition) is not py_type(PythonObject("")):
                 raise Error("TypeError: native availability requires its connected condition")
             var rule = String(condition)
-            if rule == "density_predict":
-                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
+            if rule == "density_predict" or rule == "svm_probability":
+                var requested = _lookup_impl[False](model, PythonObject("probability" if rule == "svm_probability" else "prediction_data"), fields, plan, context)
                 var b = native_loaded_module("builtins")
                 var kind = py_type(requested)
                 var enabled = False
@@ -167,7 +168,20 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
                     host_inference_scalar(requested, context, True)
                     enabled = Bool(py=requested)
                 if not enabled:
-                    raise Error("AttributeError: prediction data was not requested")
+                    raise Error("AttributeError: predict_proba is not available when probability=False" if rule == "svm_probability" else "AttributeError: prediction data was not requested")
+            elif rule == "sgd_probability":
+                var loss = _lookup_impl[False](model, PythonObject("loss"), fields, plan, context)
+                if py_type(loss) is not py_type(PythonObject("")):
+                    raise Error("TypeError: SGD probability availability requires an exact native loss name")
+                if String(loss) != "log_loss":
+                    raise Error("AttributeError: probabilities require loss='log_loss'")
+            elif rule == "spectral_predict":
+                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
+                host_inference_scalar(requested, context, True)
+                if not Bool(py=requested):
+                    var references = _lookup_impl[False](model, PythonObject("_fit_X"), fields, plan, context)
+                    if references is None:
+                        raise Error("AttributeError: spectral prediction data was not requested or stored")
             elif rule == "hierarchy_predict":
                 var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
                 if py_type(requested) is not py_type(PythonObject(True)) and py_type(requested) is not py_type(PythonObject(0)):
@@ -201,6 +215,14 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
 
 def _property(model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
               plan: PythonObject, context: PythonObject) raises -> PythonObject:
+    if kind == "svm_svc_coef" or kind == "svm_svr_coef":
+        var owner = context["svm_owner"]
+        var entry = owner[0]
+        if py_type(entry) is not native_loaded_module("types").BuiltinFunctionType:
+            raise Error("TypeError: SVM coefficient property requires its compiled owner")
+        if neural_descriptor_entry(entry.__self__, "classical_native_call", False) is not entry:
+            raise Error("TypeError: SVM coefficient property owner changed after connection")
+        return py_call(entry, model, PythonObject("family_svc_svc_coef" if kind == "svm_svc_coef" else "family_svc_svr_coef"), Python.tuple(None), owner[1])
     if kind == "cholesky_logdet":
         var info = PythonObject(None)
         try:

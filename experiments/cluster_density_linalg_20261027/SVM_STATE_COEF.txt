@@ -1,0 +1,13 @@
+SVM state restoration, coefficient properties and availability (2026-10-28)
+
+Branch lane/svm-state-coef-20261028. Frozen executable source03464a024afb5e865aafb44ea55c1702dd6be2ee.
+
+SVC/SVR __setstate__ now one native call, with exact dictionary/string-key admission, staged legacy checked-parameter regeneration, replaced-owner admission and final native publication. The legacy native parameter validator admits primitive controls and weights before conversion/comparison, exact integer metadata replaces numbers ABC callbacks, and only fields actually overwritten undergo release admission.
+
+Public SVC/SVR coef_ routes to the existing native GEMV owner, including native fitted/kernel checks and zero-support output. Fitted dual/support metadata is captured once per pair and pinned across execution; dimensions/dtype/layout and pair keys are checked. Exact compiled GEMV entry replaces callback-capable generic entry lookup on this operation.
+
+Native attribute schemas now connect these properties and SVC probability availability. SGDClassifier probability and SpectralClustering predict availability predicates likewise use native schemas; fixed Python predicates are import metadata only. The installed property publishes its Array result through the existing native public output conversion. svc_common builtins and SVM parameter operator lookup use native-loaded modules.
+
+Focused actual svc_public_state_operation, svc_kernel_operation, provider binding, and public_attribute_c roots compile PASS exit0 in37.14s, Apple CPU O0 identical-j10. Full evidence and source snapshots: /Users/andrewhendel/mojolearn-evidence/cluster-density-linalg-20261027/svm-state-coef-owner-compile/. Initial syntax-failure compile and superseded successful compile retained in adjacent directories. No runtime/identity/cross-vendor verification. Shared svc_native dispatcher changed only to route the new state operation; full central family binding not rebuilt.
+
+Still pending: SVC/SVR _mode validation/output/fit wrappers on other methods and transitive svc_base callbacks; expansion-linear lifecycle and deeper runtime; spectral lifecycle (child takes after archive overlap resolved). Do not label these entire families Python-free.
