@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # AgglomerativeClustering public operation owner: native lifecycle, admission,
-# binding selection, preparation and finished results. Numerical solver,
-# x_cluster and resident-reference extension ABI calls remain explicit debt;
-# they must gain native descriptors before this family is called complete.
+# binding selection, preparation and finished results. Solver linkage uses its
+# native descriptor. General x_cluster and resident-reference extension ABI
+# calls remain explicit debt before this family can be called complete.
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -25,6 +25,7 @@ from providers.python.x_neighbors_descriptor_pyapi import xn_admit, xn_execute
 from providers.python.hierarchy_public_lifecycle_pyapi import hierarchy_public_begin, hierarchy_public_end, hierarchy_public_finish, hierarchy_public_refusal
 from providers.python.hierarchy_connectivity_pyapi import HierarchyConnectivity, hierarchy_connectivity
 from providers.python.hierarchy_resident_pyapi import hierarchy_fresh_holder, hierarchy_mint, hierarchy_reference_labels
+from providers.python.hierarchy_solver_descriptor_pyapi import hierarchy_solver_admit, hierarchy_solver_linkage
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 
@@ -145,18 +146,21 @@ def _agglo_legacy(fields: PythonObject, settings: PythonObject, args: PythonObje
     var info = family_array(Python.tuple(2), "<i4", context)
     var metric = Int(py=context["family_agglo_predict_metrics"][family_field(settings, "metric")])
     var use_knn = Int(py=context["family_cfb_agglo_connectivities"][family_field(settings, "_connectivity")])
-    var fit = neural_descriptor_entry(args[1], "linkage_fit")
-    # ORDER MATCHES bindings/_mojolearn_solver.mojo::linkage_fit_binding:
-    # n_rows, n_cols, n_clusters, metric, use_knn.
-    _ = family_call(fit, PythonObject(x_snapshot.source.addr), classical_address(children), classical_address(labels),
-                    classical_address(info),
-                    Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(k), PythonObject(metric),
-                                PythonObject(use_knn)))
+    var solver = hierarchy_solver_admit(args[1])
+    var children_address = Int(py=classical_address(children))
+    var labels_address = Int(py=classical_address(labels))
+    var info_address = Int(py=classical_address(info))
+    # Existing linkage ABI, now direct native descriptor dispatch. Input metadata
+    # is the retained operation snapshot; these outputs keep their owners below.
+    _ = hierarchy_solver_linkage(solver,
+        [x_snapshot.source.addr, children_address, labels_address, info_address],
+        [n_rows, n_cols, k, metric, use_knn])
+    _ = solver^
     _ = labels  # keep the Python object alive through the native call above
     _ = children  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
-    var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(info)))
+    var words = FAMILY_I32P(unsafe_from_address=info_address)
     _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "labels_", labels)
     py_setitem(fields, "children_", children)
@@ -174,7 +178,7 @@ def _agglo_legacy(fields: PythonObject, settings: PythonObject, args: PythonObje
     _ = x^
     hierarchy_fresh_holder(fields)
     if predicting:
-        hierarchy_mint(fields, args[0], fit_x, labels, Int(py=classical_address(fit_x)), Int(py=classical_address(labels)), n_rows, n_cols)
+        hierarchy_mint(fields, args[0], fit_x, labels, Int(py=classical_address(fit_x)), labels_address, n_rows, n_cols)
 
 
 def _fit_copy(snapshot: ArrayMetadata, context: PythonObject) raises -> PythonObject:

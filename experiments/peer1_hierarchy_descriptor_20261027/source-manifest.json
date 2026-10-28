@@ -1,0 +1,16 @@
+{
+  "start_commit": "b3239afc49478f01ff338b35121ee749396417aa",
+  "branch": "lane/peer1-hierarchy-audit-20261027",
+  "worktree": "/Users/andrewhendel/mojolearn-wt/peer1-hierarchy-audit-20261027",
+  "source_sha256": {
+    "hierarchy/solver_descriptor_schema.mojo": "bb7c6a872d24d6476469beec0541225d56ff94aaba3e013a429a3430d870fc33",
+    "hierarchy/solver_descriptor_host.mojo": "5a3236705625b9a258e2aff66beb5ba38ccf169e428a54e2d9aad20fa160fe1a",
+    "hierarchy/solver_descriptor_device.mojo": "9e73eb3f22864f2b781fad463b207abc0c04a4ca5e9224de701d40872d08760e",
+    "providers/python/hierarchy_solver_descriptor_pyapi.mojo": "59d8a177adee93297b6e5f8717d711630e6fb216729447c40a71940882c636e9",
+    "bindings/cfb_agglo.mojo": "d9c92800c7693a078c7341b654769d7afca30275f5f79534e23bf2d229f379f8",
+    "experiments/peer1_hierarchy_descriptor_20261027/root_solver_factory_registration.patch": "2e971d1eb66778bb2f1cefd32c9b34ad666b23203c76bf298f49301fb5efaebb"
+  },
+  "compile_run": false,
+  "runtime_run": false,
+  "shared_files_edited": false
+}
