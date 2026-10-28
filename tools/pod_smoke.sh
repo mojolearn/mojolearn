@@ -8,7 +8,8 @@
 # 2. import smoke: import mojolearn and the main public modules on the CPU-only host set;
 # 3. the board preflight probe: mojolearn._backend.tier_dir('identical');
 # 4. a CPU-column runtime check: linalg.matmul, Ridge and KMeans fit+predict on 50 rows and one
-#    LanguageModelTrainer construct (default config), identical mode.
+#    LanguageModelTrainer construct (default config) and tiny TransformerBlock and Mamba2Block
+#    forwards (the board's own-host forward reference), identical mode.
 # Exits non-zero on any failure. Results land in $LEG_OUT (summary.txt, results.tsv, logs/, *.log).
 set -u
 OUT=${LEG_OUT:?LEG_OUT is set by the CPU leg runner}
@@ -78,6 +79,26 @@ shape = mojolearn.ByteLanguageModelConfig()
 flat = rng.uniform(-0.125, 0.125, shape.n_total).astype(np.float32)
 trainer = mojolearn.LanguageModelTrainer(flat, shape=shape, data_schedule={"dataset": "pod-smoke"})
 print("lm trainer ok", type(trainer).__name__)
+# The host forwards the board's own_host_forward_reference scorer runs (tiny shapes).
+dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
+tw = {"input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,), "q_proj.weight": (nh * hd, dm),
+      "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm), "o_proj.weight": (dm, nh * hd),
+      "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm), "down_proj.weight": (dm, it)}
+tw = {k: (np.ones(v, np.float32) if k.endswith("layernorm.weight")
+          else (rng.random(v, dtype=np.float32) * np.float32(0.25) - np.float32(0.125))) for k, v in tw.items()}
+x = rng.standard_normal((1, 8, dm)).astype(np.float32)
+y = np.asarray(mojolearn.TransformerBlock(tw, n_heads=nh, n_kv_heads=nkv).forward(x))
+assert y.shape == x.shape and np.isfinite(y).all()
+print("transformer forward ok", y.shape)
+di, mh = 64, 1
+cd, dip = di + 256, 2 * di + 256 + mh
+mw = {"block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "conv1d.weight": (cd, 1, 4), "conv1d.bias": (cd,),
+      "dt_bias": (mh,), "A_log": (mh,), "D": (mh,), "norm.weight": (di,), "out_proj.weight": (dm, di)}
+mw = {k: (np.ones(v, np.float32) if k.endswith("norm.weight")
+          else (rng.standard_normal(v) / 8).astype(np.float32)) for k, v in mw.items()}
+z = np.asarray(mojolearn.Mamba2Block(mw).forward(x))
+assert z.shape == x.shape and np.isfinite(z).all()
+print("mamba2 forward ok", z.shape)
 print("RUNTIME-OK")
 EOF
 step() {
