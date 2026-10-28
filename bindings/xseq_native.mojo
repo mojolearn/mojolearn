@@ -21,6 +21,7 @@ from bindings.xseq_score_native import xseq_regressor_score, xseq_classifier_sco
 from bindings.xseq_prophet_native import prophet_fit, prophet_predict
 from bindings.py_balanced import py_fields
 from providers.python.xseq_public_lifecycle_pyapi import XseqPublicLifecycle
+from providers.python.recurrent_state_pyapi import recurrent_state
 from providers.python.estimator_lifecycle_pyapi import estimator_fit_begin, estimator_fit_end
 
 
@@ -99,7 +100,9 @@ def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var args = call[2]
         var context = call[3]
         var result = PythonObject(None)
-        if (operation.startswith("rnn_") or operation.startswith("mlp_")) and operation != "rnn_hidden_sequence":
+        if operation == "rnn_state_dict" or operation == "rnn_load_state_dict":
+            result = recurrent_state(model, operation, args, context)
+        elif (operation.startswith("rnn_") or operation.startswith("mlp_")) and operation != "rnn_hidden_sequence":
             var lifecycle = XseqPublicLifecycle(model, operation, args, context)
             if lifecycle.fitting:
                 var depth = estimator_fit_begin(py_fields(model))

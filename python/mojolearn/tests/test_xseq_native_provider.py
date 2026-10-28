@@ -97,3 +97,64 @@ def test_recurrent_builtin_schedule_does_not_call_packed_schedule_entries(monkey
                             random_state=7, lr_schedule=schedule, numeric_mode='identical')
     audit_native_call(model.fit, x, x[:, -1, 0].copy()).assert_native()
     assert not seen
+
+
+@pytest.mark.parametrize('dtype', ['f4', 'f8'])
+def test_mlp_finite_check_reads_strided_input_without_packed_entries(monkeypatch, dtype):
+    _, context = connect()
+    seen = []
+
+    def forbidden(*args, **kwargs):
+        seen.append(True)
+        raise AssertionError('finite validation called packed numerical entry')
+
+    for name in ('all_finite_f32', 'all_finite_f64'):
+        monkeypatch.setitem(context['xseq_base'], name, forbidden)
+    x = np.arange(48, dtype=dtype).reshape(8, 6)[:, ::-2]
+    y = np.arange(8, dtype=dtype)[::-1]
+    model = ml.MLPRegressor(hidden_layer_sizes=(2,), max_iter=1, batch_size=4,
+                            random_state=7, numeric_mode='identical')
+    audit_native_call(model.fit, x, y).assert_native()
+    x[3, 1] = np.nan
+    with pytest.raises(ValueError, match='NaN or infinity'):
+        model.predict(x)
+    assert not seen
+
+
+@pytest.mark.parametrize('name', ['RNNRegressor', 'LSTMRegressor', 'GRURegressor'])
+def test_recurrent_state_native_round_trip_and_atomic_rejection(name):
+    from collections import OrderedDict
+    cls = getattr(ml, name)
+    model = cls(hidden_size=3, num_layers=2, max_epochs=1, batch_size=4,
+                random_state=7, numeric_mode='identical')
+    x = np.arange(48, dtype='f4').reshape(8, 3, 2) / 48
+    model.fit(x, x[:, -1, 0].copy())
+    expected = model.params_.copy()
+    state = audit_native_call(model.state_dict).assert_native()
+    assert list(state)[-2:] == ['head.weight', 'head.bias']
+    assert np.concatenate([v.ravel() for v in state.values()]).tobytes() == expected.tobytes()
+    assert all(not np.shares_memory(v, model.params_) for v in state.values())
+    model.params_.fill(0)
+    assert audit_native_call(model.load_state_dict, OrderedDict(state)).assert_native() is model
+    assert model.params_.tobytes() == expected.tobytes()
+    bad = dict(state, **{'head.bias': np.zeros((999,), dtype='f4')})
+    with pytest.raises(ValueError, match='shape'):
+        model.load_state_dict(bad)
+    assert model.params_.tobytes() == expected.tobytes()
+
+
+def test_recurrent_state_refuses_mapping_hook_before_it_runs():
+    model = ml.RNNRegressor(hidden_size=2, max_epochs=1, batch_size=4,
+                            random_state=7, numeric_mode='identical')
+    x = np.arange(48, dtype='f4').reshape(8, 3, 2) / 48
+    model.fit(x, x[:, -1, 0].copy())
+    seen = []
+
+    class MappingHook(dict):
+        def __getitem__(self, key):
+            seen.append(key)
+            raise AssertionError('mapping hook ran')
+
+    with pytest.raises(TypeError, match='exact dict'):
+        model.load_state_dict(MappingHook(model.state_dict()))
+    assert not seen

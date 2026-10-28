@@ -271,30 +271,17 @@ class LayerNorm:
     """
 
     def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True, bias=True, numeric_mode=None):
-        self.normalized_shape, self._D = _D(normalized_shape)
-        self.eps = float(eps)
-        self.elementwise_affine = bool(elementwise_affine)
-        self.weight = np.ones(self.normalized_shape, np.float32) if elementwise_affine else None
-        self.bias = np.zeros(self.normalized_shape, np.float32) if (elementwise_affine and bias) else None
-        self.numeric_mode = numeric_mode
-        self.weight_grad = self.bias_grad = None
-        self._x = None
-        self._stats = None
+        return _SEQ_NATIVE("seqln_initialize", self,
+                           (normalized_shape, eps, elementwise_affine, bias), numeric_mode, _SEQ_CONTEXT)
 
     def _dev_binding(self):
         """The sequence binding when it has the resident LayerNorm entry, else None."""
-        if _CLASS_DEVICE_IO_OFF:
-            return None
-        try:
-            b = _backend.binding(_SEQ_BINDING, self.numeric_mode)
-        except Exception:  # noqa: BLE001  (no GPU binding on this install)
-            return None
-        return b if resident_binding(b) and callable(getattr(b, "layer_norm_dev", None)) else None
+        return _SEQ_NATIVE("seqln_device_binding", self, (), None, _SEQ_CONTEXT)
 
     @property
     def _device_io(self):
         """Whether this layer takes and returns resident tensors (`to_device`)."""
-        return self._dev_binding() is not None
+        return _SEQ_NATIVE("seqln_device_io", self, (), None, _SEQ_CONTEXT)
 
     def to_device(self, a):
         """Upload a float32 array once so `forward` and `backward` keep it on the device.
@@ -312,10 +299,7 @@ class LayerNorm:
         -------
         device tensor or ndarray
         """
-        if is_seq_tensor(a):
-            return a
-        a = _f32(a, "x")
-        return a if self._dev_binding() is None else _seq_to_device(a, self.numeric_mode)
+        return _SEQ_NATIVE("seqln_to_device", self, (a,), None, _SEQ_CONTEXT)
 
     def forward(self, x):
         """Normalize `x` over the trailing `normalized_shape` dimensions.
@@ -349,10 +333,14 @@ class LayerNorm:
         dx : ndarray of float32
             Gradient with respect to the forward input.
         """
-        if self._x is None:
-            raise RuntimeError("LayerNorm.backward: call forward first")
-        _, dx, dw, db = _run(self._x, self._D, self.weight, self.bias, self.eps, dy, self.numeric_mode,
-                             self._stats)
-        self.weight_grad = None if self.weight is None else dw.reshape(self.normalized_shape)
-        self.bias_grad = None if self.bias is None else db.reshape(self.normalized_shape)
-        return dx
+        return _SEQ_NATIVE("seqln_layer_backward", self, (dy,), None, _SEQ_CONTEXT)
+
+
+# glue: native instance storage and hooks are connected once after class definition.
+_ln_mro = LayerNorm.__mro__
+_ln_rows = tuple(vars(base) for base in _ln_mro)  # glue: fixed class ancestry
+_ln_descriptor = next(row["__dict__"] for row in _ln_rows if "__dict__" in row)  # glue: native instance dictionary
+_ln_hooks = tuple((base, name, row.get(name)) for base, row in zip(_ln_mro, _ln_rows)
+                  for name in ("__getattribute__", "__getattr__", "__setattr__", "__dict__"))  # glue: fixed native storage hooks
+_SEQ_CONTEXT["seqln_layout"] = (LayerNorm, _ln_mro, _ln_descriptor.__get__, _ln_hooks)
+_SEQ_CONTEXT["seqln_class_device_io_off"] = _CLASS_DEVICE_IO_OFF

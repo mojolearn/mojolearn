@@ -343,7 +343,7 @@ def _family_weight_scalar(value: Float64, n: Int, wide: Bool,
     else:
         family_fill_f32(FAMILY_F32P(unsafe_from_address=address), n, Float32(value))
     var descriptor = CastIn(address, CAST_KIND_FLOAT, item, n, 1, item, 0)
-    return ArrayMetadata(weights, List[Int](n), descriptor, n, NPY_DOUBLE if wide else NPY_FLOAT,
+    return ArrayMetadata(weights, List[Int]([n]), descriptor, n, NPY_DOUBLE if wide else NPY_FLOAT,
                          True, True, True, weights, True)
 
 

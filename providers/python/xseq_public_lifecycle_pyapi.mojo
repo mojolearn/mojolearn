@@ -14,9 +14,9 @@ from bindings.classical_warnings import classical_warn_column
 from bindings.prep_lda_admission import lda_native_labels
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.sequential_arrays import sequential_array, sequential_address
-from bindings.xseq_native_common import xseq_base
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from core.classical_ridge_impl import classical_widen_f32_f64
+from core.host_inference_impl import host_inference_nd_finite
 
 
 def xseq_public_labels(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -24,17 +24,30 @@ def xseq_public_labels(fields: PythonObject, context: PythonObject) raises -> Py
 
 
 def _finite(view: PythonObject, name: String, model_name: String, context: PythonObject) raises:
-    var code = Int(py=view.dtype.num)
+    # Capture the admitted ndarray's metadata once, then validate its bytes
+    # directly. No ndarray copy or CPython-dispatched numerical entry is needed
+    # for strided inputs (including negative strides and swapped byte order).
+    var dtype = view.dtype
+    var code = Int(py=dtype.num)
     if code != 11 and code != 12:
         return
-    var input = view
-    if not Bool(py=view.flags.c_contiguous):
-        # Resolve the admitted ndarray method, not PythonObject.copy's Mojo overload.
-        input = py_call(py_call(native_loaded_module("builtins").getattr, view, "copy"), "C")
-    var entry = xseq_base(context, "all_finite_f32" if code == 11 else "all_finite_f64")
-    if Int(py=py_call(entry, sequential_address(input), Int(py=input.size))) != 1:
+    var width = Int(py=dtype.itemsize)
+    var native = Bool(py=dtype.isnative)
+    var dimensions = view.shape
+    var byte_strides = view.strides
+    var shape = List[Int]()
+    var strides = List[Int]()
+    for axis in range(len(dimensions)):  # small-loop(admitted rank metadata)
+        var size = Int(py=dimensions[axis])
+        shape.append(size)
+        strides.append(Int(py=byte_strides[axis]))
+    var address = Int(py=sequential_address(view))
+    try:
+        host_inference_nd_finite(address, shape, strides, width, native)
+    except:
         raise Error("Input " + name + " contains NaN or infinity (" + model_name + ").")
-    _ = input
+    _ = view
+
 
 
 struct XseqPublicLifecycle(Movable):

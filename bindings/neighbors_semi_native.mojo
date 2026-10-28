@@ -13,9 +13,9 @@
 # `_lazy_out._empty_out` made them (the opt-in MOJOLEARN_XN_LAZY_OUT
 # anonymous-map backing is a memory placement only: the same zeros, the
 # same bits). Import-time switches the Python module read once
-# (MOJOLEARN_XN_OLD_ITEMS, MOJOLEARN_XN_UNFUSED_KNN) are read from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
-from the
+# (MOJOLEARN_XN_OLD_ITEMS, MOJOLEARN_XN_UNFUSED_KNN) are read from the
 # context, where the module put them at its import.
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
