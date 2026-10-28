@@ -1,0 +1,37 @@
+Whole backend public metadata operations — 2026-10-28
+Branch lane/peer4-backend-public-20261028, base20ab53ec02.
+
+Installed source trace: __init__ exports _backend.numeric_mode,
+set_default_mode (as set_numeric_mode), vendor, gpu_arch and gpu_arch_how.
+Later class installers do not replace them. Full reference search retained
+at evidence root installed-routing-search.log; the only from-import alias
+outside __init__ is cross_vendor._installed_vendor, consumed solely during
+that module's import-time worker_initialize setup.
+
+Changes: new backend_public_native owner handles validation, native string
+normalization, default state updates, compiled mode/vendor checks, provider
+refusals, and finished metadata results. Five signature-preserving Python
+wrappers are one binding call each. Import-only bridge connects existing tier
+loader results, retains compiled readback identities and refused exceptions,
+and replaces package plus _backend exports after package setup completes.
+Existing default storage is shared with every native/legacy estimator owner.
+Deferred Mojo type owners are not loaded merely to inspect later vendor
+entries after an available compiled readback, avoiding unsupported duplicate
+type registration. Existing tier availability/refusals remain represented.
+Token host registration: one import and one backend_public_native_call entry.
+Package registration: separate final __init__ bridge connection block.
+No arithmetic, GPU routes, tuning, or _backend loader implementation changed.
+
+Focused qualification: final attempt2 CPU apple-m1 identical O0, all10 Mac
+logical CPUs configured as compiler workers, exit0 in20.50s. This compiles
+backend_public_c through the standalone compile-only fixture; it does not
+load/run the result or qualify full token-host registration/installed loader.
+Initial attempt1 passed earlier source; final exact source bytes retained for
+attempt2. Worker configuration does not establish all-phase CPU saturation.
+Python source syntax and diff checks passed. No runtime/identity/GPU campaign.
+
+Full evidence ~/mojolearn-evidence/peer4-backend-public-20261028/attempt2/
+contains compiler output, accepted binary, source archive and hash manifest.
+compile.json contains command/compiler/binary/source hashes and coverage.
+Guard/push outputs retained at evidence root. Initial full checkout failed
+ENOSPC; source-only sparse worktree succeeded, without changing other trees.
