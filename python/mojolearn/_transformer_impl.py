@@ -1284,10 +1284,8 @@ class TransformerBlock(NumericModeMixin):
         -------
         TransformerDecodeSession
         """
-        # lane/lowbit-default: under numeric_profile="fixed15_v1" the session
-        # opens through the profile's entry (TransformerDecodeSession refuses
-        # by name a binding without it).
-        return TransformerDecodeSession(self, state)
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "new", (self, state), _native_neural_bridge.CONTEXT)
 
     __call__ = forward
 
@@ -1306,20 +1304,6 @@ def _exports(ext, name):
         return False
 
 
-def _private_copy(a):
-    """A fresh float32 C-order buffer holding `a`'s bytes, or None for None.
-
-    The resident decode session's OWNERSHIP clause: the session COPIES the
-    weights and the cache at open, so a caller's later edit to either is not
-    observed. On the GPU arm the copy lands in device memory; on the host arm
-    it lands here, in a buffer of this process, which is the same promise
-    with the same visibility and the same refresh door (`load_state`)."""
-    if a is None:
-        return None
-    pb = probe(a)
-    out = empty(tuple(int(d) for d in pb.shape), "<f4")  # glue: shape tuple of ints
-    memcopy(addr(out, name="copy"), addr_ro(a, name="source"), 4 * int(out.size))
-    return out
 
 
 def _refuse_resident(state, what):
@@ -1354,123 +1338,33 @@ class TransformerDecodeSession:
     ...     y_t = sess.step(x_t)            # (1, 1, d_model)
     """
 
-    def __init__(self, block, state):
-        what = "TransformerDecodeSession"
-        ext = block._extension()
-        create = (getattr(ext, "transformer_decode_session_create", None)
-                  if _exports(ext, "transformer_decode_session_create") else None)
-        # THE HOST ARM. No device session entry, but the two per-call entries
-        # the session would have run are right there under their own names.
-        host = create is None and _exports(ext, "transformer_decode_step")
-        # lane/lowbit-default (2026-09-29): under numeric_profile="fixed15_v1"
-        # the device arm opens through the profile's entry (the planes
-        # resident); the host arm has no profile session and is refused by
-        # name, never run as fp32_v1.
-        int15 = getattr(block, "_int15", None) is not None
-        if int15 and (create is None or not _exports(ext, "transformer_decode_session_open_int15")):
-            raise NotImplementedError(
-                f"mojolearn {what}: numeric_profile='fixed15_v1' needs a GPU transformer binding "
-                "that exports transformer_decode_session_open_int15 (rebuild "
-                "bindings/build_transformer.sh); the host route has no resident session under "
-                "the profile. It is never run as 'fp32_v1'.")
-        if create is None and not host:
-            raise NotImplementedError(
-                f"mojolearn {what}: the loaded {type(block).__name__} binding "
-                "exports neither a resident decode session nor the per-call "
-                "transformer_decode_step entry the host arm runs; rebuild "
-                "bindings/build_transformer.sh (or build_transformer_host.sh) "
-                "in IDENTICAL mode"
-            )
-        if state is None:
-            raise ValueError(f"mojolearn {what}: state is required (allocate_state)")
-        block._admit_state_profile(state)
-        _refuse_resident(state, what)
-        if state.batch_size < 1:
-            raise ValueError(f"mojolearn {what}: the state holds no rows")
-        if int(getattr(state, "window", 0)) != block.window:
-            raise ValueError(
-                f"mojolearn {what}: the state was allocated for window "
-                f"{getattr(state, 'window', 0)} but this block has window "
-                f"{block.window}"
-            )
-        b = int(state.batch_size)
-        n = b * block.n_kv_heads * state.capacity * block.head_dim
-        kc = _state_buf(state.k_cache, what, "k_cache", (n,))
-        vc = _state_buf(state.v_cache, what, "v_cache", (n,))
-        self._block = block
-        self._state = state
-        self._ext = ext
-        self._open = False
-        w = block._w
-        wopt = block._wopt  # noqa: F841  (keeps the optional arrays alive)
-        if host:
-            # The weights (the optional tail included) and the KV cache
-            # COPIED, which is the ownership clause the device arm satisfies
-            # with an upload. `cached_tokens` is unchanged by opening.
-            self._native = None
-            self._hw = [_private_copy(a) for a in w]  # glue: private copy per weight tensor
-            self._hwopt = [_private_copy(a) for a in block._wopt]  # glue: private copy per weight tensor
-            self._kc = _private_copy(kc)
-            self._vc = _private_copy(vc)
-            s0 = int(state.cached_tokens)
-        elif int15:
-            # the open's eleven with the projection slots zero, the options
-            # tail always, then the 21 plane addresses (q, k, v, o, gate, up,
-            # down; hi, lo, exponents), `_call_int15`'s layout
-            self._native = create()
-            planes = block._int15  # noqa: F841  (kept alive on the block)
-            addrs = ([addr_ro(w[0], name="weight"), addr_ro(w[1], name="weight")] + [0] * 7
-                     + [addr(kc, name="k_cache"), addr(vc, name="v_cache")]
-                     + block._tail_addrs())
-            for trip in block._int15:  # glue: addresses per int15 plane triple
-                addrs += [0, 0, 0] if trip is None else [addr_ro(t, name="planes") for t in trip]  # glue: addresses per int15 plane triple
-            params = ([b, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
-                       block.intermediate, int(state.max_tokens), int(state.cached_tokens),
-                       block.window] + list(block._opts_tail))
-            s0 = int(ext.transformer_decode_session_open_int15(self._native, addrs, params))
-        else:
-            self._native = create()
-            addrs, params = block._with_tails(
-                [0 if a is None else addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
-                + [addr(kc, name="k_cache"), addr(vc, name="v_cache")],
-                [b, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
-                 block.intermediate, int(state.max_tokens), int(state.cached_tokens),
-                 block.window])
-            s0 = int(ext.transformer_decode_session_open(self._native, addrs, params))
-        self._open = True
-        state.cached_tokens = s0
-        state._resident_session = self
+    @property
+    def _native(self):
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "native", (self,), _native_neural_bridge.CONTEXT)
 
-    def _host_call(self, entry, x, y, params):
-        """One host entry on the session's OWN weights and cache: the address
-        list `TransformerBlock._call_impl` builds, in the same order it
-        documents (x, the nine weights, k_cache, v_cache, y_out, then the
-        eleven-address options tail for a non-default block), with this
-        session's buffers standing where the caller's would."""
-        blk = self._block
-        addrs = ([addr_ro(x, name="x")]
-                 + [0 if a is None else addr_ro(a, name="weight") for a in self._hw]  # glue: one address per weight tensor
-                 + [addr(self._kc, name="k_cache"), addr(self._vc, name="v_cache"),
-                    addr(y, name="y")])
-        if blk._extended:
-            addrs = addrs + [0 if a is None else addr_ro(a, name="weight")
-                             for a in self._hwopt]  # glue: one address per weight tensor
-            params = params + list(blk._opts_tail)
-        return int(entry(addrs, params))
+    @property
+    def _open(self):
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "is_open", (self,), _native_neural_bridge.CONTEXT)
+
+    def __init__(self, block, state):
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "init", (self, block, state), _native_neural_bridge.CONTEXT)
+
 
     @property
     def state(self):
         """The `TransformerState` this session decodes."""
-        return self._state
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "state", (self,), _native_neural_bridge.CONTEXT)
 
     @property
     def is_open(self):
         """Whether the session is still open."""
-        return self._open
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "is_open", (self,), _native_neural_bridge.CONTEXT)
 
-    def _require_open(self, what):
-        if not self._open:
-            raise ValueError(f"mojolearn {what}: the session is closed")
 
     def step(self, x):
         """Decode one token per row.
@@ -1479,28 +1373,8 @@ class TransformerDecodeSession:
         and advances `state.cached_tokens`. Raises `ValueError` if the session is closed or
         B differs from the state's batch size.
         """
-        what = "TransformerDecodeSession.step"
-        self._require_open(what)
-        blk = self._block
-        x = _batch_tokens(x, what, blk.d_model, True)
-        b = int(x.shape[0])
-        st = self._state
-        if b != st.batch_size:
-            raise ValueError(
-                f"mojolearn {what}: the session holds {st.batch_size} rows, x has B = {b}")
-        y = empty((b, 1, blk.d_model), "<f4")
-        if self._native is None:
-            # B, d_model, n_heads, n_kv_heads, head_dim, intermediate,
-            # max_tokens, cached_tokens, window -- `_call_impl`'s step params.
-            new_len = self._host_call(
-                self._ext.transformer_decode_step, x, y,
-                [b, blk.d_model, blk.n_heads, blk.n_kv_heads, blk.head_dim,
-                 blk.intermediate, int(st.max_tokens), int(st.cached_tokens), blk.window])
-        else:
-            new_len = self._ext.transformer_decode_session_step(
-                self._native, [addr_ro(x, name="x"), addr(y, name="y")], [int(st.cached_tokens)])
-        st.cached_tokens = int(new_len)
-        return y
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "step", (self, x), _native_neural_bridge.CONTEXT)
 
     def forward(self, x):
         """Run L tokens per row on the session's cache (a prefill or a chunked continuation).
@@ -1508,114 +1382,54 @@ class TransformerDecodeSession:
         `x` is ``(B, L, d_model)`` float32; returns the same shape. Raises `ValueError` if
         the session is closed or B differs from the state's batch size.
         """
-        what = "TransformerDecodeSession.forward"
-        self._require_open(what)
-        blk = self._block
-        x = _batch_tokens(x, what, blk.d_model, False)
-        b, l = int(x.shape[0]), int(x.shape[1])
-        st = self._state
-        if b != st.batch_size:
-            raise ValueError(
-                f"mojolearn {what}: the session holds {st.batch_size} rows, x has B = {b}")
-        y = empty((b, l, blk.d_model), "<f4")
-        if self._native is None:
-            # B, L, then the same seven -- `_call_impl`'s forward params.
-            new_len = self._host_call(
-                self._ext.transformer_forward, x, y,
-                [b, l, blk.d_model, blk.n_heads, blk.n_kv_heads, blk.head_dim,
-                 blk.intermediate, int(st.max_tokens), int(st.cached_tokens), blk.window])
-        else:
-            new_len = self._ext.transformer_decode_session_forward(
-                self._native, [addr_ro(x, name="x"), addr(y, name="y")], [l, int(st.cached_tokens)])
-        st.cached_tokens = int(new_len)
-        return y
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "forward", (self, x), _native_neural_bridge.CONTEXT)
 
     def sync_state(self):
         """Copy the session's cache into the state's buffers; the session stays open and keeps owning the state."""
-        what = "TransformerDecodeSession.sync_state"
-        self._require_open(what)
-        st = self._state
-        blk = self._block
-        n = st.batch_size * blk.n_kv_heads * st.capacity * blk.head_dim
-        kc = _state_buf(st.k_cache, what, "k_cache", (n,))
-        vc = _state_buf(st.v_cache, what, "v_cache", (n,))
-        if self._native is None:
-            memcopy(addr(kc, name="k_cache"), addr_ro(self._kc, name="resident"), 4 * n)
-            memcopy(addr(vc, name="v_cache"), addr_ro(self._vc, name="resident"), 4 * n)
-        else:
-            st.cached_tokens = int(self._ext.transformer_decode_session_export_state(
-                self._native, [addr(kc, name="k_cache"), addr(vc, name="v_cache")]))
-        return st
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "sync", (self,), _native_neural_bridge.CONTEXT)
 
     def load_state(self):
         """Reload the session's cache from the state's buffers and `cached_tokens`, after you edit them."""
-        what = "TransformerDecodeSession.load_state"
-        self._require_open(what)
-        st = self._state
-        blk = self._block
-        blk._admit_state_profile(st)
-        n = st.batch_size * blk.n_kv_heads * st.capacity * blk.head_dim
-        kc = _state_buf(st.k_cache, what, "k_cache", (n,))
-        vc = _state_buf(st.v_cache, what, "v_cache", (n,))
-        if self._native is None:
-            memcopy(addr(self._kc, name="resident"), addr_ro(kc, name="k_cache"), 4 * n)
-            memcopy(addr(self._vc, name="resident"), addr_ro(vc, name="v_cache"), 4 * n)
-        else:
-            st.cached_tokens = int(self._ext.transformer_decode_session_load_state(
-                self._native, [addr(kc, name="k_cache"), addr(vc, name="v_cache")],
-                [int(st.cached_tokens)]))
-        return st
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "load", (self,), _native_neural_bridge.CONTEXT)
 
-    def _release(self):
-        if self._native is None:
-            self._hw = self._hwopt = self._kc = self._vc = None
-        else:
-            self._ext.transformer_decode_session_close(self._native)
 
     def close(self):
         """Copy the cache back into the state, release the session's buffers and hand the state back.
 
         Calling it on a closed session does nothing.
         """
-        if not self._open:
-            return
-        try:
-            self.sync_state()
-        finally:
-            self._open = False
-            self._state._resident_session = None
-            self._release()
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "close", (self,), _native_neural_bridge.CONTEXT)
 
     def discard(self):
         """Close without copying the cache back into the state.
 
         Use it when you throw the state away, or after a failed call.
         """
-        if not self._open:
-            return
-        self._open = False
-        self._state._resident_session = None
-        self._release()
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "discard", (self,), _native_neural_bridge.CONTEXT)
 
     def __enter__(self):
-        return self
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "enter", (self,), _native_neural_bridge.CONTEXT)
 
     def __exit__(self, *exc):
-        self.close()
-        return False
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "exit", (self,), _native_neural_bridge.CONTEXT)
 
     def __del__(self):
         try:
-            if getattr(self, "_open", False):
-                self._open = False
-                self._state._resident_session = None
-                self._release()
+            _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+                "drop", (self,), _native_neural_bridge.CONTEXT)
         except Exception:
             pass
 
     def __repr__(self):
-        return "TransformerDecodeSession(open=%r, cached_tokens=%d)" % (
-            self._open, int(self._state.cached_tokens))
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "repr", (self,), _native_neural_bridge.CONTEXT)
 
 
 # Compiled public constructors and forward/state operations need no Python
