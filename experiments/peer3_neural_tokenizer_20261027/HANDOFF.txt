@@ -71,8 +71,10 @@ Remaining integration evidence and limits
 - Budget-aware Transformer session tickets preserve their existing verified
   compiled session entries. A matching provider descriptor transport for that
   precise route remains pending; no different retained-tape route was substituted.
-- Private tokenizer lm_corpus helpers remain Python testing/corpus preparation
-  outside the repaired public methods. Existing low-level native exports remain.
+- At the original handoff, private tokenizer helpers still performed Python
+  product work reached by public lm_corpus operations. This was migration debt,
+  not a testing exception. FOLLOWUP_HANDOFF.txt and CORPUS_HANDOFF.txt record
+  their subsequent native migration and the affected compile evidence.
 - Shared CausalLM/model-construction/provider paths beyond the narrow standalone
   snapshots and tokenizer consumers changed here remain their owners' scope.
 - Source guards do not prove Python-free runtime. No blanket transitive-runtime,

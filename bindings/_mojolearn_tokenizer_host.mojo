@@ -86,6 +86,7 @@ from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
 from bindings.transformer_public_native import transformer_public_c, TransformerPublicTapeOwner
 from bindings.lm_corpus_public_native import lm_corpus_public_c, LmCorpusIteratorHandle
+from bindings.model_catalog_native import catalog_public_c
 from bindings.tokenizer_public_native import (
     tokenizer_public_c, tokenizer_vocab_encode, tokenizer_vocab_decode,
     tokenizer_vocab_pretokenize, tokenizer_vocab_fingerprint,
@@ -1377,12 +1378,16 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(checkpoint_c[14], "checkpoint_enter")
         module.def_py_c_function(checkpoint_c[15], "safetensors_names")
         module.def_py_c_function(checkpoint_c[16], "safetensors_contains")
+        module.def_py_c_function(checkpoint_c[17], "checkpoint_connect")
+        module.def_py_c_function(checkpoint_c[18], "checkpoint_repr")
+        module.def_py_c_function(checkpoint_c[19], "checkpoint_widen_f16")
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
         module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_py_c_function(transformer_public_c, "transformer_public_call")
         _ = module.add_type[TransformerPublicTapeOwner]("_TransformerPublicTapeOwner")
         module.def_py_c_function(tokenizer_public_c, "tokenizer_public_call")
         module.def_py_c_function(lm_corpus_public_c, "lm_corpus_public_call")
+        module.def_py_c_function(catalog_public_c, "catalog_public_call")
         _ = module.add_type[LmCorpusIteratorHandle]("_LmCorpusIteratorHandle")
         module.def_py_c_function(neural_block_c[0], "neural_block_init")
         module.def_py_c_function(neural_block_c[4], "neural_block_set_params")
@@ -1433,6 +1438,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_public_c[13], "causal_lm_parameters")
         module.def_py_c_function(causal_public_c[14], "causal_lm_blocks")
         module.def_py_c_function(causal_public_c[15], "causal_state_init")
+        module.def_py_c_function(causal_public_c[16], "causal_lm_repr")
+        module.def_py_c_function(causal_public_c[17], "causal_state_repr")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))
