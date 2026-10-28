@@ -3,6 +3,7 @@
 # Admission compares exact type identities before reading attributes or
 # walking containers, so subclass properties/iterators cannot run first.
 from bindings.native_loaded_module import native_loaded_module, NativeModules
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_torch_admission import native_torch_exact, native_torch_admit
 from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_get, py_setitem
@@ -106,7 +107,47 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
     sequential_admit_value(mods, value, context, depth)
 
 
+struct _SequentialFieldNames(Defaultable, Movable):
+    # Fixed operation metadata is built once; execution never recreates the
+    # tuple whose identity participates in prepared admission. Mutable model
+    # fields and call arguments still receive their normal admission.
+    var names: List[PythonObject]
+
+    def __init__(out self):
+        self.names = List[PythonObject]()
+
+
+comptime _SEQUENTIAL_FIELD_NAMES = _Global[
+    StorageType=_SequentialFieldNames, name="MojolearnSequentialFieldNamesV1",
+    init_fn=_SequentialFieldNames.__init__,
+]
+
+
 def _read_fields(operation: String) raises -> PythonObject:
+    var slot = -1
+    if operation == "layers" or operation == "table" or operation == "program" or operation == "parameter_layers":
+        slot = 0
+    elif operation == "sample":
+        slot = 1
+    elif operation == "forward":
+        slot = 2
+    elif operation == "predict" or operation == "predict_proba":
+        slot = 3
+    if slot < 0:
+        return PythonObject(None)
+    var saved = _SEQUENTIAL_FIELD_NAMES.get_or_create_ptr()
+    if len(saved[].names) == 0:
+        # Publish only a complete inventory if initialization raises.
+        var names = List[PythonObject]()
+        names.append(_read_fields_full("layers"))
+        names.append(_read_fields_full("sample"))
+        names.append(_read_fields_full("forward"))
+        names.append(_read_fields_full("predict"))
+        saved[].names = names^
+    return saved[].names[slot]
+
+
+def _read_fields_full(operation: String) raises -> PythonObject:
     """The model fields a read-only operation reads, in inventory order, or
     None for an operation that gets the full inventory walk.
 
@@ -156,7 +197,7 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
         # admitted on every call.
         var key = b.list()
         _ = py_call(key.append, context)
-        _ = py_call(key.append, names)
+        prepared_key_add(mods, key, names)
         for k in range(len(names)):  # driver-loop: over model fields read by this operation, identity only
             _ = py_call(key.append, PythonObject(py_contains(fields, names[k])))
             if py_contains(fields, names[k]):
