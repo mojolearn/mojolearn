@@ -1,0 +1,710 @@
+{
+  "source_review_only": true,
+  "lanes": 571,
+  "public_api_entries": 269,
+  "lane_cpu_counts": {
+    "training": 531,
+    "host-only": 1,
+    "": 39
+  },
+  "non_training_inference_rows": [
+    {
+      "lane": "cross-val-folds",
+      "cpu": "host-only",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": false
+    },
+    {
+      "lane": "gbdt-pair-logit-pointwise",
+      "cpu": "",
+      "cpu_vacuous": true,
+      "family": "",
+      "two_device": false
+    },
+    {
+      "lane": "gbdt-yeti-rank-pointwise",
+      "cpu": "",
+      "cpu_vacuous": true,
+      "family": "",
+      "two_device": false
+    },
+    {
+      "lane": "optim-resident-io",
+      "cpu": "",
+      "cpu_vacuous": true,
+      "family": "",
+      "two_device": false
+    },
+    {
+      "lane": "par-boosting",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-boosting-clf",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-boosting-pointwise",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-boosting-reg",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-border-types",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-byte-lm",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-byte-lm-model-pool",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-byte-lm-offload",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-cd",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-cd-elasticnet",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-cholesky",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-dbscan",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-feature-freq",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-forest-pool",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-gmm",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-gp",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-gram",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-gram-ols",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-gram-pca",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-gram-tsvd",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-graph-agglomerative",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-graph-spectral",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-graph-umap",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-hdbscan",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-iforest",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-kernel-ridge",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-kmeans",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-logistic",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-nystroem",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-ordered",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-ordered-rmse",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-resample",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-svm",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "par-svm-svr",
+      "cpu": "",
+      "cpu_vacuous": false,
+      "family": "",
+      "two_device": true
+    },
+    {
+      "lane": "sequence-device-release",
+      "cpu": "",
+      "cpu_vacuous": true,
+      "family": "",
+      "two_device": false
+    },
+    {
+      "lane": "training-device-cross-entropy",
+      "cpu": "",
+      "cpu_vacuous": true,
+      "family": "",
+      "two_device": false
+    }
+  ],
+  "public_api_cpu_counts": {
+    "['training']": 233,
+    "['host-only', 'training']": 1,
+    "[]": 34,
+    "['host-only']": 1
+  },
+  "public_api_no_cpu": [
+    {
+      "name": "OffloadedByteLanguageModelTrainer",
+      "cpu": [],
+      "lanes": [
+        "par-byte-lm-offload"
+      ],
+      "kind": "class",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "ParallelByteLanguageModelTrainer",
+      "cpu": [],
+      "lanes": [
+        "par-byte-lm",
+        "par-byte-lm-model-pool",
+        "par-byte-lm-offload"
+      ],
+      "kind": "class",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "PooledByteLanguageModelTrainer",
+      "cpu": [],
+      "lanes": [
+        "par-byte-lm-model-pool"
+      ],
+      "kind": "class",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "model_pool_training.PooledByteLanguageModelTrainer",
+      "cpu": [],
+      "lanes": [
+        "par-byte-lm-model-pool"
+      ],
+      "kind": "class",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "models.verify_catalog_entry",
+      "cpu": [],
+      "lanes": [],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "offload_training.OffloadedByteLanguageModelTrainer",
+      "cpu": [],
+      "lanes": [
+        "par-byte-lm-offload"
+      ],
+      "kind": "class",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.apply_kernel_method",
+      "cpu": [],
+      "lanes": [
+        "par-kernel-ridge",
+        "par-nystroem"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.bootstrap",
+      "cpu": [],
+      "lanes": [
+        "par-resample"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_cholesky",
+      "cpu": [],
+      "lanes": [
+        "par-cholesky"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_coordinate_descent",
+      "cpu": [],
+      "lanes": [
+        "par-cd",
+        "par-cd-elasticnet"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_dbscan",
+      "cpu": [],
+      "lanes": [
+        "par-dbscan"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_gaussian_mixture",
+      "cpu": [],
+      "lanes": [
+        "par-gmm"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_gaussian_process",
+      "cpu": [],
+      "lanes": [
+        "par-gp"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_gram_estimator",
+      "cpu": [],
+      "lanes": [
+        "par-gram",
+        "par-gram-ols",
+        "par-gram-pca",
+        "par-gram-tsvd"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_hdbscan",
+      "cpu": [],
+      "lanes": [
+        "par-hdbscan"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_kernel_method",
+      "cpu": [],
+      "lanes": [
+        "par-kernel-ridge",
+        "par-nystroem"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_kmeans",
+      "cpu": [],
+      "lanes": [
+        "par-kmeans"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_logistic",
+      "cpu": [],
+      "lanes": [
+        "par-logistic"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.fit_svm",
+      "cpu": [],
+      "lanes": [
+        "par-svm",
+        "par-svm-svr"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.monte_carlo_integrate",
+      "cpu": [],
+      "lanes": [
+        "par-resample"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.permutation_test",
+      "cpu": [],
+      "lanes": [
+        "par-resample"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.predict_gaussian_mixture",
+      "cpu": [],
+      "lanes": [
+        "par-gmm"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.predict_gaussian_process",
+      "cpu": [],
+      "lanes": [
+        "par-gp"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.predict_svm",
+      "cpu": [],
+      "lanes": [
+        "par-svm",
+        "par-svm-svr"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_classical.solve_cholesky",
+      "cpu": [],
+      "lanes": [
+        "par-cholesky"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_ensemble.ParallelForestPredictor",
+      "cpu": [],
+      "lanes": [
+        "par-forest-pool"
+      ],
+      "kind": "class",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_ensemble.fit_boosting",
+      "cpu": [],
+      "lanes": [
+        "par-boosting",
+        "par-boosting-clf",
+        "par-boosting-pointwise",
+        "par-boosting-reg",
+        "par-border-types",
+        "par-ordered"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_ensemble.fit_feature_freq",
+      "cpu": [],
+      "lanes": [
+        "par-feature-freq"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_ensemble.fit_isolation_forest",
+      "cpu": [],
+      "lanes": [
+        "par-iforest"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_ensemble.fit_ordered_rmse",
+      "cpu": [],
+      "lanes": [
+        "par-ordered-rmse"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_ensemble.score_isolation_forest",
+      "cpu": [],
+      "lanes": [
+        "par-iforest"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_graph.fit_graph",
+      "cpu": [],
+      "lanes": [
+        "par-graph-agglomerative",
+        "par-graph-spectral",
+        "par-graph-umap"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_graph.transform_umap",
+      "cpu": [],
+      "lanes": [
+        "par-graph-umap"
+      ],
+      "kind": "function",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    },
+    {
+      "name": "parallel_training.ParallelByteLanguageModelTrainer",
+      "cpu": [],
+      "lanes": [
+        "par-byte-lm",
+        "par-byte-lm-model-pool",
+        "par-byte-lm-offload"
+      ],
+      "kind": "class",
+      "alias": "",
+      "host_family": "",
+      "routed": false
+    }
+  ],
+  "runtime_executed": false,
+  "current_release_identity_checked": false,
+  "classification": {
+    "declared_cpu_lanes": 532,
+    "missing_algorithm_cpu_lanes": [
+      "gbdt-pair-logit-pointwise",
+      "gbdt-yeti-rank-pointwise"
+    ],
+    "cooperative_multi_gpu_lanes": 34,
+    "device_resource_only_lanes": [
+      "optim-resident-io",
+      "sequence-device-release",
+      "training-device-cross-entropy"
+    ],
+    "eligible_registered_lanes": 534,
+    "total_registered_lanes": 571,
+    "public_unlaned_verification_utility": "models.verify_catalog_entry",
+    "scope_warning": "Source/registration inventory, not executed coverage or proof of all parameter combinations; counts precede new QueryRMSE-pointwise registration."
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "artifact_scope": "installed 0.8.62 native wheel plus candidate Python sources and separately compiled native repair groups; not a rebuilt production wheel",
+  "base_commit": "0a1b2445c875584552ab34c8c548b6f99efb9949",
+  "branch": "fix/light-verifier-coverage",
+  "commands": {
+    "verify": {
+      "fault_controls": 16,
+      "new_endpoints": 1275
+    },
+    "verify --all": {
+      "fault_controls": 16,
+      "new_endpoints": 1275
+    },
+    "verify --neural-training": {
+      "fault_controls": 14,
+      "new_endpoints": 363
+    }
+  },
+  "date": "2026-10-27",
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/full-api-verifier-20261027",
+  "files": {
+    "accepted-native-and-source.tgz": "715675966ef4e371af5683250cc39a772a09f47aa649216e6087632ecb55b6ad",
+    "apple-final-capture.json": "0374e26d3e3da5234dbdf903c4138f9d5fe8a1e88785bef34057c54ce9e23846",
+    "apple-normal-public.json": "c2e6346ec61fa90dc490c4a8e453dcf662425ddd9440ba2a6a902f652ebfa5f5",
+    "checker-complete.log": "86c5631446f8ff9c7dd0d6b90210416e456e18c8ade252b90d1751daecf4eaee",
+    "checker-reuse.log": "1614dee92706e3a9a55c10efeef67301b49f74698b39920bb8e6a091037895d0",
+    "executed-source-closure.tgz": "e3d81ca47a21513d72efc05b8e17b17eca3bb301e29242c9110b81cd72a64c2a",
+    "hotaisle-final-offers.json": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed",
+    "hotaisle-up.log": "cec5ecfd6a146bd74611efcf88a9d96b4298ed01631b70773a2b3fc46f41fd01",
+    "nvidia-final-capture.json": "29c9de0dd5ea068cb9db2ae358781ed3345636624077b0adcd2a26e6fd16931e",
+    "nvidia-final-neural.json": "a82c3b702d087dc90f3c9c5d25e1b7901f28cb45bc9219308268f21c2eb44ab8",
+    "nvidia-normal-public.json": "c1fdc2a432e9deec4e86c6ebfe17e49bcbeb0a9ca714932cef6049cad367b839",
+    "nvidia-reference-verified.json": "c3df1d2d15a53f3fbfc0553335293e9fde91f55bccd3f0bd978fa2c84937efd4"
+  },
+  "fixtures": {
+    "comparison": "exact bytes, shape, dtype and explicit API contracts",
+    "kinds": {
+      "admission only": 1,
+      "availability contract": 67,
+      "metadata/state contract": 593,
+      "numerical": 614
+    },
+    "scope": "bounded correctness; no timing or quality measurements"
+  },
+  "format": "mojolearn.public-api-verifier-evidence.v1",
+  "native_repairs": [
+    "standalone block constructor parameter storage and native set_params reconstruction",
+    "registered decision-tree constructor storage-hook admission for bagging members",
+    "embedding device-buffer owner admission and finalization"
+  ],
+  "qualification_run": false,
+  "release_qualified": false,
+  "retention": {
+    "archive_artifact_hashes_verified": 6,
+    "delete_verified": "HTTP 204, then GET 404 and absent from listing",
+    "nvidia_pod_deleted": "1ezjplia1wyp1d",
+    "r2_archive": "measurements/box-archive/verifier-api-20261027/verifier-api-20261027-20261027T1739Z.tgz"
+  },
+  "runtime": {
+    "cuda": {
+      "driver": "595.91.07",
+      "executed": 1275,
+      "failures": 0,
+      "faults_caught_and_restored": 16,
+      "hardware": "RTX 4090",
+      "neural_endpoint_match": 363,
+      "neural_faults_caught_and_restored": 14
+    },
+    "hip": {
+      "blocker": "VM availability HTTP 200 with null offerings throughout bounded rental retry and final stock check; bare-metal availability also null; no AMD rental created",
+      "executed": 0,
+      "provider": "Hot Aisle"
+    },
+    "metal": {
+      "blocker": "tools/macos_serial_guard.py refused launch at macOS pressure level 2; installed old native paths still fail these five checks",
+      "executed": 1275,
+      "faults_caught_and_restored": 16,
+      "hardware": "Apple M4",
+      "matching_cuda": 1270,
+      "output_differences": [],
+      "repair_checks_pending": [
+        "mojolearn.BaggingClassifier.estimators_:get",
+        "mojolearn.BaggingClassifier.estimators_:set",
+        "mojolearn.BaggingRegressor.estimators_:get",
+        "mojolearn.BaggingRegressor.estimators_:set",
+        "mojolearn.Embedding.to_device"
+      ]
+    }
+  },
+  "separate_light_flag": false,
+  "validation": {
+    "checker_tests_passed": 50,
+    "release_label_reuse": "accepted only for unchanged loaded native hashes and relevant fixture hashes; tested without new numerical execution",
+    "source_inventory_endpoints": 3802,
+    "source_inventory_is_runtime_evidence": false,
+    "source_inventory_unmapped": 0
+  }
+}
