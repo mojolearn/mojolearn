@@ -1,0 +1,39 @@
+Captured-program loop reuse, 2026-10-28
+Branch: lane/program-loop-reuse-20261028
+Base: e3f3c1572c
+Source commit: bff09cfc29f76c6122e91509f00119c0bbe04262
+
+Repeated work removed:
+- Full OpsProgram copies inside every minibatch (including an additional copy
+  when selecting the otherwise branch). Execution borrows the immutable graph
+  already captured for this fit; only the selected branch executes.
+- Repeated allocation/reconstruction of batch shape tables, selected membership,
+  predicate no-gradient flags and parameter-handle containers. Shapes and native
+  input widths are prepared once; only row counts and branch membership change.
+- Learning-rate calculation and optimizer config access per parameter/minibatch:
+  configuration is captured once per fit; learning rate once per epoch, before
+  scheduler advancement at the original end-of-epoch boundary.
+- Three freshly constructed node argument containers at every replay node;
+  native scratch lists are cleared/repopulated across the synchronous walk.
+
+Setup/reuse and invalidation:
+All reuse is operation-local. Each fit still captures current programs and
+validates its parameter/shape contracts. Temporary handles are retired and
+containers cleared at existing batch/predicate reset boundaries. Branch masks,
+state step counts and dropout keys remain updated at their prior positions;
+node input/scalar words are repopulated before each call. No live mutable graph
+reference is cached across public calls and no numerical update order changes.
+
+Compilation: focused HostExec ordinary/conditional program training, graph
+replay, losses, optimizer updates and cleanup compiled with identical define,
+Mac arm64 CPU, O0. Exit 0. See compile.json for exact flags, binary hash and
+retained source closure. No runtime, performance, identity or GPU execution.
+
+Limits: per-node metadata words still copied into reusable scratch; replay
+output/value containers and some per-batch work remain. Conditional membership
+is still scanned per minibatch. Scratch capacity can remain at the largest
+node/parameter count until replay/fit ends. Public provider boundaries and
+GPU executor instantiations are not qualified by this focused compilation.
+
+Evidence: ~/mojolearn-evidence/program-loop-reuse-20261028/
+Complete logs, source bytes/hashes and binary retained on Mac; no rented box.

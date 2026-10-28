@@ -1,0 +1,38 @@
+{
+  "source_commit": "bff09cfc29f76c6122e91509f00119c0bbe04262",
+  "target": "Mac arm64 CPU",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "compiler_workers": "default, no CPU saturation claim",
+  "flags": [
+    "--emit",
+    "shared-lib",
+    "--optimization-level",
+    "0",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    ".",
+    "-I",
+    "bindings"
+  ],
+  "compile_slot": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh",
+  "compiler_environment": "pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+  "entry": "experiments/program_loop_reuse_20261028/compile.mojo",
+  "exit_code": 0,
+  "binary": "/Users/andrewhendel/mojolearn-evidence/program-loop-reuse-20261028/program.dylib",
+  "binary_sha256": "c120d94a164fc284248a296c10ad6eeb9d2d320723a3eb675f464dee8ffe47a9",
+  "log": "/Users/andrewhendel/mojolearn-evidence/program-loop-reuse-20261028/compile.log",
+  "source_closure": "/Users/andrewhendel/mojolearn-evidence/program-loop-reuse-20261028/source-closure.json",
+  "retained_source_bytes": "/Users/andrewhendel/mojolearn-evidence/program-loop-reuse-20261028/source-closure.tar.gz",
+  "source_closure_files": 114,
+  "coverage": [
+    "HostExec captured-program ordinary and conditional training",
+    "replay_values native graph replay, losses, optimizer updates and cleanup"
+  ],
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_executed": false,
+  "rented_boxes": []
+}
