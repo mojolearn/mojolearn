@@ -11,6 +11,8 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from hierarchy.cluster_descriptor_device import HIERARCHY_CLUSTER_DEVICE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr, read_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -24,6 +26,11 @@ from x_cluster.minibatch_ptr import minibatch_entry_ptr_idn
 from x_cluster.out import ClusterOut
 from providers.python.x_cluster_out_pyapi import cluster_out_to_py, py_floats, py_ints
 from x_cluster.minibatch_fast import MBK_CLS2_POOL, MBK_W2_SUMCMP
+
+
+def hierarchy_cluster_native_api_v1_binding() raises -> PythonObject:
+    var api = HIERARCHY_CLUSTER_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def call_binding(
@@ -142,6 +149,7 @@ def build__mojolearn_x_cluster() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_cluster")
         m.def_function[call_binding]("x_cluster_call")
+        m.def_function[hierarchy_cluster_native_api_v1_binding]("hierarchy_cluster_native_api_v1")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
