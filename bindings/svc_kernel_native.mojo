@@ -87,10 +87,12 @@ def _svc_provider(binding: PythonObject) raises -> PythonObject:
     return PythonObject(alloc=CompiledBindingSnapshot(native, binding, String(SVC_ABI_NAME), 1, [flags]))
 
 
-def _svc_publish_dispatch(fields: PythonObject, native: PythonObject) raises:
+def _svc_publish_dispatch(fields: PythonObject, native: PythonObject, context: PythonObject) raises:
     if native is not None:
         # Plain diagnostic values only: never persist module/capsule owners or
         # make the native table part of a model's pickle/checkpoint state.
+        if py_contains(fields, "_native_svc_dispatch"):
+            native_release_admit(fields["_native_svc_dispatch"], context)
         py_setitem(fields, "_native_svc_dispatch", neural_descriptor_info(native.downcast_value_ptr[CompiledBindingSnapshot]()[].provider))
 
 
@@ -969,9 +971,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var settings = _svc_fit_settings(fields, gamma, n_cols, context)
     if labels is None:
         _fit_ovo(fields, binding, x_meta, classes, pair, gamma, c_rows, context, settings, native)
-        if native is not None and py_contains(fields, "_native_svc_dispatch"):
-        native_release_admit(fields["_native_svc_dispatch"], context)
-    _svc_publish_dispatch(fields, native)
+        _svc_publish_dispatch(fields, native, context)
         _ = x^
         _ = x_meta  # retain captured storage owners through the last native use
         _ = c_rows^
@@ -1013,9 +1013,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         _platt(fields, binding, x_meta, codes, gamma, c_rows, 2, context, settings, native)
     elif py_contains(fields, PythonObject("_prob_ab")):
         _ = family_call(fields.pop, PythonObject("_prob_ab"), PythonObject(None))
-    if native is not None and py_contains(fields, "_native_svc_dispatch"):
-        native_release_admit(fields["_native_svc_dispatch"], context)
-    _svc_publish_dispatch(fields, native)
+    _svc_publish_dispatch(fields, native, context)
     _ = x^
     _ = x_meta  # retain captured storage owners through the last native use
     _ = labels^
@@ -1053,9 +1051,7 @@ def _run(fields: PythonObject, binding: PythonObject, source: PythonObject, pred
     _ = out  # keep the Python object alive through the native call above
     _ = q^
     _ = q_meta  # retain captured storage owners through the last native use
-    if native is not None and py_contains(fields, "_native_svc_dispatch"):
-        native_release_admit(fields["_native_svc_dispatch"], context)
-    _svc_publish_dispatch(fields, native)
+    _svc_publish_dispatch(fields, native, context)
     return out
 
 
@@ -1081,9 +1077,7 @@ def _pair_decisions(fields: PythonObject, binding: PythonObject, source: PythonO
         _ = dec  # keep the Python object alive through the native call above
     _ = q^
     _ = q_meta  # retain captured storage owners through the last native use
-    if native is not None and py_contains(fields, "_native_svc_dispatch"):
-        native_release_admit(fields["_native_svc_dispatch"], context)
-    _svc_publish_dispatch(fields, native)
+    _svc_publish_dispatch(fields, native, context)
     return dec
 
 
@@ -1453,9 +1447,7 @@ def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObj
     var fields = py_fields(model)
     var native = _svc_provider(args[0])
     var result = _svc_kernel_operation(model, operation, args, context, fields, native)
-    if native is not None and py_contains(fields, "_native_svc_dispatch"):
-        native_release_admit(fields["_native_svc_dispatch"], context)
-    _svc_publish_dispatch(fields, native)
+    _svc_publish_dispatch(fields, native, context)
     return result
 
 

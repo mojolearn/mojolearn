@@ -126,6 +126,21 @@ def _density_availability(package):
     return {cls: {'predict': ((vars(member)['check'],), 'density_predict')}}
 
 
+def _linear_spectral_availability(package):
+    # glue: fixed availability declarations, captured once without calling predicates
+    import sys
+    result = {}
+    for module_name, class_name, member_name, condition in (  # glue: two native availability schemas
+            ('_expansion_linear', 'SGDClassifier', 'predict_proba', 'sgd_probability'),
+            ('_spectral_impl', 'SpectralClustering', 'predict', 'spectral_predict')):
+        module = sys.modules.get(package.__name__ + '.' + module_name)
+        if type(module) is ModuleType:
+            cls = vars(module)[class_name]
+            member = vars(cls)[member_name]
+            result[cls] = {member_name: ((vars(member)['check'],), condition)}
+    return result
+
+
 def connect_classes(package):
     # glue: establish native slots once, before dependent estimator/parameter
     # tables capture method identities; lazy imports admit only new classes.
@@ -157,6 +172,7 @@ def connect_classes(package):
     neighbor_availability = _neighbor_availability(package)
     neighbor_availability.update(_hierarchy_availability(package))
     neighbor_availability.update(_density_availability(package))
+    neighbor_availability.update(_linear_spectral_availability(package))
     neighbor_availability[_svm_impl.SVC] = {
         name: ((vars(vars(_svm_impl.SVC)[name])['check'],), 'svm_probability')
         for name in ('predict_proba', 'predict_log_proba')  # glue: two fixed native availability schemas

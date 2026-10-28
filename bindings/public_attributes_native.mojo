@@ -169,6 +169,19 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
                     enabled = Bool(py=requested)
                 if not enabled:
                     raise Error("AttributeError: predict_proba is not available when probability=False" if rule == "svm_probability" else "AttributeError: prediction data was not requested")
+            elif rule == "sgd_probability":
+                var loss = _lookup_impl[False](model, PythonObject("loss"), fields, plan, context)
+                if py_type(loss) is not py_type(PythonObject("")):
+                    raise Error("TypeError: SGD probability availability requires an exact native loss name")
+                if String(loss) != "log_loss":
+                    raise Error("AttributeError: probabilities require loss='log_loss'")
+            elif rule == "spectral_predict":
+                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
+                host_inference_scalar(requested, context, True)
+                if not Bool(py=requested):
+                    var references = _lookup_impl[False](model, PythonObject("_fit_X"), fields, plan, context)
+                    if references is None:
+                        raise Error("AttributeError: spectral prediction data was not requested or stored")
             elif rule == "hierarchy_predict":
                 var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
                 if py_type(requested) is not py_type(PythonObject(True)) and py_type(requested) is not py_type(PythonObject(0)):
