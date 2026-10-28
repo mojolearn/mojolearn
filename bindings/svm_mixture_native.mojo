@@ -15,6 +15,8 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_is_int, family_isinstance, family_call, family_entry, family_array, family_as_f32,
 )
+from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 
 
 def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject, n_targets: Int,
@@ -130,8 +132,8 @@ def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObj
     return Python.tuple(x, y)
 
 
-def svm_mixture_operation(model: PythonObject, operation: String, args: PythonObject,
-                          context: PythonObject) raises -> PythonObject:
+def _svm_mixture_operation_route(model: PythonObject, operation: String, args: PythonObject,
+                                 context: PythonObject) raises -> PythonObject:
     """args[0] is the resolved binding."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
@@ -147,3 +149,24 @@ def svm_mixture_operation(model: PythonObject, operation: String, args: PythonOb
     if operation == "family_svm_gmm_sample":
         return _gmm_sample(model, args[0], args[1], context)
     raise Error("RuntimeError: unknown svm/mixture operation " + operation)
+
+
+def svm_mixture_operation(model: PythonObject, operation: String, args: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """The public operation: the estimators that formerly took the `_mode`
+    class-creation wrappers run their whole lifecycle around the owner
+    (providers/python/family_public_lifecycle_pyapi.mojo); every other
+    operation goes straight to the owner."""
+    var lifecycle = family_lifecycle_spec(operation)
+    if lifecycle.method.byte_length() == 0:
+        return _svm_mixture_operation_route(model, operation, args, context)
+    var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
+    var result = PythonObject(None)
+    try:
+        result = _svm_mixture_operation_route(model, operation, call.args, context)
+    except error:
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
+    finally:
+        neighbors_public_end(model, call)
+    return family_lifecycle_finish(model, lifecycle, result, call, context)

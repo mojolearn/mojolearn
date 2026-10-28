@@ -35,6 +35,8 @@ from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from core.neighbors_graph_impl import xn_graph_even_rows
 from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
+from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 
 #: `_expansion_neighbors._KERNELS["rbf"]` and `_U_IDENTITY`.
 comptime _XN_KERNEL_RBF = 2
@@ -675,8 +677,8 @@ def _svgp_score(model: PythonObject, args: PythonObject, context: PythonObject) 
                                   PythonObject("uniform_average"), PythonObject(True), mode), context)
 
 
-def neighbors_graph_operation(model: PythonObject, operation: String, var args: PythonObject,
-                              context: PythonObject) raises -> PythonObject:
+def _neighbors_graph_operation_route(model: PythonObject, operation: String, var args: PythonObject,
+                                     context: PythonObject) raises -> PythonObject:
     if (operation == "family_xn_graph_connected_components" and len(args) > 0
             and py_type(args[0]) is _b().str):
         # connected_components(..., numeric_mode=<str>): the shell hands over
@@ -710,3 +712,24 @@ def neighbors_graph_operation(model: PythonObject, operation: String, var args: 
     if operation == "family_xn_graph_svgp_score":
         return _svgp_score(model, args, context)
     raise Error("RuntimeError: unknown neighbors operation " + operation)
+
+
+def neighbors_graph_operation(model: PythonObject, operation: String, args: PythonObject,
+                              context: PythonObject) raises -> PythonObject:
+    """The public operation: the estimators that formerly took the `_mode`
+    class-creation wrappers run their whole lifecycle around the owner
+    (providers/python/family_public_lifecycle_pyapi.mojo); every other
+    operation goes straight to the owner."""
+    var lifecycle = family_lifecycle_spec(operation)
+    if lifecycle.method.byte_length() == 0:
+        return _neighbors_graph_operation_route(model, operation, args, context)
+    var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
+    var result = PythonObject(None)
+    try:
+        result = _neighbors_graph_operation_route(model, operation, call.args, context)
+    except error:
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
+    finally:
+        neighbors_public_end(model, call)
+    return family_lifecycle_finish(model, lifecycle, result, call, context)

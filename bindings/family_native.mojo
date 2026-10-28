@@ -7,8 +7,6 @@
 # exception unchanged.
 from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.cluster_public_lifecycle_pyapi import cluster_public_operation
-from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from std.python import PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.family_common import family_call
@@ -89,26 +87,6 @@ def family_operation(model: PythonObject, operation: String, var args: PythonObj
     if (operation.startswith("family_xn_loc_") or operation.startswith("family_xn_semi_")
             or operation.startswith("family_xn_graph_") or operation.startswith("family_svc_ocsvm_")):
         args = estimator_arguments(model, "_mojolearn_x_neighbors", args, context)
-    # The estimators whose `_mode` class-creation wrappers this owner retired
-    # (providers/python/family_public_lifecycle_pyapi.mojo): the whole public
-    # lifecycle around the unchanged algorithm owner.
-    var lifecycle = family_lifecycle_spec(operation)
-    if lifecycle.method.byte_length() > 0:
-        var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
-        var result = PythonObject(None)
-        try:
-            result = _family_route(model, operation, call.args, context)
-        except error:
-            var failure = neighbors_public_refusal(error, call, model)
-            raise failure^
-        finally:
-            neighbors_public_end(model, call)
-        return family_lifecycle_finish(model, lifecycle, result, call, context)
-    return _family_route(model, operation, args, context)
-
-
-def _family_route(model: PythonObject, operation: String, args: PythonObject,
-                  context: PythonObject) raises -> PythonObject:
     if ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
             or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"
                 and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_")):
