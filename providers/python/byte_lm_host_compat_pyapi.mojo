@@ -133,7 +133,9 @@ def host_compat_vendor() -> PythonObject:
 
 
 def host_compat_profile() raises -> PythonObject:
-    return PythonObject(ByteConfig().profile())
+    # The former CPU proxy used the public config default (chunked=False),
+    # independent of a binary experiment switch's optional default.
+    return PythonObject(ByteConfig(chunked_lm_head_v2=False).profile())
 
 
 def host_compat_suffix() -> PythonObject:
