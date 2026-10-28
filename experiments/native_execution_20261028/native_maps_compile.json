@@ -1,0 +1,22 @@
+{
+  "source_commit": "09584d5fc2",
+  "target": "Mac arm64 CPU",
+  "runtime_executed": false,
+  "performance_measured": false,
+  "compilations": [
+    {
+      "scope": "sequential native operation map",
+      "exit_code": 0,
+      "binary": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/sequential-native-map-host/_mojolearn_runtime_sequential_host.so",
+      "sha256": "77ec83210941e8c02d2086efac007f62b7b481643bca6df6e457143c13a18027",
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/sequential-native-map-compile.log"
+    },
+    {
+      "scope": "bound native owner type registration",
+      "exit_code": 0,
+      "binary": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/compile_registration",
+      "sha256": "6ae14581306ab9980f89c7cde85444d85837b8ecd1a2dbfc655e213f0d736bff",
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/registration-compile.log"
+    }
+  ]
+}
