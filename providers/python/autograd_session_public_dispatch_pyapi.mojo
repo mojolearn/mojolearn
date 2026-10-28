@@ -36,4 +36,4 @@ struct NativeSessionPublicAPI[E: Exec & Movable & Deinitable, KIND: Int](Default
     def __init__(out self):
         self.name = String(SESSION_PUBLIC_ABI_NAME)
         self.entries = List[NativeDescriptorCall]()
-        self.entries.append(session_public_native_v1[E, KIND])
+        self.entries.append(session_public_native_v1[Self.E, Self.KIND])
