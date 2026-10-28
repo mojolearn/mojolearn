@@ -9,7 +9,8 @@
 # 3. the board preflight probe: mojolearn._backend.tier_dir('identical');
 # 4. a CPU-column runtime check: linalg.matmul, Ridge and KMeans fit+predict on 50 rows and one
 #    LanguageModelTrainer construct (default config) and tiny TransformerBlock and Mamba2Block
-#    forwards (the board's own-host forward reference), identical mode.
+#    forwards (the board's own-host forward reference) and a TransformerBlock decode_session,
+#    identical mode.
 # Exits non-zero on any failure. Results land in $LEG_OUT (summary.txt, results.tsv, logs/, *.log).
 set -u
 OUT=${LEG_OUT:?LEG_OUT is set by the CPU leg runner}
@@ -92,6 +93,12 @@ x = rng.standard_normal((1, 8, dm)).astype(np.float32)
 y = np.asarray(mojolearn.TransformerBlock(tw, n_heads=nh, n_kv_heads=nkv).forward(x))
 assert y.shape == x.shape and np.isfinite(y).all()
 print("transformer forward ok", y.shape)
+tb = mojolearn.TransformerBlock(tw, n_heads=nh, n_kv_heads=nkv)
+with tb.decode_session(tb.allocate_state(1, max_tokens=16)) as sess:
+    for t in range(4):
+        step = np.asarray(sess.step(np.ascontiguousarray(x[:, t:t + 1])))
+assert step.shape == (1, 1, dm) and np.isfinite(step).all()
+print("transformer decode_session ok", step.shape)
 di, mh = 64, 1
 cd, dip = di + 256, 2 * di + 256 + mh
 mw = {"block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "conv1d.weight": (cd, 1, 4), "conv1d.bias": (cd,),
