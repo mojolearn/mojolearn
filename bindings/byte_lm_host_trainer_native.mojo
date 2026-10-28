@@ -21,7 +21,7 @@ from bindings.byte_lm_trainer_native import _validated_state
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from providers.python.byte_lm_json_checkpoint_pyapi import byte_json_payload, byte_json_arrays, byte_json_read
 from bindings.linalg_ops_native import linalg_ops_operation
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_numpy_metadata import native_numpy_type
 from bindings.native_buffer_owner import native_storage_allocate
 from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_lengths, byte_lm_config_operation
@@ -96,10 +96,10 @@ def _host_provider(fields: PythonObject) raises -> PythonObject:
     return provider
 
 
-def _host_words(fields: PythonObject, threaded: Int = 0, threads: Int = 0,
+def _host_words(mut mods: NativeModules, fields: PythonObject, threaded: Int = 0, threads: Int = 0,
                 batch: Int = 0, length: Int = 0, completed: Int = 0) raises -> List[Int]:
     var native = fields["_native"]
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     if py_type(native) is not b.list and py_type(native) is not b.tuple:
         raise Error("TypeError: host model shape requires native list or tuple storage")
     if len(native) != 7 and len(native) != 9 and len(native) != 10:
@@ -122,8 +122,8 @@ def _host_words(fields: PythonObject, threaded: Int = 0, threads: Int = 0,
     return words^
 
 
-def _host_shape(config: PythonObject, context: PythonObject) raises -> Tuple[_Shape, PythonObject]:
-    var bi = native_loaded_module("builtins")
+def _host_shape(mut mods: NativeModules, config: PythonObject, context: PythonObject) raises -> Tuple[_Shape, PythonObject]:
+    var bi = mods.module("builtins")
     var state = bi.dict()
     var object = config
     if config is not None:
@@ -145,21 +145,23 @@ def _host_shape(config: PythonObject, context: PythonObject) raises -> Tuple[_Sh
     return (shape^, object)
 
 
-def _host_profile_pair(fields: PythonObject) raises -> List[String]:
+def _host_profile_pair(mut mods: NativeModules, fields: PythonObject) raises -> List[String]:
     var provider = _host_provider(fields)
+    mods.released()
     var result = List[String](length=2, fill=String(""))
-    _ = neural_descriptor_execute(provider, 4, [Int(result.unsafe_ptr())], _host_words(fields), List[Float64](), False)
+    _ = neural_descriptor_execute(provider, 4, [Int(result.unsafe_ptr())], _host_words(mods, fields), List[Float64](), False)
+    mods.released()
     return result^
 
 
-def _host_profile(fields: PythonObject) raises -> PythonObject:
-    var result = _host_profile_pair(fields)
+def _host_profile(mut mods: NativeModules, fields: PythonObject) raises -> PythonObject:
+    var result = _host_profile_pair(mods, fields)
     return PythonObject(result[0])
 
 
-def _inference_parameters(source: PythonObject, shape: _Shape,
+def _inference_parameters(mut mods: NativeModules, source: PythonObject, shape: _Shape,
                           context: PythonObject) raises -> Tuple[PythonObject, String]:
-    var bi = native_loaded_module("builtins")
+    var bi = mods.module("builtins")
     if py_type(source) is not bi.dict:
         return (training_f32_cast_owned(source, [shape.n_total()], "parameters", context), String("float32"))
     # Inspect native dictionary keys without invoking mapping/protocol hooks.
@@ -216,8 +218,10 @@ def _inference_parameters(source: PythonObject, shape: _Shape,
         var item = owners[i]
         if formats[i] == 1:
             item = linalg_ops_operation(PythonObject(None), "family_lin_from_bf16", item, context["byte_lm_linalg_context"])
+            mods.released()
         elif formats[i] == 2:
             item = linalg_ops_operation(PythonObject(None), "family_lin_dequantize_int8", item, context["byte_lm_linalg_context"])
+            mods.released()
         var owned = training_f32_cast_owned(item, shapes[i], names[i], context)
         var count = 1
         for j in range(len(shapes[i])):  # driver-loop: over admitted tensor shape metadata
@@ -229,27 +233,27 @@ def _inference_parameters(source: PythonObject, shape: _Shape,
     return (result, format^)
 
 
-def byte_lm_host_inference_construct(model: PythonObject, args: PythonObject,
+def byte_lm_host_inference_construct(mut mods: NativeModules, model: PythonObject, args: PythonObject,
                                      context: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
+    var bi = mods.module("builtins")
     if py_type(model) is not context["byte_lm_host_inference_class"]:
         raise Error("TypeError: host inference requires the connected native inference class")
     classical_connect_numpy(context)
-    var captured = _host_shape(args[1], context)
+    var captured = _host_shape(mods, args[1], context)
     var shape = captured[0].copy()
     if py_type(args[2]) is not bi.bool:
         raise Error("TypeError: threaded must be a bool")
     var pending = bi.dict()
     py_setitem(pending, "_threaded", args[2])
     py_setitem(pending, "_threads", args[3])
-    _ = _host_threads(pending, PythonObject(None), PythonObject(None))
-    var packed = _inference_parameters(args[0], shape, context)
+    _ = _host_threads(mods, pending, PythonObject(None), PythonObject(None))
+    var packed = _inference_parameters(mods, args[0], shape, context)
     var binding = context["byte_lm_host_binding"]
     if py_type(binding) is bi.str:
         raise Error(String(py=binding))
     py_setitem(pending, "_binding", binding)
     py_setitem(pending, "_native", shape.native_shape())
-    var profiles = _host_profile_pair(pending)
+    var profiles = _host_profile_pair(mods, pending)
     var expected = shape.profile(String(py=context["byte_lm_default_profile"])) + profiles[1]
     if profiles[0] != expected:
         raise Error("RuntimeError: byte LM host profile mismatch: " + profiles[0] + " != " + expected)
@@ -261,23 +265,26 @@ def byte_lm_host_inference_construct(model: PythonObject, args: PythonObject,
     return PythonObject(None)
 
 
-def byte_lm_host_inference_checkpoint(cls: PythonObject, args: PythonObject,
+def byte_lm_host_inference_checkpoint(mut mods: NativeModules, cls: PythonObject, args: PythonObject,
         context: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
     if cls is not context["byte_lm_host_inference_class"]:
         raise Error("TypeError: host checkpoint restoration requires the connected native inference class")
     classical_connect_numpy(context)
     var source = byte_json_payload(byte_json_read(args[0], io_error))
+    mods.released()
     var described = _shape_of(source)
     training_byte_shape_validate(described.d, described.chunked)
     byte_json_arrays(source, described.n_total(), described.n_tensors())
+    mods.released()
     # This is the same complete state validator used by the GPU trainer:
     # integrity, mode/profile, tensor registry, optimizer, cursor and schedule.
     var state_context = context["byte_lm_checkpoint_context"]
     classical_connect_numpy(state_context)
-    var state = _validated_state(source, state_context)
+    var state = _validated_state(mods, source, state_context)
     var shape = _host_shape_from_state(state, context)
+    mods.released()
     var result = native_storage_allocate(cls)
-    _ = byte_lm_host_inference_construct(result,
+    _ = byte_lm_host_inference_construct(mods, result,
         Python.tuple(state["parameters"], shape, args[1], args[2]), context)
     return result
 
@@ -287,15 +294,15 @@ def _host_shape_from_state(state: PythonObject, context: PythonObject) raises ->
     return byte_lm_config_operation(state, "config_state", Python.tuple(), context)
 
 
-def byte_lm_host_construct(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
+def byte_lm_host_construct(mut mods: NativeModules, trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = mods.module("builtins")
     if py_type(trainer) is not context["byte_lm_host_trainer_class"]:
         raise Error("TypeError: host training requires the connected native trainer class")
     classical_connect_numpy(context)
     var profile = py_get(context["byte_lm_profile_defaults"], "training", PythonObject("fp32_v1"))
     if py_type(profile) is not bi.str or not Bool(py=context["byte_lm_profiles"][profile]["training"]):
         raise Error("NotImplementedError: the selected numeric profile is unavailable for Byte-LM training")
-    var captured = _host_shape(args[3], context)
+    var captured = _host_shape(mods, args[3], context)
     var shape = captured[0].copy()
     var binding = context["byte_lm_host_binding"]
     if py_type(binding) is bi.str:
@@ -353,13 +360,14 @@ def byte_lm_host_construct(trainer: PythonObject, args: PythonObject, context: P
     py_setitem(fields, "_step_words", Python.tuple(shape.batch(), shape.length() + 1, shape.vocab(), n))
     py_setitem(fields, "_gradient", PythonObject(None))
     _ = _host_provider(fields)
+    mods.released()
     return PythonObject(None)
 
 
-def byte_lm_host_from_state(cls: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def byte_lm_host_from_state(mut mods: NativeModules, cls: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     if cls is not context["byte_lm_host_trainer_class"]:
         raise Error("TypeError: host restoration requires the connected native trainer class")
-    var bi = native_loaded_module("builtins")
+    var bi = mods.module("builtins")
     var options = args[4]
     classical_admit_value(options, context)
     if py_type(options) is not bi.dict:
@@ -373,16 +381,16 @@ def byte_lm_host_from_state(cls: PythonObject, args: PythonObject, context: Pyth
         py_get(options, "lr", PythonObject(.001)), py_get(options, "betas", Python.tuple(.9, .999)),
         py_get(options, "eps", PythonObject(.00000001)), py_get(options, "weight_decay", PythonObject(.01)))
     var result = native_storage_allocate(cls)
-    _ = byte_lm_host_construct(result, constructor, context)
+    _ = byte_lm_host_construct(mods, result, constructor, context)
     return result
 
 
-def byte_lm_host_metadata(trainer: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
+def byte_lm_host_metadata(mut mods: NativeModules, trainer: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
     if py_type(trainer) is not context["byte_lm_host_trainer_class"] and py_type(trainer) is not context["byte_lm_host_inference_class"]:
         raise Error("TypeError: host metadata requires the connected native trainer class")
     var fields = py_fields(trainer)
     if operation == "profile":
-        return _host_profile(fields)
+        return _host_profile(mods, fields)
     if operation == "parameters_sha256":
         var value = fields["_parameters"]
         classical_admit_value(value, context)
@@ -393,8 +401,8 @@ def byte_lm_host_metadata(trainer: PythonObject, operation: String, context: Pyt
     return fields[name]
 
 
-def _host_threads(fields: PythonObject, threaded: PythonObject, threads: PythonObject) raises -> Tuple[Int, Int]:
-    var bi = native_loaded_module("builtins")
+def _host_threads(mut mods: NativeModules, fields: PythonObject, threaded: PythonObject, threads: PythonObject) raises -> Tuple[Int, Int]:
+    var bi = mods.module("builtins")
     var flag = fields["_threaded"] if threaded is None else threaded
     if py_type(flag) is not bi.bool:
         raise Error("TypeError: threaded must be a bool or None")
@@ -409,15 +417,16 @@ def _host_threads(fields: PythonObject, threaded: PythonObject, threads: PythonO
     return (1 if Bool(py=flag) else 0, count)
 
 
-def byte_lm_host_infer(model: PythonObject, operation: String, args: PythonObject,
+def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     if py_type(model) is not context["byte_lm_host_inference_class"]:
         raise Error("TypeError: host inference requires the connected native model class")
     classical_connect_numpy(context)
     var fields = py_fields(model)
-    var threaded = _host_threads(fields, args[2], args[3])
-    var words = _host_words(fields, threaded[0], threaded[1])
+    var threaded = _host_threads(mods, fields, args[2], args[3])
+    var words = _host_words(mods, fields, threaded[0], threaded[1])
     var provider = _host_provider(fields)
+    mods.released()
     var is_loss = operation == "loss_bits" or operation == "inference_loss"
     classical_admit_value(args[0], context)
     classical_admit_value(args[1], context)
@@ -444,6 +453,7 @@ def byte_lm_host_infer(model: PythonObject, operation: String, args: PythonObjec
     var sizes = List[Int](length=batch, fill=length)
     if args[1] is not None:
         sizes = byte_lm_lengths(args[1], batch, length, context)
+        mods.released()
         var padded = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
         neural_copy_row_prefixes(Int(py=classical_address(padded)), token_address, sizes, batch, length, 1)
         tokens = padded
@@ -460,6 +470,7 @@ def byte_lm_host_infer(model: PythonObject, operation: String, args: PythonObjec
     words[13] = length
     if is_loss:
         var bits = neural_descriptor_execute(provider, 2, addresses, words, List[Float64](), False)
+        mods.released()
         _ = tokens
         _ = parameters
         if operation == "inference_loss":
@@ -470,6 +481,7 @@ def byte_lm_host_infer(model: PythonObject, operation: String, args: PythonObjec
         var next_address = Int(py=classical_address(next))
         addresses.append(next_address)
         var written = neural_descriptor_execute(provider, 1, addresses, words, List[Float64](), False)
+        mods.released()
         if written != batch:
             raise Error("RuntimeError: byte LM host wrote an unexpected number of next bytes")
         var output = Python.list()
@@ -486,6 +498,7 @@ def byte_lm_host_infer(model: PythonObject, operation: String, args: PythonObjec
     var out_address = Int(py=classical_address(out))
     addresses.append(out_address)
     var written = neural_descriptor_execute(provider, 0, addresses, words, List[Float64](), False)
+    mods.released()
     if written != batch * length * vocab:
         raise Error("RuntimeError: byte LM host wrote an unexpected number of logits")
     _ = tokens
@@ -509,7 +522,7 @@ def byte_lm_host_infer(model: PythonObject, operation: String, args: PythonObjec
     return out
 
 
-def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def byte_lm_host_train_step(mut mods: NativeModules, trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var fields = py_fields(trainer)
     # (batch, length + 1, vocab_size, n_total), retained at construction
@@ -537,6 +550,7 @@ def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: 
     var post_v = _f32_array(n, context)
     py_setitem(fields, "_gradient", PythonObject(None))
     var provider = _host_provider(fields)
+    mods.released()
     var descriptors: List[Int] = [Int(py=classical_address(fields["_parameters"])),
         Int(py=classical_address(fields["_m"])), Int(py=classical_address(fields["_v"])),
         Int(py=classical_address(tokens)), Int(py=classical_address(grad)),
@@ -549,11 +563,12 @@ def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: 
     for i in range(5):  # driver-loop: over the five admitted optimizer metadata fields
         scalars.append(Float64(py=optimizer[i]))
     var completed = fields["_completed"]
-    if py_type(completed) is not native_loaded_module("builtins").int:
+    if py_type(completed) is not mods.module("builtins").int:
         raise Error("TypeError: completed_steps requires a native integer")
-    var native = _host_words(fields, completed=Int(py=completed))
+    var native = _host_words(mods, fields, completed=Int(py=completed))
     # Preserve the old GIL-held host operation and transactional output publish.
     var bits = neural_descriptor_execute(provider, 3, descriptors, native, scalars, False)
+    mods.released()
     _ = grad  # keep the Python object alive through the native call above
     _ = tokens  # keep the Python object alive through the native call above
     _ = post_v  # keep the Python object alive through the native call above
@@ -574,27 +589,28 @@ def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: 
 
 
 def byte_lm_host_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var mods = NativeModules()
     var io_error = ByteCheckpointIOError()
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
         if operation == "logits" or operation == "next_bytes" or operation == "loss_bits" or operation == "inference_loss":
-            return byte_lm_host_infer(call[0], operation, call[2], call[3]).steal_data()
+            return byte_lm_host_infer(mods, call[0], operation, call[2], call[3]).steal_data()
         if operation == "inference_from_checkpoint":
-            return byte_lm_host_inference_checkpoint(call[0], call[2], call[3], io_error).steal_data()
+            return byte_lm_host_inference_checkpoint(mods, call[0], call[2], call[3], io_error).steal_data()
         if operation == "inference_construct":
-            return byte_lm_host_inference_construct(call[0], call[2], call[3]).steal_data()
+            return byte_lm_host_inference_construct(mods, call[0], call[2], call[3]).steal_data()
         if operation == "construct":
-            return byte_lm_host_construct(call[0], call[2], call[3]).steal_data()
+            return byte_lm_host_construct(mods, call[0], call[2], call[3]).steal_data()
         if operation == "from_state":
-            return byte_lm_host_from_state(call[0], call[2], call[3]).steal_data()
+            return byte_lm_host_from_state(mods, call[0], call[2], call[3]).steal_data()
         if operation == "shape" or operation == "profile" or operation == "completed_steps" or operation == "parameters" or operation == "m" or operation == "v" or operation == "gradient" or operation == "parameters_sha256":
-            return byte_lm_host_metadata(call[0], operation, call[3]).steal_data()
+            return byte_lm_host_metadata(mods, call[0], operation, call[3]).steal_data()
         if operation == "native_provider_info":
             return neural_descriptor_info(py_fields(call[0])["_native_provider"]).steal_data()
         if operation != "train_step" and operation != "loss":
             raise Error("RuntimeError: unknown byte LM host trainer operation " + operation)
-        var result = byte_lm_host_train_step(call[0], call[2], call[3])
+        var result = byte_lm_host_train_step(mods, call[0], call[2], call[3])
         if operation == "loss":
             return PythonObject(Float64(bitcast[DType.float32](UInt32(py=result)))).steal_data()
         return result.steal_data()

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential model-description and option metadata."""
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.python import Python, PythonObject
 from bindings.sequential_admission import sequential_integer, sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_fields, py_setitem
@@ -20,10 +20,10 @@ def _positive(value: PythonObject, name: String, low: Int, context: PythonObject
     return Int(py=value)
 
 
-def _shape(value: PythonObject, name: String, infer: Bool, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def _shape(mut mods: NativeModules, value: PythonObject, name: String, infer: Bool, context: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     var source = py_call(b.tuple, value)
-    sequential_admit_value(source, context)
+    sequential_admit_value(mods, source, context)
     if len(source) < 1 or len(source) > 6:
         raise Error(name + " must list 1 to 6 dimensions")
     var out = Python.list()
@@ -35,17 +35,17 @@ def _shape(value: PythonObject, name: String, infer: Bool, context: PythonObject
     return out
 
 
-def sequential_append(model: PythonObject, code: PythonObject, a0: PythonObject,
+def sequential_append(mut mods: NativeModules, model: PythonObject, code: PythonObject, a0: PythonObject,
                       a1: PythonObject, f: PythonObject, supplied: PythonObject) raises:
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     var args = Python.list(a0, a1, 0, 0, 0, 0) if supplied is None else py_call(b.list, supplied)
     var fields = sequential_fields(model)
     _ = py_call(fields["_layers"].append, Python.tuple(code, a0, a1, f, py_call(b.tuple, args)))
 
 
-def _arguments(kind: String, supplied: PythonObject, keywords: PythonObject,
+def _arguments(mut mods: NativeModules, kind: String, supplied: PythonObject, keywords: PythonObject,
                names: PythonObject, defaults: PythonObject, required: Int) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     if len(supplied) > len(names):
         raise Error("TypeError: " + kind + " received too many positional arguments")
     var result = py_call(b.list, defaults)
@@ -68,9 +68,9 @@ def _arguments(kind: String, supplied: PythonObject, keywords: PythonObject,
     return result
 
 
-def sequential_add(model: PythonObject, kind_arg: PythonObject, supplied: PythonObject,
+def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: PythonObject, supplied: PythonObject,
                    keywords: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     if not Bool(py=py_call(b.isinstance, kind_arg, b.str)):
         raise Error("kind must name a supported Sequential layer")
     var kind = String(kind_arg.lower())
@@ -83,31 +83,31 @@ def sequential_add(model: PythonObject, kind_arg: PythonObject, supplied: Python
     var f = PythonObject(0.0)
     var args = PythonObject(None)
     if kind == "linear":
-        var options = _arguments(kind, supplied, keywords, Python.tuple("units", "bias"), Python.tuple(None, True), 1)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("units", "bias"), Python.tuple(None, True), 1)
         if not _integer(options[0], context) or Bool(py=options[0] < PythonObject(1)):
             raise Error("units must be a positive integer")
         a0 = py_call(b.int, options[0])
         a1 = PythonObject(1 if Bool(py=options[1]) else 0)
     elif kind == "layer_norm":
-        var options = _arguments(kind, supplied, keywords, Python.tuple("eps"), Python.tuple(1e-5), 0)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("eps"), Python.tuple(1e-5), 0)
         if not Bool(py=options[0] > PythonObject(0)):
             raise Error("eps must be positive")
         f = py_call(b.float, options[0])
     elif kind == "dropout":
-        var options = _arguments(kind, supplied, keywords, Python.tuple("p"), Python.tuple(None), 1)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("p"), Python.tuple(None), 1)
         if not (Bool(py=options[0] >= PythonObject(0)) and Bool(py=options[0] < PythonObject(1))):
             raise Error("p must be in [0, 1)")
         f = py_call(b.float, options[0])
     elif kind == "residual":
-        var options = _arguments(kind, supplied, keywords, Python.tuple("source"), Python.tuple(-1), 0)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("source"), Python.tuple(-1), 0)
         if not _integer(options[0], context):
             raise Error("source must be -1 or the index of an earlier layer")
         a0 = py_call(b.int, options[0])
     elif kind == "reshape" or kind == "permute":
         var name = "shape" if kind == "reshape" else "axes"
-        var options = _arguments(kind, supplied, keywords, Python.tuple(name), Python.tuple(None), 1)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple(name), Python.tuple(None), 1)
         if kind == "reshape":
-            args = _shape(options[0], name, True, context)
+            args = _shape(mods, options[0], name, True, context)
         else:
             var source = py_call(b.tuple, options[0])
             if len(source) < 1 or len(source) > 6:
@@ -118,7 +118,7 @@ def sequential_add(model: PythonObject, kind_arg: PythonObject, supplied: Python
         while len(args) < 6:  # driver-loop: over unused description argument slots
             _ = py_call(args.append, 0 if kind == "reshape" else -1)
     elif kind == "conv2d":
-        var options = _arguments(kind, supplied, keywords,
+        var options = _arguments(mods, kind, supplied, keywords,
             Python.tuple("out_channels", "kernel_size", "stride", "padding", "bias", "groups"),
             Python.tuple(None, None, 1, 0, True, 1), 2)
         var oc = _positive(options[0], "out_channels", 1, context)
@@ -130,19 +130,19 @@ def sequential_add(model: PythonObject, kind_arg: PythonObject, supplied: Python
         a1 = PythonObject(kernel)
         args = Python.list(oc, kernel, stride, padding, 1 if Bool(py=options[4]) else 0, groups)
     elif kind == "max_pool2d" or kind == "avg_pool2d":
-        var options = _arguments(kind, supplied, keywords, Python.tuple("kernel_size", "stride"), Python.tuple(None, None), 1)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("kernel_size", "stride"), Python.tuple(None, None), 1)
         var kernel = _positive(options[0], "kernel_size", 1, context)
         var stride = kernel if options[1] is None else _positive(options[1], "stride", 1, context)
         a0 = PythonObject(kernel)
         a1 = PythonObject(stride)
     elif len(supplied) != 0 or len(keywords) != 0:
         raise Error("TypeError: " + kind + " takes no arguments")
-    sequential_append(model, code, a0, a1, f, args)
+    sequential_append(mods, model, code, a0, a1, f, args)
     return model
 
 
-def sequential_compile(model: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def sequential_compile(mut mods: NativeModules, model: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     var loss = options[0]
     var optimizer = options[1]
     var schedule = options[9]
@@ -174,8 +174,8 @@ def sequential_compile(model: PythonObject, options: PythonObject, context: Pyth
     return model
 
 
-def sequential_program(model: PythonObject, n_features: PythonObject, sample: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def sequential_program(mut mods: NativeModules, model: PythonObject, n_features: PythonObject, sample: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     var layers = sequential_fields(model)["_layers"]
     var result = Python.list()
     if sample is None:
@@ -221,17 +221,17 @@ def sequential_layers(model: PythonObject, context: PythonObject) raises -> Pyth
     return result
 
 
-def sequential_sample(model: PythonObject, value: PythonObject) raises -> PythonObject:
+def sequential_sample(mut mods: NativeModules, model: PythonObject, value: PythonObject) raises -> PythonObject:
     # The public sample-inspection operation admits current shape metadata.
     var shape = value.shape
     var dims = List[Int]()
     for k in range(Int(py=value.ndim)):  # driver-loop: over input rank metadata
         dims.append(Int(py=shape[k]))
-    return sequential_sample_shape(model, dims)
+    return sequential_sample_shape(mods, model, dims)
 
 
-def sequential_sample_shape(model: PythonObject, dims: List[Int]) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def sequential_sample_shape(mut mods: NativeModules, model: PythonObject, dims: List[Int]) raises -> PythonObject:
+    var b = mods.module("builtins")
     var fields = sequential_fields(model)
     var shape = fields["input_shape"]
     var nd = len(dims)
