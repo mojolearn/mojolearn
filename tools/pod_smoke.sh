@@ -108,6 +108,20 @@ mw = {k: (np.ones(v, np.float32) if k.endswith("norm.weight")
 z = np.asarray(mojolearn.Mamba2Block(mw).forward(x))
 assert z.shape == x.shape and np.isfinite(z).all()
 print("mamba2 forward ok", z.shape)
+# Prepared-owner reuse path: repeated forwards and a token-by-token Mamba2Block.step
+# decode on one block and one state (the second and later calls reuse the owner).
+mb = mojolearn.Mamba2Block(mw)
+z1 = np.asarray(mb.forward(x)); z2 = np.asarray(mb.forward(x))
+assert z1.shape == z2.shape == x.shape and np.isfinite(z2).all()
+st = mb.allocate_state(1)
+for t in range(4):
+    zs = np.asarray(mb.step(np.ascontiguousarray(x[:, t:t + 1]), st))
+assert zs.shape == (1, 1, dm) and np.isfinite(zs).all()
+print("mamba2 step ok", zs.shape, "max|step-forward|", float(np.abs(zs[0, 0] - z1[0, 3]).max()))
+tb2 = mojolearn.TransformerBlock(tw, n_heads=nh, n_kv_heads=nkv)
+y1 = np.asarray(tb2.forward(x)); y2 = np.asarray(tb2.forward(x))
+assert y2.shape == x.shape and np.isfinite(y2).all()
+print("transformer repeated forward ok", y2.shape)
 print("RUNTIME-OK")
 EOF
 step() {
