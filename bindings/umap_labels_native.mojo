@@ -281,15 +281,18 @@ def _label_code(code: Int) raises -> Float32:
     # bit patterns avoid float32 rounding collisions and vendor FTZ behavior.
     # Positive plus negative normals cover the device graph's Int32 row
     # bound; skip the single reserved -1 word on the negative side.
+    # No label-count refusal: past the 2 * 0x7F000000 - 1 distinct finite
+    # codes the index wraps and codes collide silently, as the former
+    # Float32(sorted index) coding collided past 2**24 labels.
+    var span = 2 * 0x7F000000 - 1
+    var index = code % span
     var bits = UInt32(0)
-    if code < 0x7F000000:
-        bits = UInt32(0x00800000) + UInt32(code)
+    if index < 0x7F000000:
+        bits = UInt32(0x00800000) + UInt32(index)
     else:
-        var offset = code - 0x7F000000
+        var offset = index - 0x7F000000
         if offset >= 0x3F000000:
             offset += 1
-        if offset >= 0x7F000000:
-            raise Error("UMAP categorical labels exceed the finite float32 equality-code capacity")
         bits = UInt32(0x80800000) + UInt32(offset)
     return bitcast[DType.float32](bits)
 
