@@ -30,7 +30,8 @@ from bindings.family_common import (
 from providers.python.radius_public_lifecycle_pyapi import radius_fit, radius_refusals
 from bindings.neighbors_knn_native import neighbors_knn_operation, knn_release
 from bindings.neighbors_local_native import neighbors_local_operation
-from bindings.neighbors_semi_native import neighbors_semi_operation
+from bindings.neighbors_semi_native import neighbors_semi_operation, schi2_public_weights, schi2_public_set_weights
+from providers.python.neighbors_feature_names_pyapi import neighbors_feature_names
 from bindings.neighbors_graph_native import neighbors_graph_operation
 from bindings.neighbors_ann_native import neighbors_ann_operation
 from bindings.neighbors_kde_native import neighbors_kde_operation
@@ -162,6 +163,13 @@ def neighbors_operation(model: PythonObject, operation: String, args: PythonObje
         return radius_fit(model, args, context)
     if operation == "family_xn_pcs_feature_names":
         return pcs_feature_names(model, context)
+    if operation.startswith("family_xn_names_"):
+        return neighbors_feature_names(model, operation, args, context)
+    if operation == "family_xn_schi2_weights":
+        return schi2_public_weights(model, context)
+    if operation == "family_xn_schi2_set_weights":
+        schi2_public_set_weights(model, args[0])
+        return PythonObject(None)
     if (operation == "family_xn_pcs_fit" or operation == "family_xn_pcs_transform"
             or operation == "family_xn_pcs_fit_transform"):
         return _pcs_operation(model, operation, args, context)

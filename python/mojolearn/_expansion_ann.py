@@ -330,13 +330,10 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
                  addr_ro(self.codes_.reshape((n * pq_dim,)), name="codes_")],
                 [n, dim, self.n_lists_, pq_dim, self.pq_bits_])
 
-    def __getattr__(self, name):
-        # `codes_` of a RESIDENT fit (lane fg-ivf A7) is made on first read,
-        # outside fit and search: `save`, a pickle and user code read it here
-        if name == "codes_" and "_device_codes" in self.__dict__:
-            self._materialize_device_arrays()
-            return self.__dict__["codes_"]
-        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+    # `codes_` of a RESIDENT fit (lane fg-ivf A7) is made on first read by the
+    # native attribute slot connected at import (bindings/neighbor_query_native.mojo
+    # `neighbor_query_attribute_c`, `ann_pq_materialize`); there is no Python
+    # `__getattr__`.
 
     def _materialize_device_arrays(self):
         """Write the resident fit's codes into a new numpy array
@@ -1259,7 +1256,6 @@ _native_family_bridge.connect_bindings("_mojolearn_x_ann")
 # The native slot exports device codes on demand and publishes the completed
 # Array/ndarray under the same public attribute, retaining the device owner.
 from ._native_neighbor_queries import connect as _connect_ann_attributes
-del IVFPQIndex.__getattr__
 _ANN_ATTRIBUTE_CALL, _ANN_ATTRIBUTE_CONTEXT = _connect_ann_attributes(
     {IVFPQIndex: "ann_pq"}, _FAMILY_CONTEXT, _ARCHIVE_CONTEXT, ())
 
