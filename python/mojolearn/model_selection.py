@@ -680,14 +680,7 @@ def _check_splits(n_splits):
 
 class _KFoldBase(_Splitter):
     def __init__(self, n_splits=5, *, shuffle=False, random_state=None):
-        self.n_splits = _check_splits(n_splits)
-        if not is_bool(shuffle):
-            raise TypeError(f'shuffle must be True or False; got {shuffle}')
-        if not shuffle and random_state is not None:
-            raise ValueError('Setting a random_state has no effect since shuffle is False. You should '
-                             'leave random_state to its default (None), or set shuffle=True.')
-        self.shuffle = shuffle
-        self.random_state = random_state
+        return _NATIVE(self, "family_msel_splitter_init", ("kfold", n_splits, shuffle, random_state), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of splits, ``n_splits``."""
@@ -873,10 +866,7 @@ class TimeSeriesSplit(_Splitter):
     """
 
     def __init__(self, n_splits=5, *, max_train_size=None, test_size=None, gap=0):
-        self.n_splits = _check_splits(n_splits)
-        self.max_train_size = max_train_size
-        self.test_size = test_size
-        self.gap = gap
+        return _NATIVE(self, "family_msel_splitter_init", ("time", n_splits, max_train_size, test_size, gap), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of splits, ``n_splits``."""
@@ -1023,14 +1013,6 @@ class LeavePGroupsOut(_Splitter):
 
 
 class _Repeated:
-    def __init__(self, cv, *, n_repeats=10, random_state=None, **params):
-        if is_bool(n_repeats) or not isinstance(n_repeats, numbers.Integral) or n_repeats <= 0:
-            raise ValueError('Number of repetitions must be greater than 0.')
-        self.cv = cv
-        self.n_repeats = int(n_repeats)
-        self.random_state = random_state
-        self.cvargs = params
-
     def get_params(self, deep=True):
         """Return ``n_repeats``, ``random_state`` and ``n_splits`` as a dict."""
         return _PARAMS_METADATA(self, False, _PARAMS_METADATA_CONTEXT)
@@ -1074,7 +1056,7 @@ class RepeatedKFold(_Repeated):
     """
 
     def __init__(self, *, n_splits=5, n_repeats=10, random_state=None):
-        super().__init__(KFold, n_repeats=n_repeats, random_state=random_state, n_splits=n_splits)
+        return _NATIVE(self, "family_msel_splitter_init", ("repeated", n_splits, n_repeats, random_state), _NATIVE_CONTEXT)
 
 
 class RepeatedStratifiedKFold(_Repeated):
@@ -1105,7 +1087,7 @@ class RepeatedStratifiedKFold(_Repeated):
     """
 
     def __init__(self, *, n_splits=5, n_repeats=10, random_state=None):
-        super().__init__(StratifiedKFold, n_repeats=n_repeats, random_state=random_state, n_splits=n_splits)
+        return _NATIVE(self, "family_msel_splitter_init", ("repeated", n_splits, n_repeats, random_state), _NATIVE_CONTEXT)
 
 
 class ShuffleSplit(_Splitter):
@@ -1270,12 +1252,7 @@ class PredefinedSplit(_Splitter):
     """
 
     def __init__(self, test_fold):
-        # lane py-runtime-b: the fold labels widened once to int64 (a C
-        # copy of an integer buffer, array('q') over a list), then the fold
-        # values and rows from the native encoder and row selection; no
-        # Python pass over the rows
-        self._folds = _index_copy(test_fold)
-        self.test_fold = self._folds.tolist()
+        return _NATIVE(self, "family_msel_splitter_init", ("predefined", test_fold), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of distinct fold values other than -1."""
@@ -1286,33 +1263,9 @@ class PredefinedSplit(_Splitter):
         return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
-def _index_copy(value):
-    """`_as_index(flatten_labels(value))`: an int64 or int32 1-D buffer is
-    widened in C (array('q') over its memoryview) instead of through a list
-    of Python ints (lane/py-misc-msel); anything else takes the definition."""
-    if _msel_native() and not isinstance(value, (list, tuple, range)):
-        try:
-            a = _materialize(value, 'cv indices')[0]
-        except (TypeError, ValueError):
-            a = None
-        if a is not None and a.ndim == 1 and a.dtype in ('<i8', '<i4'):
-            raw = a._as_c().tobytes()
-            if a.dtype == '<i8' and _LITTLE_ENDIAN:
-                store = array.array('q')
-                store.frombytes(raw)
-            else:
-                narrow = array.array('i' if a.dtype == '<i4' else 'q')
-                narrow.frombytes(raw)
-                if not _LITTLE_ENDIAN:
-                    narrow.byteswap()
-                store = array.array('q', narrow)
-            return Array._owned(store, (len(store),), '<i8', 'C')
-    return _as_index(flatten_labels(value))
-
-
 class _IterableCV(_Splitter):
     def __init__(self, cv):
-        self._pairs = [(_index_copy(tr), _index_copy(te)) for tr, te in cv]  # cpu-route: user cv iterable of (train, test) pairs, one per fold, each read once by _index_copy
+        return _NATIVE(self, "family_msel_splitter_init", ("iterable", cv), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)

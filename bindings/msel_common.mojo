@@ -373,7 +373,9 @@ def msel_index_copy(value: PythonObject, context: PythonObject) raises -> Python
     """`_index_copy(value)`: an int64 / int32 1-D buffer widened to an
     owned int64 Array; anything else `_as_index(flatten_labels(value))`."""
     var b = msel_b()
-    if not family_isinstance(value, Python.tuple(b.list, b.tuple, b.range)):
+    msel_admit(value, context)
+    var cls = py_type(value)
+    if cls is not b.list and cls is not b.tuple and cls is not b.range:
         var a = msel_try_materialize(value, "cv indices", Python.tuple(b.TypeError, b.ValueError), context)
         if not msel_missed(a, context) and Int(py=a.ndim) == 1:
             var dtype = String(py=a.dtype)

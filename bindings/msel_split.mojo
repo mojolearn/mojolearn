@@ -20,6 +20,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.classical_arrays import classical_wrap_array
 from bindings.native_buffer_owner import native_storage_allocate
+from bindings.native_owner_lifetime import native_release_admit
+from bindings.msel_search_state import msel_parameter_values
 from bindings.family_common import (
     FAMILY_I64P, FAMILY_I32P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
 )
@@ -107,7 +109,7 @@ def msel_sabotage() -> Bool:
 def msel_check_splits(n_splits: PythonObject, context: PythonObject) raises -> Int:
     """`_check_splits`."""
     if msel_is_bool(n_splits, context) or not msel_is_integral(n_splits, context):
-        raise Error("The number of folds must be of Integral type. " + family_repr(n_splits) + " was passed.")
+        raise Error("The number of folds must be of Integral type.")
     if msel_cmp("le", n_splits, PythonObject(1)):
         raise Error("k-fold cross-validation requires at least one train/test split by setting "
                     + "n_splits=2 or more, got n_splits=" + family_str(n_splits) + ".")
@@ -120,7 +122,7 @@ def msel_new_kfold(name: String, n_splits: PythonObject, shuffle: PythonObject, 
     `_KFoldBase.__init__`'s checks, then its three attributes."""
     var k = msel_check_splits(n_splits, context)
     if not msel_is_bool(shuffle, context):
-        raise Error("TypeError: shuffle must be True or False; got " + family_str(shuffle))
+        raise Error("TypeError: shuffle must be True or False")
     if not Bool(py=family_call(msel_b().bool, shuffle)) and random_state is not None:
         raise Error("Setting a random_state has no effect since shuffle is False. You should "
                     + "leave random_state to its default (None), or set shuffle=True.")
@@ -132,6 +134,78 @@ def msel_new_kfold(name: String, n_splits: PythonObject, shuffle: PythonObject, 
     py_setitem(fields, "shuffle", shuffle)
     py_setitem(fields, "random_state", random_state)
     return cv
+
+
+def msel_splitter_initialize(model: PythonObject, args: PythonObject,
+                             context: PythonObject) raises -> PythonObject:
+    # The public constructor hands over untouched arguments. Admission precedes
+    # formatting, numeric conversion, metadata reads and any overwritten release.
+    var fields = _splitter_fields(model, context)
+    msel_admit(args, context)
+    var kind = String(args[0])
+    var updates = Python.dict()
+    if kind == "kfold":
+        var k = msel_check_splits(args[1], context)
+        if not msel_is_bool(args[2], context):
+            raise Error("TypeError: shuffle must be True or False")
+        if not msel_truth(args[2]) and args[3] is not None:
+            raise Error("Setting a random_state has no effect since shuffle is False. You should "
+                        + "leave random_state to its default (None), or set shuffle=True.")
+        py_setitem(updates, "n_splits", PythonObject(k))
+        py_setitem(updates, "shuffle", args[2])
+        py_setitem(updates, "random_state", args[3])
+    elif kind == "time":
+        py_setitem(updates, "n_splits", PythonObject(msel_check_splits(args[1], context)))
+        py_setitem(updates, "max_train_size", args[2])
+        py_setitem(updates, "test_size", args[3])
+        py_setitem(updates, "gap", args[4])
+    elif kind == "repeated":
+        if not msel_is_int_arg(args[2], context) or msel_int(args[2]) <= 0:
+            raise Error("Number of repetitions must be greater than 0.")
+        var base = String("KFold") if msel_is(model, "RepeatedKFold", context) else String("StratifiedKFold")
+        var cvargs = Python.dict()
+        py_setitem(cvargs, "n_splits", args[1])
+        py_setitem(updates, "cv", msel_cls(base, context))
+        py_setitem(updates, "cvargs", cvargs)
+        py_setitem(updates, "n_repeats", PythonObject(msel_int(args[2])))
+        py_setitem(updates, "random_state", args[3])
+    elif kind == "predefined":
+        var folds = msel_index_copy(args[1], context)
+        var values = Python.list()
+        var data = msel_read_i64(folds)
+        for i in range(len(data)):  # driver-loop: finished public fold labels, without Array.tolist callbacks
+            _ = py_call(values.append, PythonObject(data[i]))
+        py_setitem(updates, "_folds", folds)
+        py_setitem(updates, "test_fold", values)
+    elif kind == "iterable":
+        py_setitem(updates, "_pairs", msel_index_pairs(args[1], context))
+    else:
+        raise Error("ValueError: unknown native splitter constructor")
+    var keys = py_call(msel_b().list, updates)
+    for i in range(len(keys)):  # driver-loop: refuse custom finalizers before releasing overwritten state
+        if py_contains(fields, keys[i]) and fields[keys[i]] is not updates[keys[i]]:
+            if String(keys[i]) == "cv":
+                if fields[keys[i]] is not msel_cls("KFold", context) and fields[keys[i]] is not msel_cls("StratifiedKFold", context):
+                    raise Error("TypeError: repeated splitter contains unsupported class state")
+            else:
+                native_release_admit(fields[keys[i]], context)
+    for i in range(len(keys)):  # driver-loop: commit fully prepared constructor state through native dictionary slots
+        py_setitem(fields, keys[i], updates[keys[i]])
+    return PythonObject(None)
+
+
+def msel_flag_truth(value: PythonObject, context: PythonObject) raises -> Bool:
+    # Public CV flags have scalar truth semantics; exact built-in containers
+    # also have native length truth. Refuse Python-defined __bool__ paths before
+    # invoking conversion, even when their objects are valid data inputs.
+    msel_admit(value, context)
+    var b = msel_b()
+    var cls = py_type(value)
+    if value is None or msel_is_bool(value, context) or msel_is_real(value, context):
+        return msel_truth(value)
+    if cls is b.str or cls is b.bytes or cls is b.bytearray or cls is b.list or cls is b.tuple or cls is b.dict or cls is b.range:
+        return msel_truth(value)
+    raise Error("TypeError: cross-validation flags require native scalar truth values")
 
 
 def msel_truth(value: PythonObject) raises -> Bool:
@@ -1128,26 +1202,26 @@ def msel_check_cv(cv_in: PythonObject, y: PythonObject, classifier: Bool, shuffl
     return msel_iterable_cv(cv, context)
 
 
-def msel_iterable_cv(cv: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_IterableCV(cv)`: the caller's index pairs copied once."""
-    if py_type(cv) is not msel_b().list and py_type(cv) is not msel_b().tuple:
+def msel_index_pairs(cv: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Copy admitted native fold pairs once, without caller iterator protocols."""
+    var b = msel_b()
+    if py_type(cv) is not b.list and py_type(cv) is not b.tuple:
         raise Error("TypeError: explicit folds require a list/tuple of index pairs, without Python iterator hooks")
     msel_admit(cv, context)
     var pairs = Python.list()
-    var it = family_call(msel_b().iter, cv)
-    var b = msel_b()
-    while True:  # driver-loop: over the caller's folds
-        var item = msel_try(b.next, Python.tuple(it), b.StopIteration, context)
-        if msel_missed(item, context):
-            break
-        var pair = family_call(b.tuple, item)
-        if len(pair) < 2:
-            raise Error("not enough values to unpack (expected 2, got " + String(len(pair)) + ")")
-        if len(pair) > 2:
-            raise Error("too many values to unpack (expected 2)")
-        var tr = pair[0]
-        var te = pair[1]
-        _ = py_call(pairs.append, Python.tuple(msel_index_copy(tr, context), msel_index_copy(te, context)))
+    for i in range(len(cv)):  # driver-loop: native fixed fold container
+        var item = msel_parameter_values(cv[i], context)
+        if len(item) != 2:
+            raise Error("ValueError: each explicit fold must contain exactly train and test indices")
+        var train = msel_index_copy(item[0], context)
+        var test = msel_index_copy(item[1], context)
+        _ = py_call(pairs.append, Python.tuple(train, test))
+    return pairs
+
+
+def msel_iterable_cv(cv: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_IterableCV(cv)`: the caller's index pairs copied once."""
+    var pairs = msel_index_pairs(cv, context)
     var cls = msel_cls("_IterableCV", context)
     var plan = _splitter_plan(cls, context)
     var out = native_storage_allocate(cls)
