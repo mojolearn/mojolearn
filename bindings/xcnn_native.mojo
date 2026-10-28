@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.xcnn_common import xcnn_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries
+from bindings.xcnn_common import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries
 from bindings.py_balanced import py_type, py_call, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.xcnn_tensor_native import xcnn_tensor_operation
@@ -48,7 +48,7 @@ def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var context = call[3]
         var operation = String(py=call[1])
         if operation != "tensor_finalize":
-            xcnn_numpy(context)
+            xcnn_connect_numpy(context)
         if operation.startswith("tensor_"):
             return xcnn_tensor_operation(call[0], operation, call[2], context).steal_data()
         if operation.startswith("conv_") or operation.startswith("block_"):
