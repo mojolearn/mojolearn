@@ -24,7 +24,7 @@ from bindings.family_common import (
     family_repr, family_call, family_call_kw, family_array,
     family_field, family_f32_snapshot, family_owned_snapshot,
 )
-from bindings.host_archive_native import host_archive_radius_refusals
+from providers.python.radius_public_lifecycle_pyapi import radius_fit, radius_refusals
 from bindings.neighbors_knn_native import neighbors_knn_operation, knn_release
 from bindings.neighbors_local_native import neighbors_local_operation
 from bindings.neighbors_semi_native import neighbors_semi_operation
@@ -169,31 +169,16 @@ def _pcs_operation(model: PythonObject, operation: String, args: PythonObject,
     return result
 
 
-def _radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
-    """`RadiusNeighbors.fit(X)`: the refusals (`_check_refusals`, which also
-    resolves the metric), then the points stored as float32."""
-    classical_connect_numpy(context)
-    var fields = py_fields(model)
-    host_archive_radius_refusals(fields, String(py_type(model).__name__), context)
-    var snapshot = family_f32_snapshot(args[0], 2, "X", context, True)
-    var index = family_owned_snapshot(snapshot, context)
-    py_setitem(fields, "_index", index)
-    py_setitem(fields, "n_samples_fit_", PythonObject(snapshot.source.rows))
-    py_setitem(fields, "n_features_in_", PythonObject(snapshot.source.cols))
-    _ = snapshot^
-
-
 def neighbors_operation(model: PythonObject, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     if operation == "family_xn_knn_release":
         knn_release(model)
         return PythonObject(None)
     if operation == "family_xn_radius_refusals":
-        host_archive_radius_refusals(py_fields(model), String(py_type(model).__name__), context)
+        radius_refusals(model, context)
         return PythonObject(None)
     if operation == "family_xn_radius_fit":
-        _radius_fit(model, args, context)
-        return model
+        return radius_fit(model, args, context)
     if (operation == "family_xn_pcs_fit" or operation == "family_xn_pcs_transform"
             or operation == "family_xn_pcs_fit_transform"):
         return _pcs_operation(model, operation, args, context)
