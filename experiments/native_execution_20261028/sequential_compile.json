@@ -1,0 +1,12 @@
+{
+  "scope": "Sequential fixed operation metadata retention; runtime_sequential host root only",
+  "exit_code": 0,
+  "target": "Mac arm64 CPU",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/sequential-host/_mojolearn_runtime_sequential_host.so",
+  "sha256": "42ce48cb94d2f70f48dd8922b103edc30e89e0b779cb6be6f3acc74331ec0bf1",
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/sequential-compile.log",
+  "runtime_executed": false,
+  "performance_measured": false,
+  "source_commit": "0285dcecfd",
+  "limitations": "Shared registry/other families not qualified by this receipt; Python-backed key checking remains."
+}
