@@ -205,7 +205,7 @@ class Kernel:
     @property
     def n_dims(self):
         """Number of free hyperparameters (the length of `theta`)."""
-        return len(self._free_values())
+        return _NATIVE(self, "family_gp_kernel_n_dims", (), _NATIVE_CONTEXT)
 
     @property
     def theta(self):
@@ -213,16 +213,13 @@ class Kernel:
 
         On a fitted ``kernel_`` this is the optimizer's own theta.
         """
-        fitted = getattr(self, "_theta_fit", None)
-        if fitted is not None:
-            return list(fitted)
-        return [math.log(v) for v in self._free_values()]  # glue: sklearn theta API, log of free kernel hyperparameters (n_dims entries)
+        return _NATIVE(self, "family_gp_kernel_theta", (), _NATIVE_CONTEXT)
 
     @property
     def bounds(self):
         """Natural log of each free hyperparameter's ``(low, high)`` bounds,
         as a list of ``[low, high]`` pairs."""
-        return [[math.log(lo), math.log(hi)] for lo, hi in self._free_bounds()]  # glue: sklearn bounds API, log of kernel hyperparameters (n_dims entries) bounds
+        return _NATIVE(self, "family_gp_kernel_bounds", (), _NATIVE_CONTEXT)
 
     def __repr__(self):
         return self._name()

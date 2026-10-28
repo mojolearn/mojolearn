@@ -1,0 +1,53 @@
+GP kernel metadata public boundary — 2026-10-27
+
+Branch: lane/peer5-gp-kernels-20261027
+Owner: peer5/gp_kernels; isolated worktree mojolearn-gp-kernels.
+
+Completed source batch:
+- Kernel.n_dims, theta and bounds now each make one native family call.
+- bindings/gp_kernel_public_native.mojo owns exact connected kernel admission,
+  passive state capture, composite traversal, cycle refusal, logarithms, fitted
+  theta copying and finished list/pair construction. Retains every kernel owner
+  and captures each distinct owner's instance dictionary once per operation.
+- Rejects Python class/instance descriptors, subclass protocols, non-string
+  state keys, custom numeric conversions and custom sequences before invoking
+  hooks. ConstantKernel, WhiteKernel, RBF, Matern, _Combined and _SavedKernel
+  layouts are admitted. Saved kernels remain fixed, with zero free dimensions.
+- Host logarithms call existing portable_log_c, including native domain and
+  NaN/infinity handling; no new numerical algorithm or performance default.
+- Exports gp_admit_kernel(kernel, context) for the estimator integration and
+  gp_kernel_snapshot(kernel, context) for consumers needing native value arrays.
+
+Integration requirement (parent owns shared dispatcher):
+  bindings/gp_native.mojo imports gp_kernel_operation from
+  bindings.gp_kernel_public_native and routes family_gp_kernel_* to it.
+  Do not merge the Python wrappers without that dispatch connection.
+
+Compilation:
+- checks/gp_kernel_public_compile.mojo builds all metadata dispatch branches
+  and the admission helper into a standalone, never-loaded extension.
+- PASS, exit 0, 51.64 seconds, Mojo 1.0.0 ed45d567, Mac CPU column, O0,
+  target apple-m1, identical definition, configured compiler workers 10.
+- Mac hw.logicalcpu reports 10; no development CPU cap. Parallelism setting
+  does not demonstrate CPU utilization; other peer builds can overlap.
+- No product runtime, identity, GPU or benchmark execution performed.
+- First failed fixture compile (String unsupported in def_function signature)
+  remains retained under attempt1. Corrected fixture converts PythonObject
+  operation to String before invoking the unchanged native owner.
+
+Evidence:
+  experiments/gp_kernel_public_20261027/compile.json
+  ~/mojolearn-evidence/gp-kernel-public-20261027/attempt2/
+    compile.log, result.json, source-manifest.json, source-bytes.tgz,
+    _mojolearn_gp_kernel_compile.so
+  ~/mojolearn-evidence/gp-kernel-public-20261027/attempt1/
+  ~/mojolearn-evidence/gp-kernel-public-20261027/compiler.txt
+No rented machine was used; all source, logs and binary are on the Mac.
+
+Remaining work:
+- Parent dispatcher/estimator integration and its focused compilation.
+- Kernel constructors, add/mul/repr, and older private Python helpers remain
+  pending migration. This batch is limited to the three metadata properties.
+- Existing gp_common_native estimator helpers remain separate pending review;
+  this metadata owner does not call their permissive gp_free traversal.
+- Runtime and vendor evidence is intentionally pending by owner direction.
