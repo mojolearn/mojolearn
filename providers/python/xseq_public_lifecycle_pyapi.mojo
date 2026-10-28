@@ -3,10 +3,14 @@
 # Retain fit tracking, validation, fitted errors, feature names and public output
 # dtype while calling the existing xseq native owners directly.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
+from bindings.mode_metadata_native import _fields
+from bindings.linear_constructor_native import _constructor_plan
+from bindings.params_metadata_native import _resolved
+from bindings.optimizer_admission import opt_schedule
 from bindings.classical_validate import classical_view, classical_refuse_sparse, classical_estimator_name, classical_check_width, RESHAPE_HINT
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classical_labels import labels_shape_of
@@ -17,6 +21,37 @@ from bindings.sequential_arrays import sequential_array, sequential_address
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from core.classical_ridge_impl import classical_widen_f32_f64
 from core.host_inference_impl import host_inference_nd_finite
+
+
+def xseq_public_owner(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Reuse the connected constructor's native storage/ancestry contract, not
+    # its execution: methods must reject replaced hooks before any field read.
+    var owner_context = context["xseq_owner_context"]
+    var fields = _fields(model)
+    var plan = _constructor_plan(model, fields, owner_context)
+    var b = native_loaded_module("builtins")
+    var missing = owner_context["missing"]
+    for name in ["_CELL", "_TASK", "_LOSS_CODE", "_estimator_type"]:  # driver-loop: class metadata consumed by neural execution
+        var value = _resolved(py_type(model), PythonObject(name), missing)
+        if value is not missing and py_type(value) is not b.str and py_type(value) is not b.int:
+            raise Error("TypeError: native neural class metadata cannot invoke Python descriptors")
+    var lifecycle = context["xseq_lifecycle_context"]
+    classical_connect_numpy(lifecycle)
+    var names = plan["names"]
+    for i in range(len(names)):  # driver-loop: native constructor parameters before operation coercion
+        var value = py_get(fields, names[i])
+        if String(names[i]) == "lr_schedule":
+            if value is not None:
+                _ = _fields(value)
+            opt_schedule(value, context["optimizer_context"])
+        else:
+            classical_admit_value(value, lifecycle)
+    for name in ["_mojolearn_fitted", "_mojolearn_fitting", "_y_1d", "_LOSS_CODE", "n_features_in_",
+                 "n_outputs_", "n_layers_", "n_timesteps_", "out_activation_", "params_", "coefs_",
+                 "intercepts_", "n_iter_", "loss_curve_", "loss_", "best_loss_", "t_", "feature_names_in_"]:  # driver-loop: consumed or replaced fitted state owners
+        if py_contains(fields, name):
+            classical_admit_value(fields[PythonObject(name)], lifecycle)
+    return fields
 
 
 def xseq_public_labels(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -64,6 +99,7 @@ struct XseqPublicLifecycle(Movable):
 
     def __init__(out self, model: PythonObject, operation: String, args: PythonObject,
                  context: PythonObject) raises:
+        var fields = xseq_public_owner(model, context)
         self.source = args[0]
         self.arguments = args
         self.lifecycle = context["xseq_lifecycle_context"]
@@ -76,7 +112,6 @@ struct XseqPublicLifecycle(Movable):
         self.shape = List[Int]()
         var b = native_loaded_module("builtins")
         self.classifier = String(py=py_call(b.getattr, py_type(model), "_estimator_type", "")) == "classifier"
-        var fields = py_fields(model)
         var depth = py_get(fields, "_mojolearn_fitting", PythonObject(0))
         if py_type(depth) is not b.int:
             raise Error("TypeError: native fit depth must be an exact integer")

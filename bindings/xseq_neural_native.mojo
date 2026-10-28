@@ -22,6 +22,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from providers.python.sequence_pyapi import py_ints, py_f64s
 from providers.python.autograd_pyapi import cast_in_of
+from sequence.ops_impl import net_of
 from sequence.neural_model_dispatch import RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_descriptor
 from bindings.optimizer_admission import opt_schedule
@@ -349,12 +350,17 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var steps_t = Int(py=x.shape[1])
     var out = xseq_zeros(Python.tuple(n, fields["n_outputs_"]), context)
     var seq = xseq_zeros(Python.tuple(n, steps_t, xseq_int(fields["hidden_size"])) if want_seq else Python.tuple(1), context)
-    var params = xseq_f32(fields["params_"], "params_", False, context)
+    var params = xseq_f32(xseq_input(fields["params_"], context), "params_", False, context)
     var ip = _rnn_ints(model, fields)
+    var network = net_of(py_ints(ip))
+    if Int(py=params.size) != network.n_params():
+        raise Error("ValueError: recurrent params_ size differs from the fitted network layout")
     _ = py_call(_method(ip, "extend"), Python.list(Int(py=_attr(py_type(model), "_TASK")), n, steps_t,
                 xseq_int(fields["predict_chunk"]), 1 if want_seq else 0))
     var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out)), Int(py=xseq_addr(seq))]
-    _ = neural_descriptor_execute(xseq_neural_provider(entries), RNN_PREDICT, addresses, py_ints(ip), List[Float64]())
+    var written = neural_descriptor_execute(xseq_neural_provider(entries), RNN_PREDICT, addresses, py_ints(ip), List[Float64]())
+    if written != n * network.O:
+        raise Error("RuntimeError: recurrent prediction returned an invalid result count")
     _ = params  # keep the Python object alive through the native call above
     _ = seq  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -593,14 +599,37 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
     var coefs = fields["coefs_"]
     var intercepts = fields["intercepts_"]
     var layers = len(coefs)
+    if layers < 1 or len(intercepts) != layers:
+        raise Error("ValueError: MLP fitted weights require matching nonempty layer lists")
     var hidden = Python.list()
+    var weights_kept = Python.list()
+    var biases_kept = Python.list()
+    var weight_counts = List[Int]()
+    var bias_counts = List[Int]()
     var total = 0
-    for l in range(layers):  # driver-loop: over network layers
-        var weights = coefs[l]
-        var bias = intercepts[l]
-        total += Int(py=weights.size) + Int(py=bias.size)
+    var input_width = columns
+    for l in range(layers):  # driver-loop: capture each admitted fitted weight and its shape once
+        var weights = xseq_f32(xseq_input(coefs[l], context), "coefs_", False, context)
+        var bias = xseq_f32(xseq_input(intercepts[l], context), "intercepts_", False, context)
+        var weight_shape = weights.shape
+        var bias_shape = bias.shape
+        if len(weight_shape) != 2 or len(bias_shape) != 1:
+            raise Error("ValueError: MLP weights must be matrices and biases must be vectors")
+        var fi = Int(py=weight_shape[0])
+        var fo = Int(py=weight_shape[1])
+        if fi != input_width or fo < 1 or Int(py=bias_shape[0]) != fo:
+            raise Error("ValueError: MLP fitted parameter shapes do not match the layer layout")
+        input_width = fo
+        var count = fi * fo
+        weight_counts.append(count)
+        bias_counts.append(fo)
+        total += count + fo
+        _ = py_call(weights_kept.append, weights)
+        _ = py_call(biases_kept.append, bias)
         if l < layers - 1:
-            _ = py_call(_method(hidden, "append"), weights.shape[1])
+            _ = py_call(_method(hidden, "append"), fo)
+    if input_width != Int(py=fields["n_outputs_"]):
+        raise Error("ValueError: MLP output weights differ from n_outputs_")
     var width = 2 if proba2 else Int(py=fields["n_outputs_"])
     var out = xseq_zeros(Python.tuple(rows, width), context)
     # the packed layout of the fitted weights, w then b of each layer
@@ -608,15 +637,15 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
     var offset = 0
     var destination = xseq_f32p(params)
     for l in range(layers):  # driver-loop: over network layers
-        var w = xseq_f32(coefs[l], "coefs_", False, context)
-        var count = Int(py=w.size)
+        var w = weights_kept[l]
+        var count = weight_counts[l]
         if count:
             memcpy(dest=destination + offset, src=xseq_f32p(w), count=count)
             _ = w  # keep the Python object alive through the native call above
             _ = params  # keep the Python object alive through the native call above
         offset += count
-        var bias = xseq_f32(intercepts[l], "intercepts_", False, context)
-        count = Int(py=bias.size)
+        var bias = biases_kept[l]
+        count = bias_counts[l]
         if count:
             memcpy(dest=destination + offset, src=xseq_f32p(bias), count=count)
             _ = bias  # keep the Python object alive through the native call above
