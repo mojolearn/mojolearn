@@ -561,7 +561,7 @@ class TSNE(NumericModeMixin):
         TypeError
             If `max_iter` or `random_state` is not an int.
         """
-        return _NATIVE(self, "family_mani_tsne_fit", (None, None, X),
+        return _NATIVE(self, "family_mani_tsne_fit", (None, None, X, y),
                        _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
@@ -580,7 +580,7 @@ class TSNE(NumericModeMixin):
             The embedding, also stored in `embedding_`.
         """
         return _NATIVE(self, "family_mani_tsne_fit_transform",
-                       (None, None, X), _NATIVE_CONTEXT)
+                       (None, None, X, y), _NATIVE_CONTEXT)
 
 
 # IDENTICAL by construction (x_ann/cagra_core.mojo). random_state r >= 0
@@ -1262,3 +1262,7 @@ from ._native_neighbor_queries import connect as _connect_ann_attributes
 del IVFPQIndex.__getattr__
 _ANN_ATTRIBUTE_CALL, _ANN_ATTRIBUTE_CONTEXT = _connect_ann_attributes(
     {IVFPQIndex: "ann_pq"}, _FAMILY_CONTEXT, _ARCHIVE_CONTEXT, ())
+
+# Import-time connection for the native manifold fit lifecycle.
+from ._native_runtime_manifold_bridge import connect_lifecycle as _connect_manifold_lifecycle
+_connect_manifold_lifecycle(TSNE)
