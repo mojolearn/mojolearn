@@ -36,8 +36,17 @@ struct LinBuf(Movable):
     var pin: Optional[AdmittedBorrowedBuffer]
     var owner: PythonObject
 
+    def __init__(out self, keep: PythonObject, addr: Int, var shape: List[Int]):
+        # Python's None is a runtime object. Constructing it in a default
+        # argument asks the compiler to initialize CPython at compile time.
+        self.keep = keep
+        self.addr = addr
+        self.shape = shape^
+        self.pin = None
+        self.owner = PythonObject(None)
+
     def __init__(out self, keep: PythonObject, addr: Int, var shape: List[Int],
-                 var pin: Optional[AdmittedBorrowedBuffer] = None, owner: PythonObject = PythonObject(None)):
+                 var pin: Optional[AdmittedBorrowedBuffer], owner: PythonObject):
         self.keep = keep
         self.addr = addr
         self.shape = shape^
