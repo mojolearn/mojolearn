@@ -13,6 +13,8 @@ from bindings.native_array_view import native_array_ndarray_view as _array_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
+from bindings.native_mode_recipe import mode_recipe_call
+from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.host_inference_scalars import host_inference_scalar
 
 
@@ -221,6 +223,10 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
         for i in range(len(names)):  # driver-loop: supported STL configuration fields
             py_setitem(out, names[i], _lookup_impl[False](model, names[i], fields, plan, context))
         return out
+    var recipes = py_get(context, "native_property_recipes")
+    var recipe = PythonObject(None) if recipes is None else py_get(recipes, PythonObject(kind))
+    if recipe is not None:
+        return mode_recipe_call(recipe["entry"], Python.tuple(model, recipe["operation"], recipe["arguments"], recipe["context"]))
     raise Error("TypeError: unconnected native property schema")
 
 
@@ -300,6 +306,8 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 result = _array_view(result, context)
         return result.steal_data()
     except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error)
         if String(error).startswith("AttributeError:"):
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("ValueError:"):
