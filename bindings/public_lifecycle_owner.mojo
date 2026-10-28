@@ -143,8 +143,8 @@ def lifecycle_begin(model: PythonObject, method: String, source: PythonObject, x
             lifecycle_not_fitted(model, method, context)
         if x_checks and not nested and source is not None:
             lifecycle_check_x(model, source, sparse_ok, context)
-            # inverse_transform takes the transformed space (n_components
-            # columns): scikit-learn checks n_features_in_ only on the others
+            # inverse_transform takes the transformed space, not the fit's
+            # features: scikit-learn checks n_features_in_ only on the latter.
             if requires_fit and method != "inverse_transform":
                 lifecycle_check_width(model, fields, source, context)
     return 0
