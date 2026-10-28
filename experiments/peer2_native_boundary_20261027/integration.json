@@ -9,12 +9,30 @@
   ],
   "shared_file_owner": {
     "python/mojolearn/_expansion_decomp.py": "decomposition lane",
-    "python/mojolearn/_expansion_ann.py": "Peer 1 (TSNE patches coordinated)",
-    "shared dispatch/admission/attributes/lifecycle": "root coordinator"
+    "python/mojolearn/_expansion_ann.py": "Peer 1; TSNE changes coordinated",
+    "providers/python/array_metadata_pyapi.mojo": "preprocessing lane after original-owner root helper",
+    "shared pre-dispatch/admission/attributes": "root coordinator",
+    "family lifecycle": "respective Peer 2 lane",
+    "main integration": "root coordinator (serialized)"
   },
   "source_review_status": "in_progress",
-  "native_compile_status": "not_run_root_owned",
+  "native_compile_status": {
+    "selector": "passed and merged by root; main receipt ae523b60fb",
+    "jl_rp": "passed frozen 81b018766f; exception-class correction recompile pending",
+    "scalers_pls": "failed frozen 81b018766f; PLS source type fixes committed; split recompile pending",
+    "manifold": "failed frozen 81b018766f; UMAP source type fixes committed; next freeze also adds typed ownership",
+    "umap_init": "failed frozen 81b018766f; UMAP source type fixes committed; recompile pending",
+    "next_freeze": "5bfbe8118e",
+    "next_run": "cpu-batch-4"
+  },
   "public_runtime_status": "pending_final_integration",
   "vendor_identity_status": "pending_final_integration",
-  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/peer2-native-boundary-20261027"
+  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/peer2-native-boundary-20261027",
+  "owner_verification_steering": "Compile and merge; no further source tests, public runtime or cross-vendor verification in this turn. Existing results retained; required push hooks run.",
+  "run_retention": {
+    "cpu-batch-1": "all three compiler launches failed missing std (launcher repaired); complete Mac/R2 retention; pod deleted verified",
+    "cpu-batch-2": "unreachable SSH; no source staged; controller retained Mac/R2; pod deleted verified via reap after automatic retention refusal",
+    "cpu-batch-3": "JL/RP passed; other roots failed; original logs plus successful binary/source retained Mac/R2; pod deleted verified",
+    "cpu-batch-4": "active; frozen 5bfbe8118e; no runtime verification"
+  }
 }
