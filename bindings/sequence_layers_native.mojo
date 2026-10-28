@@ -14,6 +14,7 @@ routing properties read (`_x`, `_stats`, `_routing`, `_wdev`) are written
 under the same names.
 """
 from std.python import Python, PythonObject
+from bindings.sequence_moe_native import sequence_moe_operation
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_device_native import device_shape, shape_count
@@ -419,130 +420,8 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
                    py_get(fields, "numeric_mode"), stats, context)[0]
 
 
-# ---------------------------------------------------------------- MoEBlock
-
-def _moe_check_weights(fields: PythonObject, e: Int, d: Int, f: Int) raises:
-    """`_check_weights()`: the three expert weight shapes."""
-    var names = Python.tuple("router", "gate_up_proj", "down_proj")
-    var shapes = Python.tuple(Python.tuple(e, d), Python.tuple(e, 2 * f, d), Python.tuple(e, d, f))
-    for i in range(3):  # driver-loop: over the three named expert weight arrays
-        var have = py_call(_b().tuple, fields[names[i]].shape)
-        if not Bool(py=have == shapes[i]):
-            raise Error("ValueError: MoEBlock: " + String(py=names[i]) + " has shape " + _text(have) + ", expected " + _text(shapes[i]))
-
-
-def _moe_weights(fields: PythonObject, entries: PythonObject, e: Int, d: Int, f: Int,
-                 context: PythonObject) raises -> PythonObject:
-    """`_weights_handle(b)`: the resident copies, put again after any weight
-    assignment (the old copies freed)."""
-    var module = entries["module"]
-    var cur = py_get(fields, "_wdev")
-    var version = py_get(fields, "_wver", PythonObject(0))
-    if cur is not None and cur[0] is module and Bool(py=cur[1] == version):
-        return cur[2]
-    # `_free_weights()`
-    py_setitem(fields, "_wdev", PythonObject(None))
-    if cur is not None:
-        try:
-            var owner = seq_binding(PythonObject(None), context, cur[0])
-            _ = py_call_typed(owner["moe_weights_free"], cur[2])
-        except:
-            pass
-    var h = py_call_typed(entries["moe_weights_put"], Python.list(classical_address(fields["router"]),
-                          classical_address(fields["gate_up_proj"]), classical_address(fields["down_proj"])),
-                          Python.list(e, d, f))
-    var handle = PythonObject(Int(py=h))
-    py_setitem(fields, "_wdev", Python.tuple(module, version, handle))
-    return handle
-
-
-def sequence_moe_forward(owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`MoEBlock.forward(x)`."""
-    var b = _b()
-    var fields = py_fields(owner)
-    var e = Int(py=fields["E"])
-    var d = Int(py=fields["D"])
-    var f = Int(py=fields["F"])
-    var k = Int(py=fields["k"])
-    var norm = 1 if Bool(py=fields["norm_topk_prob"]) else 0
-    var x = values[0]
-    if seq_device(x, context):
-        var binding = seq_device_get(x, "b", context)
-        var entries = seq_binding(PythonObject(None), context, binding)
-        if py_get(entries, "moe_forward_dev") is not None and py_get(entries, "moe_weights_put") is not None:
-            var xs = _shape(x, context)
-            var size = shape_count(xs)
-            if len(xs) < 1 or xs[len(xs) - 1] != d or size == 0:
-                raise Error("ValueError: MoEBlock: x must have shape (..., " + String(d) + ")")
-            var t = size // d
-            _moe_check_weights(fields, e, d, f)
-            var h = _moe_weights(fields, entries, e, d, f, context)
-            # every cell of the four outputs is stored by the route and the combine: no fill
-            var y = _new(entries, xs, context)
-            var logits = _new(entries, [t, e], context)
-            var sel = _new(entries, [t, k], context)
-            var w = _new(entries, [t, k], context)
-            _ = py_call_typed(entries["moe_forward_dev"], Python.list(seq_device_get(x, "h", context), seq_device_get(y, "h", context),
-                              seq_device_get(logits, "h", context), seq_device_get(sel, "h", context), seq_device_get(w, "h", context)),
-                              Python.list(t, d, f, e, k, norm, h))
-            py_setitem(fields, "_routing", Python.list(logits, sel, w, PythonObject(None)))
-            return y
-        # no device MoE entry: x is read back and runs the host-array entry
-        var input = context["input_context"]
-        classical_connect_numpy(input)
-        var shape = _shape(x, context)
-        var host = classical_typed(_ints(shape), "<f4", input)
-        var n = shape_count(shape)
-        if n > 0:
-            _ = py_call_typed(entries["seq_tensor_download"], seq_device_get(x, "h", context), classical_address(host), PythonObject(n))
-            _ = host  # keep the Python object alive through the native call above
-        x = host
-    var a = _f32(x, "MoEBlock", context)
-    var shape = _shape(a, context)
-    var size = shape_count(shape)
-    if size % d != 0:
-        raise Error("ValueError: cannot reshape array of size " + String(size) + " into shape (-1," + String(d) + ")")
-    var t = size // d
-    var y = _host([t, d], context)
-    var logits = _host([t, e], context)
-    var sel = _host([t, k], context)
-    var w = _host([t, k], context)
-    var entries = seq_binding(py_get(fields, "numeric_mode"), context, PythonObject(None))
-    var ip = Python.list(t, d, f, e, k, norm)
-    var xa = classical_address(a)
-    _ = a  # keep the Python object alive through the native call above
-    if py_get(entries, "moe_weights_put") is not None:
-        _moe_check_weights(fields, e, d, f)
-        var h = _moe_weights(fields, entries, e, d, f, context)
-        _ = py_call(py_call(b.getattr, ip, "append"), h)
-        _ = py_call_typed(entries["moe_forward"], Python.list(xa, xa, xa, xa, classical_address(y), classical_address(logits),
-                          classical_address(sel), classical_address(w)), ip)
-        _ = logits  # keep the Python object alive through the native call above
-        _ = y  # keep the Python object alive through the native call above
-        _ = a  # keep the Python object alive through the native call above
-        _ = w  # keep the Python object alive through the native call above
-        _ = sel  # keep the Python object alive through the native call above
-    else:
-        var r = _f32(fields["router"], "router", context)
-        var gu = _f32(fields["gate_up_proj"], "gate_up_proj", context)
-        var dn = _f32(fields["down_proj"], "down_proj", context)
-        _ = py_call_typed(entries["moe_forward"], Python.list(xa, classical_address(r), classical_address(gu), classical_address(dn),
-                          classical_address(y), classical_address(logits), classical_address(sel), classical_address(w)), ip)
-        _ = dn  # keep the Python object alive through the native call above
-        _ = gu  # keep the Python object alive through the native call above
-        _ = r  # keep the Python object alive through the native call above
-        _ = a  # keep the Python object alive through the native call above
-        _ = w  # keep the Python object alive through the native call above
-        _ = sel  # keep the Python object alive through the native call above
-        _ = logits  # keep the Python object alive through the native call above
-        _ = y  # keep the Python object alive through the native call above
-    _ = a^
-    py_setitem(fields, "_routing", Python.list(logits, sel, w, PythonObject(None)))
-    return _reshape(y, shape)
-
-
 def sequence_layers_operation(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject,
                               context: PythonObject) raises -> PythonObject:
-    if operation == "seqmoe_forward":
-        return sequence_moe_forward(owner, values, context)
+    if operation.startswith("seqmoe_"):
+        return sequence_moe_operation(operation, owner, values, mode, context)
     return sequence_layer_norm(operation, owner, values, mode, context)

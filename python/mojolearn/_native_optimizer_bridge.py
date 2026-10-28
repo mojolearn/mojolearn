@@ -190,7 +190,7 @@ def connect_sequence_device(training, device):
                 "optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move", "optimizer_resident_step", "optimizer_resident_step_dev",
                 "adafactor_resident_open", "adafactor_resident_step", "adafactor_resident_step_dev",
                 "lamb_resident_open", "lamb_resident_step", "lamb_resident_step_dev",
-                "layer_norm", "layer_norm_dev", "moe_forward", "moe_forward_dev", "moe_weights_put", "moe_weights_free")
+                "layer_norm", "layer_norm_dev", "moe_forward", "moe_backward", "moe_forward_dev", "moe_weights_put", "moe_weights_free")
     for mode in ("identical", "fast"):  # glue: connect supported sequence numeric-mode ABI symbols at import
         try:
             binding = _backend.binding("_mojolearn_x_sequence", mode)
