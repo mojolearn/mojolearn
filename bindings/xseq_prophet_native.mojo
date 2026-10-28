@@ -9,6 +9,7 @@ from bindings.xseq_native_common import xseq_entries, xseq_base, xseq_addr, xseq
 from bindings.native_loaded_module import native_loaded_module
 from bindings.sequential_arrays import sequential_array
 from bindings.classical_pandas import classical_admit_value
+from bindings.classical_exceptions import classical_require_fitted
 from providers.python.prophet_lifecycle_pyapi import prophet_fields, prophet_scalar
 from providers.python.prophet_buffers_pyapi import prophet_source, prophet_contiguous, prophet_nanoseconds
 from providers.python.forecast_owner_pyapi import forecast_commit
@@ -282,16 +283,21 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     # diagnostics from info_ (y_scale, objective, iterations, 0): views only
     py_setitem(fields, "objective_", info_out.__getitem__(Python.tuple(py_call(b.slice, PythonObject(None)), 1)))
     py_setitem(fields, "n_iter_", xseq_column_i64(info_out, B, 4, 2, context))
+    # fit bookkeeping of the former `_mode` fit wrapper, committed with the state
+    py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
     _commit(original, fields, context)
     return model
 
 
 def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = _b()
+    # NotFittedError, as the former `_mode` predict guard raised it
+    classical_require_fitted(model, False, "predict", context["xseq_lifecycle_context"])
     var original = prophet_fields(model, context)
     var fields = _state(original, context)
     if not py_contains(fields, "params_") or not py_contains(fields, "info_"):
-        raise Error("RuntimeError: ProphetForecaster: call fit() first")
+        raise Error("NotFittedError: This " + String(py_type(model).__name__)
+                    + " instance is not fitted yet. Call 'fit' with appropriate arguments before using predict.")
     var stored = Python.tuple("params_", "info_", "changepoints_t_")
     for i in range(len(stored)):  # driver-loop: native fitted buffers captured once before numerical execution
         var value = prophet_source(fields[stored[i]], context)
