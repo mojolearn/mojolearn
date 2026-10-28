@@ -1,0 +1,8 @@
+{
+  "manifest_root": "/Users/andrewhendel/CascadeProjects/mojolearn",
+  "manifest_sha256": "5bd97d6cdab34b8e5db666baf73e3092b42a81447d88acf825fc31f26bdbc4a9",
+  "lock_sha256": "f6c531ef5300670dd0d66b0cd55cacabe12a28047e2d8d26648f430a46587509",
+  "installed_package_records": "/Users/andrewhendel/mojolearn-evidence/peer6-cv-build-environment-20261027/installed-packages.json",
+  "package_count": 65,
+  "scope": "Read-only compiler environment provenance; no product execution"
+}

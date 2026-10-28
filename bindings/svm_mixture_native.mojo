@@ -6,6 +6,9 @@
 # `qn_decision_function` / `gmm_sample` with the argument lists their
 # bindings document. Same entries, same inputs: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
+from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -56,16 +59,16 @@ def _class_count(classes: PythonObject) raises -> Int:
 def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObject,
                 context: PythonObject) raises -> PythonObject:
     """`GaussianMixture.sample(n_samples)`: (X, y)."""
-    var b = Python.import_module("builtins")
-    var operator = Python.import_module("operator")
-    if py_call(b.getattr, model, PythonObject("_ext"), PythonObject(None)) is not None:
+    var b = native_loaded_module("builtins")
+    var operator = native_loaded_module("operator")
+    if family_raw_get_or(model, "_ext", PythonObject(None)) is not None:
         raise Error("NotImplementedError: mojolearn GaussianMixture: sample() is the default fit's; a fit with "
                     + "the options routed to x_cluster does not sample (x_cluster/NOT_IMPLEMENTED.tsv)")
-    if not Bool(py=family_call(b.hasattr, model, PythonObject("weights_"))):
+    if not family_raw_has(model, "weights_"):
         raise Error("mojolearn GaussianMixture: call fit before sample")
     if not family_is_int(n_samples):
         raise Error("TypeError: mojolearn GaussianMixture: n_samples must be an int")
-    var seed = py_call(b.getattr, model, PythonObject("random_state"))
+    var seed = family_raw_get(model, "random_state")
     var seed_ok = family_is_int(seed)
     if seed_ok:
         seed_ok = Bool(py=family_call(operator.le, PythonObject(0), seed)) and Bool(
@@ -74,13 +77,13 @@ def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObj
         raise Error("mojolearn GaussianMixture: sample needs random_state to be an int in "
                     + "[0, 2**64), got " + family_repr(seed) + "; it is the key of every draw (DEVIATION 2791)")
     var n = Int(py=family_call(b.int, n_samples))
-    var weights = py_call(b.getattr, model, PythonObject("weights_"))
+    var weights = family_raw_get(model, "weights_")
     var k = Int(py=weights.shape[0])
-    var d = Int(py=py_call(b.getattr, model, PythonObject("n_features_in_")))
-    var means = py_call(b.getattr, model, PythonObject("means_"))
-    var covariances = py_call(b.getattr, model, PythonObject("covariances_"))
-    var precisions = py_call(b.getattr, model, PythonObject("precisions_cholesky_"))
-    var log_det = py_call(b.getattr, model, PythonObject("log_det_chol_"))
+    var d = Int(py=family_raw_get(model, "n_features_in_"))
+    var means = family_raw_get(model, "means_")
+    var covariances = family_raw_get(model, "covariances_")
+    var precisions = family_raw_get(model, "precisions_cholesky_")
+    var log_det = family_raw_get(model, "log_det_chol_")
     # Never a zero-length buffer: a refused n still addresses real memory.
     var rows = max(n, 1)
     var x = family_array(Python.tuple(rows, d), "<f4", context)
@@ -90,25 +93,25 @@ def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObj
     var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     if want is None or not Bool(py=py_call(b.bool, want)):
         want = context["backend_fields"]["_DEFAULT_MODE"]
-    var getter = py_call(b.getattr, binding, PythonObject("mixture_numeric_mode"), PythonObject(None))
+    var getter = neural_descriptor_entry(binding, "mixture_numeric_mode", False)
     if getter is not None:
         var got = Int(py=family_call(b.int, family_call(getter)))
         var wanted = py_get(context["family_gmm_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
             raise Error("RuntimeError: mojolearn GaussianMixture: numeric_mode=" + family_repr(want) + " was requested "
-                        + "but " + String(py_call(b.getattr, binding, PythonObject("__name__"))) + " reports compile-time mode code "
+                        + "but " + String(py_fields(binding)["__name__"]) + " reports compile-time mode code "
                         + String(got) + "; rebuild it with bash bindings/build_mixture.sh")
-    var converged = 1 if Bool(py=py_call(b.bool, py_call(b.getattr, model, PythonObject("converged_")))) else 0
+    var converged = 1 if Bool(py=py_call(b.bool, family_raw_get(model, "converged_"))) else 0
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_sample_binding:
     # weights, means, covariances, precisions_chol, log_det_chol, X out, y out;
     # k, d, n_iter, converged, lower_bound, n (0: no X is read);
     # n_samples, random_state low 32 bits, random_state high 32 bits.
-    _ = family_call(family_entry(binding, "gmm_sample", context),
+    _ = family_call(neural_descriptor_entry(binding, "gmm_sample"),
                     Python.list(classical_address(weights), classical_address(means), classical_address(covariances),
                                 classical_address(precisions), classical_address(log_det), classical_address(x),
                                 classical_address(y)),
-                    Python.list(PythonObject(k), PythonObject(d), py_call(b.getattr, model, PythonObject("n_iter_")),
-                                PythonObject(converged), py_call(b.getattr, model, PythonObject("lower_bound_")),
+                    Python.list(PythonObject(k), PythonObject(d), family_raw_get(model, "n_iter_"),
+                                PythonObject(converged), family_raw_get(model, "lower_bound_"),
                                 PythonObject(0)),
                     Python.list(PythonObject(n), family_call(operator.and_, seed, PythonObject(0xFFFFFFFF)),
                                 family_call(operator.rshift, seed, PythonObject(32))))
@@ -131,7 +134,7 @@ def svm_mixture_operation(model: PythonObject, operation: String, args: PythonOb
                           context: PythonObject) raises -> PythonObject:
     """args[0] is the resolved binding."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if operation == "family_svm_linear_svc_decision":
         if not Bool(py=family_call(b.hasattr, model, PythonObject("_w"))):
             raise Error("mojolearn LinearSVC: call fit first")

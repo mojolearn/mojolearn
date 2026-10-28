@@ -326,19 +326,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
     def __init__(self, n_clusters=8, *, init="k-means++", max_iter=100, batch_size=1024,
                  verbose=0, compute_labels=True, random_state=None, tol=0.0,
                  max_no_improvement=10, init_size=None, n_init="auto", reassignment_ratio=0.01, numeric_mode=None):
-        self.numeric_mode = numeric_mode
-        self.n_clusters = n_clusters
-        self.init = init
-        self.max_iter = max_iter
-        self.batch_size = batch_size
-        self.verbose = verbose
-        self.compute_labels = compute_labels
-        self.random_state = random_state
-        self.tol = tol
-        self.max_no_improvement = max_no_improvement
-        self.init_size = init_size
-        self.n_init = n_init
-        self.reassignment_ratio = reassignment_ratio
+        return _NATIVE(self, "family_xc_initialize", (None, (n_clusters, init, max_iter, batch_size, verbose, compute_labels, random_state, tol, max_no_improvement, init_size, n_init, reassignment_ratio, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         """Fit the centers on `X`.
@@ -468,17 +456,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
 
     def __init__(self, n_clusters=8, *, init="random", n_init=1, random_state=None, max_iter=300,
                  verbose=0, tol=1e-4, copy_x=True, algorithm="lloyd", bisecting_strategy="biggest_inertia", numeric_mode=None):
-        self.numeric_mode = numeric_mode
-        self.n_clusters = n_clusters
-        self.init = init
-        self.n_init = n_init
-        self.random_state = random_state
-        self.max_iter = max_iter
-        self.verbose = verbose
-        self.tol = tol
-        self.copy_x = copy_x
-        self.algorithm = algorithm
-        self.bisecting_strategy = bisecting_strategy
+        return _NATIVE(self, "family_xc_initialize", (None, (n_clusters, init, n_init, random_state, max_iter, verbose, tol, copy_x, algorithm, bisecting_strategy, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         """Build the bisection tree on `X`.
@@ -598,14 +576,7 @@ class MeanShift(_XCluster):
 
     def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1,
                  cluster_all=True, n_jobs=None, max_iter=300, numeric_mode=None):
-        self.numeric_mode = numeric_mode
-        self.bandwidth = bandwidth
-        self.seeds = seeds
-        self.bin_seeding = bin_seeding
-        self.min_bin_freq = min_bin_freq
-        self.cluster_all = cluster_all
-        self.n_jobs = n_jobs
-        self.max_iter = max_iter
+        return _NATIVE(self, "family_xc_initialize", (None, (bandwidth, seeds, bin_seeding, min_bin_freq, cluster_all, n_jobs, max_iter, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Find the cluster centers of `X`.
@@ -757,21 +728,7 @@ class OPTICS(_XCluster):
                  metric_params=None, cluster_method="xi", eps=None, xi=0.05,
                  predecessor_correction=True, min_cluster_size=None, algorithm="auto",
                  leaf_size=30, memory=None, n_jobs=None, numeric_mode=None):
-        self.numeric_mode = numeric_mode
-        self.min_samples = min_samples
-        self.max_eps = max_eps
-        self.metric = metric
-        self.p = p
-        self.metric_params = metric_params
-        self.cluster_method = cluster_method
-        self.eps = eps
-        self.xi = xi
-        self.predecessor_correction = predecessor_correction
-        self.min_cluster_size = min_cluster_size
-        self.algorithm = algorithm
-        self.leaf_size = leaf_size
-        self.memory = memory
-        self.n_jobs = n_jobs
+        return _NATIVE(self, "family_xc_initialize", (None, (min_samples, max_eps, metric, p, metric_params, cluster_method, eps, xi, predecessor_correction, min_cluster_size, algorithm, leaf_size, memory, n_jobs, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Compute the reachability ordering of `X` and extract clusters.
@@ -889,15 +846,7 @@ class AffinityPropagation(_XCluster):
 
     def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True,
                  preference=None, affinity="euclidean", verbose=False, random_state=None, numeric_mode=None):
-        self.numeric_mode = numeric_mode
-        self.damping = damping
-        self.max_iter = max_iter
-        self.convergence_iter = convergence_iter
-        self.copy = copy
-        self.preference = preference
-        self.affinity = affinity
-        self.verbose = verbose
-        self.random_state = random_state
+        return _NATIVE(self, "family_xc_initialize", (None, (damping, max_iter, convergence_iter, copy, preference, affinity, verbose, random_state, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Find the exemplars of `X`.
@@ -1086,24 +1035,7 @@ class BayesianGaussianMixture(_XCluster):
                  mean_precision_prior=None, mean_prior=None, degrees_of_freedom_prior=None,
                  covariance_prior=None, random_state=None, warm_start=False, verbose=0,
                  verbose_interval=10, numeric_mode=None):
-        self.numeric_mode = numeric_mode
-        self.n_components = n_components
-        self.covariance_type = covariance_type
-        self.tol = tol
-        self.reg_covar = reg_covar
-        self.max_iter = max_iter
-        self.n_init = n_init
-        self.init_params = init_params
-        self.weight_concentration_prior_type = weight_concentration_prior_type
-        self.weight_concentration_prior = weight_concentration_prior
-        self.mean_precision_prior = mean_precision_prior
-        self.mean_prior = mean_prior
-        self.degrees_of_freedom_prior = degrees_of_freedom_prior
-        self.covariance_prior = covariance_prior
-        self.random_state = random_state
-        self.warm_start = warm_start
-        self.verbose = verbose
-        self.verbose_interval = verbose_interval
+        return _NATIVE(self, "family_xc_initialize", (None, (n_components, covariance_type, tol, reg_covar, max_iter, n_init, init_params, weight_concentration_prior_type, weight_concentration_prior, mean_precision_prior, mean_prior, degrees_of_freedom_prior, covariance_prior, random_state, warm_start, verbose, verbose_interval, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the mixture on `X`.
@@ -1244,6 +1176,8 @@ _native_family_bridge.tables(
 
 # Fixed binding connections belong to package setup, never a model operation.
 _native_family_bridge.connect_bindings("_mojolearn_x_cluster")
+from ._native_owner_lifetime import connect_owner_context as _connect_cluster_owner_context
+_connect_cluster_owner_context(_NATIVE_CONTEXT)
 
 # Import-time schema only; runtime reads each admitted parameter natively.
 from inspect import signature as _cluster_signature

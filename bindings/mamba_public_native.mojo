@@ -26,7 +26,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_address, py_ints,
 )
-from bindings.causal_lm_public import _native_function, _mutable, _writeback
+from bindings.causal_lm_public import _native_function, _native_entry_fields, _native_has_entry, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings, _model_block
 from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths, _neural_int_words
 from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, neural_block_f32, neural_array_snapshot, neural_native_scalar
@@ -167,7 +167,7 @@ def _mamba_session_fields(session: PythonObject, context: PythonObject,
 def _m3_entries(block: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
     # The binding the retired `Mamba3Block._extension()` returned: the shipped
     # host binding for the CPU inference class, the block's tier otherwise.
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     # isinstance may consult a replaced block.__class__ descriptor even when
     # field storage was admitted. Test the actual native type ancestry.
     ref cpy = Python().cpython()
@@ -189,8 +189,9 @@ def _m3_entries(block: PythonObject, fields: PythonObject, context: PythonObject
 
 
 def _m3_canonical(entries: PythonObject) raises -> PythonObject:
-    if Bool(py=py_call(Python.import_module("builtins").hasattr, entries, "canonical")):
-        return entries.canonical
+    var fields = _native_entry_fields(entries)
+    if py_contains(fields, "canonical"):
+        return fields["canonical"]
     return entries
 
 
@@ -248,7 +249,7 @@ def _mamba_saved_entry(entries: PythonObject, name: String, required: Bool = Tru
 
 
 def _m3_allocate(block: PythonObject, fields: PythonObject, batch: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var b = Int(py=py_call(bi.int, batch))
     if b < 1:
         raise Error("Mamba3Block: batch_size must be positive, got " + String(b))
@@ -266,7 +267,7 @@ def _m3_allocate(block: PythonObject, fields: PythonObject, batch: PythonObject,
 def _m3_fresh(block: PythonObject, fields: PythonObject, x: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     # The retired `_call`: the discard-only prefill where the binding has it,
     # else the carried-state entry from a fresh zero state.
-    if Bool(py=py_call(Python.import_module("builtins").hasattr, entries, "mamba3_forward_fresh")):
+    if _native_has_entry(entries, "mamba3_forward_fresh"):
         return _prefill_mamba3_reports(block, x, entries, fields)
     var state = _m3_allocate(block, fields, x.shape[0], context)
     return _m3_state_call(block, x, state, False, entries, fields, _fields(state))
@@ -342,11 +343,13 @@ def _mamba3_weight_names() -> List[String]:
 def _m3_checked_weights(block: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
     # The current weights through the constructor's own native checks, as the
     # retired `type(self)(...)` re-validation did, without a Python constructor.
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var plan = py_call(bi.object.__new__, context["config_context"]["plan_class"])
-    py_setattr(plan, "kind", PythonObject("mamba3"))
-    py_setattr(plan, "d_model", fields["d_model"])
-    py_setattr(plan, "block_kwargs", bi.dict())
+    var plan_fields = _mamba_record_fields(plan, context["config_context"]["plan_class"],
+        [String("kind"), String("d_model"), String("block_kwargs")])
+    py_setitem(plan_fields, "kind", PythonObject("mamba3"))
+    py_setitem(plan_fields, "d_model", fields["d_model"])
+    py_setitem(plan_fields, "block_kwargs", bi.dict())
     var named = bi.dict()
     var names = _mamba3_weight_names()
     var weights = fields["_w"]
@@ -355,14 +358,14 @@ def _m3_checked_weights(block: PythonObject, fields: PythonObject, context: Pyth
     var route = fields["_native_route"]
     var checked = _model_block(named, plan, PythonObject("fp32_v1"), route,
                                _model_bindings(route, "mamba3", context, py_get(fields, "numeric_mode")), context)
-    return checked.__dict__["_w"]
+    return neural_block_fields(checked, context)["_w"]
 
 
 def mamba3_install_owned(block: PythonObject, context: PythonObject, fields: PythonObject) raises -> PythonObject:
     # Publish session, binding and generation together after successful upload.
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var entries = _m3_entries(block, fields, context)
-    if not Bool(py=py_call(bi.hasattr, entries, "mamba3_owned_weights_enabled")) or not Bool(py=_native_function(entries, "mamba3_owned_weights_enabled")()):
+    if not _native_has_entry(entries, "mamba3_owned_weights_enabled") or not Bool(py=_native_function(entries, "mamba3_owned_weights_enabled")()):
         raise Error("RuntimeError: Mamba3 owned weights require the NN40 IDENTICAL arm")
     var weights = _m3_checked_weights(block, fields, context)
     var canonical = _m3_canonical(entries)
@@ -422,7 +425,7 @@ def mamba3_release_owned(block: PythonObject, context: PythonObject) raises -> P
 
 
 def mamba3_session_info(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = _fields(block)
     var session = py_get(fields, "_prefill_session")
     var binding = py_get(fields, "_prefill_binding")
@@ -442,7 +445,7 @@ def mamba3_session_info(block: PythonObject, context: PythonObject) raises -> Py
 
 
 def mamba3_export_owned(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = _fields(block)
     var generation = py_get(fields, "_owned_generation")
     if generation is None:
@@ -488,7 +491,7 @@ def mamba3_export_owned(block: PythonObject, context: PythonObject) raises -> Py
 
 
 def mamba3_getstate(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = _fields(block)
     var result = py_call(bi.dict, fields)
     if py_get(fields, "_owned_generation") is not None:
@@ -697,7 +700,7 @@ def _session_layout(mut handle: MambaDecodeHandle, fields: PythonObject) raises:
 
 
 def mamba_session_init(session: PythonObject, block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = neural_block_snapshot(block, context)
     var kind_name = String(py_get(fields, "_native_kind", PythonObject("")))
     var kind = 1 if kind_name == "mamba1" else (2 if kind_name == "mamba2" else (3 if kind_name == "mamba3" else 0))
@@ -707,8 +710,8 @@ def mamba_session_init(session: PythonObject, block: PythonObject, state: Python
     _ = _mamba_record_fields(session, context["mamba_session_classes"][kind_name],
         [String("_handle"), String("_block"), String("_state")])
     var binding = _model_bindings(fields["_native_route"], kind_name, context, py_get(fields, "numeric_mode"))[kind_name]
-    var device_arm = Bool(py=py_call(bi.hasattr, binding, kind_name + "_session_create"))
-    if not device_arm and not Bool(py=py_call(bi.hasattr, binding, kind_name + "_decode_step")):
+    var device_arm = _native_has_entry(binding, kind_name + "_session_create")
+    if not device_arm and not _native_has_entry(binding, kind_name + "_decode_step"):
         raise Error("NotImplementedError: " + what + ": the loaded binding exports neither a resident decode session nor the per-call " + kind_name + "_decode_step entry")
     if state is None:
         raise Error(what + ": state is required (allocate_state)")
@@ -723,7 +726,7 @@ def mamba_session_init(session: PythonObject, block: PythonObject, state: Python
     handle.b = Int(py=hshape[0])
     handle.d_model = Int(py=fields["d_model"])
     if kind == 1:
-        if Bool(py=py_call(bi.hasattr, binding, "mamba1_profile")):
+        if _native_has_entry(binding, "mamba1_profile"):
             handle.profile = Int(py=_native_function(binding, "mamba1_profile")())
         _m1_check(slots, handle.profile, what)
         handle.position = Int(py=py_get(slots, "absolute_position", PythonObject(0)))
@@ -799,7 +802,7 @@ def mamba_session_init(session: PythonObject, block: PythonObject, state: Python
 
 
 def mamba_session_open(block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var kind = String(py_get(_fields(block), "_native_kind", PythonObject("")))
     var classes = context["mamba_session_classes"]
     if not py_contains(classes, kind):
@@ -815,7 +818,7 @@ def _session_require_open(handle: PythonObject, what: String) raises:
 
 
 def mamba_session_step(session: PythonObject, input: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var hobj = session._handle
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
     var kind = h[].kind

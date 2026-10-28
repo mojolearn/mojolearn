@@ -562,41 +562,8 @@ class ExponentialSmoothing:
         eps=2.24e-3,
         initialization_method="estimated",
     ):
-        if seasonal not in ("additive", "add", "multiplicative", "mul"):
-            raise ValueError(
-                f"mojolearn ExponentialSmoothing: seasonal={seasonal!r} is "
-                "refused; it must be 'additive'/'add' or "
-                "'multiplicative'/'mul' (holtwinters.pyx:197)"
-            )
-        if not isinstance(ts_num, int) or isinstance(ts_num, bool):
-            raise TypeError(
-                "mojolearn ExponentialSmoothing: type of ts_num must be int. "
-                f"Given: {type(ts_num)}"
-            )
-        if not isinstance(seasonal_periods, int) or isinstance(seasonal_periods, bool):
-            raise TypeError(
-                "mojolearn ExponentialSmoothing: type of seasonal_periods "
-                f"must be int. Given: {type(seasonal_periods)}"
-            )
-        if not isinstance(start_periods, int) or isinstance(start_periods, bool):
-            raise TypeError(
-                "mojolearn ExponentialSmoothing: type of start_periods must "
-                f"be int. Given: {type(start_periods)}"
-            )
-        if initialization_method not in _HW_INIT_CODES:
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: initialization_method="
-                f"{initialization_method!r} is refused; it must be "
-                "'estimated' (the default), 'heuristic' or 'cuml'"
-            )
-        self.endog = endog
-        self.initialization_method = initialization_method
-        self.seasonal = seasonal
-        self.seasonal_periods = seasonal_periods
-        self.start_periods = start_periods
-        self.ts_num = ts_num
-        self.eps = eps
-        self.fit_executed_flag = False
+        return _TSA(self, "hw_initialize", (endog, seasonal, seasonal_periods,
+                    start_periods, ts_num, eps, initialization_method), _TSA_CONTEXT)
 
     #: The GPU family this estimator binds; `_classical_host.py`'s host
     #: subclass answers the forecast inference binding for it instead.
@@ -749,51 +716,7 @@ class ExponentialSmoothing:
             Shapes follow cuML: ``(h, ts_num)`` when ``index`` is None and
             ``ts_num > 1``; ``(h,)`` when ``ts_num == 1`` or for a given ``index``.
         """
-        if not self.fit_executed_flag:
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: fit() the model before "
-                "forecast()"
-            )
-        if not isinstance(h, int) or isinstance(h, bool):
-            raise TypeError(
-                f"mojolearn ExponentialSmoothing: h must be int, got {type(h)}"
-            )
-        if index is not None and (not isinstance(index, int) or isinstance(index, bool)):
-            raise TypeError(
-                "mojolearn ExponentialSmoothing: index must be int or None, "
-                f"got {type(index)}"
-            )
-        if h <= 0:
-            raise ValueError(
-                f"mojolearn ExponentialSmoothing: h must be > 0. Currently: {h}"
-            )
-        if index is not None and (index < 0 or index >= self.ts_num):
-            raise IndexError(
-                f"mojolearn ExponentialSmoothing: index input: {index} outside "
-                f"of range [0, {self.ts_num})"
-            )
-        out = empty((h * self.ts_num,), "<f4")
-        self._bind().holtwinters_forecast(
-            addr_ro(self._comps, name="components"),
-            addr(out, name="out"),
-            # ORDER MATCHES bindings/_mojolearn_tsa.mojo::holtwinters_forecast_binding.
-            #   0 n, 1 batch_size, 2 frequency, 3 h
-            [
-                int(self.n),
-                int(self.ts_num),
-                int(self.seasonal_periods),
-                int(h),
-            ],
-            self.seasonal,
-        )
-        # out is TIME-MAJOR: series s at step i is [s + i * ts_num], which
-        # is cuML's `(ts_num, h)` array with order="F". DEVIATION 2422:
-        # the three cuML return shapes, each from that flat buffer with
-        # no NumPy: one series is its strided slice, un-interleaved by
-        # `strided_rows`; a single series IS the flat buffer; and
-        # `points.T` -- `(h, ts_num)` -- IS the time-major buffer read
-        # in C order.
-        return self._shaped(out, h, index)
+        return _TSA(self, "hw_forecast", (h, index), _TSA_CONTEXT)
 
     def _shaped(self, out, steps, index):
         """`forecast`'s three return shapes over a TIME-MAJOR flat buffer of
@@ -874,7 +797,7 @@ class ExponentialSmoothing:
         path : str or path-like
             Destination file.
         """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
+        return _TSA(self, "hw_save", (path,), _TSA_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -910,15 +833,7 @@ class ExponentialSmoothing:
 
     def __getattr__(self, name):
         # only reached when normal lookup fails: a component not built yet
-        if name in ExponentialSmoothing._LAZY_COMPONENTS:
-            lay = self.__dict__.get("_comp_layout")
-            if lay is not None:
-                cl, b, rows = lay
-                k = ExponentialSmoothing._LAZY_COMPONENTS.index(name)
-                value = strided_rows(self._comps, k * cl, cl, b, rows, empty((b, rows), "<f4"))
-                self.__dict__[name] = value
-                return value
-        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+        return _TSA(self, "hw_attribute", (name,), _TSA_CONTEXT)
 
     def _component(self, comp, index, who):
         """cuML's return shapes for `get_level` / `get_trend` /
@@ -968,7 +883,7 @@ class ExponentialSmoothing:
             ``(n - seasonal_periods, ts_num)`` when ``index`` is None and
             ``ts_num > 1``; 1-D for one series or a given ``index``.
         """
-        return self._named("level_", index, "level")
+        return _TSA(self, "hw_component", ("level_", index), _TSA_CONTEXT)
 
     def get_trend(self, index=None):
         """Fitted trend component.
@@ -984,7 +899,7 @@ class ExponentialSmoothing:
             ``(n - seasonal_periods, ts_num)`` when ``index`` is None and
             ``ts_num > 1``; 1-D for one series or a given ``index``.
         """
-        return self._named("trend_", index, "trend")
+        return _TSA(self, "hw_component", ("trend_", index), _TSA_CONTEXT)
 
     def get_season(self, index=None):
         """Fitted season component.
@@ -1000,8 +915,10 @@ class ExponentialSmoothing:
             ``(n - seasonal_periods, ts_num)`` when ``index`` is None and
             ``ts_num > 1``; 1-D for one series or a given ``index``.
         """
-        return self._named("season_", index, "season")
+        return _TSA(self, "hw_component", ("season_", index), _TSA_CONTEXT)
 
+
+_TSA_CONTEXT["hw_class"] = ExponentialSmoothing
 
 _native_archive_bridge.register(ExponentialSmoothing, _HW_FORMAT, (
     ("need_true", "fit_executed_flag", "ValueError",

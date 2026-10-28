@@ -81,19 +81,7 @@ class GARCH(ParamsMixin):
     """
 
     def __init__(self, p=1, o=0, q=1, mean="Constant", dist="normal", power=2.0, numeric_mode=None):
-        if mean not in ("Constant", "Zero"):
-            raise NotImplementedError(f"GARCH: mean={mean!r} is not implemented ('Constant', 'Zero')")
-        if dist != "normal":
-            raise NotImplementedError(f"GARCH: dist={dist!r} is not implemented ('normal')")
-        if power != 2.0:
-            raise NotImplementedError("GARCH: power != 2 is not implemented")
-        self.p, self.o, self.q = int(p), int(o), int(q)
-        if min(self.p, self.o, self.q) < 0 or self.p + self.o + self.q < 1:
-            raise ValueError("GARCH: p, o, q >= 0 with at least one term")
-        if self.o > 0 and self.p == 0:
-            raise ValueError("GARCH: o > 0 needs p > 0 (arch refuses it too)")
-        self.mean, self.dist, self.power = mean, dist, power
-        self.numeric_mode = numeric_mode
+        _XSEQ(self, "garch_initialize", (p, o, q, mean, dist, power, numeric_mode), _XSEQ_CONTEXT)
 
     def fit(self, y, horizon=1):
         """Fit the model to one series or a batch of series.
@@ -134,9 +122,7 @@ class GARCH(ParamsMixin):
         ndarray of shape (horizon,) or (batch_size, horizon), float32
             Forecast conditional variances.
         """
-        h = int(horizon)
-        if h > self._fc.shape[1]:
-            y = self._y[0] if self._one else self._y
-            self.fit(y, horizon=h)
-        f = self._fc[:, :h]
-        return f[0] if self._one else f
+        return _XSEQ(self, "garch_forecast", (horizon,), _XSEQ_CONTEXT)
+
+
+_native_xseq_bridge.register(xseq_garch_classes=((GARCH, None),))

@@ -9,6 +9,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_error_class import error_without_class
 from bindings.native_owner_lifetime import native_release_weakrefs
+from bindings.umap_parameters_native import umap_parameters_fields
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.params_metadata_native import _read, _connected_plan, _resolved
 from bindings.linear_constructor_native import _constructor_plan
@@ -136,6 +137,10 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
     for i in range(len(names)):  # driver-loop: earlier successful nested changes remain if a later child refuses
         _ = _set(values[names[i]], nested[names[i]], context, depth + 1)
     var fresh = _fresh_fields(model, values, plan, context)
+    if py_get(plan, "validation_kind") is not None and String(plan["validation_kind"]) == "umap":
+        # The original setter validates a replacement constructor before
+        # clearing fitted state. Failed settings leave this model untouched.
+        _ = umap_parameters_fields(fresh, context["umap_validation_context"])
     var previous = py_call(b.list, fields.values())
     var retained = py_call(b.list, fresh.values())
     _release_owned(previous, retained, context)
@@ -235,6 +240,8 @@ def full_reset_params_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") ->
             return raise_python_exception(error_without_class(error, "RecursionError"), ExceptionType("PyExc_RecursionError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        if String(error).startswith("NotImplementedError:"):
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if String(error).startswith("ValueError:"):
             return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
         if String(error).startswith("AttributeError:"):

@@ -76,12 +76,12 @@ def connected():
     return ns, modules, calls
 
 
-def test_install_preserves_77_signatures_defaults_and_one_call_boundary():
+def test_install_preserves_78_signatures_defaults_and_one_call_boundary():
     ns, modules, calls = fixture()
     originals = {cls: (cls.__init__, inspect.signature(cls.__init__)) for cls in ns['_CLASSES']}
     with patch.dict('sys.modules', modules):
         ns['install']()
-    assert len(ns['_CONTEXT']['plans']) == 77
+    assert len(ns['_CONTEXT']['plans']) == 78
     for cls, (constructor, signature) in originals.items():
         # The public constructor is now one native call; the original body
         # is retained only as the test oracle, never called by the product.
@@ -112,7 +112,7 @@ def test_install_preserves_77_signatures_defaults_and_one_call_boundary():
             n for n in names if signature.parameters[n].default is inspect.Parameter.empty}
         assert plan['rule_fields'] == tuple(dict.fromkeys(e[0] for e in plan['events'] if e[3]))
         assert plan['label'] == constructor.__qualname__
-    assert len(calls) == 2 * 77
+    assert len(calls) == 2 * 78
 
 
 def test_host_inheritance_stays_on_original_pending_contract():
@@ -150,7 +150,9 @@ def test_connection_pins_final_storage_hooks_without_constructing():
                                                          type(vars(object)['__setattr__']))
     for cls, plan in ns['_CONTEXT']['plans'].items():
         assert plan['mro'] == cls.__mro__
-        assert tuple(name for name, _ in plan['constructor_hooks']) == ('__getattribute__', '__getattr__', '__setattr__')
+        assert tuple(name for name, _ in plan['constructor_hooks']) == (
+            ('__getattribute__', '__getattr__', '__setattr__')
+            + (('_parameters', '_extras') if plan['validation_kind'] == 'umap' else ()))
         assert plan['constructor_hooks'][0][1] is object.__getattribute__
         assert plan['constructor_hooks'][1][1] is ns['_CONTEXT']['missing']
         assert all(value is vars(base).get(name) for base, name, value in plan['layout_hooks'])
@@ -317,7 +319,7 @@ def test_deferred_module_connects_after_package_in_package_order():
     with patch.dict('sys.modules', modules):
         ns['install']()
         ns['connect'](metadata, {'plans': {}}, {'plans': {}}, {'family_msel_estimators': {}})
-        assert ns['_CONTEXT']['ready'] and len(ns['_CONTEXT']['plans']) == 66
+        assert ns['_CONTEXT']['ready'] and len(ns['_CONTEXT']['plans']) == 67
         assert all(cls not in ns['_CONTEXT']['plans'] and cls.set_params is originals[cls] for cls in lazy)
         assert all(vars(cls)['__init__'] is initializers[cls] for cls in lazy)
         native_init = ns['_initializer'](object).__code__
@@ -343,7 +345,7 @@ def test_deferred_module_connects_after_package_in_package_order():
                 assert calls[-1][:2] == ('init', obj) and calls[-1][4] is ns['_CONTEXT'] and calls[-1][5] is cls
                 obj.set_params(alpha=1)
                 assert calls[-1][0] is obj and calls[-1][2] is ns['_CONTEXT']
-    assert len(ns['_CONTEXT']['plans']) == 77
+    assert len(ns['_CONTEXT']['plans']) == 78
     assert 'pending_classes' not in ns['_CONTEXT']
 
 
@@ -457,3 +459,37 @@ def test_constructor_compile_invalidation_is_only_host_tokenizer():
             if 'bindings/full_reset_constructor_native.mojo' in closure['files']:
                 owners.add((mode, name))
     assert owners == {('host', 'tokenizer')}
+
+
+def test_umap_validation_is_connected_without_a_python_callback():
+    ns, _, _ = connected()
+    cls = next(cls for cls in ns['_CLASSES'] if cls.__name__ == 'UMAP')
+    plan = ns['_CONTEXT']['plans'][cls]
+    assert plan['validation_kind'] == 'umap'
+    assert plan['events'][-1] == ('numeric_mode', 'parameter', 'numeric_mode', True)
+    assert all('validation_kind' in p for p in ns['_CONTEXT']['plans'].values())
+    constructor = (ROOT / 'bindings/full_reset_constructor_native.mojo').read_text()
+    body = constructor.split('var validated = False', 1)[1]
+    assert body.index('umap_parameters_fields(fields,') < body.index('py_setitem(fields, targets[i], sources[i])')
+    reset = (ROOT / 'bindings/full_reset_params_native.mojo').read_text()
+    assert reset.index('umap_parameters_fields(fresh,') < reset.index('_release_owned(previous, retained, context)')
+    validation = (ROOT / 'bindings/umap_parameters_native.mojo').read_text()
+    for forbidden in ('._parameters(', '._extras(', 'operator.index', 'operator.le', 'operator.eq'):
+        assert forbidden not in validation
+    assert '_one_of(cls, context["integer_types"])' in validation
+
+
+def test_umap_parameter_source_keeps_scalar_arrays_and_native_bounds():
+    source = (ROOT / 'bindings/umap_parameters_native.mojo').read_text()
+    assert 'var shape = array_shape_once(value, context)' in source
+    assert 'array_metadata_once(value, shape^, name, context, True)' in source
+    assert 'word > UInt64(UMAP_I64_MAX)' in source
+    assert 'var at = i if value.native_byte_order else width - i - 1' in source
+    assert 'result = bitcast[DType.float64](word)' in source
+    assert 'result = Float64(Float32(result))' not in source  # final return rounds once
+    assert 'return Float64(Float32(result))' in source
+    array_refusal = source.split('def _parameter_array(', 1)[1].split('def umap_integer(', 1)[0]
+    assert 'except:' in array_refusal
+    assert 'raise Error("ValueError: UMAP " + name + detail)' in array_refusal
+    assert '_parameter_array(value, name, True, context)' in source
+    assert '_parameter_array(value, name, False, context)' in source

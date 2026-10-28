@@ -5,26 +5,25 @@
 # parameter lists, in the same order, so every word is the one the Python kit
 # produced.
 #
-# The matrices ARE the Python kit's `_M` objects and their device buffers its
-# `_DevBuf` objects, assembled from their slots (no Python runs): a matrix
-# keeps its host store (`_s`, an `array.array('f')`) or its device buffer
-# (`_d`), moves to the device when an entry needs it there (`mk_did`) and back
-# when a host-address entry reads it (`mk_store`), exactly as `_M.s` and
-# `_Kit._did` move it. Views share the store or the buffer as `reshape` and a
-# vector's `T` shared them, and a buffer returns to the binding's pool when its
-# last holder dies (`_DevBuf.__del__`), as before. The kit's choices (resident
-# entries on a GPU binding, `_RES_MIN` 1, the optional resident entries, the
-# Apple FAST precise LLE entries) are the Python kit's own tests.
+# Matrices and pooled device buffers use typed native owners. Views share
+# those owners; releasing the final device reference calls its retained
+# compiled free cell in native code. No Python _M/_DevBuf object or finalizer
+# participates in this owner. The numerical kit keeps the existing entries
+# and resident/host operation ordering.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.py_attr import py_attr
-from bindings.native_buffer_owner import native_storage_allocate
+from bindings.manifold_storage_native import (
+    ManifoldMatrix, ManifoldDevice, matrix_rows, matrix_cols, matrix_store, matrix_device,
+    matrix_set_store, matrix_set_device, device_binding, device_identifier,
+)
+from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address, classical_wrap_array
-from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_entry, family_as_f32, family_as_f32_dense
+from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_as_f32, family_f32_snapshot
 from core.family_cast_impl import family_all_finite_f32
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
-from bindings.spectral_umap_routes import spectral_umap_entry
+from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_entry as family_entry, spectral_umap_optional_entry
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -78,7 +77,7 @@ def mk_store_zeros(n: Int, ctx: PythonObject) raises -> PythonObject:
 
 
 def mk_store_len(store: PythonObject) raises -> Int:
-    return Int(py=py_call(Python.import_module("builtins").len, store))
+    return Int(py=py_call(native_loaded_module("builtins").len, store))
 
 
 def mk_store_addr(store: PythonObject) raises -> PythonObject:
@@ -96,51 +95,40 @@ def mk_store_copy(store: PythonObject, ctx: PythonObject) raises -> PythonObject
 
 
 def mk_r(m: PythonObject) raises -> Int:
-    return Int(py=m.r)
+    return matrix_rows(m)
 
 
 def mk_c(m: PythonObject) raises -> Int:
-    return Int(py=m.c)
+    return matrix_cols(m)
 
 
 def mk_n(m: PythonObject) raises -> Int:
-    return Int(py=m.r) * Int(py=m.c)
+    return matrix_rows(m) * matrix_cols(m)
 
 
 def mk_on_dev(m: PythonObject) raises -> Bool:
-    return not (m._d is None)
+    return not (matrix_device(m) is None)
 
 
 def mk_new(store: PythonObject, r: Int, c: Int, ctx: PythonObject) raises -> PythonObject:
     """`_M(store, r, c)`, assembled from its slots."""
     if mk_store_len(store) != r * c:
         raise Error("x_decomp: matrix store does not match its shape")
-    var m = native_storage_allocate(ctx["family_mani_M"])
-    py_setattr(m, "_s", store)
-    py_setattr(m, "r", PythonObject(r))
-    py_setattr(m, "c", PythonObject(c))
-    py_setattr(m, "_d", PythonObject(None))
-    return m
+    return PythonObject(alloc=ManifoldMatrix(store, PythonObject(None), r, c))
 
 
 def mk_dev_view(d: PythonObject, r: Int, c: Int, ctx: PythonObject) raises -> PythonObject:
     """`_M._on_device(d, r, c)`."""
-    var m = native_storage_allocate(ctx["family_mani_M"])
-    py_setattr(m, "_s", PythonObject(None))
-    py_setattr(m, "r", PythonObject(r))
-    py_setattr(m, "c", PythonObject(c))
-    py_setattr(m, "_d", d)
-    return m
+    _ = d.downcast_value_ptr[ManifoldDevice]()
+    return PythonObject(alloc=ManifoldMatrix(PythonObject(None), d, r, c))
 
 
 def mk_devbuf(raw: PythonObject, n: Int, ctx: PythonObject) raises -> PythonObject:
     """`_DevBuf(raw, n)`: a pooled device buffer of the binding, freed (back to
     the pool) when its last holder dies."""
-    var d = native_storage_allocate(ctx["family_mani_devbuf"])
-    py_setattr(d, "b", raw)
-    py_setattr(d, "n", PythonObject(n))
-    py_setattr(d, "id", family_call(family_entry(raw, "x_decomp_dev_alloc", ctx), PythonObject(max(n, 1))))
-    return d
+    var release = family_entry(raw, "x_decomp_dev_free", ctx)
+    var identifier = family_call(family_entry(raw, "x_decomp_dev_alloc", ctx), PythonObject(max(n, 1)))
+    return PythonObject(alloc=ManifoldDevice(raw, release, identifier, n))
 
 
 def mk_zeros(r: Int, c: Int, ctx: PythonObject) raises -> PythonObject:
@@ -168,22 +156,26 @@ def mk_fill(value: Float64, r: Int, c: Int, ctx: PythonObject) raises -> PythonO
 
 def mk_one(ctx: PythonObject) raises -> PythonObject:
     """`_M._one`, the shared host 1 x 1 zero."""
-    return ctx["family_mani_M"]._one
+    var one = py_get(ctx, "family_mani_native_one")
+    if one is None:
+        one = mk_zeros(1, 1, ctx)
+        py_setitem(ctx, "family_mani_native_one", one)
+    return one
 
 
 def mk_store(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
     """`m.s`: the host store, downloaded once if the matrix is on the device;
     the matrix is a host matrix afterwards."""
-    if m._s is None:
-        var d = m._d
+    if matrix_store(m) is None:
+        var d = matrix_device(m)
         var n = mk_n(m)
         var a = mk_store_zeros(n, ctx)
         if n > 0:
-            _ = family_call(family_entry(d.b, "x_decomp_dev_download", ctx), d.id, mk_store_addr(a), PythonObject(n))
+            _ = family_call(family_entry(device_binding(d), "x_decomp_dev_download", ctx), device_identifier(d), mk_store_addr(a), PythonObject(n))
             _ = a  # keep the Python object alive through the native call above
-        py_setattr(m, "_s", a)
-    py_setattr(m, "_d", PythonObject(None))
-    return m._s
+        matrix_set_store(m, a)
+    matrix_set_device(m, PythonObject(None))
+    return matrix_store(m)
 
 
 def mk_addr(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
@@ -228,7 +220,7 @@ def mk_out2(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
 def mk_reshape(m: PythonObject, r: Int, c: Int, ctx: PythonObject) raises -> PythonObject:
     """`m.reshape(r, c)`: a view of the same buffer or the same store."""
     if mk_on_dev(m) and r * c == mk_n(m):
-        return mk_dev_view(m._d, r, c, ctx)
+        return mk_dev_view(matrix_device(m), r, c, ctx)
     return mk_new(mk_store(m, ctx), r, c, ctx)
 
 
@@ -240,8 +232,8 @@ def mk_res_moves(m: PythonObject, count: Int) raises -> Bool:
 def mk_dev_gather(m: PythonObject, op: Int, idx: List[Int], ctx: PythonObject) raises -> PythonObject:
     """`_dev_gather(M, op, idx)`: rows (TAKE_ROWS) or columns (TAKE_COLS) of
     a device matrix, on its own binding."""
-    var d = m._d
-    var raw = d.b
+    var d = matrix_device(m)
+    var raw = device_binding(d)
     var w = len(idx)
     var ia = mk_store_zeros(w, ctx)
     var p = mk_store_ptr(ia)
@@ -250,7 +242,7 @@ def mk_dev_gather(m: PythonObject, op: Int, idx: List[Int], ctx: PythonObject) r
         p[t] = Float32(Float64(idx[t]))
         _ = ia  # keep the Python object alive through the native call above
     var di = mk_devbuf(raw, w, ctx)
-    _ = family_call(family_entry(raw, "x_decomp_dev_upload", ctx), di.id, mk_store_addr(ia), PythonObject(w))
+    _ = family_call(family_entry(raw, "x_decomp_dev_upload", ctx), device_identifier(di), mk_store_addr(ia), PythonObject(w))
     _ = ia  # keep the Python object alive through the native call above
     var r = mk_r(m)
     var c = mk_c(m)
@@ -259,12 +251,12 @@ def mk_dev_gather(m: PythonObject, op: Int, idx: List[Int], ctx: PythonObject) r
     if op == MV_TAKE_ROWS:
         var count = w * c
         out = mk_dev_view(mk_devbuf(raw, count, ctx), w, c, ctx)
-        _ = family_call(family_entry(raw, "x_decomp_dev_move", ctx), d.id, di.id, out._d.id,
+        _ = family_call(family_entry(raw, "x_decomp_dev_move", ctx), device_identifier(d), device_identifier(di), device_identifier(matrix_device(out)),
                         mk_ints([op, count, c, 0, 0, 1, 0, n, count, w]))
     else:
         var count = r * w
         out = mk_dev_view(mk_devbuf(raw, count, ctx), r, w, ctx)
-        _ = family_call(family_entry(raw, "x_decomp_dev_move", ctx), d.id, di.id, out._d.id,
+        _ = family_call(family_entry(raw, "x_decomp_dev_move", ctx), device_identifier(d), device_identifier(di), device_identifier(matrix_device(out)),
                         mk_ints([op, count, w, c, 0, 0, 0, n, count, w]))
     _ = ia^
     _ = di^
@@ -280,7 +272,7 @@ def mk_rows(m: PythonObject, a: Int, b: Int, ctx: PythonObject) raises -> Python
             idx.append(i)
         return mk_dev_gather(m, MV_TAKE_ROWS, idx, ctx)
     var store = mk_store(m, ctx)
-    var part = py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice,
+    var part = py_call(py_attr(store, "__getitem__"), py_call(native_loaded_module("builtins").slice,
                                                   PythonObject(a * c), PythonObject(b * c)))
     return mk_new(part, b - a, c, ctx)
 
@@ -356,18 +348,11 @@ struct MKit(Movable):
         self.mode = mode
         self.b = binding
         self.ctx = ctx
-        # `_raw()`: a profiler proxy's wrapped binding, else the binding
-        var raw = binding
-        if py_type(binding) is py_type(native_loaded_module("builtins")):
-            # Exact import-time entry tables have no Python proxy hooks. Read
-            # absent optional attributes without Python's module-error formatter.
-            raw = py_get(_loaded_fields(binding), PythonObject("_b"), binding)
-        else:
-            try:
-                raw = py_call(Python.import_module("builtins").object.__getattribute__, binding, PythonObject("_b"))
-            except:
-                raw = binding
-        self.raw = raw
+        # Proxy resolution is import-time work. A Python __getattr__ or
+        # object descriptor must never select a numerical entry at runtime.
+        if py_type(binding) is not py_type(native_loaded_module("builtins")):
+            raise Error("TypeError: manifold kit requires an exact native module")
+        self.raw = binding
         self.res_known = False
         self.res_ok = False
         self.opt = Python.dict()
@@ -376,17 +361,12 @@ struct MKit(Movable):
 
     def fn(self, name: String) raises -> PythonObject:
         """`self.b.<name>`."""
-        if py_type(self.b) is py_type(native_loaded_module("builtins")):
-            return spectral_umap_entry(self.b, name, self.ctx)
-        return family_entry(self.b, name, self.ctx)
+        return spectral_umap_entry(self.b, name, self.ctx)
 
     def has(self, name: String) -> Bool:
-        """Whether the raw binding exports `name` (any refusal: no)."""
+        """Whether the admitted module exports a compiled optional entry."""
         try:
-            if py_type(self.raw) is py_type(native_loaded_module("builtins")):
-                return py_get(_loaded_fields(self.raw), PythonObject(name)) is not None
-            _ = py_call(Python.import_module("builtins").getattr, self.raw, PythonObject(name))
-            return True
+            return spectral_umap_optional_entry(self.raw, name, self.ctx) is not None
         except:
             return False
 
@@ -412,16 +392,16 @@ struct MKit(Movable):
     def vendor(self) -> String:
         """`_kit_vendor`: the binding's compiled vendor, "" when it cannot say."""
         try:
-            var f = py_call(Python.import_module("builtins").getattr, self.raw, PythonObject("x_decomp_vendor"))
-            return String(py=py_call(Python.import_module("builtins").str, py_call(f)))
+            var f = spectral_umap_entry(self.raw, "x_decomp_vendor", self.ctx)
+            return String(py=py_call(native_loaded_module("builtins").str, py_call(f)))
         except:
             return String("")
 
     def w4_flags(self) -> Int:
         """`w4_flags()`: 0 on a binding without the entry."""
         try:
-            var f = py_call(Python.import_module("builtins").getattr, self.raw, PythonObject("x_decomp_w4_flags"))
-            return Int(py=py_call(Python.import_module("builtins").int, py_call(f)))
+            var f = spectral_umap_entry(self.raw, "x_decomp_w4_flags", self.ctx)
+            return Int(py=py_call(native_loaded_module("builtins").int, py_call(f)))
         except:
             return 0
 
@@ -431,9 +411,8 @@ struct MKit(Movable):
         if self.mode != "fast" or self.vendor() != "metal":
             return
         try:
-            var g = Python.import_module("builtins").getattr
-            var mm = py_call(g, self.b, PythonObject("x_decomp_lle_gemm_ordered"))
-            var lu = py_call(g, self.b, PythonObject("x_decomp_lle_lu_ordered"))
+            var mm = spectral_umap_entry(self.b, "x_decomp_lle_gemm_ordered", self.ctx)
+            var lu = spectral_umap_entry(self.b, "x_decomp_lle_lu_ordered", self.ctx)
             self.lle_mm = mm
             self.lle_lu = lu
         except:
@@ -471,19 +450,19 @@ struct MKit(Movable):
     def did(mut self, m: PythonObject) raises -> PythonObject:
         """`_did(M)`: M's device id on this binding, uploading a host matrix
         (it moves)."""
-        var d = m._d
-        if not (d is None) and d.b is self.raw:
-            return d.id
+        var d = matrix_device(m)
+        if not (d is None) and device_binding(d) is self.raw:
+            return device_identifier(d)
         var a = mk_store(m, self.ctx)
         var n = mk_store_len(a)
         var nd = mk_devbuf(self.raw, n, self.ctx)
         if n > 0:
-            _ = family_call(self.fn("x_decomp_dev_upload"), nd.id, mk_store_addr(a), PythonObject(n))
+            _ = family_call(self.fn("x_decomp_dev_upload"), device_identifier(nd), mk_store_addr(a), PythonObject(n))
             _ = a  # keep the Python object alive through the native call above
-        py_setattr(m, "_s", PythonObject(None))
-        py_setattr(m, "_d", nd)
+        matrix_set_store(m, PythonObject(None))
+        matrix_set_device(m, nd)
         _ = a^
-        return nd.id
+        return device_identifier(nd)
 
     def dout(mut self, r: Int, c: Int) raises -> PythonObject:
         return mk_dev_view(mk_devbuf(self.raw, r * c, self.ctx), r, c, self.ctx)
@@ -491,17 +470,20 @@ struct MKit(Movable):
     def dev_one(mut self) raises -> PythonObject:
         """`_dev_one(kit)`: the unused broadcast operand on the device, one
         per binding (the Python kit's own cache)."""
-        var cache = self.ctx["family_mani_dev_one"]
-        var key = py_call(Python.import_module("builtins").id, self.raw)
+        var cache = py_get(self.ctx, "family_mani_native_dev_one")
+        if cache is None:
+            cache = Python.dict()
+            py_setitem(self.ctx, "family_mani_native_dev_one", cache)
+        var key = py_call(native_loaded_module("builtins").id, self.raw)
         var d = py_get(cache, key, PythonObject(None))
-        if d is None or not (d.b is self.raw):
+        if d is None or not (device_binding(d) is self.raw):
             d = mk_devbuf(self.raw, 1, self.ctx)
             var z = mk_store_zeros(1, self.ctx)
-            _ = family_call(self.fn("x_decomp_dev_upload"), d.id, mk_store_addr(z), PythonObject(1))
+            _ = family_call(self.fn("x_decomp_dev_upload"), device_identifier(d), mk_store_addr(z), PythonObject(1))
             _ = z  # keep the Python object alive through the native call above
             _ = z^
             py_setitem(cache, key, d)
-        return d.id
+        return device_identifier(d)
 
     # ---- elementwise
     def _mode_of(self, x: PythonObject, a: PythonObject) raises -> Int:
@@ -539,7 +521,7 @@ struct MKit(Movable):
             var ib = one_id if b is None else self.did(bm)
             var ic = one_id if c is None else self.did(cm)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_ew"), ia, ib, ic, out._d.id,
+            _ = family_call(self.fn("x_decomp_dev_ew"), ia, ib, ic, device_identifier(matrix_device(out)),
                             mk_ints([op, n, mk_c(a), mk_n(bm), bmode, mk_n(cm), cmode]), PythonObject(s))
             return out
         var out = mk_zeros(mk_r(a), mk_c(a), self.ctx)
@@ -598,7 +580,7 @@ struct MKit(Movable):
             var out = self.dout(m, n)
             var ia = self.did(a)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_gemm"), ia, ib, out._d.id, params)
+            _ = family_call(self.fn("x_decomp_dev_gemm"), ia, ib, device_identifier(matrix_device(out)), params)
             return out
         var out = mk_zeros(m, n, self.ctx)
         if m * n > 0:
@@ -614,7 +596,7 @@ struct MKit(Movable):
         if r * c > 0 and self.use1(a):
             var out = self.dout(1, c)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_colsum"), ia, out._d.id, mk_ints([r, c]))
+            _ = family_call(self.fn("x_decomp_dev_colsum"), ia, device_identifier(matrix_device(out)), mk_ints([r, c]))
             return out
         var out = mk_zeros(1, c, self.ctx)
         var pa = mk_addr(a, self.ctx)
@@ -628,7 +610,7 @@ struct MKit(Movable):
         if r * c > 0 and self.use1(a):
             var out = self.dout(r, 1)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_rowsum"), ia, out._d.id, mk_ints([r, c]))
+            _ = family_call(self.fn("x_decomp_dev_rowsum"), ia, device_identifier(matrix_device(out)), mk_ints([r, c]))
             return out
         var out = mk_zeros(r, 1, self.ctx)
         var pa = mk_addr(a, self.ctx)
@@ -650,7 +632,7 @@ struct MKit(Movable):
             var out = self.dout(ar, br)
             var ia = self.did(a)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_sqdist"), ia, ib, out._d.id, params)
+            _ = family_call(self.fn("x_decomp_dev_sqdist"), ia, ib, device_identifier(matrix_device(out)), params)
             return out
         var out = mk_zeros(ar, br, self.ctx)
         var pa = mk_addr(a, self.ctx)
@@ -671,7 +653,7 @@ struct MKit(Movable):
             var out = self.dout(ar, br)
             var ia = self.did(a)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_sqdist"), ia, ib, out._d.id, params)
+            _ = family_call(self.fn("x_decomp_dev_sqdist"), ia, ib, device_identifier(matrix_device(out)), params)
             return out
         var out = mk_zeros(ar, br, self.ctx)
         var pa = mk_addr(a, self.ctx)
@@ -682,8 +664,8 @@ struct MKit(Movable):
 
     def rand(mut self, r: Int, c: Int, seed: PythonObject, stream: Int, kind: Int) raises -> PythonObject:
         """`rand(r, c, seed, stream, kind)` (the Philox stream)."""
-        var op = Python.import_module("operator")
-        var b = Python.import_module("builtins")
+        var op = native_loaded_module("operator")
+        var b = native_loaded_module("builtins")
         var params = Python.list()
         mk_append(params, PythonObject(r * c))
         mk_append(params, py_call(op.and_, py_call(b.int, seed), PythonObject(0xFFFFFFFF)))
@@ -691,7 +673,7 @@ struct MKit(Movable):
         mk_append(params, PythonObject(kind))
         if r * c >= 1024 and self.res():
             var out = self.dout(r, c)
-            _ = family_call(self.fn("x_decomp_dev_rand"), out._d.id, params)
+            _ = family_call(self.fn("x_decomp_dev_rand"), device_identifier(matrix_device(out)), params)
             return out
         var out = mk_zeros(r, c, self.ctx)
         if r * c > 0:
@@ -706,9 +688,9 @@ struct MKit(Movable):
         var w = mk_zeros(1, n, self.ctx)
         var v = mk_zeros(n, n, self.ctx)
         var params = mk_ints([n, 0])
-        var d = a._d
-        if n >= 1 and mk_c(a) == n and not (d is None) and d.b is self.raw and self.opt_dev("x_decomp_dev_eigh"):
-            _ = family_call(self.fn("x_decomp_dev_eigh"), d.id, mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
+        var d = matrix_device(a)
+        if n >= 1 and mk_c(a) == n and not (d is None) and device_binding(d) is self.raw and self.opt_dev("x_decomp_dev_eigh"):
+            _ = family_call(self.fn("x_decomp_dev_eigh"), device_identifier(d), mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
             _ = v  # keep the Python object alive through the native call above
             _ = w  # keep the Python object alive through the native call above
             return (w, v)
@@ -735,7 +717,7 @@ struct MKit(Movable):
         if n >= 1 and mk_c(a) == n and self.opt_dev("x_decomp_dev_lu") and self.use1(a):
             var lu = self.dout(n, n)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_lu"), ia, lu._d.id, mk_store_addr(piv), mk_addr(info, self.ctx),
+            _ = family_call(self.fn("x_decomp_dev_lu"), ia, device_identifier(matrix_device(lu)), mk_store_addr(piv), mk_addr(info, self.ctx),
                             mk_ints([n]))
             _ = info  # keep the Python object alive through the native call above
             _ = piv  # keep the Python object alive through the native call above
@@ -758,9 +740,9 @@ struct MKit(Movable):
         var diag = mk_zeros(1, n, self.ctx)
         var st = mk_zeros(1, 4, self.ctx)
         var params = mk_ints([n, 1 if clamp else 0])
-        var d = lu._d
-        if n >= 1 and not (d is None) and d.b is self.raw and self.opt_dev("x_decomp_dev_lu"):
-            _ = family_call(self.fn("x_decomp_dev_lu_aux"), d.id, mk_store_addr(piv), mk_addr(pm, self.ctx),
+        var d = matrix_device(lu)
+        if n >= 1 and not (d is None) and device_binding(d) is self.raw and self.opt_dev("x_decomp_dev_lu"):
+            _ = family_call(self.fn("x_decomp_dev_lu_aux"), device_identifier(d), mk_store_addr(piv), mk_addr(pm, self.ctx),
                             mk_addr(im, self.ctx), mk_addr(diag, self.ctx), mk_addr(st, self.ctx), params)
             _ = pm  # keep the Python object alive through the native call above
             _ = st  # keep the Python object alive through the native call above
@@ -790,7 +772,7 @@ struct MKit(Movable):
         var diag = self.dout(1, n)
         var st = self.dout(1, 4)
         var ia = self.did(a)
-        _ = family_call(self.fn("x_decomp_dev_lu_aux"), ia, lu._d.id, pm._d.id, im._d.id, diag._d.id, st._d.id,
+        _ = family_call(self.fn("x_decomp_dev_lu_aux"), ia, device_identifier(matrix_device(lu)), device_identifier(matrix_device(pm)), device_identifier(matrix_device(im)), device_identifier(matrix_device(diag)), device_identifier(matrix_device(st)),
                         mk_ints([n, 1 if clamp else 0]))
         # The unused diagonal is still a kernel output: its numeric id does
         # not retain the pooled device buffer while the call is running.
@@ -809,7 +791,7 @@ struct MKit(Movable):
             var il = self.did(lu)
             var ii = self.did(idx)
             var ib = self.did(b)
-            _ = family_call(self.fn("x_decomp_dev_trisolve"), il, ii, ib, out._d.id, params)
+            _ = family_call(self.fn("x_decomp_dev_trisolve"), il, ii, ib, device_identifier(matrix_device(out)), params)
             return out
         var out = mk_zeros(n, w, self.ctx)
         if n * w > 0:
@@ -858,7 +840,7 @@ struct MKit(Movable):
             var out = self.dout(m, c)
             var ia = self.did(a)
             var ii = self.did(idx)
-            _ = family_call(self.fn("x_decomp_dev_move"), ia, ii, out._d.id, params)
+            _ = family_call(self.fn("x_decomp_dev_move"), ia, ii, device_identifier(matrix_device(out)), params)
             return out
         var out = mk_zeros(m, c, self.ctx)
         if count > 0:
@@ -894,7 +876,7 @@ struct MKit(Movable):
         if self.use1(a):
             var out = self.dout(1, 1)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_reduce"), ia, out._d.id, params)
+            _ = family_call(self.fn("x_decomp_dev_reduce"), ia, device_identifier(matrix_device(out)), params)
             return out
         var out = mk_zeros(1, 1, self.ctx)
         var pa = mk_addr(a, self.ctx)
@@ -912,7 +894,7 @@ struct MKit(Movable):
             var out = self.dout(1, count)
             var ia = self.did(a)
             var ii = self.did(idx)
-            _ = family_call(self.fn("x_decomp_dev_move"), ia, ii, out._d.id, params)
+            _ = family_call(self.fn("x_decomp_dev_move"), ia, ii, device_identifier(matrix_device(out)), params)
             return out
         var out = mk_zeros(1, count, self.ctx)
         if count > 0:
@@ -970,7 +952,7 @@ struct MKit(Movable):
             var cnt = mk_n(ms[i])
             if cnt > 0:
                 var im = self.did(ms[i])
-                _ = family_call(self.fn("x_decomp_dev_move"), im, one, out._d.id,
+                _ = family_call(self.fn("x_decomp_dev_move"), im, one, device_identifier(matrix_device(out)),
                                 mk_ints([MV_PLACE_COLS, cnt, c, c, off * c, 0, 0, cnt, rows * c, 1]))
             off += mk_r(ms[i])
         return out
@@ -986,7 +968,7 @@ struct MKit(Movable):
         if cnt > 0 and r * c > 0 and self.use1(a):
             out = self.dout(1, cnt)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_absmax"), ia, out._d.id, params)
+            _ = family_call(self.fn("x_decomp_dev_absmax"), ia, device_identifier(matrix_device(out)), params)
         else:
             out = mk_zeros(1, cnt, self.ctx)
             if cnt > 0 and r * c > 0:
@@ -1013,7 +995,7 @@ struct MKit(Movable):
             var cnt = self.dout(1, 1)
             var ia = self.did(a)
             var sid = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_order_f"), ia, sid, out._d.id, cnt._d.id, mk_ints([n, 0, 0]))
+            _ = family_call(self.fn("x_decomp_dev_order_f"), ia, sid, device_identifier(matrix_device(out)), device_identifier(matrix_device(cnt)), mk_ints([n, 0, 0]))
             # Keep the scratch owner through the call, even though only the
             # sorted indices are returned. An id alone does not own a buffer.
             _ = cnt^
@@ -1034,7 +1016,7 @@ struct MKit(Movable):
             var out = self.dout(n, 1)
             var cnt = self.dout(1, 1)
             var ia = self.did(a)
-            _ = family_call(self.fn("x_decomp_dev_argmin_all"), ia, out._d.id, cnt._d.id, mk_ints([n]))
+            _ = family_call(self.fn("x_decomp_dev_argmin_all"), ia, device_identifier(matrix_device(out)), device_identifier(matrix_device(cnt)), mk_ints([n]))
             var c = Int(self.word(cnt, 0))
             if c > 0:
                 return mk_rows(out, 0, c, self.ctx)
@@ -1043,12 +1025,12 @@ struct MKit(Movable):
         var c = 0
         if n > 0:
             var pa = mk_addr(a, self.ctx)
-            c = Int(py=py_call(Python.import_module("builtins").int,
+            c = Int(py=py_call(native_loaded_module("builtins").int,
                                family_call(self.fn("x_decomp_argmin_all"), pa, PythonObject(n),
                                            mk_addr(buf, self.ctx))))
             _ = buf  # keep the Python object alive through the native call above
         var store = mk_store(buf, self.ctx)
-        var part = py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice,
+        var part = py_call(py_attr(store, "__getitem__"), py_call(native_loaded_module("builtins").slice,
                                                       PythonObject(0), PythonObject(c)))
         return mk_new(part, c, 1, self.ctx)
 
@@ -1063,9 +1045,9 @@ struct MKit(Movable):
             var cnt = r * c
             if cnt > 0:
                 var ix = self.did(x)
-                _ = family_call(self.fn("x_decomp_dev_move"), ix, one, out._d.id,
+                _ = family_call(self.fn("x_decomp_dev_move"), ix, one, device_identifier(matrix_device(out)),
                                 mk_ints([MV_PLACE_COLS, cnt, c, c, 0, 0, 0, cnt, tot, 1]))
-            var oid = out._d.id
+            var oid = device_identifier(matrix_device(out))
             _ = family_call(self.fn("x_decomp_dev_move"), oid, one, oid,
                             mk_ints([MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1]))
             return out
@@ -1081,7 +1063,7 @@ struct MKit(Movable):
         if self.use1(m):
             var out = self.dout(1, 2)
             var im = self.did(m)
-            _ = family_call(self.fn("x_decomp_dev_dsum_sq"), im, out._d.id, mk_ints([n]))
+            _ = family_call(self.fn("x_decomp_dev_dsum_sq"), im, device_identifier(matrix_device(out)), mk_ints([n]))
             var store = mk_store(out, self.ctx)
             # the binary64 result's two float32 words, read as one double
             var v = FAMILY_F64P(unsafe_from_address=Int(py=mk_store_addr(store)))[0]
@@ -1090,7 +1072,7 @@ struct MKit(Movable):
             return v
         # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
         var pm = mk_addr(m, self.ctx)
-        return Float64(py=py_call(Python.import_module("builtins").float,
+        return Float64(py=py_call(native_loaded_module("builtins").float,
                                   family_call(self.fn("x_decomp_dsum_sq"), pm, PythonObject(n))))
 
     # ---- neighbor graphs (x_decomp/graph_cells.mojo)
@@ -1099,7 +1081,7 @@ struct MKit(Movable):
         if self.res():
             var dist = self.dout(n, n)
             var iw = self.did(w)
-            _ = family_call(self.fn("x_decomp_dev_graph_dijkstra"), iw, dist._d.id, mk_ints([n]))
+            _ = family_call(self.fn("x_decomp_dev_graph_dijkstra"), iw, device_identifier(matrix_device(dist)), mk_ints([n]))
             return dist
         var dist = mk_zeros(n, n, self.ctx)
         var pw = mk_addr(w, self.ctx)
@@ -1116,7 +1098,7 @@ struct MKit(Movable):
             var dst = self.dout(n, nn)
             if n * nn > 0:
                 var id = self.did(d)
-                _ = family_call(self.fn("x_decomp_dev_graph_knn"), id, idx._d.id, dst._d.id, params)
+                _ = family_call(self.fn("x_decomp_dev_graph_knn"), id, device_identifier(matrix_device(idx)), device_identifier(matrix_device(dst)), params)
             return (idx, dst)
         var idx = mk_zeros(n, nn, self.ctx)
         var dst = mk_zeros(n, nn, self.ctx)
@@ -1133,7 +1115,7 @@ struct MKit(Movable):
             var out = self.dout(n, n)
             var ii = self.did(idx)
             var iw = self.did(w)
-            _ = family_call(self.fn("x_decomp_dev_graph_knn_dense"), ii, iw, out._d.id, mk_ints([n, nn]))
+            _ = family_call(self.fn("x_decomp_dev_graph_knn_dense"), ii, iw, device_identifier(matrix_device(out)), mk_ints([n, nn]))
             return out
         var out = mk_zeros(n, n, self.ctx)
         var pi = mk_addr(idx, self.ctx)
@@ -1147,7 +1129,7 @@ struct MKit(Movable):
         if self.res():
             var out = self.dout(n, n)
             var id = self.did(d)
-            _ = family_call(self.fn("x_decomp_dev_graph_radius"), id, out._d.id, mk_ints([n]), PythonObject(r))
+            _ = family_call(self.fn("x_decomp_dev_graph_radius"), id, device_identifier(matrix_device(out)), mk_ints([n]), PythonObject(r))
             return out
         var out = mk_zeros(n, n, self.ctx)
         var pd = mk_addr(d, self.ctx)
@@ -1163,7 +1145,7 @@ struct MKit(Movable):
             if nq * n > 0:
                 var iq = self.did(dq)
                 var id = self.did(d)
-                _ = family_call(self.fn("x_decomp_dev_graph_radius_geo"), iq, id, out._d.id, mk_ints([nq, n]),
+                _ = family_call(self.fn("x_decomp_dev_graph_radius_geo"), iq, id, device_identifier(matrix_device(out)), mk_ints([nq, n]),
                                 PythonObject(r))
             return out
         var out = mk_zeros(nq, n, self.ctx)
@@ -1181,7 +1163,7 @@ struct MKit(Movable):
             var out = self.dout(n, n)
             var ii = self.did(idx)
             var iw = self.did(wb)
-            _ = family_call(self.fn("x_decomp_dev_graph_lle_iw"), ii, iw, out._d.id, mk_ints([n, nn]))
+            _ = family_call(self.fn("x_decomp_dev_graph_lle_iw"), ii, iw, device_identifier(matrix_device(out)), mk_ints([n, nn]))
             return out
         var out = mk_zeros(n, n, self.ctx)
         var pi = mk_addr(idx, self.ctx)
@@ -1192,11 +1174,11 @@ struct MKit(Movable):
 
     def graph_components(mut self, w: PythonObject) raises -> Tuple[PythonObject, Int]:
         var n = mk_r(w)
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if self.res():
             var comp = self.dout(n, 1)
             var iw = self.did(w)
-            var c = family_call(self.fn("x_decomp_dev_graph_components"), iw, comp._d.id, mk_ints([n]))
+            var c = family_call(self.fn("x_decomp_dev_graph_components"), iw, device_identifier(matrix_device(comp)), mk_ints([n]))
             return (comp, Int(py=py_call(b.int, c)))
         var comp = mk_zeros(n, 1, self.ctx)
         var pw = mk_addr(w, self.ctx)
@@ -1230,7 +1212,7 @@ struct MKit(Movable):
         var py = mk_addr(y, self.ctx)
         var pi = mk_addr(nbr, self.ctx)
         _ = family_call(self.fn("x_decomp_barycenter_rows"), px, py, pi, mk_addr(w, self.ctx), mk_addr(flags, self.ctx),
-                        mk_ints([n, mk_r(y), mk_c(x), k]), py_call(Python.import_module("builtins").float, reg))
+                        mk_ints([n, mk_r(y), mk_c(x), k]), py_call(native_loaded_module("builtins").float, reg))
         _ = flags  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         return w
@@ -1273,16 +1255,16 @@ def mk_t(m: PythonObject, mut hk: MKit, ctx: PythonObject) raises -> PythonObjec
     var r = mk_r(m)
     var c = mk_c(m)
     var n = r * c
-    var d = m._d
+    var d = matrix_device(m)
     if d is None and n > 0 and r != 1 and c != 1 and n < I32_MAX:
         if hk.res():
             _ = hk.did(m)
-            d = m._d
+            d = matrix_device(m)
     if not (d is None) and (r == 1 or c == 1):
         return mk_dev_view(d, c, r, ctx)
     if not (d is None) and n < I32_MAX:
-        var out = mk_dev_view(mk_devbuf(d.b, n, ctx), c, r, ctx)
-        _ = family_call(family_entry(d.b, "x_decomp_dev_move", ctx), d.id, d.id, out._d.id,
+        var out = mk_dev_view(mk_devbuf(device_binding(d), n, ctx), c, r, ctx)
+        _ = family_call(family_entry(device_binding(d), "x_decomp_dev_move", ctx), device_identifier(d), device_identifier(d), device_identifier(matrix_device(out)),
                         mk_ints([MV_TRANSPOSE, n, r, c, 0, 0, 0, n, n, 1]))
         return out
     if r == 1 or c == 1:
@@ -1322,23 +1304,28 @@ def mk_take_rows_list(m: PythonObject, idx: List[Int], mut hk: MKit, ctx: Python
     return out
 
 
-def mk_from_input(source: PythonObject, name: String, ctx: PythonObject) raises -> PythonObject:
-    """`_M.from_input(X, name)`: a scipy.sparse input densified exactly, the
-    `as_f32_c` cast and refusals, one copy into a host store, and the
-    finiteness refusal."""
-    var a = family_as_f32_dense(source, 2, name, ctx)
-    var r = Int(py=a.shape[0])
-    var c = Int(py=a.shape[1])
-    if Int(py=a.ndim) != 2 or r == 0 or c == 0:
+def mk_from_snapshot(value: ArrayMetadata, name: String, ctx: PythonObject) raises -> PythonObject:
+    # Conversion, shape, address and original owners were captured at the public
+    # boundary. Copies and finiteness checks consume that same immutable view.
+    var r = value.source.rows
+    var c = value.source.cols
+    if len(value.shape) != 2 or r == 0 or c == 0:
         raise Error(name + ": a nonempty two-dimensional input is required")
     var store = mk_store_zeros(r * c, ctx)
-    var src = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a)))
-    _ = a  # keep the Python object alive through the native call above
+    var src = FAMILY_F32P(unsafe_from_address=value.source.addr)
     memcpy(dest=mk_store_ptr(store), src=src, count=r * c)
-    _ = store  # keep the Python object alive through the native call above
-    _ = a  # keep the Python object alive through the native call above
+    _ = store
+    _ = value
     if not family_all_finite_f32(src, r * c):
         raise Error(name + ": input must be finite; NaN/inf are unsupported")
-    _ = a  # keep the Python object alive through the native calls above
-    _ = a^
+    _ = value
     return mk_new(store, r, c, ctx)
+
+
+def mk_from_input(source: PythonObject, name: String, ctx: PythonObject) raises -> PythonObject:
+    """Capture dense/sparse input once and copy its admitted float32 words."""
+    var snapshot = family_f32_snapshot(source, 2, name, ctx, True)
+    var result = mk_from_snapshot(snapshot, name, ctx)
+    _ = snapshot
+    _ = source
+    return result

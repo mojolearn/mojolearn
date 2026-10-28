@@ -95,3 +95,23 @@ def test_saved_binding_lookup_uses_connected_identity_without_attribute_hooks():
         body = NATIVE.split(f'def mamba3_{operation}(')[1].split(f'def mamba3_{following}(')[0]
         assert '_mamba_saved_entries(binding, context)' in body
         assert '_native_function(binding,' not in body
+
+
+def test_native_entry_selection_refuses_hooks_before_lookup():
+    assert 'Python.import_module(' not in NATIVE
+    assert '.hasattr' not in NATIVE
+    canonical = NATIVE.split('def _m3_canonical(')[1].split('def _mamba_saved_entries(')[0]
+    assert canonical.index('_native_entry_fields(entries)') < canonical.index('fields["canonical"]')
+    assert 'entries.canonical' not in canonical
+    for name in ('mamba3_forward_fresh', 'mamba3_owned_weights_enabled', 'mamba1_profile'):
+        assert f'_native_has_entry(' in NATIVE and f'"{name}")' in NATIVE
+    assert '_native_has_entry(binding, kind_name + "_session_create")' in NATIVE
+    assert '_native_has_entry(binding, kind_name + "_decode_step")' in NATIVE
+
+
+def test_owned_weight_revalidation_admits_plan_and_finished_record():
+    body = NATIVE.split('def _m3_checked_weights(')[1].split('def mamba3_install_owned(')[0]
+    assert body.index('_mamba_record_fields(plan,') < body.index('py_setitem(plan_fields, "kind"')
+    assert 'py_setattr(plan,' not in body
+    assert 'return neural_block_fields(checked, context)["_w"]' in body
+    assert 'checked.__dict__' not in body

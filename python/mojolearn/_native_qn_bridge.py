@@ -12,6 +12,8 @@ def connect(losses):
     from .tokenizer import _binding
 
     context = _state_context()
+    from ._native_owner_lifetime import connect_owner_context
+    connect_owner_context(context)
     connected = {}
     metric_bindings = {}
     selected = _backend.default_mode()
@@ -24,6 +26,7 @@ def connect(losses):
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"QNRegressor requires compiled {name}")
                 entries[name] = entry
+            entries["_module"] = entries["qn_fit"].__self__
             connected[mode] = entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
@@ -41,6 +44,7 @@ def connect(losses):
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"QNRegressor score requires compiled {name}")
                 metric_entries[name] = entry
+            metric_entries["_module"] = metric_entries["x_metrics_run"].__self__
             metric_bindings[mode] = metric_entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             metric_bindings[mode] = type(error).__name__ + ": " + str(error)

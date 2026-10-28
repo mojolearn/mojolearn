@@ -1,0 +1,18 @@
+{
+  "source_freeze": "d5a3291cce229540a89c82e38a9c43ad51e87d25",
+  "selected_commits": [
+    "c5e82e1e5d",
+    "71e740865e",
+    "01bdf4991f",
+    "214860ffb0",
+    "c2cc05f102",
+    "cd719e08f4"
+  ],
+  "selected_product_paths_compared": 6,
+  "different_paths": [
+    "bindings/_mojolearn_runtime_classical_host.mojo"
+  ],
+  "coverage": "scaler public entries and actual registration helper compiled; production builder receives the same import/call but full runtime_classical module not rebuilt",
+  "failed_manifold_excluded": true,
+  "runtime_executed": false
+}

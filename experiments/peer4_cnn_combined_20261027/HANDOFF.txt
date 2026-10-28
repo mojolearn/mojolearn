@@ -1,0 +1,20 @@
+Combined CNN compile after integration
+Branch lane/peer4-neural-ops-20261027 source head 846b316761.
+Actual xcnn_c dispatcher plus exported BN resident backward composition compiled
+on Mac CPU apple-m1, identical, O0, 10 configured workers, 237.95 seconds.
+This closes the old shared-common versus new pooling compile gap: tensor/common,
+Conv2d/Conv1d lifecycle and backward, BasicBlock, BatchNorm, ordinary pooling,
+Dropout2d and adaptive pooling are in the same compiled source closure. Includes
+the resident saved-index shape guard. See compile.json, full source manifest and
+archive under ~/mojolearn-evidence/peer4-neural-20261027/combined-cnn-attempt1/.
+The Mac had concurrent independent peer builds; configured workers are not a CPU
+saturation claim. No runtime, GPU or within-release identity execution.
+
+MoE first native batch is also included on this branch, compiled separately
+against its source closure (experiments/peer4_moe_native_20261027).
+
+Pending: native CNN tensor/_Dev finalizer installation (Python __del__ shells can
+still be entered by decref), CNNClassifier native label-provider registration,
+classifier transitive setup/results, graph layer constructor/backward, and the
+adjacent Embedding/MLPInference/LayerNorm follow-ups. None of those pending paths
+is declared callback-free or runtime-qualified by the compile pass.

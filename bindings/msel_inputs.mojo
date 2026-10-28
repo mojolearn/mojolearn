@@ -156,7 +156,7 @@ def _pandas_materialize(value: PythonObject, context: PythonObject, rows_context
         var placement = py_call(b.range, 1) if series else _pd_locations(blocks[k], context)
         if len(placement) != width:
             raise Error("ValueError: pandas block placement and width disagree")
-        var prepared = _prepare(data, rows_context)
+        var prepared = _prepare(data, rows_context, True)
         var dtype = String(_slot(prepared, "dtype", rows_context))
         var original_kind = String(data.dtype.kind)
         if original_kind == "O":
@@ -212,11 +212,11 @@ def msel_input(value: PythonObject, name: String, context: PythonObject) raises 
     var cls = py_type(value)
     var b = rows["arena_native_types"]
     if cls is context["array_class"] or cls is py_get(context, "ndarray"):
-        return _prepare(value, rows)
+        return _prepare(value, rows, True)
     if native_pandas_exact(value):
         return _pandas_materialize(value, context, rows)
     if native_torch_exact(cls):
-        return _prepare(native_torch_numpy(value), rows)
+        return _prepare(native_torch_numpy(value), rows, True)
     var sequence = value
     if cls is native_loaded_module("builtins").range:
         sequence = py_call(b["list"], value)
@@ -247,7 +247,7 @@ def msel_input(value: PythonObject, name: String, context: PythonObject) raises 
             var packed = native_array_from_bytes(String(format), py_call(view.tobytes, "C"))
             var wide = native_array_from_values(String("i" if format == "h" else "q"), packed)
             return _owned(wide, view.shape, "<i4" if format == "h" else "<i8", rows)
-    return _prepare(classical_input(value, context, name), rows)
+    return _prepare(classical_input(value, context, name), rows, True)
 
 
 def msel_input_count(value: PythonObject, context: PythonObject) raises -> Int:

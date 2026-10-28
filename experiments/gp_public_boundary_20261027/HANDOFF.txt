@@ -1,0 +1,31 @@
+GP public boundary incremental batch — 2026-10-27
+Branch lane/peer5-gp-trees-20261027, source commit 2a1b52376b.
+
+Changes:
+- GPR and GPC wrapper bodies hand binding placeholders to the native owner.
+  Shared estimator provider resolves GP/current mode and GPC/identical base
+  bindings inside the native operation; explicit internal native modules retain
+  the host/archive/parallel ABI.
+- GPC log_marginal_likelihood now performs its refusal ordering, fitted-state
+  check, scalar admission and result return in one native call.
+- Fixed binding names are connected at module import.
+
+Compilation: PASS exit 0, 275.65 s, Mac CPU column apple-m1, identical, O0,
+10 workers (local allocation sysctl hw.logicalcpu=10). Full GP dispatcher and
+regressor/classifier native owners compiled into never-loaded shared library.
+Compiler/source/archive/artifact hashes and exact command in compile.json.
+First fixture attempt failed because def_function requires PythonObject rather
+than String/var arguments; retained under attempt1. The fixture was repaired.
+
+Evidence: ~/mojolearn-evidence/peer5-gp-public-20261027/attempt2/
+  complete compile.log, result.json, source-manifest.json, source-bytes.tgz,
+  _mojolearn_gp_public_compile.so. No rented box, no R2 rented-box obligation.
+
+Pending: this is an incremental boundary repair, NOT whole-GP compliance.
+The installed _mode lifecycle decorators still do Python work around fit and
+predict; a separate active GP lifecycle batch will remove those wrappers.
+Kernel public metadata has a separate compiled branch awaiting dispatch wiring.
+GP kernel constructors/operators and transitive warning/label/scalar repairs
+remain active work. Runtime/identity/vendor verification was not performed and
+is outside the owner's compile-and-merge task. Compilation proves only scope
+above; no runtime success, numerical identity or full-library claim.

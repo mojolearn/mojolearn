@@ -173,39 +173,7 @@ def numeric_mode():
         When the binary is in the wrong directory, its profile version is unknown, or
         the extension is stale.
     """
-    global _mode_cache, _profile_cache
-    if _mode_cache is not None:
-        return _mode_cache
-    binding = _load()
-    raw = int(binding.linalg_numeric_mode())
-    # A NAME lookup: the binary reports the NUMERIC_* code.
-    compiled = _backend._CODE_MODE.get(raw, "unknown")
-    selected = _backend.numeric_mode()
-    if compiled != selected:
-        raise RuntimeError(
-            "mojolearn.linalg: the loaded binary was compiled "
-            f"{compiled} but this process selected the {selected} set -- a "
-            f".so is in the wrong directory ({binding.__file__}); rebuild "
-            f"both sets with {_BUILD_SCRIPT}"
-        )
-    version = int(binding.linalg_profile_version())
-    getter = getattr(binding, "linalg_numerical_profile", None)
-    actual = str(getter()) if getter is not None else (PROFILE if version == PROFILE_VERSION else None)
-    known = PROFILE if version == PROFILE_VERSION else _EXPERIMENT_PROFILES.get(version)
-    expected = os.environ.get(_EXPECTED_PROFILE_ENV, PROFILE)
-    if known is None or actual != known or actual != expected:
-        raise RuntimeError(
-            f"mojolearn.linalg: binary numerical profile {actual!r} "
-            f"(version {version}) does not match the supported expected profile "
-            f"{expected!r}. The version names the arithmetic; unknown or stale "
-            f"profiles cannot be substituted. Experimental arms require their "
-            f"exact {_EXPECTED_PROFILE_ENV} value and remain unqualified."
-        )
-    if version != PROFILE_VERSION and compiled != "identical":
-        raise RuntimeError("Experimental neural GEMM profiles require IDENTICAL mode")
-    _profile_cache = (actual, version)
-    _mode_cache = compiled
-    return compiled
+    return _NATIVE(None, "family_lin_numeric_mode", (), _NATIVE_CONTEXT)
 
 
 def profile():
@@ -224,40 +192,7 @@ def profile():
     -------
     dict
     """
-    mode = numeric_mode()
-    actual, version = _profile_cache or (PROFILE, PROFILE_VERSION)
-    result = {
-        "profile": actual,
-        "profile_version": version,
-        "numeric_mode": mode,
-        "identity_claimed": mode == "identical",
-        "dtype": "float32",
-        "ops": ("OP_NN", "OP_NT", "OP_TN"),
-        "contract": "gemm/IDENTICAL_FP32_CONTRACT.md",
-        "kernel": "gemm/checks/gemm_identical.mojo",
-        "oracle": "gemm/host/gemm_oracle.mojo::gemm_oracle",
-        # The measured extent of the claim, not the extent of the API. Both
-        # numbers are the lane's own, from gemm/README.md; read it rather than
-        # quoting these.
-        "certified_shapes": 62,
-        "certified_vendors": ("Apple M4", "NVIDIA H100", "AMD MI325X"),
-        "certification_source": "gemm/README.md",
-        "binary": _load().__file__,
-    }
-    if version != PROFILE_VERSION:
-        # v1's evidence does not establish this different graph. Identity is
-        # the intended per-version contract; qualification remains outstanding.
-        result.update(
-            contract="gemm/contract.mojo",
-            identity_claimed=False,
-            identity_required=True,
-            certified_shapes=0,
-            certified_vendors=(),
-            certification_source=None,
-            qualification="UNVERIFIED_EXPERIMENT",
-            experiment_source="experiments/neural_identical_20261006/gemm_cnn.json",
-        )
-    return result
+    return _NATIVE(None, "family_lin_profile", (), _NATIVE_CONTEXT)
 
 
 def require_identical():
@@ -267,21 +202,7 @@ def require_identical():
     wrong build fails immediately rather than at the first product. `matmul` calls it
     for you unless you pass ``identical=False``.
     """
-    loaded = numeric_mode()
-    if loaded != "identical":
-        # Names the tier that actually loaded.
-        raise RuntimeError(
-            f"mojolearn.linalg: this process loaded the {loaded.upper()} "
-            f"build, which makes NO cross-vendor identity claim; {PROFILE} "
-            "is what the IDENTICAL build computes.\n"
-            "  Select it with mojolearn.set_numeric_mode('identical') "
-            "before the call, or set MOJOLEARN_NUMERIC_MODE=identical "
-            "before importing mojolearn; "
-            "the identical binary builds with\n      "
-            f"MOJOLEARN_NUMERIC_MODE=identical bash {_BUILD_SCRIPT}\n"
-            "  Or pass identical=False to say in the source that you want "
-            f"the {loaded} product and are making no identity claim about it."
-        )
+    return _NATIVE(None, "family_lin_require_identical", (), _NATIVE_CONTEXT)
 
 
 # The op mapping, contract section 0.1, written out once. `transpose_a` and
@@ -1014,7 +935,7 @@ def _connect_native_linalg():
     # glue: connect selected-mode images once; all public admission and binding
     # replacement checks happen in the shared native provider boundary.
     _backend.default_mode()
-    _native_family_bridge.connect_bindings(_MODULE_NAME)
+    _native_family_bridge.connect_bindings(_MODULE_NAME, "_mojolearn_x_decomp")
     records = _native_family_bridge.shared_context()['family_binding_connections'][_MODULE_NAME]
     return {mode: record[0] for mode, record in records.items()}  # glue: fixed import-time mode records
 

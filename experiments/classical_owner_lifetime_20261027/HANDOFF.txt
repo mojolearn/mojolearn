@@ -1,0 +1,25 @@
+Linear model retained-owner lifetime batch (2026-10-27)
+
+Branch: lane/classical-owner-lifetime-20261027
+Frozen source: 111f36fdd5decdf09cec26a7b8fcf83da9c7f39b.
+
+Changes:
+- LinearRegression/Ridge constructor admission now checks every prior owner that will be replaced before publishing any new field. Existing numeric_mode is retained when repeated initialization supplies None.
+- LinearRegression/Ridge set_params checks every owner removed by the dictionary reset, including user-added fields outside classical_fields. Unchanged parameter owners remain retained throughout reset; a failed admission leaves the instance unchanged.
+- Actual OLS/Ridge fit owners admit all previously stored outputs they replace before any mutation or numeric execution.
+- LogisticRegression constructor, set_params and actual fit follow the same replacement-owner rules. The native ClassLabels list subclass is handled using its existing frozen class/MRO admission plus native list copying, element-owner admission and weakref checks.
+- Shared _state_context explicitly connects native_owner_lifetime metadata at import. Explicit host contexts and LogisticRegression derive from this context and retain it.
+- No kernel arithmetic changed. QNRegressor is separately owned by the parent lane.
+
+Compilation:
+- Focused checks/classical_owner_lifetime_compile.mojo compiles the actual classical constructors/parameter updates/OLS+Ridge fits and actual logistic_c public entry. The central classical_c routing image is not rebuilt by this focused root; its two call sites pass the new context argument.
+- Apple CPU, optimization0, identical define, all10 logical cores configured through -j10. Configured parallelism is not a claim that all phases saturate10cores.
+- Focused compile PASS: exit 0, 235.59s, source 111f36fdd5decdf09cec26a7b8fcf83da9c7f39b; complete command, compiler and binary hashes in compile/result.json.
+- Import bridge syntax-compiled; no runtime/identity/vendor verification was run.
+
+Remaining:
+- Runtime behavior, weakref/finalizer refusal fixtures, explicit host execution and cross-vendor identity remain untested under the current compile-only development instruction.
+- This fixes owner replacement/lifetime admission; it does not claim that every independent path in these owners has received a complete transitive runtime audit.
+
+Complete local evidence: /Users/andrewhendel/mojolearn-evidence/classical-owner-lifetime-20261027/
+No rented machine was used; no pod ownership or teardown exists for this batch.
