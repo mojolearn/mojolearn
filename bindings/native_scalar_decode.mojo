@@ -45,11 +45,16 @@ struct NativeScalarBuffer(ImplicitlyCopyable, Movable):
 
 
 def native_scalar_buffer(value: PythonObject) raises -> NativeScalarBuffer:
+    return native_scalar_buffer_dtype(value, value.dtype)
+
+
+def native_scalar_buffer_dtype(value: PythonObject, dtype: PythonObject) raises -> NativeScalarBuffer:
     # Callers have admitted the exact native ndarray/scalar and primitive
-    # dtype. Its native descriptor supplies width/code/byte order without
+    # dtype. A caller that already captured dtype supplies that same object;
+    # the original API captures it once above. Its native descriptor supplies
+    # width/code/byte order without
     # NumPy computation. Requesting PEP3118 format would reject byte-swapped
     # long double even though its raw buffer bytes are supported.
-    var dtype = value.dtype
     var width = Int(py=dtype.itemsize)
     var code = String(dtype.char)
     var order = String(dtype.byteorder)
