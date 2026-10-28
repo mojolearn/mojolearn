@@ -499,7 +499,7 @@ def lin_borrow_array(var input: LinAdmission, typestr: String, context: PythonOb
     # Array.from_buffer's zero-copy ownership semantics from metadata already
     # admitted once. The public CPython raw-memory view does not ask the exporter
     # for its metadata again; the owned pin keeps storage valid for its lifetime.
-    var v = input.view
+    var v = input.view.copy()
     var array = native_storage_allocate(context["array_class"])
     var pin = PythonObject(alloc=LinBufferPin(input.pin^))
     ref cpy = Python().cpython()
