@@ -10,6 +10,7 @@
 # in the same order with the same arguments: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.label_admission_native import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -128,8 +129,7 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
     var all_one = True
     for i in range(k):  # driver-loop: over the classes (the class weight argument checks)
         var v = values[i]
-        var vt = py_type(v)
-        if labels_bool_type(vt, context) or not labels_real_type(vt, context):
+        if labels_primitive_kind(py_type(v), context) < 3:
             raise Error("class weights must be finite nonnegative real numbers")
         var f = svc_float(v)
         if not svc_isfinite(f) or f < 0:

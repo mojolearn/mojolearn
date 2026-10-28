@@ -1,0 +1,11 @@
+b395d0f541 cherry-picked onto origin/main 3e13fed704 as 4990f63a03 (lane/native-label-rebase-20261028).
+Kept from b395 (absent from main): label_admission_native (labels_primitive_kind incl. q/Q/g scalar aliases, labels_admit_primitive,
+classifier_label_list), label_snapshot_native (Array label values from one captured snapshot, no _mv), ClassLabels unwrap at label
+entry points, flatten depth limit + primitive admission, codes/y admission, class_weight item admission, svc_common delegation to
+_sorted_classes/_classification_labels/labels_label_kind.
+Kept from main (exact-type repair): labels_{real,integral,bool,text}_type now delegate to labels_primitive_kind; C-exporter-only
+memoryview restriction in _label_list; string pandas Series shape path in svc_shape_of; labels_type_name in messages.
+Compiles (Apple CPU O0 identical -j10, tools/compile_slot.sh): native_label_protocol_compile exit 0 37.7 s; svm_public_lifecycle_compile
+(whole family_operation + public_attribute_c) exit 0 219.6 s. Logs ~/mojolearn-evidence/native-label-rebase-20261028/.
+b395_original_compile.json = original receipt at its own source. tools/tests/test_no_python_runtime.py: OK (196 recorded debt, 0 unlisted,
+no stale rows to prune). No runtime/identity/GPU.
