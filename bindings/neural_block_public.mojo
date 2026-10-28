@@ -158,6 +158,7 @@ def _neural_owner_key(mut mods: NativeModules, block: PythonObject, live: Python
     if entries is None or py_type(entries) is not bi.dict:
         return PythonObject(None)
     key.add(entries)
+    key.watch_arrays(mods, context)
     if key.retains(block):
         return PythonObject(None)
     return PythonObject(alloc=key^)
@@ -173,7 +174,7 @@ def _neural_owner_matches(mut mods: NativeModules, key: PythonObject, block: Pyt
     var table = context["bindings"]
     if not native.matches_identity(table, offset):
         return False
-    return native.matches(py_get(table, binding_key), offset) and native.complete(offset)
+    return native.matches(py_get(table, binding_key), offset) and native.complete(offset) and native.arrays_match(mods, context)
 
 
 def _neural_weights_retained(mut mods: NativeModules, snaps: PythonObject, originals: PythonObject, context: PythonObject) raises -> Bool:
@@ -475,30 +476,62 @@ def _neural_state_capture(mut mods: NativeModules, owner: NativeBlockExecution, 
     for i in range(len(scalars)):  # small-loop(capture native state words before conversion)
         if py_contains(fields, scalars[i]):
             neural_plain_value(mods, fields[scalars[i]], 0, context)
-    # Prepared state views: a buffer Array still stored under the same name
-    # reuses the passive view captured for it on an earlier call (same
-    # storage, so in-place kernel updates and caller edits stay visible);
-    # a new or replaced buffer is captured with the full admission.
+    # One metadata stamp covers this state's buffers; class admission is
+    # checked once per state, not once for every cache/window tensor.
     var prepared = prepared_get(mods, _NEURAL_STATE_SLOT, state)
-    var views = bi.dict()
-    var missed = prepared is None
-    for i in range(len(buffers)):  # small-loop(retain state storage with stable metadata)
+    var valid = False
+    if prepared is not None:
+        try:
+            ref key = prepared[1].downcast_value_ptr[NativeIdentityKey]()[]
+            var offset = 0
+            valid = True
+            for i in range(len(buffers)):  # small-loop(buffers: native state buffer names): compare owner identities
+                if not key.matches_identity(py_get(fields, buffers[i]), offset):
+                    valid = False
+                    break
+            valid = valid and key.complete(offset) and key.arrays_match(mods, context)
+        except:
+            valid = False
+    var views = prepared[0] if valid else bi.dict()
+    var stamp = PythonObject(None)
+    if not valid:
+        try:
+            var key = NativeIdentityKey(mods)
+            for i in range(len(buffers)):  # small-loop(buffers: native state buffer names): capture owner identities
+                key.add_identity(py_get(fields, buffers[i]))
+            key.watch_arrays(mods, context)
+            if not key.retains(state):
+                stamp = PythonObject(alloc=key^)
+        except:
+            stamp = PythonObject(None)
+    for i in range(len(buffers)):  # small-loop(buffers: native state buffer names): retain stable state storage
         var value = py_get(fields, buffers[i])
         if value is not None:
             if py_type(value) is context["array_class"]:
-                var hit = PythonObject(None) if prepared is None else py_get(prepared, buffers[i])
-                var view = PythonObject(None)
-                if hit is not None and hit[0] is value:
-                    view = hit[1]
-                else:
-                    view = neural_array_snapshot(mods, value, context)
-                    missed = True
+                var view = views[buffers[i]] if valid else neural_array_snapshot(mods, value, context)
                 py_setitem(copied, buffers[i], view)
-                py_setitem(views, buffers[i], Python.list(value, view))
+                if not valid:
+                    py_setitem(views, buffers[i], view)
             else:
                 admit_native_buffer_exporter(value)
-    if missed or len(views) != len(prepared):
-        prepared_put(mods, _NEURAL_STATE_SLOT, state, views)
+    if not valid:
+        var stable = False
+        if stamp is not None:
+            try:
+                ref key = stamp.downcast_value_ptr[NativeIdentityKey]()[]
+                var offset = 0
+                stable = True
+                for i in range(len(buffers)):  # small-loop(buffers: native state buffer names): recheck after capture
+                    if not key.matches_identity(py_get(fields, buffers[i]), offset):
+                        stable = False
+                        break
+                stable = stable and key.complete(offset) and key.arrays_match(mods, context)
+            except:
+                stable = False
+        if stable:
+            prepared_put(mods, _NEURAL_STATE_SLOT, state, Python.list(views, stamp))
+        else:
+            prepared_drop(mods, _NEURAL_STATE_SLOT, state)
     var snapshot = py_call(bi.object.__new__, cls)
     _ = py_call(_fields(mods, snapshot).update, copied)
     return snapshot
@@ -873,34 +906,61 @@ def _neural_derived_words(mut mods: NativeModules, snapshot: PythonObject) raise
     return derived
 
 
+def _neural_snapshot_names() -> List[String]:
+    return [String("_w"), String("_wopt"), String("_int15"), String("dt_limit"), String("_opts_tail"), String("rope_scaling")]
+
+
+def _neural_snapshot_matches(mut mods: NativeModules, key: PythonObject, block: PythonObject, live: PythonObject, context: PythonObject) raises -> Bool:
+    ref native = key.downcast_value_ptr[NativeIdentityKey]()[]
+    var offset = 0
+    if not native.matches_identity(py_type(block), offset) or not native.matches_identity(context, offset):
+        return False
+    for name in _neural_snapshot_names():  # small-loop(snapshot input field names)
+        if not native.matches_identity(PythonObject(py_contains(live, name)), offset) or not native.matches(py_get(live, name), offset, 1):
+            return False
+    return native.complete(offset) and native.arrays_match(mods, context)
+
+
 def neural_block_snapshot_prepared(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
-    # neural_block_snapshot, prepared: the weight views and metadata copies
-    # are captured on first use and reused while every stored field keeps
-    # its identity; field admission runs first on every call.
     var bi = mods.module("builtins")
     var live = neural_block_fields(mods, block, context)
-    # The derived words are functions of these stored fields only; every
-    # other field is taken live per call, as the full snapshot copies it.
-    var key = PythonObject(None)
-    try:
-        key = bi.list()
-        _ = py_call(key.append, py_type(block))
-        _ = py_call(key.append, context)
-        for name in [String("_w"), String("_wopt"), String("_int15"), String("dt_limit"), String("_opts_tail"), String("rope_scaling")]:  # small-loop(snapshot inputs)
-            _ = py_call(key.append, PythonObject(py_contains(live, name)))
-            prepared_key_add(mods, key, py_get(live, name), 1)
-    except:
-        key = PythonObject(None)
     var record = prepared_get(mods, _NEURAL_SNAPSHOT_SLOT, block)
-    if key is not None and record is not None and prepared_key_same(record[0], key):
+    var hit = False
+    if record is not None:
+        try:
+            hit = _neural_snapshot_matches(mods, record[0], block, live, context)
+        except:
+            hit = False
+    if hit:
         var fields = py_call(bi.dict, live)
         _ = py_call(fields.update, record[1])
         py_setitem(fields, "_neural_live_fields", live)
         py_setitem(fields, "_neural_weight_names", neural_block_weight_names(mods, block))
         return fields
+    var key = PythonObject(None)
+    try:
+        var native = NativeIdentityKey(mods)
+        native.add_identity(py_type(block))
+        native.add_identity(context)
+        for name in _neural_snapshot_names():  # small-loop(snapshot input field names)
+            native.add_identity(PythonObject(py_contains(live, name)))
+            native.add(py_get(live, name), 1)
+        native.watch_arrays(mods, context)
+        if not native.retains(block):
+            key = PythonObject(alloc=native^)
+    except:
+        key = PythonObject(None)
     var snapshot = neural_block_snapshot(mods, block, context)
-    if key is not None and _neural_owner_reusable(mods, snapshot, live, context):
+    var reusable = key is not None and _neural_owner_reusable(mods, snapshot, live, context)
+    if reusable:
+        try:
+            reusable = _neural_snapshot_matches(mods, key, block, live, context)
+        except:
+            reusable = False
+    if reusable:
         prepared_put(mods, _NEURAL_SNAPSHOT_SLOT, block, Python.list(key, _neural_derived_words(mods, snapshot)))
+    else:
+        prepared_drop(mods, _NEURAL_SNAPSHOT_SLOT, block)
     return snapshot
 
 

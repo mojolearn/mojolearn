@@ -1,7 +1,7 @@
 {
   "compile_exit": 0,
   "runtime_executed": false,
-  "scope": "CPU forward/step/allocate standalone path focused compile; no host registration or GPU runtime qualification",
+  "scope": "CPU forward/step/allocate/backward focused compile, including native keys, Array metadata invalidation and immutable layer borrowing",
   "compiler": "Mojo 1.0.0 (ed45d567)",
   "flags": [
     "--optimization-level",
@@ -16,10 +16,11 @@
     "bindings"
   ],
   "source_sha256": {
-    "bindings/native_identity_key.mojo": "93511a64404c31426e9658a0d13e7ff6b8b6a8e5720403e108aa1277ec1d0e0d",
-    "bindings/neural_block_public.mojo": "1909ff1e69493d6b42999f479b01cb93bc23da97fa6768fbc671d25b48143ab7",
-    "bindings/causal_lm_public.mojo": "7383de9acd2cc7bc2e88ad565ce0948d551548d59278002d67bf7cf575b97093"
+    "bindings/native_identity_key.mojo": "4d95022bd16633cada06d19763a7a2c2b2157c02b363059d5b073eb682892ed1",
+    "bindings/neural_block_public.mojo": "d9642e6aed2472f179dd62f85638134882c0e1ae31a057ada14c99d7d2260cc7",
+    "bindings/causal_lm_public.mojo": "550feb90aae5f2356490dbe669ee49c054406fe8bdff0e19613d37cae3be7dff"
   },
-  "log": "/Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/block4.log",
-  "binary": "/Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/compile_block"
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/block_final.log",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/compile_block_final",
+  "retained_failed_attempt": "block_backward2.log: PythonObject default arguments cannot be evaluated at compile time; replaced with explicit native helper overload"
 }

@@ -27,7 +27,7 @@ from providers.python.generation_session_pyapi import (
 from core.generation_metadata import generation_transformer_addresses
 from transformer.native_generation_engine import NativeGenerationProgress, native_generation_read
 from providers.python.generation_metadata_pyapi import (
-    GenerationWeightSnapshot, GenerationLayerSnapshot, GenerationHeadSnapshot, GenerationOperationSnapshot, GenerationEngineAdmission,
+    GenerationWeightSnapshot, GenerationLayerSnapshot, GenerationHeadSnapshot, GenerationOperationSnapshot, GenerationEngineAdmission, _generation_bool,
 )
 from std.memory import memcpy
 from bindings.generation_buffers import (
@@ -54,7 +54,7 @@ from transformer.causal_lm_public_impl import (
 from bindings.tokenizer_public_native import tokenizer_vocab_encode, tokenizer_vocab_decode, tokenizer_vocab_fingerprint, tokenizer_decode_utf8
 from bindings.mode_metadata_native import _fields as _native_record_fields, _truth
 from bindings.neural_block_admission import neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_block_weight_names, neural_metadata_snapshot, neural_block_fields
-from bindings.causal_model_config import model_record_fields, model_plan_snapshot
+from bindings.causal_model_config import model_record_fields, model_plan_snapshot, model_dict, model_plain
 from bindings.causal_operation_owner import causal_model_capture, causal_model_publish, causal_model_origin, causal_state_capture, causal_state_publish, causal_state_origin, causal_state_fields, causal_snapshot_fields, causal_model_cache_set, causal_block_cache_set, causal_checkpoint_capture, causal_pin_entries, causal_layer_capture, causal_layer_publish
 
 
@@ -722,10 +722,17 @@ def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entri
     var profile = kind == "transformer" and packed
     var planes = profile and py_contains(entries, "forward15")
     if prepared is not None:
-        var reused = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer.copy()
-        reused.rebind(fields, kind)
+        # Reuse the immutable native layer vectors directly. Only mutable
+        # arithmetic-profile words and this operation's fields are rebound.
+        model_dict(fields)
+        var profile_id = PythonObject(None)
+        var profile_changed = False
+        if kind == "transformer":
+            profile_id = model_plain(py_get(fields, "_arithmetic_profile", PythonObject(None)))
+            profile_changed = _generation_bool(py_get(fields, "_arithmetic_profile_changed", PythonObject(False)))
+        ref reused = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer
         mods.released()
-        return _causal_layer_run_prepared(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step)
+        return _causal_layer_run_bound(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step, fields, profile_id, profile_changed)
     var layer = GenerationLayerSnapshot(fields, kind, planes)
     mods.released()
     return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
@@ -761,9 +768,17 @@ def _causal_layer_run_prepared(mut mods: NativeModules,
     e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
     head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
 ) raises -> PythonObject:
+    return _causal_layer_run_bound(mods, e, kind, d, b, l, layer, head_profile, device15, x, supplied_state, step, layer.block, layer.profile, layer.profile_changed)
+
+
+def _causal_layer_run_bound(mut mods: NativeModules,
+    e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
+    head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
+    block_override: PythonObject, profile_override: PythonObject, profile_changed_override: Bool,
+) raises -> PythonObject:
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
-    var blk = layer.block
+    var blk = block_override
     var st = supplied_state
     if py_type(st) is mods.module("types").SimpleNamespace:
         var failure = py_get(causal_snapshot_fields(mods, st), "_causal_admission_failure")
@@ -779,8 +794,9 @@ def _causal_layer_run_prepared(mut mods: NativeModules,
     if kind == "transformer":
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
         var old_profile = py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None))
-        var profile_id = layer.profile
-        if old_profile is None and Int(py=st.cached_tokens) != 0 and layer.profile_changed:
+        var profile_id = profile_override
+        var profile_changed = profile_changed_override
+        if old_profile is None and Int(py=st.cached_tokens) != 0 and profile_changed:
             raise Error("CausalLM: cached state requires arithmetic profile metadata")
         if old_profile is not None and profile_id is not None and not Bool(py=old_profile == profile_id):
             raise Error("CausalLM: state arithmetic profile differs")

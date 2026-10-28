@@ -20,7 +20,7 @@ Python entry dictionaries and some downstream CPython methods still exist.
 Snapshot dictionaries are deliberately operation-local across GIL releases;
 sharing a mutable retained snapshot would introduce reentrancy/race hazards.
 The cache-miss bootstrap still uses the original namespace admission code.
-The standalone backward snapshot key has not yet been migrated in this batch.
+The standalone backward/Mamba3 snapshot key now uses NativeIdentityKey too.
 
 Validation: compile_block.mojo compiles the forward and allocate CPU call paths,
 not a runtime test. Command:
@@ -28,3 +28,20 @@ bash tools/compile_slot.sh pixi run -e default mojo build --optimization-level 0
 Full logs/binary/initial fixture under:
 /Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/
 No runtime, identity, performance or GPU execution was run.
+
+Followup: Array metadata invalidation and immutable layer borrowing
+- Native keys capture all 14 writable Array slots via admitted native member
+  descriptors. Hits compare slot identities and the live class namespace/mro;
+  same-size class edits, changed descriptors, address, layout, shape, and
+  storage owners invalidate the cache. No Python identity list/dict is created
+  by this comparison. Descriptor/native CPython calls remain boundary work.
+- Standalone state capture uses one combined metadata stamp per state and
+  reuses its view dictionary directly on a hit, without new pair/list records.
+- Immutable GenerationLayerSnapshot vectors are borrowed directly during
+  standalone execution. Per-operation block fields and mutable profile words
+  are passed separately instead of copying the native weight vectors.
+- Final CPU focused forward/allocate/backward compile rc=0; log block_final.log.
+  Retained failed block_backward2.log used unsupported compile-time PythonObject
+  default expressions; explicit ordinary helper overloads compile successfully.
+- No runtime/identity/performance/GPU claims. Public owner/runtime snapshots
+  remain partly Python-backed; this batch is not complete CPython removal.

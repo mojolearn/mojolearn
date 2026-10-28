@@ -9,7 +9,8 @@ in-place edits and same-size replacement are checked, not inferred from size.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import NativeModules
-from bindings.py_balanced import py_type
+from bindings.py_balanced import py_type, py_call
+from bindings.native_array_snapshot import native_array_slots
 
 
 struct NativeIdentityKey(Movable, Writable):
@@ -20,6 +21,17 @@ struct NativeIdentityKey(Movable, Writable):
     var dict_type: PythonObject
     var str_type: PythonObject
 
+    var array_class: PythonObject
+    var array_getters: List[PythonObject]
+    var array_owners: List[PythonObject]
+    var array_values: List[PythonObject]
+    var array_mro: PythonObject
+    var array_mro_getter: PythonObject
+    var array_rows: List[PythonObject]
+    var array_row_sizes: List[Int]
+    var array_row_keys: List[List[PythonObject]]
+    var array_row_values: List[List[PythonObject]]
+
     def __init__(out self, mut mods: NativeModules) raises:
         var bi = mods.module("builtins")
         self.objects = List[PythonObject]()
@@ -28,6 +40,16 @@ struct NativeIdentityKey(Movable, Writable):
         self.tuple_type = bi.tuple
         self.dict_type = bi.dict
         self.str_type = bi.str
+        self.array_class = PythonObject(None)
+        self.array_getters = List[PythonObject]()
+        self.array_owners = List[PythonObject]()
+        self.array_values = List[PythonObject]()
+        self.array_mro = PythonObject(None)
+        self.array_mro_getter = PythonObject(None)
+        self.array_rows = List[PythonObject]()
+        self.array_row_sizes = List[Int]()
+        self.array_row_keys = List[List[PythonObject]]()
+        self.array_row_values = List[List[PythonObject]]()
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("NativeIdentityKey(native)")
@@ -56,6 +78,9 @@ struct NativeIdentityKey(Movable, Writable):
     def retains(self, value: PythonObject) -> Bool:
         for i in range(len(self.objects)):  # driver-loop: over retained identity references
             if self.objects[i] is value:
+                return True
+        for i in range(len(self.array_values)):  # driver-loop: over retained array metadata owners
+            if self.array_values[i] is value:
                 return True
         return False
 
@@ -111,7 +136,7 @@ struct NativeIdentityKey(Movable, Writable):
     def _skip(self, key: PythonObject, skip: List[String]) raises -> Bool:
         if py_type(key) is self.str_type:
             var name = String(key)
-            for i in range(len(skip)):  # small-loop(skip: fixed runtime-owned field names)
+            for i in range(len(skip)):  # small-loop(skip: fixed runtime-owned field names): compare fixed exclusions only
                 if name == skip[i]:
                     return True
         return False
@@ -156,3 +181,77 @@ struct NativeIdentityKey(Movable, Writable):
 
     def complete(self, offset: Int) -> Bool:
         return offset == len(self.objects)
+
+    def watch_arrays(mut self, mut mods: NativeModules, context: PythonObject) raises:
+        # Array slots are public writable storage. Object identity alone cannot
+        # establish that a retained view still describes the caller's Array.
+        var cls = context["array_class"]
+        for i in range(len(self.objects)):  # driver-loop: over retained input identities
+            var value = self.objects[i]
+            if py_type(value) is cls:
+                var found = False
+                for j in range(len(self.array_owners)):  # driver-loop: over already captured array owners
+                    if self.array_owners[j] is value:
+                        found = True
+                        break
+                if not found:
+                    self.array_owners.append(value)
+        if len(self.array_owners) == 0:
+            return
+        var slots = native_array_slots(mods, context)
+        self.array_class = cls
+        var bi = mods.module("builtins")
+        var names = py_call(bi.list, slots.keys())
+        for i in range(len(names)):  # small-loop(names: native Array slot schema): capture descriptors once
+            self.array_getters.append(slots[names[i]].__get__)
+        for i in range(len(self.array_owners)):  # driver-loop: over retained array metadata owners
+            for j in range(len(self.array_getters)):  # small-loop(array_getters: native Array slot schema): retain slot values
+                self.array_values.append(py_call(self.array_getters[j], self.array_owners[i], cls))
+        # Keep live mapping proxies, not dictionary copies. On a hit, native
+        # lookups compare every admitted class value and namespace size. This
+        # detects same-size replacement, descriptor edits and inherited hooks.
+        self.array_mro_getter = bi.type.__dict__["__mro__"].__get__
+        self.array_mro = py_call(self.array_mro_getter, cls)
+        var get_namespace = bi.type.__dict__["__dict__"].__get__
+        for i in range(len(self.array_mro)):  # driver-loop: over native Array class ancestry metadata
+            var row = py_call(get_namespace, self.array_mro[i])
+            self.array_rows.append(row)
+            self.array_row_sizes.append(len(row))
+            var keys = py_call(bi.list, row.keys())
+            var native_keys = List[PythonObject]()
+            var native_values = List[PythonObject]()
+            for j in range(len(keys)):  # driver-loop: over admitted class namespace metadata
+                if py_type(keys[j]) is not self.str_type:
+                    raise Error("native identity snapshot: class namespace needs exact string keys")
+                native_keys.append(keys[j])
+                native_values.append(row[keys[j]])
+            self.array_row_keys.append(native_keys^)
+            self.array_row_values.append(native_values^)
+
+    def arrays_match(self, mut mods: NativeModules, context: PythonObject) raises -> Bool:
+        if len(self.array_owners) == 0:
+            return True
+        if context["array_class"] is not self.array_class or py_call(self.array_mro_getter, self.array_class) is not self.array_mro:
+            return False
+        ref cpy = Python().cpython()
+        for i in range(len(self.array_rows)):  # driver-loop: over admitted class namespace metadata
+            var row = self.array_rows[i]
+            if len(row) != self.array_row_sizes[i]:
+                return False
+            for j in range(len(self.array_row_keys[i])):  # driver-loop: over retained native namespace keys
+                var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(row._obj_ptr, self.array_row_keys[i][j]._obj_ptr)
+                if not raw:
+                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                    return False
+                var current = PythonObject(from_owned=raw)
+                if current is not self.array_row_values[i][j]:
+                    return False
+        var offset = 0
+        for i in range(len(self.array_owners)):  # driver-loop: over retained array metadata owners
+            if py_type(self.array_owners[i]) is not self.array_class:
+                return False
+            for j in range(len(self.array_getters)):  # small-loop(array_getters: native Array slot schema): compare live slots
+                if py_call(self.array_getters[j], self.array_owners[i], self.array_class) is not self.array_values[offset]:
+                    return False
+                offset += 1
+        return True
