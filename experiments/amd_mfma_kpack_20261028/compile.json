@@ -179,7 +179,7 @@
   "cpu_root": "not applicable (GPU-only check program): the entry creates a DeviceContext, so a build with no named accelerator on a GPU-less pod fails to instantiate in std/gpu/host/info.mojo for both arms (rc=1, logs kept); coordinator ruling 2026-10-28",
   "pod_smoke": "INTEG_BUILD total=46 ok=46; smoke_after rc=0 (missing_bindings 0); probe_tier_dir rc=0",
   "scripted_gates": {
-   "tree": "29f53ef561 (merge of origin/main a2a47a14b1-era 84e2bc7dda; EXPERIMENTS.md conflict resolved additively)",
+   "tree": "29f53ef561 (merge of origin/main 84e2bc7dda; EXPERIMENTS.md conflict resolved additively)",
    "test_no_python_runtime": "rc=0",
    "test_tombstones_preserved": "rc=0 (full worktree checkout)"
   },
