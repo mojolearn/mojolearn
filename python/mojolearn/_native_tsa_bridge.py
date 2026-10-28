@@ -22,6 +22,13 @@ def connect():
     ownership = dict(context)
     connect_owner_context(ownership)
     context["tsa_owner_context"] = ownership
+    # glue: reuse the native array materializer's exact storage descriptors
+    context.update(owner_array_slots=ownership["owner_array_slots"],
+                   arena_native_types=ownership["owner_native_types"], arena_memoryview=memoryview,
+                   owner_mmap_class=ownership["owner_mmap_class"])
+    import struct
+    context["arena_half_copy_canonical"] = struct.pack("<e", struct.unpack("<e", b"\x01\x7c")[0]) == b"\x00\x7e"
+
     selected = _backend.default_mode()
     bindings = {}
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
