@@ -113,7 +113,7 @@ def _state(model: PythonObject, args: PythonObject, dbscan: Bool, restore: Bool,
     var fields = py_fields(model)
     var resident_name = String("_resident_holder") if dbscan else String("_resident")
     if not restore:
-        var state = py_call(fields.copy)
+        var state = py_call(native_loaded_module("builtins").dict, fields)
         _ = py_call(state.pop, resident_name, PythonObject(None))
         return state
     var state = args[0]
