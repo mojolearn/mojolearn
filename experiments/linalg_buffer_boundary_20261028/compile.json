@@ -52,5 +52,6 @@
     "evidence": "/Users/andrewhendel/mojolearn-evidence/linalg-buffer-boundary-20261028/compile",
     "reason": "follow-up preserves import-connected mmap-backed native buffer owners"
   },
-  "resample_scope": "The parent-base resample import closure compiled. Peer6 resample edits are separate; their updated source is not qualified by this compile."
+  "resample_scope": "The parent-base resample import closure compiled. Peer6 resample edits are separate; their updated source is not qualified by this compile.",
+  "post_compile_comment_only_changes": "Four loop annotations reformatted to satisfy required source guard. Executable source unchanged; original failed push retained in push.log and retry in push-annotations.log."
 }

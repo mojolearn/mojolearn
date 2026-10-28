@@ -409,7 +409,7 @@ def lin_admit_exporter(value: PythonObject, context: PythonObject, depth: Int = 
             lin_admit_exporter(owner, context, depth + 1)
         return
     var owners = context["buffer_owner_types"]
-    for i in range(len(owners)):  # small-loop: exact import-connected native storage classes
+    for i in range(len(owners)):  # small-loop(import-connected native storage classes)
         if cls is owners[i]:
             return
     admit_native_buffer_exporter(value)

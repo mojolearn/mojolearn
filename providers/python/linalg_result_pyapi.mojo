@@ -16,7 +16,7 @@ def _result_owner(cls: PythonObject, context: PythonObject) raises -> PythonObje
     var ancestry = _type_mro(cls)
     var schema = PythonObject(None)
     var start = -1
-    for i in range(len(ancestry)):  # small-loop: find an import-connected tuple result owner
+    for i in range(len(ancestry)):  # driver-loop: over result class ancestry to find the connected tuple owner
         if py_type(ancestry[i]) is not b.type:
             raise Error("TypeError: linalg result ancestry cannot invoke metaclass hooks")
         if schema is None:
@@ -27,7 +27,7 @@ def _result_owner(cls: PythonObject, context: PythonObject) raises -> PythonObje
         raise Error("TypeError: linalg results require QRResult or SVDResult")
     if len(ancestry) - start != len(schema[0]):
         raise Error("TypeError: linalg result ancestry changed after connection")
-    for i in range(len(schema[0])):  # small-loop: connected owner and immutable tuple/object tail
+    for i in range(len(schema[0])):  # driver-loop: over the connected result owner ancestry
         if ancestry[start + i] is not schema[0][i]:
             raise Error("TypeError: linalg result ancestry changed after connection")
     var fields = _class_fields(ancestry[start])
@@ -40,7 +40,7 @@ def _result_owner(cls: PythonObject, context: PythonObject) raises -> PythonObje
             raise Error("TypeError: linalg result class metadata changed after connection")
     for i in range(start):  # driver-loop: passive subclasses may not replace tuple access/lifetime protocols
         var fields = _class_fields(ancestry[i])
-        for hook in ["__getattribute__", "__getattr__", "__getitem__", "__iter__", "__len__", "__del__"]:  # small-loop: result protocols that must remain native
+        for hook in ["__getattribute__", "__getattr__", "__getitem__", "__iter__", "__len__", "__del__"]:  # small-loop(native result protocol names)
             if py_contains(fields, hook):
                 raise Error("TypeError: linalg results cannot invoke Python tuple protocols")
     return schema
