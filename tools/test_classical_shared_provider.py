@@ -118,3 +118,25 @@ def test_svc_auxiliary_dispatch_retains_native_owners_and_operation_metadata():
     adapter=(ROOT/'providers/python/svc_descriptor_pyapi.mojo').read_text()
     assert 'neural_descriptor_execute(owner[].provider, op, a, p, f)' in adapter
     assert 'neural_descriptor_connect' not in adapter
+
+
+def test_svm_shared_inputs_are_snapshotted_outside_pair_and_fold_loops():
+    for name in ('_resolve_gamma', '_fit_ovo', '_platt'):
+        src=body(name)
+        assert 'x_meta: ArrayMetadata' in src
+        for repeated in ('x.shape', 'x.size', '_addr(x)', 'classical_address(x)'):
+            assert repeated not in src
+    for name in ('_svc_fit', '_svr_fit'):
+        src=body(name)
+        assert src.count('svc_snapshot(args[1],') == 1
+        assert '_ = x_meta' in src
+    for name in ('_run', '_pair_decisions', '_svr_predict'):
+        assert 'q_meta.source.addr' in body(name)
+        assert '_ = q_meta' in body(name)
+    assert '_addr(q)' not in body('_machine')
+    metadata=(ROOT/'providers/python/array_metadata_pyapi.mojo').read_text()
+    for slot in ('_store', '_base', '_pin', '_mv'):
+        assert f'array_slot_once(value, "{slot}", context)' in metadata
+    owned=(ROOT/'bindings/family_common.mojo').read_text().split('def family_owned_snapshot(',1)[1].split('\ndef ',1)[0]
+    assert 'value.owned_writable' in owned
+    assert 'value.keep.' not in owned

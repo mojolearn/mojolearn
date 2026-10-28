@@ -241,7 +241,7 @@ def family_f32_snapshot(source: PythonObject, ndim: Int, name: String,
                 py_setitem(context, "output_context", context)
             prepared = host_sparse_dense(source, sparse, context)
     var view = classical_view(prepared, context, name)
-    var shape = array_shape_once(view)
+    var shape = array_shape_once(view, context)
     var nd = len(shape)
     var shape_words = Python.list()
     var count = 1
@@ -290,7 +290,7 @@ def family_as_f32_dense(source: PythonObject, ndim: Int, name: String, context: 
 def family_owned_snapshot(value: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     # Ownership is inspected once at the boundary; shape, count and address
     # are already admitted and must not be fetched again during the copy.
-    if value.is_array and value.keep._base is None and not Bool(py=value.keep._readonly):
+    if value.owned_writable:
         return value.keep
     var result = family_array(value.python_shape(), "<f4", context)
     memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),

@@ -20,9 +20,10 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address, classical_is_array, classical_wrap_array
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call,
-    family_entry, family_array, family_view, family_cast_view, family_as_f32, family_shape_repr,
+    family_entry, family_array, family_view, family_cast_view, family_as_f32, family_shape_repr, family_f32_snapshot,
 )
 from bindings.metrics_reg_native import _Prog, _Reg, _reg_run, _arena_double, _arena_int, _RE_DIV
 from core.family_cast_impl import family_all_finite_f32
@@ -158,22 +159,17 @@ def svc_f32(source: PythonObject, ndim: Int, name: String, dense: Bool,
     """`_buffer.as_f32_c` (or `as_f32_dense_c` with `dense`): the rank and
     emptiness refusals, the cast; returns (array, copied). A scipy.sparse
     matrix is densified exactly first (its implicit entries are zeros)."""
+    var snapshot = svc_snapshot(source, ndim, name, dense, context)
+    return Python.tuple(snapshot.keep, PythonObject(snapshot.copied))
+
+
+def svc_snapshot(source: PythonObject, ndim: Int, name: String, dense: Bool,
+                 context: PythonObject) raises -> ArrayMetadata:
     var b = svc_builtins()
-    var src = source
-    var copied = py_type(source) is b.list or py_type(source) is b.tuple or py_type(source) is b.range
-    if dense:
-        var sparse = host_sparse_format(source)
-        if sparse.byte_length() > 0:
-            if not py_contains(context, PythonObject("output_context")):
-                py_setitem(context, PythonObject("output_context"), context)
-            src = host_sparse_dense(source, sparse, context)
-            copied = False
-    var view = family_view(src, ndim, name, context)
-    var result = family_cast_view(view, name, context)
-    copied = copied or not (result is view)
-    _ = view^
-    _ = src^
-    return Python.tuple(result, PythonObject(copied))
+    var sequence = py_type(source) is b.list or py_type(source) is b.tuple or py_type(source) is b.range
+    var snapshot = family_f32_snapshot(source, ndim, name, context, dense)
+    snapshot.copied = snapshot.copied or sequence
+    return snapshot^
 
 
 # ---------------------------------------------------------------- shapes and labels

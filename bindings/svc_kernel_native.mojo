@@ -35,7 +35,7 @@ from core.scale_gamma_exact import scale_gamma_from_limbs
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64,
-    svc_read_f32, svc_read_i32, svc_f32, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_decode,
+    svc_read_f32, svc_read_i32, svc_f32, svc_snapshot, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_decode,
     svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy,
 )
 
@@ -60,6 +60,7 @@ comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 63
 
 from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svr_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
+from providers.python.array_metadata_pyapi import ArrayMetadata
 from std.os import getenv
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
 from providers.python.neural_descriptor_pyapi import (
@@ -268,11 +269,11 @@ def _kernel_code(fields: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=context["family_svc_kernels"][svc_field(fields, "_hp_kernel")])
 
 
-def _resolve_gamma(fields: PythonObject, binding: PythonObject, x: PythonObject, context: PythonObject, native: PythonObject) raises -> Float64:
+def _resolve_gamma(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, context: PythonObject, native: PythonObject) raises -> Float64:
     """`SVC._resolve_gamma`: 'auto' 1 / n_cols; 'scale' the exact variance's
     once-rounded reciprocal (`_scale_gamma.scale_gamma_x`); else the float."""
     var g = svc_field(fields, "_hp_gamma")
-    var n_cols = Int(py=x.shape[1])
+    var n_cols = x_meta.shape[1]
     if family_isinstance(g, svc_builtins().str):
         if String(g) == "auto":
             return 1.0 / Float64(n_cols)
@@ -286,14 +287,14 @@ def _resolve_gamma(fields: PythonObject, binding: PythonObject, x: PythonObject,
             if (bits & _PY2MOJO_SCALE_GAMMA) == 0:
                 raise Error("RuntimeError: mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
                             + "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it")
-            var n = Int(py=x.size)
+            var n = x_meta.count
             if n == 0:
                 raise Error("gamma='scale' needs at least one cell of X")
             var words = family_array(Python.tuple(PythonObject(_SG_SLOTS)), "<i8", context)
             if native is not None:
-                _ = svc_descriptor_execute(native, 9, [_addr(x), _addr(words)], [n], [])
+                _ = svc_descriptor_execute(native, 9, [x_meta.source.addr, _addr(words)], [n], [])
             else:
-                _ = family_call(_entry(binding, "scale_gamma_limbs", context), classical_address(x), PythonObject(n),
+                _ = family_call(_entry(binding, "scale_gamma_limbs", context), PythonObject(x_meta.source.addr), PythonObject(n),
                                 classical_address(words))
             _ = words  # keep the Python object alive through the native call above
             var limbs = List[Int64](length=_SG_SLOTS, fill=Int64(0))
@@ -484,19 +485,21 @@ def _solve(fields: PythonObject, binding: PythonObject, x_addr: Int, n_rows: Int
 def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual: PythonObject, sv: PythonObject,
              n_support: Int, bias: Float64, label0: Float64, label1: Float64, predict_class: Bool,
              support: PythonObject, out_addr: Int, context: PythonObject,
-             settings: SvcOperationSettings, native: PythonObject, n_rows: Int, query_cols: Int) raises:
+             settings: SvcOperationSettings, native: PythonObject, n_rows: Int, query_cols: Int, query_address: Int) raises:
     """`SVC._machine`: one machine's decisions (or labels) on q, written at
     `out_addr` (n float32)."""
     var n_features = settings.features
     var query = q
+    var query_addr = query_address
     var vectors = sv
     var held = PythonObject(None)
     if settings.kernel == 4 and n_support > 0:
         # X is the cross-kernel against the TRAINING rows; the decision
         # reads its columns at the support vectors and no support rows.
         held = _i32_array(support, context)
-        query = _gather(binding, _addr(q), n_rows, query_cols, 0, n_rows, _addr(held), n_support, context, native)
+        query = _gather(binding, query_address, n_rows, query_cols, 0, n_rows, _addr(held), n_support, context, native)
         _ = held  # keep the Python object alive through the native call above
+        query_addr = _addr(query)
         n_features = n_support
         vectors = dual
     # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_predict_binding:
@@ -504,14 +507,14 @@ def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual:
     # gamma, predict_class, cache_size_mib, degree, coef0
     if native is not None:
         _ = svc_descriptor_execute(native, 1,
-            [_addr(query), _addr(dual) if n_support > 0 else 0,
+            [query_addr, _addr(dual) if n_support > 0 else 0,
              _addr(vectors) if n_support > 0 else 0, out_addr],
             settings.predict_ints(n_rows, n_features, n_support, predict_class),
             settings.predict_floats(bias, label0, label1))
     else:
         var params = Python.list(n_rows, n_features, n_support, bias, label0, label1, settings.kernel,
             settings.gamma, 1 if predict_class else 0, settings.cache_mib, settings.degree, settings.coef0)
-        _ = family_call(_entry(binding, "svc_predict", context), classical_address(query),
+        _ = family_call(_entry(binding, "svc_predict", context), PythonObject(query_addr),
             classical_address(dual) if n_support > 0 else PythonObject(0),
             classical_address(vectors) if n_support > 0 else PythonObject(0), PythonObject(out_addr), params)
     _ = query  # keep the Python object alive through the native call above
@@ -591,7 +594,7 @@ def _set_binary(fields: PythonObject, solved: PythonObject, n_cols: Int, context
                svc_prefix(solved[1], n_support, Python.tuple(PythonObject(1), PythonObject(n_support)), "<f4", context))
 
 
-def _platt(fields: PythonObject, binding: PythonObject, x: PythonObject, codes: PythonObject, gamma: Float64,
+def _platt(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, codes: PythonObject, gamma: Float64,
            c_rows: PythonObject, k: Int, context: PythonObject,
            settings: SvcOperationSettings, native: PythonObject) raises:
     """`SVC._fit_probability`: libsvm's `svm_binary_svc_probability` per class
@@ -607,8 +610,8 @@ def _platt(fields: PythonObject, binding: PythonObject, x: PythonObject, codes: 
     var mask = family_call(operator.sub, family_call(operator.lshift, PythonObject(1), PythonObject(64)), PythonObject(1))
     var precomputed = String(svc_field(fields, "_hp_kernel")) == "precomputed"
     var n_all = Int(py=codes.shape[0])
-    var x_rows = Int(py=x.shape[0])
-    var x_cols = Int(py=x.shape[1])
+    var x_rows = x_meta.shape[0]
+    var x_cols = x_meta.shape[1]
     var ab = Python.list()
     var a_values = family_array(Python.tuple(PythonObject(k * (k - 1) // 2)), "<f8", context)
     var b_values = family_array(Python.tuple(PythonObject(k * (k - 1) // 2)), "<f8", context)
@@ -671,10 +674,10 @@ def _platt(fields: PythonObject, binding: PythonObject, x: PythonObject, codes: 
                 _ = rows_held  # keep the Python object alive through the native call above
                 var sub: PythonObject
                 if precomputed:
-                    sub = _gather(binding, _addr(x), x_rows, x_cols, rows_addr, nt, rows_addr, nt, context, native)
+                    sub = _gather(binding, x_meta.source.addr, x_rows, x_cols, rows_addr, nt, rows_addr, nt, context, native)
                     _ = rows_held  # keep the Python object alive through the native call above
                 else:
-                    sub = _gather(binding, _addr(x), x_rows, x_cols, rows_addr, nt, 0, x_cols, context, native)
+                    sub = _gather(binding, x_meta.source.addr, x_rows, x_cols, rows_addr, nt, 0, x_cols, context, native)
                     _ = rows_held  # keep the Python object alive through the native call above
                 var sub_c = PythonObject(None)
                 if c_rows is not None:
@@ -687,10 +690,10 @@ def _platt(fields: PythonObject, binding: PythonObject, x: PythonObject, codes: 
                 _ = sub_c  # keep the Python object alive through the native call above
                 var q: PythonObject
                 if precomputed:
-                    q = _gather(binding, _addr(x), x_rows, x_cols, hrows_addr, h, rows_addr, nt, context, native)
+                    q = _gather(binding, x_meta.source.addr, x_rows, x_cols, hrows_addr, h, rows_addr, nt, context, native)
                     _ = rows_held  # keep the Python object alive through the native call above
                 else:
-                    q = _gather(binding, _addr(x), x_rows, x_cols, hrows_addr, h, 0, x_cols, context, native)
+                    q = _gather(binding, x_meta.source.addr, x_rows, x_cols, hrows_addr, h, 0, x_cols, context, native)
                 var n_sv = Int(py=solved[0])
                 _ = sub_c  # keep the Python object alive through the native call above
                 _ = lab  # keep the Python object alive through the native call above
@@ -704,7 +707,7 @@ def _platt(fields: PythonObject, binding: PythonObject, x: PythonObject, codes: 
                 _ = sub_c  # keep the Python object alive through the native call above
                 _ = lab  # keep the Python object alive through the native call above
                 _machine(fields, binding, q, dual, sv, n_sv, svc_round_f32(svc_read_f64(solved[4], 0)), 0.0, 1.0, False,
-                         support, _addr(dec_perm) + 4 * begin, context, settings, native, h, Int(py=q.shape[1]))
+                         support, _addr(dec_perm) + 4 * begin, context, settings, native, h, nt if precomputed else x_cols, _addr(q))
                 _ = sub_c  # keep the Python object alive through the native call above
                 _ = lab  # keep the Python object alive through the native call above
                 _ = dec_perm  # keep the Python object alive through the native call above
@@ -754,15 +757,15 @@ def _platt(fields: PythonObject, binding: PythonObject, x: PythonObject, codes: 
     py_setitem(fields, PythonObject("probB_"), b_values)
 
 
-def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, classes: PythonObject, codes: PythonObject,
+def _fit_ovo(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, classes: PythonObject, codes: PythonObject,
              gamma: Float64, c_rows: PythonObject, context: PythonObject,
              settings: SvcOperationSettings, native: PythonObject) raises:
     """`SVC._fit_ovo` and `_set_ovo_native`: one binary machine per class
     pair (i < j, class j the solver's +1), then scikit-learn's multiclass
     layout from `svc_ovo_layout`."""
     var b = svc_builtins()
-    var n_rows = Int(py=x.shape[0])
-    var n_cols = Int(py=x.shape[1])
+    var n_rows = x_meta.shape[0]
+    var n_cols = x_meta.shape[1]
     var k = len(classes)
     var precomputed = String(svc_field(fields, "_hp_kernel")) == "precomputed"
     var pairs = Python.list()
@@ -781,10 +784,10 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
             var sub: PythonObject
             if precomputed:
                 # the pair's kernel matrix: its rows AND its columns
-                sub = _gather(binding, _addr(x), n_rows, n_cols, _addr(idx_a), m, _addr(idx_a), m, context, native)
+                sub = _gather(binding, x_meta.source.addr, n_rows, n_cols, _addr(idx_a), m, _addr(idx_a), m, context, native)
                 _ = idx_a  # keep the Python object alive through the native call above
             else:
-                sub = _gather(binding, _addr(x), n_rows, n_cols, _addr(idx_a), m, 0, n_cols, context, native)
+                sub = _gather(binding, x_meta.source.addr, n_rows, n_cols, _addr(idx_a), m, 0, n_cols, context, native)
                 _ = idx_a  # keep the Python object alive through the native call above
             var sub_c = sel[2]
             var solved = _solve(fields, binding, _addr(sub), m, Int(py=sub.shape[1]), _addr(sel[1]), gamma,
@@ -808,7 +811,7 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
             _ = idx_a  # keep the Python object alive through the native call above
             if precomputed:
                 # the support rows of the WHOLE kernel matrix
-                sv_rows = _gather(binding, _addr(x), n_rows, n_cols, _addr(pair_support), n_sv, 0, n_cols, context, native)
+                sv_rows = _gather(binding, x_meta.source.addr, n_rows, n_cols, _addr(pair_support), n_sv, 0, n_cols, context, native)
                 _ = pair_support  # keep the Python object alive through the native call above
                 _ = idx_a  # keep the Python object alive through the native call above
             var dual = svc_prefix(solved[1], n_sv, Python.tuple(PythonObject(1), PythonObject(n_sv)), "<f4", context)
@@ -863,7 +866,7 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
         _ = n_support  # keep the Python object alive through the native call above
         py_setitem(fields, PythonObject("support_"), sup)
         py_setitem(fields, PythonObject("support_vectors_"),
-                   _gather(binding, _addr(x), n_rows, n_cols, _addr(sup), n_sv, 0, n_cols, context, native))
+                   _gather(binding, x_meta.source.addr, n_rows, n_cols, _addr(sup), n_sv, 0, n_cols, context, native))
         _ = sup  # keep the Python object alive through the native call above
         _ = dual_all  # keep the Python object alive through the native call above
         _ = n_support  # keep the Python object alive through the native call above
@@ -889,7 +892,7 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
     py_setitem(fields, PythonObject("_label1"), PythonObject(1.0))
     _ = support^
     _ = dual_all^
-    _platt(fields, binding, x, codes, gamma, c_rows, k, context, settings, native)
+    _platt(fields, binding, x_meta, codes, gamma, c_rows, k, context, settings, native)
 
 
 def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, native: PythonObject) raises:
@@ -897,35 +900,36 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, True, context)
-    var xc = svc_f32(args[1], 2, "X", True, context)
-    py_setitem(fields, PythonObject("input_copied_"), xc[1])
-    var x = xc[0]
+    var x_meta = svc_snapshot(args[1], 2, "X", True, context)
+    py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
+    var x = x_meta.keep
     var y = args[2]
     var parsed = _as_labels(y, context)
     var labels = parsed[0]
     var classes = parsed[1]
     var pair = parsed[2]
-    var n_rows = Int(py=x.shape[0])
-    var n_cols = Int(py=x.shape[1])
+    var n_rows = x_meta.shape[0]
+    var n_cols = x_meta.shape[1]
     var n_y = Int(py=pair.shape[0]) if labels is None else Int(py=labels.shape[0])
     if n_y != n_rows:
         raise Error("mojolearn SVC: y has " + String(n_y) + " entries, X has " + String(n_rows) + " rows")
     if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_cols != n_rows:
         raise Error("mojolearn SVC: kernel='precomputed' needs the square n x n "
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
-    var gamma = _resolve_gamma(fields, binding, x, context, native)
+    var gamma = _resolve_gamma(fields, binding, x_meta, context, native)
     var c_rows = _c_rows(binding, svc_float(svc_field(fields, "_hp_C")), n_rows, args[3],
                          py_get(fields, PythonObject("class_weight"), PythonObject(None)), y, "SVC", context, native)
     var settings = _svc_fit_settings(fields, gamma, n_cols, context)
     if labels is None:
-        _fit_ovo(fields, binding, x, classes, pair, gamma, c_rows, context, settings, native)
+        _fit_ovo(fields, binding, x_meta, classes, pair, gamma, c_rows, context, settings, native)
         _svc_publish_dispatch(fields, native)
         _ = x^
+    _ = x_meta  # retain captured storage owners through the last native use
         _ = c_rows^
         return
     if py_contains(fields, PythonObject("_pairs")):
         _ = family_call(fields.pop, PythonObject("_pairs"), PythonObject(None))
-    var solved = _solve(fields, binding, _addr(x), n_rows, n_cols, _addr(labels), gamma,
+    var solved = _solve(fields, binding, x_meta.source.addr, n_rows, n_cols, _addr(labels), gamma,
                         0 if c_rows is None else _addr(c_rows), context, settings, native)
     _ = labels  # keep the Python object alive through the native call above
     var info = solved[4]
@@ -957,11 +961,12 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
             _ = wide  # keep the Python object alive through the native call above
             _ = codes  # keep the Python object alive through the native call above
         _ = wide^
-        _platt(fields, binding, x, codes, gamma, c_rows, 2, context, settings, native)
+        _platt(fields, binding, x_meta, codes, gamma, c_rows, 2, context, settings, native)
     elif py_contains(fields, PythonObject("_prob_ab")):
         _ = family_call(fields.pop, PythonObject("_prob_ab"), PythonObject(None))
     _svc_publish_dispatch(fields, native)
     _ = x^
+    _ = x_meta  # retain captured storage owners through the last native use
     _ = labels^
     _ = c_rows^
 
@@ -969,32 +974,34 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
 # ---------------------------------------------------------------- SVC inference
 
 
-def _query(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def _query(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> ArrayMetadata:
     """`SVC._query`."""
     if not svc_has(fields, "dual_coef_"):
         raise Error("mojolearn SVC: call fit() first")
-    var q = svc_f32(source, 2, "X", True, context)[0]
+    var q = svc_snapshot(source, 2, "X", True, context)
     var d = svc_int(svc_field(fields, "n_features_in_"))
-    if Int(py=q.shape[1]) != d:
-        raise Error("mojolearn SVC: X has " + String(Int(py=q.shape[1])) + " features, fit saw " + String(d))
-    return q
+    if q.shape[1] != d:
+        raise Error("mojolearn SVC: X has " + String(q.shape[1]) + " features, fit saw " + String(d))
+    return q^
 
 
 def _run(fields: PythonObject, binding: PythonObject, source: PythonObject, predict_class: Bool,
          context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`SVC._run`: the binary machine's (n,) float32 decisions or labels."""
-    var q = _query(fields, source, context)
-    var shape = q.shape
-    var n_rows = Int(py=shape[0])
-    var query_cols = Int(py=shape[1])
+    var q_meta = _query(fields, source, context)
+    var q = q_meta.keep
+    var shape = q_meta.shape
+    var n_rows = shape[0]
+    var query_cols = shape[1]
     var settings = _svc_predict_settings(fields, context)
     var out = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
     _machine(fields, binding, q, svc_field(fields, "dual_coef_"), svc_field(fields, "support_vectors_"),
              svc_int(svc_field(fields, "n_support_")), svc_read_f32(svc_field(fields, "intercept_"), 0),
              svc_float(svc_field(fields, "_label0")), svc_float(svc_field(fields, "_label1")), predict_class,
-             svc_field(fields, "support_"), _addr(out), context, settings, native, n_rows, query_cols)
+             svc_field(fields, "support_"), _addr(out), context, settings, native, n_rows, query_cols, q_meta.source.addr)
     _ = out  # keep the Python object alive through the native call above
     _ = q^
+    _ = q_meta  # retain captured storage owners through the last native use
     _svc_publish_dispatch(fields, native)
     return out
 
@@ -1003,11 +1010,12 @@ def _pair_decisions(fields: PythonObject, binding: PythonObject, source: PythonO
                     context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`SVC._pair_decisions`: each pair machine's raw decision, pair-major,
     in ONE float32 (n_pairs, n) Array."""
-    var q = _query(fields, source, context)
+    var q_meta = _query(fields, source, context)
+    var q = q_meta.keep
     var pairs = svc_field(fields, "_pairs")
-    var shape = q.shape
-    var n_rows = Int(py=shape[0])
-    var query_cols = Int(py=shape[1])
+    var shape = q_meta.shape
+    var n_rows = shape[0]
+    var query_cols = shape[1]
     var settings = _svc_predict_settings(fields, context)
     var dec = family_array(Python.tuple(PythonObject(len(pairs)), PythonObject(n_rows)), "<f4", context)
     var base = _addr(dec)
@@ -1016,9 +1024,10 @@ def _pair_decisions(fields: PythonObject, binding: PythonObject, source: PythonO
         var p = pairs[pno]
         var dual = p["dual"]
         _machine(fields, binding, q, dual, p["sv"], Int(py=dual.shape[1]), svc_float(p["b"]), 0.0, 1.0, False,
-                 p["support"], base + 4 * n_rows * pno, context, settings, native, n_rows, query_cols)
+                 p["support"], base + 4 * n_rows * pno, context, settings, native, n_rows, query_cols, q_meta.source.addr)
         _ = dec  # keep the Python object alive through the native call above
     _ = q^
+    _ = q_meta  # retain captured storage owners through the last native use
     _svc_publish_dispatch(fields, native)
     return dec
 
@@ -1165,11 +1174,11 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, False, context)
-    var xc = svc_f32(args[1], 2, "X", True, context)
-    py_setitem(fields, PythonObject("input_copied_"), xc[1])
-    var x = xc[0]
-    var n_rows = Int(py=x.shape[0])
-    var n_cols = Int(py=x.shape[1])
+    var x_meta = svc_snapshot(args[1], 2, "X", True, context)
+    py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
+    var x = x_meta.keep
+    var n_rows = x_meta.shape[0]
+    var n_cols = x_meta.shape[1]
     # `_as_targets`: no finiteness check here (svr_fit names the index)
     var shape = svc_shape_of(args[2])
     if len(shape) != 1:
@@ -1180,7 +1189,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_cols != n_rows:
         raise Error("mojolearn SVR: kernel='precomputed' needs the square n x n "
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
-    var gamma = _resolve_gamma(fields, binding, x, context, native)
+    var gamma = _resolve_gamma(fields, binding, x_meta, context, native)
     var c_rows = _c_rows(binding, svc_float(svc_field(fields, "_hp_C")), n_rows, args[3], PythonObject(None),
                          PythonObject(None), "SVR", context, native)
     # WORST-CASE OUTPUT BUFFERS: at most n_rows coefficients (DEVIATION 873)
@@ -1201,7 +1210,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         _ = c_rows  # keep the Python object alive through the native call above
         _kernel_tail(fields, params)
         _ = c_rows  # keep the Python object alive through the native call above
-    var n_support = svc_int(svr_execute(binding, native, True, Python.list(classical_address(x), classical_address(targets),
+    var n_support = svc_int(svr_execute(binding, native, True, Python.list(PythonObject(x_meta.source.addr), classical_address(targets),
                                         classical_address(dual), classical_address(support), classical_address(sv),
                                         classical_address(info)), params))
     _ = targets  # keep the Python object alive through the native call above
@@ -1243,6 +1252,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("_gamma"), PythonObject(gamma))
     _ = x^
+    _ = x_meta  # retain captured storage owners through the last native use
     _ = targets^
     _ = c_rows^
 
@@ -1252,24 +1262,27 @@ def _svr_predict(fields: PythonObject, binding: PythonObject, source: PythonObje
     """`SVR.predict`."""
     if not svc_has(fields, "dual_coef_"):
         raise Error("mojolearn SVR: call fit() first")
-    var q = svc_f32(source, 2, "X", True, context)[0]
+    var q_meta = svc_snapshot(source, 2, "X", True, context)
+    var q = q_meta.keep
     var d = svc_int(svc_field(fields, "n_features_in_"))
-    if Int(py=q.shape[1]) != d:
-        raise Error("mojolearn SVR: X has " + String(Int(py=q.shape[1])) + " features, fit saw " + String(d))
-    var n_rows = Int(py=q.shape[0])
+    if q_meta.shape[1] != d:
+        raise Error("mojolearn SVR: X has " + String(q_meta.shape[1]) + " features, fit saw " + String(d))
+    var n_rows = q_meta.shape[0]
     var out = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
     var dual = svc_field(fields, "dual_coef_")
     var sv = svc_field(fields, "support_vectors_")
     var n_support = svc_int(svc_field(fields, "n_support_"))
     var n_features = d
     var query = q
+    var query_address = q_meta.source.addr
     var held = PythonObject(None)
     if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_support > 0:
         # the cross-kernel's columns at the support vectors (SVC's rule)
         held = _i32_array(svc_field(fields, "support_"), context)
-        query = _gather(binding, _addr(q), n_rows, Int(py=q.shape[1]), 0, n_rows, _addr(held), Int(py=held.shape[0]), context, native)
+        query = _gather(binding, q_meta.source.addr, n_rows, q_meta.shape[1], 0, n_rows, _addr(held), Int(py=held.shape[0]), context, native)
         _ = held  # keep the Python object alive through the native call above
         _ = q  # keep the Python object alive through the native call above
+        query_address = _addr(query)
         n_features = n_support
         sv = dual
     # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_predict_binding:
@@ -1279,7 +1292,7 @@ def _svr_predict(fields: PythonObject, binding: PythonObject, source: PythonObje
                              PythonObject(_kernel_code(fields, context)), svc_field(fields, "_gamma"),
                              svc_field(fields, "_hp_cache_size"))
     _kernel_tail(fields, params)
-    _ = svr_execute(binding, native, False, Python.list(classical_address(query),
+    _ = svr_execute(binding, native, False, Python.list(PythonObject(query_address),
                     classical_address(dual) if n_support > 0 else PythonObject(0),
                     classical_address(sv) if n_support > 0 else PythonObject(0),
                     classical_address(out)), params)
@@ -1290,6 +1303,7 @@ def _svr_predict(fields: PythonObject, binding: PythonObject, source: PythonObje
     _ = query^
     _ = held^
     _ = q^
+    _ = q_meta  # retain captured storage owners through the last native use
     return out
 
 

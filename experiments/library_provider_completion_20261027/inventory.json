@@ -340,5 +340,20 @@
       "remaining xseq input metadata repetition and legacy base-helper dispatch",
       "other families inherited public wrappers"
     ]
+  },
+  "shared_svm_input_snapshot": {
+    "status": "source_candidate_uncompiled",
+    "changes": [
+      "common ArrayMetadata retains backing storage and readonly/ownership once",
+      "SVC/SVR fit and prediction X snapshots thread native dimensions/addresses through gamma, class pairs and probability folds",
+      "shared linalg Array admission reuses owner retention helper"
+    ],
+    "remaining": [
+      "target/sample weight metadata",
+      "fitted-state pair descriptors",
+      "core base-helper dispatch",
+      "CPU SVM and linear SVM",
+      "runtime qualification"
+    ]
   }
 }
