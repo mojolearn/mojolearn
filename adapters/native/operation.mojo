@@ -3,6 +3,11 @@
 # training entry (adapters/native/training.mojo). No math. The per-operation
 # dispatcher run_operation was removed on 2026-10-24 (docs/TOMBSTONES.md):
 # framework adapters run whole models only and must not get a per-op path back.
+# TOMBSTONE: torch.ops.mojolearn.operation, the MAX ops mojolearn_matmul / mojolearn_relu / mojolearn_operation0..3 and the
+# native mojolearn_adapter_operation* entries over run_operation (removed API: whole-model only) deleted 2026-10-24 by
+# 761a927d6 and the commits after it on lane/adapters-whole-model-20261024; code recoverable at 761a927d6^ (= b022e2ea5).
+# Restore: no patch (removed API, not an experiment define); check the files out of b022e2ea5 (docs/TOMBSTONES.md,
+# "Framework adapter per-operation surfaces").
 from autograd.rankn import ShapeN, RN_MAX_RANK
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COPY
