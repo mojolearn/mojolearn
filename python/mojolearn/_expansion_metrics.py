@@ -2285,3 +2285,6 @@ _native_family_bridge.tables(family_metrics_ops=dict(_OPS), family_metrics_terms
                              family_metrics_prog_context=_PROG_CONTEXT,
                              family_metrics_undefined=UndefinedMetricWarning, family_metrics_real=numbers.Real,
                              family_mexp_integral=numbers.Integral)
+
+from ._native_owner_lifetime import connect_owner_context as _connect_metric_owners
+_connect_metric_owners(_NATIVE_CONTEXT)

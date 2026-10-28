@@ -1,0 +1,49 @@
+{
+  "base_commit": "74c1e58ebea71213f5880bc8f83d43fe09c1bdbe",
+  "exit_code": 0,
+  "target": "apple-m1 CPU column",
+  "workers": 10,
+  "cpu_allocation": 10,
+  "flags": [
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "fixture": "checks/metrics_boundaries_compile.mojo",
+  "scope": "Full metric provider roots with operation-entry snapshots of exact Array/ndarray/list/tuple/array.array/bytearray inputs and aliases; Mac CPU compile only",
+  "runtime_executed": false,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-entry-snapshots-20261028/metrics-boundaries.so",
+  "artifact_sha256": "0281705f799ec48dd5e99c147412e4bd0ebd053ddb675a7052cc1eb7b37db042",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-entry-snapshots-20261028/source-bytes.tgz",
+  "source_archive_sha256": "05acfe646647fec82e76ed257cf887ab38580fd9018fac021431f40cb5689565",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-entry-snapshots-20261028/source-manifest.json",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-entry-snapshots-20261028/compile.log",
+  "earlier_attempt_logs": [
+    "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-entry-snapshots-20261028/compile-before-native-sequences.log",
+    "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-entry-snapshots-20261028/compile-disk-full.log"
+  ],
+  "pending": [
+    "Pandas/Torch and other native buffer metric materialization metadata review",
+    "Pandas resample remaining native dtype/layout coverage is owned by its continuing peer",
+    "Root-owned shared linalg_ops_buffers import/metadata fixes integration",
+    "GPU compilation and runtime/identity checks deliberately excluded by owner"
+  ],
+  "failed_attempts": [
+    {
+      "exit_code": 1,
+      "cause": "ENOSPC creating shared compiler transform-cache lock",
+      "summary": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-entry-snapshots-20261028/failure-summary.json"
+    }
+  ],
+  "public_shell_source_check": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-entry-snapshots-20261028/public-shell-ast.json"
+}
