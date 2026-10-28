@@ -1,0 +1,652 @@
+{
+ "schema": "overhead-generate-guards-same-bits-v1",
+ "fixture": "tools/tests/overhead_generate_guards_fixture.py",
+ "column": "CPU host column, identical mode, Linux x86-64-v3 (RunPod pod imjfv5ooree230)",
+ "before": {
+  "sha": "b06b0150b3 with tools/../to_base.patch applied (origin/main 927e59c779 guards + CausalExecutionEntries registration)",
+  "tokenizer_host_sha256": "77b33457906d9da343aa5c0d358a6c49305b878f04f669f6acf3b404c1af460e"
+ },
+ "after": {
+  "sha": "b06b0150b3",
+  "tokenizer_host_sha256": "21c140bac85b504a37a6d143c2a7bf7d1b471c5854efb4b2fffadbd01ba1e852"
+ },
+ "result": {
+  "same": true,
+  "rows": 105,
+  "different": []
+ },
+ "note": "Before and after both need the CausalExecutionEntries registration: without it CausalLM.load on the CPU column raises before any generation (main at 927e59c779).",
+ "run_owed": "RUN OWED (orchestrator, end of program): rerun tools/tests/overhead_generate_guards_fixture.py on the final merged main against a build with this lane reverted; the run above is at b06b0150b3, before main daf3d650f5 was merged.",
+ "rows": [
+  {
+   "op": "/families/llama/refusals/after_restore",
+   "same": true,
+   "digest": "i[2, 6]:1a6e1de6f04a5eb9b0eb333df7315f44ded463c31d7f23ac41bc6d6830dba789",
+   "raised": null
+  },
+  {
+   "op": "/families/llama/refusals/descriptor_replaced",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/llama/refusals/float_ids",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/llama/refusals/hook___del__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/llama/refusals/hook___getattr__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/llama/refusals/hook___getattribute__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/llama/refusals/hook___setattr__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/llama/refusals/mutated_during_generate",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/llama/refusals/negative_max_new",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/llama/refusals/out_of_vocab",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/llama/refusals/rank1_ids",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/llama/refusals/sampling_without_seed",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/llama/refusals/stream_mutated_between_reads/after",
+   "same": true,
+   "digest": "i[2, 1]:0208b0adbf5767dac2f62c143705c3525ca872f1f9a71fca18e9b9891fc9fa8c",
+   "raised": null
+  },
+  {
+   "op": "/families/llama/refusals/stream_mutated_between_reads/first",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/refusals/stream_mutated_between_reads/info/done",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/refusals/stream_mutated_between_reads/info/generated_tokens",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/refusals/stream_mutated_between_reads/info/lengths",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/refusals/stream_mutated_between_reads/info/usable",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/refusals/stream_mutated_between_reads/mutated",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/llama/same_bits/forward",
+   "same": true,
+   "digest": "f[2, 3, 64]:a57ca497e40d89514d0b98cdac052e99f382635676d1f2d09529590766f8ab39",
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/generate_greedy",
+   "same": true,
+   "digest": "i[2, 9]:c9392c584f65482f0528cc417c0445a9640142f147575923593cb730a7054e2a",
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/generate_greedy_eos",
+   "same": true,
+   "digest": "i[2, 9]:c9392c584f65482f0528cc417c0445a9640142f147575923593cb730a7054e2a",
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/generate_sampled",
+   "same": true,
+   "digest": "i[2, 9]:0c237eac6b232720ca6a2dc4c74b7408b89a56e2ec5f2424da0c93860a25c98f",
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/generate_sampled_eos",
+   "same": true,
+   "digest": "i[2, 9]:caf75088f5482f1bd116c4352202ebd96d76098b3027420f6c06c8e84a57ee18",
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/step",
+   "same": true,
+   "digest": "f[2, 64]:d960181d6f5ea476c802c163a0c6da013a561fad35424ce7552ddfca8f83a96d",
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_greedy/info/done",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_greedy/info/generated_tokens",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_greedy/info/lengths",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_greedy/info/usable",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_greedy/reads",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_sampled/info/done",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_sampled/info/generated_tokens",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_sampled/info/lengths",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_sampled/info/usable",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/llama/same_bits/stream_sampled/reads",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/refusals/after_restore",
+   "same": true,
+   "digest": "i[2, 6]:fad7b701219202825e70611a3c4b8c056e4c813d6259f957753423648869adaf",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/refusals/descriptor_replaced",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba/refusals/float_ids",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba/refusals/hook___del__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba/refusals/hook___getattr__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba/refusals/hook___getattribute__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba/refusals/hook___setattr__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba/refusals/mutated_during_generate",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba/refusals/negative_max_new",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/mamba/refusals/out_of_vocab",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/mamba/refusals/rank1_ids",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/mamba/refusals/sampling_without_seed",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/mamba/refusals/stream_mutated_between_reads/after",
+   "same": true,
+   "digest": "i[2, 1]:f1833c11f88585608c320b53224d2642b97af5fdb9cae59c13fcab53f37c4b06",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/refusals/stream_mutated_between_reads/first",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/refusals/stream_mutated_between_reads/info/done",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/refusals/stream_mutated_between_reads/info/generated_tokens",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/refusals/stream_mutated_between_reads/info/lengths",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/refusals/stream_mutated_between_reads/info/usable",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/refusals/stream_mutated_between_reads/mutated",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba/same_bits/forward",
+   "same": true,
+   "digest": "f[2, 3, 64]:9396673dd229ac08d328d9805421224fee7bfc0a3ea36d831f7435400d81f376",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/generate_greedy",
+   "same": true,
+   "digest": "i[2, 9]:3a1cc435ce0bab5f3cb0de01b922b40e3c7c27fcb71cad05d9f794aac81f488d",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/generate_greedy_eos",
+   "same": true,
+   "digest": "i[2, 9]:3a1cc435ce0bab5f3cb0de01b922b40e3c7c27fcb71cad05d9f794aac81f488d",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/generate_sampled",
+   "same": true,
+   "digest": "i[2, 9]:3a1cc435ce0bab5f3cb0de01b922b40e3c7c27fcb71cad05d9f794aac81f488d",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/generate_sampled_eos",
+   "same": true,
+   "digest": "i[2, 9]:3cfa5e987bdd2e53d6ae6019e1350542f02a844df5861876765dd1b7c16f683a",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/step",
+   "same": true,
+   "digest": "f[2, 64]:d3cc1347813ca474bf85c3b131e925a69eff203756e54bb05aa8f818fbc71ab4",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_greedy/info/done",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_greedy/info/generated_tokens",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_greedy/info/lengths",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_greedy/info/usable",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_greedy/reads",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_sampled/info/done",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_sampled/info/generated_tokens",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_sampled/info/lengths",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_sampled/info/usable",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba/same_bits/stream_sampled/reads",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/refusals/after_restore",
+   "same": true,
+   "digest": "i[2, 6]:fad7b701219202825e70611a3c4b8c056e4c813d6259f957753423648869adaf",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/refusals/descriptor_replaced",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba2/refusals/float_ids",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba2/refusals/hook___del__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba2/refusals/hook___getattr__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba2/refusals/hook___getattribute__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba2/refusals/hook___setattr__",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba2/refusals/mutated_during_generate",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba2/refusals/negative_max_new",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/mamba2/refusals/out_of_vocab",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/mamba2/refusals/rank1_ids",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/mamba2/refusals/sampling_without_seed",
+   "same": true,
+   "digest": null,
+   "raised": "ValueError"
+  },
+  {
+   "op": "/families/mamba2/refusals/stream_mutated_between_reads/after",
+   "same": true,
+   "digest": "i[2, 1]:f1833c11f88585608c320b53224d2642b97af5fdb9cae59c13fcab53f37c4b06",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/refusals/stream_mutated_between_reads/first",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/refusals/stream_mutated_between_reads/info/done",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/refusals/stream_mutated_between_reads/info/generated_tokens",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/refusals/stream_mutated_between_reads/info/lengths",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/refusals/stream_mutated_between_reads/info/usable",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/refusals/stream_mutated_between_reads/mutated",
+   "same": true,
+   "digest": null,
+   "raised": "TypeError"
+  },
+  {
+   "op": "/families/mamba2/same_bits/forward",
+   "same": true,
+   "digest": "f[2, 3, 64]:3db60495953073f080f0c7a89805f7db6c0ce6605976d5ea2098f43b4278a6ee",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/generate_greedy",
+   "same": true,
+   "digest": "i[2, 9]:3a1cc435ce0bab5f3cb0de01b922b40e3c7c27fcb71cad05d9f794aac81f488d",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/generate_greedy_eos",
+   "same": true,
+   "digest": "i[2, 9]:3a1cc435ce0bab5f3cb0de01b922b40e3c7c27fcb71cad05d9f794aac81f488d",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/generate_sampled",
+   "same": true,
+   "digest": "i[2, 9]:3a1cc435ce0bab5f3cb0de01b922b40e3c7c27fcb71cad05d9f794aac81f488d",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/generate_sampled_eos",
+   "same": true,
+   "digest": "i[2, 9]:3cfa5e987bdd2e53d6ae6019e1350542f02a844df5861876765dd1b7c16f683a",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/step",
+   "same": true,
+   "digest": "f[2, 64]:aac5c33ea15dbbd61e08892d888f6cb635672809bd56e976a5cb1c5681d41f8c",
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_greedy/info/done",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_greedy/info/generated_tokens",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_greedy/info/lengths",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_greedy/info/usable",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_greedy/reads",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_sampled/info/done",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_sampled/info/generated_tokens",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_sampled/info/lengths",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_sampled/info/usable",
+   "same": true,
+   "digest": null,
+   "raised": null
+  },
+  {
+   "op": "/families/mamba2/same_bits/stream_sampled/reads",
+   "same": true,
+   "digest": null,
+   "raised": null
+  }
+ ]
+}
