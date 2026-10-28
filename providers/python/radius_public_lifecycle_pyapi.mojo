@@ -100,8 +100,8 @@ def _complex_scalar(value: PythonObject, context: PythonObject) raises -> Bool:
     return False
 
 
-def radius_target(source: PythonObject, rows: Int, context: PythonObject, transposed: Bool = False,
-                  columns: PythonObject = PythonObject(None), name: String = "RadiusNeighbors") raises -> PythonObject:
+def radius_target(source: PythonObject, rows: Int, context: PythonObject, transposed: Bool,
+                  columns: PythonObject, name: String = "RadiusNeighbors") raises -> PythonObject:
     # y is ignored numerically. Keep only the old public length, complex,
     # column-warning and float-finiteness semantics, without flatten/tolist or
     # a second read of exporter metadata. The returned owner survives fit.
@@ -271,7 +271,8 @@ def radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     if host_sparse_format(args[0]).byte_length() > 0:
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (RadiusNeighbors takes dense X only.)")
     var x = family_f32_snapshot(args[0], 2, "X", context)
-    var target = radius_target(args[1] if len(args) > 1 else PythonObject(None), x.shape[0], context) if Int(py=depth) == 0 else PythonObject(None)
+    var target = radius_target(args[1] if len(args) > 1 else PythonObject(None), x.shape[0], context,
+                               False, PythonObject(None)) if Int(py=depth) == 0 else PythonObject(None)
     var call = NeighborPublicCall(args, fields, args[0], "fit", True, estimator_outside(), estimator_fit_begin(fields), x.shape[0], x.shape[1])
     try:
         _radius_refusals(fields, settings, context)
