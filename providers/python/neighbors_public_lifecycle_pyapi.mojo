@@ -6,12 +6,12 @@ from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.mode_metadata_native import _fields
+from bindings.mode_metadata_native import _fields, _fitted
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_estimator_name, classical_check_width
-from bindings.classical_exceptions import classical_require_fitted
+from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.classical_warnings import classical_warn_column
 from bindings.classifier_public_lifecycle import _public_labels
@@ -116,8 +116,10 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))
     if py_type(fitted) is not b.bool and py_type(fitted) is not b.int:
         raise Error("TypeError: native fitted flags cannot invoke Python boolean hooks")
-    if not fitting:
-        classical_require_fitted(model, False, method, context)
+    if not fitting and not Bool(py=_fitted(model)):
+        _ = classical_not_fitted_class(context)
+        raise Error("NotFittedError: This " + classical_estimator_name(model)
+                    + " instance is not fitted yet. Call 'fit' with appropriate arguments before using " + method + ".")
     var first = 0 if operation == "family_xn_knn_nn_fit" else 1
     var source = args[first]
     var name = classical_estimator_name(model)
