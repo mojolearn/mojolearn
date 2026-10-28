@@ -827,7 +827,7 @@ def _mani_arguments(model: PythonObject, operation: String, args: PythonObject,
     if default_binding is None:
         default_binding = estimator_binding_mode(PythonObject(None), "_mojolearn_x_decomp", context)
     var resolved = Python.list(binding, default_binding)
-    for i in range(2, len(args)):  # small-loop: fixed public operation argument envelope
+    for i in range(2, len(args)):  # small-loop(args: fixed public operation argument envelope): bounded by the public signature
         _ = py_call(resolved.append, args[i])
     return py_call(Python.import_module("builtins").tuple, resolved)
 
