@@ -21,8 +21,11 @@ def _operation_lock_wait() raises:
     # path. This is a general scheduling policy, independent of model shapes.
     # POSIX timespec on supported LP64 hosts is two signed 64-bit words.
     var request = List[Int64](length=2, fill=0)
+    # Mojo Pointer is non-nullable. Supply ordinary POSIX remainder storage;
+    # interrupted waits still return the same cancellation below.
+    var remaining = List[Int64](length=2, fill=0)
     request[1] = 100000
-    if external_call["nanosleep", c_int](request.unsafe_ptr(), MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=0)) != 0:
+    if external_call["nanosleep", c_int](request.unsafe_ptr(), remaining.unsafe_ptr()) != 0:
         var number = 0
         comptime if CompilationTarget.is_macos():
             number = Int(external_call["__error", MutPointer[c_int, MutUntrackedOrigin]]()[])
