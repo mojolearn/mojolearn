@@ -1,0 +1,28 @@
+Density public lifecycle batch (2026-10-27)
+
+Branch: lane/density-lifecycle-20261027
+Frozen source: 180d376221abcf9f2b04aaaeca67bf0e688cfb52.
+Base includes Peer1 214ab9b005 via main 44c01fb9bb; its native KDE lifecycle and public-attribute leaf specialization are preserved.
+
+Changes:
+- DBSCAN constructor, fit, fit_predict, predict, getstate and setstate now submit one native call; native owner handles selection, scalar/buffer admission, fitted tracking, X/y preparation and completed result conversion.
+- KernelDensity constructor, state restoration and unconditional sample refusal moved native. Native owner adds replacement/retained-state ownership admission around Peer1's already-native fit/score lifecycle, reusing that lifecycle once.
+- Reinitialization/refit/state restoration admit all overwritten owners before writes, including prior fitted/output metadata and resident key/buffer owners. Exact modules remain retained by native context while resident records are replaced.
+- DBSCAN predict retains conditional availability through the existing native attribute provider's frozen descriptor schema, without executing its Python availability predicate.
+- cfb_resident ABI unchanged. Native optional/release/inference entry lookup uses exact module dictionaries and compiled entry identities; no module __getattr__ fallback.
+- No numerical kernel changes. save/load retain their existing separate native archive owner; this batch does not qualify its transitive archive internals.
+
+Compilation:
+- First attempt retained under compile/: source18233c2741, exit1,16.742s; fields.copy conflicted with a Mojo method. Fixed by the explicit builtin native dict constructor.
+- Final compile PASS: exit 0, 96.22s, source 180d376221abcf9f2b04aaaeca67bf0e688cfb52; complete result and binary hash in compile-fixed/result.json.
+- Actual native DBSCAN/KDE lifecycle and public_attribute_c entry compiled by checks/density_public_boundary_compile.mojo. Apple CPU, O0, identical define, -j10 (Mac allocation10cores). Configured workers do not assert every phase saturates10cores.
+- Python facade files syntax-compiled. No runtime, identity or cross-vendor tests executed.
+- This focused compile does not compile independent arithmetic extension binaries or the full family router image. New router wiring is the thin imported-owner branch.
+
+Remaining:
+- Runtime and identity behavior deliberately deferred under current owner instructions.
+- KDE input metadata snapshot reuse remains the already-recorded Peer1 follow-up: neighbors lifecycle snapshots original X and the KDE dense helper subsequently captures it again to retain borrow/copy reporting. No claim of once-only transitive metadata capture.
+- Shared archive save/load admission remains separately owned; no archive runtime coverage claimed.
+
+Complete local evidence: /Users/andrewhendel/mojolearn-evidence/density-lifecycle-20261027/
+No rented machine was used; no pod ownership or teardown exists for this batch.
