@@ -51,5 +51,29 @@
     "AMD (gfx942) and Apple (metal) device targets",
     "other bindings importing ssd_minimal (_mojolearn_neural_host, _mojolearn_training_host, mamba_public_native merged roots)",
     "any runtime, identity or timing"
-  ]
+  ],
+  "post_merge": {
+    "merge": "8824981251 (origin/main 45b0630582 merged; mamba_host_gen --check rc 0)",
+    "results": [
+      {
+        "name": "mamba_host_cpu_mac_armA",
+        "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
+        "jobs": 10,
+        "exit": 0,
+        "seconds": 243,
+        "binary_sha256": "9ccc90611dc88ffa76c00d8c877aba8a8330a48788014707a2d6105643bee344",
+        "log": "/Users/andrewhendel/mojolearn-evidence/nv-occupancy-20261028/mac-cpu2/build_A.log"
+      },
+      {
+        "name": "mamba_host_cpu_mac_armB",
+        "flags": "-D MOJOLEARN_IDN_SSD_OCCUPANCY=1",
+        "jobs": 10,
+        "exit": 0,
+        "seconds": 21,
+        "binary_sha256": "70bd8fea7b117e16cebea6e00165662be2187df70b799a692cf883383dc67232",
+        "log": "/Users/andrewhendel/mojolearn-evidence/nv-occupancy-20261028/mac-cpu2/build_B.log"
+      }
+    ],
+    "note": "CPU column gates the define off; sm_89 arms not re-run after the merge (lane files unchanged by it)"
+  }
 }
