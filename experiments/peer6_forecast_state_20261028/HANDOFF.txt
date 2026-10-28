@@ -1,0 +1,43 @@
+Peer6 Croston/Theta/ETS/GARCH direct state operations — 2026-10-28
+Branch lane/peer6-timeseries-20261027; follows e456212ca7 VAR/STL.
+
+Independent public fit/predict calls now use exact connected model classes,
+passive native dictionaries and consumed scalar admission. They execute against
+a staged dictionary and call forecast_commit only after completion: every old
+owner being replaced must pass native release admission before any original
+field is changed. This extends the existing constructor/convenience staging
+to the independently callable methods; unchanged references remain retained.
+
+Series preparation captures dimensions/address once and passes those words
+through the existing fit owners. Theta/ETS observations and Croston means are
+captured as exact native contiguous float32 buffers before prediction. Native
+cache tuples and nested scalar keys are admitted before equality; cached arrays
+are captured once and copied through native byte moves, without user array
+or copy protocols. Per-series cached Theta names must be native strings.
+Publication flags and ETS season metadata are admitted before execution.
+Existing cached-result reuse, scalar settings, arithmetic entries, output
+ranks and GARCH reuse/refit behavior remain.
+
+The forecast entry explicitly connects its distinct NumPy admission context
+before any type/metadata admission. TSA already does this at its entry.
+The import-only sequence table adds var_forecast, required by the preceding
+VAR/STL batch. Pair this corrective batch with e456212ca7.
+
+Compile: actual xseq public C dispatcher with this owner repair, Mac CPU
+identical O0, -j10 available logical CPUs configured. Final exit/timing in compile.json; the first 48.980-second pass preceded
+the lifecycle connection and VAR symbol registration correction;
+compile.json records exact compiler, command, flags, binary hash and scope.
+No runtime/identity/GPU/performance campaign and no rented box.
+Full logs, source bytes, manifest and binary:
+~/mojolearn-evidence/peer6-forecast-state-20261028/
+
+This lane's source migrations now cover AutoARIMA, standalone ARIMA's new
+lifecycle/execution owners, Croston, Theta, ETS/DampedETS, GARCH, VAR/VARResults
+and STL/DecomposeResult. Parent owns Prophet; cv_review owns legacy TSA.
+Prior native archive/save/load, inherited ParamsMixin/NumericModeMixin and
+shared boundary providers retain separate ownership/evidence. This receipt
+is compilation and source admission review only, not runtime or whole-library
+Python-free/bitwise-identity qualification. No main mutation by this lane.
+
+A final edit/build launch briefly hit filesystem ENOSPC before mutation;
+retry proceeded after available space recovered. No evidence was deleted.
