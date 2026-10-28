@@ -6,6 +6,8 @@ from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.generation_buffers import generation_array, py_ints
+from transformer.causal_lm_construct_impl import causal_lm_gather_f32
+from core.hostptr import f32_ptr
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import _one_of
 
@@ -154,7 +156,7 @@ def neural_array_snapshot(value: PythonObject, context: PythonObject) raises -> 
             raise Error("TypeError: neural Array needs retained native storage")
     admit_native_buffer_exporter(store)
     var pin = AdmittedBorrowedBuffer(store)
-    var layout = pin.layout.value()
+    var layout = pin.layout.value().copy()
     var offset = Int(py=values["_addr"]) - layout.address
     if count == 0:
         offset = 0
@@ -337,8 +339,6 @@ def neural_block_f32(value: PythonObject, name: String, context: PythonObject) r
             return captured
         # F-order follows the existing byte-preserving C preparation, with
         # metadata captured once above and the original owner retained.
-        from transformer.causal_lm_construct_impl import causal_lm_gather_f32
-        from core.hostptr import f32_ptr
         var dims = List[Int]()
         var steps = List[Int]()
         for i in range(len(captured.shape)):  # driver-loop: native admission metadata and retained owner registry
@@ -352,7 +352,7 @@ def neural_block_f32(value: PythonObject, name: String, context: PythonObject) r
     var pin = AdmittedBorrowedBuffer(value)
     if pin.format != "f" and pin.format != "<f" and pin.format != "=f" and pin.format != "@f":
         raise Error("TypeError: neural " + name + " requires float32 input")
-    var layout = pin.layout.value()
+    var layout = pin.layout.value().copy()
     if layout.itemsize != 4:
         raise Error("TypeError: neural float32 input requires four-byte elements")
     _ = neural_array_slots(context)

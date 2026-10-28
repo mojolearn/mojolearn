@@ -122,7 +122,7 @@ struct TransformerBuffer(Movable):
         admit_native_buffer_exporter(store)
         self.store = store
         self.pin = AdmittedBorrowedBuffer(store)
-        var layout = self.pin.layout.value()
+        var layout = self.pin.layout.value().copy()
         if not layout.contiguous():
             raise Error("TypeError: Transformer cache requires C-contiguous native storage")
         if is_array:

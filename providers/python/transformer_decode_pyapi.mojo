@@ -256,7 +256,7 @@ struct TransformerDecodeCache(Movable):
         else:
             admit_native_buffer_exporter(value)
             self.pin = AdmittedBorrowedBuffer(value, True)
-            var layout = self.pin.value().layout.value()
+            var layout = self.pin.value().layout.value().copy()
             if self.pin.value().format != "f" or layout.itemsize != 4 or not layout.contiguous() or len(layout.shape) != 1 or layout.shape[0] != count:
                 raise Error("TypeError: Transformer decode cache requires writable flat contiguous float32 storage")
             # Preserve the legacy foreign-buffer copy/writeback boundary. It

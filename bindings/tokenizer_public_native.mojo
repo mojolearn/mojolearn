@@ -183,7 +183,8 @@ def _bytes(value: PythonObject, allow_text: Bool = True, name: String = "text") 
         ref cpy = Python().cpython()
         var pointer = cpy.lib.get_function[PyObjectPtr]("PyUnicode_AsUTF8String")(raw._obj_ptr)
         if not pointer:
-            raise stash_python_error()
+            var failure = stash_python_error()
+            raise failure^
         raw = PythonObject(from_owned=pointer)
     try:
         admit_native_buffer_exporter(raw)
@@ -245,13 +246,14 @@ def _ids(var value: PythonObject) raises -> List[Int]:
         raise Error("TypeError: ids must be a sequence of int, got " + _type_name(value) + "; use native integer buffers")
     var pin = AdmittedBorrowedBuffer(value)
     try:
-        var layout = pin.layout.value()
+        var layout = pin.layout.value().copy()
         if len(layout.shape) != 1:
             raise Error("TypeError: tokenizer ids require a one-dimensional integer buffer")
         var format = pin.format
         var big_endian = format.startswith(">") or format.startswith("!")
         if format.startswith("@") or format.startswith("=") or format.startswith("<") or big_endian:
-            format = String(format[byte=1:])
+            var stripped = String(format[byte=1:])
+            format = stripped^
         if format != "b" and format != "B" and format != "h" and format != "H" and format != "i" and format != "I" and format != "l" and format != "L" and format != "q" and format != "Q" and format != "n" and format != "N":
             raise Error("TypeError: tokenizer ids require a native integer buffer")
         var packed = List[UInt8](length=layout.count * layout.itemsize, fill=0)
@@ -262,10 +264,10 @@ def _ids(var value: PythonObject) raises -> List[Int]:
                 raise Error("TypeError: tokenizer integer buffer is wider than 64 bits")
             for byte in range(layout.itemsize):  # cpu-route: capture admitted native integer input storage without scalar callbacks
                 var source = layout.itemsize - 1 - byte if big_endian else byte
-                bits |= UInt64(packed[i * layout.itemsize + source]) << (8 * byte)
+                bits |= UInt64(packed[i * layout.itemsize + source]) << UInt64(8 * byte)
             var signed = format == "b" or format == "h" or format == "i" or format == "l" or format == "q" or format == "n"
-            if signed and layout.itemsize < 8 and (bits & (UInt64(1) << (layout.itemsize * 8 - 1))) != 0:
-                bits |= UInt64(0xffffffffffffffff) << (layout.itemsize * 8)
+            if signed and layout.itemsize < 8 and (bits & (UInt64(1) << UInt64(layout.itemsize * 8 - 1))) != 0:
+                bits |= UInt64(0xffffffffffffffff) << UInt64(layout.itemsize * 8)
             if not signed and bits > UInt64(9223372036854775807):
                 raise Error("ValueError: tokenizer id exceeds the supported integer range")
             result.append(Int(bits))
@@ -290,7 +292,8 @@ def _text_result(raw: PythonObject, errors: PythonObject) raises -> PythonObject
     var decode = raw.decode
     var result = cpy.PyObject_Call(decode._obj_ptr, args._obj_ptr, PyObjectPtr())
     if not result:
-        raise stash_python_error()
+        var failure = stash_python_error()
+        raise failure^
     return PythonObject(from_owned=result)
 
 
@@ -396,7 +399,7 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
     var lengths = List[Int64]()
     for i in range(len(documents)):  # cpu-route: prepare native document buffers and publish completed token lists
         var bytes = _bytes(documents[i], not bytes_only, "document " + String(i) if batch else "text")
-        lengths.append(len(bytes))
+        lengths.append(Int64(len(bytes)))
         tokenizer_append_bytes(text, bytes)
     var ids = List[Int32](length=max(len(text), 1), fill=0)
     var counts = List[Int64](length=max(len(lengths), 1), fill=0)
@@ -404,7 +407,7 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
     if not batch:
         if len(text) > 0:
             total = bpe_encode_into(owner[], Int(text.unsafe_ptr()), len(text), Int(ids.unsafe_ptr()), len(text), allow)
-            counts[0] = total
+            counts[0] = Int64(total)
     elif len(lengths) > 0:
         # Retain the existing optional fast batch route. The imported module
         # and handle are read from the operation snapshot, never self._m.
@@ -553,7 +556,7 @@ def _trainer_train(trainer: PythonObject, input_documents: PythonObject, context
     var lengths = List[Int64]()
     for i in range(len(documents)):  # cpu-route: capture documents into retained native training buffers
         var bytes = _bytes(documents[i])
-        lengths.append(len(bytes))
+        lengths.append(Int64(len(bytes)))
         tokenizer_append_bytes(arena, bytes)
     var sabotage = getenv("MOJOLEARN_BPE_TRAINER_SABOTAGE", "")
     var reverse = sabotage != "" and sabotage != "0"
