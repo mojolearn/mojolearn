@@ -1,0 +1,17 @@
+purge-trees-ensemble lane, 2026-10-28. Branch lane/purge-trees-20261028 (from integration/provider-queue-20261028 3d95fa9dfc).
+Merged green tree heads 55f12e87bb (tree-aux), e667e684ee (iforest+boost), 8c03803f96 (explainers); origin/main already contained.
+Conflict: bindings/public_attributes_native.mojo _property kept both svm_svc/svr_coef and bagging_estimators blocks.
+_native_trees_bridge.py keeps forest_release_gpu/gbdt_resident_release/iforest_resident_release and both gbdt/iforest elif registrations.
+Moved to native (one trees_* call per constructor):
+- DARTRegressor/DARTClassifier.__init__ -> trees_dart_construct (bindings/trees_boost_constructor_native.mojo dart_construct):
+  former _DARTBase.__init__ checks/order/wording, storage-hook/descriptor admission, stored fields, _trees_seed checks after storing.
+- OrderedRMSE.__init__ -> trees_gbdt_ordered_init (trees_public_gbdt_fit.mojo gbdt_ordered_construct; checks via
+  trees_public_gbdt.mojo ordered_option_values), then gbdt_initialize with registered GradientBoosting defaults.
+- ExperimentalTwoLevelFeatureFreq.__init__ -> trees_gbdt_feature_freq_init (gbdt_feature_freq_construct): gbdt_initialize, sources parse/uniqueness.
+- Removed dead Python: _trees_seed/_trees_sub_seed/_trees_clone (_expansion_trees.py), OrderedRMSE._ordered_options, _f32, _F32_MAX and unused imports (ensemble.py).
+_coef_block: no caller left in _expansion_trees.py after the explainers merge; the definition in _expansion_linear.py (not this lane's file) is now unused.
+Inventory (tools/public_runtime_inventory.py --endpoints-json) prohibited_source groups:
+  _expansion_trees.py 11 -> 0, ensemble.py 2 -> 0 (start 3d95fa9dfc -> head).
+Compiles: compile.json (full tree dispatcher checks/tree_auxiliary_public_compile.mojo, rc 0 at 3d3ca4404e 81 s and after main merge 75afa45d35 16 s, Mac -j10),
+  attributes_compile.json (checks/peer1_attribute_owner_compile.mojo, rc 0, 14 s). CPU column, identical, O0 only.
+Not covered: GPU builds, fast mode, runtime, identity, Python tests. No box rented.

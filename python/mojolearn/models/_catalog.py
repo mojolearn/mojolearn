@@ -1,292 +1,49 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The verified pretrained-model catalog: :func:`catalog` and :func:`verify_catalog_entry`."""
-# Engineering notes. catalog.json beside this file is written by tools/model_catalog.py from
-# tools/real_model_import.py box runs; it holds revisions, hashes and numbers only, never weights, model
-# files or evaluation images. verify_catalog_entry rebuilds a model the way real_model_import.py does
-# (same source, same export call, same import shapes, same seeded check input) so its output digest is
-# comparable with the digests the catalog records per version, numeric mode and vendor. The check input
-# and the digest are the tool's: numpy.random.default_rng(seed) and sha256 of the output bytes, 16 hex.
-# A torch model is exported to an ONNX file first (torch.onnx.export, _torch_to_onnx) and the file is
-# imported, the two-step path the docs give; the torch.export reader was removed 2026-10-22.
-from __future__ import annotations
+"""Native catalog metadata and verification of already exported model artifacts.
 
-import copy
-import json
-import os
+Export a model and prepare its catalog check input in application/test code.
+The native verifier admits the artifact and input, runs the existing imported
+program provider, and completes both digests and the comparison report.
+"""
 from pathlib import Path
+from .. import _backend
+from .._version import __version__
+from .._array import Array
+from ..tokenizer import _binding
+from ..importers._program import _IMPORT_CONTEXT
 
 __all__ = ["catalog", "verify_catalog_entry"]
-
-_HERE = Path(__file__).resolve().parent
-_CATALOG = _HERE / "catalog.json"
-_SCHEMA = "mojolearn-model-catalog/1"
-_CACHE = os.path.join("~", ".cache", "mojolearn", "models")
-
-
-def _load():
-    try:
-        doc = json.loads(_CATALOG.read_text())  # cpu-route: catalog() returns the shipped JSON as Python dicts
-    except FileNotFoundError:
-        return []
-    if doc.get("schema") != _SCHEMA:
-        raise RuntimeError(f"the model catalog has schema {doc.get('schema')!r}, expected {_SCHEMA!r}")
-    return doc.get("models", [])
+_NATIVE = _binding()._module
+_CATALOG = Path(__file__).resolve().parent / "catalog.json"
 
 
 def catalog():
-    """List the pretrained models in mojolearn's model catalog.
+    """Return independent native-decoded records from the shipped model catalog."""
+    return _NATIVE.catalog_public_call("catalog", (), _NATIVE_CONTEXT)
 
-    Each entry describes one published pretrained model that mojolearn
-    imports with :func:`mojolearn.import_model`: where it comes from, pinned
-    exactly (torchvision weights and versions, a Hugging Face repository and
-    commit, or an ONNX file's URL and SHA-256), the input shapes, the import
-    call, its accuracy where a public evaluation exists, and for each
-    mojolearn version and numeric mode the output digest on each GPU vendor
-    with the latency and device memory measured there. In `identical` mode,
-    mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs; an entry
-    whose ``status`` is ``'verified'`` has the same output digest on every
-    vendor it was run on, NVIDIA and AMD included.
 
-    The catalog holds no weights or data: :func:`verify_catalog_entry`
-    downloads the model from its source.
+def verify_catalog_entry(name, *, source=None, inputs=None, numeric_mode=None, cache=None):
+    """Verify an exported catalog model using explicit native check inputs.
 
-    Returns
-    -------
-    list of dict
-        One dict per model, with the keys ``name``, ``kind``, ``status``,
-        ``source``, ``inputs``, ``outputs``, ``import``, ``check``,
-        ``accuracy`` and ``versions``. ``versions`` maps a mojolearn version
-        to a numeric mode to ``{'digests': {vendor: digest}, 'vendors':
-        {vendor: {'latency_ms': ..., 'device_memory_mb': ..., ...}}}``.
+    ``source`` is an existing ONNX artifact or native ``GraphIR``. ``inputs``
+    is one native Array/buffer, or a tuple/list of native input arrays in model
+    order. Its byte digest must match the catalog's recorded check input.
+    Export and seeded check-input generation belong to application/test setup;
+    no Python model forward, exporter, downloader or random generator runs here.
+    ``cache`` remains accepted for call compatibility; the artifact is supplied
+    directly. ``numeric_mode`` uses the normal import provider selection.
 
-    Examples
-    --------
-    >>> import mojolearn
-    >>> [m["name"] for m in mojolearn.models.catalog() if m["status"] == "verified"]
+    Returns the name, version, numeric mode, vendor, source, input/output digests,
+    elapsed run milliseconds, expected digest and match result. A missing
+    expected digest yields ``match=None``. Missing source/inputs are refused
+    with the explicit native alternative.
     """
-    return copy.deepcopy(_load())
+    return _NATIVE.catalog_public_call("verify", (name, source, inputs, numeric_mode, cache), _NATIVE_CONTEXT)
 
 
-def _entry(name):
-    for e in _load():  # glue: catalog entries, one per model
-        if e.get("name") == name:
-            return e
-    names = ", ".join(e.get("name", "?") for e in _load())  # glue: catalog entry names for the message
-    raise KeyError(f"no model {name!r} in the catalog (models: {names or 'none'})")
-
-
-def _sha256_file(path):
-    """The SHA-256 of the file at ``path``, 64 lowercase hex digits (read and hashed in Mojo)."""
-    from .. import _backend
-    b = _backend.binding("_mojolearn_x_sequence")
-    sha, _size = b.verify_file_sha256(os.fspath(path))  # cpu-route: verification file hash in the native Mojo host reader
-    return str(sha)
-
-
-def _sha256_bytes(data):
-    """The SHA-256 of ``data``, 64 lowercase hex digits (core/sha256.mojo)."""
-    from .. import _backend
-    return str(_backend.load_host_module("_mojolearn_tokenizer_host").sha256_hex(data))  # cpu-route: verification digest in the native Mojo host hash
-
-
-def _download(url, dest):
-    import urllib.request
-    tmp = str(dest) + ".part"
-    with urllib.request.urlopen(url, timeout=600) as r, open(tmp, "wb") as fh:  # cpu-route: urllib HTTP response object, Mojo has no HTTP client
-        while True:  # cpu-route: urllib HTTP response object read in 1 MB chunks
-            chunk = r.read(1 << 20)
-            if not chunk:
-                break
-            fh.write(chunk)
-    os.replace(tmp, dest)
-
-
-def _no_tf32(torch):
-    try:
-        torch.backends.cuda.matmul.allow_tf32 = False
-        torch.backends.cudnn.allow_tf32 = False
-    except AttributeError:
-        pass
-
-
-def _check_input(entry):
-    """The catalog's seeded check input (the box tool's recipe), as one array."""
-    from .._optional_numpy import require_numpy
-    np = require_numpy("mojolearn.models.verify_catalog_entry")
-    check = entry["check"]
-    shape = tuple(entry["inputs"][0]["shape"])
-    if check.get("input_kind") == "ids":
-        raise ValueError(f"{entry['name']}: a token-id check input needs the model's vocabulary size; "
-                         "this entry cannot be checked here")
-    # cpu-route: verification inputs made before the run (numpy's seeded generator, the recipe the catalog digests record)
-    return np.random.default_rng(int(check["seed"])).standard_normal(shape, dtype=np.float32)
-
-
-def _torch_to_onnx(torch, model, x, path):
-    """``model`` exported to the ONNX file ``path`` on the example ``x`` (the two-step torch import:
-    torch.onnx.export, then mojolearn.import_model of the file). Opset 17, the TorchScript exporter."""
-    args = (torch.from_numpy(x),)
-    try:
-        torch.onnx.export(model, args, str(path), opset_version=17, dynamo=False)
-    except TypeError:  # a torch without the dynamo switch: its only exporter is the TorchScript one
-        torch.onnx.export(model, args, str(path), opset_version=17)
-    return str(path)
-
-
-def _source_torchvision(entry, x, report, workdir):
-    try:
-        import torch
-        import torchvision
-    except ImportError:
-        raise ImportError(f"checking {entry['name']} needs torch and torchvision") from None
-    _no_tf32(torch)
-    src = entry["source"]
-    cls, _, member = src["weights"].partition(".")  # glue: splits the weights enum name string
-    weights = getattr(getattr(torchvision.models, cls), member)
-    ctor = getattr(torchvision.models, entry["name"])
-    model = ctor(weights=weights).eval()
-    report["source"] = {"weights": str(weights), "torch_version": torch.__version__,
-                        "torchvision_version": torchvision.__version__}
-    with torch.no_grad():
-        return _torch_to_onnx(torch, model, x, Path(workdir) / (entry["name"] + ".onnx"))
-
-
-def _source_hf(entry, x, report, workdir):
-    try:
-        import torch
-        import transformers
-    except ImportError:
-        raise ImportError(f"checking {entry['name']} needs torch and transformers") from None
-    _no_tf32(torch)
-    src = entry["source"]
-    lm = transformers.AutoModelForCausalLM.from_pretrained(src["repo"], revision=src.get("revision"),
-                                                           torch_dtype=torch.float32)
-    lm.config.use_cache = False
-
-    class Logits(torch.nn.Module):
-        def __init__(self, m):
-            super().__init__()
-            self.m = m
-
-        def forward(self, input_ids):
-            return self.m(input_ids=input_ids, use_cache=False, return_dict=True).logits
-
-    report["source"] = {"repo": src["repo"], "revision": src.get("revision"), "torch_version": torch.__version__,
-                        "transformers_version": transformers.__version__}
-    with torch.no_grad():
-        return _torch_to_onnx(torch, Logits(lm).eval(), x, Path(workdir) / (entry["name"] + ".onnx"))
-
-
-def _source_onnx(entry, cache, report):
-    src = entry["source"]
-    cache = Path(os.path.expanduser(cache))
-    cache.mkdir(parents=True, exist_ok=True)
-    name = src["url"].rsplit("/", 1)[1]
-    path = cache / name
-    if not path.is_file():
-        _download(src["url"], path)
-    sha = _sha256_file(path)
-    if sha != src["sha256"]:
-        raise RuntimeError(f"{path} has SHA-256 {sha}; the catalog's file has {src['sha256']}. "
-                           "Delete it to download it again.")
-    report["source"] = {"url": src["url"], "sha256": sha}
-    if not src.get("converted_sha256"):
-        return str(path)
-    try:
-        import onnx
-        from onnx import version_converter
-    except ImportError:
-        raise ImportError(f"checking {entry['name']} needs the onnx package (its file is converted to "
-                          "opset 13 first)") from None
-    conv = cache / (path.stem + "-opset13.onnx")
-    if not conv.is_file():
-        onnx.save(version_converter.convert_version(onnx.load(str(path)), 13), str(conv))
-    report["source"]["converted_sha256"] = _sha256_file(conv)
-    report["source"]["onnx_version"] = onnx.__version__
-    return str(conv)
-
-
-def verify_catalog_entry(name, *, cache=None):
-    """Import a catalog model on this install and compare its output digest.
-
-    Builds the model from its pinned source (downloading the weights or the
-    model file, which needs network access and torch with torchvision,
-    transformers or onnx as the source requires), imports it with
-    :func:`mojolearn.import_model`, runs it once on the catalog's seeded
-    check input and compares the SHA-256 digest of the output with the
-    digest the catalog records for this mojolearn version and numeric mode.
-    In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA
-    and AMD GPUs, so the digest matches on any of them.
-
-    Parameters
-    ----------
-    name : str
-        A model name from :func:`catalog`, such as ``'resnet18'``.
-    cache : str or path-like, optional
-        Where ONNX model files are downloaded (default
-        ``~/.cache/mojolearn/models``). torchvision and Hugging Face
-        weights use those libraries' own caches.
-
-    Returns
-    -------
-    dict
-        ``name``, ``version``, ``numeric_mode``, ``vendor``, ``digest``
-        (this install's output digest), ``expected`` (the catalog's digest,
-        or None when the catalog has none for this version and mode),
-        ``match`` (True or False, or None when there is nothing to compare
-        with), ``input_digest``, ``run_ms`` (the wall time of this first
-        run, warm-up included) and ``source``.
-
-    Raises
-    ------
-    KeyError
-        ``name`` is not in the catalog.
-    ValueError
-        The entry's status is not ``'verified'``, or the check input on this
-        install differs from the catalog's.
-
-    Examples
-    --------
-    >>> import mojolearn
-    >>> report = mojolearn.models.verify_catalog_entry("resnet18")
-    >>> report["match"]
-    True
-    """
-    import tempfile
-    import time
-
-    import mojolearn
-    entry = _entry(name)
-    if entry.get("status") != "verified":
-        raise ValueError(f"{name}: catalog status is {entry.get('status')!r}; only verified models are checked")
-    version = mojolearn.__version__
-    mode = mojolearn.numeric_mode()
-    report = {"name": name, "version": version, "numeric_mode": mode, "vendor": mojolearn.vendor()}
-    x = _check_input(entry)
-    want_in = entry["check"]["input_digest"]
-    report["input_digest"] = _sha256_bytes(x.tobytes())[:16]
-    if report["input_digest"] != want_in:
-        raise ValueError(f"{name}: the check input on this install has digest {report['input_digest']}, the "
-                         f"catalog's has {want_in} (a different numpy random generator)")
-    kind = entry["kind"]
-    shapes = entry["check"].get("import_shapes")
-    shapes = {k: tuple(v) for k, v in shapes.items()} if shapes else None  # glue: one entry per model input
-    with tempfile.TemporaryDirectory(prefix="mojolearn-catalog-") as workdir:
-        if kind == "torchvision":
-            source = _source_torchvision(entry, x, report, workdir)
-        elif kind == "hf-causal-lm":
-            source = _source_hf(entry, x, report, workdir)
-        else:
-            source = _source_onnx(entry, cache or _CACHE, report)
-        prog = mojolearn.import_model(source, shapes=shapes)
-    t0 = time.perf_counter()
-    y = prog.run(x)
-    report["run_ms"] = (time.perf_counter() - t0) * 1e3
-    y = y if isinstance(y, tuple) else (y,)
-    report["digest"] = _sha256_bytes(b"".join([a.tobytes() for a in y]))[:16]  # glue: one byte string per model output
-    cell = (entry.get("versions", {}).get(version) or {}).get(mode) or {}
-    digests = cell.get("digests") or {}
-    report["expected"] = next(iter(digests.values()), None)  # glue: the vendors' digests are equal
-    report["match"] = None if report["expected"] is None else report["digest"] == report["expected"]
-    return report
+# Import-time connections only; product calls never resolve package bindings.
+_NATIVE_CONTEXT = {"path": str(_CATALOG), "version": __version__, "vendor": _backend.vendor(),
+                   "default_mode": _backend.default_mode(),
+                   "backend_fields": vars(_backend), "import_context": _IMPORT_CONTEXT,
+                   "array_class": Array}
+_NATIVE.catalog_public_call("connect", (), _NATIVE_CONTEXT)

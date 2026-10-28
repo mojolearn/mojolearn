@@ -1,0 +1,89 @@
+Hierarchy general x_cluster transport — source handoff, 2026-10-28
+
+Start: local main 780cd217d65a24e15656eab73ff00a49522368c3.
+Branch: lane/peer1-hierarchy-cluster-20261028.
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-hierarchy-cluster-20261028.
+Scope: new dedicated descriptor files and cfb_agglo._agglo_x integration only.
+Root separately integrated the solver descriptor; this branch's older
+_agglo_legacy source is untouched and must not replace that integrated repair.
+
+What changed
+- General AgglomerativeClustering fit/fit_predict now call the typed native
+  hierarchy_cluster descriptor instead of CPython x_cluster_call ENTRY_AGGLO.
+- Existing x_cluster.entries.agglo_entry, agglo_tree and tree_labels are the
+  numerical owners on both HostOps and DeviceOps. No arithmetic, launch,
+  stopping, distance, connectivity or cut algorithm was duplicated or edited.
+- Private ABI mojolearn.hierarchy.cluster.v1, factory
+  hierarchy_cluster_native_api_v1: FIT=0, MODE=1, CAPABILITIES=2.
+  FIT buffers: X f32, connectivity f32, children i32[merges,2], labels i32[n],
+  distances f32[merges], scalars f64[2] (components, clusters).
+  Int words: X count, connectivity count, n, d, linkage, metric, edge count,
+  merge count, edge mode, cut, use_threshold. Floats: Minkowski p, threshold.
+  MODE returns compiled GLOBAL_NUMERIC_MODE. Caps: FIT=1, DEVICE=2.
+- Validation checks exact metadata span lengths, shapes, nonnull populated
+  buffers, supported metric/linkage/cut words and byte-overflow guards. Empty
+  connectivity/zero-merge outputs may use null addresses. All numerical
+  output slot lengths are checked before any result bytes are published.
+- No numerical CPython fallback. Common NeuralDescriptorProvider retains the
+  admitted factory/capsule/module; CompiledBindingSnapshot records ABI, mode
+  and capability. Existing model numeric_mode/parallel module selection stays
+  in cfb_agglo. This does not change solver default-mode selection.
+- The public input ArrayMetadata and connectivity owner survive execution.
+  Output arrays are fresh and their addresses are captured once. Native List
+  scalar storage survives the descriptor call and is consumed afterwards.
+  Optional prediction residency reuses the captured label address.
+  n_clusters conversion and cosine zero-flag address are captured once here.
+- The old result list/array.array conversion path is bypassed. Children and
+  labels remain int32, distances float32, scalar counters become Python ints.
+  Existing warning, field-removal, tree/full/partial/cut semantics are retained.
+
+Root integration and smallest meaningful compile
+1. Cherry-pick this source commit while preserving root's _agglo_legacy repair.
+2. Apply root_cluster_factory_registration.patch from this evidence directory:
+   only two imports, one capsule factory and one m.def_function in each shared
+   bindings/_mojolearn_x_cluster{,_host}.mojo. No other exports are changed.
+   Patch git apply --check passed on this branch and parent 0a98da2dca source.
+3. Small host numerical root: compile_cluster_host.mojo here, usual CPU column
+   and identical flags. It instantiates the real HostOps/agglo_entry route.
+   compile_cluster_device.mojo instantiates the unchanged DeviceOps owner on
+   an available supported device target. No separate Apple fast work requested.
+4. Compile public entry experiments/provider_hierarchy_20261027/compile_hierarchy.mojo
+   after source integration; it exercises cfb_agglo_operation and provider.
+   Module build roots must eventually cover factory registration/loading.
+   Host numerical compile alone does not cover the Python-facing provider or
+   device instantiation. Parent chooses compiler/flags and records provenance.
+
+Remaining Python/native-transport paths and limits
+- hierarchy_resident_pyapi labeled_reference prepare/predict/release (optional
+  prediction_data and predict), holder/finalizer transport remain separate
+  CPython-dispatched numerical/resource debt. This slice does not repair them.
+- Shared lifecycle, constructor/public-attribute installation, warning handling,
+  scalar builtins/operator validation, sparse connectivity/storage admission,
+  output compatibility and serialization retain their existing owners/audit.
+  This is not a claim that all those public operations are Python-free.
+- Metadata capsule discovery uses verified native extension entries; only
+  numerical dispatch for this general tree route is replaced here.
+- Other x_cluster algorithms still use x_cluster_call and ClusterOut Python
+  conversion. No changes to density/cluster siblings, adapters or Session.
+- Existing solver descriptor root work is not requalified by this branch.
+- Runtime, identity, cross-vendor, installed loading and invalid-state ordering
+  controls are NOT RUN. No product imports, compiler, benchmark or rental.
+  Complete-operation and family-complete claims remain unsupported.
+
+Validation and retained evidence
+- git diff --check PASS; shared registration patch apply --check PASS.
+- Initial staged diff check exited 2 on two blank-context markers inside the
+  patch artifact; commit did not run. Empty context lines were normalized,
+  preserving patch applicability. Original diagnostic log is retained.
+- Required git commit/push source guards run at delivery; their actual status
+  and any failures are retained externally, never inferred from grep output.
+- Complete source closure snapshot, diff and full check/push logs:
+  /Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/hierarchy-cluster-20261028/
+- source-manifest.json records exact reviewed/new source bytes. Source review
+  checked full and partial trees, zero merges, dense/COO connectivity layouts,
+  precomputed distances, scalar counters, optional distances, owners, native
+  mode/capability and same numerical callee. This is source evidence only.
+- Exploratory lookups for guessed descriptor filenames or already-integrated
+  solver evidence absent on this branch returned not-found; actual files were
+  then read from the parent worktree. Those are lookup misses, not runtime or
+  compile results. No test/compiler failure is omitted.

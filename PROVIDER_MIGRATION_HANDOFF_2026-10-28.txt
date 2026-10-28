@@ -633,3 +633,12 @@ Cherry-picked -x: b00f153308 2a63c7c545 d950eac50c (Prophet pair), ac2484736f 65
 Compile: experiments/integration_provider_queue_20261028/compile_tranche2.json — 33/33 affected roots exit 0 on RunPod
 x86-64-v3 CPU identical O0 (incl. runtime_classical_host and tokenizer_host). Pods uwr13guyoqe3vm (and ready-timeout
 ad0h8odft6dxsl) reaped verified. No runtime/identity/GPU execution.
+
+INTEGRATION 2026-10-28 (Claude integrator) — TRANCHE 3
+Merged (clean): 0617d68eea (peer3 neural/tokenizer), e4741fa2b7 (program pooled offload), dfc3fcefa0 (purge mode/backend),
+05b70eb1e2 (peer2 manifold/decomp), 28ff73d56e (purge trees), 0c6db00159 (purge neighbors), f1699b53a6 (peer1 native-next),
+d12bd2cab0 (board quality v8 tooling). Fix 2b0dfea245: transformer/native_decode_dispatch.mojo:49 list-literal ternary
+(GPU-target type error from main cbc14776d7). Wide-rebuild fence on neural_descriptor_pyapi.mojo acknowledged.
+Compile: experiments/integration_provider_queue_20261028/compile_tranche3.json — 65 affected roots + byte_lm sm_89/gfx942 +
+transformer sm_89/gfx942/host exit 0 (x86-64-v3 identical; pods 72c9ivaggbj3e2, tk6su34j7e3g9o, 69zjjal284f5d8 reaped).
+Known pre-existing failure NOT fixed: byte_lm_host (byte_lm_host_compat_pyapi.mojo, unchanged). No runtime/identity/GPU execution.
