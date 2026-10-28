@@ -1370,6 +1370,9 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(checkpoint_c[14], "checkpoint_enter")
         module.def_py_c_function(checkpoint_c[15], "safetensors_names")
         module.def_py_c_function(checkpoint_c[16], "safetensors_contains")
+        module.def_py_c_function(checkpoint_c[17], "checkpoint_connect")
+        module.def_py_c_function(checkpoint_c[18], "checkpoint_repr")
+        module.def_py_c_function(checkpoint_c[19], "checkpoint_widen_f16")
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
         module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_py_c_function(transformer_public_c, "transformer_public_call")
@@ -1426,6 +1429,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_public_c[13], "causal_lm_parameters")
         module.def_py_c_function(causal_public_c[14], "causal_lm_blocks")
         module.def_py_c_function(causal_public_c[15], "causal_state_init")
+        module.def_py_c_function(causal_public_c[16], "causal_lm_repr")
+        module.def_py_c_function(causal_public_c[17], "causal_state_repr")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))
