@@ -383,6 +383,20 @@ class Index:
         if mod.is_pkg and self.module_file(modname + "." + name):
             return ("module", modname + "." + name)
         getter = mod.defs.get("__getattr__")
+        if getter is not None:  # PEP 562: `if name == "X": return getattr(module, name)`
+            param = _params(getter)[0][:1]
+            for node in ast.walk(getter):
+                if (isinstance(node, ast.If) and isinstance(node.test, ast.Compare) and len(node.test.ops) == 1
+                        and isinstance(node.test.ops[0], ast.Eq) and isinstance(node.test.left, ast.Name)
+                        and [node.test.left.id] == param and isinstance(node.test.comparators[0], ast.Constant)
+                        and node.test.comparators[0].value == name and len(node.body) == 1
+                        and isinstance(node.body[0], ast.Return) and isinstance(node.body[0].value, ast.Call)
+                        and isinstance(node.body[0].value.func, ast.Name) and node.body[0].value.func.id == "getattr"
+                        and len(node.body[0].value.args) == 2 and isinstance(node.body[0].value.args[1], ast.Name)
+                        and [node.body[0].value.args[1].id] == param):
+                    source = self.resolve_expr(node.body[0].value.args[0], modname, None, depth + 1)
+                    if source and source[0] == "module":
+                        return self.resolve_name(source[1], name, depth + 1)
         if getter is not None:  # PEP 562: `from .x import name` inside the module __getattr__
             for node in ast.walk(getter):
                 if isinstance(node, ast.ImportFrom):
