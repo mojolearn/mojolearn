@@ -96,28 +96,7 @@ class ETS(ParamsMixin):
 
     def __init__(self, season_length=1, model="AAN", damped=True, alpha=None, beta=None, phi=None,
                  gamma=None, numeric_mode=None):
-        model = str(model)
-        if len(model) != 3:
-            raise ValueError("ETS: model is three letters, error / trend / season")
-        e, tr, s = model
-        if "Z" in model:
-            raise NotImplementedError("ETS: automatic ('Z') model selection is not implemented")
-        if tr == "M":
-            raise NotImplementedError("ETS: multiplicative trend is not implemented")
-        if e not in "AM" or tr not in "NA" or s not in "NAM":
-            raise ValueError(f"ETS: invalid model {model!r} (error A|M, trend N|A, season N|A|M)")
-        if damped and tr == "N":
-            raise ValueError("ETS: a damped model needs a trend")
-        season_length = int(season_length)
-        if s != "N" and season_length == 1:
-            raise ValueError("ETS: Nonseasonal data (a seasonal model needs season_length > 1)")
-        if s != "N" and season_length > 58:
-            raise NotImplementedError("ETS: season_length above 58 is not implemented (Nelder-Mead over at most 63 coordinates)")
-        if e == "A" and s == "M":
-            raise ValueError("ETS: Forbidden model combination (additive errors with a multiplicative season)")
-        self.season_length, self.model, self.damped = season_length, model, bool(damped)
-        self.alpha, self.beta, self.phi, self.gamma = alpha, beta, phi, gamma
-        self.numeric_mode = numeric_mode
+        _XSEQ(self, "ets_initialize", (season_length, model, damped, alpha, beta, phi, gamma, numeric_mode), _XSEQ_CONTEXT)
 
     def fit(self, y, X=None):
         """Check and store one series or a batch of series.
@@ -219,7 +198,6 @@ class DampedETS(ETS):
     """
 
     def __init__(self, season_length=1, error="A", alpha=None, beta=None, phi=None, numeric_mode=None):
-        super().__init__(season_length, error + "AN", True, alpha, beta, phi, numeric_mode=numeric_mode)
-        self.error = error  # stored so get_params / clone report it
+        _XSEQ(self, "ets_initialize", (season_length, error, alpha, beta, phi, numeric_mode), _XSEQ_CONTEXT)
 
 _native_xseq_bridge.register(xseq_ets_classes=((ETS, None), (DampedETS, None)))
