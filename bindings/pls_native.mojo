@@ -22,6 +22,10 @@ from bindings.py_attr import py_attr
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_host_f32
 from bindings.classical_labels import labels_f32
+from bindings.metrics_cls_native import metrics_cls_operation
+from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.decomp_input_pyapi import decomp_input_snapshot
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.decomp_kit_native import (
     DecompKit, decomp_int, decomp_float, decomp_mode, decomp_entries, decomp_input, decomp_is_a,
     decomp_class_attr, XD_SUB, XD_ADD, XD_MUL, XD_DIV, XD_SCALE, XD_SQ, XD_SQRT, XD_SELECT, XD_RECIP,
@@ -35,62 +39,27 @@ def _name(model: PythonObject) raises -> String:
 
 
 def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    var array = decomp_input(source, name, context)
-    return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
+    var input = decomp_input_snapshot(source, name, context)
+    return kit.input_snapshot(input, input.shape[0], input.shape[1])
 
 
 def _row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     # A fitted 1-D float32 vector as a 1 x n matrix.
-    var array = classical_host_f32(source, 1, name, context)
-    return kit.input(array, 1, Int(py=array.shape[0]))
-
-
-def _array_like(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    # `_sk_validate._array_like`: an `__array__`-only object (no buffer, not
-    # a sequence) as the array it exports, else the value itself.
-    var b = Python.import_module("builtins")
-    if value is None:
-        return value
-    var t = py_type(value)
-    if t is b.list or t is b.tuple or t is b.str or t is b.bytes:
-        return value
-    if Bool(py=py_call(b.isinstance, value, Python.tuple(b.list, b.tuple, b.str, b.bytes))):
-        return value
-    var export = py_call(b.getattr, value, PythonObject("__array__"), PythonObject(None))
-    if not Bool(py=py_call(b.callable, export)):
-        return value
-    if Bool(py=py_call(b.isinstance, value, context["array_class"])):
-        return value
-    try:
-        var view = py_call(b.memoryview, value)
-        _ = py_call(view.release)
-        return value
-    except error:
-        return py_call(export)
+    var input = decomp_input_snapshot(source, name, context, 1)
+    return kit.input_snapshot(input, 1, input.shape[0])
 
 
 def _target(mut kit: DecompKit, source: PythonObject, context: PythonObject) raises -> Tuple[Int, Bool]:
-    # `_PLS._xy`'s Y: (its n x q matrix or -1, whether it was 1-D).
-    var b = Python.import_module("builtins")
-    var y = _array_like(source, context)
-    if y is None:
+    # Admit the exact supported input before reading any metadata. A vector
+    # keeps the old row-then-transpose execution order, using captured shape
+    # and address instead of source.shape, source.reshape or __array__ hooks.
+    if source is None:
         return (Int(-1), False)
-    var shape = py_call(b.getattr, y, PythonObject("shape"), PythonObject(None))
-    var vec: Bool
-    if shape is not None:
-        vec = len(shape) == 1
-    else:
-        vec = not Bool(py=py_call(b.isinstance, y[0], Python.tuple(b.list, b.tuple)))
-    if not vec:
-        return (_matrix(kit, y, "Y", context), False)
-    # `_row_of`: a 1-D input as a 1 x n matrix, then its transpose.
-    var row: PythonObject
-    if shape is not None and Bool(py=py_call(b.hasattr, y, PythonObject("reshape"))):
-        row = py_call(y.reshape, 1, -1)
-    else:
-        row = Python.list(py_call(b.list, y))
-    var m = _matrix(kit, row, "Y", context)
-    return (kit.transpose(m), True)
+    var input = decomp_input_snapshot(source, "Y", context, -1)
+    if len(input.shape) == 2:
+        return (kit.input_snapshot(input, input.shape[0], input.shape[1]), False)
+    var row = kit.input_snapshot(input, 1, input.shape[0])
+    return (kit.transpose(row), True)
 
 
 def _center_scale(mut kit: DecompKit, a: Int, scale: Bool) raises -> Tuple[Int, Int, Int]:
@@ -259,6 +228,34 @@ def _rebuild(mut kit: DecompKit, z: Int, loadings_name: String, std_name: String
     return kit.ew(XD_ADD, scaled, mean)
 
 
+
+def _score_binding(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `_metrics_impl._get_binding` belongs to this whole public operation.
+    # Use the import-connected provider and preserve its metrics-specific
+    # mode refusals/readback before invoking the existing native metric owner.
+    var mode = py_get(fields, "numeric_mode")
+    var b = Python.import_module("builtins")
+    if mode is not None:
+        if py_type(mode) is not b.str:
+            raise Error("numeric_mode must be 'fast' or 'identical'")
+        var selected = String(py=py_call(py_call(mode.strip).lower))
+        if selected != "fast" and selected != "identical":
+            raise Error("numeric_mode must be 'fast' or 'identical'")
+    else:
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var expected = String(py=py_call(py_call(mode.strip).lower))
+    var module = estimator_binding(model, "_mojolearn_metrics", context, False)
+    var reader = neural_descriptor_entry(module, "metrics_numeric_mode", False)
+    if reader is None:
+        reader = neural_descriptor_entry(module, "umap_numeric_mode", False)
+    if reader is not None:
+        var word = Int(py=py_call(reader))
+        var actual = String("fast") if word == 0 else (String("identical") if word == 1 else String("None"))
+        if actual != expected:
+            raise Error("RuntimeError: mojolearn metrics: requested " + expected + ", binary reports " + actual + "; rebuild it")
+    return module
+
+
 def pls_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     if operation == "fit" or operation == "fit_transform":
@@ -286,16 +283,17 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         # name="y")`), the native predict, then `metrics.r2_score(y, pred,
         # sample_weight=..., numeric_mode=...)` through the metrics owner
         # (`family_mcls_r2`, the entry r2_score calls, with its arguments);
-        # args: (X, y, sample_weight, the metrics binding `_get_binding` resolved).
-        var truth = labels_f32(args[1], -1, "C", "y", context)
-        var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context)
+        # args: (X, y, sample_weight); binding selection remains native.
         var owner = py_get(context, "pls_metric_owner")
         if owner is None:
             raise Error("NotImplementedError: mojolearn: the PLS score needs the native metrics owner "
                         + "(family_mcls_r2); this install does not carry it")
+        var binding = _score_binding(model, fields, owner[1])
+        var truth = labels_f32(args[1], -1, "C", "y", context)
+        var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context)
         var mode = py_get(fields, "numeric_mode")
-        var r2 = py_call(owner[0], PythonObject(None), "family_mcls_r2",
-                         Python.tuple(args[3], truth.keep, prediction, args[2], PythonObject("uniform_average"),
+        var r2 = metrics_cls_operation(PythonObject(None), "family_mcls_r2",
+                         Python.tuple(binding, truth.keep, prediction, args[2], PythonObject("uniform_average"),
                                       PythonObject(True), mode), owner[1])
         _ = truth^
         return r2
