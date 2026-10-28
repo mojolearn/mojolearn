@@ -6,6 +6,8 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_get, py_type, py_call, py_contains
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_address
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
+from core.borrowed_buffer import BorrowedBufferLayout
 from core.generation_metadata import GenerationLayerWords
 
 
@@ -163,12 +165,63 @@ from core.generation_metadata import generation_transformer_addresses
 from transformer.native_generation_engine import NativeGenerationLayer, NativeGenerationModel
 
 
+def _generation_engine_weights(snapshot: GenerationWeightSnapshot,
+    mut pins: List[AdmittedBorrowedBuffer], mut storage: List[List[Float32]],
+    mut layouts: List[BorrowedBufferLayout], mut destinations: List[Int]) raises -> List[Int]:
+    # Admit native exporters and pin metadata once; copy bytes at the old
+    # per-use point, retaining aliases without calling Python buffer hooks.
+    var addresses = snapshot.addresses.copy()
+    for index in snapshot.refresh:  # driver-loop: foreign weight descriptors, never execution
+        admit_native_buffer_exporter(snapshot.owners[index])
+        var pin = AdmittedBorrowedBuffer(snapshot.owners[index])
+        ref layout = pin.layout.value()
+        if not layout.contiguous():
+            raise Error("generation: internal model and state buffers must be C-contiguous")
+        if pin.format != "f" and pin.format != "i" and pin.format != "b":
+            raise Error("generation: unsupported native model buffer format " + pin.format)
+        var bytes = layout.count * layout.itemsize
+        storage.append(List[Float32](length=(bytes + 3) // 4, fill=0))
+        var address = Int(storage[len(storage) - 1].unsafe_ptr())
+        addresses[index] = address
+        layouts.append(layout.copy())
+        destinations.append(address)
+        pins.append(pin^)
+    return addresses^
+
+
+def _generation_engine_state(value: PythonObject, count: Int, label: String,
+    mut pins: List[AdmittedBorrowedBuffer], mut storage: List[List[Float32]],
+    mut keep: List[PythonObject], mut layer: NativeGenerationLayer) raises -> Int:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if py_type(value) is g[].array_cls:
+        var copies = List[PythonObject]()
+        return generation_mutable(value, [count], keep, copies, label)
+    admit_native_buffer_exporter(value)
+    var pin = AdmittedBorrowedBuffer(value, True)
+    ref layout = pin.layout.value()
+    if pin.format != "f" or layout.itemsize != 4 or not layout.contiguous():
+        raise Error("CausalLM: state buffer " + label + " must be writable C-contiguous float32 (it is updated in place)")
+    if len(layout.shape) != 1 or layout.shape[0] != count:
+        raise Error("CausalLM: state buffer " + label + " shape differs from its required cache span")
+    storage.append(List[Float32](length=count, fill=0))
+    var address = Int(storage[len(storage) - 1].unsafe_ptr())
+    layer.refresh_layouts.append(layout.copy())
+    layer.refresh_addresses.append(address)
+    layer.writeback_layouts.append(layout.copy())
+    layer.writeback_addresses.append(address)
+    pins.append(pin^)
+    return address
+
+
 struct GenerationEngineAdmission(Movable):
     var snapshot: GenerationOperationSnapshot
     var state: PythonObject
     var states: List[PythonObject]
     var owners: List[AdmittedNativeExecution]
     var buffers: List[PythonObject]
+    var pins: List[AdmittedBorrowedBuffer]
+    var storage: List[List[Float32]]
+    var state_keys: List[PythonObject]
     var native: NativeGenerationModel
     var published: Bool
 
@@ -178,13 +231,14 @@ struct GenerationEngineAdmission(Movable):
         self.states = List[PythonObject]()
         self.owners = List[AdmittedNativeExecution]()
         self.buffers = List[PythonObject]()
+        self.pins = List[AdmittedBorrowedBuffer]()
+        self.storage = List[List[Float32]]()
+        self.state_keys = List[PythonObject]()
         self.published = False
         var entries = snapshot.entries
         var provider = py_get(entries, "native_block_operations")
         if snapshot.kind != "transformer" or snapshot.head.packed or snapshot.planes or provider is None or snapshot.native is None:
             raise Error("CausalLM: native generation engine requires admitted nonresident fp32 Transformer descriptors")
-        if len(snapshot.embedding.refresh) != 0 or len(snapshot.head.weights.refresh) != 0:
-            raise Error("CausalLM: native generation engine foreign-weight descriptor admission is pending")
         self.owners.append(AdmittedNativeExecution(snapshot.native, PythonObject(None), 0, -1, -1, PythonObject(None), 0))
         var model_limit = snapshot.model.max_positions
         var limited = model_limit is not None
@@ -192,6 +246,19 @@ struct GenerationEngineAdmission(Movable):
             snapshot.head.weights.addresses[0], snapshot.head.weights.addresses[1], snapshot.head.norm_eps,
             batch, snapshot.width, snapshot.vocab, Int(py=state.positions), Int(py=state.max_tokens),
             limited, Int(py=model_limit) if limited else 0)
+        try:
+            var embedding = _generation_engine_weights(snapshot.embedding, self.pins, self.storage,
+                self.native.embedding_refresh, self.native.embedding_targets)
+            self.native.embedding = embedding[0]
+        except problem:
+            self.native.embedding_failure = String(problem)
+        try:
+            var head = _generation_engine_weights(snapshot.head.weights, self.pins, self.storage,
+                self.native.head_refresh, self.native.head_targets)
+            self.native.norm = head[0]
+            self.native.head = head[1]
+        except problem:
+            self.native.head_failure = String(problem)
         var layers = state.layers
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
         var cpu = Bool(py=entries["cpu"])
@@ -200,8 +267,6 @@ struct GenerationEngineAdmission(Movable):
             var st = layers[i]
             var native_layer = NativeGenerationLayer(self.owners[0].endpoint(), 33 if cpu else 11, [], [], 0)
             try:
-                if len(layer.weights.refresh) != 0 or len(layer.optional.refresh) != 0:
-                    raise Error("CausalLM: native generation engine foreign-weight descriptor admission is pending")
                 if py_call(g[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
                     raise Error("CausalLM: layer state is owned by a decode session (resident in it); sync_state() or close it first")
                 var old_profile = py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None))
@@ -216,11 +281,14 @@ struct GenerationEngineAdmission(Movable):
                 var cache_count = layer.words.cache_count(batch, capacity)
                 var key = st.k_cache
                 var value = st.v_cache
-                if py_type(key) is not g[].array_cls or py_type(value) is not g[].array_cls:
-                    raise Error("CausalLM: native generation engine foreign mutable-state descriptor admission is pending")
-                var copies = List[PythonObject]()
-                var key_address = generation_mutable(key, [cache_count], self.buffers, copies, "k_cache")
-                var value_address = generation_mutable(value, [cache_count], self.buffers, copies, "v_cache")
+                var weights = _generation_engine_weights(layer.weights, self.pins, self.storage,
+                    native_layer.refresh_layouts, native_layer.refresh_addresses)
+                var optional = _generation_engine_weights(layer.optional, self.pins, self.storage,
+                    native_layer.refresh_layouts, native_layer.refresh_addresses)
+                var key_address = _generation_engine_state(key, cache_count, "k_cache",
+                    self.pins, self.storage, self.buffers, native_layer)
+                var value_address = _generation_engine_state(value, cache_count, "v_cache",
+                    self.pins, self.storage, self.buffers, native_layer)
                 var block = layer.block
                 var lock_owner = block["_runtime_lock"]
                 var lock = OperationLockLease(lock_owner)
@@ -238,10 +306,20 @@ struct GenerationEngineAdmission(Movable):
                 self.owners.append(AdmittedNativeExecution(provider, session, handle,
                     -1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle))
                 native_layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
-                var addresses = generation_transformer_addresses(0, layer.weights.addresses.copy(),
-                    key_address, value_address, 0, layer.optional.addresses.copy(), [])
+                var addresses = generation_transformer_addresses(0, weights,
+                    key_address, value_address, 0, optional, [])
                 native_layer.addresses = addresses^
                 native_layer.parameters = layer.words.transformer_params(batch, length, capacity, cached)
+                var state_index = -1
+                for index in range(len(self.state_keys)):  # driver-loop: exact alias identity of admitted state records
+                    if self.state_keys[index] is st:
+                        state_index = index
+                        break
+                if state_index < 0:
+                    state_index = len(self.state_keys)
+                    self.state_keys.append(st)
+                    self.native.state_counters.append(cached)
+                native_layer.state_index = state_index
             except problem:
                 # Defer this refusal to its original execution position. Earlier
                 # layers must retain their normal partial progress on failure.
