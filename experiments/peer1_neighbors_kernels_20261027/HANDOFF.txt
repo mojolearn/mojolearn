@@ -1,0 +1,140 @@
+Peer 1 — neighbor/search and kernel native runtime migration
+
+Branch: lane/peer1-neighbors-kernels-20261027
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-neighbors-kernels-20261027
+Starting local main: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Initial compiled neighbor/query source: 642328adf04dc1cf414e4316da7d769fa0c73b3d
+Resolver/hierarchy compile source: 17e5f8f71b0661f0f72e90df2329e569f73bf972
+
+Owner's final direction: small local compile, fix errors, then merge main;
+no runtime or cross-vendor verification. RunPod CPU authorized if needed.
+Authorized RunPod CPU compilation used after the Mac guard deadline.
+First pod removed after verified Mac/R2 retention; its runner deadline
+interrupted the follow-up repair batch. A second pod compiled only missing
+attribute/kernel/hierarchy artifacts successfully, retained all results on
+the Mac and R2, and was removed with deletion verified. No benchmarks, publication, or watcher services used.
+
+Changes delivered
+- KNN, KernelDensity, LocalOutlierFactor, NearestCentroid, KNNImputer and
+  KernelRidge/Nystroem/RBFSampler now use dedicated native lifecycle owners
+  for fitted checks, validation, feature names, fit tracking and finished
+  public output conversion. Public methods pass binding placeholders into
+  the native provider selection rather than calling Python _bind/metrics.
+- Native LOF score_samples and NC predict_log_proba replace Python bodies.
+  LOF novelty availability is evaluated by the native attribute owner.
+  Import-time native_method marks bypass all associated Python wrappers;
+  the no-op CPU training decorator now preserves those complete boundaries.
+- IVFIndex.extend owns validation, stable descriptors/storage retention,
+  allocation, existing-kernel execution and model publication natively.
+  IVF pickle preparation is native. Lazy export updates only its exported
+  data key so changed fitted arrays cannot bless stale resident storage.
+- IVFPQ/IVFSQ/IVFRaBitQ/Cagra fit/search/refine and pickle boundaries own
+  preparation and finished results natively. PQ lazy codes_ export has a
+  native attribute slot; Cagra keeps borrowed Array behavior using captured
+  dimensions/address. Refine admits candidates without NumPy.asarray and
+  preserves int8 candidate sequences while rejecting boolean candidates.
+- Kernel/PCS paths retain input and fitted metadata owners. Combined feature
+  fit_transform operations reuse captured X. PCS integer seeds preserve
+  arbitrarily wide integers. Radius fit stores an owned native snapshot.
+- KNN/KDE pickle owners are native. Reset-aware fitted checks preserve
+  _mojolearn_params_reset behavior. Existing native constructor replacements
+  were traced and retained rather than duplicating constructor migrations.
+- Peer2-requested TSNE-only tuples changed to (None, None, X); these depend
+  on Peer2's native manifold binding selection. No other TSNE code changed.
+- Root later assigned AgglomerativeClustering. Its dedicated native owner now
+  handles lifecycle, binding selection, explicit dense/sparse connectivity,
+  retained snapshots/resident state, finished labels and pickle state. The
+  native availability predicate preserves prediction_data OR _fit_X is not
+  None, with short circuiting. See provider_hierarchy_20261027/HANDOFF.txt for
+  its explicit numerical-dispatch/loader/shared-helper debt.
+- Shared native attribute resolution now separates fixed leaf dependencies
+  from connected property/predicate handling. The unchanged baseline also
+  stalled compilation; the finite native schema removes the mutual call
+  recursion without changing native dictionary/descriptor precedence.
+  Internal compiler cause remains unconfirmed. Independent source review:
+  ~/mojolearn-evidence/peer1-audit-tests-20261027/public-attribute-leaf-review.txt.
+- TSNE companion27bba573f6 adds y and connects Peer2's native manifold lifecycle;
+  it requires Peer2's bridge commit2dc27d16fb in the integrated tree.
+- Root-requested neighbor import/SVC compile repairs were delivered in
+  7c4d0635c0. Root's mode-selection, retained-array-owner and family-admission
+  source commits were reused as dependencies; they were not reimplemented.
+
+Affected native entries and compile scope
+- classical_native_call -> family_xn_knn_*, family_xn_kde_*, family_xn_loc_*,
+  family_km_krr_*, family_km_nys_*, family_km_rbf_*, family_xn_pcs_*,
+  family_xn_radius_fit and family_xn_ann_*.
+- neighbor_query_call (IVF extend/getstate and existing query consumers),
+  neighbor_query_attribute_call (IVF/PQ materialization), public_attribute_c
+  (LOF availability), neighbors_ann_search and ann_pq_materialize.
+- Successful split roots: checks/peer1_neighbors_owner_compile.mojo and
+  checks/peer1_query_owner_compile.mojo. Other successful roots are
+  checks/peer1_kernel_owner_compile.mojo, checks/peer1_attribute_owner_compile.mojo
+  and experiments/provider_hierarchy_20261027/compile_hierarchy.mojo.
+  All five roots now PASS; source commits/binaries/logs are in compile-provenance.json.
+- Original combined entry: checks/peer1_neighbors_kernels_compile.mojo.
+  It retains the actual native neighbor/kernel operation functions and
+  query/attribute C entries in one shared library; it runs no product code.
+- Production consumers include bindings/build_runtime_classical_host.sh
+  and the tokenizer-host query/attribute registrations. The focused compile
+  does not claim either whole production artifact was built or loaded.
+
+Compile status and evidence
+- See compile-provenance.json and the complete local logs under
+  ~/mojolearn-evidence/peer1-neighbors-kernels-20261027/local-compile/ and
+  cpu-compile/. The Mac attempt reached its 180-second guard with no
+  further source error; its compilation is INCOMPLETE, not a pass.
+- Neighbors and query split roots PASSED with exit0 in36s and16s on Linux
+  x86-64-v3, Mojo1.0.0(ed45d567), O0/j32/identical/CPU. Their complete binaries,
+  logs and source bytes are retained on the Mac and in R2; no runtime claim.
+- Kernel and attribute roots timed out, including unchanged baseline attribute
+  source. Native leaf resolver repair produced an observed attribute exit0,
+  but that new binary missed the first runner's retained snapshot before
+  teardown. This is unqualified evidence; rerun only missing artifacts.
+- First direct compiler invocation failed because its environment was not
+  activated. The normal Pixi shell activation fixed std-library discovery.
+- The first real parse diagnosed source errors (exception rethrow ownership,
+  ambiguous dictionary copy access, a missing raises annotation, a List
+  copy and a missing context argument). All were repaired before rerunning.
+- Kernel/attribute/hierarchy final compile results all PASS. The hierarchy
+  probe initially failed the main/shared-lib output-format contract; its
+  exported entry then compiled successfully. Only that root was repeated.
+- The source manifest retains hashes of all tracked Mojo files plus Pixi
+  manifest/lock as a conservative source-closure superset; compiler version,
+  compiler hash, flags, target, source commit and binary hash are retained.
+- Earlier source/AST checks and 81 newly retained public runtime controls
+  are recorded in AUDIT.txt/test-manifest.json. All runtime controls remain
+  UNRUN. No runtime, installed-wheel, performance or identity pass is claimed.
+
+Explicit remaining Python/provider paths (not a family-completion claim)
+- Base KNN/KDE and ANN numerical exports still use packed CPython extension
+  dispatch. They execute existing native algorithms, but descriptor-only
+  provider migration is still required. No arithmetic was rewritten here.
+- Kernel-method/x_neighbors descriptor execution remains behind the existing
+  MOJOLEARN_CLASSICAL_NATIVE_DISPATCH switch; its default legacy route and
+  shared label/score helpers retain CPython-dispatched numerical work.
+- KernelRidge/KNN scores still reach shared metrics/mcls label and reduction
+  owners. Native public wrapping does not qualify those transitive paths.
+- PCS None/RandomState seed selection still calls NumPy RNG, and the compiled
+  draw entry retains packed dispatch. PCS and Radius fit still need their
+  full remaining public lifecycle migration; do not infer completion from
+  the binding-placeholder and snapshot changes.
+- KDE's borrowing/copy-report contract and shared label/target/query helpers
+  still reread some metadata. IVF search/filter and parallel query helpers
+  also retain repeated metadata captures. Input-owner fixes do not eliminate
+  all of that work.
+- Expansion semi-supervised, kernel-feature and graph/SVGP operations still
+  have unported lifecycle/helpers. KernelPCA's actual native decomp owner is
+  separately coordinated with Peer2; retained Python KPCA bodies alone are
+  not evidence that those bodies execute.
+- Archive save/load decorators and installed-slot behavior need the final
+  integration pass. Existing supported serialization and optional tag
+  metadata were retained; no broad Python-free claim is made.
+
+Sublane details
+- experiments/provider_neighbors_core_20261027/HANDOFF.txt
+- experiments/peer1_kernels_native_20261027/HANDOFF.txt
+- experiments/peer1_neighbors_kernels_20261027/ANN_QUERY_HANDOFF.txt
+- Read-only ANN/IVF review: /tmp/peer1-kernels-ann-ivf-review.txt.
+
+Log rule: keep complete logs in files; inspect exit/structured summaries and
+bounded relevant diagnostics, never full logs or subagent transcripts.
