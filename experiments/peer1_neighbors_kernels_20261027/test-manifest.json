@@ -1,0 +1,28 @@
+{
+  "test_file_sha256": "bbcfc7aba72240da40727d9c791516de904c054e6ca2f61d93c1a6c19a8b2433",
+  "case_counts": {
+    "test_fit_does_not_call_mutable_python_binding_selector": 11,
+    "test_fit_refuses_input_protocols_before_entering_hooks": 33,
+    "test_fit_refuses_mutated_scalar_subclasses_without_coercion": 11,
+    "test_kernel_inference_refuses_mutated_fitted_metadata": 6,
+    "test_neighbors_return_completed_distance_label_and_probability_results": 1,
+    "test_precomputed_kernel_ridge_returns_multioutput_result": 1,
+    "test_lof_public_score_samples_and_decision_have_matching_offset": 1,
+    "test_centroid_public_log_probabilities_are_finished_results": 1,
+    "test_kernel_aliases_resolve_to_the_same_public_classes": 1,
+    "test_new_public_results_do_not_reenter_python_compatibility": 2,
+    "test_ivf_extend_accepts_strided_rows_and_searches_appended_ids": 1,
+    "test_ivf_extend_admits_before_mutation_and_leaves_fit_unchanged_on_refusal": 3,
+    "test_tsne_source_leaves_both_binding_routes_for_native_admission": 1
+  },
+  "total_cases": 73,
+  "runtime_cases_unrun": 72,
+  "source_syntax": "PASS",
+  "tsne_source_check": {
+    "status": "PASS",
+    "path": "/Users/andrewhendel/mojolearn-wt/peer1-neighbors-kernels-20261027/python/mojolearn/_expansion_ann.py",
+    "sha256": "71da072e7719255b822ded6dd14a9dc58afbebb2e270a64863b1545eb934ac52"
+  },
+  "product_runtime": "NOT_RUN",
+  "native_compile": "NOT_RUN"
+}
