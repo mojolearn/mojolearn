@@ -105,17 +105,18 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
         return FamilyLifecycle("predict", widen=True)
     if operation == "family_xn_graph_svgp_score":
         return FamilyLifecycle("score")
-    # KMeans (bindings/kmeans_native.mojo): its own by-name non-finite refusal.
+    # KMeans (bindings/kmeans_native.mojo): its own by-name non-finite refusal;
+    # X reaches the owner as the caller passed it (array init receives the rows).
     if operation == "family_kmeans_fit":
-        return FamilyLifecycle("fit")
+        return FamilyLifecycle("fit", replace=False)
     if operation == "family_kmeans_fit_predict":
-        return FamilyLifecycle("fit_predict")
+        return FamilyLifecycle("fit_predict", replace=False)
     if operation == "family_kmeans_fit_transform":
-        return FamilyLifecycle("fit_transform")
+        return FamilyLifecycle("fit_transform", replace=False)
     if operation == "family_kmeans_predict":
-        return FamilyLifecycle("predict")
+        return FamilyLifecycle("predict", replace=False)
     if operation == "family_kmeans_transform":
-        return FamilyLifecycle("transform")
+        return FamilyLifecycle("transform", replace=False)
     # LinearSVC / LinearSVR (bindings/svc_linear_native.mojo, svm_mixture_native.mojo).
     if operation == "family_svc_linear_svc_fit":
         return FamilyLifecycle("fit", scan=True, replace=False, target=2, classifier=True, required=True)
@@ -219,7 +220,9 @@ def family_lifecycle_begin(model: PythonObject, operation: String, spec: FamilyL
         if py_type(width) is b.int:
             host_inference_scalar(width, context)
             classical_check_width(columns, Int(py=width), name)
-        estimator_feature_check(model, fields, source, context)
+            # scikit-learn's feature-name check runs after a fit only: a
+            # stateless transform before any fit warns about nothing.
+            estimator_feature_check(model, fields, source, context)
     if fitting and Int(py=depth) == 0 and spec.target >= 0:
         if spec.target < len(args):
             var target = _target(args[spec.target], rows, name, spec.classifier, spec.required, False, context)
