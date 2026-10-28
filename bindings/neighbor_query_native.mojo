@@ -186,8 +186,8 @@ def _ivf_search(model: PythonObject, args: PythonObject, context: PythonObject) 
     if not py_contains(fields, "list_data_") and not py_contains(fields, "_device_list_data"):
         raise Error("ValueError: call fit or load before search")
     var q = family_f32_snapshot(args[0], 2, "queries", context)
-    var fitted = List[Int](Int(py=fields["n_rows_"]), Int(py=fields["n_features_in_"]),
-                           Int(py=fields["n_lists_"]), Int(py=fields["metric_code_"]))
+    var fitted = List[Int]([Int(py=fields["n_rows_"]), Int(py=fields["n_features_in_"]),
+                           Int(py=fields["n_lists_"]), Int(py=fields["metric_code_"])])
     var dim = fitted[1]
     if q.shape[1] != dim:
         raise Error("ValueError: query feature count differs from the fitted index")
