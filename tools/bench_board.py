@@ -943,6 +943,17 @@ def gpu_opponents_only(races, vendor):
     return out
 
 
+def box_persisted_out(out, env=None):
+    """True when this run is wrapped by tools/box_persist_run.sh (MOJOLEARN_BOX_PERSIST=1) and `out` lies inside
+    the results dir it persists to R2 (MOJOLEARN_RESULTS_DIR): the evidence then reaches R2 with the whole dir."""
+    env = os.environ if env is None else env
+    res = env.get("MOJOLEARN_RESULTS_DIR")
+    if env.get("MOJOLEARN_BOX_PERSIST") != "1" or not res:
+        return False
+    res, out = os.path.realpath(res), os.path.realpath(out)
+    return out == res or out.startswith(res.rstrip(os.sep) + os.sep)
+
+
 def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None,
                neural_shape="full"):
     check_neural_modes(families, modes, vendor)
@@ -5183,10 +5194,13 @@ def main(argv=None):
     # after every planned race passed a smoke run of these board and driver files
     full = not args.smoke and rows is None and not (
         any(r["family"] == "neural" for r in races) and args.neural_shape != "full")
-    if args.evidence_local_only and not (args.smoke or args.preflight_only):
+    if args.evidence_local_only and not (args.smoke or args.preflight_only or box_persisted_out(out)):
         # smoke-fixes (2026-10-14): the campaign smoke's preflight-only recipes keep their preflight archive local;
-        # the campaign uploads each recipe's evidence to R2 right after the recipe, outside its 5 s timer
-        raise SystemExit("bench_board: --evidence-local-only is for smoke and preflight-only runs only")
+        # the campaign uploads each recipe's evidence to R2 right after the recipe, outside its 5 s timer.
+        # A box-persisted run (tools/box_persist_run.sh, MOJOLEARN_BOX_PERSIST=1) whose --out lies inside the
+        # persisted results dir keeps its evidence there: the wrapper uploads that dir to R2 with presigned PUTs
+        # minted on the Mac, so no R2 credential is needed on the rented box (2026-10-28).
+        raise SystemExit("bench_board: --evidence-local-only is for smoke, preflight-only and box-persisted runs only")
     try:
         artifact_identity = _load_tool("bench_board_provenance").identity(args.artifact_manifest)
     except (OSError, ValueError) as exc:
