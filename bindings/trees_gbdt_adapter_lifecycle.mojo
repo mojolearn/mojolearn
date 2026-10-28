@@ -20,7 +20,9 @@ from bindings.trees_constructor_native import tree_parameter_storage
 from bindings.trees_public_state import _release_tree_values, tree_is_fitted
 from bindings.trees_public_inputs import trees_view, trees_check_rank, trees_f32_view
 from bindings.trees_public_gbdt_fit import adapter_classifier_fit, adapter_regressor_fit, _adapter_eval
+from bindings.trees_public_gbdt_fit import gbdt_fit, _tables as _gbdt_tables, _in as _gbdt_in
 from bindings.trees_public_gbdt import adapter_decision_function, adapter_predict, adapter_predict_proba
+from bindings.trees_public_gbdt import gbdt_predict, gbdt_predict_proba, ordered_rmse_fit, feature_freq_fit
 from bindings.trees_public_mixin_score import gbdt_adapter_score
 
 
@@ -181,3 +183,135 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
         raise Error("unknown native GBDT adapter operation " + operation)
     _ = x
     return parallel_public_result(result, method, kind, native)
+
+
+# ------------------------------------------------ GradientBoosting (legacy)
+#
+# `GradientBoosting`, `OrderedRMSE` and `ExperimentalTwoLevelFeatureFreq`
+# (python/mojolearn/ensemble.py) are `_mojolearn_native_public`: each public
+# fit/predict/predict_proba is one call here, and this envelope does what the
+# former _mode class-creation wrappers did around the unchanged inner owners
+# (gbdt_fit, ordered_rmse_fit, feature_freq_fit, gbdt_predict,
+# gbdt_predict_proba): the NotFittedError check, scikit-learn's X admission
+# (sparse, rank, emptiness), a column-vector y raveled with its warning, the
+# fit depth and fitted flag, feature_names_in_, the fitted width and feature
+# names at predict, and NumPy results for callers outside the package. These
+# classes declare no _estimator_type, so no output is widened.
+
+
+def _gbdt_model_class(cls: PythonObject, context: PythonObject) raises -> Bool:
+    var b = native_loaded_module("builtins")
+    var classes = context["trees_classes"]
+    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    for i in range(len(ancestry)):  # driver-loop: over the model's class ancestry, to its connected GBDT base
+        var kind = py_get(classes, ancestry[i])
+        if kind is not None and String(kind) == "gbdt":
+            return True
+    return False
+
+
+def _gbdt_model_y(y: PythonObject, rows: Int, model: PythonObject, fields: PythonObject,
+                  name: String, native: PythonObject) raises -> PythonObject:
+    """_sk_validate._check_y for these classes (no estimator kind): a
+    non-list column-vector y is raveled with scikit-learn's conversion
+    warning unless the loss is multi-target. The inner fit owns every other
+    target refusal."""
+    var b = native_loaded_module("builtins")
+    if y is None or py_type(y) is b.list or py_type(y) is b.tuple or py_type(y) is b.memoryview:
+        return y
+    var loss = py_get(fields, "loss")
+    if loss is not None and _gbdt_in(loss, _gbdt_tables(native)["multi_regression_losses"]):
+        return y
+    var column = False
+    try:
+        var yv = trees_view(y, "y", native)
+        column = yv.ndim() == 2 and yv.shape[1] == 1
+        _ = yv^
+    except:
+        # not a numeric array: the inner fit reports it in its own words
+        return y
+    if not column:
+        return y
+    return classical_check_y(y, rows, name, native)
+
+
+def gbdt_model_public_operation(model: PythonObject, operation: String, args: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    var b = native_loaded_module("builtins")
+    var cls = py_type(model)
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: native GradientBoosting requires ordinary class metadata")
+    if not _gbdt_model_class(cls, context):
+        raise Error("TypeError: native GradientBoosting lifecycle requires the connected GradientBoosting base")
+    if py_type(args) is not b.tuple or len(args) < 1:
+        raise Error("TypeError: native GradientBoosting operations take their argument tuple")
+    var native = _context(context)
+    var fields = _fields(model)
+    var name = classical_estimator_name(model)
+    var fitting = operation.endswith("_fit")
+    var method = String("fit")
+    if not fitting:
+        method = "predict_proba" if operation.endswith("_proba") else "predict"
+        classical_require_fitted(model, False, method, native)
+        if Bool(py=py_get(fields, "_mojolearn_fitting", PythonObject(0))):
+            # a fit's own predict sees its validated input, as before
+            if method == "predict_proba":
+                return gbdt_predict_proba(model, args[0], context)
+            return gbdt_predict(model, args[0], context)
+    classical_refuse_sparse(args[0], name)
+    var view = trees_view(args[0], "X", native)
+    trees_check_rank(view, 2, "X")
+    var rows = view.shape[0]
+    var cols = view.shape[1]
+    _ = view^
+    if fitting:
+        var inputs = args
+        if len(args) >= 2:
+            var y = _gbdt_model_y(args[1], rows, model, fields, name, native)
+            if y is not args[1]:
+                var items = py_call(b.list, args)
+                py_setitem(items, PythonObject(1), y)
+                inputs = py_call(b.tuple, items)
+        var saved = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+        if py_type(saved) is not b.int:
+            raise Error("TypeError: native GradientBoosting fit depth must be an exact integer")
+        var depth = Int(py=saved)
+        py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
+        var result = PythonObject(None)
+        try:
+            if operation == "trees_public_gbdt_model_fit":
+                result = gbdt_fit(model, inputs, context)
+            elif operation == "trees_public_gbdt_model_ordered_fit":
+                result = ordered_rmse_fit(model, inputs, context)
+            elif operation == "trees_public_gbdt_model_feature_freq_fit":
+                result = feature_freq_fit(model, inputs, context)
+            else:
+                raise Error("unknown native GradientBoosting operation " + operation)
+        finally:
+            # `_fields` again: a fit may replace the instance dictionary's contents
+            var after = _fields(model)
+            if depth > 0:
+                py_setitem(after, "_mojolearn_fitting", PythonObject(depth))
+            else:
+                _ = py_call(after.pop, "_mojolearn_fitting", PythonObject(None))
+        var state = _fields(model)
+        py_setitem(state, "_mojolearn_fitted", PythonObject(True))
+        var names = _feature_names(args[0], native)
+        if names is None:
+            _ = py_call(state.pop, "feature_names_in_", PythonObject(None))
+        else:
+            py_setitem(state, "feature_names_in_", names)
+        return result
+    var fitted = py_get(fields, "n_features_in_")
+    if fitted is not None and py_type(fitted) is b.int:
+        classical_check_width(cols, Int(py=fitted), name)
+    estimator_feature_check(model, fields, args[0], native)
+    var result = PythonObject(None)
+    if operation == "trees_public_gbdt_model_proba":
+        result = gbdt_predict_proba(model, args[0], context)
+    elif operation == "trees_public_gbdt_model_predict":
+        result = gbdt_predict(model, args[0], context)
+    else:
+        raise Error("unknown native GradientBoosting operation " + operation)
+    _ = rows
+    return parallel_public_result(result, method, PythonObject(None), native)
