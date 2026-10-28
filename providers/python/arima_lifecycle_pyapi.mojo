@@ -97,6 +97,10 @@ def arima_initialize(model: PythonObject, args: PythonObject, context: PythonObj
     # Kernel order bounds remain the kernel owner's decision. Arbitrary-size
     # builtin integers here preserve constructor/clone metadata unchanged.
     py_setitem(updates, "complexity_", order[0] + order[2] + seasonal[0] + seasonal[2] + intercept + 1)
+    # The constructor's own numeric_mode (formerly added by the `_mode`
+    # NumericModeMixin wrapper): stored as given, checked when fit selects
+    # the binary (bindings/tsa_arima_native.mojo).
+    py_setitem(updates, "numeric_mode", args[7])
     forecast_commit(fields, updates, context["tsa_owner_context"])
     return PythonObject(None)
 
