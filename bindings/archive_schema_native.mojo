@@ -433,8 +433,7 @@ def _schema_whole(fields: PythonObject, item: PythonObject, name: String,
     if kind == "mul":
         return _schema_whole(fields, item[1], name, context) * _schema_whole(fields, item[2], name, context)
     if kind == "kernel_ls":
-        var nodes = Python.list()
-        _schema_kernel_nodes(_schema_value(fields, item[1], name), item[2], nodes)
+        var nodes = _schema_kernel_snapshot(_schema_value(fields, item[1], name), item[2], context)
         var total = 0
         for i in range(len(nodes)):  # driver-loop: over the kernel's postfix nodes
             total += len(nodes[i][2])
@@ -615,38 +614,10 @@ def _schema_repr_shown(value: PythonObject) raises -> String:
     return "<" + String(py_call(b.type.__dict__["__name__"].__get__, cls)) + ">"
 
 
-def _schema_is_bool(value: PythonObject) raises -> Bool:
-    """`_labels.is_bool`: Python's bool or NumPy's bool_."""
-    var cls = py_type(value)
-    return cls is native_loaded_module("builtins").bool or String(cls.__name__) == "bool_"
-
-
 def _schema_classes(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`_labels.classes_member(value)`: the saved form of `classes_`."""
-    var b = native_loaded_module("builtins")
-    var numbers = native_loaded_module("numbers")
-    var count = len(value)
-    var labels = Python.list()
-    var all_int = True
-    var all_real = True
-    var all_bool = True
-    var all_str = True
-    for i in range(count):  # driver-loop: over the distinct class labels of one fitted model
-        var label = value[i]
-        _ = py_call(labels.append, label)
-        var boolean = _schema_is_bool(label)
-        all_bool = all_bool and boolean
-        all_int = all_int and not boolean and Bool(py=py_call(b.isinstance, label, numbers.Integral))
-        all_real = all_real and not boolean and Bool(py=py_call(b.isinstance, label, numbers.Real))
-        all_str = all_str and Bool(py=py_call(b.isinstance, label, b.str))
-    if all_int or all_bool or all_real:
-        var items = Python.list()
-        for i in range(count):  # driver-loop: over the distinct class labels of one fitted model
-            _ = py_call(items.append, Python.tuple("const", labels[i]))
-        return _schema_vector(Python.dict(), String("<i8") if all_int or all_bool else String("<f8"), items, name, context)
-    if all_str:
-        return labels
-    raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
+    # The older "classes" schema spelling shares the admitted class-table
+    # owner; it must not revive len/index/ABC callbacks on caller state.
+    return _schema_class_table(value, PythonObject(None), PythonObject(None), context)
 
 
 def _schema_valid_mode(mode: PythonObject) raises -> PythonObject:
@@ -779,10 +750,50 @@ def _schema_class_table(value: PythonObject, integral: PythonObject, real: Pytho
 
 
 def _schema_kernel_nodes(kernel: PythonObject, table: PythonObject, nodes: PythonObject) raises:
-    # Shared strict node capture for GP public execution and saved models.
-    # No user _nodes/descriptor/sequence callback runs during serialization.
+    # Validate import-connected layout storage before the shared GP owner
+    # hashes a key, indexes a layout or converts any layout scalar.
+    var b = native_loaded_module("builtins")
+    if py_type(table) is not b.dict or py_type(nodes) is not b.list:
+        raise Error("TypeError: saved kernel layouts require native dictionary/list storage")
+    var keys = py_call(b.list, table)
+    for i in range(len(keys)):  # driver-loop: all key identities before dictionary lookup can compare one
+        if py_type(keys[i]) is not b.type:
+            raise Error("TypeError: saved kernel layout keys require native classes")
+    for i in range(len(keys)):  # driver-loop: fixed layout words before shared GP node capture
+        var layout = table[keys[i]]
+        if py_type(layout) is not b.tuple or len(layout) == 0 or py_type(layout[0]) is not b.str:
+            raise Error("TypeError: saved kernel layouts require exact tuples and native names")
+        var how = String(layout[0])
+        if how == "leaf":
+            if len(layout) != 4 or py_type(layout[1]) is not b.int:
+                raise Error("TypeError: saved leaf layouts require native integer kinds")
+            for j in range(2, 4):  # small-loop(leaf parameter and length-scale field names)
+                if layout[j] is not None and py_type(layout[j]) is not b.str:
+                    raise Error("TypeError: saved kernel fields require native names")
+        elif how == "pair" or how == "nodes":
+            if len(layout) != (4 if how == "pair" else 2):
+                raise Error("TypeError: saved kernel layout has an invalid field count")
+            for j in range(1, len(layout)):  # small-loop(pair or saved-node field names)
+                if py_type(layout[j]) is not b.str:
+                    raise Error("TypeError: saved kernel fields require native names")
+        else:
+            raise Error("RuntimeError: unknown saved kernel layout")
+    # Retain Peer5's shared strict node capture for execution and archives.
     var captured = gp_kernel_nodes(kernel, table)
     _ = py_call(nodes.extend, captured)
+
+
+def _schema_kernel_snapshot(kernel: PythonObject, table: PythonObject, context: PythonObject) raises -> PythonObject:
+    # This list belongs only to archive_schema_save's local context. The
+    # kernel and kernel_ls steps reuse one capture of the same graph/state.
+    var cache = context["archive_kernel_snapshots"]
+    for i in range(len(cache)):  # driver-loop: identity-only lookup among this archive operation's kernels
+        if cache[i][0] is kernel and cache[i][1] is table:
+            return cache[i][2]
+    var nodes = Python.list()
+    _schema_kernel_nodes(kernel, table, nodes)
+    _ = py_call(cache.append, Python.tuple(kernel, table, nodes))
+    return nodes
 
 
 def _schema_kernel(model_fields: PythonObject, step: PythonObject, values: PythonObject, name: String,
@@ -790,8 +801,7 @@ def _schema_kernel(model_fields: PythonObject, step: PythonObject, values: Pytho
     """The four kernel members of a "kernel" step, as `_kernel_arrays` and
     GaussianProcessRegressor.save packed them with Array.from_list."""
     var b = native_loaded_module("builtins")
-    var nodes = Python.list()
-    _schema_kernel_nodes(_schema_value(model_fields, step[1], name), step[2], nodes)
+    var nodes = _schema_kernel_snapshot(_schema_value(model_fields, step[1], name), step[2], context)
     var dtype = String(step[3])
     var code = _store_code(dtype)
     var kinds = Python.list()
@@ -1093,5 +1103,7 @@ def archive_schema_save(model: PythonObject, path: PythonObject, context: Python
     var fields = py_call(native_loaded_module("builtins").dict, admitted)
     _schema_gp_state(fields, steps, context)
     var values = Python.dict()
-    _schema_run(model, fields, steps, values, String(cls.__name__), context)
+    var operation_context = py_call(native_loaded_module("builtins").dict, context)
+    py_setitem(operation_context, "archive_kernel_snapshots", Python.list())
+    _schema_run(model, fields, steps, values, String(cls.__name__), operation_context)
     return classical_archive_write(path, values, context)
