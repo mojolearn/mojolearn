@@ -15,7 +15,7 @@ from bindings.causal_lm_public import _native_function
 
 
 def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: PythonObject,
-                            captured_fields: PythonObject = PythonObject(None)) raises -> PythonObject:
+                            captured_fields: PythonObject) raises -> PythonObject:
     """The zero-state prefill: `(y, h_last, k_last, v_last, theta_last)`, the
     reports None where the binding skips them. The caller assigns them."""
     var bi = Python.import_module("builtins")
@@ -81,8 +81,10 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
 
 
 def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject) raises -> PythonObject:
-    var result = _prefill_mamba3_reports(block, x, entries)
+    # Pass the captured fields explicitly: a PythonObject(None) default is
+    # evaluated at compile time and needs a live interpreter.
     var fields = py_call(Python.import_module("builtins").object.__getattribute__, block, "__dict__")
+    var result = _prefill_mamba3_reports(block, x, entries, fields)
     var names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
     for i in range(4):  # driver-loop: over report result metadata slots
         py_setitem(fields, names[i], result[i + 1])
