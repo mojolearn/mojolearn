@@ -16,6 +16,8 @@ from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_cont
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.pca_exact import pca_copied
+from bindings.mode_metadata_native import _fields
+from bindings.umap_parameters_native import umap_parameters_fields, umap_scalar as _umap_scalar, umap_integer as _umap_integer
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_is_str, family_type_name, family_call, family_array,
     family_as_f32, family_field, family_shape_repr,
@@ -36,120 +38,6 @@ comptime _I64_MAX = 9223372036854775807
 def _umap_attr(model: PythonObject, name: String, default: PythonObject) raises -> PythonObject:
     """Read stored fields without the Python public-output attribute hook."""
     return family_raw_get_or(model, name, default)
-
-
-def _umap_integer(value: PythonObject, name: String, minimum: Int, maximum: Int) raises -> PythonObject:
-    """`_integer(value, name, minimum, maximum)`: a bool (or NumPy bool) is
-    refused by name, then `operator.index`, then the range."""
-    var b = Python.import_module("builtins")
-    if (Bool(py=py_call(b.isinstance, value, b.bool)) or family_type_name(value) == "bool_"):
-        raise Error("UMAP " + name + " must be an integer")
-    var result: PythonObject
-    try:
-        result = py_call(Python.import_module("operator").index, value)
-    except:
-        raise Error("UMAP " + name + " must be an integer")
-    var op = Python.import_module("operator")
-    if not (Bool(py=py_call(op.le, PythonObject(minimum), result)) and Bool(py=py_call(op.le, result, PythonObject(maximum)))):
-        raise Error("UMAP " + name + " must be in [" + String(minimum) + ", " + String(maximum) + "]")
-    return result
-
-
-def _umap_scalar(value: PythonObject, name: String) raises -> Float64:
-    """`_scalar(value, name)`: a finite float32 value, rounded once."""
-    var result: Float64
-    try:
-        result = Float64(py=py_call(Python.import_module("builtins").float, value))
-    except:
-        raise Error("UMAP " + name + " must be a finite float32 value")
-    if not (result - result == 0.0) or abs(result) > _F32_MAX:
-        raise Error("UMAP " + name + " must be a finite float32 value")
-    # `float(np.float32(result))`: one round-to-nearest-even to binary32.
-    return Float64(Float32(result))
-
-
-def _umap_extras(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_extras()`: (metric code, metric_arg, a, b), validated."""
-    var b = Python.import_module("builtins")
-    var op = Python.import_module("operator")
-    if Bool(py=py_call(b.bool, _umap_attr(model, "densmap", PythonObject(False)))):
-        raise Error("NotImplementedError: UMAP densmap=True is not implemented: the density-augmented "
-                    + "objective (umap-learn's densMAP) is a different optimizer")
-    var output_metric = _umap_attr(model, "output_metric", PythonObject("euclidean"))
-    if not Bool(py=py_call(op.contains, Python.tuple(PythonObject("euclidean"), PythonObject("l2")), output_metric)):
-        raise Error("NotImplementedError: UMAP output_metric=" + family_repr(output_metric) + " is not implemented; "
-                    + "the layout optimizer's gradient is the euclidean one")
-    var metrics = context["family_mani_umap_metrics"]
-    var metric = family_field(py_fields(model), "metric")
-    if not family_is_str(metric) or not py_contains(metrics, metric):
-        raise Error("UMAP metric=" + family_repr(metric) + " is not supported; the kNN computes "
-                    + family_repr(py_call(b.sorted, metrics))
-                    + " (a callable, and every other name, is refused by name)")
-    var code = Int(py=metrics[metric])
-    var given = _umap_attr(model, "metric_kwds", PythonObject(None))
-    var kw = Python.dict()
-    if Bool(py=py_call(b.bool, given)):
-        kw = py_call(b.dict, given)
-    var p = 2.0
-    if code == 9:
-        p = _umap_scalar(py_call(kw.pop, PythonObject("p"), PythonObject(2.0)), "metric_kwds['p']")
-        if not p > 0:
-            raise Error("UMAP minkowski p must be positive")
-    if Bool(py=py_call(b.bool, kw)):
-        raise Error("UMAP metric_kwds " + family_repr(py_call(b.sorted, kw)) + " are not used by metric="
-                    + family_repr(metric))
-    var a_param = _umap_attr(model, "a", PythonObject(None))
-    var b_param = _umap_attr(model, "b", PythonObject(None))
-    if (a_param is None) != (b_param is None):
-        raise Error("UMAP a and b must be given together")
-    var a = 0.0
-    var bb = 0.0
-    if not (a_param is None):
-        a = _umap_scalar(a_param, "a")
-        bb = _umap_scalar(b_param, "b")
-        if not (a > 0 and bb > 0):
-            raise Error("UMAP a and b must be positive")
-    var init = family_field(py_fields(model), "init")
-    if family_is_str(init):
-        var s = String(py=init)
-        if s != "spectral" and s != "random" and s != "pca":
-            raise Error("UMAP init=" + family_repr(init) + " must be 'spectral', 'random', 'pca' or an array")
-    return Python.tuple(PythonObject(code), PythonObject(p), PythonObject(a), PythonObject(bb))
-
-
-def _umap_parameters(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_parameters()`: [n_neighbors, n_components, n_epochs, min_dist,
-    spread, set_op_mix_ratio, local_connectivity, random_state,
-    learning_rate, repulsion_strength, negative_sample_rate]."""
-    var fields = py_fields(model)
-    var neighbors = _umap_integer(family_field(fields, "n_neighbors"), "n_neighbors", 2, _I64_MAX)
-    var components = _umap_integer(family_field(fields, "n_components"), "n_components", 1, 32)
-    var epochs_param = family_field(fields, "n_epochs")
-    var epochs = PythonObject(0)
-    if not (epochs_param is None):
-        epochs = _umap_integer(epochs_param, "n_epochs", 1, _I64_MAX)
-    var seed = _umap_integer(family_field(fields, "random_state"), "random_state", 0, _I64_MAX)
-    var min_dist = _umap_scalar(family_field(fields, "min_dist"), "min_dist")
-    var spread = _umap_scalar(family_field(fields, "spread"), "spread")
-    var mix = _umap_scalar(family_field(fields, "set_op_mix_ratio"), "set_op_mix_ratio")
-    var connectivity = _umap_scalar(family_field(fields, "local_connectivity"), "local_connectivity")
-    var rate = _umap_scalar(family_field(fields, "learning_rate"), "learning_rate")
-    var repulsion = _umap_scalar(family_field(fields, "repulsion_strength"), "repulsion_strength")
-    var negatives = _umap_integer(family_field(fields, "negative_sample_rate"), "negative_sample_rate",
-                                  0, (1 << 31) - 1)
-    if rate <= 0:
-        raise Error("UMAP learning_rate must be positive")
-    if repulsion < 0:
-        raise Error("UMAP repulsion_strength must be nonnegative")
-    if not (min_dist >= 0 and min_dist <= spread) or spread <= 0:
-        raise Error("UMAP requires 0 <= min_dist <= spread and spread > 0")
-    if not (mix >= 0 and mix <= 1):
-        raise Error("UMAP set_op_mix_ratio must be in [0, 1]")
-    if connectivity < 0:
-        raise Error("UMAP local_connectivity must be >= 0")
-    _ = _umap_extras(model, context)
-    return Python.list(neighbors, components, epochs, PythonObject(min_dist), PythonObject(spread), PythonObject(mix),
-                       PythonObject(connectivity), seed, PythonObject(rate), PythonObject(repulsion), negatives)
 
 
 def _umap_mode(model: PythonObject, context: PythonObject) raises -> String:
@@ -313,10 +201,10 @@ def _umap_target(model: PythonObject, y: PythonObject, n: Int, context: PythonOb
     var op = Python.import_module("operator")
     var fields = py_fields(model)
     var tm = family_field(fields, "target_metric")
-    var w = _umap_scalar(family_field(fields, "target_weight"), "target_weight")
+    var w = _umap_scalar(family_field(fields, "target_weight"), "target_weight", context)
     if not (w >= 0 and w <= 1):
         raise Error("UMAP target_weight must be in [0, 1]")
-    var tk = _umap_integer(family_field(fields, "target_n_neighbors"), "target_n_neighbors", -1, _I64_MAX)
+    var tk = _umap_integer(family_field(fields, "target_n_neighbors"), "target_n_neighbors", -1, _I64_MAX, context)
     if Bool(py=py_call(op.contains, Python.tuple(PythonObject(0), PythonObject(1)), tk)):
         raise Error("UMAP target_n_neighbors must be -1 or >= 2")
     var tk_kept = py_call(b.max, tk, PythonObject(0))
@@ -381,8 +269,9 @@ def _umap_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var binding = spectral_umap_route(context, "metrics", py_get(py_fields(model), "numeric_mode"))
     var source = args[0]
     var y = args[1]
-    var config = _umap_parameters(model, context)
-    var extras = _umap_extras(model, context)
+    var validated = umap_parameters_fields(_fields(model), context)
+    var config = validated[0]
+    var extras = validated[1]
     var x = family_as_f32(source, 2, "X", context)
     var copied = pca_copied(source, context)
     if not _umap_finite(x):
@@ -470,8 +359,9 @@ def _umap_transform(model: PythonObject, args: PythonObject, context: PythonObje
     var op = Python.import_module("operator")
     if not family_raw_has(model, "_transform_training"):
         raise Error("UMAP transform requires a successful fit")
-    var config = _umap_parameters(model, context)
-    var extras = _umap_extras(model, context)
+    var validated = umap_parameters_fields(_fields(model), context)
+    var config = validated[0]
+    var extras = validated[1]
     var mode = _umap_mode(model, context)
     var fitted_config = family_raw_get(model, "_transform_config")
     var fitted_mode = family_raw_get(model, "_transform_mode")
