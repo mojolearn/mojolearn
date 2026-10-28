@@ -23,6 +23,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
+from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
@@ -174,6 +175,15 @@ def qn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var result = qn_public_operation(model, operation, args, context)
         return result.steal_data()
     except error:
+        if String(error).startswith("NotFittedError:") or String(error).startswith("DataConversionWarning:"):
+            try:
+                ref cpy = Python().cpython()
+                var context = cpy.PyTuple_GetItem(args_ptr, 3)
+                var warning = String(error).startswith("DataConversionWarning:")
+                var cls = causal_borrowed_item(context, "warning_category" if warning else "active_not_fitted_class")
+                return causal_set_exception(error_without_class(error, "DataConversionWarning" if warning else "NotFittedError"), cls)
+            except nested:
+                return raise_python_exception(nested)
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error^)
         if String(error).startswith("TypeError:"):
