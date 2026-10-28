@@ -15,6 +15,7 @@
 # and inputs before this execution. Runtime/vendor evidence is pending.
 from std.math import sqrt
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_attributes import classical_connect_numpy
@@ -56,27 +57,27 @@ def _mani_finite(v: Float64) -> Bool:
 
 def _mani_eq(value: PythonObject, text: String) raises -> Bool:
     """`value == text`, as a truth value."""
-    var b = Python.import_module("builtins")
-    return Bool(py=py_call(b.bool, py_call(Python.import_module("operator").eq, value, PythonObject(text))))
+    var b = native_loaded_module("builtins")
+    return Bool(py=py_call(b.bool, py_call(native_loaded_module("operator").eq, value, PythonObject(text))))
 
 
 def _mani_in(value: PythonObject, choices: PythonObject) raises -> Bool:
     """`value in choices`."""
-    return Bool(py=py_call(Python.import_module("operator").contains, choices, value))
+    return Bool(py=py_call(native_loaded_module("operator").contains, choices, value))
 
 
 def _mani_truth(value: PythonObject) raises -> Bool:
-    return Bool(py=py_call(Python.import_module("builtins").bool, value))
+    return Bool(py=py_call(native_loaded_module("builtins").bool, value))
 
 
 def _mani_int(value: PythonObject) raises -> Int:
     """`int(value)`."""
-    return Int(py=family_call(Python.import_module("builtins").int, value))
+    return Int(py=family_call(native_loaded_module("builtins").int, value))
 
 
 def _mani_float(value: PythonObject) raises -> Float64:
     """`float(value)`."""
-    return Float64(py=family_call(Python.import_module("builtins").float, value))
+    return Float64(py=family_call(native_loaded_module("builtins").float, value))
 
 
 def _mani_f32(v: Float64) -> Float64:
@@ -87,7 +88,7 @@ def _mani_f32(v: Float64) -> Float64:
 def _mani_kit(mode: PythonObject, binding: PythonObject, context: PythonObject) raises -> MKit:
     """`_Kit(mode)`: `binding` is the decomp binding the shell resolved for
     `mode`."""
-    return MKit(String(py=py_call(Python.import_module("builtins").str, mode)), binding, context)
+    return MKit(String(py=py_call(native_loaded_module("builtins").str, mode)), binding, context)
 
 
 def _mani_host_kit(mode: PythonObject, binding: PythonObject, context: PythonObject) raises -> MKit:
@@ -123,10 +124,10 @@ def _mani_eigen_solver(name: PythonObject, who: String) raises:
 def _mani_metric_spec(metric: PythonObject, p_in: PythonObject, metric_params: PythonObject,
                       who: String, context: PythonObject) raises -> Tuple[Int, Float64]:
     """`_metric_spec(metric, p, metric_params, who)`: (kind, p)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var p = p_in
     if _mani_truth(metric_params):
-        var extra = py_call(Python.import_module("operator").sub, py_call(b.set, metric_params),
+        var extra = py_call(native_loaded_module("operator").sub, py_call(b.set, metric_params),
                             py_call(b.set, Python.list(PythonObject("p"))))
         if _mani_truth(extra):
             raise Error("NotImplementedError: " + who + ": metric_params " + family_repr(py_call(b.sorted, extra))
@@ -288,7 +289,7 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
         qm = mk_dev_view(matrix_device(qd), j, n, ctx)
     else:
         var store = mk_store(qd, ctx)
-        qm = mk_new(py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice, PythonObject(0),
+        qm = mk_new(py_call(py_attr(store, "__getitem__"), py_call(native_loaded_module("builtins").slice, PythonObject(0),
                                                        PythonObject(j * n))), j, n, ctx)
     var v = k.mm(qm, yt, True, False)
     _ = ab^
@@ -367,7 +368,7 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     """`MDS.fit_transform(X, init=init)`; returns embedding_. args = (decomp
     binding, default-mode binding, X, init)."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = settings.values
     var mode = settings.mode
     py_setitem(settings.fields, "numeric_mode_", mode)
@@ -463,7 +464,7 @@ def _iso_graph(settings: ManifoldSettings, fields: PythonObject, mut k: MKit, m:
     if count > 1:
         metric_warn("The number of connected components of the neighbors graph is "
                     + String(count) + " > 1. Completing the graph to fit Isomap might be slow.",
-                    Python.import_module("builtins").UserWarning, k.ctx)
+                    native_loaded_module("builtins").UserWarning, k.ctx)
         var d = _mani_dist(k, m, m, kind, pw, True)
         k.graph_join(wg, d, comp[0], count)
     return (wg, nn_out)
@@ -668,7 +669,7 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
     var xm = mk_zeros(n1, p, ctx)
     var ym = mk_zeros(n1, nc, ctx)
     var sm = mk_zeros(1, p, ctx)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var pf = mk_addr(f0, ctx)
     _ = f0  # keep the Python object alive through the native call above
     var pl = mk_addr(lu, ctx)
@@ -681,7 +682,7 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
     _ = ym  # keep the Python object alive through the native call above
     _ = xm  # keep the Python object alive through the native call above
     var params = mk_ints([n, n1, nc, p, max(1, max_iter)])
-    _ = py_call(params.append, py_call(Python.import_module("operator").and_, py_call(b.int, seed),
+    _ = py_call(params.append, py_call(native_loaded_module("operator").and_, py_call(b.int, seed),
                                        PythonObject(0xFFFFFFFF)))
     var tols = Python.list(PythonObject(floor), PythonObject(_LLE_SUBSPACE_TOL), PythonObject(_LLE_STALL_TOL))
     var status = family_call(k.fn("x_decomp_lle_iterate"), pf, pl, pp, pi, pz, outs, params, tols)
@@ -818,7 +819,7 @@ def _mani_arguments(settings: ManifoldSettings, operation: String, args: PythonO
     var resolved = Python.list(binding, default_binding)
     for i in range(2, len(args)):  # small-loop(args: fixed public operation argument envelope): bounded by the public signature
         _ = py_call(resolved.append, args[i])
-    return py_call(Python.import_module("builtins").tuple, resolved)
+    return py_call(native_loaded_module("builtins").tuple, resolved)
 
 
 def mani_decomp_operation(model: PythonObject, settings: ManifoldSettings, operation: String, var args: PythonObject,
