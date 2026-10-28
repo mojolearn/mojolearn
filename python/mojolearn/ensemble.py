@@ -830,6 +830,14 @@ class GradientBoosting(NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_gbdt"
 
+    # One-call native public class (OrderedRMSE and the FeatureFreq model
+    # inherit it): the constructor takes numeric_mode itself, and fit /
+    # predict / predict_proba are one call each whose native owner
+    # (bindings/trees_gbdt_adapter_lifecycle.mojo `gbdt_model_public_operation`)
+    # does the fitted check, input admission, fit tracking, feature-name
+    # checks and NumPy results, so _mode installs no Python wrappers.
+    _mojolearn_native_public = True
+
     def _sklearn_instance_target_tags(self):
         # loss='MultiRMSE' fits a 2-D y (n_samples, n_targets): scikit-learn's
         # multi_output tag, so a column y is not raveled before the fit
@@ -881,6 +889,8 @@ class GradientBoosting(NumericModeMixin):
         boosting_type=None,
         fold_len_multiplier=2.0,
         fold_permutation_block=None,
+        *,
+        numeric_mode=None,
     ):
         # The constructor's checks and its stored state are the native
         # owner's (bindings/trees_public_gbdt_fit.mojo `gbdt_initialize`),
@@ -893,7 +903,7 @@ class GradientBoosting(NumericModeMixin):
             score_function, nan_mode, random_strength, use_pointwise_searcher, boost_from_average,
             border_build_max_samples, class_weights, permutation_count, ctr_estimation_permutation_id,
             grow_policy, max_leaves, min_data_in_leaf, min_split_gain, min_child_hessian, feature_fraction,
-            feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block,
+            feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block, numeric_mode,
         ), _TREES_CONTEXT)
 
     # -- the parameter list, in the ONE order both sides name --------------
@@ -977,8 +987,8 @@ class GradientBoosting(NumericModeMixin):
         refuses to change), refuses a query over 1023 rows, and leaves
         ``loss_curve_`` at zero.
         """
-        return _TREES(self, "trees_gbdt_fit", (X, y, sample_weight, eval_set, group_id, subgroup_id, pairs,
-                                               pairs_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_model_fit", (X, y, sample_weight, eval_set, group_id, subgroup_id,
+                                                            pairs, pairs_weight), _TREES_CONTEXT)
 
     def _resolved_learning_rate(self, n_rows, n_eval_rows=0, eval_target_constant=False):
         """The learning rate a fit on `n_rows` rows uses (`learning_rate_`),
@@ -1026,7 +1036,7 @@ class GradientBoosting(NumericModeMixin):
         -------
         mojolearn.Array
         """
-        return _TREES(self, "trees_gbdt_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_model_predict", (X,), _TREES_CONTEXT)
 
     # MultiClass softmax is their Probability (eval_processing.h:214-221); OneVsAll elementwise sigmoid is
     # MultiProbability (:222-226). The device applies the transform, so the max-subtraction matches
@@ -1051,7 +1061,7 @@ class GradientBoosting(NumericModeMixin):
         -------
         mojolearn.Array
         """
-        return _TREES(self, "trees_gbdt_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_model_proba", (X,), _TREES_CONTEXT)
 
     def predict_classes(self, X):
         """Return the predicted class codes (argmax of ``predict_proba``).
@@ -1187,16 +1197,19 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
     learning_rate : float, default 0.03
     l2_leaf_reg : float, default 3.0
     random_state : int, default 0
+    numeric_mode : {'identical', 'fast'} or None, default None
+        ``'identical'`` or ``'fast'`` (Apple GPUs only); None uses the
+        process default.
     """
 
     def __init__(
-        self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0
+        self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0, *, numeric_mode=None
     ):
         # The GradientBoosting constructor and the sources checks are the
         # native owner's (bindings/trees_public_gbdt_fit.mojo
         # `gbdt_feature_freq_construct`).
         _TREES(self, "trees_gbdt_feature_freq_init",
-               (sources, learning_rate, l2_leaf_reg, random_state), _TREES_CONTEXT)
+               (sources, learning_rate, l2_leaf_reg, random_state, numeric_mode), _TREES_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):
         """Fit the tree.
@@ -1214,7 +1227,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         -------
         self
         """
-        return _TREES(self, "trees_gbdt_feature_freq_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_model_feature_freq_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
 # Former docstring: Numeric ordered RMSE with one explicit row permutation. Fits symmetric trees using
 # independent prefix approximation cursors and one full-data cursor for exported leaves. Supports finite
@@ -1236,17 +1249,20 @@ class OrderedRMSE(GradientBoosting):
     l2_leaf_reg : float, default 3.0
     border_count : int, default 128
         1 to 255.
+    numeric_mode : {'identical', 'fast'} or None, default None
+        ``'identical'`` or ``'fast'`` (Apple GPUs only); None uses the
+        process default.
     """
 
     def __init__(
         self, n_estimators=100, max_depth=6, learning_rate=0.03,
-        l2_leaf_reg=3.0, border_count=128,
+        l2_leaf_reg=3.0, border_count=128, *, numeric_mode=None,
     ):
         # The ordered settings' checks and the GradientBoosting constructor
         # are the native owner's (bindings/trees_public_gbdt_fit.mojo
         # `gbdt_ordered_construct`).
         _TREES(self, "trees_gbdt_ordered_init",
-               (n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count), _TREES_CONTEXT)
+               (n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, numeric_mode), _TREES_CONTEXT)
 
     def fit(self, X, y, *, permutation, sample_weight=None):
         """Fit with the ordering given by ``permutation``.
@@ -1266,7 +1282,7 @@ class OrderedRMSE(GradientBoosting):
         -------
         self
         """
-        return _TREES(self, "trees_gbdt_ordered_fit", (X, y, permutation, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_model_ordered_fit", (X, y, permutation, sample_weight), _TREES_CONTEXT)
 
 # Separate sklearn prediction contracts; legacy GradientBoosting stays unchanged.
 from ._gbdt_adapters import GradientBoostingClassifier, GradientBoostingRegressor

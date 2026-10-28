@@ -13,7 +13,9 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
+from bindings.classical_exceptions import classical_require_fitted
+from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
@@ -164,10 +166,15 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if operation == "arima_repr":
             return arima_repr(call[0], context).steal_data()
         if operation == "arima_fit":
-            return arima_fit(call[0], call[2], context).steal_data()
+            var fitted = arima_fit(call[0], call[2], context)
+            # fit bookkeeping of the former `_mode` fit wrapper
+            py_setitem(py_fields(call[0]), "_mojolearn_fitted", PythonObject(True))
+            return fitted.steal_data()
         if operation == "arima_forecast":
             return arima_forecast(call[0], call[2], context).steal_data()
         if operation == "arima_predict":
+            # NotFittedError, as the former `_mode` predict guard raised it
+            classical_require_fitted(call[0], False, "predict", context)
             return arima_predict(call[0], call[2], context).steal_data()
         # AutoARIMA (bindings/tsa_autoarima_native.mojo)
         if operation == "autoarima_search":
@@ -177,12 +184,27 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if operation == "autoarima_forecast":
             return autoarima_forecast(call[0], call[2], context).steal_data()
         if operation == "autoarima_fit":
-            return autoarima_fit(call[0], call[2], context).steal_data()
+            var fitted = autoarima_fit(call[0], call[2], context)
+            # fit bookkeeping of the former `_mode` fit wrapper
+            py_setitem(py_fields(call[0]), "_mojolearn_fitted", PythonObject(True))
+            return fitted.steal_data()
         if operation == "autoarima_predict":
+            # NotFittedError, as the former `_mode` predict guard raised it
+            classical_require_fitted(call[0], False, "predict", context)
             return autoarima_predict_native(call[0], call[2], context).steal_data()
         raise Error("RuntimeError: unknown tsa operation " + operation)
     except error:
         var text = String(error)
+        if text.startswith("NotFittedError:"):
+            try:
+                ref cpy = Python().cpython()
+                # classical_require_fitted chose the active class (mojolearn's
+                # NotFittedError, or its bridge under scikit-learn's); the ABI
+                # args tuple owns the context throughout PyErr_SetString.
+                var cls = causal_borrowed_item(cpy.PyTuple_GetItem(args_ptr, 3), "active_not_fitted_class")
+                return causal_set_exception(error_without_class(error, "NotFittedError"), cls)
+            except nested:
+                return raise_python_exception(nested)
         if text.startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if text.startswith("RuntimeError:"):
