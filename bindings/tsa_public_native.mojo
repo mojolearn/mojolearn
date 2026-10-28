@@ -22,7 +22,7 @@ from core.xseq_marshal import xseq_cast_nd, tsa_flags_u8
 from bindings.tsa_hw_native import tsa_array, hw_fit, hw_predict, hw_score, hw_initialize, hw_forecast, hw_component, hw_save
 from bindings.tsa_admission import tsa_buffer, tsa_scalar, tsa_truth
 from bindings.native_loaded_module import native_loaded_module
-from bindings.tsa_arima_native import arima_fit, arima_predict
+from bindings.tsa_arima_native import arima_fit, arima_predict, arima_forecast
 from providers.python.arima_lifecycle_pyapi import arima_initialize, arima_parameter, arima_repr
 from bindings.tsa_autoarima_native import autoarima_fit
 from providers.python.autoarima_lifecycle_pyapi import autoarima_initialize, autoarima_forecast, autoarima_predict_native
@@ -165,6 +165,8 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return arima_repr(call[0], context).steal_data()
         if operation == "arima_fit":
             return arima_fit(call[0], call[2], context).steal_data()
+        if operation == "arima_forecast":
+            return arima_forecast(call[0], call[2], context).steal_data()
         if operation == "arima_predict":
             return arima_predict(call[0], call[2], context).steal_data()
         # AutoARIMA (bindings/tsa_autoarima_native.mojo)

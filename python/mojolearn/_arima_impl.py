@@ -48,9 +48,8 @@ arguments there and constructor arguments here, for the same reason.
 
 WHAT IS NOT HERE
 ----------------
-`AutoARIMA`. Its `p / q / P / Q / k` search and its information-criterion
-arms are NOT IMPLEMENTED (`arima/NOT_IMPLEMENTED.tsv`), and the differencing
-half of that search IS implemented and IS reachable, as
+`AutoARIMA` is a separate public estimator. Its search, fitting and forecasts
+are owned by native providers; the stationarity helpers remain available as
 `mojolearn.select_d` and `mojolearn.kpss_test`.
 
 CROSS-VENDOR STATUS, STATED PLAINLY BECAUSE IT IS THE LIBRARY'S HEADLINE
@@ -78,12 +77,7 @@ That property, where it exists at all, belongs to
 selected explicitly, makes no cross-vendor claim of any kind.
 """
 
-from . import _portable_math as math
-
-from . import _backend, _native_archive_bridge
-from ._array import Array
-from ._buffer import _native, addr, addr_ro, as_f32_c, empty
-from ._bufcheck import nelems, probe
+from . import _native_archive_bridge
 from ._mode import NumericModeMixin
 
 # The log-likelihood method, as `arima/estimator.mojo` numbers it. Only MLE
@@ -109,12 +103,6 @@ _ARIMA_FORMAT_EXOG = "mojolearn-arima-2"
 # `host_archive_arima` builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
-#: What `arima_numeric_mode()` answers per tier, the `NUMERIC_*` constant in
-#: `checks/numerics.mojo`. Duplicated from `_backend._MODE_CODE` on purpose:
-#: the cross-check below is worth nothing if it reads its expectation from
-#: the same object it is checking.
-_MODE_CODE = {"fast": 0, "identical": 1}
-
 # The compiled owner of `fit` and `predict` (bindings/tsa_arima_native.mojo,
 # through `tsa_native_call`), connected once at import.
 from . import _native_tsa_bridge  # noqa: E402
@@ -122,134 +110,8 @@ _TSA, _TSA_CONTEXT = _native_tsa_bridge.connect()
 _TSA_CONTEXT["arima_methods"] = _METHODS
 
 
-def _series_major(y, name):
-    """A C-contiguous float32 `(batch_size, n_obs)` array of `y`.
-
-    Returns `(array, batch_size, n_obs, copied)`. The caller MUST keep
-    `array` alive across the Mojo call; the Mojo side borrows the address
-    and holds nothing after it returns (`_buffer.py`).
-
-    DEVIATION 2415: `y` is read through the buffer protocol -- a NumPy
-    array, an `array.array`, a `mojolearn.Array`; a plain nested list is
-    materialized once as float32 the way `np.asarray` used to materialize
-    it -- and `_buffer.as_f32_c` does the conversion, reporting the copy.
-
-    NO FINITENESS CHECK HAPPENS HERE, deliberately. A NaN or an infinity is
-    refused BY NAME, with the flat index of the offender, in
-    `arima/impl/batched_arima.mojo::_refuse_non_finite`. Checking it
-    here as well would make that refusal unreachable from Python and would
-    silently take over a decision the implemented code owns.
-    """
-    try:
-        pb = probe(y)
-    except TypeError:
-        try:
-            y = Array.from_list(y, "<f4")
-        except Exception:
-            raise ValueError(
-                f"mojolearn ARIMA: {name} must be 1-D (one series) or 2-D "
-                f"(batch_size, n_obs) -- an array or a nested list of "
-                f"numbers -- got {type(y).__name__}"
-            ) from None
-        pb = probe(y)
-    if pb.ndim not in (1, 2):
-        raise ValueError(
-            f"mojolearn ARIMA: {name} must be 1-D (one series) or 2-D "
-            f"(batch_size, n_obs), got {pb.ndim}-D shape {pb.shape}"
-        )
-    if nelems(pb.shape) == 0:
-        raise ValueError(f"mojolearn ARIMA: {name} is empty, shape {pb.shape}")
-    # Named rather than silent. On a long batch the copy is the dominant
-    # cost of the call and a caller can avoid it by passing float32 in C
-    # order. float64 in particular is CONVERTED, not run: Metal exposes no
-    # float64 on the device and every kernel in this lane is float32
-    # (DEVIATION 670). cuML's ARIMA is float64 ONLY, so these are float32
-    # answers to a float32 problem, never cuML's numbers.
-    a, copied = as_f32_c(y, ndim=pb.ndim, name=name)
-    if pb.ndim == 1:
-        a = a.reshape((1, a.shape[0]))
-    return a, int(a.shape[0]), int(a.shape[1]), copied
-
-
-def _input_ndim(y):
-    """The rank the caller handed `fit` for `y`, before `_series_major` makes
-    it 2-D: the buffer's own `ndim`, or the nesting depth of a list."""
-    try:
-        return int(probe(y).ndim)
-    except TypeError:
-        depth, v = 0, y
-        while isinstance(v, (list, tuple)):
-            depth += 1
-            v = v[0] if len(v) else None
-        return depth
-
-
-def _exog_array(exog, batch_size, n_rows, y_ndim, name):
-    """A C-contiguous float32 `(batch_size, n_rows, n_exog)` array of `exog`.
-
-    Returns `(array, n_exog)`. DEVIATION 996: `exog` is `(batch_size, n_obs,
-    n_exog)`, `y`'s shape with a regressor axis last, which is statsmodels'
-    `(n_obs, k_exog)` with the batch in front. cuML's is `(n_obs, n_exog *
-    batch_size)` in Fortran order; the Mojo boundary
-    (`arima/exog_layout.mojo`) permutes to that layout. Two shorter
-    spellings are accepted because they are unambiguous:
-
-        y 1-D (one series)   exog (n_rows,) one regressor, or (n_rows, n_exog)
-        y 2-D                exog (batch_size, n_rows), one regressor
-
-    A non-finite value is NOT checked here: it is refused by name, with the
-    series, row and regressor, in `arima/exog_layout.mojo`
-    (DEVIATION 997), which every binding reaches."""
-    try:
-        pb = probe(exog)
-    except TypeError:
-        try:
-            exog = Array.from_list(exog, "<f4")
-        except Exception:
-            raise ValueError(
-                f"mojolearn ARIMA: {name} must be an array or a nested list of "
-                f"numbers, got {type(exog).__name__}"
-            ) from None
-        pb = probe(exog)
-    shape = tuple(int(v) for v in pb.shape)  # glue: shape dims of the argument
-    if len(shape) == 3:
-        want = (batch_size, n_rows)
-        got = shape[:2]
-    elif len(shape) == 2 and y_ndim == 1:
-        want = (n_rows,)
-        got = shape[:1]
-        shape = (1, shape[0], shape[1])
-    elif len(shape) == 2:
-        want = (batch_size, n_rows)
-        got = shape
-        shape = (shape[0], shape[1], 1)
-    elif len(shape) == 1 and y_ndim == 1:
-        want = (n_rows,)
-        got = shape
-        shape = (1, shape[0], 1)
-    else:
-        raise ValueError(
-            f"mojolearn ARIMA: {name} must be (batch_size, n_rows, n_exog); a "
-            f"1-D y also takes (n_rows,) or (n_rows, n_exog) and a 2-D y takes "
-            f"(batch_size, n_rows) for one regressor. Got {len(pb.shape)}-D "
-            f"shape {tuple(pb.shape)} beside a {y_ndim}-D y"
-        )
-    if tuple(got) != tuple(want):
-        raise ValueError(
-            f"mojolearn ARIMA: dimensions mismatch, {name} has shape "
-            f"{tuple(pb.shape)} and must lead with {want} "
-            f"(batch_size={batch_size}, rows={n_rows})"
-        )
-    if shape[2] < 1:
-        raise ValueError(f"mojolearn ARIMA: {name} has no regressor columns, shape {tuple(pb.shape)}")
-    a, _copied = as_f32_c(exog, ndim=len(pb.shape), name=name)
-    return a.reshape(shape), int(shape[2])
-
-
 #: The address every binding call passes for an exogenous input that is not
 #: there. One float, never read (`n_exog == 0`, or no forecast steps).
-def _no_exog():
-    return empty((1,), "<f4")
 
 
 # Batched ARIMA, backed by a batched Kalman filter and a
@@ -595,31 +457,6 @@ class ARIMA(NumericModeMixin):
 
     # -- the binding, and the tier it really is -----------------------------
 
-    def _extension(self):
-        """The `_mojolearn_arima` binding for THIS estimator's tier, with
-        the binary's own answer cross-checked against it.
-
-        `_backend.load_set` already refuses a binary whose VENDOR disagrees
-        with the directory it loaded from, and cross-checks the TIER through
-        the gbdt binary only. This adds the tier read-back for this binary
-        specifically, which is what `_svm_impl.py` does with
-        `svm_numeric_mode()` and for the same reason: a wrong-arm
-        measurement that is correctly labelled by accident is the failure
-        the whole three-tier design exists to prevent.
-        """
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "arima_numeric_mode", None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    f"mojolearn ARIMA: numeric_mode={want!r} was requested "
-                    f"but {mod.__name__} reports compile-time mode code "
-                    f"{got}; the binary and the directory it sits in "
-                    "disagree, rebuild it"
-                )
-        return mod
 
     # -- fit ----------------------------------------------------------------
 
@@ -658,77 +495,9 @@ class ARIMA(NumericModeMixin):
         # native call (bindings/tsa_arima_native.mojo)
         return _TSA(self, "arima_fit", (y, exog), _TSA_CONTEXT)
 
-    def _ic_penalties(self, N, n_obs):
-        """AIC and BIC penalties, two scalars of the order (2N; log(T) N,
-        `T` = n_obs after differencing), the `pen_aic, pen_bic` that
-        `arima_fit` and `arima_ic_from_loglike` take. No series data."""
-        d = self.order[1]
-        D, s = self.seasonal_order[1], self.seasonal_order[3]
-        T = n_obs - (d + s * D)
-        n_par = float(N)
-        return 2.0 * n_par, (math.log(T) if T > 0 else 0.0) * n_par
-
-    def _adopt_fit(self, arr, copied, y_ndim, batch_size, n_obs, ex, n_exog,
-                   params, x, x0, stats, flags, ics=None):
-        """The fitted state from the fit's output buffers (`arima_fit`'s
-        layout: params / x / x0 `(batch_size * N,)` f32, stats [llf, fx] f32,
-        flags [n_iter, retcode] i32). `fit` calls it after the native fit;
-        AutoARIMA.fit calls it with the search's own optimum under
-        MOJOLEARN_ARIMA_FAST_SEARCH_REUSE (`_x_sequence_autoarima.py`)."""
-        p, d, q = self.order
-        P, D, Q, s = self.seasonal_order
-        N = p + q + P + Q + self.k_ + n_exog + 1
-        self.input_copied_ = copied
-        self.batch_size_ = batch_size
-        self.n_obs_ = n_obs
-        self._y = arr
-        self._y_ndim = y_ndim
-        self.n_exog_ = n_exog
-        self.complexity_ = N
-        self._exog = ex if n_exog else None
-        # DEVIATION 2416: every attribute is a `mojolearn.Array`. `reshape`
-        # is a C-order view over the flat buffer the kernel wrote; a slice
-        # copies (the Array contract), which is what `ascontiguousarray`
-        # of a slice did.
-        self.params_ = params.reshape((batch_size, N))
-        self.x_ = x.reshape((batch_size, N))
-        self.x0_ = x0.reshape((batch_size, N))
-        self.n_iter_ = flags[:batch_size]
-        self.retcode_ = flags[batch_size:]
-
-        llf = stats[:batch_size].astype("<f8")
-        self.llf_ = llf
-        self.fx_ = stats[batch_size:]
-        # DEVIATION 991: cuML's information_criterion, -2 llf + penalty in
-        # binary64, now written by the fit itself (device kernel; the host
-        # column runs the same soft-float64 arithmetic). A NaN criterion is
-        # the canonical quiet NaN.
-        if ics is None:
-            # an AutoARIMA search's fit block (SEARCH_REUSE, CSS_SEARCH,
-            # STEPWISE): the plain fit's device kernel over the adopted
-            # log-likelihood row (lane arima-ics)
-            ics = empty((2 * batch_size,), "<f8")
-            pen_aic, pen_bic = self._ic_penalties(N, n_obs)
-            written = self._extension().arima_ic_from_loglike(
-                addr_ro(stats, name="stats"), addr(ics, name="ic"),
-                [batch_size, pen_aic, pen_bic])
-            if int(written) != batch_size:
-                raise RuntimeError(
-                    f"mojolearn ARIMA: the criterion kernel wrote {int(written)} "
-                    f"series, batch_size is {batch_size}")
-        self.aic_ = ics[:batch_size]
-        self.bic_ = ics[batch_size:]
-        return self
 
     # -- the named views into params_ ---------------------------------------
 
-    def _block(self, name, offset, width):
-        if not hasattr(self, "params_"):
-            raise AttributeError(f"mojolearn ARIMA: call fit() before {name}")
-        # A tuple-of-slices index COPIES into a fresh C-contiguous Array
-        # (DEVIATION 2417), exactly what `ascontiguousarray` of the NumPy
-        # column slice produced.
-        return self.params_[:, offset:offset + width]
 
     @property
     def mu_(self):
@@ -760,43 +529,6 @@ class ARIMA(NumericModeMixin):
 
     # -- predict and forecast -----------------------------------------------
 
-    def _check_fitted(self, who):
-        if not hasattr(self, "params_"):
-            raise ValueError(f"mojolearn ARIMA: call fit() before {who}")
-
-    def _future_exog(self, exog, end):
-        """The addresses' arrays for `predict(start, end, exog)`: the fit's
-        regressors and their future values. cuML's three checks
-        (`arima.pyx:688-696`), in its order and its words, then the shape
-        (`:713-722`)."""
-        n_exog = getattr(self, "n_exog_", 0)
-        if n_exog > 0 and end > self.n_obs_ and exog is None:
-            raise ValueError(
-                "mojolearn ARIMA: the model was fit with a regression component, "
-                "so future values must be provided via `exog`"
-            )
-        if n_exog == 0 and exog is not None:
-            raise ValueError(
-                "mojolearn ARIMA: a value was given for `exog` but the model was "
-                "fit without any regression component"
-            )
-        if end <= self.n_obs_ and exog is not None:
-            raise ValueError(
-                "mojolearn ARIMA: a value was given for `exog` but only in-sample "
-                "predictions were requested"
-            )
-        if n_exog == 0:
-            return _no_exog(), _no_exog()
-        if end <= self.n_obs_:
-            return self._exog, _no_exog()
-        fut, got = _exog_array(exog, self.batch_size_, end - self.n_obs_,
-                               getattr(self, "_y_ndim", 2), "exog")
-        if got != n_exog:
-            raise ValueError(
-                f"mojolearn ARIMA: dimensions mismatch, `exog` has {got} "
-                f"regressor column(s) and the model was fit with {n_exog}"
-            )
-        return self._exog, fut
 
     # In-sample and out-of-sample prediction, `(batch_size, end - start)`.
     #
@@ -874,33 +606,7 @@ class ARIMA(NumericModeMixin):
         -------
         Array of shape (batch_size, steps), float32
         """
-        self._check_fitted("forecast")
-        steps = int(steps)
-        if steps < 1:
-            raise ValueError(
-                f"mojolearn ARIMA: steps must be >= 1, got {steps}"
-            )
-        p, d, q = self.order
-        P, D, Q, s = self.seasonal_order
-        ex, fut = self._future_exog(exog, self.n_obs_ + steps)
-        out = empty((self.batch_size_ * steps,), "<f4")
-        y = self._y
-        pr = self.params_
-        self._extension().arima_forecast(
-            addr_ro(y, name="y"),
-            addr_ro(ex, name="exog"),
-            addr_ro(fut, name="exog (future values)"),
-            addr_ro(pr, name="params"),
-            addr(out, name="out"),
-            # ORDER MATCHES
-            # bindings/_mojolearn_arima.mojo::arima_forecast_binding.
-            # batch_size, n_obs, n_steps, p, d, q, P, D, Q, s, k, n_exog,
-            # reserved (MUST BE 0; the slot cuML's `level` would take, and
-            # `level` is NOT IMPLEMENTED)
-            [self.batch_size_, self.n_obs_, steps, p, d, q, P, D, Q, s,
-             self.k_, self.n_exog_, 0],
-        )
-        return out.reshape((self.batch_size_, steps))
+        return _TSA(self, "arima_forecast", (steps, exog), _TSA_CONTEXT)
 
     # -- saved models (lane/inference-forecast-umap-pca, 2026-09-15) --------
 
@@ -999,43 +705,7 @@ _native_archive_bridge.register(ARIMA, (_ARIMA_FORMAT, _ARIMA_FORMAT_EXOG), (
 ))
 
 
-def _plain_order(value, normalized):
-    """True when `value` already IS `normalized`: a tuple of Python ints."""
-    return (type(value) is tuple and all(type(v) is int for v in value)  # glue: entries of the order tuple
-            and value == normalized)
-
-
 # The class the AutoARIMA door builds its per-group models of.
 _TSA_CONTEXT["arima_class"] = ARIMA
 
 
-def _as_order(value, width, name):
-    """`(p, d, q)` or `(P, D, Q, s)` as a tuple of non-negative ints.
-
-    A CONVERSION, NOT A POLICY. Everything about whether the numbers are a
-    LEGAL order is `validate_order`'s, in Mojo, with the reference's messages. What is
-    refused here is a value that is not an order-shaped tuple of integers at
-    all, which cannot reach the Mojo side as anything meaningful.
-    """
-    try:
-        t = tuple(value)
-    except TypeError:
-        raise ValueError(
-            f"mojolearn ARIMA: {name} must be a tuple of {width} "
-            f"non-negative integers, got {value!r}"
-        ) from None
-    if len(t) != width:
-        raise ValueError(
-            f"mojolearn ARIMA: {name} must have {width} entries, got "
-            f"{len(t)} ({value!r})"
-        )
-    out = []
-    for v in t:  # glue: entries of the order tuple
-        i = int(v)
-        if i != v or i < 0:
-            raise ValueError(
-                f"mojolearn ARIMA: {name} entries must be non-negative "
-                f"integers, got {value!r}"
-            )
-        out.append(i)
-    return tuple(out)
