@@ -554,12 +554,18 @@ def _ordered_tree_structure(
     # score (`pointwise_scores.mojo`'s dynamic cosine kernel)
     score_std_dev: Float32 = Float32(0.0),
     seed: UInt64 = UInt64(0),
+    plain_cosine: Bool = False,
 ) raises -> List[_OrdSplit]:
     """The doc-parallel oblivious searcher's level loop. `fold_count > 1`
     with `plain_l2` False is the ordered fold arm (the dynamic cosine
     scorer); `fold_count == 1` with `plain_l2` True is the single-task arm
     the pointwise lane runs (`find_optimal_split_single_fold_kernel` with
     `TL2ScoreCalcer` at meta exponent 1, `pointwise_scores.mojo:809-950`)."""
+    # The single-fold cosine arm is part of the uncompiled CPU ranking
+    # draft (2026-10-27); compile its actual caller before merging. It uses
+    # TCosineScoreCalcer, not the paired-fold dynamic cosine formula.
+    if plain_cosine and (fold_count != 1 or plain_l2):
+        raise Error("plain cosine needs one fold and cannot select L2")
     var doc_count = len(doc_ids)
     var max_parts = 1 << (fold_bits + max_depth)
     var stripe = 1 << Int(ceil(log2(Float32(fold_count))))
@@ -813,7 +819,12 @@ def _ordered_tree_structure(
             # in the kernel's (leaf, fold) order, the same expressions
             var c_noisy = List[Float32]()
             var c_gain = List[Float32]()
-            if not plain_l2:
+            if plain_cosine:
+                c_noisy = _plain_cosine_candidates(
+                    hp, s.part_stats, part_count, l2, score_std_dev,
+                    helper_seed, bf_feature, score_before, c_gain,
+                )
+            elif not plain_l2:
                 c_noisy = _dynamic_cosine_candidates(
                     hp, s.part_stats, part_count, fold_count, stripe, l2,
                     score_std_dev, helper_seed, bf_feature, score_before,
@@ -932,6 +943,51 @@ def _ordered_tree_structure(
         s.indices = new_indices^
         _update_subsets_stats(s, 1 << (depth + 1 + fold_bits), sw, sg)
     return structure^
+
+
+def _plain_cosine_candidates(
+    hp: _PwHelper,
+    part_stats: List[Float32],
+    part_count: Int,
+    l2: Float32,
+    score_std_dev: Float32,
+    helper_seed: UInt64,
+    bf_feature: List[Int],
+    score_before: Float32,
+    mut gain_out: List[Float32],
+) -> List[Float32]:
+    """Score a plain single-fold histogram with Cosine or NewtonCosine."""
+    # pointwise_scores.mojo::ScoreCalcer: 1e-10 starts DenumSqr for the
+    # single-fold calcer; the ordered dynamic kernel instead starts 1e-20.
+    # normalize is False on the public fit. Left then right leaf terms and
+    # the feature-based normal draw follow the native GPU calcer exactly.
+    var scores = List[Float32](length=hp.hist_line, fill=Float32(0))
+    gain_out = List[Float32](length=hp.hist_line, fill=Float32(0))
+    for b in range(hp.hist_line):
+        var score = Float32(0)
+        var denum = Float32(1e-10)
+        for leaf in range(part_count):
+            var base = hp.hist_line * leaf * 2 + 2 * b
+            var wl = hp.hist[base]
+            var sl = hp.hist[base + 1]
+            var wr = max(part_stats[3 * leaf] - wl, Float32(0))
+            var sr = part_stats[3 * leaf + 1] - sl
+            var ml = sl / (wl + l2) if wl > Float32(0) else Float32(0)
+            score = identical_mul_add(sl, ml, score)
+            denum = identical_mul_add(wl * ml, ml, denum)
+            var mr = sr / (wr + l2) if wr > Float32(0) else Float32(0)
+            score = identical_mul_add(sr, mr, score)
+            denum = identical_mul_add(wr * mr, mr, denum)
+        var out = GBDT_ORD_FLOAT32_MAX
+        if denum > Float32(1e-15):
+            out = -score / identical_sqrt(denum)
+        if score_std_dev != Float32(0):
+            var seed = advance_seed_k(helper_seed + UInt64(bf_feature[b]), 4)
+            var draw = next_normal_f(seed)
+            out = identical_mul_add(draw[0], score_std_dev, out)
+        scores[b] = out
+        gain_out[b] = identical_mul_add(out, Float32(1), -score_before)
+    return scores^
 
 
 @no_inline
