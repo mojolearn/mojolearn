@@ -26,7 +26,7 @@
     "jl_rp": "PASS batch4 frozen5bfbe8118e; merged main5d490ccbff",
     "scalers": "PASS22.6s batch5 frozen d5a3291cce including snapshot type registration helper/module init; production builder two-line wiring source delta explicitly recorded",
     "new_manifold_lifecycle": "PASS batch6 f6a83c3551 actual dedicated runtime module; remaining scalar conversion/UMAP lifecycle debt explicit",
-    "normalizer_transform": "FAIL batch6: two metadata copies and UInt64 shift; repair queued; not merge-ready",
+    "normalizer_transform": "PASS batch7 frozen71cba19d87; later object/string error-order repair requires next affected compile before main merge",
     "pca_query": "PASS batch6 f6a83c3551 focused query+transitive sparse target; production dispatch source-reviewed"
   },
   "public_runtime_status": "pending_final_integration",
@@ -39,11 +39,13 @@
     "cpu-batch-3": "JL/RP passed; other roots failed; original logs plus successful binary/source retained Mac/R2; pod deleted verified",
     "cpu-batch-4": "Four roots PASS, scalers FAIL; full logs/binaries/source Mac+R2 retained and pod deleted verified",
     "cpu-batch-5": "Scalers PASS, new manifold lifecycle FAIL; logs/source/binary retained Mac+R2, pod deleted verified",
-    "cpu-batch-6": "Manifold/PCA query PASS, prep FAIL; full source/logs/accepted binaries Mac+R2, pod4oyi1zqe8aua2h deleted verified"
+    "cpu-batch-6": "Manifold/PCA query PASS, prep FAIL; full source/logs/accepted binaries Mac+R2, pod4oyi1zqe8aua2h deleted verified",
+    "cpu-batch-7": "Prep PASS and separate serial GBDT CTR PASS; full source/logs/binaries Mac+R2, podb8o973bpjz3685 deleted verified"
   },
   "main_merged": {
     "selector": "root receipt ae523b60fb",
     "four_batch4_groups": "5d490ccbff",
-    "scaler_snapshots_and_minmax_settings": "caa72cfe1f"
+    "scaler_snapshots_and_minmax_settings": "caa72cfe1f",
+    "batch6_manifold_pca_queries_sparse": "67c303bf6a"
   }
 }
