@@ -99,24 +99,10 @@ class ProphetForecaster(ParamsMixin):
                  yearly_seasonality="auto", weekly_seasonality="auto", daily_seasonality="auto",
                  seasonality_mode="additive", seasonality_prior_scale=10.0, holidays_prior_scale=10.0,
                  changepoint_prior_scale=0.05, max_iter=2000, numeric_mode=None):
-        if growth != "linear":
-            raise NotImplementedError(f"ProphetForecaster: growth={growth!r} is not implemented ('linear')")
-        if seasonality_mode not in ("additive", "multiplicative"):
-            raise ValueError("seasonality_mode must be 'additive' or 'multiplicative'")
-        self.growth = growth
-        self.changepoints = changepoints
-        self.n_changepoints = int(n_changepoints)
-        self.changepoint_range = float(changepoint_range)
-        self.yearly_seasonality = yearly_seasonality
-        self.weekly_seasonality = weekly_seasonality
-        self.daily_seasonality = daily_seasonality
-        self.seasonality_mode = seasonality_mode
-        self.seasonality_prior_scale = float(seasonality_prior_scale)
-        self.holidays_prior_scale = float(holidays_prior_scale)
-        self.changepoint_prior_scale = float(changepoint_prior_scale)
-        self.max_iter = int(max_iter)
-        self.numeric_mode = numeric_mode
-        self.seasonalities = {}
+        return _XSEQ(self, "prophet_initialize", (growth, changepoints, n_changepoints, changepoint_range,
+                     yearly_seasonality, weekly_seasonality, daily_seasonality, seasonality_mode,
+                     seasonality_prior_scale, holidays_prior_scale, changepoint_prior_scale, max_iter,
+                     numeric_mode), _XSEQ_CONTEXT)
 
     def add_seasonality(self, name, period, fourier_order, prior_scale=None):
         """Add a custom seasonality before :meth:`fit`.
@@ -137,12 +123,7 @@ class ProphetForecaster(ParamsMixin):
         -------
         self
         """
-        if int(fourier_order) < 1 or float(period) <= 0:
-            raise ValueError("add_seasonality: period > 0 and fourier_order >= 1")
-        self.seasonalities[name] = dict(period=float(period), fourier_order=int(fourier_order),
-                                        prior_scale=self.seasonality_prior_scale if prior_scale is None
-                                        else float(prior_scale))
-        return self
+        return _XSEQ(self, "prophet_add_seasonality", (name, period, fourier_order, prior_scale), _XSEQ_CONTEXT)
 
     def fit(self, t, y, holidays=None):
         """Fit the model.
@@ -196,3 +177,12 @@ class ProphetForecaster(ParamsMixin):
 # connected once at import.
 from ._native_xseq_bridge import connect as _connect_xseq  # noqa: E402
 _XSEQ, _XSEQ_CONTEXT = _connect_xseq()
+
+# Fixed class/protocol metadata is connected only during module import.
+from ._native_xseq_bridge import register as _register_xseq
+_register_xseq(xseq_prophet_class=ProphetForecaster,
+               xseq_prophet_mro=ProphetForecaster.__mro__,
+               xseq_prophet_layouts=tuple((owner, tuple((key, vars(owner).get(key)) for key in
+                   ('__dict__', '__new__', '__init__', '__getattribute__', '__getattr__', '__setattr__',
+                    '__del__', 'add_seasonality', 'fit', 'predict', 'seasonalities')))
+                   for owner in ProphetForecaster.__mro__))  # glue: fixed native lifecycle identities
