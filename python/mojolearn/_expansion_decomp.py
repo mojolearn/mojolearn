@@ -5128,3 +5128,9 @@ _DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({
     "FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis,
     "LatentDirichletAllocation": LatentDirichletAllocation,
     "GaussianRandomProjection": GaussianRandomProjection, "SparseRandomProjection": SparseRandomProjection})
+# Import-time connection of the complete native manifold lifecycle envelopes.
+# Keep these at EOF so retained constructor injection locations remain stable.
+_native_runtime_manifold_bridge.connect_lifecycle(Isomap)
+_native_runtime_manifold_bridge.connect_lifecycle(ClassicalMDS)
+_native_runtime_manifold_bridge.connect_lifecycle(MDS)
+_native_runtime_manifold_bridge.connect_lifecycle(LocallyLinearEmbedding)
