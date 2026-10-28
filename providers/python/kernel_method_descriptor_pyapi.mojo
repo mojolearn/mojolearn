@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Kernel-method admission over the common provider. No new provider type or
 # numerical implementation: this file only admits fixed private ABI words.
-from std.os import getenv
 from std.python import PythonObject
 from bindings.py_balanced import py_get, py_setitem
 from providers.python.neural_descriptor_pyapi import (
@@ -11,12 +10,16 @@ from providers.python.neural_descriptor_pyapi import (
 from kernel_methods.descriptor_schema import KERNEL_METHOD_ABI, KERNEL_METHOD_OPERATIONS, kernel_method_operation, kernel_method_scalar_mask
 
 
-def kernel_method_provider(fields: PythonObject, binding: PythonObject) raises -> PythonObject:
-    if getenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0") != "1":
+def kernel_method_provider(fields: PythonObject, binding: PythonObject, identical: Bool) raises -> PythonObject:
+    # Both supported identical providers expose the same versioned table:
+    # native_descriptor_dispatch on devices, descriptor_host on CPU. Fast
+    # retains its existing entries; the former candidate environment switch
+    # cannot silently route an identical operation through packed CPython math.
+    if not identical:
         return PythonObject(None)
     var factory = neural_descriptor_entry(binding, "kernel_methods_api_v1", False)
     if factory is None:
-        raise Error("kernel methods native provider is unavailable for this binding")
+        raise Error("RuntimeError: identical kernel methods require kernel_methods_api_v1; rebuild the kernel methods binding")
     var previous = py_get(fields, "_native_kernel_method_provider")
     var result = neural_descriptor_reuse(previous, factory, String(KERNEL_METHOD_ABI), KERNEL_METHOD_OPERATIONS)
     py_setitem(fields, "_native_kernel_method_provider", result)

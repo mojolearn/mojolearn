@@ -54,6 +54,8 @@ from bindings.py_balanced import py_call as _balanced_call
 from core.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_host_into, cd_fit_host_into
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from hierarchy.solver_descriptor_host import HIERARCHY_SOLVER_HOST_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
@@ -77,6 +79,11 @@ from hierarchy.impl.cluster.detail.connectivities import (
 from solver.host.cd_oracle import CdOracleResult, cd_oracle_fit, cd_oracle_fit_weighted
 from solver.impl.cd_gram_rule import cd_idn_gram_shape
 from std.os import getenv
+
+
+def hierarchy_solver_native_api_v1_binding() raises -> PythonObject:
+    var api = HIERARCHY_SOLVER_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -292,6 +299,7 @@ def build__mojolearn_solver_host() -> PythonObject:
         module.def_function[cd_fit_binding]("cd_fit")
         module.def_function[cd_predict_binding]("cd_predict")
         module.def_function[linkage_fit_binding]("linkage_fit")
+        module.def_function[hierarchy_solver_native_api_v1_binding]("hierarchy_solver_native_api_v1")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_solver_host: ", error))

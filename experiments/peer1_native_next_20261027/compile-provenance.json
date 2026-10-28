@@ -1,0 +1,94 @@
+{
+  "status": "PASS - four focused compilation roots",
+  "starting_commit": "b3239afc49478f01ff338b35121ee749396417aa",
+  "source_commit": "8264f02f531522ac4899c0d5546667f1cc4c5453",
+  "branch": "lane/peer1-native-next-20261027",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+  "allocation": {
+    "machine": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+    "affinity_cpus": 32,
+    "cgroup_limits": {
+      "/sys/fs/cgroup/cpu/cpu.cfs_quota_us": "-1",
+      "/sys/fs/cgroup/cpu/cpu.cfs_period_us": "100000"
+    },
+    "compiler_jobs": 32,
+    "runtime": "NOT_RUN",
+    "vendor_verification": "NOT_RUN"
+  },
+  "target": "Linux CPU x86-64-v3",
+  "flags": [
+    "--optimization-level",
+    "0",
+    "-j",
+    32,
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "x86-64-v3",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/root/mojolearn",
+    "-I",
+    "/root/mojolearn/bindings"
+  ],
+  "roots": [
+    {
+      "name": "kernel-host",
+      "entry": "bindings/entry/entry__mojolearn_kernel_methods_host.mojo",
+      "exit_code": 0,
+      "seconds": 20.0,
+      "binary_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/remote/leg_out/peer1-native-descriptors/round-1-kernel-host.so",
+      "binary_bytes": 3891464,
+      "binary_sha256": "f559630054c9d328a9bf2c0bd1fcd4d37100bb1e520ebf691ca052e6e0174280",
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/remote/leg_out/peer1-native-descriptors/round-1-kernel-host.log",
+      "log_sha256": "dd3fac259bd9bb25ab041fd5e4489695e59aa73e938d3bc83a14ee0f139d97e8"
+    },
+    {
+      "name": "kernel-public",
+      "entry": "checks/peer1_kernel_owner_compile.mojo",
+      "exit_code": 0,
+      "seconds": 30.0,
+      "binary_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/remote/leg_out/peer1-native-descriptors/round-1-kernel-public.so",
+      "binary_bytes": 5962112,
+      "binary_sha256": "9f05e7687ffbb3b3819d2e55b4bebfa03334f1134d7b128edc33713b51e73bd2",
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/remote/leg_out/peer1-native-descriptors/round-1-kernel-public.log",
+      "log_sha256": "8c340aa714d1b1fe0c20e25043a435050ab79846977a72cbd7edfbbd7152fbd4"
+    },
+    {
+      "name": "solver-host",
+      "entry": "bindings/entry/entry__mojolearn_solver_host.mojo",
+      "exit_code": 0,
+      "seconds": 16.0,
+      "binary_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/remote/leg_out/peer1-native-descriptors/round-1-solver-host.so",
+      "binary_bytes": 3205792,
+      "binary_sha256": "06f12f48d216f70e42c19b10b377549bd0754d414152276ec159f2bd75ff9a6c",
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/remote/leg_out/peer1-native-descriptors/round-1-solver-host.log",
+      "log_sha256": "c2e2e7b8e1ebc6b9ae9dace0e5f16d2cd03ca010d350adbe86f4fee22612de34"
+    },
+    {
+      "name": "hierarchy-public",
+      "entry": "experiments/provider_hierarchy_20261027/compile_hierarchy.mojo",
+      "exit_code": 0,
+      "seconds": 22.0,
+      "binary_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/remote/leg_out/peer1-native-descriptors/round-1-hierarchy-public.so",
+      "binary_bytes": 4644344,
+      "binary_sha256": "ae974b25b02709d560a5d8cca3fbb2d088f07904f65e36ee0cade9d282021b9e",
+      "log_path": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/remote/leg_out/peer1-native-descriptors/round-1-hierarchy-public.log",
+      "log_sha256": "3ea9ce402b89352665b062c8d4d8f2cc9ae7112da90ea2413ed14bef4ee377fb"
+    }
+  ],
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/remote/leg_out/peer1-native-descriptors/source-hashes.json",
+  "source_manifest_sha256": "3454b39796d3b23c2383117817d1edd82cd8555a4494649e1a0d57071b90bcd0",
+  "retained_archive": "/Users/andrewhendel/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/results-complete.tgz",
+  "archive_sha256": "0de342daf5d795bd75719920476ed20e9e813721fab97031e4592b2d79af375a",
+  "r2_object": "measurements/runpod-cpu/mojolearn-cpu-peer1-descriptors-20261027-20261028-035814/results-complete.tgz",
+  "teardown": "pod=57liouihqtep8q\nname=mojolearn-cpu-peer1-descriptors-20261027-20261028-035814\nterminated_verified=1\nexit=0\nat=2026-10-28T04:02:45Z\n",
+  "runtime_verification": "NOT_RUN - owner instruction",
+  "identity_verification": "NOT_RUN",
+  "gpu_compilation": "NOT_RUN - CPU descriptor/registration plus public owners compiled",
+  "remaining": "See kernel and hierarchy descriptor handoffs; score, general linkage, residency, legacy fast and shared metadata paths remain"
+}

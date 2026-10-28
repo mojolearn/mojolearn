@@ -1369,6 +1369,7 @@ class RadiusNeighbors(NumericModeMixin):
     # The ball cover is not built at fit, a known cost rather than an
     # oversight: `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner
     # records it.
+    @_native_query_method
     def fit(self, X, y=None):
         """Store the points to search.
 
@@ -1387,7 +1388,7 @@ class RadiusNeighbors(NumericModeMixin):
         -------
         self
         """
-        return _NATIVE(self, "family_xn_radius_fit", (X,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_radius_fit", (X, y), _NATIVE_CONTEXT)
 
     def save(self, path):
         """Save the fitted model to an ``.npz`` file.

@@ -43,6 +43,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays import classical_address
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.mode_metadata_native import _fields
+from bindings.public_attributes_native import _string_keys
 from bindings.family_common import (
     family_repr, family_call,
     family_entry, family_array,
@@ -175,25 +177,30 @@ def _km_chi2_input(x: ArrayMetadata, kernel: Int, where: String) raises:
 def _km_extension(fields: PythonObject, binding: PythonObject, where: String, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, Int]:
     """`_KernelMethodBase._extension`: the binary's own compile-time mode
     must be the one requested."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     if want is None:
         want = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(want) is not py_type(PythonObject("")):
         raise Error("TypeError: numeric_mode must be a native string or None")
-    var native = kernel_method_provider(fields, binding)
+    want = want.strip().lower()
+    var selected = String(want)
+    if selected != "identical" and selected != "fast":
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    var native = kernel_method_provider(fields, binding, selected == "identical")
     var getter = PythonObject(None)
     if native is None:
         getter = neural_descriptor_entry(binding, "kernel_methods_numeric_mode", False)
     if native is not None or getter is not None:
         var got = kernel_method_metadata(native, 13) if native is not None else _km_int(family_call(getter), "numeric mode")
-        if native is not None and got != 1:
-            raise Error("kernel methods native provider candidate requires identical mode")
         var codes = context["family_km_mode_codes"]
         var wanted = py_get(codes, want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
+            var owner_name = py_get(py_fields(binding), "__name__", PythonObject("kernel methods binding"))
+            if py_type(owner_name) is not b.str:
+                raise Error("TypeError: kernel methods binding name must be a native string")
             raise Error("RuntimeError: mojolearn " + where + ": numeric_mode=" + family_repr(want) + " was requested "
-                        + "but " + String(py_call(b.getattr, binding, PythonObject("__name__"))) + " reports compile-time mode code "
+                        + "but " + String(owner_name) + " reports compile-time mode code "
                         + String(got) + "; the binary and the directory it sits in disagree, rebuild "
                         + "it with bash bindings/build_kernel_methods.sh")
     var flags = kernel_method_metadata(native, 14) if native is not None else 0
@@ -217,7 +224,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     """`KernelRidge.fit(X, y, sample_weight)`."""
     classical_connect_numpy(context)
     var where = String("KernelRidge")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var x = x_meta.keep
     var n = x_meta.source.rows
@@ -315,7 +322,7 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     and the per-call predict run the same kernels on the same bytes."""
     classical_connect_numpy(context)
     var where = String("KernelRidge")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("dual_coef_")):
         raise Error("mojolearn " + where + ": call fit before predict")
@@ -396,7 +403,7 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     registers it, else None (the caller transforms)."""
     classical_connect_numpy(context)
     var where = String("Nystroem")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var x = x_meta.keep
     var n = x_meta.source.rows
@@ -648,7 +655,7 @@ def _km_release(model: PythonObject, release: String) raises:
     """Drop the resident handle, if held, through the minting binding's
     `release` entry. Quiet on a binding that cannot be reached any more and
     on a handle already released (a copied instance)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
         return
@@ -684,7 +691,7 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
             return PythonObject(None)
     elif (flags & 1) == 0:
         return PythonObject(None)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
@@ -718,7 +725,7 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
 def _km_scale_gamma(binding: PythonObject, x: ArrayMetadata, d: Int, context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`_scale_gamma.scale_gamma_x`: the binding's exact limbs of the float32
     cells, the one rounding in exact integer math."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var flags_entry = PythonObject(None)
     var flags = 0
     if native is not None:
@@ -755,7 +762,7 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     the binding registers it, else the fit and then the transform."""
     classical_connect_numpy(context)
     var where = String("RBFSampler")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var x = x_meta.keep
     var m = x_meta.source.rows
@@ -937,12 +944,15 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
             return _km_par_fit(model, admitted, context)
         return _km_par_apply(model, admitted, context)
     if operation == "family_km_getstate":
-        var state = py_call(native_loaded_module("builtins").dict, py_fields(model))
+        var state = py_call(native_loaded_module("builtins").dict, _fields(model))
         _ = py_call(state.pop, PythonObject(_HOLDER), PythonObject(None))
         _ = py_call(state.pop, "_native_kernel_method_provider", PythonObject(None))
         return state
     if operation == "family_km_setstate":
-        var fields = py_fields(model)
+        var fields = _fields(model)
+        if py_type(args[0]) is not native_loaded_module("builtins").dict:
+            raise Error("TypeError: kernel state requires an ordinary native dictionary")
+        _string_keys(args[0])
         _ = py_call(fields.update, args[0])
         py_setitem(fields, _HOLDER, Python.dict())
         return PythonObject(None)
