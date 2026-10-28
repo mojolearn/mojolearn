@@ -1,6 +1,6 @@
 # Six-lane integration
 
-Start with [INTEGRATION_HANDOFF.md](INTEGRATION_HANDOFF.md). The six-lane delivery is merged into main from `integration/six-lane-ab-20261006`; new controls remain default off. The master harness and main's measured results are retained. No estimator, runtime test, benchmark, quality/identity assessment or promotion was performed by this merge.
+The [historical integration handoff](https://github.com/mojolearn/mojolearn/blob/dacfa820ad64864062d044ecd062f799fedf9572/experiments/six_lane_integration/INTEGRATION_HANDOFF.md) is retained in Git history. The six-lane delivery is merged into main from `integration/six-lane-ab-20261006`; new controls remain default off. The master harness and main's measured results are retained. No estimator, runtime test, benchmark, quality/identity assessment or promotion was performed by this merge.
 
 | Artifact | Purpose |
 | --- | --- |
