@@ -1196,9 +1196,9 @@ def gbdt_fit_binding(
         )
     if use_pointwise and border_type != BORDER_TYPE_GREEDY_LOG_SUM:
         _refuse("feature_border_type under use_pointwise_searcher")
-    # UNCOMPILED DRAFT (2026-10-27): compile this actual gbdt_fit route and
-    # its native owner before merge. Existing ranking CPU derivatives are
-    # shared; the new owner performs the distinct doc-parallel tree search.
+    # CPU binding compilation passed on Apple M1 at O0 (2026-10-28);
+    # runtime/identity remain pending. Existing ranking CPU derivatives are
+    # shared; this owner performs the distinct doc-parallel tree search.
     var ranking_pointwise = use_pointwise and (
         pw_objective == GBDT_OBJ_QUERY_RMSE
         or pw_objective == GBDT_OBJ_PAIR_LOGIT

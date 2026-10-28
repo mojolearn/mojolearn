@@ -769,8 +769,8 @@ def _estimate_leaves_for_loss(
         for k in range(sizes[leaf]):
             bins[offsets[leaf] + k] = leaf
     var weights_cpu = List[Float64]()
-    # UNCOMPILED ranking draft (2026-10-27): compile both searcher callers
-    # before merge. GPU PairLogit setup replaces row weights with per-row
+    # Both CPU searcher callers compiled on Apple M1 at O0 (2026-10-28);
+    # runtime/identity remain pending. GPU setup replaces row weights with per-row
     # pair weights. Gradient leaves and Regularize need their partition sums,
     # not row counts; this also repairs the existing greedy grouped owner.
     var pair_row_weights = List[Float32]()

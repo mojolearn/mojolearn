@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Grouped objectives with the host doc-parallel symmetric-tree searcher."""
 
-# UNCOMPILED DRAFT (2026-10-27). Andrew authorized an isolated implementation
-# branch without builds. Compile this owner and the actual gbdt_fit binding
-# before any merge. No runtime or identity result is claimed. Keep the two
-# ranking pointwise lanes classified as unqualified until evidence is retained.
+# CPU binding compilation passed on Apple M1 at O0 (2026-10-28).
+# This includes the pointwise owner and actual gbdt_fit binding. Runtime,
+# identity and negative-control execution remain pending; verifier lane
+# registration is not evidence of passing execution.
 # See docs/GBDT_CPU_RANKING_DRAFT_20261027.md for exact scope and pending work.
 #
 # PairLogit/YetiRank derivatives and grouped leaf estimation already exist in
