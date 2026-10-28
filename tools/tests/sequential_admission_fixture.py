@@ -49,6 +49,9 @@ def _sequential_class(runtime_so, numeric_so, tokenizer_so):
     package = types.ModuleType("mojolearn")
     package.__path__ = [str(PACKAGE)]
     sys.modules["mojolearn"] = package
+    # The package connects its stdlib module registry at import, before any
+    # binding initializes; native admission reads it (bindings/native_loaded_module.mojo).
+    import mojolearn._native_loaded_modules  # noqa: F401
     numeric = _load_extension("mojolearn._mojolearn_x_sequence_host", numeric_so)
     tokenizer = _load_extension("mojolearn._host._mojolearn_tokenizer_host", tokenizer_so)
     runtime = _load_extension("mojolearn._host._mojolearn_runtime_sequential_host", runtime_so)
@@ -70,9 +73,6 @@ def _sequential_class(runtime_so, numeric_so, tokenizer_so):
     backend.load_host_module = lambda name: hosts[name]
     sys.modules["mojolearn._backend"] = backend
     package._backend = backend
-    # The package connects its stdlib module registry at import; native
-    # admission reads it (bindings/native_loaded_module.mojo).
-    import mojolearn._native_loaded_modules  # noqa: F401
     from mojolearn import _x_sequence_model
     return _x_sequence_model.Sequential
 
