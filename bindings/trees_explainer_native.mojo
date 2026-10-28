@@ -52,7 +52,9 @@ def _entry(table: PythonObject, name: String, required: Bool = True) raises -> P
 
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
     var cls = py_type(model)
-    if cls is context["trees_explainer_host_forest"]:
+    # The CPU host forest registers itself when its module loads (CPU installs).
+    var host = py_get(context, "trees_explainer_host_forest")
+    if host is not None and cls is host:
         return "rf_regressor"  # the archive keeps its actual output count
     # Compare identities before dictionary lookup; custom metaclasses must not
     # gain a hash/equality callback while selecting the native model layout.
@@ -289,7 +291,8 @@ def _replace(fields: PythonObject, changes: PythonObject, context: PythonObject)
             for i in range(len(value)):
                 _ = py_call(todo.append, value[i])
         else:
-            var tree = py_type(value) is context["trees_explainer_host_forest"]
+            var host = py_get(context, "trees_explainer_host_forest")
+            var tree = host is not None and py_type(value) is host
             for group_index in range(2):  # driver-loop: connected class tables
                 var group = "trees_classes" if group_index == 0 else "trees_boost_classes"
                 var keys = py_call(b.list, context[group])

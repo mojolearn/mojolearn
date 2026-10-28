@@ -2976,8 +2976,6 @@ def _connect_explainers():
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
     from ._native_classical_bridge import _layout
-    from ._forest_host import HostForest
-    _TREES_CONTEXT["trees_explainer_host_forest"] = HostForest
     module = _binding()._module
     attribute = module.standard_scaler_attribute_call
     factory = module.classical_attribute_descriptor

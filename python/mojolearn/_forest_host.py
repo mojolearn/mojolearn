@@ -290,3 +290,9 @@ def host_predict_proba(path, X):
 # Fixed public archive owner connected at import, after host classes exist.
 from .linear_model import _native_classical as _native_host_archive, _CLASSICAL as _ARCHIVE_CONTEXT
 from . import _classical_host as _archive_registry
+
+# TreeExplainer's native owner (bindings/trees_explainer_native.mojo) reads a
+# HostForest's flat arrays; connect the exact class once, at import.
+from . import _native_trees_bridge as _explainer_bridge
+_explainer_bridge.connect()[1].setdefault("trees_explainer_host_forest", HostForest)
+del _explainer_bridge
