@@ -36,6 +36,8 @@ from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
 from bindings.arena_prog_native import _metrics_run
+from bindings.label_admission_native import labels_primitive_kind, labels_admit_primitive, classifier_label_list
+from bindings.label_snapshot_native import label_array_list
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -619,12 +621,16 @@ def _native_labels(view: LabelsView, bool_source: Bool, context: PythonObject) r
     return _keep_ret_classes_store^
 
 
-def _label_list(y: PythonObject, context: PythonObject) raises -> PythonObject:
+def _label_list(var y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`y.tolist()` of a label container that has one (an ndarray, an
     `array.array`, a pandas Series, an Array): the C methods of the exact
     native classes; any other buffer through its memoryview."""
+    y = classifier_label_list(y, context)
+    classical_admit_value(y, context)
     var b = labels_builtins()
     var cls = py_type(y)
+    if cls is b.list or cls is b.tuple:
+        return py_call(b.list, y)
     var ndarray = py_get(context, "ndarray")
     if ndarray is not None and cls is ndarray:
         return py_call(ndarray.tolist, y)
@@ -633,14 +639,15 @@ def _label_list(y: PythonObject, context: PythonObject) raises -> PythonObject:
     if native_pandas_exact(y):
         return _label_list(_pandas_values(y), context)
     if cls is context["array_class"]:
-        return py_call(native_buffer_view(y._mv).tolist)
+        return label_array_list(y, context)
     return py_call(native_buffer_view(y).tolist)
 
 
-def _flatten_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
+def _flatten_labels(var y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.flatten_labels`: a flat Python list of the label objects,
     nested lists and tuples flattened depth first."""
     var b = labels_builtins()
+    y = classifier_label_list(y, context)
     var item = y
     var cls = py_type(y)
     if cls is not b.list and cls is not b.tuple and cls is not b.str and cls is not b.bytes:
@@ -649,51 +656,49 @@ def _flatten_labels(y: PythonObject, context: PythonObject) raises -> PythonObje
     if cls is b.str or cls is b.bytes:
         raise Error("mojolearn: y must be a sequence of labels")
     var out = Python.list()
-    _flatten_into(item, out, b)
+    _flatten_into(item, out, context)
     return out
 
 
-def _flatten_into(item: PythonObject, out_buf: PythonObject, b: PythonObject) raises:
+def _flatten_into(item: PythonObject, out_buf: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    if depth > 64:
+        raise Error("TypeError: label nesting exceeds the supported native depth")
+    var b = labels_builtins()
     var cls = py_type(item)
-    if Bool(py=py_call(b.isinstance, item, Python.tuple(b.list, b.tuple))):
-        for k in range(len(item)):  # cpu-route: Python label objects, the explicit label input step
-            _flatten_into(item[k], out_buf, b)
+    if cls is b.list or cls is b.tuple:
+        for k in range(len(item)):  # driver-loop: exact native container slots, never subclass iteration/indexing hooks
+            _flatten_into(item[k], out_buf, context, depth + 1)
         return
+    _ = labels_admit_primitive(item, context)
     _ = py_call(out_buf.append, item)
 
 
 def _label_kind(t: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
-    """`_labels._kind_of_type`: 1 str, 2 number, 0 refused."""
-    if Bool(py=py_call(b.issubclass, t, b.str)):
-        return 1
-    if Bool(py=py_call(b.issubclass, t, context["labels_real_type"])) or String(t.__name__) == "bool_":
-        return 2
-    return 0
+    var kind = labels_primitive_kind(t, context)
+    return 1 if kind == 1 else 2 if kind > 1 else 0
 
 
-def _sorted_classes(labels: PythonObject, context: PythonObject) raises -> ClassicalLabels:
+def _sorted_classes(var labels: PythonObject, context: PythonObject) raises -> ClassicalLabels:
     """`_labels.sorted_classes`: the ORDER RULE over Python label objects
     (numbers by value, strings by code point, the first of equal labels
     kept), its refusals in walk order, one dense code per label."""
     var b = labels_builtins()
+    labels = classifier_label_list(labels, context)
+    if py_type(labels) is not b.list and py_type(labels) is not b.tuple:
+        raise Error("TypeError: sorted labels require an exact native list or tuple")
     var n = len(labels)
     if n == 0:
         raise Error("mojolearn: y is empty")
-    var kinds = Python.dict()
     var seen_str = False
     var seen_number = False
     for i in range(n):  # cpu-route: Python label objects, the explicit label input step
         var item = labels[i]
         var t = py_type(item)
-        var kind_obj = py_get(kinds, t)
-        var kind = 0
-        if kind_obj is None:
-            kind = _label_kind(t, b, context)
-            py_setitem(kinds, t, PythonObject(kind))
-        else:
-            kind = Int(py=kind_obj)
+        # Inspect identities before hashing a class: an application metaclass
+        # can define Python __hash__, even when the label itself is untouched.
+        var kind = _label_kind(t, b, context)
         if kind == 0:
-            raise Error("mojolearn: label " + String(py_call(b.repr, item)) + " is neither a number nor a str")
+            raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols")
         if kind == 2 and Bool(py=item != item):
             raise Error("mojolearn: y contains a NaN label; NaN is not a class")
         seen_str = seen_str or kind == 1
@@ -717,6 +722,7 @@ def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source:
     """The numeric label vector `_labels._encode_labels_native` encodes, or
     None for what only the label input step reads (lists, str or object
     buffers, a pandas Series, a matrix, an empty vector)."""
+    classical_admit_value(y, context)
     var b = labels_builtins()
     var cls = py_type(y)
     if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes or native_pandas_exact(y):
@@ -767,11 +773,12 @@ def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[Clas
     return _native_labels(_view_of_array(array), False, context)
 
 
-def labels_encode_labels(y: PythonObject, context: PythonObject) raises -> ClassicalLabels:
+def labels_encode_labels(var y: PythonObject, context: PythonObject) raises -> ClassicalLabels:
     """`_labels.encode_labels(y)`: one native `prepare_targets` call for a
     numeric label vector (a buffer or a flat list of exact ints or exact
     floats); the ORDER RULE over Python objects for str and object labels."""
     var b = labels_builtins()
+    y = classifier_label_list(y, context)
     var bool_source = False
     var numeric = _numeric_label_view(y, context, bool_source)
     if numeric:
@@ -783,32 +790,28 @@ def labels_encode_labels(y: PythonObject, context: PythonObject) raises -> Class
     return _sorted_classes(flat, context)
 
 
-def labels_label_kind(classes: PythonObject, context: PythonObject) raises -> String:
-    """`_labels.label_kind`: 'int', 'float' or 'object'."""
+def labels_label_kind(var classes: PythonObject, context: PythonObject) raises -> String:
+    classes = classifier_label_list(classes, context)
     var b = labels_builtins()
+    if py_type(classes) is not b.list and py_type(classes) is not b.tuple:
+        raise Error("TypeError: class labels require an exact native list or tuple")
     var all_int = True
     var all_real = True
-    for i in range(len(classes)):  # driver-loop: over kind test of the class labels (classes-sized: distinct classes)
-        var c = classes[i]
-        var t = py_type(c)
-        var is_bool = t is b.bool or String(t.__name__) == "bool_"
-        var integral = Bool(py=py_call(b.isinstance, c, context["labels_integral_type"])) and not is_bool
-        var real = Bool(py=py_call(b.isinstance, c, context["labels_real_type"])) and not is_bool
-        all_int = all_int and integral
-        all_real = all_real and real
-    if all_int:
-        return "int"
-    if all_real:
-        return "float"
-    return "object"
+    for i in range(len(classes)):  # driver-loop: exact primitive kinds preserve bool/string object-label output
+        var kind = labels_admit_primitive(classes[i], context)
+        all_int = all_int and kind == 3
+        all_real = all_real and (kind == 3 or kind == 4)
+    return String("int") if all_int else String("float") if all_real else String("object")
 
 
-def labels_decode_labels(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
+def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.decode_labels(classes, codes)` for int64 or int32 codes:
     integer classes an int64 Array, real classes a float64 Array (the base
     binding's gathers), str or bool classes a Python list."""
     var b = labels_builtins()
+    classes = classifier_label_list(classes, context)
     var kind = labels_label_kind(classes, context)
+    classical_admit_value(codes, context)
     var n = Int(py=codes.size)
     var k = len(classes)
     var wide_codes = codes
@@ -876,7 +879,15 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
     var b = labels_builtins()
     if class_weight is None:
         return PythonObject(None)
-    var classes = labels.classes
+    if py_type(class_weight) is not b.str and py_type(class_weight) is not b.dict:
+        raise Error("TypeError: class_weight requires an exact native string or dictionary")
+    if py_type(class_weight) is b.dict:
+        var items = py_call(b.list, class_weight.items())
+        for i in range(len(items)):  # driver-loop: admit keys before native hashing and values before numeric conversion
+            _ = labels_admit_primitive(items[i][0], context)
+            _ = labels_admit_primitive(items[i][1], context)
+    var classes = classifier_label_list(labels.classes, context)
+    _ = labels_label_kind(classes, context)
     var k = len(classes)
     var n = labels.n
     var objects = Python.list()
@@ -913,7 +924,8 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
     for i in range(k):  # driver-loop: over class weight argument checks
         var v = objects[i]
         var t = py_type(v)
-        if t is b.bool or String(t.__name__) == "bool_" or not Bool(py=py_call(b.isinstance, v, context["labels_real_type"])):
+        var kind = labels_admit_primitive(v, context)
+        if kind != 3 and kind != 4:
             raise Error("class weights must be finite nonnegative real numbers")
         var f = Float64(py=py_call(b.float, v))
         if not isfinite(f) or f < 0:
@@ -1001,8 +1013,9 @@ comptime _INT32_MAX = 2147483647
 # ------------------------------------------------------------ shapes
 
 
-def labels_shape_of(value: PythonObject, context: PythonObject) raises -> List[Int]:
+def labels_shape_of(var value: PythonObject, context: PythonObject) raises -> List[Int]:
     """Shape from admitted native storage, without Array properties or protocols."""
+    value = classifier_label_list(value, context)
     classical_admit_value(value, context)
     var b = labels_builtins()
     var cls = py_type(value)
@@ -1212,9 +1225,11 @@ struct ScoreLabels(Copyable, Movable):
         self.kind = kind
 
 
-def _native_classification(values: PythonObject, context: PythonObject) raises -> Optional[ScoreLabels]:
+def _native_classification(var values: PythonObject, context: PythonObject) raises -> Optional[ScoreLabels]:
     """`_metrics_impl._native_classification_labels`: an integer or bool
     buffer (or a flat list of exact ints) through the native encoder."""
+    values = classifier_label_list(values, context)
+    classical_admit_value(values, context)
     var b = labels_builtins()
     var cls = py_type(values)
     if cls is b.str or cls is b.bytes:
@@ -1279,9 +1294,9 @@ def _classification_labels(values: PythonObject, name: String, context: PythonOb
     for i in range(n):  # cpu-route: the label types of user labels, the explicit label input step
         var v = labels[i]
         var t = py_type(v)
-        all_str = all_str and Bool(py=py_call(b.isinstance, v, b.str))
-        all_int = all_int and (Bool(py=py_call(b.isinstance, v, context["labels_integral_type"]))
-                               or t is b.bool or String(t.__name__) == "bool_")
+        var kind = labels_admit_primitive(v, context)
+        all_str = all_str and kind == 1
+        all_int = all_int and (kind == 2 or kind == 3)
     var out = Python.list()
     if all_str:
         for i in range(n):  # cpu-route: str labels, the explicit label input step

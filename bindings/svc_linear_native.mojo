@@ -10,6 +10,7 @@
 # in the same order with the same arguments: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.label_admission_native import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -119,8 +120,7 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
     var all_one = True
     for i in range(k):  # driver-loop: over the classes (the class weight argument checks)
         var v = values[i]
-        var boolean = family_isinstance(v, b.bool) or String(py_type(v).__name__) == "bool_"
-        if boolean or not family_isinstance(v, context["family_svc_real"]):
+        if labels_primitive_kind(py_type(v), context) < 3:
             raise Error("class weights must be finite nonnegative real numbers")
         var f = svc_float(v)
         if not svc_isfinite(f) or f < 0:
@@ -244,7 +244,7 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     # `_target_1d`
-    if len(svc_shape_of(args[2])) != 1:
+    if len(svc_shape_of(args[2], context)) != 1:
         raise Error("mojolearn LinearSVR requires a 1-D y")
     var t = svc_f32(args[2], 1, "y", False, context)[0]
     if Int(py=t.shape[0]) != rows:

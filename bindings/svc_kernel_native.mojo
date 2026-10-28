@@ -28,6 +28,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit
+from bindings.label_admission_native import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_is_array, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
@@ -122,12 +123,7 @@ def _entry(binding: PythonObject, name: String, context: PythonObject) raises ->
 
 
 def _svm_integral(value: PythonObject, context: PythonObject) raises -> Bool:
-    var kind = py_type(value)
-    var integers = context["integer_types"]
-    for i in range(len(integers)):  # driver-loop: exact primitive integer types instead of Python numbers ABC callbacks
-        if kind is integers[i]:
-            return True
-    return False
+    return labels_primitive_kind(py_type(value), context) == 3
 
 
 def _svm_parameter_admission(fields: PythonObject, classifier: Bool, context: PythonObject) raises:
@@ -607,7 +603,7 @@ def _as_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
         return Python.tuple(PythonObject(None), classes, codes)
     var real = True
     for i in range(len(classes)):  # small-loop(classes: the two labels)
-        if not family_isinstance(classes[i], context["family_svc_real"]):
+        if labels_primitive_kind(py_type(classes[i]), context) < 2:
             real = False
     if not real:
         # non-numeric labels: the solver sees each row's code, 0.0 or 1.0
@@ -1233,7 +1229,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var n_rows = x_meta.shape[0]
     var n_cols = x_meta.shape[1]
     # `_as_targets`: no finiteness check here (svr_fit names the index)
-    var shape = svc_shape_of(args[2])
+    var shape = svc_shape_of(args[2], context)
     if len(shape) != 1:
         raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
     var targets = svc_f32(args[2], 1, "y", False, context)[0]
@@ -1364,7 +1360,7 @@ def _svr_score(fields: PythonObject, binding: PythonObject, source: PythonObject
                context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`SVR.score`: R^2, 1.0 for a perfect constant fit, 0.0 otherwise."""
     var pred = _svr_predict(fields, binding, source, context, native)
-    var shape = svc_shape_of(y)
+    var shape = svc_shape_of(y, context)
     if len(shape) != 1:
         raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
     var n = Int(py=pred.shape[0])
