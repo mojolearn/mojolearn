@@ -2213,3 +2213,9 @@ Evidence: `~/mojolearn-evidence/boxes-20261021/amd-out/graph-opt/ab-table.tsv` a
 |---|---|---|---|---|---|---|
 | `SCHED_FAST_TABLE` (rollback `SCHED_FAST_TABLE_OFF`) | lr-exponential / synthetic | lane/dead-native-entries-0859@9552c0ecb (code at 485ba9cc1) | rab13-schedtable (2026-10-05) | 231.8 -> 19.2 (then); no reader since | DELETED (dead code) | it only registered `sched_exp_block`, which nothing called after the schedules moved into `lr_schedule_at` / `lr_schedule_series`; the define now refuses (docs/TOMBSTONES.md) |
 | `PURITY_3_OFF`, `PURITY_6_OFF` | nearest-centroid, per-row argmax (lane apple-fast-purity) | lane/dead-native-entries-0859@1d3757533 (code at 485ba9cc1) | none | not timed | DELETED (dead code) | they only changed the `x_neighbors_purity_flags` word, which nothing read; the defines now refuse (docs/TOMBSTONES.md) |
+
+## Neural speed lanes (2026-10-28)
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_IDN_NORM_FIXED_LANES` (IDENTICAL, default OFF) | neural:transformer-forward / gaussian, neural:lm-forward / bytes, neural:lm-train-step / bytes | lane/norm-folds@(see HANDOFF) | pending nv (nf-A / nf-B), pending amd | Oct 27 board, ours: transformer-forward NV 13.87 / AMD 4.74; lm-forward NV 57.97 / AMD 34.43; lm-train-step NV 35.98 / AMD 42.99 -> pending | PENDING | BITS CHANGE (fold order, every column in one commit): the RMSNorm S1 row sum, the variant LayerNorm sums and the RMSNorm backward dot fold as 32 strided slots plus fold32's pairwise tree (transformer/experiments/norm_fixed_lanes.mojo); device RMSNorm, residual+RMSNorm and backward dot kernels run one 32-lane cell per row (shuffle_xor tree), one-thread kernels and the host oracles/byte-LM host kernel run the same slots serially. Chain depth d_model -> d_model/32 + 5. Idea 12 of the Oct 28 neural report. |
