@@ -1,0 +1,34 @@
+{
+  "scope": "source syntax and one-statement wrapper shape only; no runtime execution",
+  "files": [
+    {
+      "path": "python/mojolearn/_x_sequence_croston.py",
+      "native_call_wrappers": [
+        "_Croston.__init__",
+        "_Croston.forecast"
+      ]
+    },
+    {
+      "path": "python/mojolearn/_x_sequence_ets.py",
+      "native_call_wrappers": [
+        "ETS.__init__",
+        "ETS.forecast",
+        "DampedETS.__init__"
+      ]
+    },
+    {
+      "path": "python/mojolearn/_x_sequence_theta.py",
+      "native_call_wrappers": [
+        "AutoTheta.__init__",
+        "AutoTheta.forecast"
+      ]
+    },
+    {
+      "path": "python/mojolearn/_x_sequence_garch.py",
+      "native_call_wrappers": [
+        "GARCH.__init__",
+        "GARCH.forecast"
+      ]
+    }
+  ]
+}

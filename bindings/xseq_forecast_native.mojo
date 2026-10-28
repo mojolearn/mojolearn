@@ -18,6 +18,7 @@ from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _fields
 from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
 from core.cast_in import NPY_DOUBLE
+from providers.python.forecast_initialize_pyapi import forecast_initialize
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common import (
@@ -534,6 +535,9 @@ def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, c
 
 
 def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == "croston_initialize" or operation == "ets_initialize" or operation == "theta_initialize" or operation == "garch_initialize":
+        var kind = "croston" if operation == "croston_initialize" else ("ets" if operation == "ets_initialize" else ("theta" if operation == "theta_initialize" else "garch"))
+        return forecast_initialize(model, kind, args, context)
     if operation == "croston_forecast" or operation == "ets_forecast" or operation == "theta_forecast" or operation == "garch_forecast":
         var kind = "croston" if operation == "croston_forecast" else ("ets" if operation == "ets_forecast" else ("theta" if operation == "theta_forecast" else "garch"))
         return _forecast_operation(model, kind, args, context)

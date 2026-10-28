@@ -20,8 +20,7 @@ class _Croston(ParamsMixin):
     _VARIANT = 0
 
     def __init__(self, alias=None, numeric_mode=None):
-        self.alias = alias
-        self.numeric_mode = numeric_mode
+        _XSEQ(self, "croston_initialize", (alias, numeric_mode), _XSEQ_CONTEXT)
 
     def fit(self, y, X=None):
         """Fit one series or a batch of series.
