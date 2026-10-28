@@ -90,3 +90,78 @@ def test_packed_weights_admit_metadata_and_keep_original_quantization_routes():
     assert 'layout.copy_to(Int(py=result._addr))' in packed
     for numerical in ('to_bf16', 'from_bf16', 'quantize_int8', 'dequantize_int8', 'quantize_int15'):
         assert f'_native_function(linalg, "{numerical}")' in source
+
+
+def test_execution_registry_is_pinned_and_native_handles_do_not_reread_bindings():
+    owner = (ROOT / "bindings/causal_operation_owner.mojo").read_text()
+    registry = owner.split("def _causal_entries", 1)[1].split("def causal_model_capture", 1)[0]
+    assert 'downcast_value_ptr[CausalExecutionEntries]' in registry
+    assert 'item is not original[names[i]]' in registry
+    assert 'entries["parallel_call"] is not connected["parallel_causal_call"]' in registry
+    assert 'causal_pin_entries(_standalone_record_fields(model), entries)' in PUBLIC
+    run = PUBLIC.split("def _causal_layer_run_prepared", 1)[1].split("def causal_model_embedding", 1)[0]
+    assert 'e["transformer_native_session_handle_v1"]' in run
+    assert '_native_function(e["block_binding"]' not in run
+
+
+def test_operation_owner_preserves_aliases_tied_weights_and_original_parameters():
+    owner = (ROOT / "bindings/causal_operation_owner.mojo").read_text()
+    model = owner.split("def causal_model_capture", 1)[1].split("def causal_model_publish", 1)[0]
+    assert 'identity = py_call(bi.id, original)' in model
+    assert 'captured = py_get(buffers, identity)' in model
+    assert '"_causal_entries_identity", fields["_native_entries"]' in model
+    assert '"_causal_original_parameters", original_parameters' in model
+    state = owner.split("def causal_state_capture", 1)[1].split("def causal_layer_publish", 1)[0]
+    assert 'identity = py_call(bi.id, layers[i])' in state and 'layer = py_get(seen, identity)' in state
+    assert '"_native_state_identity", state' in state
+    assert '"_causal_admission_failure"' in state
+    params = PUBLIC.split("def causal_lm_parameters_binding", 1)[1].split("def causal_lm_blocks_binding", 1)[0]
+    assert 'py_setitem(result, name, originals[key])' in params
+    assert '"_neural_original_w"' in params and '"_neural_original_wopt"' in params
+    assert 'pieces[k][2], keep' in params  # fused outputs consume captured bytes
+
+
+def test_success_and_failure_publish_only_admitted_live_fields():
+    owner = (ROOT / "bindings/causal_operation_owner.mojo").read_text()
+    state = owner.split("def causal_state_publish", 1)[1].split("def causal_model_cache_set", 1)[0]
+    assert state.index('neural_string_keys(live)') < state.index('py_setitem(live, name')
+    assert 'py_contains(seen, identity)' in state
+    layer = owner.split("def causal_layer_publish", 1)[1].split("def causal_state_publish", 1)[0]
+    assert layer.index('neural_string_keys(target)') < layer.index('py_setitem(target, name')
+    assert 'layer[name] is initial[name]' in layer  # do not replace original mutable exporters
+    door = PUBLIC.split("def causal_public_c[", 1)[1]
+    assert door.count('causal_state_publish(state)') == 2
+    assert door.count('causal_model_publish(model)') == 2
+    assert 'native state publication also failed:' in door
+    model = owner.split("def causal_model_publish", 1)[1].split("def causal_layer_capture", 1)[0]
+    assert '"h_last_"' in model and 'neural_string_keys(original)' in model
+
+
+def test_parallel_paths_pass_identity_and_distinct_captured_payloads():
+    owner = (ROOT / "bindings/causal_operation_owner.mojo").read_text()
+    assert '"capture_model", Python.list(model, fields)' in owner
+    assert '"capture_state", Python.list(layers[i], model)' in owner
+    assert '"run", Python.list(causal_model_origin(model), ids, causal_state_origin(state), remote_step, model, state)' in PUBLIC
+    assert '"release_layers", Python.list(causal_model_origin(model), state, model, captured)' in PUBLIC
+    assert 'causal_layer_publish(dest)' in PUBLIC
+    assert '"state_publish", Python.list(causal_state_origin(s[].state.layers[i]), causal_state_origin(dest), s[].state.layers[i])' in PUBLIC
+
+
+def test_streams_and_checkpoints_capture_before_execution_and_guard_output_metadata():
+    owner = (ROOT / "bindings/causal_operation_owner.mojo").read_text()
+    door = PUBLIC.split("def causal_public_c[", 1)[1]
+    assert door.index('causal_model_capture(args[0]') < door.index('causal_lm_forward_binding(model')
+    assert door.index('causal_checkpoint_capture(args[1]') < door.index('causal_lm_resume_binding(model')
+    assert 'causal_model_capture(causal_model_origin(stream[].model)' in door
+    assert 'causal_state_capture(causal_state_origin(stream[].state), model' in door
+    assert 'causal_lm_read_binding(args[0], args[1], stream_native)' in door
+    assert 'state = stream[].state' in door
+    assert 'causal_lm_resident_binding(model, s.prompt, PythonObject(s.max_new)' in PUBLIC
+    assert 'generation_array_snapshot(args[3])' in door
+    read = PUBLIC.split("def _read(mut", 1)[1].split("def _decode_chunk", 1)[0]
+    run = read.index('_run_prepared(')
+    guard = read.index('_causal_array_guard()', run)
+    assert guard < read.index('logits._addr', run)
+    checkpoint = owner.split('def causal_checkpoint_capture', 1)[1]
+    assert checkpoint.index('neural_string_keys(checkpoint)') < checkpoint.index('checkpoint.keys()')
+    assert 'generation_array_snapshot(item)' in checkpoint

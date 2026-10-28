@@ -31,8 +31,9 @@ from providers.python.generation_metadata_pyapi import (
 from std.memory import memcpy
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy, generation_mutable,
-    generation_ids, generation_initialize_binding, py_ints,
+    generation_ids, generation_initialize_binding, generation_array_context, generation_array_snapshot, generation_buffer_view, py_ints,
 )
+from bindings.native_array_snapshot import native_array_slots
 from core.generation_policy_impl import generation_pick
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
@@ -49,8 +50,9 @@ from transformer.causal_lm_public_impl import (
 
 from bindings.tokenizer_public_native import tokenizer_vocab_encode, tokenizer_vocab_decode, tokenizer_vocab_fingerprint
 from bindings.mode_metadata_native import _fields as _native_record_fields, _truth
-from bindings.neural_block_admission import neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_block_weight_names
+from bindings.neural_block_admission import neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_block_weight_names, neural_metadata_snapshot, neural_block_fields
 from bindings.causal_model_config import model_record_fields, model_plan_snapshot
+from bindings.causal_operation_owner import causal_model_capture, causal_model_publish, causal_model_origin, causal_state_capture, causal_state_publish, causal_state_origin, causal_state_fields, causal_snapshot_fields, causal_model_cache_set, causal_block_cache_set, causal_checkpoint_capture, causal_pin_entries, causal_layer_capture, causal_layer_publish
 
 
 struct CausalPublicConnection(Defaultable, Movable):
@@ -77,6 +79,17 @@ def _causal_context() raises -> PythonObject:
     return context
 
 
+def _causal_context_for(model: PythonObject) raises -> PythonObject:
+    # Standalone neural blocks already supply an admitted private owner context.
+    if py_type(model) is native_loaded_module("types").SimpleNamespace:
+        var fields = causal_snapshot_fields(model)
+        if not py_contains(fields, "_causal_original"):
+            var context = py_get(fields, "_native_context")
+            if context is not None:
+                return context
+    return _causal_context()
+
+
 def _causal_state_fields(state: PythonObject) raises -> PythonObject:
     return model_record_fields(state, _causal_context()["generation_classes"][1],
         Python.tuple("batch_size", "max_tokens", "layers", "positions", "_owner", "_usable"))
@@ -87,7 +100,7 @@ def _causal_model_fields(model: PythonObject) raises -> PythonObject:
         Python.tuple("plan", "config", "kind", "d_model", "vocab_size", "n_layers", "norm_eps",
             "numeric_profile", "device", "weight_format", "max_positions", "_embed", "_norm", "_head",
             "_blocks", "_native_entries", "_native_vendor", "_native_numeric_mode", "_head_int15",
-            "_closed", "_failed", "_runtime", "_parallel_entry", "_block_kwargs", "unused_names", "_block_class", "_prims"))
+            "_closed", "_failed", "_runtime", "_parallel_entry", "_block_kwargs", "unused_names", "_block_class", "_prims", "_causal_entries_owner"))
 
 
 def _standalone_record_fields(model: PythonObject) raises -> PythonObject:
@@ -102,6 +115,13 @@ def _standalone_record_fields(model: PythonObject) raises -> PythonObject:
             raise cpy.unsafe_get_error()
         return PythonObject(from_owned=raw)
     return _native_record_fields(model)
+
+
+def _causal_array_guard() raises:
+    # Kernel/worker calls may release the GIL. Recheck descriptor storage
+    # before consuming retained Array metadata afterwards; original numerical
+    # metadata stays in its operation snapshot and is never read again.
+    _ = native_array_slots(generation_array_context())
 
 
 def _native_entry_fields(entries: PythonObject) raises -> PythonObject:
@@ -136,8 +156,14 @@ def _native_has_entry(entries: PythonObject, name: String) raises -> Bool:
 
 def _native_function(module: PythonObject, name: String) raises -> PythonObject:
     var entry = py_get(_native_entry_fields(module), name)
-    if py_type(entry) is not py_type(native_loaded_module("builtins").len):
+    var bi = native_loaded_module("builtins")
+    var types = native_loaded_module("types")
+    if py_type(entry) is not py_type(bi.len):
         raise Error("TypeError: CausalLM " + name + " must be a compiled native extension entry")
+    if py_type(entry.__self__) is not types.ModuleType or String(entry.__name__) != name:
+        raise Error("TypeError: CausalLM entry must retain its named compiled module function")
+    if py_type(module) is types.ModuleType and entry.__self__ is not module:
+        raise Error("TypeError: CausalLM entry belongs to another module")
     return entry
 
 
@@ -178,7 +204,7 @@ def causal_lm_admit_binding(
         py_setitem(entries, "forward", _native_function(block_binding, "transformer_forward"))
         py_setitem(entries, "decode", _native_function(block_binding, "transformer_decode_step"))
         py_setitem(entries, "block_binding", block_binding)
-        for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh")]:  # small-loop(optional entry names)
+        for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh"), String("transformer_native_session_handle_v1")]:  # small-loop(optional entry names retained once at construction)
             if _native_has_entry(block_binding, name):
                 py_setitem(entries, name, _native_function(block_binding, name))
         if _native_has_entry(block_binding, "transformer_session_forward"):
@@ -226,14 +252,14 @@ def causal_lm_admit_binding(
     if requested_gpu and kind == "transformer" and mode == NUMERIC_IDENTICAL and (String(getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")) == "1" or String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1"):
         if not py_contains(entries, "forward_session"):
             raise Error("CausalLM: native session candidate requires transformer_session_forward")
-        var owner_fields = py_call(g[].bi.object.__getattribute__, model._blocks[0], "__dict__")
+        var owner_fields = neural_block_fields(model._blocks[0], _causal_context_for(model))
         var provider = generation_reuse_native_provider(py_get(owner_fields, "_native_session_provider_cache"), block_binding,
             _native_function(block_binding, "transformer_native_api_v1"),
             _native_function(block_binding, "transformer_native_session_handle_v1"))
         py_setitem(owner_fields, "_native_session_provider_cache", provider)
         py_setitem(entries, "native_session_provider", provider)
     if mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
-        var owner_fields = py_call(g[].bi.object.__getattribute__, model._blocks[0], "__dict__")
+        var owner_fields = neural_block_fields(model._blocks[0], _causal_context_for(model))
         var primitive_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_primitives_provider_cache"),
             _native_function(primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
         py_setitem(owner_fields, "_native_primitives_provider_cache", primitive_provider)
@@ -249,6 +275,7 @@ def causal_lm_admit_binding(
             py_setitem(owner_fields, "_native_mamba_provider_cache", mamba_provider)
             py_setitem(entries, "native_mamba", mamba_provider)
     py_setattr(model, "_native_entries", entries)
+    causal_pin_entries(_standalone_record_fields(model), entries)
     return PythonObject(None)
 
 
@@ -262,8 +289,8 @@ def _block(model: PythonObject, index: Int) raises -> PythonObject:
         return local[index]
     var parallel = py_get(model._native_entries, "parallel_call")
     if parallel is not None:
-        return py_call(parallel, "block_fields", Python.list(model, index))
-    return py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.object.__getattribute__, model._blocks[index], "__dict__")
+        return py_call(parallel, "block_fields", Python.list(causal_model_origin(model), index, model))
+    return neural_block_fields(model._blocks[index], _causal_context_for(model))
 
 
 def _positions(model: PythonObject, state: PythonObject, length: Int) raises:
@@ -281,15 +308,16 @@ def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
     var result = g[].bi.dict()
     # The live arrays leave the model: a kept resident session set could miss
     # an in-place edit, so it is dropped and generation opens per call again.
-    var model_fields = py_call(g[].bi.object.__getattribute__, model, "__dict__")
-    py_setitem(model_fields, "_parameters_exposed", True)
-    py_setitem(model_fields, "_resident_sessions", PythonObject(None))
+    var model_fields = _standalone_record_fields(model)
+    causal_model_cache_set(model, model_fields, "_parameters_exposed", True)
+    causal_model_cache_set(model, model_fields, "_resident_sessions", PythonObject(None))
     var p = model.plan
-    py_setitem(result, p.embed_name, model._embed)
+    var original_parameters = py_get(model_fields, "_causal_original_parameters", model_fields)
+    py_setitem(result, p.embed_name, original_parameters["_embed"])
     if p.norm_name is not None:
-        py_setitem(result, p.norm_name, model._norm)
+        py_setitem(result, p.norm_name, original_parameters["_norm"])
     if p.head_name is not None:
-        py_setitem(result, p.head_name, model._head)
+        py_setitem(result, p.head_name, original_parameters["_head"])
     var weight_names = model._native_entries["weight_names"]
     # Same canonical optional slot order as the transformer native ABI.
     var optional_names = [String("q_proj.bias"), String("k_proj.bias"), String("v_proj.bias"),
@@ -307,13 +335,18 @@ def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
             py_setitem(slices, entry[0], entry[2])
         var blk = _block(model, i)
         var values = g[].bi.dict()
+        var originals = g[].bi.dict()
+        var original_w = py_get(blk, "_neural_original_w", blk["_w"])
         for j in range(min(len(weight_names), len(blk["_w"]))):  # driver-loop: over block weight slots
             if blk["_w"][j] is not None:
                 py_setitem(values, weight_names[j], blk["_w"][j])
+                py_setitem(originals, weight_names[j], original_w[j])
         if String(model.kind) == "transformer":
+            var original_wopt = py_get(blk, "_neural_original_wopt", blk["_wopt"])
             for j in range(len(optional_names)):  # driver-loop: over optional block weight slots
                 if blk["_wopt"][j] is not None:
                     py_setitem(values, optional_names[j], blk["_wopt"][j])
+                    py_setitem(originals, optional_names[j], original_wopt[j])
         var keys = py_call(g[].bi.list, values)
         var fused = g[].bi.dict()
         for j in range(len(keys)):  # driver-loop: over checkpoint tensor names
@@ -321,13 +354,14 @@ def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
             var name = py_get(names, key, PythonObject("layers." + String(i) + "." + String(key)))
             var rows = py_get(slices, key)
             if rows is None:
-                py_setitem(result, name, values[key])
+                py_setitem(result, name, originals[key])
             else:
                 # A fused checkpoint tensor (Phi-3 QKV / gate-up) is split
                 # for execution. Return every row under its checkpoint name.
                 var piece = py_call(g[].bi.list, rows)
                 _ = py_call(piece.append, values[key])
                 _ = py_call(py_call(fused.setdefault, name, g[].bi.list()).append, piece)
+        _causal_array_guard()
         var fused_names = py_call(g[].bi.list, fused)
         for j in range(len(fused_names)):  # driver-loop: over fused checkpoint tensor names
             var name = fused_names[j]
@@ -349,7 +383,12 @@ def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
 
 
 def causal_lm_blocks_binding(model: PythonObject) raises -> PythonObject:
-    return py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.list, model._blocks)
+    var fields = _causal_model_fields(model)
+    var bi = native_loaded_module("builtins")
+    var blocks = fields["_blocks"]
+    if py_type(blocks) is not bi.list and py_type(blocks) is not bi.tuple:
+        raise Error("TypeError: CausalLM blocks require an ordinary owner sequence")
+    return py_call(bi.tuple, blocks)
 
 
 def causal_layer_allocate(model: PythonObject, i: Int, b: Int, cap: Int) raises -> PythonObject:
@@ -357,6 +396,7 @@ def causal_layer_allocate(model: PythonObject, i: Int, b: Int, cap: Int) raises 
     var kind = String(model.kind)
     var blk = _block(model, i)
     var st = py_call(g[].bi.object.__new__, g[].layer_classes[kind])
+    _ = model_record_fields(st, g[].layer_classes[kind], Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "k_cache", "v_cache", "cached_tokens", "_resident_session", "_numeric_profile", "conv_window", "h", "profile_id", "absolute_position", "_nn34_usable", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw", "buffered_tokens"))
     if kind == "transformer":
         var window = Int(py=blk["window"])
         var nkv = Int(py=blk["n_kv_heads"])
@@ -416,10 +456,11 @@ def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacit
     _positions(model, PythonObject(None), cap)
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var state = py_call(g[].bi.object.__new__, g[].state_cls)
+    _ = model_record_fields(state, g[].state_cls, Python.tuple("batch_size", "max_tokens", "positions", "_owner", "_usable", "layers"))
     py_setattr(state, "batch_size", PythonObject(b))
     py_setattr(state, "max_tokens", PythonObject(cap))
     py_setattr(state, "positions", PythonObject(0))
-    py_setattr(state, "_owner", model)
+    py_setattr(state, "_owner", causal_model_origin(model))
     py_setattr(state, "_usable", PythonObject(True))
     py_setattr(state, "layers", g[].bi.list())
     var kind = String(model.kind)
@@ -427,22 +468,26 @@ def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacit
     try:
         for i in range(len(model._blocks)):  # driver-loop: over model layer state owners
             _ = py_call(state.layers.append, causal_layer_allocate(model, i, b, cap) if parallel is None else
-                        py_call(parallel, "allocate_layer", Python.list(model, i, b, cap)))
+                        py_call(parallel, "allocate_layer", Python.list(causal_model_origin(model), i, b, cap, model)))
     except error:
         if parallel is not None:
             try:
-                _ = py_call(parallel, "release_layers", Python.list(model, state))
+                var captured = causal_state_capture(state, model, _causal_context_for(model))
+                _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), state, model, captured))
             except cleanup_error:
                 raise Error("CausalLM: state allocation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
+    if py_type(model) is native_loaded_module("types").SimpleNamespace and py_contains(causal_snapshot_fields(model), "_causal_original"):
+        return causal_state_capture(state, model, _causal_context())
     return state
 
 
 def _state(model: PythonObject, state: PythonObject, b: Int, l: Int) raises:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if py_type(state) is not g[].state_cls or state._owner is not model:
+    var state_fields = causal_state_fields(state, _causal_context_for(model))
+    if state_fields["_owner"] is not causal_model_origin(model):
         raise Error("CausalLM: state belongs to another model")
-    if not Bool(py=py_call(g[].bi.getattr, state, "_usable", True)):
+    if not _truth(py_get(state_fields, "_usable", PythonObject(True))):
         raise Error("CausalLM: state lost after a failed call; reset or restore it")
     if Int(py=state.batch_size) != b or len(state.layers) != len(model._blocks):
         raise Error("CausalLM: state batch/layer counts disagree with model and input")
@@ -451,17 +496,18 @@ def _state(model: PythonObject, state: PythonObject, b: Int, l: Int) raises:
 
 def causal_lm_reset_binding(model: PythonObject, state: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if py_type(state) is not g[].state_cls or state._owner is not model:
+    var state_fields = causal_state_fields(state, _causal_context_for(model))
+    if state_fields["_owner"] is not causal_model_origin(model):
         raise Error("CausalLM: state belongs to another model")
     var fresh = causal_lm_allocate_binding(model, state.batch_size, state.max_tokens)
     var parallel = py_get(model._native_entries, "parallel_call")
     if parallel is not None:
         try:
-            _ = py_call(parallel, "release_layers", Python.list(model, state))
+            _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(state), model, state))
         except error:
             py_setattr(state, "_usable", PythonObject(False))
             try:
-                _ = py_call(parallel, "release_layers", Python.list(model, fresh))
+                _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(fresh), model, fresh))
             except cleanup_error:
                 raise Error("CausalLM: state reset failed: " + String(error) + "; fresh-state cleanup also failed: " + String(cleanup_error))
             raise error
@@ -552,6 +598,7 @@ def causal_transformer_admin(binding: PythonObject, session: PythonObject, opera
 
 def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
     # Standalone public block calls retain their existing ABI and admit anew.
+    _causal_array_guard()
     var shape = x.shape
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
@@ -572,6 +619,10 @@ def _causal_layer_run_prepared(
     var copies = List[PythonObject]()
     var blk = layer.block
     var st = supplied_state
+    if py_type(st) is native_loaded_module("types").SimpleNamespace:
+        var failure = py_get(causal_snapshot_fields(st), "_causal_admission_failure")
+        if failure is not None:
+            raise Error(String(failure))
     var y = generation_array([b, l, d])
     var addresses = PythonObject(None)
     var params = PythonObject(None)
@@ -604,22 +655,22 @@ def _causal_layer_run_prepared(
                 34 if head_profile else 33, a_words, p_words, [])))
         elif device15 and block_provider is not None:
             if blk["_native_session"] is None:
-                py_setitem(blk, "_native_session", e["create"]())
-                py_setitem(blk, "_session_binding", e["block_binding"])
+                causal_block_cache_set(blk, "_native_session", e["create"]())
+                causal_block_cache_set(blk, "_session_binding", e["block_binding"])
             var session = blk["_native_session"]
             var handle = neural_descriptor_handle(block_provider,
-                _native_function(e["block_binding"], "transformer_native_session_handle_v1"), session)
+                e["transformer_native_session_handle_v1"], session)
             py_setattr(st, "cached_tokens", PythonObject(neural_descriptor_reserved_execute(block_provider,
                 session, handle, 0, 1, 35, a_words, p_words, [])))
         elif native_provider is not None and not head_profile and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
             if blk["_native_session"] is None:
-                py_setitem(blk, "_native_session", e["create"]())
-                py_setitem(blk, "_session_binding", e["block_binding"])
+                causal_block_cache_set(blk, "_native_session", e["create"]())
+                causal_block_cache_set(blk, "_session_binding", e["block_binding"])
             var session = blk["_native_session"]
             var linked = py_get(blk, "_native_forward_owner")
             if linked is None or not generation_native_session_matches(linked, native_provider, session):
                 linked = generation_connect_native_session(native_provider, session)
-                py_setitem(blk, "_native_forward_owner", linked)
+                causal_block_cache_set(blk, "_native_forward_owner", linked)
             # Native vectors cross directly. No Python argument-list packing
             # or CPython callable dispatch occurs in this repeated layer call.
             py_setattr(st, "cached_tokens", PythonObject(generation_native_forward(linked, a_words, p_words)))
@@ -628,15 +679,15 @@ def _causal_layer_run_prepared(
             params = py_ints(p_words)
             if device15:
                 if blk["_native_session"] is None:
-                    py_setitem(blk, "_native_session", e["create"]())
-                    py_setitem(blk, "_session_binding", e["block_binding"])
+                    causal_block_cache_set(blk, "_native_session", e["create"]())
+                    causal_block_cache_set(blk, "_session_binding", e["block_binding"])
                 py_setattr(st, "cached_tokens", py_call(e["forward15"], blk["_native_session"], addresses, params))
             elif head_profile:
                 py_setattr(st, "cached_tokens", py_call(e["forward15_host"], addresses, params))
             elif py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
                 if blk["_native_session"] is None:
-                    py_setitem(blk, "_native_session", e["create"]())
-                    py_setitem(blk, "_session_binding", e["block_binding"])
+                    causal_block_cache_set(blk, "_native_session", e["create"]())
+                    causal_block_cache_set(blk, "_session_binding", e["block_binding"])
                 py_setattr(st, "cached_tokens", py_call(e["forward_session"], blk["_native_session"], addresses, params))
             else:
                 if step:
@@ -702,7 +753,7 @@ def _causal_layer_run_prepared(
                 py_setattr(st, "buffered_tokens", py_call(e["decode" if step else "forward"], py_ints(m_addresses), params))
             _ = last  # keep the Python object alive through the native call above
             _ = y  # keep the Python object alive through the native call above
-            py_setitem(blk, "h_last_", last)
+            causal_block_cache_set(blk, "h_last_", last)
     _writeback(copies)
     _ = layer  # retain captured Array weights until every native read completes
     _ = keep^
@@ -710,6 +761,7 @@ def _causal_layer_run_prepared(
 
 
 def causal_model_embedding(model: PythonObject, ids: PythonObject) raises -> PythonObject:
+    _causal_array_guard()
     var flat = Int(py=ids.ndim) == 1
     var b = 1 if flat else Int(py=ids.shape[0])
     var l = Int(py=ids.shape[0]) if flat else Int(py=ids.shape[1])
@@ -734,6 +786,7 @@ def _causal_model_embedding_prepared(
         _ = py_call(e["embedding_forward"], py_ints(a), py_ints([b * l, v, d]))
     _ = x  # keep the Python object alive through the native call above
     if flat:
+        _causal_array_guard()
         var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
         py_setattr(x, "shape", py_call(bi.tuple, py_ints([l, d])))
         py_setattr(x, "strides", py_call(bi.tuple, py_ints([d * 4, 4])))
@@ -744,6 +797,7 @@ def _causal_model_embedding_prepared(
 
 
 def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = True, packed: Bool = True) raises -> PythonObject:
+    _causal_array_guard()
     var flat = Int(py=x.ndim) == 2
     var b = 1 if flat else Int(py=x.shape[0])
     var l = Int(py=x.shape[0]) if flat else Int(py=x.shape[1])
@@ -796,6 +850,7 @@ def _causal_model_head_prepared(head: GenerationHeadSnapshot, x: PythonObject, b
         _ = hi  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
     if flat:
+        _causal_array_guard()
         var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
         py_setattr(out, "shape", py_call(bi.tuple, py_ints([l, v])))
         py_setattr(out, "strides", py_call(bi.tuple, py_ints([v * 4, 4])))
@@ -827,6 +882,8 @@ def _resident_forward_ok(model: PythonObject, state: PythonObject) raises -> Boo
         if py_get(blk, "_arithmetic_profile", PythonObject(None)) is not None:
             return False
         var st = state.layers[i]
+        if py_type(st) is native_loaded_module("types").SimpleNamespace and py_get(causal_snapshot_fields(st), "_causal_admission_failure") is not None:
+            return False
         if py_call(g[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
             return False
         if py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None)) is not None:
@@ -846,7 +903,7 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
     var int15 = model._head_int15 is not None
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
-    var fields = py_call(g[].bi.object.__getattribute__, model, "__dict__")
+    var fields = _standalone_record_fields(model)
     var persist = (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
     var key = _resident_key(model, state, b, int15)
@@ -855,7 +912,7 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
     var sessions = PythonObject(None)
     var out = generation_array([b, l, v])
     if persist:
-        py_setitem(fields, "_resident_busy", True)
+        causal_model_cache_set(model, fields, "_resident_busy", True)
     try:
         if kept is not None and Bool(py=kept[0] == key):
             lm = kept[1]
@@ -863,7 +920,7 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
             _resident_load_states(e, sessions, state, keep)
         else:
             if kept is not None:
-                py_setitem(fields, "_resident_sessions", PythonObject(None))
+                causal_model_cache_set(model, fields, "_resident_sessions", PythonObject(None))
                 _resident_close(e, kept[1], kept[2])
             var opened = _resident_open_all(model, e, state, b, l, int15, keep)
             lm = opened[0]
@@ -892,14 +949,14 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
         _writeback(copies)
     except error:
         if persist:
-            py_setitem(fields, "_resident_sessions", PythonObject(None))
-            py_setitem(fields, "_resident_busy", False)
+            causal_model_cache_set(model, fields, "_resident_sessions", PythonObject(None))
+            causal_model_cache_set(model, fields, "_resident_busy", False)
         if lm is not None:
             _resident_close(e, lm, sessions)
         raise error
     if persist:
-        py_setitem(fields, "_resident_sessions", Python.tuple(key, lm, sessions))
-        py_setitem(fields, "_resident_busy", False)
+        causal_model_cache_set(model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
+        causal_model_cache_set(model, fields, "_resident_busy", False)
     else:
         _resident_close(e, lm, sessions)
     _ = keep^
@@ -930,6 +987,7 @@ def _engine_admission(model: PythonObject, state: PythonObject, batch: Int, leng
 
 
 def _run_engine(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+    _causal_array_guard()
     var shape = ids.shape
     var batch = Int(py=shape[0])
     var length = Int(py=shape[1])
@@ -963,6 +1021,7 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject, remote_ste
 
 def _run_prepared(model: PythonObject, ids: PythonObject, state: PythonObject,
                   mut snapshot: Optional[GenerationOperationSnapshot], remote_step: Bool = False) raises -> PythonObject:
+    _causal_array_guard()
     var shape = ids.shape
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
@@ -971,7 +1030,7 @@ def _run_prepared(model: PythonObject, ids: PythonObject, state: PythonObject,
     var parallel = py_get(entries, "parallel_call")
     try:
         if parallel is not None:
-            return py_call(parallel, "run", Python.list(model, ids, state, remote_step))
+            return py_call(parallel, "run", Python.list(causal_model_origin(model), ids, causal_state_origin(state), remote_step, model, state))
         if _resident_forward_ok(model, state):
             var logits = _resident_forward(model, ids, state)
             py_setattr(state, "positions", PythonObject(Int(py=state.positions) + l))
@@ -1018,13 +1077,14 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
     except error:
         if supplied_state is None and parallel is not None:
             try:
-                _ = py_call(parallel, "release_layers", Python.list(model, state))
+                _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(state), model, state))
             except cleanup_error:
                 raise Error("CausalLM: forward failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     if supplied_state is None and parallel is not None:
-        _ = py_call(parallel, "release_layers", Python.list(model, state))
+        _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(state), model, state))
     if one:
+        _causal_array_guard()
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
         py_setattr(out, "shape", py_call(g[].bi.tuple, py_ints([Int(py=ids.shape[0]), Int(py=model.vocab_size)])))
         py_setattr(out, "strides", py_call(g[].bi.tuple, py_ints([Int(py=model.vocab_size) * 4, 4])))
@@ -1106,7 +1166,8 @@ def _resident_key(model: PythonObject, state: PythonObject, b: Int, int15: Bool)
     var caps = g[].bi.list()
     for i in range(len(state.layers)):  # driver-loop: over model layers
         _ = py_call(caps.append, state.layers[i].max_tokens)
-    return Python.tuple(b, py_call(g[].bi.tuple, caps), int15, py_call(g[].bi.id, model._native_entries))
+    var identity = py_get(_standalone_record_fields(model), "_causal_entries_identity", model._native_entries)
+    return Python.tuple(b, py_call(g[].bi.tuple, caps), int15, py_call(g[].bi.id, identity))
 
 
 def _resident_load_states(e: PythonObject, sessions: PythonObject, state: PythonObject, mut keep: List[PythonObject]) raises:
@@ -1131,7 +1192,7 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
     if int15 and String(e["resident_vendor"]) != "cuda":
         return PythonObject(None)
     var ids = generation_ids(value, Int(py=model.vocab_size))
-    var n = Int(py=maximum)
+    var n = _public_int(maximum, "generation: max_new_tokens must be an integer")
     if n == 0:
         return ids
     if n < 0:
@@ -1152,7 +1213,7 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
     # sessions are opened per call again, so an in-place edit is observed as
     # before. A concurrent call, or a binding without load_state, opens its
     # own set.
-    var fields = py_call(g[].bi.object.__getattribute__, model, "__dict__")
+    var fields = _standalone_record_fields(model)
     var persist = (py_contains(e, "transformer_decode_session_load_state")
                    and not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
@@ -1161,7 +1222,7 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
     var lm = PythonObject(None)
     var sessions = PythonObject(None)
     if persist:
-        py_setitem(fields, "_resident_busy", True)
+        causal_model_cache_set(model, fields, "_resident_busy", True)
     try:
         if kept is not None and Bool(py=kept[0] == key):
             lm = kept[1]
@@ -1169,7 +1230,7 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
             _resident_load_states(e, sessions, state, keep)
         else:
             if kept is not None:
-                py_setitem(fields, "_resident_sessions", PythonObject(None))
+                causal_model_cache_set(model, fields, "_resident_sessions", PythonObject(None))
                 _resident_close(e, kept[1], kept[2])
             var opened = _resident_open_all(model, e, state, b, l, int15, keep)
             lm = opened[0]
@@ -1184,14 +1245,14 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
         _ = ids  # keep the Python object alive through the native call above
     except error:
         if persist:
-            py_setitem(fields, "_resident_sessions", PythonObject(None))
-            py_setitem(fields, "_resident_busy", False)
+            causal_model_cache_set(model, fields, "_resident_sessions", PythonObject(None))
+            causal_model_cache_set(model, fields, "_resident_busy", False)
         if lm is not None:
             _resident_close(e, lm, sessions)
         raise error
     if persist:
-        py_setitem(fields, "_resident_sessions", Python.tuple(key, lm, sessions))
-        py_setitem(fields, "_resident_busy", False)
+        causal_model_cache_set(model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
+        causal_model_cache_set(model, fields, "_resident_busy", False)
     else:
         _resident_close(e, lm, sessions)
     var result = generation_array([b, l + n], "i")
@@ -1236,7 +1297,10 @@ struct GenerationHandle(Movable, Writable):
         self.current = prompt
         self.max_new = maximum
         self.produced = 0
-        self.state = causal_lm_allocate_binding(model, prompt.shape[0], PythonObject(Int(py=prompt.shape[1]) + maximum))
+        _causal_array_guard()
+        var batch = Int(py=prompt.shape[0])
+        var length = Int(py=prompt.shape[1])
+        self.state = causal_lm_allocate_binding(model, PythonObject(batch), PythonObject(length + maximum))
         self.greedy = True
         self.temperature = Float32(1)
         self.top_k = 0
@@ -1244,8 +1308,8 @@ struct GenerationHandle(Movable, Writable):
         self.seed = UInt64(0)
         self.eos = List[Int]()
         self.pad = 0
-        self.lengths = List[Int](length=Int(py=prompt.shape[0]), fill=0)
-        self.finished = List[Bool](length=Int(py=prompt.shape[0]), fill=False)
+        self.lengths = List[Int](length=batch, fill=0)
+        self.finished = List[Bool](length=batch, fill=False)
         self.busy = False
         self.usable = True
         self.tokenizer = PythonObject(None)
@@ -1266,6 +1330,9 @@ struct GenerationHandle(Movable, Writable):
 def _options(mut s: GenerationHandle, options: PythonObject) raises:
     # The Python veneer forwards these scalar objects unchanged. Explicit
     # sampling requires an explicit seed; greedy consumes no RNG state.
+    neural_plain_value(options, 0, _causal_context())
+    if py_type(options) is not native_loaded_module("builtins").tuple and py_type(options) is not native_loaded_module("builtins").list:
+        raise Error("TypeError: generation options require an ordinary scalar tuple")
     if len(options) != 7:
         raise Error("generation: expected greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id")
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
@@ -1313,12 +1380,13 @@ def causal_lm_stream_binding(model: PythonObject, value: PythonObject, maximum: 
         var parallel = py_get(model._native_entries, "parallel_call")
         if parallel is not None:
             try:
-                _ = py_call(parallel, "release_layers", Python.list(model, handle.state))
+                _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(handle.state), model, handle.state))
             except cleanup_error:
                 raise Error("generation: option validation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var stream = py_call(g[].bi.object.__new__, g[].stream_cls)
+    _ = _causal_stream_fields(stream)
     py_setattr(stream, "_native", PythonObject(alloc=handle^))
     py_setattr(stream, "_runtime", model._runtime)
     return stream
@@ -1335,6 +1403,7 @@ def _engine_publish_stream(mut s: GenerationHandle, progress: NativeGenerationPr
 
 
 def _read_engine(mut s: GenerationHandle, capacity: Int) raises -> PythonObject:
+    _causal_array_guard()
     var batch = len(s.finished)
     var length = Int(py=s.current.shape[1])
     var owner = _engine_admission(s.model, s.state, batch, length)
@@ -1378,8 +1447,10 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
             return result
         var snapshot: Optional[GenerationOperationSnapshot] = None
         while wrote < capacity and not s.done():  # driver-loop: over decode steps, one model forward each
+            _causal_array_guard()
             var l = Int(py=s.current.shape[1])
             var logits = _run_prepared(s.model, s.current, s.state, snapshot, s.produced > 0)
+            _causal_array_guard()
             var raw = f32_ptr(Int(py=logits._addr))
             _ = logits  # keep the Python object alive through the native call above
             var next = generation_array([b, 1], "i")
@@ -1412,6 +1483,7 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
 
 
 def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonObject:
+    _causal_array_guard()
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var n = Int(py=ids.shape[1])
     var raw = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
@@ -1429,16 +1501,20 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
     return py_call(prefix.decode, "utf-8", "replace")
 
 
-def causal_lm_read_binding(stream: PythonObject, count: PythonObject) raises -> PythonObject:
-    var owner = stream._native.downcast_value_ptr[GenerationHandle]()
+def _causal_stream_fields(stream: PythonObject) raises -> PythonObject:
+    return model_record_fields(stream, _causal_context()["generation_classes"][3], Python.tuple("_native", "_runtime"))
+
+
+def causal_lm_read_binding(stream: PythonObject, count: PythonObject, native: PythonObject = PythonObject(None)) raises -> PythonObject:
+    var owner = (native if native is not None else _causal_stream_fields(stream)["_native"]).downcast_value_ptr[GenerationHandle]()
     var ids = _read(owner[], _public_int(count, "generation: max_tokens must be an integer"))
     if owner[].tokenizer is not None:
         return _decode_chunk(owner[], ids)
     return ids
 
 
-def causal_lm_info_binding(stream: PythonObject) raises -> PythonObject:
-    var s = stream._native.downcast_value_ptr[GenerationHandle]()
+def causal_lm_info_binding(stream: PythonObject, native: PythonObject = PythonObject(None)) raises -> PythonObject:
+    var s = (native if native is not None else _causal_stream_fields(stream)["_native"]).downcast_value_ptr[GenerationHandle]()
     var result = GENERATION_BOUNDARY.get_or_create_ptr()[].bi.dict()
     py_setitem(result, "done", PythonObject(s[].done()))
     py_setitem(result, "generated_tokens", PythonObject(s[].produced))
@@ -1449,10 +1525,11 @@ def causal_lm_info_binding(stream: PythonObject) raises -> PythonObject:
 
 def _generate_complete(model: PythonObject, value: PythonObject, maximum: PythonObject, mut s: GenerationHandle) raises -> PythonObject:
     if s.greedy and len(s.eos) == 0:
-        var resident = causal_lm_resident_binding(model, value, maximum, PythonObject(None), s.state)
+        var resident = causal_lm_resident_binding(model, s.prompt, PythonObject(s.max_new), PythonObject(None), s.state)
         if resident is not None:
             return resident
     var continuation = _read(s, max(1, s.max_new))
+    _causal_array_guard()
     var b = len(s.lengths)
     var l = Int(py=s.prompt.shape[1])
     var n = Int(py=continuation.shape[1])
@@ -1471,7 +1548,7 @@ def _generate_complete(model: PythonObject, value: PythonObject, maximum: Python
 
 def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
     var stream = causal_lm_stream_binding(model, value, maximum, options)
-    var s = stream._native.downcast_value_ptr[GenerationHandle]()
+    var s = _causal_stream_fields(stream)["_native"].downcast_value_ptr[GenerationHandle]()
     var parallel = py_get(model._native_entries, "parallel_call")
     var result = PythonObject(None)
     try:
@@ -1479,12 +1556,12 @@ def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum
     except error:
         if parallel is not None:
             try:
-                _ = py_call(parallel, "release_layers", Python.list(model, s[].state))
+                _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(s[].state), model, s[].state))
             except cleanup_error:
                 raise Error("CausalLM: generation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     if parallel is not None:
-        _ = py_call(parallel, "release_layers", Python.list(model, s[].state))
+        _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(s[].state), model, s[].state))
     return result
 
 
@@ -1500,14 +1577,14 @@ def causal_lm_text_stream_binding(model: PythonObject, tokenizer: PythonObject, 
     _ = prompt  # keep the Python object alive through the native call above
     _ = packed^
     var stream = causal_lm_stream_binding(model, prompt, maximum, options)
-    var owner = stream._native.downcast_value_ptr[GenerationHandle]()
+    var owner = _causal_stream_fields(stream)["_native"].downcast_value_ptr[GenerationHandle]()
     owner[].tokenizer = tokenizer
     return stream
 
 
 def causal_lm_generate_text_binding(model: PythonObject, tokenizer: PythonObject, text: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
     var stream = causal_lm_text_stream_binding(model, tokenizer, text, maximum, options)
-    var owner = stream._native.downcast_value_ptr[GenerationHandle]()
+    var owner = _causal_stream_fields(stream)["_native"].downcast_value_ptr[GenerationHandle]()
     var parallel = py_get(model._native_entries, "parallel_call")
     var result = PythonObject(None)
     try:
@@ -1516,20 +1593,21 @@ def causal_lm_generate_text_binding(model: PythonObject, tokenizer: PythonObject
     except error:
         if parallel is not None:
             try:
-                _ = py_call(parallel, "release_layers", Python.list(model, owner[].state))
+                _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(owner[].state), model, owner[].state))
             except cleanup_error:
                 raise Error("CausalLM: text generation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     if parallel is not None:
-        _ = py_call(parallel, "release_layers", Python.list(model, owner[].state))
+        _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(owner[].state), model, owner[].state))
     return result
 
 
 def _array_bytes(value: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     if py_type(value) is g[].array_cls:
-        return py_call(value._mv.tobytes, "C")
-    return py_call(py_call(g[].bi.memoryview, value).tobytes, "C")
+        var captured = generation_array_snapshot(value)
+        return py_call(captured._mv.tobytes, "C")
+    return py_call(generation_buffer_view(value).tobytes, "C")
 
 
 def _hash() -> Sha256:
@@ -1542,6 +1620,7 @@ def _hash_scalar(mut hash: Sha256, value: PythonObject) raises:
 
 
 def _fingerprint(model: PythonObject) raises -> PythonObject:
+    _causal_array_guard()
     var h = _hash()
     _hash_scalar(h, model.kind)
     _hash_scalar(h, model.numeric_profile)
@@ -1554,6 +1633,7 @@ def _fingerprint(model: PythonObject) raises -> PythonObject:
     sha256_update(h, _array_bytes(model._head))
     for i in range(len(model._blocks)):  # driver-loop: over model layers
         var blk = _block(model, i)
+        _causal_array_guard()
         if String(model.kind) == "transformer":
             _hash_scalar(h, blk["_opts_tail"])
             _hash_scalar(h, blk["n_heads"])
@@ -1615,8 +1695,8 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
     return PythonObject(h.hexdigest())
 
 
-def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
-    var s = stream._native.downcast_value_ptr[GenerationHandle]()
+def causal_lm_snapshot_binding(stream: PythonObject, native: PythonObject = PythonObject(None)) raises -> PythonObject:
+    var s = (native if native is not None else _causal_stream_fields(stream)["_native"]).downcast_value_ptr[GenerationHandle]()
     if s[].busy or not s[].usable:
         raise Error("generation: cannot checkpoint a busy or failed stream")
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
@@ -1654,7 +1734,8 @@ def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
         var st = s[].state.layers[i]
         var parallel = py_get(s[].model._native_entries, "parallel_call")
         if parallel is not None:
-            st = py_call(parallel, "state_snapshot", Python.list(st))
+            st = py_call(parallel, "state_snapshot", Python.list(causal_state_origin(st), st))
+            st = causal_layer_capture(st, s[].model.kind, _causal_context_for(s[].model))
         var entry = g[].bi.dict()
         for j in range(len(arrays)):  # driver-loop: over layer state arrays
             py_setitem(entry, arrays[j], generation_copy(py_call(g[].bi.getattr, st, arrays[j])))
@@ -1686,7 +1767,7 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
         if not Bool(py=checkpoint["tokenizer"] == fingerprint):
             raise Error("generation: checkpoint tokenizer differs")
     var stream = causal_lm_stream_binding(model, checkpoint["prompt"], checkpoint["maximum"], checkpoint["options"])
-    var s = stream._native.downcast_value_ptr[GenerationHandle]()
+    var s = _causal_stream_fields(stream)["_native"].downcast_value_ptr[GenerationHandle]()
     try:
         s[].produced = Int(py=checkpoint["produced"])
         if s[].produced < 0 or s[].produced > s[].max_new:
@@ -1722,7 +1803,8 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
             var dest = s[].state.layers[i]
             var parallel = py_get(model._native_entries, "parallel_call")
             if parallel is not None:
-                dest = py_call(parallel, "state_snapshot", Python.list(dest))
+                dest = py_call(parallel, "state_snapshot", Python.list(causal_state_origin(dest), dest))
+                dest = causal_layer_capture(dest, model.kind, _causal_context_for(model))
             var source = checkpoint["layers"][i]
             for j in range(len(arrays)):  # driver-loop: over layer state arrays
                 var expected = py_call(g[].bi.getattr, dest, arrays[j])
@@ -1743,7 +1825,8 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
                     raise Error("generation: checkpoint Mamba2 buffered length differs")
                 py_setattr(dest, "buffered_tokens", source["buffered_tokens"])
             if parallel is not None:
-                _ = py_call(parallel, "state_publish", Python.list(s[].state.layers[i], dest))
+                causal_layer_publish(dest)
+                _ = py_call(parallel, "state_publish", Python.list(causal_state_origin(s[].state.layers[i]), causal_state_origin(dest), s[].state.layers[i]))
         s[].tokenizer = tokenizer if Bool(py=checkpoint["text"]) else PythonObject(None)
         s[].pending_bytes = py_call(g[].bi.bytearray, checkpoint["pending_bytes"])
         return stream
@@ -1753,7 +1836,7 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
         var parallel = py_get(model._native_entries, "parallel_call")
         if parallel is not None:
             try:
-                _ = py_call(parallel, "release_layers", Python.list(model, s[].state))
+                _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(model), causal_state_origin(s[].state), model, s[].state))
             except cleanup_error:
                 raise Error("generation: checkpoint restore failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
@@ -1819,37 +1902,72 @@ def _causal_owner_unusable(args_ptr: PyObjectPtr) -> Bool:
 
 
 def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var model = PythonObject(None)
+    var state = PythonObject(None)
     try:
         var args = PythonObject(from_borrowed=args_ptr)
         var result = PythonObject(None)
+        var options = PythonObject(None)
+        var checkpoint = PythonObject(None)
+        var last_logits = PythonObject(None)
+        var stream_native = PythonObject(None)
+        comptime if operation == 1 or operation == 2 or operation == 3 or operation == 4 or operation == 7 or operation == 8 or operation == 9 or operation == 10 or operation == 12 or operation == 13:
+            model = causal_model_capture(args[0], _causal_context())
+        comptime if operation == 2:
+            state = causal_state_capture(args[1], model, _causal_context())
+        elif operation == 3:
+            state = causal_state_capture(args[2], model, _causal_context())
+        elif operation == 10:
+            state = causal_state_capture(args[4], model, _causal_context())
+            if args[3] is not None:
+                last_logits = generation_array_snapshot(args[3]) if py_type(args[3]) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else generation_buffer_view(args[3])
+        elif operation == 5 or operation == 6 or operation == 11:
+            stream_native = _causal_stream_fields(args[0])["_native"]
+            comptime if operation == 5 or operation == 11:
+                var stream = stream_native.downcast_value_ptr[GenerationHandle]()
+                # Every public read/checkpoint captures current caller metadata
+                # once; prior calls already published their state progress.
+                model = causal_model_capture(causal_model_origin(stream[].model), _causal_context())
+                state = causal_state_capture(causal_state_origin(stream[].state), model, _causal_context())
+                stream[].model = model
+                stream[].state = state
+        comptime if operation == 4 or operation == 7 or operation == 8 or operation == 9:
+            var raw_options = args[4] if operation == 8 or operation == 9 else args[3]
+            neural_plain_value(raw_options, 0, _causal_context())
+            options = neural_metadata_snapshot(raw_options)
+        comptime if operation == 12:
+            checkpoint = causal_checkpoint_capture(args[1], _causal_context())
         comptime if operation == 0:
             result = causal_lm_admit_binding(args[0], args[1], args[2], args[3])
         elif operation == 1:
-            result = causal_lm_allocate_binding(args[0], args[1], args[2])
+            result = causal_lm_allocate_binding(model, args[1], args[2])
+            causal_state_publish(result)
+            result = causal_state_origin(result)
         elif operation == 2:
-            result = causal_lm_reset_binding(args[0], args[1])
+            result = causal_lm_reset_binding(model, state)
+            result = causal_state_origin(result)
         elif operation == 3:
-            result = causal_lm_forward_binding(args[0], args[1], args[2], args[3])
+            result = causal_lm_forward_binding(model, args[1], state, args[3])
         elif operation == 4:
-            result = causal_lm_stream_binding(args[0], args[1], args[2], args[3])
+            result = causal_lm_stream_binding(model, args[1], args[2], options)
         elif operation == 5:
-            result = causal_lm_read_binding(args[0], args[1])
+            result = causal_lm_read_binding(args[0], args[1], stream_native)
         elif operation == 6:
-            result = causal_lm_info_binding(args[0])
+            result = causal_lm_info_binding(args[0], stream_native)
         elif operation == 7:
-            result = causal_lm_generate_binding(args[0], args[1], args[2], args[3])
+            result = causal_lm_generate_binding(model, args[1], args[2], options)
         elif operation == 8:
-            result = causal_lm_text_stream_binding(args[0], args[1], args[2], args[3], args[4])
+            result = causal_lm_text_stream_binding(model, args[1], args[2], args[3], options)
         elif operation == 9:
-            result = causal_lm_generate_text_binding(args[0], args[1], args[2], args[3], args[4])
+            result = causal_lm_generate_text_binding(model, args[1], args[2], args[3], options)
         elif operation == 10:
-            result = causal_lm_resident_binding(args[0], args[1], args[2], args[3], args[4])
+            result = causal_lm_resident_binding(model, args[1], args[2], last_logits, state)
         elif operation == 11:
-            result = causal_lm_snapshot_binding(args[0])
+            result = causal_lm_snapshot_binding(args[0], stream_native)
         elif operation == 12:
-            result = causal_lm_resume_binding(args[0], args[1], args[2])
+            result = causal_lm_resume_binding(model, checkpoint, args[2])
         elif operation == 13:
-            result = causal_lm_parameters_binding(args[0])
+            result = causal_lm_parameters_binding(model)
         elif operation == 14:
             result = causal_lm_blocks_binding(args[0])
         elif operation == 15:
@@ -1858,9 +1976,22 @@ def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
             result = causal_lm_repr_binding(args[0])
         else:
             result = causal_state_repr_binding(args[0])
+        comptime if operation == 4 or operation == 8 or operation == 12:
+            # Restored and newly allocated state owners must match the native
+            # continuation before the next public operation recaptures them.
+            var stream = _causal_stream_fields(result)["_native"].downcast_value_ptr[GenerationHandle]()
+            state = stream[].state
+        causal_state_publish(state)
+        causal_model_publish(model)
         return result.steal_data()
     except error:
         var message = String(error)
+        try:
+            causal_state_publish(state)
+            causal_model_publish(model)
+        except publication_error:
+            message += "; native state publication also failed: " + String(publication_error)
+            return raise_python_exception(Error(message), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("TypeError:"):
