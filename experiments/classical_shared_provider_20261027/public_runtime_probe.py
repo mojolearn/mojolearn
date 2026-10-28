@@ -20,6 +20,8 @@ def qualify():
     weights = np.linspace(0.5, 1.5, len(x), dtype='f4')
     results = []
     binding = _backend.binding('_mojolearn_svm', 'identical')
+    if _backend._CPU_ONLY is not None:
+        binding = _backend.load_host_module('_mojolearn_svm_host')
     @contextmanager
     def poison_legacy(arm):
         if not arm:
@@ -154,9 +156,9 @@ def qualify():
             assert expected in str(error), (expected, str(error))
         else:
             raise AssertionError('invalid sample weight accepted')
-    return dict(status='passed', cases=results,
+    return dict(status='passed', vendor=_backend.vendor(), cases=results,
                 pending=['all kernels/label types/class weights', 'concurrent input mutation',
-                         'CPU binding candidate', 'other SVM surfaces and families', 'performance', 'other targets'])
+                         'other SVM surfaces and families', 'performance', 'other targets'])
 
 
 def main():

@@ -7,6 +7,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from svm.operation_metadata import SVC_ABI_NAME
+from svm.native_descriptor_schema import svc_binary_spans
 from svm.native_epilogue_dispatch import svc_native_epilogue, svc_native_platt, svc_native_splitmix
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from svm.native_auxiliary_dispatch import svc_native_auxiliary
@@ -83,43 +84,7 @@ def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) 
 def svc_binary_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                   result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op > 11:
-            raise Error("SVC native ABI: unknown operation")
-        var expected_a = 7 if op == 0 else (4 if op == 1 or op == 2 else (3 if op == 3 else (1 if op == 4 else 0)))
-        var expected_p = 6 if op < 2 else (5 if op == 2 else (1 if op == 3 else (3 if op == 4 else 0)))
-        var expected_f = 4 if op == 0 else (6 if op == 1 else (5 if op == 2 else 0))
-        if op == 6:
-            if np != 9 and np != 10 and np != 12:
-                raise Error("svr_fit: params must contain 9 values (10 with the per-row bounds, 12 with degree and coef0), got " + String(np))
-            expected_a = 6
-            expected_p = np
-            expected_f = np
-        elif op == 7:
-            if np != 7 and np != 9:
-                raise Error("svr_predict: params must contain 7 values (9 with degree and coef0), got " + String(np))
-            expected_a = 4
-            expected_p = np
-            expected_f = np
-        elif op == 8:
-            expected_a = 0
-            expected_p = 0
-            expected_f = 0
-        elif op == 9:
-            expected_a = 2
-            expected_p = 1
-            expected_f = 0
-        elif op == 10:
-            if np < 4 or (np - 4) % 3 != 0:
-                raise Error("svc_ovo_layout: malformed class-pair descriptor")
-            expected_a = 3 + 2 * ((np - 4) // 3)
-            expected_p = np
-            expected_f = 0
-        elif op == 11:
-            expected_a = 3
-            expected_p = 3
-            expected_f = 0
-        if na != expected_a or np != expected_p or nf != expected_f:
-            raise Error("SVC native ABI: descriptor span differs from the named operation")
+        svc_binary_spans(op, na, np, nf)
         if result == 0 or (nf > 0 and ff == 0):
             raise Error("SVC native ABI: null result or scalar span")
         var a = native_descriptor_words(aa, na)
