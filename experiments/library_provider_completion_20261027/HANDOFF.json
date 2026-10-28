@@ -1,0 +1,104 @@
+{
+  "date": "2026-10-27",
+  "branch": "lane/library-provider-completion-20261027",
+  "source_head_before_handoff": "bfd4c13e425dfcaf1c071b6943b37cb2d535eed5",
+  "worktree": "/Users/andrewhendel/mojolearn-wt/library-provider-completion-20261027",
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/library-provider-completion-20261027",
+  "status": "source_checkpoint_incomplete_migration_uncompiled_by_lane",
+  "root_owns": [
+    "integration",
+    "all compilation",
+    "actual public Mac runtime and bit verification"
+  ],
+  "recent_commits": [
+    {
+      "commit": "a68a5b4cd3",
+      "change": "Native inherited RNN/MLP lifecycle: validation, fitted errors/tracking, labels/features and regression output widening"
+    },
+    {
+      "commit": "8ff4917801",
+      "change": "Source census includes inherited public lifecycle wrappers; predicts735 risky effective methods, not735 confirmed public bugs"
+    },
+    {
+      "commit": "cb385d2f90",
+      "change": "Shared ArrayMetadata storage-owner capture and SVC/SVR X snapshots reused through gamma/pairs/folds/query"
+    },
+    {
+      "commit": "ee4eedbf8f",
+      "change": "Required follow-up: fix multiclass owner-retention indentation introduced in cb385d2f90"
+    },
+    {
+      "commit": "10f0f81f99",
+      "change": "Shared native sample-weight scalar/vector metadata, cast and validation snapshot; SVC retains address/owners"
+    },
+    {
+      "commit": "bfd4c13e42",
+      "change": "CPU SVC/SVR12-op table over original host owners; shared CPU/GPU ABI span schema"
+    }
+  ],
+  "earlier_chunks": [
+    "SVM/KMeans frontdoors and mode resolution",
+    "GPU SVC/SVR/gamma/OVO table",
+    "kernel methods17-op table",
+    "x_neighbors82-op CPU/GPU table",
+    "operation-local compiled binding snapshot",
+    "CPU linalg15-op table",
+    "lowbit11public fronts and owned foreign buffer admission"
+  ],
+  "integration_notes": [
+    "Preserve root neural_descriptor_pyapi fixes; none of these commits overwrite that file",
+    "642f34668 is a cherry-pick of neural lane0f92d6574; skip duplicate during integration",
+    "Source candidate switches remain opt-in; no performance defaults promoted",
+    "CPU table is source-only; public runtime probe supports explicitly selected CPU installs"
+  ],
+  "validation": [
+    {
+      "log": "lifecycle-final-source-tests.log",
+      "result": "25source tests passed; no runtime"
+    },
+    {
+      "log": "lifecycle-census-tests.log",
+      "result": "2source tests passed"
+    },
+    {
+      "log": "svc-input-snapshot-tests.log",
+      "result": "27source tests and14subtests passed after signature assertion repair"
+    },
+    {
+      "log": "shared-weight-snapshot-tests.log",
+      "result": "23source tests passed"
+    },
+    {
+      "log": "cpu-svm-provider-tests.log",
+      "result": "24source tests passed"
+    },
+    {
+      "log": "cpu-svm-provider-push.log",
+      "result": "push successful; static kernel/shell policies0hits; not compile/runtime evidence"
+    }
+  ],
+  "authored_not_run_probes": [
+    "experiments/classical_shared_provider_20261027/public_runtime_probe.py",
+    "experiments/xseq_public_lifecycle_20261027/public_runtime_probe.py",
+    "experiments/lowbit_provider_20261027/public_runtime_probe.py",
+    "experiments/linalg_host_provider_20261027/public_runtime_probe.py",
+    "experiments/x_neighbors_provider_20261027/public_runtime_probe.py",
+    "experiments/library_provider_completion_20261027/frontdoor_runtime_probe.py"
+  ],
+  "remaining": [
+    "All latest source chunks need root compilation and actual public runtime qualification; root selective lifecycle compile in flight is separate",
+    "SVC/SVR target/class-label admission still repeats metadata; class weighting re-encodes labels; base reduction/cast helper calls still use CPython dispatch",
+    "SVC/SVR outer orchestration still carries PythonObject containers; native typed tables alone do not complete migration",
+    "Linear SVM and remaining OneClass/neighbor paths require transitive admission/metadata/dispatch audit and repair",
+    "RNN/MLP owners still repeat input metadata and use legacy base helper dispatch; recurrent state_dict/load_state_dict/_layout still Python",
+    "Many other families retain inherited public lifecycle wrappers; source census is risk inventory, not actual public runtime qualification",
+    "Other linalg/decomposition, linear, preprocess, metrics, model selection, time-series and family methods still require actual-method/transitive migration",
+    "No whole-library Python-free or metadata-once completion claim; no measured speedup claim"
+  ],
+  "next_work_not_started": "Reuse parsed SVC classes/codes for class weights and binary targets instead of re-reading y; then finish target snapshot/base-helper dispatch and broader lifecycle work",
+  "failures_and_limitations": [
+    "Root observed real inherited MLP/RNN wrapper runtime failures on9929; source repair a68 is unqualified until root actual rerun",
+    "cb385 indentation error fixed in ee4 before subsequent chunks; source tests had not caught it",
+    "Initial source assertion expected old array_shape_once(view) signature; updated to require one array_shape_once(view,context). Original full run logfile was overwritten by rerun; diagnostic summary retained separately, not represented as full original log"
+  ]
+}
