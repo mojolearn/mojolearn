@@ -293,6 +293,7 @@ def _causal_model_key(mut mods: NativeModules, model: PythonObject, live: Python
     for i in range(len(blocks)):  # driver-loop: over each model layer's identity and setup inputs once
         key.add(py_type(blocks[i]))
         key.fields(_fields(mods, blocks[i]), _causal_block_runtime_names())
+    key.watch_arrays(mods, context)
     # A self-referential field must not make the cache retain its weak key.
     if key.retains(model):
         return PythonObject(None)
@@ -317,7 +318,7 @@ def _causal_model_matches(mut mods: NativeModules, saved: PythonObject, model: P
             return False
         if not key[].matches_fields(_fields(mods, blocks[i]), _causal_block_runtime_names(), offset):
             return False
-    return key[].complete(offset)
+    return key[].complete(offset) and key[].arrays_match(mods, context)
 
 
 def _causal_view_retained(mut mods: NativeModules, view: PythonObject, original: PythonObject, context: PythonObject) raises -> Bool:
@@ -528,27 +529,64 @@ def causal_layer_capture(mut mods: NativeModules, state: PythonObject, kind: Pyt
     # reuses the passive view captured for it on an earlier call (same
     # storage); a new or replaced buffer, or a foreign exporter, is captured
     # as before.
-    var prepared = prepared_get(mods, _CAUSAL_LAYER_SLOT, state)
-    var views = bi.dict()
-    var missed = prepared is None
+    var record = prepared_get(mods, _CAUSAL_LAYER_SLOT, state)
+    var prepared = PythonObject(None)
+    if record is not None and len(record) == 2:
+        try:
+            if record[1].downcast_value_ptr[NativeIdentityKey]()[].arrays_match(mods, context):
+                prepared = record[0]
+        except:
+            prepared = PythonObject(None)
+    # A single Array class/slot stamp covers every buffer in this state.
+    # Check original identities before taking views, so replacement triggers
+    # a fresh combined stamp rather than nine repeated class-namespace scans.
+    if prepared is not None:
+        for i in range(len(buffers)):  # driver-loop: over current state buffer identities
+            var value = py_get(fields, buffers[i])
+            var hit = py_get(prepared, buffers[i])
+            if value is not None and py_type(value) is context["array_class"]:
+                if hit is None or hit[0] is not value:
+                    prepared = PythonObject(None)
+                    break
+            elif hit is not None:
+                prepared = PythonObject(None)
+                break
+    var stamp = NativeIdentityKey(mods)
+    var stamped = False
+    if prepared is None:
+        try:
+            for i in range(len(buffers)):  # driver-loop: over state buffers retained in the native metadata stamp
+                var value = py_get(fields, buffers[i])
+                if value is not None and py_type(value) is context["array_class"]:
+                    stamp.add_identity(value)
+            stamp.watch_arrays(mods, context)
+            stamped = True
+        except:
+            stamped = False
+    var views = bi.dict() if prepared is None else prepared
     for i in range(len(buffers)):  # driver-loop: over retain each mutable state buffer exporter
         if py_contains(fields, buffers[i]):
             var value = fields[buffers[i]]
             var captured = PythonObject(None)
             if value is not None and py_type(value) is context["array_class"]:
                 var hit = PythonObject(None) if prepared is None else py_get(prepared, buffers[i])
-                if hit is not None and hit[0] is value:
+                if hit is not None:
                     captured = hit[1]
                 else:
                     captured = _causal_buffer(value, context)
-                    missed = True
-                py_setitem(views, buffers[i], Python.list(value, captured))
+                    py_setitem(views, buffers[i], Python.list(value, captured))
             else:
                 captured = _causal_buffer(value, context)
             py_setitem(original_buffers, buffers[i], captured)
             py_setitem(fields, buffers[i], captured)
-    if missed or len(views) != len(prepared):
-        prepared_put(mods, _CAUSAL_LAYER_SLOT, state, views)
+    if prepared is None and stamped:
+        var unchanged = False
+        try:
+            unchanged = stamp.arrays_match(mods, context)
+        except:
+            unchanged = False
+        if unchanged and not stamp.retains(state):
+            prepared_put(mods, _CAUSAL_LAYER_SLOT, state, Python.list(views, PythonObject(alloc=stamp^)))
     py_setitem(fields, "_causal_original", state)
     py_setitem(fields, "_native_state_identity", state)
     py_setitem(fields, "_causal_live_fields", live)
