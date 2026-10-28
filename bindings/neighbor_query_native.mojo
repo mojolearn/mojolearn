@@ -357,7 +357,7 @@ def neighbor_query(model: PythonObject, op: String, args: PythonObject, context:
     if op == "getstate" and String(kind[0]) == "ivf":
         var fields = py_fields(model)
         _ivf_materialize(fields, context)
-        var state = py_call(fields.copy)
+        var state = py_call(native_loaded_module("builtins").dict, fields)
         _ = py_call(state.pop, "_resident", PythonObject(None))
         return state
     if op == "search" and String(kind[0]) == "ivf":

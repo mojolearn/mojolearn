@@ -649,7 +649,7 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
         var fields = _fields(model)
         if py_contains(fields, "_device_codes"):
             _ = ann_pq_materialize(model, context)
-        var state = py_call(fields.copy)
+        var state = py_call(native_loaded_module("builtins").dict, fields)
         _ = py_call(state.pop, "_resident", PythonObject(None))
         _ = py_call(state.pop, "_device_codes", PythonObject(None))
         return state
@@ -697,7 +697,8 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
         else:
             raise Error("RuntimeError: unknown neighbors operation " + operation)
     except error:
-        raise neighbors_public_refusal(error, call, model)
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
     finally:
         neighbors_public_end(model, call)
     _ = snapshot
