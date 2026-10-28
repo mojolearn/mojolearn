@@ -23,7 +23,8 @@ if [ "$SET" = cpu ] && [ -z "${SKIP_FAMILIES:-}" ]; then
   xargs -P $PAR -L 1 bash -c '"$@"' _ < "$OUT/plan.txt"
   sha256sum python/mojolearn/host/*.so > "$OUT/so_sha256.txt" 2>/dev/null
   total=$(wc -l < "$OUT/plan.txt"); ok=$(grep -c 'rc=0' "$OUT/families.tsv"); nso=$(ls python/mojolearn/host/*.so 2>/dev/null | wc -l)
-  bad=$(grep -liE 'refus|destination exists|output already exists' "$OUT"/logs/host_*.log 2>/dev/null | xargs -n1 basename 2>/dev/null | tr '\n' ' ')
+  # judge the cache's own status rows (tools/bincache.py rec.row), not compiler text: warnings mention "refusal"
+  bad=$(grep -h '^BINCACHE' "$OUT"/logs/host_*.log 2>/dev/null | grep -iE 'refused|exists' | awk '{print $3}' | tr '\n' ' ')
   echo "HOST_FAMILIES total=$total ok=$ok so_files=$nso refused_or_exists=[${bad}]" >> "$OUT/summary.txt"
   grep -h BINCACHE "$OUT"/logs/host_*.log 2>/dev/null | awk '{print $2}' | sort | uniq -c > "$OUT/bincache_rows.txt"
   cat > "$OUT/smoke.py" <<'PY'
