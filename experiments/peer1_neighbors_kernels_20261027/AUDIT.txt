@@ -114,7 +114,7 @@ Shared root requirements (no edits here)
 
 Regression coverage
 -------------------
-python/mojolearn/tests/test_peer1_provider_boundary.py contains 72 runtime cases:
+python/mojolearn/tests/test_peer1_provider_boundary.py contains 81 runtime cases:
 - 11 public fits with a mutable Python _bind callback that must remain uncalled;
 - 33 public fits with ndarray-shape, array-protocol or list-subclass hooks;
 - 11 post-construction setting mutations, admitted before any scalar hook;
@@ -127,6 +127,10 @@ python/mojolearn/tests/test_peer1_provider_boundary.py contains 72 runtime cases
 - 4 IVF extend cases: strided float64 rows with appended search ids/candidate
   counts, wrong width, a fitted ndarray subclass, and a fitted scalar subclass.
   Refusals preserve the original fitted arrays and row count.
+- 9 follow-up cases for completed implementation paths: Nystroem/RBFSampler
+  ignored-y length/finiteness and fit-depth cleanup (4), KernelRidge column-y
+  warning/flat float64 public result (1), and IVFPQ/IVFSQ/IVFRaBitQ/Cagra
+  repeated searches with strided queries/masks and PQ lazy code export (4).
 
 One additional source-only case checks TSNE fit/fit_transform pass both native
 binding placeholders. This check does not qualify TSNE lifecycle or execution.
@@ -148,6 +152,14 @@ compile targets. The parent retains source changes and its own compilation
 handoff separately; this report records independent starting-source findings.
 
 Source validation retained in source-validation.log and test-manifest.json:
-exit 0; Python AST syntax pass; 13 test functions, 73 expanded cases. The single
+initial exit 0; Python AST syntax pass; 13 test functions, 73 expanded cases. The single
 TSNE source check passed against the parent's edited _expansion_ann.py, whose
-exact path and SHA256 are recorded. The 72 runtime cases were not executed.
+exact path and SHA256 are recorded. source-validation-followup.log retains the
+later exit 0 and current 16 functions, 82 expanded cases; test-manifest.json is
+updated to their current hash. All 81 runtime cases remain unexecuted.
+
+Complete git/source-hook logs, including the original CSV CRLF diff failure and
+ANN loop-annotation push failure, are retained on the Mac under
+/Users/andrewhendel/mojolearn-evidence/peer1-audit-tests-20261027/.
+retained-log-index.json records paths and exit codes. Both source failures were
+fixed; a passing source hook is not native compilation or runtime evidence.

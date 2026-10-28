@@ -402,3 +402,80 @@ def test_tsne_source_leaves_both_binding_routes_for_native_admission():
         assert isinstance(arguments, ast.Tuple) and len(arguments.elts) == 3
         assert all(isinstance(arg, ast.Constant) and arg.value is None for arg in arguments.elts[:2])
         assert isinstance(arguments.elts[2], ast.Name) and arguments.elts[2].id == "X"
+
+
+@pytest.mark.parametrize("name", ("Nystroem", "RBFSampler"))
+@pytest.mark.parametrize("bad_y", ("length", "nonfinite"))
+def test_kernel_feature_fit_keeps_ignored_target_validation_and_cleans_fit_depth(name, bad_y):
+    model = _model(name)
+    x, y = _data()
+    target = y[:2] if bad_y == "length" else y.astype(np.float64)
+    if bad_y == "nonfinite":
+        target[0] = np.nan
+    with pytest.raises(ValueError):
+        model.fit(x, target)
+    assert not vars(model).get("_mojolearn_fitting", 0)
+    assert model.fit(x, y) is model
+    assert vars(model).get("_mojolearn_fitted") is True
+    transformed = model.transform(x[:2])
+    assert type(transformed) is np.ndarray
+    assert transformed.shape == (2, 2)
+    assert transformed.dtype == np.float32
+
+
+def test_kernel_ridge_column_target_warns_and_returns_flat_public_prediction():
+    model = _model("KernelRidge")
+    x, y = _data()
+    with pytest.warns(UserWarning, match="column-vector y"):
+        assert model.fit(x, y.astype(np.float32)[:, None]) is model
+    prediction = model.predict(x[:2])
+    assert type(prediction) is np.ndarray
+    assert prediction.shape == (2,)
+    assert prediction.dtype == np.float64
+    assert not vars(model).get("_mojolearn_fitting", 0)
+
+
+@pytest.mark.parametrize("name", ("IVFPQIndex", "IVFSQIndex", "IVFRaBitQIndex", "CagraIndex"))
+def test_ann_search_returns_stable_completed_results_with_strided_filters(name):
+    import mojolearn
+
+    # Small ordinary shape; five features exercises PQ padding and RaBitQ's
+    # power-of-two rotation width. This is a correctness fixture, never a race.
+    x = np.random.default_rng(108).normal(size=(12, 5)).astype(np.float32)
+    options = {"n_lists": 2, "n_probes": 2, "n_neighbors": 2,
+               "kmeans_n_iters": 2, "random_state": 0}
+    if name == "IVFPQIndex":
+        options.update(pq_dim=2, pq_bits=1, pq_kmeans_n_iters=2)
+    elif name == "CagraIndex":
+        options = {"graph_degree": 2, "intermediate_graph_degree": 4,
+                   "n_neighbors": 2, "itopk_size": 4, "search_width": 1,
+                   "random_state": 0}
+    model = getattr(mojolearn, name)(numeric_mode="identical", **options)
+    assert model.fit(x) is model
+    query = x[::3]
+    first = model.search(query)
+    repeated = model.search(query)
+    for a, b in zip(first, repeated):
+        assert type(a) is type(b) is np.ndarray
+        assert a.shape == b.shape == (4, 2)
+        np.testing.assert_array_equal(a, b)
+    assert first[0].dtype == np.float32 and first[1].dtype == np.int32
+    backing = np.ones(24, dtype=np.bool_)
+    backing[::4] = False
+    mask = backing[::2]
+    assert not mask.flags.c_contiguous
+    distances, indices = model.search(query, filter=mask)
+    assert type(distances) is type(indices) is np.ndarray
+    valid = indices >= 0
+    assert np.all(indices[valid] < x.shape[0])
+    assert np.all(mask[indices[valid]])
+    assert np.isinf(distances[~valid]).all()
+    if name != "CagraIndex":
+        np.testing.assert_array_equal(np.asarray(model.n_candidates_), np.full(4, 6))
+    if name == "IVFPQIndex":
+        # Exercise the public lazy export after searches reused the resident
+        # fit. Materializing codes must retain the search result.
+        assert np.asarray(model.codes_).shape == (12, 2)
+        exported = model.search(query)
+        for a, b in zip(first, exported):
+            np.testing.assert_array_equal(a, b)
