@@ -76,8 +76,9 @@ FUNCTION_OP = "call"   # the method column for a public function
 
 # Public operations returned by factories/framework registration are not in the
 # package's __all__. Keep them in the same gate as directly exported estimators.
+# (adapters._torch_compile._Compiled was retired with implicit graph capture, 2026-10-27:
+# the module keeps only a native refusal `backend`, no returned class.)
 RETURNED_OPERATIONS = (
-    ("adapters._torch_compile", "_Compiled", "__call__"),
     ("importers._program", "ImportedProgram", "run"),
 )
 
