@@ -16,8 +16,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_view
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from providers.python.estimator_binding_pyapi import estimator_arguments
-from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_pcs_draw_entry, xn_pcs_draw
 from core.cast_in import CAST_KIND_SIGNED
 from providers.python.pcs_rng_pyapi import pcs_seed
 from providers.python.pcs_public_lifecycle_pyapi import pcs_public_begin, pcs_feature_names
@@ -68,10 +67,7 @@ def _pcs_fit(fields: PythonObject, settings: PythonObject, binding: PythonObject
     var nf = d + (1 if coef0 != 0.0 else 0)
     var seed = pcs_seed(family_field(settings, "random_state"), context)
     if nf > 0:
-        var draw = neural_descriptor_entry(xn_module(binding), "x_neighbors_kfeat_pcs_draw_idn", False)
-        if draw is None:
-            raise Error("NotImplementedError: mojolearn PolynomialCountSketch: this binary lacks "
-                        + "x_neighbors_kfeat_pcs_draw_idn (rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
+        var draw = xn_pcs_draw_entry(binding)
         var ih = family_array(Python.tuple(degree, nf), "<i4", context)
         var bh = family_array(Python.tuple(degree, nf), "<i4", context)
         if py_type(seed) is not py_type(PythonObject(0)):
@@ -80,12 +76,8 @@ def _pcs_fit(fields: PythonObject, settings: PythonObject, binding: PythonObject
         # Preserve arbitrary-sized integer seeds without Python operator.and_.
         var raw_seed = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLongMask")(seed._obj_ptr)
         var word = Int(raw_seed & 0xFFFFFFFF)
-        # Remaining provider work: PCS drawing is not yet in XN's table.
-        # The numerical extension entry below is still CPython-dispatched.
-        _ = family_call(draw, Python.list(word, components, degree * nf),
-                        classical_address(ih), classical_address(bh))
-        _ = ih
-        _ = bh
+        xn_pcs_draw(binding, draw, word, components, degree * nf,
+                    Int(py=classical_address(ih)), Int(py=classical_address(bh)))
         py_setitem(fields, "indexHash_", ih)
         py_setitem(fields, "bitHash_", bh)
     else:

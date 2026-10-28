@@ -1,0 +1,45 @@
+XN normal estimator route proposal and dedicated extraction, 2026-10-28
+
+The dedicated x_neighbors_admission_pyapi owner contains module/capsule admission,
+one native mode read, one native capability read, and retained binding snapshot
+construction. It imports no estimator selector, avoiding the selector/descriptor
+import cycle. Existing x_neighbors_descriptor_pyapi imports these helpers and
+keeps packed dispatch plus explicit module/function caller policy separate.
+
+Parent applies the authorized shared patch in estimator_binding_pyapi:
+  import xn_admit_checked from the dedicated admission owner;
+  in estimator_checked_mode, before the legacy mode getter, return
+  xn_admit_checked(module) for _mojolearn_x_neighbors + requested identical.
+Other families and existing fast routes remain unchanged. Preserve the kernel
+admission branch already present in the parent's newer shared source.
+
+Exact proposed shared patch (not applied to this lane's shared source):
+/Users/andrewhendel/mojolearn-evidence/peer1-radius-native-20261027/xn_estimator_mode.patch
+
+All source-located direct estimator selector consumers for this backend already
+admit/reuse CompiledBindingSnapshot: family_native's LOF/NC/semi/graph/OCSVM path,
+neighbors_native PCS, neighbors_knn_native classifier/regressor fit, cfb_agglo
+hierarchy, and the facade path in xn_admit_arguments. Their downstream xn_admit
+returns the retained snapshot, without a second descriptor/mode/capability read.
+
+Explicit raw module/function callers remain on the existing opt-in descriptor
+route. This repair covers normal identical estimator selection and does not
+claim all XN public function wrappers or their other bindings/lifecycles complete.
+PCS normal identical fit drawing becomes native only after the shared early
+branch and appended draw descriptor both land in the compiled source closure.
+
+Missing native factory is an explicit native-entry refusal; an old factory with
+no PCS capability yields the existing PCS rebuild refusal. Native table mode
+mismatch retains a RuntimeError naming requested identical and compiled mode.
+No callback or silent numerical Python fallback is introduced on this route.
+
+Validation: exact shared patch applicability and dedicated diff checks passed.
+Two existing source assertions in tools/test_x_neighbors_provider.py were updated
+for the moved admission code and passed as source-only checks. No product import,
+runtime test, compiler or vendor execution occurred in this lane. Parent owns
+the next compile. Reuse compile_radius.mojo for the public owner and
+compile_pcs_draw_host.mojo for the changed numerical auxiliary owner.
+
+Full evidence: /Users/andrewhendel/mojolearn-evidence/peer1-radius-native-20261027/
+xn-mode-patch-check.log, xn-admission-source-check.log,
+xn-admission-diff-check.log, xn-admission-commit.log, xn-admission-push.log.
