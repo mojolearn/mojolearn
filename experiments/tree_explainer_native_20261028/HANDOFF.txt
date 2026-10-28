@@ -12,7 +12,7 @@ Branch lane/peer5-explainers-20261028; worktree mojolearn-explainers.
 - trees_public_native routes trees_explainer_* and trees_agnostic_*.
 - __init__.py records _LinearRegressorMixin.predict identity in the tree
   context for the resident linear route.
-Compile: compile.json (attempt2 at 4f7c03567f; attempt1 at cab1cde66b also passed) (complete tree public dispatcher root
+Compile: compile.json (attempt3 at b48e99e4c8, loop tags only over attempt2 4f7c03567f; attempt1 cab1cde66b passed) (complete tree public dispatcher root
 checks/tree_auxiliary_public_compile.mojo, CPU column, identical, O0, -j10).
 Not covered: GPU/AMD/Apple builds, runtime, identity, tests. Semantics change:
 a plain Python function as the explained model is now refused; nsamples and
