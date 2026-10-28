@@ -981,8 +981,44 @@ def _logits_input(source: PythonObject, lengths: PythonObject, shape: _Shape,
     return (tokens, batch, length, sizes^)
 
 
+def _admit_pooled_logits_layout(context: PythonObject) raises:
+    # Only the exact connected pooled class is admitted. Read type dictionaries
+    # through pinned native descriptors; do not trigger class/Python hooks while
+    # checking whether a caller replaced one. This precedes slot writes too.
+    var cls = context["byte_lm_pooled_class"]
+    if py_type(cls) is not _b().type:
+        raise Error("TypeError: Byte-LM pooled logits require the connected native storage class")
+    var mro = py_call(context["byte_lm_type_mro_getter"], cls)
+    var expected = context["byte_lm_pooled_mro"]
+    if len(mro) != len(expected):
+        raise Error("TypeError: Byte-LM pooled logits ancestry changed")
+    var layout = context["byte_lm_pooled_layout"]
+    for i in range(len(expected)):  # driver-loop: over fixed pooled Array ancestry metadata
+        if mro[i] is not expected[i]:
+            raise Error("TypeError: Byte-LM pooled logits ancestry changed")
+        var namespace = py_call(context["byte_lm_type_dict_getter"], layout[i][0])
+        var hooks = layout[i][1]
+        for j in range(len(hooks)):  # driver-loop: over fixed connected native storage descriptors
+            if py_get(namespace, hooks[j][0]) is not hooks[j][1]:
+                raise Error("TypeError: Byte-LM pooled logits storage hook changed")
+
+
+def _logits_output_address(out: PythonObject, context: PythonObject) raises -> Int:
+    # Both outputs are internally allocated, exact Array storage. The pooled
+    # subclass was admitted before allocation above; no arbitrary subclasses or
+    # array-interface/input protocols are accepted as output storage here.
+    var cls = py_type(out)
+    if cls is not context["array_class"] and cls is not context["byte_lm_pooled_class"]:
+        raise Error("TypeError: Byte-LM logits output requires exact native Array storage")
+    var address = py_call(context["byte_lm_addr_getter"], out, cls)
+    if py_type(address) is not _b().int or Int(py=address) == 0:
+        raise Error("TypeError: Byte-LM logits output has an invalid native address slot")
+    return Int(py=address)
+
+
 def _pooled_logits(fields: PythonObject, batch: Int, length: Int, vocab: Int,
                    context: PythonObject) raises -> PythonObject:
+    _admit_pooled_logits_layout(context)
     var pool = py_get(fields, "_logits_pool")
     if pool is None:
         pool = native_storage_allocate(context["byte_lm_logits_pool"])
@@ -1064,6 +1100,7 @@ def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObj
         var direct_next = next_bytes and resident and args[1] is None
         var expected = batch if direct_next else batch * length * shape.vocab()
         var out = _i32(batch, context) if direct_next else (_pooled_logits(fields, batch, length, shape.vocab(), context) if resident else tsa_array("f", "<f4", Python.tuple(batch, length, shape.vocab()), expected, 4, context))
+        var output_address = _logits_output_address(out, context)
         var written = 0
         if resident:
             var lost = fields["_lost_at"]
@@ -1075,7 +1112,7 @@ def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObj
                 py_setitem(fields, "_session_open", False)
                 py_setitem(fields, "_grad_step", -1)
             var state = fields["_state"]
-            var addresses = Python.list(classical_address(tokens), classical_address(out), classical_address(state["flags"]))
+            var addresses = Python.list(classical_address(tokens), PythonObject(output_address), classical_address(state["flags"]))
             for key in [String("parameters"), String("m"), String("v")]:  # small-loop(the three session admission buffers)
                 _ = py_call(addresses.append, 0 if Bool(py=fields["_session_open"]) else Int(py=classical_address(state[key])))
             try:
@@ -1090,7 +1127,7 @@ def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObj
             _adopt_open(fields)
         else:
             var state = fields["_state"]
-            var addresses: List[Int] = [Int(py=classical_address(state["parameters"])), Int(py=classical_address(tokens)), Int(py=classical_address(out))]
+            var addresses: List[Int] = [Int(py=classical_address(state["parameters"])), Int(py=classical_address(tokens)), output_address]
             if provider is not None:
                 var plan = _native_plan(shape, state, False, batch, length)
                 written = neural_descriptor_execute(provider, 7, addresses, plan[0], plan[1])
@@ -1102,11 +1139,11 @@ def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObj
         if next_bytes:
             var indices = List[Int64](length=batch, fill=0)
             if direct_next:
-                var source = _I32P(unsafe_from_address=Int(py=classical_address(out)))
+                var source = _I32P(unsafe_from_address=output_address)
                 for row in range(batch):  # cpu-route: consume the native greedy output
                     indices[row] = Int64(source[row])
             else:
-                var source = _F32P(unsafe_from_address=Int(py=classical_address(out)))
+                var source = _F32P(unsafe_from_address=output_address)
                 for row in range(batch):  # cpu-route: same strict first-max owner on each last real row
                     argmax_rows_f32(source + (row * length + admitted[3][row] - 1) * shape.vocab(), 1, shape.vocab(), MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(indices.unsafe_ptr()) + row * 8))
             result = Python.list()
@@ -1114,7 +1151,7 @@ def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObj
                 _ = py_call(result.append, Int(indices[row]))
         elif args[1] is not None:
             result = tsa_array("f", "<f4", Python.tuple(batch, length, shape.vocab()), expected, 4, context)
-            neural_copy_row_prefixes(Int(py=classical_address(result)), Int(py=classical_address(out)), admitted[3], batch, length, shape.vocab())
+            neural_copy_row_prefixes(Int(py=classical_address(result)), output_address, admitted[3], batch, length, shape.vocab())
         else:
             result = out
         _ = out
