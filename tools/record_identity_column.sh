@@ -269,6 +269,12 @@ rc=${rc:-0}
 line=$("${PY[@]}" tools/identity_columns.py check "$JSON" 2>&1 | tail -1)
 echo "$line" | cut -c1-600
 adm=NO; case $line in *admissible=yes*) adm=yes;; esac
+# Retain the exact record in MojoLearn as well as the original run directory.
+# Collection does not admit it or regenerate the wheel's reference table.
+if [ -f "$JSON" ]; then
+    "${PY[@]}" tools/retain_run_summary.py identity "$JSON" || \
+        echo "RETENTION FAILED: identity record remains at $JSON; collect it before teardown" >&2
+fi
 echo "RECORDED $NAME rc=$rc admissible=$adm json=$JSON"
 [ "$adm" = yes ] || exit 1
 exit 0

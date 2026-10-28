@@ -1,5 +1,10 @@
 # Latest verifier summaries (copied 2026-10-28)
 
+New maintainer runs automatically write compact snapshots to `auto/`; see
+[automatic result retention](../../RESULT_RETENTION.md). The dated copies below
+remain historical snapshots. Collection does not promote a reference or publish
+to GitHub; see the runner list for automatic coverage.
+
 Retention: the repo holds only the latest run's small summary; it is overwritten on each new run. The full history
 of every run is retained in `~/mojolearn-evidence/<run dir>` (here `full-api-verifier-20261027/`,
 `neural-provider-verifier-20261027/`, `cpu-verifier-coverage-20261028/`, `gbdt-cpu-ranking-verifier-20261028/`) and in
