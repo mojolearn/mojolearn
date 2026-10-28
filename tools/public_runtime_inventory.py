@@ -822,6 +822,9 @@ class Scope:
                                 self.binding_names.add(elt.id)
                             elif self.entry_of(part):
                                 self.entry_names[elt.id] = self.entry_of(part)
+                            elif isinstance(part, ast.Name) and part.id in self.entry_names:
+                                # `_ENTRY, _CONTEXT = entry, context` after `entry = module.call`
+                                self.entry_names[elt.id] = self.entry_names[part.id]
                 names = [t.id for t in targets if isinstance(t, ast.Name)]
                 if not names:
                     continue
@@ -1780,6 +1783,38 @@ class EndpointConnections:
         return current
 
 
+def _property_factory(index, cls, assigned):
+    """[("get", Func), ("set", Func), ...] when `assigned` calls a package function (module
+    level, or a def in the class body) whose every return is `property(f, g, ...)` of the
+    same nested defs; None otherwise."""
+    if not isinstance(assigned, ast.Call) or not isinstance(assigned.func, ast.Name):
+        return None
+    node = next((n for n in cls.node.body if isinstance(n, ast.FunctionDef) and n.name == assigned.func.id), None)
+    if node is not None:
+        factory = index.func(cls.mod, node, cls=cls)
+    else:
+        target = index.resolve_expr(assigned.func, cls.mod.name, None)
+        if not target or target[0] != "func":
+            return None
+        factory = target[1]
+    returns = [n for n in _own_nodes(factory.node) if isinstance(n, ast.Return)]
+    shapes = {ast.dump(r.value) for r in returns if r.value is not None}
+    if len(returns) != 1 or len(shapes) != 1:
+        return None
+    made = returns[0].value
+    if (not isinstance(made, ast.Call) or not isinstance(made.func, ast.Name) or made.func.id != "property"
+            or made.keywords or not made.args or len(made.args) > 3):
+        return None
+    out = []
+    for suffix, arg in zip(("get", "set", "delete"), made.args):
+        if isinstance(arg, ast.Constant) and arg.value is None:
+            continue
+        if not isinstance(arg, ast.Name) or arg.id not in factory.local_defs:
+            return None
+        out.append((suffix, index.func(factory.mod, factory.local_defs[arg.id], parent=factory)))
+    return out
+
+
 def _dataclass_methods(cls, decorator):
     """The Python methods `@dataclass(...)` with literal options generates on `cls`, or None
     when the decorator is not a literal dataclass call (the class's own definitions are kept;
@@ -2097,7 +2132,16 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                     else:
                         assigned = next((n.value for n in cls.node.body if isinstance(n, ast.Assign)
                             and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)), None)
-                        if isinstance(assigned, ast.Call) or isinstance(assigned, (ast.Name, ast.Attribute)) and not found:
+                        accessors = _property_factory(index, cls, assigned)
+                        if accessors:
+                            # `t = _word(0)`: a helper returning property(get, put) of its own
+                            # nested functions; each accessor is the operation that runs
+                            for suffix, accessor in accessors:
+                                func = Func(accessor.mod, accessor.node, parent=accessor.parent)
+                                func.qual += ":" + suffix
+                                func.key = (func.mod.name, func.qual)
+                                add(group, name + ":" + suffix, "property", func, obj)
+                        elif isinstance(assigned, ast.Call) or isinstance(assigned, (ast.Name, ast.Attribute)) and not found:
                             # A custom descriptor or imported callable cannot
                             # disappear just because lookup cannot resolve it.
                             add(group, name, "unresolved_class_attribute", owner=obj)
