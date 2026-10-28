@@ -9,7 +9,6 @@ next to the code. The evidence copy is the working copy; the repo copy is a snap
 was made. Edit the evidence copy, then copy it here again.
 
 Lane handoffs (`~/mojolearn-evidence/<lane>-<YYYYMMDD>/HANDOFF.md`, written by each lane at the end) are mirrored as
-`experiments/handoffs_<YYYYMMDD>/<lane>.md`. Both are dated directories that accumulate: a new day gets a new
-directory, and older ones are never deleted (`docs/EVIDENCE_LAYOUT.md`).
+`experiments/handoffs_<YYYYMMDD>/<lane>.md`.
 
 Briefs carry no credentials: secrets stay in `~/.mojolearn_r2` and provider config, never in a brief.
