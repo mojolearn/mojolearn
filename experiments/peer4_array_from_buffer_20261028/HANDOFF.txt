@@ -1,0 +1,23 @@
+Array.from_buffer native public owner — 2026-10-28
+Branch: lane/peer4-public-boundaries-20261028
+Base: 20ab53ec02; backend/profile child commits also present as fcee3d4bfc/ff81abe394.
+
+Installed-boundary trace
+Array.from_buffer was still a live Python classmethod: no import-time installer replaced it, and array_native_call had no from_buffer route. The classmethod now makes one existing-binding call; no new tokenizer-host registration is needed for this operation.
+
+Changes
+- New array_from_buffer_native owner handles class/exporter admission, stable metadata capture, dtype/layout/extent checks, allocation and native slot publication.
+- Native member descriptors admit passive Array subclasses while refusing custom allocation/access/lifetime hooks or replaced storage slots. Existing Array input fields are captured once; backing extent and declared contiguous layout are checked before a view is exposed.
+- Native memoryview creation pins the exporter once. Captured C/F layouts preserve zero-copy physical order, shape, dtype and readonly status. The result retains both pin and source storage; derived Array views retain their original Array owner too.
+- Exact native mmap support is connected independently of optional corpus setup. Recursive memoryview admission checks the original native exporter. NumPy numeric scalars remain supported zero-dimensional buffers, admitted via exact scalar identities from the checked C dtype constructor. NumPy remains optional and late imports are handled natively.
+- Released memoryview and closed native exporter exceptions preserve their native exception class at acquisition. Unsupported formats, non-contiguous storage, inconsistent private metadata and Python buffer callbacks are refused before pointer use. Big-endian/network-order multi-byte buffers are explicitly refused.
+- Scope is this public constructor. No claim is made about unrelated pre-existing Array operations or package-wide runtime compliance.
+
+Validation
+Full actual Array public dispatcher compilation, including the new route and transitive native helper, passed on Mac CPU/identical, O0, 10 allocated logical CPUs / 10 configured workers. Final unchanged-source attempt5 passed in52.932 seconds. No runtime operation, installed module loading, GPU build, identity test or performance measurement was run.
+Attempt1 failed on a source String self-aliasing assignment; repaired with an intermediate owned value. Attempts2/3 passed before the final mmap/scalar support additions. Attempt4 crashed with uncaught std::system_error (mutex lock failed); concurrent ENOSPC prevented crash-report/result.json retention. Its compiler exit status is unavailable, no binary was produced, and no success is claimed. Full compiler output and controller-failure.json are retained. The compiler crash's internal cause is unconfirmed. After only owned clean/sparse worktree cleanup, unchanged-source attempt5 passed. No compiler/toolchain patch or unsupported mode was used.
+
+Evidence
+Repository compile.json records the exact final command, source archive/manifest, compiler and binary hashes. Complete output/binary/source bytes are under ~/mojolearn-evidence/peer4-public-boundaries-20261028/array-from-buffer-attempt5/; previous attempts remain under the same root.
+Narrow source review (not runtime validation): ~/mojolearn-evidence/peer4-array-from-buffer-review-20261028/. It identified missing NumPy scalar exporters; the final native path includes that repair. No concrete layout or reference ownership defect was established by that review.
+Required push guards run before handoff. Main integration remains serialized by the parent. Runtime/GPU/identity coverage remains unperformed under the current compile-only instruction.
