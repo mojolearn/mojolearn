@@ -1,0 +1,71 @@
+{
+ "lane": "grad-views",
+ "define": "MOJOLEARN_IDN_PARAM_GRAD_VIEWS",
+ "entry": "bindings/entry/entry__mojolearn_byte_lm.mojo (binding _mojolearn_byte_lm)",
+ "command": "pixi run --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib <target> <defines> -I <wt> -I <wt>/bindings <entry> -o <out> (experiments/grad_views_20261028/compile_final.sh, wrapped in tools/compile_slot.sh)",
+ "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+ "jobs": 10,
+ "host": "Mac (M4), compile only",
+ "final_compiles": {
+  "cpu-off": {
+   "exit": 0,
+   "seconds": 346,
+   "source_commit": "b1055551c12fabdd59ea83777eb4b9eba1072a36",
+   "artifact_sha256": "3c24d4957c1f52127abc9d7018f7e37cacdaf74114f61b866366160e1c923ba1",
+   "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/final-cpu-off/compile.log",
+   "target": "--target-cpu apple-m1 -D MOJOLEARN_COLUMN_CPU",
+   "defines": "-D MOJOLEARN_NUMERIC_IDENTICAL=1"
+  },
+  "cpu-on": {
+   "exit": 0,
+   "seconds": 392,
+   "source_commit": "b1055551c12fabdd59ea83777eb4b9eba1072a36",
+   "artifact_sha256": "e90bf6a4c92a1735839b84e72ba4e2ab5bcda98e9f4c4fa2ed1f323ec998b672",
+   "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/final-cpu-on/compile.log",
+   "target": "--target-cpu apple-m1 -D MOJOLEARN_COLUMN_CPU",
+   "defines": "-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDN_PARAM_GRAD_VIEWS=1"
+  },
+  "sm89-off": {
+   "exit": 0,
+   "seconds": 469,
+   "source_commit": "b1055551c12fabdd59ea83777eb4b9eba1072a36",
+   "artifact_sha256": "64651886cda07ab69e20ffff886867a33618d6fc96d624671bfffa6b95c5960b",
+   "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/final-sm89-off/compile.log",
+   "target": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA",
+   "defines": "-D MOJOLEARN_NUMERIC_IDENTICAL=1"
+  },
+  "sm89-on": {
+   "exit": 0,
+   "seconds": 363,
+   "source_commit": "b1055551c12fabdd59ea83777eb4b9eba1072a36",
+   "artifact_sha256": "e100bc83f220fe3647d285b0f1766d9f9a3124f1945a9ad56cb4fcc714c9d7cc",
+   "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/final-sm89-on/compile.log",
+   "target": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA",
+   "defines": "-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDN_PARAM_GRAD_VIEWS=1"
+  }
+ },
+ "premerge_runpod_sm89": {
+  "source_commit": "9ddf59b93d",
+  "pod": "e8bh90pgp26dra (32 vCPU, deleted and verified gone by the leg tool, $0.20)",
+  "arms": {
+   "sm89-off": {
+    "exit": 0,
+    "artifact_sha256": "b0b5e9fb79bd9b41eb874d24abb15c50b11df474e0fb93f7f2bb255f048126e9",
+    "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/runpod/remote/leg_out/sm89-off/compile.log"
+   },
+   "sm89-on": {
+    "exit": 0,
+    "artifact_sha256": "e5b9de79b07ca4304f9c09f470641448e43c8ea2ae3a6b778d00d156b3ce6a1d",
+    "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/runpod/remote/leg_out/sm89-on/compile.log"
+   }
+  }
+ },
+ "later_merge": "4a10a3069e (origin/main tranche 4) merged after these compiles; it changes no file in the byte LM entry import closure (208 files scanned), so no recompile",
+ "runtime_executed": false,
+ "not_covered": [
+  "runtime, identity and GPU timing (RUN OWED)",
+  "AMD gfx target compile",
+  "FAST mode (define is IDENTICAL-only)",
+  "other bindings importing training/byte_lm.mojo (byte_lm_parallel/model pool) not compiled"
+ ]
+}

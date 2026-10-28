@@ -1,0 +1,54 @@
+# lane/amd-mfma: MOJOLEARN_IDN_AMD_MFMA_KPACK (REPORT 2026-10-28 idea 3)
+
+## Branch and head
+lane/amd-mfma (from origin/main cbc14776d7; origin/main 45b0630582 merged at 20e8caa2ae , 4a10a3069e at 680f90fba0, a69666b609 at bed5e1d6d0, dacfa820ad at 4073aa5682 and ebcd7f9477 at 24533936ec, additive; the second merge touches no file of this lane except appended EXPERIMENTS.md rows, so no recompile). Code at 0ae648f4cd; the head adds the receipt and this file.
+
+## What the head contains
+- gemm/checks/gemm_identical.mojo:3815: `IDN_AMD_MFMA_KPACK`, default off; IDENTICAL only, off under `MOJOLEARN_IDN_ALL_OFF`.
+- gemm/checks/gemm_identical.mojo:3825: `identical_gemm_mfma_kpack_kernel`. Each wave covers a 64x32 slab with one `v_mfma_f32_32x32x1f32` per p and holds 32 cells per lane. A block is 2 waves on a 64x64 tile. It has the MFMA16 kernel's GROUP/split mode and exact admission.
+- gemm/checks/gemm_identical.mojo:4137: the fill rule `gemm_amd_mfma_kpack_take`. It takes only calls the MFMA16 body would take, with the same split choice and workspace test, and only when the wave count (64x32 slabs, times P when split) reaches `gemm_tile_min_blocks()` (1024 on AMD). No shape constants.
+- gemm/checks/gemm_identical.mojo:7700: the dispatch in `_shipped_body_kpack_hg`, before `_mfma16_try`. It is comptime-gated to the AMD column, so NVIDIA, Apple and host are unchanged.
+- docs/apple-fast/EXPERIMENTS.md: the experiment row (pending).
+
+## Findings that change the brief's premise
+- The report's diagnosis 3 (2c "AMD fill") is out of date. Roadmap A1 already shipped on main as the default-on MFMA16 small-tile body (`identical_gemm_mfma16_kernel`, lane/nr-gemm). A2's fill selection also shipped: `gemm_mfma16_waves`, plus NVIDIA's `IDN_GEMM_NV_STEP_KPACK`. AMD stepped-down calls already run on the matrix cores. Both shipped arms are marked "NEVER RUN — PENDING MEASUREMENT".
+- K>1 fp32 MFMA (`32x32x2f32`, `16x16x4f32`) cannot keep the bits. Its internal sum order and rounding are not specified by the ISA and have never been probed. The contract needs one `fma_rn` per p in ascending order. A fold defined by undocumented hardware cannot be reproduced on NVIDIA, Apple or the host, so this is not done as a bits-change idea either (REPORT section 3, "reject"). On gfx942 the K=1 multi-block forms issue products at the same rate as the K>1 forms, so K=1 costs no matrix throughput. "kpack" here therefore means more cells per lane. Per p, a lane reads 1 A word and 1 B word for 2048 products of its wave, against 2 words for 1024 with MFMA16: half the shared-memory reads per product.
+- Expect a small or null effect on the board shapes. At 2048x384x384 the device is under-filled and the rule declines (384 slabs < 1024). The rule takes 2048x1536x384 and the split weight-gradient calls when the workspace fits. gemm 4096^3 runs the existing 128x128 matrix-core kernel and is not affected. The report's "43 -> 20-28 ms" was based on the out-of-date premise.
+
+## Bits
+Arm B (define ON) should give the same bits as arm A (define OFF) by construction (the comment at the section head). Each cell has one accumulator, seeded +0.0 per leaf, with one K=1 MFMA `fma_rn` step per p in ascending order. Each step is flushed (or admitted), the leaf partial ftz goes through `_fold_push_local`, and ftz(root) is stored. Split mode is the MFMA16 leaf-major ws plus `_ksplit_fold_launch`. Only the tile and the cells per lane change. This is not verified on a device.
+
+## A/B define
+Arm A = define OFF (the branch as is, behavior of main); arm B = define ON (`-D MOJOLEARN_IDN_AMD_MFMA_KPACK=1`).
+
+## Compile receipt
+experiments/amd_mfma_kpack_20261028/compile.json. Entry: gemm/checks/gemm_workspace_reuse_check.mojo, which calls the shipped dispatch. Mojo 1.0.0 (ed45d567), -j 10, through tools/compile_slot.sh. All four compiles exited 0:
+- CPU column, -O0, define on and off;
+- gfx942, default optimization, define on and off.
+The define-on gfx942 binary is 83 KB larger and has 8 more amdhsa strings, so the new kernels are compiled for the device.
+NOT covered: any binding (_mojolearn_linalg, _mojolearn_byte_lm and the other 31 bindings that import gemm_identical.mojo), gfx942 at -O0, NVIDIA/Metal (the arm is not reachable there), runtime, identity, timing.
+
+Post-merge (20e8caa2ae): CPU root re-compiled on the Mac, -O0 -j 10, define ON and OFF, both rc=0 (~/mojolearn-evidence/amd-mfma-20261028/mac2/). gfx942 not re-run after the merge.
+
+## Box
+None rented. The RunPod CPU box was blocked by block_cost.sh (4 live pods, cap 4), so gfx942 was cross-compiled on the Mac instead (it works there).
+
+## Push
+The push needed MOJOLEARN_WIDE_REBUILD_OK=1: the rebuild fence counts 33 bindings for gemm_identical.mojo. The dispatch and its kernel family live in that module. Other hooks passed (no_compute_in_shells 0 hits). Not merged to main.
+
+## RUN OWED (orchestrator; nothing queued)
+One run per arm (reps 1, rounds 1, pairs 1). The bindings to build are build_linalg (gemm rows) and build_byte_lm (LM rows).
+  lq add amd CMD lane/amd-mfma amfk-B-amd MOJOLEARN_GRID_TAG=amfk-B-amd MOJOLEARN_BUILD_DEFINES=MOJOLEARN_IDN_AMD_MFMA_KPACK=1 .pixi/envs/default/bin/python tools/six_lane_grid_bb.py --tag amfk-B-amd --vendor amd --race neural:gemm:gaussian --race neural:gemm-bf16:gaussian --race neural:lm-train-step:bytes --race neural:lm-forward:bytes BUILDS=build_linalg,build_byte_lm
+  lq add amd CMD lane/amd-mfma amfk-A-amd MOJOLEARN_GRID_TAG=amfk-A-amd .pixi/envs/default/bin/python tools/six_lane_grid_bb.py --tag amfk-A-amd --vendor amd --race neural:gemm:gaussian --race neural:gemm-bf16:gaussian --race neural:lm-train-step:bytes --race neural:lm-forward:bytes BUILDS=build_linalg,build_byte_lm
+  lq add nv CMD lane/amd-mfma amfk-B-nv MOJOLEARN_GRID_TAG=amfk-B-nv MOJOLEARN_BUILD_DEFINES=MOJOLEARN_IDN_AMD_MFMA_KPACK=1 .pixi/envs/default/bin/python tools/six_lane_grid_bb.py --tag amfk-B-nv --vendor nvidia --race neural:gemm:gaussian --race neural:gemm-bf16:gaussian --race neural:lm-train-step:bytes --race neural:lm-forward:bytes BUILDS=build_linalg,build_byte_lm
+  lq add nv CMD lane/amd-mfma amfk-A-nv MOJOLEARN_GRID_TAG=amfk-A-nv .pixi/envs/default/bin/python tools/six_lane_grid_bb.py --tag amfk-A-nv --vendor nvidia --race neural:gemm:gaussian --race neural:gemm-bf16:gaussian --race neural:lm-train-step:bytes --race neural:lm-forward:bytes BUILDS=build_linalg,build_byte_lm
+The NV pair is a null control: the arm compiles out on NVIDIA. Identity check: on AMD, each race's output hash must be equal between amfk-A-amd (OFF) and amfk-B-amd (ON); arm B AMD must equal NV. No `lq add ID` line: ID covers algos lanes only, and these are neural rows.
+Pending / held: the A/B above; bindings not compiled; verdict and the EXPERIMENTS row stay pending until the A/B lands. Separately (not this lane): the shipped MFMA16 and NV_STEP_KPACK defaults have never been measured; queue their _OFF arms the same way.
+
+## Self-merge gate (2026-10-28)
+- Pod: mojolearn-cpu-amd-mfma-merge (32 vCPU, 60-min lease), reaped and verified gone, $0.25. On tree 1dac30c3ea:
+  gfx942 define-on build rc=0; pod smoke 46/46 host families, import smoke rc=0 (missing_bindings 0), tier_dir probe rc=0.
+- CPU root: not applicable (GPU-only check program; the entry needs a GPU device context). Earlier Mac compiles are superseded: no compiles on the Mac.
+- origin/main (84e2bc7dda) merged at 29f53ef561: EXPERIMENTS.md conflict resolved additively (both rows kept). On that tree:
+  test_no_python_runtime rc=0, test_tombstones_preserved rc=0.
+- The A/B (nv + amd, one run per arm) belongs to the ab-runner after merge.

@@ -6,7 +6,7 @@
 # qualification of arbitrary Python callbacks as native execution.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.py_typed_call import py_call_typed
 from providers.python.autograd_weight_frontend_pyapi import _checkpoint, _record
 from autograd.program_io import ProgramInput
@@ -32,7 +32,7 @@ def _exact_mapping(value: PythonObject, mapping_types: PythonObject) raises -> B
     return kind is mapping_types[0] or kind is mapping_types[1]
 
 
-def sequential_load_weights(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var fields = sequential_fields(model)
     if len(fields["_layers"]) == 0:
@@ -43,7 +43,7 @@ def sequential_load_weights(model: PythonObject, args: PythonObject, context: Py
     var prefix = args[3]
     # Exact-type admission: no hasattr/isinstance protocol of a caller object
     # runs (a user mapping's keys/__getitem__/__fspath__ are never consulted).
-    var registry = native_loaded_module("mojolearn._native_loaded_modules")
+    var registry = mods.module("mojolearn._native_loaded_modules")
     var path_types = registry.PATH_TYPES
     var mapping_types = registry.MAPPING_TYPES
     if py_type(prefix) is not b.str:
@@ -76,6 +76,7 @@ def sequential_load_weights(model: PythonObject, args: PythonObject, context: Py
         raise Error("TypeError: source='torch' takes a mapping of names to tensors (a dict or OrderedDict)")
     var owners = Python.list()
     var values = _checkpoint(source, owners) if path else source
+    mods.released()
     var held = py_call(b.list, values.keys())
     var known = py_call(b.set, held)
     var missing = Python.list()
@@ -108,6 +109,7 @@ def sequential_load_weights(model: PythonObject, args: PythonObject, context: Py
             value = sequential_input(value, context)
         _ = py_call(tensor_owners.append, value)
         var record = _record(keys[k], Int(py=requests[k][0]), 0, value, path, scalar_owners)
+        mods.released()
         py_setitem(record, 1, requests[k][1])
         _ = py_call(records.extend, record)
     var sample = PythonObject(None)
@@ -131,12 +133,15 @@ def sequential_load_weights(model: PythonObject, args: PythonObject, context: Py
                 raise Error("load_state_dict: " + String(py_call(b.repr, keys[0])) + " has the wrong shape for layer " + String(first)
                             + (" (linear): expected (out_features, in_features)" if linear else " (layer_norm): expected (width,)"))
             width = Int(py=records[9 if linear else 8])
-    var program = sequential_program(model, PythonObject(width), sample)
+    var program = sequential_program(mods, model, PythonObject(width), sample)
     var table = sequential_table(model)
     var entries = sequential_entries(model, context)
+    mods.released()
     var counts = py_call_typed(entries["model_n_params"], program, table)
-    var params = sequential_array(Python.tuple(counts[0]), context["float32"], context)
+    mods.released()
+    var params = sequential_array(mods, Python.tuple(counts[0]), context["float32"], context)
     counts = py_call_typed(entries["model_import_params"], program, table, records, keys, sequential_address(params))
+    mods.released()
     # Raw addresses remain borrowed until the native transfer has completed.
     _ = owners^
     _ = tensor_owners^

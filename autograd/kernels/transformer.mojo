@@ -6,6 +6,10 @@ from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
 from std.gpu import block_dim, block_idx, thread_idx
+from transformer.experiments.norm_fixed_lanes import (
+    IDN_NORM_FIXED_LANES, NFL_LANES, nfl_cell, nfl_cell_dot, nfl_cell_total,
+    norm_row_threads,
+)
 from std.time import perf_counter_ns
 from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
@@ -891,6 +895,31 @@ def bwd_norm_dh_kernel(
     )
 
 
+@always_inline
+def _norm_row_coefficients(
+    dot: MutPointer[Float32, MutAnyOrigin],
+    rstd_out: MutPointer[Float32, MutAnyOrigin],
+    dv_out: MutPointer[Float32, MutAnyOrigin],
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    t: Int,
+    c: Float32,
+    dm: Int,
+    eps_in: Float32,
+):
+    """Row t's stored `c`, the recomputed rstd and dv: the statements of
+    `bwd_norm_dot_kernel` below, verbatim, for the fixed-lane cells."""
+    dot.unsafe_store(t, c)
+    var ss = ftz(sumsq.unsafe_load(t))
+    var mean = ftz(identical_div(ss, Float32(dm)))
+    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    rstd_out.unsafe_store(t, rstd)
+    var r2 = ftz(identical_mul(rstd, rstd))
+    var r3 = ftz(identical_mul(r2, rstd))
+    var cr3 = ftz(identical_mul(c, r3))
+    var da = ftz(identical_mul(BWD_NEG_HALF, cr3))
+    dv_out.unsafe_store(t, ftz(identical_div(da, Float32(dm))))
+
+
 def bwd_norm_dh_dot_kernel(
     dh: MutPointer[Float32, MutAnyOrigin],
     dot: MutPointer[Float32, MutAnyOrigin],
@@ -910,7 +939,34 @@ def bwd_norm_dh_dot_kernel(
     product before feeding it to the unchanged fused ``c`` fold. The pinned
     reduction order and arithmetic seams therefore do not move. Fusion
     removes one launch and the dot kernel's global reread of ``dh``.
+
+    MOJOLEARN_IDN_NORM_FIXED_LANES: one 32-lane cell per row (launched with
+    `norm_row_threads(m)` threads); lane l computes and stores dh_j for
+    j = l, l + 32, ... and folds them as the fixed fold's slot l, then the
+    shuffle tree (transformer/experiments/norm_fixed_lanes.mojo).
     """
+    comptime if IDN_NORM_FIXED_LANES:
+        comptime assert not (BWD_ANY_SABOTAGE or NN24_NORM_LANES8), "MOJOLEARN_IDN_NORM_FIXED_LANES does not combine with backward sabotage or MOJOLEARN_IDN_NORM=1/4"
+        var cell = nfl_cell(Int(m_in))
+        if not cell[2]:
+            return
+        var ct = cell[0]
+        var lane = cell[1]
+        var cdm = Int(dm_in)
+        var cc = Float32(0.0)
+        var cj = lane
+        while cj < cdm:  # device-loop: this lane's slot of one row
+            var ci = ct * cdm + cj
+            var cdh = ftz(
+                identical_mul(ftz(dy.unsafe_load(ci)), ftz(weight.unsafe_load(cj)))
+            )
+            dh.unsafe_store(ci, cdh)
+            cc = ftz(identical_mul_add(cdh, ftz(x.unsafe_load(ci)), cc))
+            cj += NFL_LANES
+        cc = ftz(nfl_cell_total(cc))
+        if lane == 0:
+            _norm_row_coefficients(dot, rstd_out, dv_out, sumsq, ct, cc, cdm, eps_in)
+        return
     var m = Int(m_in)
     var dm = Int(dm_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -983,7 +1039,21 @@ def bwd_norm_dot_kernel(
     **`-0.5` AND `2.0` ARE SPELLED, NOT ELIDED.** Both are exact scalings by
     a power of two and neither is BIT INERT, so unlike contract S8's
     `* attention_scaling` (exactly `1.0`, inert on every input including
-    both zero signs) they change the number and must appear."""
+    both zero signs) they change the number and must appear.
+
+    MOJOLEARN_IDN_NORM_FIXED_LANES: the `c` fold is the fixed 32-lane fold
+    on a 32-lane cell per row (launched with `norm_row_threads(m)`
+    threads); the row coefficients below are unchanged."""
+    comptime if IDN_NORM_FIXED_LANES:
+        comptime assert not (BWD_ANY_SABOTAGE or NN24_NORM_LANES8), "MOJOLEARN_IDN_NORM_FIXED_LANES does not combine with backward sabotage or MOJOLEARN_IDN_NORM=1/4"
+        var cell = nfl_cell(Int(m_in))
+        if not cell[2]:
+            return
+        var cdm = Int(dm_in)
+        var cc = ftz(nfl_cell_dot(dh, x, cell[0] * cdm, cell[0] * cdm, cdm, cell[1]))
+        if cell[1] == 0:
+            _norm_row_coefficients(dot, rstd_out, dv_out, sumsq, cell[0], cc, cdm, eps_in)
+        return
     var m = Int(m_in)
     var dm = Int(dm_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -3038,9 +3108,13 @@ def _bwd_rms_norm_kernels[which: Int](
     # same bits. Without the trial define and without a column default
     # carrying a rows token (DEVIATION 2649) the two values below are the
     # shipped `_grid(m)` and `BWD_TPB`.
-    var dot_blocks = _grid(m)
+    # MOJOLEARN_IDN_NORM_FIXED_LANES: one 32-lane cell per row; BWD_TPB is
+    # a multiple of 32 and 64 so a cell never straddles a warp, and the
+    # 4-16-thread step-glue geometry (which cannot hold a cell) is not
+    # offered under the define.
+    var dot_blocks = _grid(norm_row_threads(m))
     var dot_threads = BWD_TPB
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS:
+    comptime if (STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS) and not IDN_NORM_FIXED_LANES:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             dot_blocks = step_glue_blocks(m, glue_rows)
