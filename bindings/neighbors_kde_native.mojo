@@ -235,7 +235,13 @@ def _kde_handle(fields: PythonObject, binding: PythonObject, context: PythonObje
     if cached is not None:
         if py_type(cached) is not b.tuple or len(cached) != 3 or py_type(cached[1]) is not b.int:
             raise Error("TypeError: KDE resident state must retain its native handle and module")
-        classical_admit_value(cached[0], context)
+        var previous = cached[0]
+        if (py_type(previous) is not b.tuple or len(previous) != 6 or py_type(previous[0]) is not b.int
+                or py_type(previous[1]) is not b.tuple or len(previous[1]) != 2
+                or py_type(previous[1][0]) is not b.int or py_type(previous[1][1]) is not b.int
+                or py_type(previous[2]) is not b.int or py_type(previous[3]) is not b.str
+                or py_type(previous[4]) is not b.str or py_type(previous[5]) is not b.float):
+            raise Error("TypeError: KDE resident key must contain native address, shape and setting words")
         _ = knn_door(cached[2], "kde_fit_release")
     if cached is not None and _kde_truth(family_call(op.eq, cached[0], key)):
         return cached[1]
