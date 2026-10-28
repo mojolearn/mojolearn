@@ -135,7 +135,8 @@ struct AdmittedSambaExecution(Movable):
                     var optional = snapshot.optional.resolve(self.keep)
                     var provider = layer_fields["_native_block_provider_cache"]
                     publication.provider = provider
-                    var use_session = packed or layer_state is not None or Bool(py=py_call(bi.hasattr, entries, "transformer_session_forward_fresh"))
+                    var cpu = String(layer_fields["_native_route"]) == "cpu"
+                    var use_session = not cpu and (packed or layer_state is not None or Bool(py=py_call(bi.hasattr, entries, "transformer_session_forward_fresh")))
                     var session = PythonObject(None)
                     if use_session:
                         session = layer_fields["_native_session"]
@@ -176,7 +177,7 @@ struct AdmittedSambaExecution(Movable):
                         a.append(_mutable(slots["k_cache"], [count], self.keep, publication.copies, "k_cache"))
                         a.append(_mutable(slots["v_cache"], [count], self.keep, publication.copies, "v_cache"))
                         p = snapshot.words.transformer_params(b, l, capacity, cached)
-                        operation = 35 if packed else 11
+                        operation = 33 if cpu else (35 if packed else 11)
                     elif packed:
                         var count = snapshot.words.cache_count(b, l)
                         scratch.append(List[Float32](length=count, fill=0))
@@ -202,7 +203,7 @@ struct AdmittedSambaExecution(Movable):
                     var planes = snapshot.packed.resolve(self.keep)
                     for address in planes:  # driver-loop: native packed projection plane metadata
                         a.append(address)
-                    layer = NativeSambaLayer(self.owners[len(self.owners) - 1].endpoint(), operation, a^, p^, [], 0, 12 if use_session else 10, -1, [])
+                    layer = NativeSambaLayer(self.owners[len(self.owners) - 1].endpoint(), operation, a^, p^, [], 0, 12 if use_session or layer_state is not None else 10, -1, [])
                     layer.scratch = scratch^
                 else:
                     var h = Int(py=layer_fields["nheads"])
@@ -479,9 +480,11 @@ def samba_provider_eligible(fields: PythonObject) raises -> Bool:
     var bi = Python.import_module("builtins")
     for i in range(len(blocks)):  # driver-loop: route eligibility at the single operation boundary
         var block = _samba_native_fields(blocks[i])
-        if String(block["_native_route"]) != "gpu" or String(block["numeric_mode"]) != "identical":
+        if String(block["numeric_mode"]) != "identical":
             return False
         if String(block["_native_kind"]) == "transformer":
+            if String(block["_native_route"]) == "cpu" and block["_int15"] is not None:
+                return False  # CPU training binding does not export packed projections.
             if getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1" or getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH", "1") == "0":
                 return False
             var lock = OperationLockLease(block["_runtime_lock"])
