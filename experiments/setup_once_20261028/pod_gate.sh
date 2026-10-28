@@ -24,7 +24,7 @@ root() {
   printf 'ROOT\t%s\t%s\t%s\trc=%s\t%ss\tsha256=%s\n' "$SET" "$tag" "$e" "$rc" "$(( $(date +%s)-t0 ))" "$sha" >> "$OUT/roots.tsv"
 }
 export -f root
-awk -F'\t' '{sub(/\.sh$/,"",$1); printf "root %s %s\n", $1, $2}' experiments/setup_once_20261028/gpu_roots.tsv > "$OUT/root_plan.txt"
+awk -F'\t' '{sub(/\.sh$/,"",$1); printf "root %s %s\n", $1, $2}' "${ROOTS_FILE:-experiments/setup_once_20261028/gpu_roots.tsv}" > "$OUT/root_plan.txt"
 xargs -P $PAR -L 1 bash -c '"$@"' _ < "$OUT/root_plan.txt"
 nr=$(wc -l < "$OUT/root_plan.txt"); okr=$(grep -c 'rc=0' "$OUT/roots.tsv" 2>/dev/null)
 echo "ROOTS set=$SET total=$nr ok=$okr" >> "$OUT/summary.txt"
