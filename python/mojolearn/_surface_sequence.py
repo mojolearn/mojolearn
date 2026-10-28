@@ -86,7 +86,7 @@ FAMILIES = (
             "seq_optimizer_init", "seq_optimizer_step", "seq_optimizer_state",
             "seq_optimizer_import", "seq_optimizer_export", "seq_optimizer_close",
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
-            "ops_session_create",
+            "ops_session_create", "session_public_api_v1", "ops_session_public_connect",
             "ops_shape",
             # checkpoints (autograd/model_checkpoint.mojo)
             "model_save_checkpoint", "model_checkpoint_info", "model_load_checkpoint",

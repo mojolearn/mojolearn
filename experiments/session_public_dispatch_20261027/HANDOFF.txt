@@ -1,0 +1,22 @@
+Session public dispatch batch — 2026-10-27
+
+Source a9d24b7748b8f67c0e300438c38095d20ae68d3b.
+Session public wrappers pass self and arguments directly to one cached native
+entry. Native admission reads exact owner storage and the retained public
+provider, checks that its compiled image matches the session resource, then
+invokes a private descriptor table. The target checks registry identity and
+executor before calling the existing whole-operation native handler directly.
+There is no instance callable selection or CPython call for this dispatch.
+Input buffers stay with existing admission/operation owners; no numerical
+algorithm changes are made by this batch.
+
+Successful focused compile: actual Session registration/constructor/router and
+HostExec whole-operation handler, Mac CPU column, O0, ten compiler workers.
+The first compile failed on generic parameter qualification; failure retained.
+See compile.json for frozen source, compiler, flags, binary hash and log paths.
+No runtime execution, GPU compile or within-release identity result is claimed.
+
+Program wrappers/serialization and distributed/partitioned execution remain
+separate work owned by root's public_wrapper_repairs lane. Existing scalar,
+protocol and transitive operation admission still needs its scoped audit;
+this batch is not a whole-library Python-free claim.

@@ -140,8 +140,13 @@ def _program_object(session: PythonObject, info: PythonObject) raises -> PythonO
 def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject,
 ) raises -> PythonObject:
+    return ops_session_call_fields_py[E, KIND](session, operation, args, ops_session_fields(session))
+
+
+def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
+    session: PythonObject, operation: PythonObject, args: PythonObject, fields: PythonObject,
+) raises -> PythonObject:
     var name = String(operation)
-    var fields = ops_session_fields(session)
     var resource_scope: List[Int] = [ops_session_registry_token(), KIND]
     if not _nil(fields["_id"]):
         if py_type(fields["_id"]) is not py_type(PythonObject(0)):
