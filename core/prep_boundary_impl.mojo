@@ -21,7 +21,7 @@ def prep_float_finite(source: CastIn, shape: List[Int], strides: List[Int],
         var bits = UInt64(0)
         for byte in range(width):  # native input marshaling: supported four/eight-byte float words
             var index = byte if native else width - 1 - byte
-            bits |= UInt64(pointer[offset + index]) << (8 * byte)
+            bits |= UInt64(pointer[offset + index]) << UInt64(8 * byte)
         if bits & mask == mask:
             return False
     return True
