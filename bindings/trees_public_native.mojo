@@ -23,6 +23,8 @@ from bindings.trees_gbdt_parameters import gbdt_adapter_construct, gbdt_adapter_
 from bindings.trees_public_meta import meta_operation
 from bindings.trees_public_meta_lifecycle import meta_public_operation
 from bindings.trees_public_mixin_score import boost_score, gbdt_adapter_score
+from bindings.trees_explainer_native import trees_explainer_operation
+from bindings.trees_agnostic_native import trees_agnostic_operation
 from bindings.trees_public_gbdt_fit import (
     gbdt_fit, catboost_auto_learning_rate_op, gbdt_inspect, gbdt_initialize, adapter_classifier_fit,
     adapter_regressor_fit,
@@ -60,6 +62,10 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return gbdt_adapter_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_meta_"):
         return meta_public_operation(model, operation, args, context)
+    if operation.startswith("trees_explainer_"):
+        return trees_explainer_operation(model, operation, args, context)
+    if operation.startswith("trees_agnostic_"):
+        return trees_agnostic_operation(model, operation, args, context)
     if py_get(context, "cv_fixed_owner") is not None:
         context = fixed_owner_context(context)
         _ = fixed_owner_fields(model, context)
