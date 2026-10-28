@@ -775,3 +775,10 @@ consolidate-neural (2026-10-28, Opus): one consolidated compile for nine neural/
   resident-session root 2/2 at sm_89 (it is a device path), 46/46 host families through the cache with declared outputs (0 refused),
   import mojolearn + tier_dir('identical') rc=0. Table: experiments/consolidate_neural_20261028/root_rc_table.tsv; receipt compile.json beside it.
 - RUN OWED (A/B and same-bits fixtures, all lanes): ~/mojolearn-evidence/consolidate-neural-20261028/RUN_OWED.txt.
+
+SETUP-ONCE BATCH 1 (lane/setup-once-20261028 @ 80c61505e0, merged to main): per-call setup removed from the
+standalone neural block path (Mamba2Block.step et al.): bindings/native_prepared_owner.mojo (weak-ref registry,
+identity key), neural_block_owner prepared (snapshot, bindings, causal_lm_admit_binding, generation layer once),
+state buffer views reused, native_loaded_module validated once per process then pointer-stamped. Compile gate:
+46/46 host families + pod smoke (Mamba2 step reuse path, step==forward bits), 25/25 GPU roots sm_89 and gfx942.
+Receipt experiments/setup_once_20261028/compile_b1.json. RUN OWED: mamba2-decode race nv+amd; ID check nv+amd.
