@@ -5,9 +5,13 @@ Lane `lane/gemm-int-slices`, 2026-10-28. Idea 13 of
 identical fp32 and bf16 paths use no matrix units; only `int8i32.v1` does).
 Switch `-D MOJOLEARN_IDN_GEMM_INT_SLICES=1`, default OFF.
 
-**STATUS: PROTOTYPE, PARTIAL.** Compiled (CPU column, Apple, NVIDIA sm_89, AMD gfx942;
-receipts in `experiments/gemm_int_slices_20261028/compile.json`). Not run: no gate, no
-identity check, no timing and no quality number exists yet. Everything below is a
+**STATUS: PROTOTYPE, PARTIAL.** Compiled on the merged head (origin/main 45b0630582): the
+gate binary for the CPU column, NVIDIA sm_89 and AMD gfx942, and the linalg bindings with the
+switch on (sm_89, gfx942, CPU-column host binding) and off (gfx942); Apple and the remaining
+off arms compiled at the pre-merge head. gfx942 needs the default optimization level: at -O0 the
+AMD link fails with `undefined symbol: free` in BOTH arms, the switch off as well, so the
+failure is not this code. Receipts: `experiments/gemm_int_slices_20261028/compile.json`. Not run:
+no gate, no identity check, no timing and no quality number exist yet. Everything below is a
 construction argument until the gate and the A/B in section 7 have run.
 
 ## 1. What it is
