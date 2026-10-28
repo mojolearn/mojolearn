@@ -64,9 +64,12 @@ def group_rows(endpoints):
                           row['endpoint'] if not definition else None], sort_keys=True)
         group = groups.setdefault(key, {'id': hashlib.sha256(key.encode()).hexdigest()[:16],
             'source': definition or '', 'source_ast_sha256': row.get('source_ast_sha256') or '',
-            'endpoints': [], 'families': set(), 'statuses': set(), 'native_entries': set(),
+            'endpoints': [], 'public_aliases': set(), 'families': set(), 'statuses': set(), 'native_entries': set(),
             'qualification_debt': set(), 'import_connections': connections})
         group['endpoints'].append(row['endpoint'])
+        public = row.get('public', row['endpoint'])
+        suffix = row['endpoint'][len(public):] if row['endpoint'].startswith(public) else ''
+        group['public_aliases'].update(alias + suffix for alias in row.get('aliases', []))
         group['families'].add(row['family'])
         group['statuses'].add(row['runtime_status'])
         group['native_entries'].update(row.get('native_entries', []))
@@ -106,9 +109,9 @@ def main():
     report = json.loads(raw)
     rows = worklist(report, args.root)
     columns = ('id', 'source', 'statuses', 'families', 'phase_hints', 'native_entries',
-               'qualification_debt', 'runtime_evidence', 'direct_call_names', 'endpoints')
+               'qualification_debt', 'runtime_evidence', 'direct_call_names', 'public_aliases', 'endpoints')
     with args.out.open('w', newline='') as stream:
-        writer = csv.DictWriter(stream, fieldnames=columns, delimiter='\t')
+        writer = csv.DictWriter(stream, fieldnames=columns, delimiter='\t', lineterminator='\n')
         writer.writeheader()
         for row in rows:
             writer.writerow({k: '|'.join(sorted(row[k])) if isinstance(row[k], (set, list)) else row[k] for k in columns})

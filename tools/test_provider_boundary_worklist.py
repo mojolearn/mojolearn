@@ -22,6 +22,12 @@ def test_unresolved_sources_and_different_installed_connections_stay_distinct():
     assert len(groups) == 4
 
 
+def test_namespace_aliases_are_retained_without_duplicating_the_operation():
+    group = group_rows([row('pkg.A.fit', public='pkg.A', aliases=['pkg.A', 'pkg.family.A'])])[0]
+    assert group['endpoints'] == ['pkg.A.fit']
+    assert group['public_aliases'] == {'pkg.A.fit', 'pkg.family.A.fit'}
+
+
 def test_one_native_call_still_requires_transitive_review():
     node = ast.parse('def run(x):\n    return native(x)\n').body[0]
     hints, names = phase_hints(node, {'native'})
