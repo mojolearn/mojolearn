@@ -35,12 +35,10 @@ back when first accessed), so nothing crosses the bus inside the call
 built with -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF has no `moe_forward_dev`; a
 resident x is then read back once and the host-array entry runs. The
 host-array entry's outputs are `np.empty` (the binding stores every cell)."""
+import os as _os
 from ._optional_numpy import require_numpy
-np = require_numpy('_x_sequence_moe')
-
-from . import _backend
-from ._buffer import InitStream
-from ._x_sequence_device import SequenceDeviceTensor, is_seq_tensor
+_numpy = require_numpy("_x_sequence_moe")  # glue: preserve the optional dependency at import
+from . import _x_sequence_device as _sequence_device  # glue: connect native device storage before MoE
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
 
@@ -128,116 +126,56 @@ class MoEBlock:
         -------
         device tensor or ndarray
         """
-        from ._x_sequence_device import to_device
-        b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        if not callable(getattr(b, "moe_forward_dev", None)):
-            a = np.asarray(a)
-            if a.dtype != np.float32:
-                raise TypeError(f"mojolearn: to_device takes float32 (got {a.dtype}); convert it yourself")
-            return np.ascontiguousarray(a)
-        return to_device(a, self.numeric_mode)
+        return _SEQ_NATIVE("seqmoe_to_device", self, (a,), None, _SEQ_CONTEXT)
 
     def _routing_out(self, i):
-        r = self.__dict__.get("_routing")
-        if r is None:
-            raise AttributeError("MoEBlock: call forward first")
-        v = r[i]
-        if is_seq_tensor(v):   # resident (the device entry): read back on first access
-            v = v.numpy()
-            r[i] = v
-        return v
+        return _SEQ_NATIVE("seqmoe_routing", self, (i,), None, _SEQ_CONTEXT)
 
     @property
     def router_logits_(self):
         """Router logits of the last forward, (n_tokens, num_experts)."""
-        return self._routing_out(0)
+        return _SEQ_NATIVE("seqmoe_routing", self, (0,), None, _SEQ_CONTEXT)
 
     @property
     def selected_experts_(self):
         """Experts chosen for each token by the last forward, int64 (n_tokens, top_k)."""
-        r = self.__dict__.get("_routing")
-        if r is not None and r[3] is None:
-            r[3] = self._routing_out(1).astype(np.int64)   # glue: the picks' dtype for the caller
-        if r is None:
-            raise AttributeError("MoEBlock: call forward first")
-        return r[3]
+        return _SEQ_NATIVE("seqmoe_selected", self, (), None, _SEQ_CONTEXT)
 
     @property
     def routing_weights_(self):
         """Routing weights of the chosen experts, (n_tokens, top_k)."""
-        return self._routing_out(2)
+        return _SEQ_NATIVE("seqmoe_routing", self, (2,), None, _SEQ_CONTEXT)
 
     def __setattr__(self, name, value):
-        if name in _WEIGHTS:
-            a = np.array(value, dtype=np.float32, copy=True, order="C")
-            a.flags.writeable = False
-            object.__setattr__(self, name, a)
-            object.__setattr__(self, "_wver", self.__dict__.get("_wver", 0) + 1)
-            return
-        object.__setattr__(self, name, value)
+        return _SEQ_NATIVE("seqmoe_setattr", self, (name, value), None, _SEQ_CONTEXT)
 
     def _weights_handle(self, b):
         """The device copies' handle on binding `b`, put again after any
         weight assignment (the old copies freed)."""
-        cur = self.__dict__.get("_wdev")
-        if cur is not None and cur[0] is b and cur[1] == self._wver:
-            return cur[2]
-        self._free_weights()
-        h = int(b.moe_weights_put([self.router.ctypes.data, self.gate_up_proj.ctypes.data,
-                                   self.down_proj.ctypes.data], [self.E, self.D, self.F]))
-        object.__setattr__(self, "_wdev", (b, self._wver, h))
-        return h
+        return _SEQ_NATIVE("seqmoe_weights", self, (b,), None, _SEQ_CONTEXT)
 
     def _free_weights(self):
-        cur = self.__dict__.get("_wdev")
-        object.__setattr__(self, "_wdev", None)
-        if cur is not None:
-            try:
-                cur[0].moe_weights_free(cur[2])
-            except Exception:  # noqa: BLE001  (interpreter shutdown)
-                pass
+        return _SEQ_NATIVE("seqmoe_release", self, (), None, _SEQ_CONTEXT)
 
     def __del__(self):
-        self._free_weights()
+        return _SEQ_NATIVE("seqmoe_release", self, (), None, _SEQ_CONTEXT)
 
     def __init__(self, hidden_size, intermediate_size, num_experts=8, top_k=2, norm_topk_prob=True,
                  hidden_act="silu", random_state=0, numeric_mode=None):
-        if hidden_act != "silu":
-            raise NotImplementedError("MoEBlock: hidden_act other than 'silu' is not implemented")
-        if not 1 <= int(top_k) <= int(num_experts):
-            raise ValueError("MoEBlock: 1 <= top_k <= num_experts")
-        self.D, self.F, self.E, self.k = int(hidden_size), int(intermediate_size), int(num_experts), int(top_k)
-        self.norm_topk_prob = bool(norm_topk_prob)
-        self.numeric_mode = numeric_mode
-        # N(0, 0.02**2) weights drawn in Mojo (InitStream.fill_normal, the
-        # base binding's counter-based normal_init_f32; lane pyglue-numeric:
-        # numpy's Generator drew them in Python), one stream in this order
-        stream = InitStream(random_state)
-        for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),  # glue: three named expert weight shapes
-                            ("down_proj", (self.E, self.D, self.F))):
-            a = np.empty(shape, np.float32)
-            stream.fill_normal(a.ctypes.data, a.size, 0.0, 0.02)
-            setattr(self, name, a)   # a read-only copy (__setattr__)
+        return _SEQ_NATIVE("seqmoe_initialize", self,
+                           (hidden_size, intermediate_size, num_experts, top_k, norm_topk_prob,
+                            hidden_act, random_state), numeric_mode, _SEQ_CONTEXT)
 
     def load_state_dict(self, sd):
         """Load `router`, `gate_up_proj` and `down_proj` from a dict of arrays; returns self.
 
         Shapes must match the block's, otherwise `ValueError`.
         """
-        for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),  # glue: the four named MoE parameter tensors
-                            ("down_proj", (self.E, self.D, self.F))):
-            a = np.asarray(sd[name], dtype=np.float32)
-            if a.shape != shape:
-                raise ValueError(f"MoEBlock: {name} has shape {a.shape}, expected {shape}")
-            setattr(self, name, a)   # a read-only copy (__setattr__)
-        return self
+        return _SEQ_NATIVE("seqmoe_load", self, (sd,), None, _SEQ_CONTEXT)
 
     def _check_weights(self):
         # `want`, not `shape`: the caller's `shape` holds x's shape for the final reshape
-        for name, want in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),  # glue: checks three named expert weight shapes
-                           ("down_proj", (self.E, self.D, self.F))):
-            if getattr(self, name).shape != want:
-                raise ValueError(f"MoEBlock: {name} has shape {getattr(self, name).shape}, expected {want}")
+        return _SEQ_NATIVE("seqmoe_check_weights", self, (), None, _SEQ_CONTEXT)
 
     def forward(self, x):
         """Apply the block to `x` of shape (..., hidden_size); also callable as ``block(x)``.
@@ -278,46 +216,13 @@ class MoEBlock:
         dx : ndarray of float32
             Gradient with respect to `x`, shape of `x`.
         """
-        if is_seq_tensor(x):
-            x = x.numpy()
-        if is_seq_tensor(dy):
-            dy = dy.numpy()
-        x = np.asarray(x)
-        dy = np.asarray(dy)
-        if x.dtype == np.float64 or dy.dtype == np.float64:
-            raise TypeError("MoEBlock: float64 is refused; pass float32")
-        if x.ndim < 1 or x.shape[-1] != self.D or x.size == 0:
-            raise ValueError(f"MoEBlock: x must have shape (..., {self.D})")
-        if dy.shape != x.shape:
-            raise ValueError(f"MoEBlock: dy has shape {dy.shape}, expected {x.shape}")
-        self._check_weights()
-        shape = x.shape
-        X = np.ascontiguousarray(x, dtype=np.float32).reshape(-1, self.D)
-        DY = np.ascontiguousarray(dy, dtype=np.float32).reshape(-1, self.D)
-        T = X.shape[0]
-        # the binding stores every cell of every output
-        dx = np.empty((T, self.D), np.float32)
-        dr = np.empty((self.E, self.D), np.float32)
-        dgu = np.empty((self.E, 2 * self.F, self.D), np.float32)
-        ddn = np.empty((self.E, self.D, self.F), np.float32)
-        y = np.empty((T, self.D), np.float32)
-        logits = np.empty((T, self.E), np.float32)
-        sel = np.empty((T, self.k), np.float32)
-        w = np.empty((T, self.k), np.float32)
-        b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        if not callable(getattr(b, "moe_backward", None)):
-            raise NotImplementedError("MoEBlock: this install has no backward pass")
-        ip = [T, self.D, self.F, self.E, self.k, int(self.norm_topk_prob)]
-        r, gu, dn = (np.ascontiguousarray(a) for a in (self.router, self.gate_up_proj, self.down_proj))  # glue: three contiguous weight buffers for the binding
-        addrs = [X.ctypes.data, r.ctypes.data, gu.ctypes.data, dn.ctypes.data, DY.ctypes.data,
-                 dx.ctypes.data, dr.ctypes.data, dgu.ctypes.data, ddn.ctypes.data,
-                 y.ctypes.data, logits.ctypes.data, sel.ctypes.data, w.ctypes.data]
-        if hasattr(b, "moe_weights_put"):
-            b.moe_backward(addrs, ip + [self._weights_handle(b)])
-        else:
-            b.moe_backward(addrs, ip)
-        object.__setattr__(self, "_routing", [logits, sel, w, None])
-        object.__setattr__(self, "router_grad_", dr)
-        object.__setattr__(self, "gate_up_proj_grad_", dgu)
-        object.__setattr__(self, "down_proj_grad_", ddn)
-        return dx.reshape(shape)
+        return _SEQ_NATIVE("seqmoe_backward", self, (x, dy), None, _SEQ_CONTEXT)
+
+
+# glue: connect the class storage layout and native OS entropy entry once.
+_moe_mro = MoEBlock.__mro__
+_moe_rows = tuple(vars(base) for base in _moe_mro)  # glue: fixed native owner ancestry
+_moe_hooks = tuple((base, name, row.get(name)) for base, row in zip(_moe_mro, _moe_rows)
+                   for name in ("__getattribute__", "__getattr__", "__setattr__", "__dict__"))  # glue: storage hook identities
+_SEQ_CONTEXT["seqmoe_layout"] = (MoEBlock, _moe_mro, _moe_hooks)
+_SEQ_CONTEXT["seqmoe_urandom"] = _os.urandom

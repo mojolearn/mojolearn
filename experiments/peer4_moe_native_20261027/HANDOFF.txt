@@ -1,0 +1,42 @@
+MoE whole public operations — 2026-10-27
+
+Branch: lane/peer4-moe-native-20261027
+Base: 765a269fc4 (main at worktree creation).
+
+Changes
+- Constructor, passive scalar/owner admission, weight initialization/copy and
+  read-only storage, load_state_dict, weight assignment/release, forward,
+  backward, to_device and routing-output properties have one Python binding
+  call each. The new native owner is bindings/sequence_moe_native.mojo.
+- Native host inputs retain original owners and one shared borrowed-buffer
+  metadata pin through conversion/execution. Device metadata is captured once
+  per argument. Private weight methods also dispatch natively.
+- Shape checks now cover the host forward as well as resident forward/backward;
+  state loading stages all three validated copies before publishing. Native
+  result arrays are allocated in the finished caller shape, avoiding Python
+  reshape/astype. Selected-expert int64 output uses existing native cast code.
+- Existing native forward/backward arithmetic and resident weight ABI unchanged.
+  Constructor invokes the same normal_init_f32 implementation directly.
+- Shared files: sequence_layers_native.mojo removes the old MoE-only section
+  and routes seqmoe_* to the new owner. LayerNorm code is unchanged.
+  _native_optimizer_bridge.py adds only moe_backward to optional retained ABI
+  symbols. No sequence binding registration edits.
+
+Compilation
+- compile.json: Mac CPU column, O0, identical, 10 configured compiler workers;
+  small shared-library fixture instantiates the sequence_layers dispatcher and
+  complete new MoE owner (also existing LayerNorm owner). Dynamic low-level
+  sequence kernel symbols are not compiled by that fixture.
+- Attempts1/2 retained fixture/signature and initial source diagnostics;
+  attempts3/4 succeeded, attempt5 compiled final source after descriptor lookup
+  repair. All outputs and source bytes remain under
+  ~/mojolearn-evidence/peer4-moe-native-20261027/.
+- AST-only source review confirms every MoE class method is one native call.
+- No runtime, identity, vendor or performance test executed. No box rented.
+
+Pending scope
+- GPU column compilation and actual public runtime/identity coverage remain
+  unproven; compilation is not runtime proof. Broader optimizer extension
+  dispatch/loading is not qualified by this small owner fixture.
+- Parent assigned adjacent LayerNorm review after this coherent MoE batch.
+- Required push/source guard statuses are retained alongside this handoff.
