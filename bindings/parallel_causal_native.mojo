@@ -49,7 +49,7 @@ def parallel_causal_initialize(args: PythonObject) raises:
     model_dict(args[0])
     model_dict(args[1])
     var classes = Python.dict()
-    for name in ["model", "block", "state", "primitives"]:  # small-loop: retain the import-connected record identities
+    for name in ["model", "block", "state", "primitives"]:  # small-loop(four import-connected record identities)
         var cls = args[1][name]
         if py_type(cls) is not bi.type:
             raise Error("TypeError: parallel connection requires ordinary class identities")
@@ -144,7 +144,7 @@ def _parallel_pool_capture(pool: PythonObject) raises -> PythonObject:
         py_setitem(item, "socket", socket)
         var group = worker["devices"]
         model_sequence(group)
-        for j in range(len(group)):  # small-loop: validate physical worker group indices
+        for j in range(len(group)):  # driver-loop: over physical device indices owned by one worker group
             _ = _parallel_word(group[j])
         py_setitem(item, "devices", py_call(PARALLEL_CAUSAL.get_or_create_ptr()[].bi.tuple, group))
         if py_contains(worker, "identity"):
@@ -224,7 +224,7 @@ def _parallel_owner_snapshot(owner: PythonObject) raises -> PythonObject:
     var fields = _parallel_capture_model_fields(owner, live)
     py_setitem(fields, "kind", model_string(live["kind"]))
     py_setitem(fields, "weight_format", model_string(live["weight_format"]))
-    for name in ["_native_vendor", "_native_numeric_mode"]:  # small-loop: primitive layer construction metadata
+    for name in ["_native_vendor", "_native_numeric_mode"]:  # small-loop(two primitive layer construction metadata words)
         if py_contains(live, name):
             py_setitem(fields, name, model_plain(live[name]))
     var entries = live["_native_entries"]
@@ -464,7 +464,7 @@ def _parallel_causal_worker_request(world: PythonObject, operation: String, args
 
 def parallel_causal_worker(argv: PythonObject) raises:
     model_sequence(argv)
-    for i in range(len(argv)):  # small-loop: worker startup accepts native argv words only
+    for i in range(len(argv)):  # cpu-route: admit native startup argument strings before worker connection
         _ = model_string(argv[i])
     var socket = process_worker_connect(argv)
     var world = PARALLEL_CAUSAL.get_or_create_ptr()[].bi.dict()
@@ -505,7 +505,7 @@ def _parallel_pool_publish(fields: PythonObject) raises:
     # pool: later RPCs can release the GIL. Only native socket capsule identity
     # is shared; the worker dictionaries/lists are detached publication copies.
     py_setitem(live, "workers", _parallel_pool_capture(pool)["workers"])
-    for name in ["sequence", "closed"]:  # small-loop: publish resource progress even after a failed request
+    for name in ["sequence", "closed"]:  # small-loop(two resource progress words published after every request)
         py_setitem(live, name, pool[name])
 
 
@@ -585,7 +585,7 @@ def _parallel_causal_block(owner: PythonObject, index: Int, weights: PythonObjec
         var entries = fields["_native_entries"]
         var entries_live = fields["_native_parallel_entries_live"]
         model_dict(entries_live)
-        for name in ["weight_names", "mamba1_profile"]:  # small-loop: publish worker-reported immutable entry metadata
+        for name in ["weight_names", "mamba1_profile"]:  # small-loop(two worker-reported immutable entry metadata fields)
             var value = model_plain(metadata[name])
             py_setitem(entries, name, value)
             py_setitem(entries_live, name, value)
@@ -650,7 +650,7 @@ def _parallel_causal_init(owner: PythonObject, input_plan: PythonObject, input_w
         process_pool_start(fields["_pool"])
         _parallel_pool_publish(fields)
         var metadata = Python.dict()
-        for key in ["device", "kind", "d_model", "vocab_size", "norm_eps", "numeric_profile"]:  # small-loop: captured model primitive metadata
+        for key in ["device", "kind", "d_model", "vocab_size", "norm_eps", "numeric_profile"]:  # small-loop(six captured model primitive metadata words)
             py_setitem(metadata, key, fields[key])
         var wire_plan = _parallel_causal_wire_plan(plan)
         for i in range(len(unique)):  # driver-loop: worker initialization before constructing layers
