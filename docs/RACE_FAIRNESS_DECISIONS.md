@@ -30,8 +30,15 @@ Equal iteration caps never prove equal executed work or equal quality. Fixed
 training-step throughput measurements still perform the declared step count;
 they are distinct from time to a quality target.
 
-`tools/board_quality.py` implements `mojolearn.quality-parity.v7`. Its engineering
-margins are declared by metric, independent of dataset, vendor and timing winner:
+`tools/board_quality.py` implements `mojolearn.quality-parity.v8`. Its engineering
+margins are declared by metric, independent of dataset, vendor and timing winner.
+v8 (2026-10-28) applies the 2026-10-14 owner decision to the held-out task scores
+(accuracy, AUC, R², recall, trustworthiness, log likelihood and predictive density;
+RMSE family, log loss, NLL, perplexity, inertia, reconstruction and kernel error):
+their check fails only when ours is worse than the opponent by more than the margin,
+and the signed difference is recorded. v7 judged |ours - opponent| and marked
+neural gru-fit FAIL on the Oct 27 NVIDIA and AMD boards for an AUC 0.0134 above
+torch's. Every other metric keeps the symmetric rule:
 
 | Metric | Admission margin |
 | --- | --- |

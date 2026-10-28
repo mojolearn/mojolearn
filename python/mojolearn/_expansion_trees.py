@@ -25,14 +25,12 @@ CalibratedClassifierCV's per-class epilogue moved to xtrees on lane
 py-misc-prep (strided platt/isotonic apply, `complement_pairs`, native class
 columns and 0/1 targets; its Python reference arm is deleted).
 """
-import numbers
 import weakref
 
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes, full, zeros
 from ._buffer import memory_at
-from ._labels import is_bool
 from ._mode import NumericModeMixin, available_if
 from ._class_weights import _trees_x_bind  # noqa: F401  re-exported: callers import it from this door
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
@@ -430,32 +428,6 @@ _native_archive_bridge.register(DecisionTreeClassifier, _RF_MODEL_FORMATS, _TREE
 _native_archive_bridge.register(DecisionTreeRegressor, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
 _native_trees_bridge.register(DecisionTreeClassifier, "dt_classifier")
 _native_trees_bridge.register(DecisionTreeRegressor, "dt_regressor")
-
-
-# ------------------------------------------------------------- shared glue
-def _trees_seed(random_state):
-    if random_state is None:
-        return 0
-    if is_bool(random_state) or not isinstance(random_state, numbers.Integral) or random_state < 0:
-        raise ValueError("random_state must be None or a nonnegative int (a RandomState object is refused:"
-                         " draws come from the lane's own counter RNG, xtrees/ops.mojo)")
-    return int(random_state)
-
-
-def _trees_sub_seed(seed, k):
-    """The random_state handed to the k-th sub-estimator: a fixed function of
-    (seed, k), inside int32."""
-    return (seed * 1000003 + 7919 * (k + 1)) % 2147483647
-
-
-def _trees_clone(est, **overrides):
-    """A fresh unfitted copy with the same constructor parameters, plus
-    `overrides` for the ones the estimator has (random_state)."""
-    params = dict(est.get_params(deep=False)) if hasattr(est, "get_params") else {}
-    for k, v in overrides.items():  # glue: estimator overrides by parameter name
-        if k in params:
-            params[k] = v
-    return type(est)(**params)
 
 
 # lane/apple-fast-trees-ensembles (2026-10-02): the Apple FAST switches of
@@ -1196,46 +1168,6 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
 class _DARTBase(_TreesEnsembleBase):
     _KIND = 0
 
-    def __init__(self, n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda,
-                 max_bin, drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed,
-                 random_state, reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0,
-                 subsample_freq=0, feature_fraction_seed=2, bagging_seed=3):
-        if int(n_estimators) < 1:
-            raise ValueError("n_estimators must be >= 1")
-        if not float(learning_rate) > 0:
-            raise ValueError("learning_rate must be > 0")
-        if not 0.0 <= float(drop_rate) <= 1.0 or not 0.0 <= float(skip_drop) <= 1.0:
-            raise ValueError("drop_rate and skip_drop must be in [0, 1]")
-        if float(reg_lambda) < 0 or float(reg_alpha) < 0:
-            raise ValueError("reg_lambda and reg_alpha must be >= 0")
-        if not 0.0 < float(colsample_bytree) <= 1.0 or not 0.0 < float(subsample) <= 1.0:
-            raise ValueError("colsample_bytree and subsample must be in (0, 1]")
-        if int(subsample_freq) < 0:
-            raise ValueError("subsample_freq must be >= 0")
-        self.n_estimators = n_estimators
-        self.learning_rate = learning_rate
-        self.num_leaves = num_leaves
-        self.max_depth = max_depth
-        self.min_child_samples = min_child_samples
-        self.reg_lambda = reg_lambda
-        self.max_bin = max_bin
-        self.drop_rate = drop_rate
-        self.max_drop = max_drop
-        self.skip_drop = skip_drop
-        self.xgboost_dart_mode = xgboost_dart_mode
-        self.uniform_drop = uniform_drop
-        self.drop_seed = drop_seed
-        self.random_state = random_state
-        self.reg_alpha = reg_alpha
-        self.max_delta_step = max_delta_step
-        self.colsample_bytree = colsample_bytree
-        self.subsample = subsample
-        self.subsample_freq = subsample_freq
-        self.feature_fraction_seed = feature_fraction_seed
-        self.bagging_seed = bagging_seed
-        for sd in (random_state, drop_seed, feature_fraction_seed, bagging_seed):  # glue: validates the four seed arguments
-            _trees_seed(sd)
-
     # -------------------------------------------- lane/apple-fast-dart
     # The boosting round on the device (xtrees/dart_device.mojo): FAST on
     # every GPU vendor (Apple since lane/apple-fast-dart, NVIDIA and AMD since
@@ -1339,10 +1271,13 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
                  skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None,
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
                  feature_fraction_seed=2, bagging_seed=3):
-        super().__init__(n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda,
-                         max_bin, drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed,
-                         random_state, reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq,
-                         feature_fraction_seed, bagging_seed)
+        # The checks and the stored parameters are the native owner's
+        # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
+        _TREES(self, "trees_dart_construct", (
+            n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
+            drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
+            reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
+            bagging_seed), _TREES_CONTEXT)
 
     def fit(self, X, y):
         """Fit the boosted trees on ``X`` (n_samples, n_features) and target ``y``.
@@ -1470,10 +1405,13 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
                  skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None,
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
                  feature_fraction_seed=2, bagging_seed=3):
-        super().__init__(n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda,
-                         max_bin, drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed,
-                         random_state, reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq,
-                         feature_fraction_seed, bagging_seed)
+        # The checks and the stored parameters are the native owner's
+        # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
+        _TREES(self, "trees_dart_construct", (
+            n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
+            drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
+            reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
+            bagging_seed), _TREES_CONTEXT)
 
     def fit(self, X, y):
         """Fit the boosted trees on ``X`` (n_samples, n_features) and labels ``y``.

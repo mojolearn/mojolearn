@@ -1,0 +1,28 @@
+Program pooled/offloaded byte-LM trainers, 2026-10-28.
+Branch lane/program-pooled-offload-20261028 from origin/main 4771b55daa. Root owns main integration.
+
+Changes:
+- bindings/_mojolearn_byte_lm.mojo: new private schedule descriptor table
+  mojolearn.training.byte_lm_schedule.v1 (15 integer-descriptor operations over the
+  existing ByteParallelTrainer / ByteModelPool / ByteOffloadedReplay sessions), the
+  ByteScheduleSession value and exports byte_lm_schedule_api_v1 / _create_v1 / _handle_v1.
+  Existing byte_lm_* exports (peer3's generation/catalog/codec ones included) are untouched.
+- bindings/parallel_byte_native.mojo: trainer classes admitted once at import (exact
+  type, no storage/finalizer hooks, pooled/offload derive directly from the replica
+  class); each trainer keeps one native ParallelByteOwner record (__dict__["_native"],
+  owner-id checked); every operation drives the descriptor table. Removed instance
+  _entries callable dictionaries, schedule strings from Python and py_call_typed.
+  CPU by-design refusal sentence preserved. Public mirrors: devices, logical_shards,
+  pool_optimizer, _shape, _session; _state is a detached diagnostic copy.
+- bindings/_mojolearn_tokenizer_host.mojo: registers _ParallelByteOwner.
+- python/mojolearn/{parallel,model_pool,offload}_training.py: no super()/alias
+  wrappers or Python raise; import-time admit_class glue; dead _export_target/_floats removed.
+- tools/tests/test_parallel_export_into.py: host-mock _entries injection is now
+  impossible by design; replaced by source checks (pass via runpy; pytest unavailable).
+
+Compile (compile.json): host closure checks/parallel_byte_owner_compile.mojo exit 0 (25 s)
+and actual _mojolearn_byte_lm entry (Metal/apple-m1, identical) exit 0 (279 s), Mac,
+Mojo 1.0.0, O0, -j 10, via compile_slot.sh. No box rented.
+Not covered: Linux CUDA/HIP byte-LM targets, full merged tokenizer_host root, any
+runtime/identity/GPU execution. python/mojolearn/tests that read owner._state now get
+a copy (test_parallel_byte_native.py assertions remain valid by design, not run).
