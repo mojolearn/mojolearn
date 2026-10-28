@@ -2,6 +2,7 @@
 # Private sibling ABI for the existing fresh/backward Transformer operations.
 # Common descriptor transport; no Python/provider imports or changed kernels.
 from std.ffi import _Global
+from transformer.native_lm_resident_dispatch import transformer_lm_resident_operation
 from transformer.native_decode_dispatch import transformer_decode_operation
 from transformer.native_tape_dispatch import transformer_tape_operation
 from transformer.session_native_dispatch import transformer_session_forward_native
@@ -19,7 +20,11 @@ from transformer.transformer_binding_impl import (
 # one checked opaque owner handle to their integer vector. All spans borrowed.
 
 
-def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
+def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
+    if op >= 25:
+        return transformer_lm_resident_operation(op, a, words, f)
+    if len(f) != 0:
+        raise Error("transformer block: unexpected floating scalars")
     if op >= 15:
         return transformer_decode_operation(op - 15, a, words)
     if op == 14:
@@ -143,7 +148,7 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises 
 def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 25 or nf != 0 or na < 0 or na > 45 or np < 0 or np > 28:
+        if op < 0 or op >= 33 or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 28:
             raise Error("transformer block native ABI: unknown operation or scalar span")
         if result == 0:
             raise Error("transformer block native ABI: null result")
@@ -151,7 +156,12 @@ def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, n
             raise Error("transformer block native ABI: reservation expects only one session handle")
         var a = native_descriptor_words(aa, na)
         var p = native_descriptor_words(pp, np)
-        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = transformer_block_operation(op, a, p)
+        var f = List[Float64]()
+        if nf != 0:
+            if ff == 0:
+                raise Error("transformer block native ABI: null floating scalar span")
+            f.append(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)[0])
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = transformer_block_operation(op, a, p, f)
         return 0
     except problem:
         native_descriptor_report(problem, context, sink)

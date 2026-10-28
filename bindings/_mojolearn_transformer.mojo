@@ -1159,6 +1159,10 @@ def transformer_decode_session_close_binding(session: PythonObject) raises -> Py
     return PythonObject(0)
 
 
+def causal_lm_native_handle_binding(session: PythonObject) raises -> PythonObject:
+    return PythonObject(Int(session.downcast_value_ptr[CausalLMSession]()))
+
+
 def causal_lm_session_create_binding() raises -> PythonObject:
     """A closed session. Creation performs no GPU operation."""
     return PythonObject(alloc=CausalLMSession())
@@ -1643,6 +1647,7 @@ def build__mojolearn_transformer() -> PythonObject:
         # lane/py-lm: the resident CausalLM decode session.
         _ = m.add_type[CausalLMSession]("_CausalLMSession")
         m.def_function[causal_lm_session_create_binding]("causal_lm_session_create")
+        m.def_function[causal_lm_native_handle_binding]("causal_lm_native_handle_v1")
         m.def_function[causal_lm_session_open_binding]("causal_lm_session_open")
         m.def_function[causal_lm_session_open_int15_binding]("causal_lm_session_open_int15")
         m.def_function[causal_lm_session_run_binding]("causal_lm_session_run")
