@@ -82,8 +82,12 @@ def estimator_checked_mode(module: PythonObject, reader: String, name: String,
     # These families read mode from their admitted native table once per
     # operation. Preserve that single read instead of calling the legacy door
     # first; plain frontdoors below still perform the original checked readback.
+    # Kernel identical mode always uses the versioned native descriptor. Its
+    # owner validates descriptor mode once; fast retains its legacy readback.
+    if name == "_mojolearn_kernel_methods" and requested == "identical":
+        return module
     if (getenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "0") == "1"
-            and (name == "_mojolearn_svm" or name == "_mojolearn_kernel_methods" or name == "_mojolearn_x_neighbors")):
+            and (name == "_mojolearn_svm" or name == "_mojolearn_x_neighbors")):
         if requested != "identical":
             raise Error("native dispatch candidate requires identical mode")
         return module
