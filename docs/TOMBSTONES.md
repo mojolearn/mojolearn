@@ -1938,6 +1938,8 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - grid_controls/classical-decomp.json removed (control C25_PROJECTION_REUSE): DELETED 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 noise, a loser. on/off ms ratio NV/AMD: nystroem istella 1.007/0.912, taxi 1.002/0.984; rbf-sampler istella 1.040/0.884, taxi 1.007/0.884; kernel_rel_error SAME. Code recoverable at main ad7ed2370; define refused in core/six_lane_experiment_guards.mojo.
 - EXPERIMENTS.md:1606 (IDENTICAL grid ge123e6f9 losers deleted (lane/grid-losers-1,): `MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE` on more:nystroem, more:rbf-sampler / istella, taxi, main @ ad7ed2370 (deleted on lane/grid-losers-1), A/B ge123e6f9, nystroem istella NV 118.2 -> 119.1 (1.007), AMD 63.5 -> 57.9 (0.912); taxi NV 141.6 -> 141.8 (1.002), AMD 149.8 -> 147.4 (0.984); rbf-sampler istella NV 95.2 -> 98.9 (1.040), AMD 38.1 -> 33.6 (0.884); taxi NV 89.3 -> 89.9 (1.007), AMD 33.9 -> 29.9 (0.884); 0.963x combined ms, **DROP (noise), code deleted**: inside the noise floor on both vendors (NVIDIA flat or slower, AMD gain not outside the floor); kernel_rel_error SAME. Deleted `classical_projection_kernel` (kernel_methods/rbf_fused.mojo) and its launch/route in kernel_methods/estimator.mojo; RBF_IDN_FUSED keeps its own d cut
 
+<a id="mojolearn_classical_pca_cov-arm23"></a>
+
 ### MOJOLEARN_CLASSICAL_PCA_COV=23
 
 - Verdict: slower. Deleted 2026-10-08 by `3df299f27` (grid-act-2: delete PCA_COV=23 arm (grid ge123e6f9 pca istella 2.28x/1.27x slower, taxi 0.90x/0.78x; combined 1.195x slower); c04 stays; refuse =23; tombstones).
@@ -1946,6 +1948,8 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - Guard refusal (core/six_lane_experiment_guards.mojo:201): removed: MOJOLEARN_CLASSICAL_PCA_COV=23 (C23 one-pass covariance) retired 2026-10-08: slower, pca NV 2.28x / AMD 1.27x istella, NV 0.90x / AMD 0.78x taxi, combined 1.195x (grid ge123e6f9); =4 (c04) stays; see EXPERIMENTS.md
 - grid_controls/classical-decomp.json removed (control PCA_COV): DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. c23/off ms ratio NV/AMD on pca: istella 2.281/1.265 (154.0 -> 351.3 NV, 53.1 -> 67.2 AMD), taxi 0.903/0.782; combined 1.195x SLOWER (dimension-dependent: the one-pass d x d leaf Gram loses at wide d; lane grid-flips-1 refused to flip it). Deleted the C23 branch in decomposition/impl/linalg/detail/pca.mojo and pca_oracle.mojo, bm_onepass_covariance (core/blocked_moments.mojo) and its host twin; c04 stays (unmeasured), C23_MCD is separate. Code recoverable at main 42d1e42c6; =23 refused in core/six_lane_experiment_guards.mojo.
 - EXPERIMENTS.md:1711 (IDENTICAL grid ge123e6f9: two promotions and eight loser arm): `MOJOLEARN_CLASSICAL_PCA_COV=23` on classical:pca / istella, taxi, main @ 42d1e42c6 (deleted on lane/grid-act-2), A/B ge123e6f9, istella NV 154.0 -> 351.3 (2.281), AMD 53.1 -> 67.2 (1.265); taxi NV 14.9 -> 13.5 (0.903), AMD 8.2 -> 6.4 (0.782); 1.195x combined SLOWER ms, **DROP (slower on the average), code deleted**: one blocked pass with per-leaf centering and Chan merges: faster at narrow d (taxi), much slower at wide d (istella), so dimension-dependent; lane grid-flips-1 refused to flip it and the vendor average is slower. Deleted the C23 branch in decomposition/impl/linalg/detail/pca.mojo and decomposition/host/pca_oracle.mojo, `bm_onepass_covariance` (core/blocked_moments.mojo) and `host_bm_onepass_covariance` (core/blocked_moments_host.mojo); `=23` is refused.
+
+<a id="mojolearn_classical_pca_cov-arm4"></a>
 
 ### MOJOLEARN_CLASSICAL_PCA_COV=4
 
@@ -2677,6 +2681,8 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - grid_controls/neural-gemm-attn-dedupe.json removed: I06/NI19 two-head GQA reuse: measured loser on MI325X (1.21x) and L40S (1.15/1.11x); deleted, EXPERIMENTS.md row
 - EXPERIMENTS.md:1466 (IDENTICAL neural GEMM/attention switch dedupe (lane/neural-g): `MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE` on attention forward GQA ratio 2 / length 1024/1536, B1, heads8, kv4, hd64, measured @ e80a1d0 (fixed kvgrid schedule); deleted from lane/neural-gemm-attn-dedupe, A/B overnight-ab-20261006 I06, MI325X 2.434/3.581 -> 2.947/4.342 (1.211/1.212x); L40S 1.143/2.262 -> 1.311/2.506 (1.147/1.108x) ms, **DROP**: slower on both vendors. The four-head NN17 arm survives as `MOJOLEARN_IDN_ATTN_HEAD_SHARE=4`
 
+<a id="mojolearn_idn_attn_softmax-arm1"></a>
+
 ### MOJOLEARN_IDN_ATTN_SOFTMAX=1
 
 - Verdict: broken. Deleted 2026-10-08 by `89a183889` (grid-act-3: delete the attn_softmax summary_tree arm (MOJOLEARN_IDN_ATTN_SOFTMAX=1, NN20, and its split-KV controls; grid ge123e6f9 lm/samba/transformer 1.6-43x).
@@ -2977,6 +2983,8 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - grid_controls/neural-small.json removed (control gemm_tile_short_k): DELETED by lane/grid-prune 2026-10-07 (code + define; refused in core/six_lane_experiment_guards.mojo): arms equal measured pass62 losers or the NVIDIA column default; inert on AMD. Recoverable at main ab554bb4a.
 - EXPERIMENTS.md:1588 (IDENTICAL grid prune: losers and dead arms deleted (lane/gri): `MOJOLEARN_IDN_GEMM_TILE_SHORT_K` on every gemm_identical tuned-tile caller (gemm, neural, classical), NVIDIA + AMD, main @ ab554bb4a, A/B pass62 (gemm_identical.mojo:4042-4053), q/o 0.104/0.084 -> 0.051/0.049 ms a layer with the short rule; k 1024..2048 +0.2 ms a layer ms, **DROPPED, define deleted (arms equal measured losers / A/A)**: arm 512 = NVIDIA column default (A/A); arm 0 = pre-pass62 state and arm 1024 = long-k step-down, both measured slower by pass62; every arm inert on AMD (min k 0). Env knob `MOJOLEARN_GEMM_TILE_SHORT_K` and the column default stay
 
+<a id="mojolearn_idn_neural_gemm_epilogue-arm1"></a>
+
 ### MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1
 
 - Verdict: slower. Deleted 2026-10-09 by `d48c5eaaf` (grid-act-5: delete the neural_gemm_epilogue mlp arm (MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE bit 1, NN06; grid ge123e6f9 mlp-train-step NV 1.9x / AMD 0.97x, 1.367x c).
@@ -2986,6 +2994,8 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - grid_controls/neural-gemm-attn-dedupe.json removed: removed 2026-10-08 (lane grid-act-5): neural_gemm_epilogue=mlp (NN06 fused MLP GEMM + bias/ReLU, gemm/experiments/neural_epilogue.mojo and training/mlp_ops.mojo _mlp_fused_projection) grid ge123e6f9 loser, mlp-train-step NV 2.0->3.8 / AMD 3.5->3.4 ms (1.367x combined slower), same bits; guard refuses bit 1; EXPERIMENTS.md row; code at main 8ed94710a
 - EXPERIMENTS.md:1747 (IDENTICAL grid ge123e6f9: gemm_leaf split for the MLP step a): `MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1` on neural:mlp-train-step / gaussian, lane/grid-act-5 from main @ 8ed94710a, A/B ge123e6f9 (nv n0501, amd a0824), NV 2.0 -> 3.8 (1.90), AMD 3.5 -> 3.4 (0.97); 1.367x combined ms, **DELETED (loser; AMD flat, NV 1.9x)**: the forward's GEMM + bias (+ ReLU) as one thread-per-cell kernel loses the incumbent GEMM + separate bias launch on NVIDIA and gains nothing on AMD; same bits. `gemm/experiments/neural_epilogue.mojo` (its only caller was this arm) and `training/mlp_ops.mojo`'s `_mlp_gemm_epilogue_kernel` / `_mlp_fused_projection` removed; tombstones in mlp_ops.mojo and neural_tiled_v2.mojo
 
+<a id="mojolearn_idn_neural_gemm_schedule-arm3"></a>
+
 ### MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3
 
 - Verdict: slower. Deleted 2026-10-08 by `7663b5335` (grid-act-3: delete the neural_gemm_schedule stream_all arm (MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3, NI02; grid ge123e6f9 gemm 2.07x/1.78x, lm-train-step 1.11x/1.0).
@@ -2994,6 +3004,8 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - What happened: stream_all arm (NI02): grid ge123e6f9 gemm NV 2.07x / AMD 1.78x slower (lane grid-act-3); see the commit message and EXPERIMENTS.md.
 - grid_controls/neural-gemm-attn-dedupe.json removed (control neural_gemm_schedule): DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. stream_all/off ms ratio NV/AMD: gemm gaussian 2.07/1.78 (61.9 -> 128.4 NV, 28.5 -> 50.7 AMD), lm-train-step 1.11/1.07 (36.0 -> 40.0 NV, 42.7 -> 45.7 AMD); 1.45x combined SLOWER; quality not judged. NI02 (gemm/checks/gemm_identical.mojo _ni02_* kernels, dispatch, workspace sizing, identical_gemm_streaming_applies and the x_cnn pre-check) deleted; geometry, stream, stream_exact, pages, cost, fold_exact, threadmap, pages_threadmap stay. Code recoverable at main bc10b8b56; =3 refused in core/six_lane_experiment_guards.mojo.
 - EXPERIMENTS.md:1726 (IDENTICAL grid ge123e6f9: one promotion and six loser contro): `MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3` on gemm:gemm / gaussian; neural:lm-train-step / bytes, main @ bc10b8b56 (deleted on lane/grid-act-3), A/B ge123e6f9 (nv n0458/v0189, amd a0722/a0592), gemm NV 61.9 -> 128.4 (2.07), AMD 28.5 -> 50.7 (1.78); lm-train-step NV 36.0 -> 40.0 (1.11), AMD 42.7 -> 45.7 (1.07); 1.45x combined SLOWER ms, **DROP (slower), arm deleted**: bounded 16-leaf partial-plane windows for every GEMM caller: twice the launches and a carry round trip per window; quality not judged. `_ni02_*` kernels, the dispatch and workspace sizing branches, `identical_gemm_streaming_applies` and the x_cnn pre-check deleted; =3 refused; the other schedule arms (unmeasured) stay
+
+<a id="mojolearn_idn_neural_gemm_schedule-arm8"></a>
 
 ### MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8
 
@@ -3399,6 +3411,8 @@ the parent of its deletion commit.
 - `MOJOLEARN_IDN_ATTN_DEFER_REGIME`: tried device-side regime verdict + deferred corner window, estash gate for forward-only calls (H1). Files: transformer/impl/llama/fused_attention.mojo, modeling_llama.mojo, bindings/_mojolearn_transformer.mojo. Result: transformer-forward 1.376 (NV 1.647, AMD 1.104; NV confirmed by v0139), lm-forward 0.914, lm-train-step 0.989; nv2 v0117, amd a1699. Verdict LOSER. Deleted by 68d9654bb, recoverable at 68d9654bb^. Patch experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch. The patch also restores TF_SESSION_LEAN (shared commit).
 - `MOJOLEARN_IDN_TF_SESSION_LEAN`: tried skip the KV cache fill when the prefill covers the whole capacity (H9). Files: bindings/_mojolearn_transformer.mojo. Result: transformer-forward 1.350 (NV 1.689, AMD 1.011); nv2 v0118, amd a1700. Verdict LOSER. Deleted by 68d9654bb, recoverable at 68d9654bb^. Patch experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch. Deleted in the same commit as ATTN_DEFER_REGIME (they shared the session wiring commit 150df49d9); the patch is the same file and restores both.
 
+
+<a id="gbdt-oracle-multi-dimensional-host-walk"></a>
 
 ## GPU oracle multi-dimensional host walk
 
