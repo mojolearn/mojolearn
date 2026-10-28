@@ -10,6 +10,7 @@ from bindings.classical_attributes import classical_connect_numpy, _type_mro
 from bindings.public_attributes_native import _plan, _lookup
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_values
 from bindings.classical_warnings import classical_warn_column
+from bindings.classical_arrays import classical_address
 from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.host_archive_native import host_archive_radius_refusals
@@ -170,22 +171,44 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
         storage = native_torch_numpy(source)
         reshape = True
     var owner = array_owner_once(source, context) if array else storage
-    var view = native_buffer_view(array_slot_once(source, "_mv", context) if array else storage)
-    var shape = array_slot_once(source, "shape", context) if array else view.shape
-    var strides = array_slot_once(source, "strides", context) if array else view.strides
-    var code = String(view.format)
-    var width = Int(py=view.itemsize)
-    if array:
-        var dtype = String(array_slot_once(source, "dtype", context))
-        width = Int(py=array_slot_once(source, "itemsize", context))
-        code = String("e") if dtype == "<f2" else String("f") if dtype == "<f4" else String("d") if dtype == "<f8" else String("integer")
+    var view = PythonObject(None)
+    var shape = PythonObject(None)
+    var strides = PythonObject(None)
+    var code = String()
+    var width = 0
+    var address = 0
+    var little = True
+    if py_type(storage) is py_get(context, "ndarray"):
+        # Exact ndarray metadata also covers StringDType/object/record targets
+        # without demanding a PEP3118 export they need not implement. Ignored
+        # nonnumeric targets require only their native shape, never conversion.
+        shape = storage.shape
+        strides = storage.strides
+        var dtype = storage.dtype
+        code = String(dtype.char)
+        width = Int(py=dtype.itemsize)
+        little = String(dtype.byteorder) != ">"
+        if code == "F" or code == "D" or code == "G":
+            code = "Z"
+        if code == "e" or code == "f" or code == "d" or code == "g":
+            address = Int(py=classical_address(storage))
+    else:
+        view = native_buffer_view(array_slot_once(source, "_mv", context) if array else storage)
+        shape = array_slot_once(source, "shape", context) if array else view.shape
+        strides = array_slot_once(source, "strides", context) if array else view.strides
+        code = String(view.format)
+        width = Int(py=view.itemsize)
+        if array:
+            var dtype = String(array_slot_once(source, "dtype", context))
+            width = Int(py=array_slot_once(source, "itemsize", context))
+            address = Int(py=array_slot_once(source, "_addr", context))
+            code = String("e") if dtype == "<f2" else String("f") if dtype == "<f4" else String("d") if dtype == "<f8" else String("integer")
     if transposed and len(shape) > 0:
         _target_length(Python.tuple(shape[len(shape) - 1]), rows)
     else:
         _target_length(shape, rows)
     if columns is not None:
         py_setitem(columns, PythonObject(0), PythonObject(Int(py=columns[0]) + (Int(py=shape[0]) if transposed and len(shape) == 2 else 1)))
-    var little = True
     if code.startswith(">") or code.startswith("!"):
         little = False
         code = String(code[byte=1:])
@@ -213,10 +236,13 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
     var buffer = List[Int](length=10, fill=0)
     var pointer = buffer.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     ref cpy = Python().cpython()
-    if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(view._obj_ptr, pointer, Int32(0x118)) != 0:
-        raise cpy.unsafe_get_error()
+    var exported = view is not None
+    if exported:
+        if cpy.lib.get_function[Int32]("PyObject_GetBuffer")(view._obj_ptr, pointer, Int32(0x118)) != 0:
+            raise cpy.unsafe_get_error()
+        if not array:
+            address = buffer[0]
     try:
-        var address = Int(py=array_slot_once(source, "_addr", context)) if array else buffer[0]
         var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
         for i in range(count):  # driver-loop: native finite scan over the captured target buffer
             var remaining = i
@@ -228,7 +254,8 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
             if native_scalar_real(data, offset, code, width, little).special != 0:
                 raise Error("Input y contains NaN or infinity (" + name + ").")
     finally:
-        cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+        if exported:
+            cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
     return Python.tuple(source, storage, owner, view)
 
 

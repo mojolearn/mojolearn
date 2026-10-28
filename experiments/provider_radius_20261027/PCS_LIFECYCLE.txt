@@ -38,3 +38,10 @@ Evidence: /Users/andrewhendel/mojolearn-evidence/peer1-radius-native-20261027/
   pcs-lifecycle-source-inventory.log, pcs-lifecycle-diff-check.log,
   pcs-lifecycle-commit.log, pcs-final-push.log.
 Source-only checks are not evidence of compilation, runtime or identity.
+
+Target admission follow-up
+Ignored exact ndarray string/object/record/StringDType targets read shape/dtype
+metadata without requesting a PEP3118 buffer. Floating ndarrays retain their
+native storage and captured address/shape/strides, including non-native byte
+order. This avoids introducing buffer-export refusals for ignored string targets
+and avoids NumPy's unsupported formatted export of byte-swapped longdouble.

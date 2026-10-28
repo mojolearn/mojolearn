@@ -53,6 +53,9 @@ def _connect_pcs_rng():
     except ImportError:
         _native_family_bridge.tables(family_pcs_rng=None)
         return
+    from ._native_loaded_modules import connect_module
+    connect_module('numpy.random.mtrand', mtrand, ('RandomState',))
+    # _rand deliberately remains live across supported NumPy global-state APIs.
     state_getter = vars(mtrand.RandomState)['_bit_generator']
     capsule_getter = vars(BitGenerator)['capsule']
     lock_getter = vars(BitGenerator)['lock']
