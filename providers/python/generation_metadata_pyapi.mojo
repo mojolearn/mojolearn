@@ -399,6 +399,9 @@ struct GenerationEngineAdmission(Movable):
             try:
                 fields = _generation_fields(st, Python.tuple("_resident_session", "arithmetic_profile", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window", "h", "profile_id", "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens"), True)
                 identity = py_get(fields, "_native_state_identity", py_get(fields, "_causal_original", st))
+                var admission_failure = py_get(fields, "_causal_admission_failure")
+                if admission_failure is not None:
+                    raise Error(model_string(admission_failure))
                 if py_get(fields, "_resident_session") is not None:
                     raise Error("CausalLM: layer state is owned by a decode session (resident in it); sync_state() or close it first")
                 var cached = 0
