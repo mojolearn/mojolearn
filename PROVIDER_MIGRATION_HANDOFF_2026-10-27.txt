@@ -1,5 +1,63 @@
 PROVIDER MIGRATION HANDOFF — 2026-10-27
 
+CURRENT RESUME — 2026-10-27 22:51 ET
+This section supersedes the historical checkpoint/policy/status below. The
+historical record is retained; it is not the current build or work queue.
+
+Owner direction: continue moving complete public operations into Mojo/native
+providers. Run small affected local or authorized RunPod CPU compiles, then
+merge/push coherent passing batches to main. Do not run runtime/identity/vendor
+verification campaigns in this work. Compile passes are not runtime proof.
+Peers may fan out and rent all-allocated-core CPU pods with a 60-minute deadman.
+Main mutations stay serialized. Keep communication to real blockers, ownership
+collisions, completed batches and pod ownership. See current AGENTS.md.
+
+Pushed main checkpoint f8f1e59cd03facb168cc8ded984a4e2716313fda includes original
+provider integration, imported-program native dispatch, lifecycle/metadata
+repairs, neural/Transformer/Mamba/tokenizer public boundary migration and shared
+classical admission. Compile receipts:
+  experiments/provider_wrapper_compile_20261027/result.json
+  experiments/provider_wrapper_compile_20261027/neural_tokenizer_admission.json
+The original tokenizer compile failure was repaired and compiled. No currently
+uncompiled follow-up is authorized to merge merely because the first batch did.
+
+Root Session dispatch follow-up: source a9d24b7748b8f67c0e300438c38095d20ae68d3b
+compiled successfully on the Mac CPU column (10 workers, O0, 66 seconds). The
+passing batch is merged to local main at 90585148f8f1ddf26d662e39e6d5d91f5135695f.
+  experiments/session_public_dispatch_20261027/compile.json
+No GPU or runtime result is claimed by that receipt.
+
+Remaining ownership (assigned is not the same as completed):
+- Root: Session provider boundary and serialized main integration.
+- Root public_wrapper_repairs: Program serialization exact metadata admission;
+  Program public dispatch; distributed and partitioned execution.
+- Root provider_boundary_audit: targeted source inventory of remaining families,
+  with an owner/status ledger. No runtime verification campaign.
+- Peer1 lane/peer1-neighbors-kernels-20261027: neighbors, kernels and hierarchy,
+  including AgglomerativeClustering Python binding selection.
+- Peer2 lane/peer2-preprocessing-decomposition-manifold-20261027: preprocessing,
+  decomposition, PLS, manifold, UMAP and random projection lifecycle/owners.
+- Peer3 lane/peer3-neural-tokenizer-20261027: corpus/tokenizer preparation and
+  Transformer tape descriptor transport; MoE weight load/backward whole public
+  operation repair queued behind those lanes.
+The whole-library migration remains incomplete. Source markers, a zero baseline
+or native wrapper entry do not establish transitive callback freedom.
+
+Root CPU pod f9e0thol0ex6w4 completed, fetched results and was deleted/verified
+absent at 22:40 ET. Actual allocation32; configured compiler workers32. Spend
+$0.6805; initial failed controller pod iwcaz97h1hp00f cost$0.0424 and was also
+retained/deleted. Full root evidence:
+  ~/mojolearn-evidence/provider-migration-resume-20261027/runpod-provider-cpu/
+Accepted source/log/binary bundles are also in R2:
+  measurements/provider-migration-20261027/f9e0thol0ex6w4/
+  initial-results-v2.tgz, batches23.tgz, batch4.tgz, batches56.tgz
+The earlier initial-results.tgz contained only a symlink and is NOT retention
+proof; the corrected v2 bundle contains the actual files.
+Peer-owned pods have their own state/leases; inspect current owners before any
+teardown. Do not act on this historical snapshot to terminate someone else's pod.
+
+HISTORICAL CHECKPOINT — retained below; superseded where noted above
+
 PRIORITY / OWNER DIRECTION
 The owner asked for this handoff and immediate commit/push before further work.
 Checkpoint current branches; do not claim unfinished work is complete. Keep all
