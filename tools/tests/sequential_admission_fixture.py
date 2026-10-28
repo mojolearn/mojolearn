@@ -116,44 +116,58 @@ def main(out_path, scratch):
     def regressor(optimizer):
         return Sequential("identical").linear(8).relu().linear(1).compile(loss="mse", optimizer=optimizer, lr=0.01)
 
+    def record(key, call):
+        # A failing operation is recorded, never silently skipped; compare
+        # fails on any ERROR digest.
+        try:
+            digests[key] = _digest(call())
+        except Exception as error:  # noqa: BLE001
+            digests[key] = "ERROR " + type(error).__name__ + ": " + str(error)[:200]
+
     # Unfitted description-only reads (no optimizer state, no fit fields).
     bare = regressor("adam")
-    digests["unfitted.layers"] = _digest(bare.layers)
-    digests["unfitted.table"] = _digest(bare._table())
-    digests["unfitted.program"] = _digest(bare._program(4))
-    digests["unfitted.parameter_layers"] = _digest(bare._param_layers())
-    digests["unfitted.sample"] = _digest(bare._sample_of(X))
+    record("unfitted.layers", lambda: bare.layers)
+    record("unfitted.table", lambda: bare._table())
+    record("unfitted.program", lambda: bare._program(4))
+    record("unfitted.parameter_layers", lambda: bare._param_layers())
+    record("unfitted.sample", lambda: bare._sample_of(X))
 
     for optimizer in ("adam", "sgd"):
-        m = regressor(optimizer).fit(X, y, epochs=3, batch_size=8, seed=0)
-        tag = "mse_" + optimizer
-        digests[tag + ".fit.params"] = _digest(m.params_)
-        digests[tag + ".fit.loss_curve"] = _digest(list(m.loss_curve_))
-        digests[tag + ".predict"] = _digest(m.predict(X))
-        digests[tag + ".forward"] = _digest(m._forward(X, 0))
-        digests[tag + ".layers"] = _digest(m.layers)
-        digests[tag + ".table"] = _digest(m._table())
-        digests[tag + ".program"] = _digest(m._program(4))
-        digests[tag + ".parameter_layers"] = _digest(m._param_layers())
-        ckpt = scratch / (tag + ".ckpt")
-        m.save_checkpoint(str(ckpt))
-        digests[tag + ".save_checkpoint"] = _digest(_file(ckpt))
-        exported = scratch / (tag + ".export")
-        m.export(str(exported))
-        digests[tag + ".export"] = _digest(_file(exported))
-        # A model loaded from an export holds no optimizer/training state.
-        loaded = Sequential.load(str(exported))
-        digests[tag + ".loaded_export.predict"] = _digest(loaded.predict(X))
-        digests[tag + ".loaded_export.layers"] = _digest(loaded.layers)
-        resumed = Sequential.from_checkpoint(str(ckpt)).fit(X, y, epochs=1, batch_size=8, seed=0, resume=True)
-        digests[tag + ".resume.params"] = _digest(resumed.params_)
+        try:
+            m = regressor(optimizer).fit(X, y, epochs=3, batch_size=8, seed=0)
+            tag = "mse_" + optimizer
+            record(tag + ".fit.params", lambda: m.params_)
+            record(tag + ".fit.loss_curve", lambda: list(m.loss_curve_))
+            record(tag + ".predict", lambda: m.predict(X))
+            record(tag + ".forward", lambda: m._forward(X, 0))
+            record(tag + ".layers", lambda: m.layers)
+            record(tag + ".table", lambda: m._table())
+            record(tag + ".program", lambda: m._program(4))
+            record(tag + ".parameter_layers", lambda: m._param_layers())
+            ckpt = scratch / (tag + ".ckpt")
+            m.save_checkpoint(str(ckpt))
+            record(tag + ".save_checkpoint", lambda: _file(ckpt))
+            exported = scratch / (tag + ".export")
+            m.export(str(exported))
+            record(tag + ".export", lambda: _file(exported))
+            # A model loaded from an export holds no optimizer/training state.
+            loaded = Sequential.load(str(exported))
+            record(tag + ".loaded_export.predict", lambda: loaded.predict(X))
+            record(tag + ".loaded_export.layers", lambda: loaded.layers)
+            resumed = Sequential.from_checkpoint(str(ckpt)).fit(X, y, epochs=1, batch_size=8, seed=0, resume=True)
+            record(tag + ".resume.params", lambda: resumed.params_)
+        except Exception as error:  # noqa: BLE001
+            digests["mse_" + optimizer + ".setup"] = "ERROR " + type(error).__name__ + ": " + str(error)[:200]
 
     for loss in ("cross_entropy", "bce_with_logits"):
-        c = Sequential("identical").linear(8).relu().linear(2 if loss == "cross_entropy" else 1)
-        c = c.compile(loss=loss, optimizer="adam", lr=0.01).fit(X, labels, epochs=3, batch_size=8, seed=0)
-        digests[loss + ".fit.params"] = _digest(c.params_)
-        digests[loss + ".predict"] = _digest(c.predict(X))
-        digests[loss + ".predict_proba"] = _digest(c.predict_proba(X))
+        try:
+            c = Sequential("identical").linear(8).relu().linear(2 if loss == "cross_entropy" else 1)
+            c = c.compile(loss=loss, optimizer="adam", lr=0.01).fit(X, labels, epochs=3, batch_size=8, seed=0)
+            record(loss + ".fit.params", lambda: c.params_)
+            record(loss + ".predict", lambda: c.predict(X))
+            record(loss + ".predict_proba", lambda: c.predict_proba(X))
+        except Exception as error:  # noqa: BLE001
+            digests[loss + ".setup"] = "ERROR " + type(error).__name__ + ": " + str(error)[:200]
 
     def refuse(case, call):
         try:
@@ -238,7 +252,7 @@ def compare(before_path, after_path):
     if sorted(before["digests"]) != sorted(after["digests"]):
         failures.append("digest keys differ")
     for key in sorted(before["digests"]):
-        same = before["digests"][key] == after["digests"].get(key)
+        same = before["digests"][key] == after["digests"].get(key) and not before["digests"][key].startswith("ERROR")
         print("SAME_BITS" if same else "DIFFER", key)
         if not same:
             failures.append(key)
