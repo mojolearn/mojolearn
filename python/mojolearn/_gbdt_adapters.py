@@ -30,11 +30,15 @@ class _GBDTAdapter(PublicOutputsMixin):
     _sklearn_input_tags = {"allow_nan": True}
 
     def __init_subclass__(cls, **kw):
-        # scikit-learn's input and target validation and NotFittedError, as
-        # every other estimator gets them (`_mode.install_fit_tracking`)
+        # The built-in adapters' public operations are owned natively
+        # (trees_gbdt_adapter_lifecycle, connected by
+        # _native_trees_bridge.connect_gbdt_parameters); only an application
+        # subclass's own overrides get scikit-learn's validation and
+        # NotFittedError (`_mode.install_fit_tracking`, own methods only).
         super().__init_subclass__(**kw)
-        from ._mode import install_fit_tracking
-        install_fit_tracking(cls, own_only=getattr(cls, "_mojolearn_native_public", False))
+        from ._mode import _application_subclass, install_fit_tracking
+        if _application_subclass(cls):
+            install_fit_tracking(cls, own_only=True)
         _connect_application_params(cls)
 
     # Every default is GradientBoosting's own, so a default adapter is the

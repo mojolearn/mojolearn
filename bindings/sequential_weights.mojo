@@ -6,6 +6,7 @@
 # qualification of arbitrary Python callbacks as native execution.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from providers.python.autograd_weight_frontend_pyapi import _checkpoint, _record
 from autograd.program_io import ProgramInput
@@ -26,6 +27,11 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
     return result
 
 
+def _exact_mapping(value: PythonObject, mapping_types: PythonObject) raises -> Bool:
+    var kind = py_type(value)
+    return kind is mapping_types[0] or kind is mapping_types[1]
+
+
 def sequential_load_weights(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var fields = sequential_fields(model)
@@ -35,9 +41,14 @@ def sequential_load_weights(model: PythonObject, args: PythonObject, context: Py
     var source_kind = args[1]
     var names = args[2]
     var prefix = args[3]
-    if not Bool(py=py_call(b.isinstance, prefix, b.str)):
+    # Exact-type admission: no hasattr/isinstance protocol of a caller object
+    # runs (a user mapping's keys/__getitem__/__fspath__ are never consulted).
+    var registry = native_loaded_module("mojolearn._native_loaded_modules")
+    var path_types = registry.PATH_TYPES
+    var mapping_types = registry.MAPPING_TYPES
+    if py_type(prefix) is not b.str:
         raise Error("TypeError: prefix must be a string")
-    if names is not None and not Bool(py=py_call(b.hasattr, names, "get")):
+    if names is not None and not _exact_mapping(names, mapping_types):
         raise Error("TypeError: names must be a dict of layer index to name")
     var layers = sequential_parameter_layers(model)
     if len(layers) == 0:
@@ -53,14 +64,16 @@ def sequential_load_weights(model: PythonObject, args: PythonObject, context: Py
         if Bool(py=layers[k][1]):
             _ = py_call(requests.append, Python.tuple(index, 1))
             _ = py_call(keys.append, stem + ".bias")
-    var path = Bool(py=py_call(b.isinstance, source, b.str)) or Bool(py=py_call(b.isinstance, source, b.bytes)) or Bool(py=py_call(b.hasattr, source, "__fspath__"))
+    var source_type = py_type(source)
+    var path = (source_type is b.str or source_type is b.bytes
+                or source_type is path_types[0] or source_type is path_types[1])
     var kind = ("safetensors" if path else "torch") if source_kind is None else String(source_kind)
     if kind != "torch" and kind != "safetensors":
         raise Error("source must be 'torch' or 'safetensors'")
     if (kind == "safetensors") != path:
         raise Error("TypeError: safetensors takes a path; torch takes a mapping of names to tensors")
-    if not path and (not Bool(py=py_call(b.hasattr, source, "keys")) or not Bool(py=py_call(b.hasattr, source, "__getitem__"))):
-        raise Error("TypeError: source='torch' takes a mapping of names to tensors")
+    if not path and not _exact_mapping(source, mapping_types):
+        raise Error("TypeError: source='torch' takes a mapping of names to tensors (a dict or OrderedDict)")
     var owners = Python.list()
     var values = _checkpoint(source, owners) if path else source
     var held = py_call(b.list, values.keys())
