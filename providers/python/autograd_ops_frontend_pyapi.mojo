@@ -13,6 +13,8 @@ from providers.python.autograd_program_arrays_pyapi import output_array, is_inte
 from providers.python.autograd_pyapi import program_info, ops_profile_reset_py, ops_profile_report_py
 from providers.python.autograd_model_checkpoint_pyapi import ops_load_program_py, ops_save_state_py, ops_load_state_py
 from providers.python.autograd_program_save_pyapi import ops_program_save_native_py
+from providers.python.autograd_program_owner_pyapi import program_initialize_owner, program_new_owner
+from providers.python.autograd_program_public_dispatch_pyapi import ops_program_public_execute_py
 from bindings.native_json import native_path
 from providers.python.autograd_weight_frontend_pyapi import ops_weights_native_py
 from providers.python.autograd_session_frontend_pyapi import ops_session_fields
@@ -90,51 +92,10 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
     return py_call(Python.import_module("builtins").tuple, out)
 
 
+
 def _program_initialize(mut out: PythonObject, session: PythonObject, info: PythonObject) raises:
-    var b = Python.import_module("builtins")
-    py_setattr(out, "_s", session)
-    py_setattr(out, "_id", graph_int(info[0]))
-    py_setattr(out, "_execute_native", session._program_execute)
-    py_setattr(out, "_inspect_native", session._program_inspect)
-    py_setattr(out, "_control_native", session._program_control)
-    py_setattr(out, "_fit_native", session._program_fit)
-    py_setattr(out, "_session_native", session._session_native)
-    for k in range(2):  # small-loop(2: input/output shape descriptors): metadata only
-        # The original constructor accepts iterable metadata, including
-        # builtin tuple/list iterators. Materialize with the native C tuple
-        # constructor before the Mojo metadata walk.
-        var shapes = py_call(b.tuple, info[k + 1])
-        var dims = Python.list()
-        for j in range(len(shapes)):  # driver-loop: over graph input/output shapes
-            var source = py_call(b.tuple, shapes[j])
-            var shape = Python.list()
-            for axis in range(len(source)):  # driver-loop: over tensor rank metadata
-                _ = py_call(shape.append, graph_int(source[axis]))
-            _ = py_call(dims.append, py_call(b.tuple, shape))
-        if k == 0:
-            py_setattr(out, "input_shapes", py_call(b.tuple, dims))
-        else:
-            py_setattr(out, "output_shapes", py_call(b.tuple, dims))
-    var parameter_source = py_call(b.tuple, info[3])
-    var params = Python.list()
-    for k in range(len(parameter_source)):  # driver-loop: over parameter handle metadata
-        _ = py_call(params.append, graph_int(parameter_source[k]))
-    py_setattr(out, "params", py_call(b.tuple, params))
-    var kinds = Python.list()
-    if len(info) > 4:
-        var kind_source = py_call(b.tuple, info[4])
-        for k in range(len(kind_source)):  # driver-loop: over input kind metadata
-            _ = py_call(kinds.append, graph_int(kind_source[k]))
-    else:
-        for k in range(len(out.input_shapes)):  # driver-loop: over legacy value-only input descriptors
-            _ = py_call(kinds.append, 0)
-    py_setattr(out, "input_kinds", py_call(b.tuple, kinds))
-
-
-def _program_object(session: PythonObject, info: PythonObject) raises -> PythonObject:
-    var out = py_call(Python.import_module("builtins").object.__new__, session._program_class)
-    _program_initialize(out, session, info)
-    return out
+    # Retained native initializer entry shared by ImportedProgram construction.
+    program_initialize_owner(out, session, info)
 
 
 def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -154,9 +115,11 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         var admitted_id = neural_descriptor_resource_handle(fields["_lifetime"], resource_scope)
         if admitted_id == 0 or admitted_id != Int(py=fields["_id"]):
             raise Error("TypeError: Session handle differs from its native registry owner")
+    if name == "program_public":
+        return ops_program_public_execute_py[E, KIND](session, fields, args)
     if name == "program_init":
         var out = args[0]
-        _program_initialize(out, session, args[1])
+        program_initialize_owner(out, session, args[1])
         return PythonObject(None)
     if name == "enter":
         return session
@@ -213,10 +176,10 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         return control_save_py[E, KIND](sid, args[0], args[2], args[3], args[4], args[1], opt, uint64_input(args[6], "seed"))
     if name == "load_control":
         var bundle = control_load_py[E, KIND](sid, args[0])
-        py_setitem(bundle, "body", _program_object(session, bundle["body"]))
-        py_setitem(bundle, "condition", _program_object(session, bundle["condition"]))
+        py_setitem(bundle, "body", program_new_owner(session, bundle["body"]))
+        py_setitem(bundle, "condition", program_new_owner(session, bundle["condition"]))
         if bundle["otherwise"] is not PythonObject(None):
-            py_setitem(bundle, "otherwise", _program_object(session, bundle["otherwise"]))
+            py_setitem(bundle, "otherwise", program_new_owner(session, bundle["otherwise"]))
         return bundle
     if name == "save_program":
         return ops_program_save_native_py[E, KIND](args[0], args[1])
@@ -251,11 +214,11 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         return PythonObject(Float64(s[].scalar(_int(args[0], "handle", 1))))
     if name == "capture":
         var pid = s[].capture(_ints(args[0], "input", 1), _ints(args[1], "output", 1))
-        return _program_object(session, program_info(pid, s[].program(pid)))
+        return program_new_owner(session, program_info(pid, s[].program(pid)))
     if name == "load_program":
         if s[].tape.is_recording():
             raise Error("ValueError: programs run in an inference session (Session(record=False))")
-        return _program_object(session, ops_load_program_py[E, KIND](sid, native_path(args[0])))
+        return program_new_owner(session, ops_load_program_py[E, KIND](sid, native_path(args[0])))
     if name == "save_state":
         var params = _ints(args[1], "handle", 1)
         if len(params) == 0:

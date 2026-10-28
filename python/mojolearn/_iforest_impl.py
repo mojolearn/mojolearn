@@ -182,10 +182,7 @@ class IsolationForest(NumericModeMixin):
     def __getstate__(self):
         # The token names a forest in THIS process's binding; a copy or an
         # unpickled estimator fits its own on its first scoring call.
-        state = dict(self.__dict__)
-        state.pop("_if_token", None)
-        state.pop("_if_lifetime", None)
-        return state
+        return _TREES(self, "trees_iforest_getstate", (), _TREES_CONTEXT)
 
     # sk-edges: no `sample_weight` parameter. The forest builder
     # (isolation_forest/) draws its subsamples unweighted, as cuML's does

@@ -1019,9 +1019,7 @@ class GradientBoosting(NumericModeMixin):
         meaningful only in the process and registry that minted it, and an
         unpickled instance holding it could release ANOTHER model's live
         copy. The copy prepares its own at its first call."""
-        state = self.__dict__.copy()
-        state.pop("_resident", None)
-        return state
+        return _TREES(self, "trees_gbdt_getstate", (), _TREES_CONTEXT)
 
     def predict(self, X):
         """Return raw scores (not probabilities) as a float32 ``mojolearn.Array``.

@@ -1,0 +1,44 @@
+Peer3 follow-up: corpus preparation and budget-aware Transformer tape
+==================================================================
+
+Branch: lane/peer3-neural-tokenizer-20261027
+Original base: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Follow-up incorporated local main f8f1e59cd0 before source changes.
+Worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer3-20261027
+
+Correction to the original handoff: private tokenizer corpus helpers are
+reached by public lm_corpus operations. They are product execution, not a
+testing exception. The follow-up migrates these complete operations, their
+filesystem/cache processing, native mmap-backed batches and lazy iterator.
+
+Local compile evidence directory:
+/Users/andrewhendel/mojolearn-evidence/peer3-corpus-tape-moe-20261027/
+
+Compiler: Mojo 1.0.0 (ed45d567), local Mac arm64, ten logical CPUs.
+Flags: optimization-level 0, shared-lib, MOJOLEARN_NUMERIC_IDENTICAL=1,
+MOJOLEARN_COLUMN_CPU, worktree root and bindings include directories.
+Compiler workers: ten for isolated builds, five each for two parallel roots.
+No product runtime, GPU, vendor identity or benchmark execution was run.
+
+Completed focused compiles (receipts are finalized with each source freeze):
+- corpus-files-compile-4.log: exit 0, complete native filesystem helper root.
+- tokenizer-compile-2.log: exit 0, public tokenizer dispatcher and corpus helpers.
+- transformer-public-compile-1.log: exit 0, public state/tape dispatcher.
+- transformer-tape-host-compile-2.log: exit 0, real CPU descriptor dispatcher
+  including the original budget-aware numerical session functions.
+- corpus-public-compile-1.log: exit 0, complete public corpus C door and
+  native iterator handle type registration.
+
+Original failures retained: direct Mojo invocation lacked pixi stdlib setup;
+filesystem PythonObject(List) construction needed native list assembly;
+tokenizer had moved-error and Int64 diagnostics; initial tape root path was
+shadowed by the sibling handoff directory named transformer. All corresponding
+focused roots subsequently passed. Future source changes invalidate only the
+affected receipts and will receive a new focused compile before handoff.
+
+Root expanded the current-source model review to catalog/config/checkpoint/
+CausalLM. Additional concrete preparation/admission work is in progress; the
+completed corpus/tape compiles do not qualify those later changes. MoE is owned
+by separate Peer4; this branch made no MoE edits. Main integration remains
+serialized through the coordinating root. No Python-free claim is made from
+source controls or compilation.

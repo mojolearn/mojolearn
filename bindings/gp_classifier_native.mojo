@@ -24,6 +24,7 @@ from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.mcls_classify import mcls_accuracy_fraction
 from bindings.mcls_common import mc_shape_of
+from bindings.host_inference_scalars import host_inference_scalar
 
 comptime _NAME = "mojolearn GaussianProcessClassifier"
 comptime _K_PROD = 5
@@ -503,6 +504,25 @@ def _gpc_latent_mean_and_variance(model: PythonObject, args: PythonObject, conte
 def gp_classifier_operation(model: PythonObject, operation: String, args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     """GaussianProcessClassifier's public operations: args[0] is the resolved binding."""
+    if operation == "family_gp_gpc_lml":
+        # The complete public operation: refusal order, fitted state and final
+        # scalar are native. Admit truth values before any boolean protocol.
+        if args[0] is not None:
+            raise Error("NotImplementedError: " + String(_NAME) + ": log_marginal_likelihood(theta) at other "
+                        + "hyperparameters is refused; it serves the optimizer, which is "
+                        + "refused (DEVIATION 1761)")
+        classical_connect_numpy(context)
+        host_inference_scalar(args[1], context, True)
+        if Bool(py=args[1]):
+            raise Error("Gradient can only be evaluated for theta!=None")
+        var fields = py_fields(model)
+        if not py_contains(fields, "estimators_"):
+            raise Error(String(_NAME) + ": call fit() first")
+        # Return the stored native scalar without calling a descriptor or
+        # conversion protocol; clone_kernel remains accepted and unused.
+        var result = fields["log_marginal_likelihood_value_"]
+        host_inference_scalar(result, context)
+        return result
     if operation == "family_gp_gpc_fit":
         _gpc_fit(model, args, context)
         return model

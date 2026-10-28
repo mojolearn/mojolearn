@@ -1,0 +1,17 @@
+The regression_report and ranking_report public functions now enter native
+code once. Native owners validate modes/options, prepare targets/scores/weights,
+build the existing stage sequences, run the shared metric program, issue native
+warnings, and construct finished scalar/curve dictionaries. The arithmetic
+kernels and experimental defaults are unchanged; no speed or identity claim.
+
+Mac CPU-column compile through full regression/expanded metric owners passed
+(O0, 10 configured workers). AST source check confirms two single-call wrappers.
+No runtime execution. Initial compile rejected Float64.nan spelling and a missing
+warning stacklevel argument; both fixed using existing supported APIs. Full
+source, complete logs, binary and hashes in compile.json's retained paths.
+
+Remaining Peer6 metrics work: general resample row gather still has Python
+binding selection and generic array/pandas callbacks; deeper shared metric
+metadata capture-once audit remains pending. Historical helper definitions
+inside _expansion_metrics.py are retained for internal compatibility; these
+are not a claim that every reachable consumer outside metrics was migrated.

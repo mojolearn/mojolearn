@@ -14,7 +14,7 @@ from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info, neural_descriptor_entry
-from bindings.py_balanced import py_call, py_get, py_setitem, py_type
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_fields
 from bindings.family_common import family_call, family_repr, family_str, family_type_name, family_isinstance
 from bindings.optimizer_public_door import TensorView, shape_text
 from bindings.linalg_ops_buffers import (
@@ -37,9 +37,7 @@ def lin_text(context: PythonObject, name: String) raises -> String:
 
 def lin_attr(binding: PythonObject, name: String) raises -> PythonObject:
     """`getattr(binding, name, None)`."""
-    if py_type(binding) is py_type(native_loaded_module("builtins")):
-        return neural_descriptor_entry(binding, name, False)
-    return family_call(native_loaded_module("builtins").getattr, binding, PythonObject(name), PythonObject(None))
+    return neural_descriptor_entry(binding, name, False)
 
 
 def lin_call(binding: PythonObject, context: PythonObject, name: String, *args: PythonObject) raises -> PythonObject:
@@ -93,7 +91,7 @@ def lin_call(binding: PythonObject, context: PythonObject, name: String, *args: 
         return PythonObject(neural_descriptor_execute(provider, op, addresses, parameters, List[Float64]()))
     # Older/CPU bindings retain their existing door and remain unqualified by
     # the native-provider runtime gate until that binding gains this ABI.
-    var entry = family_call(native_loaded_module("builtins").getattr, binding, PythonObject(name))
+    var entry = neural_descriptor_entry(binding, name)
     var arguments = Python.list()
     for i in range(len(args)):  # small-loop(args: positional arguments of one call): bounded by the call site
         _ = py_call(arguments.append, args[i])
@@ -159,7 +157,7 @@ def lin_mode(binding: PythonObject, context: PythonObject) raises -> String:
     if compiled != selected:
         raise Error("RuntimeError: mojolearn.linalg: the loaded binary was compiled " + compiled
                     + " but this process selected the " + selected + " set -- a .so is in the wrong directory ("
-                    + family_str(py_call(b.getattr, binding, "__file__")) + "); rebuild both sets with " + build)
+                    + String(_lin_binary_path(binding)) + "); rebuild both sets with " + build)
     var version = Int(py=family_call(b.int, lin_call(binding, context, "linalg_profile_version")))
     var profile = state["PROFILE"]
     var profile_version = Int(py=state["PROFILE_VERSION"])
@@ -738,6 +736,13 @@ def lin_lowbit_operation(operation: String, var args: PythonObject, context: Pyt
         classical_admit_value(args[i], context)
         _ = py_call(admitted.append, args[i])
     args = admitted
+    if operation == "family_lin_numeric_mode":
+        return PythonObject(lin_mode(binding, context))
+    if operation == "family_lin_profile":
+        return _lin_profile(binding, context)
+    if operation == "family_lin_require_identical":
+        lin_require_identical(binding, context)
+        return PythonObject(None)
     if operation == "family_lin_provider_info":
         return neural_descriptor_info(py_get(lin_state(context), "_native_provider"))
     if operation == "family_lin_matmul":
@@ -763,3 +768,44 @@ def lin_lowbit_operation(operation: String, var args: PythonObject, context: Pyt
     if operation == "family_lin_matmul_int15":
         return _lin_matmul_int15(args, context)
     raise Error("RuntimeError: unknown linalg operation " + operation)
+
+
+def _lin_binary_path(binding: PythonObject) raises -> PythonObject:
+    var path = py_get(py_fields(binding), "__file__")
+    if py_type(path) is not py_type(PythonObject("")):
+        raise Error("TypeError: linalg binary path requires an exact string")
+    return path
+
+
+def _lin_profile(binding: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The same profile receipt previously assembled by the Python public method.
+    # Reading mode first checks the current native provider/profile exactly once.
+    var mode = lin_mode(binding, context)
+    var state = lin_state(context)
+    var profile = state["_profile_cache"]
+    var actual = state["PROFILE"] if profile is None else profile[0]
+    var version = Int(py=state["PROFILE_VERSION"] if profile is None else profile[1])
+    var result = Python.dict()
+    py_setitem(result, "profile", actual)
+    py_setitem(result, "profile_version", version)
+    py_setitem(result, "numeric_mode", mode)
+    py_setitem(result, "identity_claimed", mode == "identical")
+    py_setitem(result, "dtype", "float32")
+    py_setitem(result, "ops", Python.tuple("OP_NN", "OP_NT", "OP_TN"))
+    py_setitem(result, "contract", "gemm/IDENTICAL_FP32_CONTRACT.md")
+    py_setitem(result, "kernel", "gemm/checks/gemm_identical.mojo")
+    py_setitem(result, "oracle", "gemm/host/gemm_oracle.mojo::gemm_oracle")
+    py_setitem(result, "certified_shapes", 62)
+    py_setitem(result, "certified_vendors", Python.tuple("Apple M4", "NVIDIA H100", "AMD MI325X"))
+    py_setitem(result, "certification_source", "gemm/README.md")
+    py_setitem(result, "binary", _lin_binary_path(binding))
+    if version != Int(py=state["PROFILE_VERSION"]):
+        py_setitem(result, "contract", "gemm/contract.mojo")
+        py_setitem(result, "identity_claimed", False)
+        py_setitem(result, "identity_required", True)
+        py_setitem(result, "certified_shapes", 0)
+        py_setitem(result, "certified_vendors", Python.tuple())
+        py_setitem(result, "certification_source", PythonObject(None))
+        py_setitem(result, "qualification", "UNVERIFIED_EXPERIMENT")
+        py_setitem(result, "experiment_source", "experiments/neural_identical_20261006/gemm_cnn.json")
+    return result

@@ -91,20 +91,18 @@ VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
 
 def _identity_from_tokens_text(text, n_ranks):
     # the digest is the Mojo SHA-256 (core/sha256.mojo), the same hex as hashlib's
-    return dict(schema=VOCABULARY_SCHEMA, sha256=str(_binding().sha256_hex(text.encode("ascii"))),
-                n_ranks=n_ranks, n_vocab=n_ranks + 1, endoftext_id=n_ranks)
+    return _TOKENIZER_NATIVE.tokenizer_public_call('identity_text', (text, n_ranks), _TOKENIZER_CONTEXT)
 
 
 def _identity_of_ranks_file(path):
     """`_identity_from_tokens_text` over the canonical rendering of a rank
     file. The binding loads (and refuses) the file and renders the canonical
     text (`tokenizer/impl/vocab_build.mojo::ranks_text`)."""
-    m = _binding()
-    return _identity_of_handle(m, _native(m.bpe_load, os.fspath(path)))
+    return _TOKENIZER_NATIVE.tokenizer_public_call('identity_file', (path,), _TOKENIZER_CONTEXT)
 
 
 def _identity_of_handle(m, handle):
-    return _identity_from_tokens_text(m.bpe_ranks_text(handle), int(m.bpe_n_vocab(handle)) - 1)
+    return _TOKENIZER_NATIVE.tokenizer_public_call('identity_handle', (handle,), _TOKENIZER_CONTEXT)
 
 
 def _native(fn, *args, prefix="mojolearn: "):
@@ -425,17 +423,7 @@ class BpeTokenizer:
         `data` cut into documents by the corpus rule, each encoded alone.
         Returns `(ids int32 array, {point: id offset}, n_documents, max_id,
         ids_above_255)`."""
-        n = len(data)
-        pts = array.array("q", points)
-        ids = array.array("i", bytes(4 * max(n, 1)))
-        bounds = array.array("q", bytes(8 * max(len(pts), 1)))
-        stats = array.array("q", bytes(24))
-        total = int(_native(self._m.bpe_encode_corpus, self._handle,
-                            [_ro(data, "corpus"), addr_ro(pts, name="points"), addr(ids, name="ids"),
-                             addr(bounds, name="bounds"), addr(stats, name="stats")],
-                            [n, len(pts), int(document_bytes), n]))
-        del ids[total:]
-        return ids, dict(zip(points, bounds)), int(stats[0]), int(stats[1]), int(stats[2])
+        return _TOKENIZER_NATIVE.tokenizer_public_call('encode_corpus', (self, data, points, document_bytes), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ decode
 
@@ -651,79 +639,31 @@ class BpeVocabularyTrainer:
 def _native_trainer(required):
     """The binding when it exports `bpe_train`, else None (or the reason,
     raised, when `required`)."""
-    try:
-        module = _backend.load_host_module(_EXTENSION)  # cpu-route: tokenizer host binding module loaded once by load_host_module (vocabulary training on text)
-    except (ImportError, AttributeError) as exc:
-        if required:
-            raise ImportError(f"mojolearn: backend='mojo' needs the tokenizer host binding: {exc}") from exc
-        return None
-    if not all(hasattr(module, n) for n in ("bpe_train", "bpe_trained_sizes", "bpe_trained_copy")):  # glue: checks three trainer binding entries
-        if required:
-            raise ImportError("mojolearn: backend='mojo': this tokenizer binding predates bpe_train; rebuild it")
-        return None
-    return module
+    return _TOKENIZER_NATIVE.tokenizer_public_call('native_trainer', (required,), _TOKENIZER_CONTEXT)
 
 
 def _train_native(module, raws, vocab_size, min_frequency, break_ties_high):
     """`(tokens, merges, stats)` from the Mojo trainer: one crossing in (the
     documents back to back with int64 lengths), one out (the token bytes,
     lengths and merge ids)."""
-    text, lengths = _blob(raws, "every document")
-    n = len(text)
-    handle = _native(module.bpe_train, addr_ro(text, name="documents") if n else 0,
-                     addr_ro(lengths, name="lengths"),
-                     [len(raws), n, int(vocab_size), int(min_frequency), bool(break_ties_high)])
-    return _read_trained(module, handle, vocab_size, min_frequency)
+    return _TOKENIZER_NATIVE.tokenizer_public_call('train_native', (module, raws, vocab_size, min_frequency, break_ties_high), _TOKENIZER_CONTEXT)
 
 
 def _read_trained(module, handle, vocab_size, min_frequency):
-    n_tokens, arena_bytes, n_merges, n_ties, n_groups = (int(x) for x in module.bpe_trained_sizes(handle))  # glue: unpacks five trainer sizes
-    arena = bytearray(max(arena_bytes, 1))
-    lengths = array.array("q", [0]) * n_tokens
-    left = array.array("q", [0]) * max(n_merges, 1)
-    right = array.array("q", [0]) * max(n_merges, 1)
-    module.bpe_trained_copy(handle, addr(arena, name="arena"), addr(lengths, name="lengths"),
-                            addr(left, name="merge_left"), addr(right, name="merge_right"))
-    # The result as the public shape: token bytes by rank, merges as
-    # (left, right, new) ids.
-    tokens, at = [], 0
-    for m in lengths:  # glue: splits the native trained token arena (lengths-sized: trained token lengths)
-        tokens.append(bytes(arena[at:at + m]))
-        at += m
-    merges = list(zip(left[:n_merges], right[:n_merges], range(256, 256 + n_merges)))
-    stats = {
-        "n_tokens": n_tokens,
-        "n_merges": n_merges,
-        "n_groups": n_groups,
-        "n_ties_broken": n_ties,
-        "tie_break": _bpe_trainer.TIE_BREAK,
-        "vocab_size": vocab_size,
-        "min_frequency": min_frequency,
-    }
-    return tokens, merges, stats
+    return _TOKENIZER_NATIVE.tokenizer_public_call('read_trained', (module, handle, vocab_size, min_frequency), _TOKENIZER_CONTEXT)
 
 
 def _train_corpus(data, points, lo, hi, document_bytes, vocab_size, min_frequency):
     """`lm_corpus`'s vocabulary: the documents of `data[lo:hi]` (cut by the
     corpus rule in Mojo, `bpe_train_corpus`) trained in the same call.
     `points` are the corpus's sorted split points."""
-    module = _native_trainer(required=True)
-    pts = array.array("q", points)
-    n = len(data)
-    handle = _native(module.bpe_train_corpus, [_ro(data, "corpus"), _ro(pts, "points")],
-                     [n, len(pts), int(lo), int(hi), int(document_bytes), int(vocab_size), int(min_frequency),
-                      bool(_bpe_trainer.sabotaged())])
-    tokens, merges, stats = _read_trained(module, handle, vocab_size, min_frequency)
-    stats["backend"] = "mojo"
-    return TrainedBpeVocabulary(tokens, merges, stats)
+    return _TOKENIZER_NATIVE.tokenizer_public_call('train_corpus', (data, points, lo, hi, document_bytes, vocab_size, min_frequency), _TOKENIZER_CONTEXT)
 
 
 def _gather_rows(ids_all, out, batch, length, lo, modulus, base):
     """`out[b] = ids_all[lo + (base + b*length) % modulus : + length + 1]`
     for every row b, in one binding call (int32 buffers by address)."""
-    m = _binding()
-    return _native(m.tokens_gather_rows, [addr_ro(ids_all, name="ids"), addr(out, name="out")],
-                   [int(ids_all.size), int(batch), int(length), int(lo), int(modulus), int(base)])
+    return _TOKENIZER_NATIVE.tokenizer_public_call('gather_rows', (ids_all, out, batch, length, lo, modulus, base), _TOKENIZER_CONTEXT)
 
 
 #: Renamed classes still importable under their old name, {old: new}.
@@ -749,6 +689,8 @@ def __getattr__(name):
 # existing optional route is retained; no Python mode lookup runs per call.
 import _codecs as _tokenizer_codecs
 from ._native_loaded_modules import connect_module as _connect_tokenizer_module
+from ._array import Array as _Array
+from ._native_classical_bridge import _numpy_free_context
 _connect_tokenizer_module("_codecs", _tokenizer_codecs, ("lookup_error",))
 _TOKENIZER_NATIVE = _binding()._module
 _TOKENIZER_FAST = _fast_binding(connect_all=True)
@@ -757,4 +699,5 @@ _TOKENIZER_FAST_ENTRIES = tuple(
     ("bpe_fast_load", "bpe_encode_batch", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy"))
 _TOKENIZER_CONTEXT = (BpeTokenizer, TrainedBpeVocabulary, BpeVocabularyTrainer,
                       _TOKENIZER_NATIVE, _TOKENIZER_FAST, _TOKENIZER_FAST_ENTRIES,
-                      vars(_backend))
+                      vars(_backend), _numpy_free_context())
+_TOKENIZER_NATIVE.tokenizer_public_call("connect_bpe", (), _TOKENIZER_CONTEXT)

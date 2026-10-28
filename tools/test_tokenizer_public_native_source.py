@@ -84,6 +84,41 @@ class TokenizerPublicSource(unittest.TestCase):
         connection = (ROOT / "python/mojolearn/models/tokenizer.py").read_text()
         self.assertIn('tokenizer_public_call("connect_vocab", (), _TOKENIZER_CONTEXT)', connection)
 
+    def test_corpus_helpers_have_complete_native_boundaries(self):
+        expected = {"_identity_from_tokens_text", "_identity_of_ranks_file", "_identity_of_handle",
+                    "_native_trainer", "_train_native", "_read_trained", "_train_corpus",
+                    "_gather_rows", "_encode_corpus"}
+        tree = ast.parse((ROOT / "python/mojolearn/tokenizer.py").read_text())
+        found = set()
+        for method in ast.walk(tree):
+            if not isinstance(method, ast.FunctionDef) or method.name not in expected:
+                continue
+            body = method.body
+            if isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                body = body[1:]
+            self.assertEqual(len(body), 1, method.name)
+            self.assertIsInstance(body[0], ast.Return)
+            calls = [node for node in ast.walk(body[0]) if isinstance(node, ast.Call)]
+            self.assertEqual(len(calls), 1, method.name)
+            self.assertEqual(calls[0].func.attr, "tokenizer_public_call")
+            found.add(method.name)
+        self.assertEqual(found, expected)
+
+    def test_corpus_native_storage_and_original_typed_algorithms_are_preserved(self):
+        source = NATIVE.read_text()
+        corpus = source.split("def tokenizer_bpe_identity_file(", 1)[1].split("def tokenizer_public_call(", 1)[0]
+        for retained in ("bpe_encode_corpus_into(owner[]", "bpe_train_corpus_fill(handle,",
+                         "tokens_gather_rows_into(src, dst,", 'native_array_zeros("i", total)',
+                         'neural_array_snapshot(ids_all, context)', 'neural_array_snapshot(output, context)',
+                         '"mojolearn.bpe-trainer.v1"', 'PyUnicode_AsASCIIString'):
+            self.assertIn(retained, corpus)
+        for forbidden in ("hashlib", 'Python.import_module', 'py_call(module.', 'py_call(native_loaded_module("array").array',
+                          "tokenizer._m", "vocabulary.render", "source.__buffer__"):
+            self.assertNotIn(forbidden, corpus)
+        typed = corpus.split("def tokenizer_gather_rows_native(", 1)[1].split("def tokenizer_gather_rows(", 1)[0]
+        self.assertNotIn("PythonObject", typed)
+        self.assertNotIn("py_call", typed)
+
 
 if __name__ == "__main__":
     unittest.main()

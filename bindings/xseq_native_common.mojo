@@ -11,6 +11,7 @@ order and with the same arguments, as the Python bodies it replaces.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.sequential_admission import _one_of
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -257,16 +258,32 @@ struct XseqStream(Movable):
 
     def __init__(out self, random_state: PythonObject, context: PythonObject) raises:
         var b = native_loaded_module("builtins")
-        var word: PythonObject
+        ref cpy = Python().cpython()
         if random_state is None:
-            # `secrets.randbits(64)`: eight bytes of the OS generator
-            var raw = py_call(context["os_urandom"], 8)
-            word = py_call(py_call(b.getattr, b.int, "from_bytes"), raw, "little")
+            # Native OS entropy entry, with byte ownership held through decoding.
+            var raw = py_call(native_loaded_module("os").urandom, 8)
+            if py_type(raw) is not b.bytes or len(raw) != 8:
+                raise Error("RuntimeError: OS entropy must return eight bytes")
+            var address = cpy.lib.get_function[Int]("PyBytes_AsString")(raw._obj_ptr)
+            if address == 0:
+                raise cpy.unsafe_get_error()
+            var ptr = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
+            self.seed = 0
+            for i in range(8):  # small-loop(one seed word from native entropy)
+                self.seed |= UInt64(ptr[i]) << UInt64(8 * i)
+            _ = raw
         else:
-            word = py_call_typed(b.int, random_state)
-        var low = Int(py=word.__and__(PythonObject(4294967295)))
-        var high = Int(py=(word.__rshift__(PythonObject(32))).__and__(PythonObject(4294967295)))
-        self.seed = (UInt64(high) << 32) | UInt64(low)
+            # Admit exact built-in/NumPy scalars before the native int conversion;
+            # user __int__/bitwise methods never participate in this operation.
+            var cls = py_type(random_state)
+            if (cls is not b.int and cls is not b.float and cls is not b.bool
+                    and cls is not b.str and cls is not b.bytes and cls is not b.bytearray
+                    and not _one_of(cls, context["scalar_types"])):
+                raise Error("TypeError: random_state requires a native scalar, without conversion hooks")
+            var word = py_call_typed(b.int, random_state)
+            self.seed = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLongMask")(word._obj_ptr)
+            if cpy.PyErr_Occurred():
+                raise cpy.unsafe_get_error()
         self.offset = 0
 
     def fill_uniform(mut self, context: PythonObject, address: PythonObject, n: Int, low: Float64, high: Float64) raises:

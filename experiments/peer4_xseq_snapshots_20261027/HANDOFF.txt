@@ -1,0 +1,49 @@
+Stable recurrent/MLP public input snapshots — 2026-10-27
+
+Branch: lane/peer4-xseq-boundaries-20261027
+Follows admission/layout commit b85896fcf3.
+
+Changes
+- The native public lifecycle creates an exact ndarray's private native view
+  before reading its dtype, shape, strides or pointer. This view has independent
+  metadata and retains storage; exact-type admission prevents ndarray subclass
+  finalize callbacks. Array/buffer/numeric-sequence providers are admitted and
+  converted before receiving the same private header contract.
+- The lifecycle retains the original argument tuple through finish, including
+  original owners even when NumPy collapses a view's base chain. Original X is
+  still the feature-name provenance source; numerical validation, casts and
+  execution use only prepared private views.
+- Numeric targets are prepared once before target-shape and finite checks.
+  Column reshaping reuses that captured target, avoiding a second preparation
+  from source_y. Score buffers and native list/tuple argument containers are
+  similarly snapshotted. Nested lifecycle calls receive prepared inputs too.
+- Fitted MLP weights/biases and recurrent params use these private input headers
+  before dtype conversion, layout validation and packing. Downstream xseq_f32
+  reads captured private metadata rather than caller-owned ndarray metadata.
+- Label encode/decode implementation remains the parent's separate shared
+  native-helper work; no changes to xseq_labels/xseq_take in this branch.
+- Move the previous multiline fitted-state loop annotation to its first line,
+  as required by no_compute_in_shells. The initial b858 push was refused solely
+  for that comment placement. All rejection output is retained in push.log.
+
+Compilation and source provenance
+- compile.json records the affected selected-xseq-dispatcher CPU/identical
+  compile, O0, 10 compiler workers. It compiles this native lifecycle and its
+  RNN/MLP callers plus transitive score/state/forecast owners. The fixture and
+  full command are recorded; no numerical entry is dynamically loaded/run.
+- Complete output, binary, exact compiled source bytes/manifest and hashes:
+  ~/mojolearn-evidence/peer4-xseq-boundaries-20261027/attempt3/.
+- The loop comment is moved after compilation. The exact compiled file is
+  retained as compiled-xseq_public_lifecycle_pyapi.mojo and included under its
+  original path in source-bytes.tgz. compile.json records both before/after
+  hashes and identifies the comment-only change. No execution-relevant source
+  changed after the successful compile; a duplicate build is not needed for
+  the source-guard annotation repair.
+- Final push guards retain complete output in push-final.log in the evidence
+  root. The first rejected push log remains untouched.
+
+Limits
+No runtime, identity, GPU or performance checks were executed. Dynamic numerical
+kernels and the full tokenizer host are outside this compile fixture. Private
+view lifetime/layout behavior has source and compilation evidence only; it must
+not be reported as tested runtime behavior or bitwise identity.

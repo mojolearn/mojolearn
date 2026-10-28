@@ -1,0 +1,17 @@
+Static provider boundary refresh,2026-10-28
+Source20ab53ec02ff58a34146568a2105994a2b66605e; HEAD unchanged during scan.
+3814 endpoints ->1834 implementation groups:1452 native_boundary,
+74 prohibited_source,293 unresolved,11 allowed_tag_metadata,4 refusal_only.
+Prohibited-source flags span24 files; every file has an owner in COVERAGE_OWNERS.tsv.
+The prior inventory flagged386 groups across59 files. These are conservative
+source classifications, not a runtime defect count or proof of compliance.
+Native-boundary groups still require transitive review; installed replacements
+can make original bodies unreachable. No product runtime was imported/executed.
+No baseline was relaxed and no runtime verification campaign was run.
+Root assigned live shared Array/backend/profile/mode paths to Peer4. Program
+and imported-program unresolved classifications stay with their existing
+Program/Peer3 owners; decomposition/prep/linear/spectral unresolved bodies stay
+with their owning families. Source-less unresolved rows need later explicit
+source/installed mapping and are not silently admitted.
+Full raw inventory/worklist/logs remain on the Mac; summary.json records
+paths/sizes/hashes. Existing historical inventory is preserved unchanged.

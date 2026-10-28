@@ -12,6 +12,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from checks.numerics import NUMERIC_IDENTICAL
@@ -63,11 +64,40 @@ def _standalone_record_fields(model: PythonObject) raises -> PythonObject:
     return _native_record_fields(model)
 
 
+def _native_entry_fields(entries: PythonObject) raises -> PythonObject:
+    # Exact connected modules/namespaces use native storage, never getattr or
+    # module __getattr__. Check keys before any string dictionary lookup.
+    var types = native_loaded_module("types")
+    var bi = native_loaded_module("builtins")
+    ref cpy = Python().cpython()
+    var fields = PythonObject(None)
+    if py_type(entries) is types.ModuleType:
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(entries._obj_ptr)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
+    elif py_type(entries) is types.SimpleNamespace:
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
+        if not raw:
+            raise cpy.unsafe_get_error()
+        fields = PythonObject(from_owned=raw)
+    else:
+        raise Error("TypeError: native binding entries require a connected module or namespace")
+    var keys = py_call(bi.list, fields.keys())
+    for i in range(len(keys)):  # small-loop(native binding record field names before keyed reads)
+        if py_type(keys[i]) is not bi.str:
+            raise Error("TypeError: native binding entries require ordinary string keys")
+    return fields
+
+
+def _native_has_entry(entries: PythonObject, name: String) raises -> Bool:
+    return py_contains(_native_entry_fields(entries), name)
+
+
 def _native_function(module: PythonObject, name: String) raises -> PythonObject:
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var entry = py_call(g[].bi.getattr, module, name)
-    if py_type(entry) is not py_type(g[].bi.len):
-        raise Error("CausalLM: " + name + " must be a compiled native extension entry")
+    var entry = py_get(_native_entry_fields(module), name)
+    if py_type(entry) is not py_type(native_loaded_module("builtins").len):
+        raise Error("TypeError: CausalLM " + name + " must be a compiled native extension entry")
     return entry
 
 

@@ -19,6 +19,7 @@
 #   `_metrics_run`, the one native call `_run` made); the result words read
 #   back from the arena as `prog.ints` / `prog.words` read them.
 from std.memory import memcpy, bitcast
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
 from bindings.metrics_native_inputs import metric_shape, metric_flatten
 from bindings.classical_pandas import classical_admit_value
@@ -140,10 +141,10 @@ def mc_undefined(message: String, context: PythonObject) raises:
 
 
 def mc_entry(binding: PythonObject, name: String) raises -> PythonObject:
-    """The entry `name` of the metrics binding the shell resolved for the
-    call's numeric mode (`_get_binding(numeric_mode)`); its by-name refusal
-    is raised unchanged."""
-    return family_call(mc_b().getattr, binding, PythonObject(name))
+    # Exact module-dictionary lookup refuses Python replacements and module
+    # __getattr__ hooks before a numerical entry can be called.
+    return neural_descriptor_entry(binding, name)
+
 
 
 def mc_base(name: String, context: PythonObject) raises -> PythonObject:
@@ -152,7 +153,10 @@ def mc_base(name: String, context: PythonObject) raises -> PythonObject:
     var entries = context["family_mcls_labels"]
     if py_type(entries) is mc_b().str:
         raise Error(String(entries))
-    return entries[PythonObject(name)]
+    var entry = entries[PythonObject(name)]
+    if py_type(entry) is not context["family_builtin_type"]:
+        raise Error("TypeError: metric label preparation requires a compiled entry")
+    return entry
 
 
 def mc_i32_array(values: PythonObject, context: PythonObject) raises -> PythonObject:

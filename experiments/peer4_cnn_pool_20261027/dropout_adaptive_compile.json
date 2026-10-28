@@ -1,0 +1,59 @@
+{
+  "exit_code": 0,
+  "seconds": 74.13354429206811,
+  "command": [
+    "/Users/andrewhendel/.pixi/bin/pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-pool",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-pool/bindings",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-peer4-cnn-pool/experiments/peer4_cnn_pool_20261027/compile.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-5/pool_compile.so"
+  ],
+  "cores": 10,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "runtime_executed": false,
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-5/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-5/source_manifest.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-5/source_bytes.tgz",
+  "scope": "Mac CPU column; xcnn_pool_layers all branches including Dropout2d and AdaptivePool lifecycle/state/backward plus native index casts; no execution",
+  "artifact_sha256": "47eab0a75c83fc9bc75857a4013947091f53c5cf4e2075c836c476dc35a1e448",
+  "source_archive_sha256": "0594ab7f1b956cf1aa75017a04ce0eaf179b21cf054a95b514cd095881a63245",
+  "base_commit": "ae297a075ef9fd38909dad8ddf454d2b126de435",
+  "pending": [
+    "Parent common DeviceTensor, entry selection, ndarray admission, output reshape/host copy repairs remain separate",
+    "No runtime, GPU compilation, within-release identity or benchmark results",
+    "Parent dispatcher still invokes xcnn_numpy before lifecycle dispatch; constructor optional-dependency behavior belongs to parent shared admission review"
+  ],
+  "prior_attempts": [
+    {
+      "attempt": 4,
+      "exit_code": 0,
+      "scope": "Before passive boolean setting preservation",
+      "path": "/Users/andrewhendel/mojolearn-evidence/peer4-cnn-pool-20261027/attempt-4"
+    }
+  ]
+}

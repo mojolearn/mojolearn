@@ -385,7 +385,7 @@ def accuracy_score(
     ...                        np.array([0, 1, 0, 0], dtype=np.int32))
     0.75
     """
-    return _NATIVE(None, "family_mcls_accuracy", (_get_binding(numeric_mode), y_true, y_pred, normalize, sample_weight,
+    return _NATIVE(None, "family_mcls_accuracy", (None, y_true, y_pred, normalize, sample_weight,
                                                    numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -416,7 +416,7 @@ def rand_score(labels_true, labels_pred):
     >>> score = metrics.rand_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                            np.array([1, 1, 0, 0], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_rand", (_get_binding(), labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_mcls_rand", (None, labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::adjusted_rand_index`, the int32
@@ -450,7 +450,7 @@ def adjusted_rand_score(labels_true, labels_pred):
     >>> a = rng.integers(0, 4, 1000).astype(np.int32)
     >>> score = metrics.adjusted_rand_score(a, a)
     """
-    return _NATIVE(None, "family_mcls_adjusted_rand", (_get_binding(), labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_mcls_adjusted_rand", (None, labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::entropy` (cuML `entropy.cu`, RAFT
@@ -494,7 +494,7 @@ def entropy(clustering, *, base=None):
     >>> from mojolearn import metrics
     >>> h = metrics.entropy(np.array([0, 0, 1, 1], dtype=np.int32), base=2)
     """
-    return _NATIVE(None, "family_mcls_entropy", (_get_binding(), clustering, base), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_mcls_entropy", (None, clustering, base), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::mutual_info_score` (DEVIATIONS
@@ -529,7 +529,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     >>> mi = metrics.mutual_info_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_mutual_info", (_get_binding(), labels_true, labels_pred, contingency),
+    return _NATIVE(None, "family_mcls_mutual_info", (None, labels_true, labels_pred, contingency),
                    _NATIVE_CONTEXT)
 
 
@@ -566,7 +566,7 @@ def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
     >>> score = metrics.fowlkes_mallows_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                       np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_fowlkes_mallows", (_get_binding(), labels_true, labels_pred, sparse),
+    return _NATIVE(None, "family_mcls_fowlkes_mallows", (None, labels_true, labels_pred, sparse),
                    _NATIVE_CONTEXT)
 
 
@@ -594,7 +594,7 @@ def homogeneity_score(labels_true, labels_pred):
     >>> h = metrics.homogeneity_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                               np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_homogeneity", (_get_binding(), labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_mcls_homogeneity", (None, labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::completeness_score`, which RAFT
@@ -626,7 +626,7 @@ def completeness_score(labels_true, labels_pred):
     >>> c = metrics.completeness_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_completeness", (_get_binding(), labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_mcls_completeness", (None, labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer note: backed by `ML::Metrics::v_measure` (cuML `v_measure.cu`).
@@ -655,7 +655,7 @@ def v_measure_score(labels_true, labels_pred, *, beta=1.0):
     >>> v = metrics.v_measure_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                             np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_v_measure", (_get_binding(), labels_true, labels_pred, beta), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_mcls_v_measure", (None, labels_true, labels_pred, beta), _NATIVE_CONTEXT)
 
 
 def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
@@ -684,7 +684,7 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
     >>> h, c, v = metrics.homogeneity_completeness_v_measure(
     ...     np.array([0, 0, 1, 1], dtype=np.int32), np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_hcv", (_get_binding(), labels_true, labels_pred, beta), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_mcls_hcv", (None, labels_true, labels_pred, beta), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -753,7 +753,7 @@ def r2_score(
     >>> pred = y + rng.normal(0, 0.1, 1000).astype(np.float32)
     >>> r2 = metrics.r2_score(y, pred)
     """
-    return _NATIVE(None, "family_mcls_r2", (_get_binding(numeric_mode), y_true, y_pred, sample_weight, multioutput,
+    return _NATIVE(None, "family_mcls_r2", (None, y_true, y_pred, sample_weight, multioutput,
                                            force_finite, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -803,7 +803,7 @@ def mean_squared_error(
     >>> metrics.mean_squared_error(y, pred)
     0.375
     """
-    return _NATIVE(None, "family_mcls_regression_error", (_get_binding(numeric_mode), "mean_squared_error", y_true,
+    return _NATIVE(None, "family_mcls_regression_error", (None, "mean_squared_error", y_true,
                    y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -843,7 +843,7 @@ def mean_absolute_error(
     >>> metrics.mean_absolute_error(y, pred)
     0.5
     """
-    return _NATIVE(None, "family_mcls_regression_error", (_get_binding(numeric_mode), "mean_absolute_error", y_true,
+    return _NATIVE(None, "family_mcls_regression_error", (None, "mean_absolute_error", y_true,
                    y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -883,7 +883,7 @@ def root_mean_squared_error(
     >>> pred = np.array([2.5, 0.0, 2.0, 8.0], dtype=np.float32)
     >>> rmse = metrics.root_mean_squared_error(y, pred)
     """
-    return _NATIVE(None, "family_mcls_regression_error", (_get_binding(numeric_mode), "root_mean_squared_error",
+    return _NATIVE(None, "family_mcls_regression_error", (None, "root_mean_squared_error",
                    y_true, y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -919,7 +919,7 @@ def kl_divergence(P, Q):
     >>> Q = np.array([0.4, 0.4, 0.2], dtype=np.float32)
     >>> kl = metrics.kl_divergence(P, Q)
     """
-    return _NATIVE(None, "family_mcls_kl", (_get_binding(), P, Q), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_mcls_kl", (None, P, Q), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -983,7 +983,7 @@ def silhouette_score(
     >>> labels = rng.integers(0, 4, 1000).astype(np.int32)
     >>> s = metrics.silhouette_score(X, labels)
     """
-    return _NATIVE(None, "family_mcls_silhouette_score", (_get_binding(), X, labels, metric, sample_size, random_state,
+    return _NATIVE(None, "family_mcls_silhouette_score", (None, X, labels, metric, sample_size, random_state,
                                                            chunksize), _NATIVE_CONTEXT)
 
 
@@ -1022,7 +1022,7 @@ def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None):
     >>> labels = rng.integers(0, 4, 1000).astype(np.int32)
     >>> s = metrics.silhouette_samples(X, labels)
     """
-    return _NATIVE(None, "family_mcls_silhouette_samples", (_get_binding(), X, labels, metric, chunksize),
+    return _NATIVE(None, "family_mcls_silhouette_samples", (None, X, labels, metric, chunksize),
                    _NATIVE_CONTEXT)
 
 
@@ -1089,7 +1089,7 @@ def trustworthiness(
     >>> X = rng.random((1000, 8), dtype=np.float32)
     >>> t = metrics.trustworthiness(X, X[:, :2], n_neighbors=5)
     """
-    return _NATIVE(None, "family_mcls_trustworthiness", (_get_binding(), X, X_embedded, n_neighbors, metric,
+    return _NATIVE(None, "family_mcls_trustworthiness", (None, X, X_embedded, n_neighbors, metric,
                                                           batch_size), _NATIVE_CONTEXT)
 
 
@@ -1349,7 +1349,7 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     >>> s = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
     >>> auc = metrics.roc_auc_score(y, s)
     """
-    return _NATIVE(None, "family_mcls_roc_auc", (_get_binding(numeric_mode), y_true, y_score, average, sample_weight,
+    return _NATIVE(None, "family_mcls_roc_auc", (None, y_true, y_score, average, sample_weight,
                                                   max_fpr, multi_class, labels, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1405,7 +1405,7 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
     >>> s = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
     >>> precision, recall, thresholds = metrics.precision_recall_curve(y, s)
     """
-    return _NATIVE(None, "family_mcls_pr_curve", (_get_binding(numeric_mode), y_true, y_score, pos_label, sample_weight,
+    return _NATIVE(None, "family_mcls_pr_curve", (None, y_true, y_score, pos_label, sample_weight,
                                                    drop_intermediate, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1470,7 +1470,7 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
     >>> C = metrics.confusion_matrix(np.array([0, 1, 2, 2], dtype=np.int32),
     ...                              np.array([0, 2, 2, 1], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_confusion", (_get_binding(numeric_mode), y_true, y_pred, labels, sample_weight,
+    return _NATIVE(None, "family_mcls_confusion", (None, y_true, y_pred, labels, sample_weight,
                                                     normalize, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1515,7 +1515,7 @@ def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary
     >>> p = metrics.precision_score(np.array([0, 1, 1, 0], dtype=np.int32),
     ...                             np.array([0, 1, 0, 1], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_prf", (_get_binding(numeric_mode), 0, y_true, y_pred, labels, pos_label, average,
+    return _NATIVE(None, "family_mcls_prf", (None, 0, y_true, y_pred, labels, pos_label, average,
                                               sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1559,7 +1559,7 @@ def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     >>> r = metrics.recall_score(np.array([0, 1, 1, 0], dtype=np.int32),
     ...                          np.array([0, 1, 0, 1], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_prf", (_get_binding(numeric_mode), 1, y_true, y_pred, labels, pos_label, average,
+    return _NATIVE(None, "family_mcls_prf", (None, 1, y_true, y_pred, labels, pos_label, average,
                                               sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1603,7 +1603,7 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     >>> f1 = metrics.f1_score(np.array([0, 1, 1, 0], dtype=np.int32),
     ...                       np.array([0, 1, 0, 1], dtype=np.int32), average='macro')
     """
-    return _NATIVE(None, "family_mcls_prf", (_get_binding(numeric_mode), 2, y_true, y_pred, labels, pos_label, average,
+    return _NATIVE(None, "family_mcls_prf", (None, 2, y_true, y_pred, labels, pos_label, average,
                                               sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1662,3 +1662,4 @@ def _label_entries():
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_mcls_labels=_label_entries())
+_native_family_bridge.connect_bindings("_mojolearn_metrics")

@@ -1,0 +1,105 @@
+Hierarchy operation boundary repair, 2026-10-27
+
+Branch: lane/peer1-hierarchy-native-20261027
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-hierarchy-native-20261027
+Starting local main: f8f1e59cd03facb168cc8ded984a4e2716313fda
+Ownership: python/mojolearn/_hierarchy_impl.py, bindings/cfb_agglo.mojo,
+new dedicated providers/python/hierarchy_{public_lifecycle,connectivity,resident}_pyapi.mojo.
+No shared or other cluster owner edited. The previous neighbor branch is frozen.
+
+Public operations and installed paths
+- mojolearn.AgglomerativeClustering and mojolearn.cluster.AgglomerativeClustering
+  re-export the same _hierarchy_impl class.
+- fit / fit_predict: one family_cfb_agglo_* call with (None, X, y).
+  Native owner admits model/settings, selects connected bindings, validates y,
+  captures one X metadata snapshot, retains exporter owners through execution,
+  tracks fitted state/features, and returns self or finished public labels.
+- predict: native_method marks its fn; available_if still requires the parent
+  shared availability patch before the installed slot is wholly native.
+  Query, fitted reference and label metadata are each retained within the call.
+- __getstate__ / __setstate__: one native call; exact dictionary/key admission;
+  resident handles never enter copied state.
+- Constructor: _native_full_reset_params lists this class and replaces __init__
+  with its native initialization entry. The retained source constructor is not
+  the installed runtime constructor. No unrelated constructor owner edited.
+- save already calls archive_save once. load's source is one host_archive_load
+  call, but _mode._loader still wraps the installed classmethod in Python.
+- Parallel fit_graph continues using its five-argument ABI with the explicitly
+  pinned solver binding; the new native owner retains that internal contract.
+
+Connectivity and resident ownership
+- No connectivity callable is invoked; the native refusal requests an explicit
+  matrix. This implements the no-runtime-Python-callback contract.
+- Dense matrices and exact CSR/CSC/COO/BSR/DIA/DOK/LIL storage are admitted without
+  invoking SciPy methods or input __array__/tocoo/getattr protocols.
+- Sparse entries are copied to the existing COO edge ABI, preserving duplicates
+  and zero-entry behavior instead of summing duplicates in a dense conversion.
+- The one input snapshot feeds validation, routing, dimensions, addresses and
+  prediction-data copies. Caller-owned float32 training data is copied before
+  retention so later caller writes cannot alter the reference set.
+- Dedicated resident helpers admit exact cache schemas and native module entries;
+  they retain the existing optional residency behavior and reference ordering.
+
+Shared patch request, exact scope
+- Parent owns _native_public_attributes.py and public_attributes_native.mojo.
+- Proposed patch saved outside the repo at:
+  /Users/andrewhendel/mojolearn-evidence/peer1-hierarchy-native-20261027/hierarchy-availability-proposal.patch
+- Adds one import-connected AgglomerativeClustering.predict schema and native
+  condition prediction_data truth OR _fit_X is not None, with no callback.
+- Parent's native_method-aware _mode._guard_cpu_training skip is also required.
+  It was already prepared for the neighbor batch; not duplicated here.
+
+Remaining Python / CPython-dispatched paths (family is NOT complete)
+1. Solver numerical call: cfb_agglo._agglo_legacy -> linkage_fit extension entry.
+   Native descriptor export missing in _mojolearn_solver{,_host}.mojo.
+2. General linkage: cfb_agglo._agglo_x -> x_cluster_call extension entry. Numerical
+   run_entry code is native, but CPython dispatch and Python ClusterOut containers
+   remain. Native result-buffer descriptor missing in _mojolearn_x_cluster{,_host}.
+3. Prediction/residency: hierarchy_resident_pyapi -> labeled_reference_prepare,
+   labeled_reference_predict_resident, labeled_reference_predict/release extension
+   entries. Need a descriptor in the estimators host/device bindings with the
+   same native pointer/dimension schema and optional resident capabilities.
+4. Cosine zero-row test uses the existing xn_admit/xn_execute architecture;
+   default execution still uses the extension ABI unless the current candidate
+   descriptor setting is enabled. No new switch or default promotion here.
+5. Admitted primitive scalar conversions/comparisons still use native CPython
+   builtins/NumPy scalar slots in the retained validation code. No custom scalar
+   hooks are admitted; this is still explicit transitive dispatch debt.
+6. Shared scalar/label/feature helpers, archive save/load, archive finalizer and
+   installed parameter/attribute helpers require their own transitive closure
+   qualification. Their source/native markers are not runtime evidence.
+7. Ignored y validation reuses label flattening/shape helpers; those helpers may
+   repeat target metadata. X, query and connectivity operation metadata no longer
+   flows through the old repeated conversion paths.
+8. Installed load retains _mode._loader Python fitted handling. The archive owner
+   already writes _mojolearn_fitted for registered fitted classes; safely skipping
+   the wrapper also requires enforcing its no-Python after-fit callback contract.
+
+Next native provider scope required (root coordination)
+- Dedicated hierarchy native ABI schema/host/device executors could be added
+  without changing arithmetic. Register a descriptor factory in the solver,
+  x_cluster and estimators module builders (six host/device binding files).
+- Solver schema: four output/input addresses + n,d,k,metric,use_knn, invoking the
+  existing hierarchy.estimator.linkage_fit_host or core solver host helper.
+- x_cluster schema: X/aux pointers, lengths, nine integer and two float settings,
+  caller-owned children/labels/distances/scalar outputs; use existing run_entry
+  and copy ClusterOut directly in native code.
+- Estimators schema: existing six reference/query/output pointers and sizes, plus
+  prepare/predict-resident/release variants with optional capability metadata.
+- Remove the extension numerical calls only when these providers are connected;
+  do not label this boundary repair complete because wrappers are one call.
+
+Compile target / evidence
+- Smallest source closure: experiments/provider_hierarchy_20261027/compile_hierarchy.mojo
+  Parent: mojo build -I . -D MOJOLEARN_COLUMN_CPU=1 <stub> -o <evidence-binary>
+  Use the repo-pinned toolchain/environment and parent-coordinated job limit.
+  This is compile-only: the stub's empty arguments are deliberately non-executable.
+- Production affected closure: bindings/build_runtime_classical_host.sh.
+- Native entries: family_cfb_agglo_fit, family_cfb_agglo_fit_predict,
+  family_cfb_agglo_predict, family_cfb_agglo_getstate, family_cfb_agglo_setstate.
+- No compile, runtime, identity, cross-vendor verification or benchmark executed
+  by this lane. Parent requires successful local compile before any main merge.
+- Complete lane logs/evidence:
+  /Users/andrewhendel/mojolearn-evidence/peer1-hierarchy-native-20261027/
+  Source syntax/one-call inventory and git source/push guard status are recorded
+  there. These checks are not runtime or compilation evidence.

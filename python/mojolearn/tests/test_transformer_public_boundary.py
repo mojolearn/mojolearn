@@ -197,3 +197,20 @@ def test_decode_rejects_replaced_session_owners():
     finally:
         session._state = original
         session.discard()
+
+
+def test_budget_aware_tape_retention_and_replay_keep_outputs_and_gradients():
+    block = _block()
+    rng = np.random.default_rng(271)
+    x = rng.normal(0, .01, (1, 2, 16)).astype(np.float32)
+    dy = rng.normal(0, .01, x.shape).astype(np.float32)
+    replay_y, replay = block.forward_with_tape(x, activation_budget_bytes=0)
+    replay_gradients = block.backward_from_tape(replay, dy)
+    retained_y, retained = block.forward_with_tape(x, activation_budget_bytes=536870912)
+    retained_gradients = block.backward_from_tape(retained, dy)
+    assert np.asarray(replay_y).tobytes() == np.asarray(retained_y).tobytes()
+    for name in replay_gradients:
+        assert np.asarray(replay_gradients[name]).tobytes() == np.asarray(retained_gradients[name]).tobytes()
+    # Retention still depends on the established compile-time experiment
+    # policy; the caller budget never promises to override that policy.
+    assert isinstance(retained.retained, bool) and retained.stage_bytes >= 0

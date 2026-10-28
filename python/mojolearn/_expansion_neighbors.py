@@ -34,6 +34,7 @@ from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
 from ._mode import RegressorScoreMixin
 from . import _backend, _native_family_bridge
+from ._native_robust_bridge import native_method as _native_local_method
 from ._metrics_impl import _get_binding as _metrics_binding
 
 # The compiled family owner (bindings/neighbors_native.mojo), connected once
@@ -464,6 +465,7 @@ class LocalOutlierFactor(_XNeighbors):
         self.novelty = novelty
         self.n_jobs = n_jobs
 
+    @_native_local_method
     def fit(self, X, y=None):
         """Fit the model on the training data.
 
@@ -479,9 +481,10 @@ class LocalOutlierFactor(_XNeighbors):
         self : LocalOutlierFactor
             The fitted estimator.
         """
-        return _NATIVE(self, "family_xn_loc_lof_fit", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_loc_lof_fit", (None, X, y), _NATIVE_CONTEXT)
 
     @available_if(lambda self: not self.novelty)
+    @_native_local_method
     def fit_predict(self, X, y=None):
         """Fit the model and label the training samples.
 
@@ -500,13 +503,14 @@ class LocalOutlierFactor(_XNeighbors):
         labels : Array of shape (n_samples,), int64
             -1 for outliers, 1 for inliers.
         """
-        return _NATIVE(self, "family_xn_loc_lof_fit_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_loc_lof_fit_predict", (None, X, y), _NATIVE_CONTEXT)
 
     def _novelty(self, what):
         if not self.novelty:
             raise AttributeError(f"{what} is not available when novelty=False; use fit_predict")
 
     @available_if(lambda self: self.novelty)
+    @_native_local_method
     def score_samples(self, X):
         """Negative local outlier factor of new samples.
 
@@ -522,18 +526,10 @@ class LocalOutlierFactor(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        self._novelty("score_samples")
-        Q = _f32(X)
-        k, nf = self.n_neighbors_, self.n_samples_fit_
-        dist, idx = self._knn(Q, self._fit_X, k, False)
-        nq = Q.shape[0]
-        lrd = _empty_out((nq,), "<f4")
-        self._op("lof_lrd", [(dist, 0), (idx, 0), (self._fit_dist, 0), (lrd, 1)], (k, nq, nf))
-        score = _empty_out((nq,), "<f4")
-        self._op("lof_score", [(idx, 0), (self._lrd, 0), (lrd, 0), (score, 1)], (k, nq, nf))
-        return score
+        return _NATIVE(self, "family_xn_loc_lof_score_samples", (None, X), _NATIVE_CONTEXT)
 
     @available_if(lambda self: self.novelty)
+    @_native_local_method
     def decision_function(self, X):
         """Shifted outlier score of new samples: ``score_samples(X) - offset_``.
 
@@ -551,6 +547,7 @@ class LocalOutlierFactor(_XNeighbors):
         return _NATIVE(self, "family_xn_loc_lof_decision_function", (None, X), _NATIVE_CONTEXT)
 
     @available_if(lambda self: self.novelty)
+    @_native_local_method
     def predict(self, X):
         """Label new samples as inliers or outliers.
 
@@ -639,6 +636,7 @@ class NearestCentroid(_XNeighbors):
         self.shrink_threshold = shrink_threshold
         self.priors = priors
 
+    @_native_local_method
     def fit(self, X, y):
         """Fit the class centroids.
 
@@ -662,6 +660,7 @@ class NearestCentroid(_XNeighbors):
         """
         return _NATIVE(self, "family_xn_loc_nc_fit", (None, X, y), _NATIVE_CONTEXT)
 
+    @_native_local_method
     def predict(self, X):
         """Predict the class of each sample.
 
@@ -680,6 +679,7 @@ class NearestCentroid(_XNeighbors):
         """
         return _NATIVE(self, "family_xn_loc_nc_predict", (None, X), _NATIVE_CONTEXT)
 
+    @_native_local_method
     def decision_function(self, X):
         """Discriminant score of each sample for each class.
 
@@ -712,6 +712,7 @@ class NearestCentroid(_XNeighbors):
                  (Q.shape[0], Q.shape[1], C))
         return out
 
+    @_native_local_method
     def predict_proba(self, X):
         """Class probabilities: the softmax of :meth:`decision_function`.
 
@@ -729,6 +730,7 @@ class NearestCentroid(_XNeighbors):
         """
         return _NATIVE(self, "family_xn_loc_nc_predict_proba", (None, X), _NATIVE_CONTEXT)
 
+    @_native_local_method
     def predict_log_proba(self, X):
         """Log class probabilities: the log-softmax of :meth:`decision_function`.
 
@@ -743,11 +745,9 @@ class NearestCentroid(_XNeighbors):
         -------
         log_proba : Array of shape (n_queries, n_classes), float32
         """
-        dec = self._decision_matrix(X)
-        out = empty(dec.shape, "<f4")
-        self._op("log_softmax", [(dec, 0), (out, 1)], dec.shape)
-        return out
+        return _NATIVE(self, "family_xn_loc_nc_predict_log_proba", (None, X), _NATIVE_CONTEXT)
 
+    @_native_local_method
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of :meth:`predict` on the given data.
 
@@ -1247,7 +1247,7 @@ class PolynomialCountSketch(_XNeighbors):
             If ``degree`` or ``n_components`` is below 1, or ``random_state`` is
             not an int, a numpy RandomState or None.
         """
-        return _NATIVE(self, "family_xn_pcs_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_pcs_fit", (None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Map X to the sketched feature space.
@@ -1262,7 +1262,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_pcs_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_pcs_transform", (None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1278,7 +1278,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_pcs_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_pcs_fit_transform", (None, X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``polynomialcountsketch0``, ``polynomialcountsketch1``, ...
@@ -1914,6 +1914,7 @@ class KNNImputer(_XNeighbors):
             X = out
         return X
 
+    @_native_local_method
     def fit(self, X, y=None):
         """Store the training data used as donors.
 
@@ -1929,8 +1930,9 @@ class KNNImputer(_XNeighbors):
         self : KNNImputer
             The fitted imputer.
         """
-        return _NATIVE(self, "family_xn_loc_imp_fit", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_loc_imp_fit", (None, X, y), _NATIVE_CONTEXT)
 
+    @_native_local_method
     def transform(self, X):
         """Impute the missing values of X.
 
@@ -1949,6 +1951,7 @@ class KNNImputer(_XNeighbors):
         """
         return _NATIVE(self, "family_xn_loc_imp_transform", (None, X), _NATIVE_CONTEXT)
 
+    @_native_local_method
     def fit_transform(self, X, y=None):
         """Fit to X, then impute X: ``fit(X).transform(X)``.
 
@@ -1963,7 +1966,7 @@ class KNNImputer(_XNeighbors):
         -------
         X_imputed : Array of shape (n_samples, n_features_out), float32
         """
-        return _NATIVE(self, "family_xn_loc_imp_fit_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_loc_imp_fit_transform", (None, X, y), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names.
