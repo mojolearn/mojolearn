@@ -644,6 +644,10 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     _BINDING = "_mojolearn_gp"
 
+    # The native public owner replaces _mode lifecycle/output decorators.
+    # The shared full-reset installer still owns the field-only constructor.
+    _mojolearn_native_public = True
+
     def __init__(
         self,
         kernel=None,
@@ -655,6 +659,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         copy_X_train=True,
         n_targets=None,
         random_state=None,
+        numeric_mode=None,
     ):
         # Stored verbatim, as scikit-learn requires; `_validate_params`
         # checks them when `fit` (or `load`) runs.
@@ -666,6 +671,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         self.copy_X_train = copy_X_train
         self.n_targets = n_targets
         self.random_state = random_state
+        self.numeric_mode = numeric_mode
 
     # -- the binding, and the tier it really is -----------------------------
 
