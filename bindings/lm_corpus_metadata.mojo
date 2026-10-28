@@ -5,10 +5,11 @@ from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.neural_block_admission import neural_array_slots, neural_array_snapshot
+from bindings.neural_block_admission import neural_array_slots, neural_array_snapshot, neural_native_scalar
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_buffer_address import native_buffer_address
 from bindings.lm_corpus_files import corpus_files_initialize
+from bindings.lm_corpus_scalars import corpus_numeric_base
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, connect_native_mmap_exporter
 
 
@@ -32,7 +33,7 @@ def corpus_context() raises -> PythonObject:
 
 def corpus_connect(args: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
-    if py_type(args) is not bi.tuple or len(args) != 5:
+    if py_type(args) is not bi.tuple or len(args) != 6:
         raise Error("TypeError: corpus connection requires its native classes")
     var prior = CORPUS_CONNECTION.get_or_create_ptr()[].context
     if prior is not None:
@@ -40,6 +41,8 @@ def corpus_connect(args: PythonObject) raises -> PythonObject:
         for i in range(5):  # small-loop(import connection cannot replace retained owner identities)
             if args[i] is not prior[prior_names[i]]:
                 raise Error("TypeError: corpus import connection cannot be replaced")
+        if args[5] is not prior["scalar_connection"]:
+            raise Error("TypeError: corpus scalar admission connection cannot be replaced")
         return PythonObject(None)
     var context = Python.dict()
     var names = Python.tuple("corpus_class", "batches_class", "iterator_class", "array_class", "mmap_class")
@@ -47,6 +50,11 @@ def corpus_connect(args: PythonObject) raises -> PythonObject:
         if py_type(args[i]) is not bi.type:
             raise Error("TypeError: corpus connection classes must have ordinary native type metadata")
         py_setitem(context, names[i], args[i])
+    corpus_dict(args[5])
+    var admission = py_call(bi.dict, args[5])
+    py_setitem(admission, "native_module_type", py_type(bi))
+    py_setitem(context, "scalar_connection", args[5])
+    py_setitem(context, "admission_context", admission)
     py_setitem(context, "array_slots", neural_array_slots(context))
     py_setitem(context, "batch_ids_method", _class_fields(context["batches_class"])["ids"])
     py_setitem(context, "mmap_hooks", corpus_mmap_hooks(context["mmap_class"]))
@@ -60,9 +68,13 @@ def corpus_int(value: PythonObject, name: String, strict: Bool = False) raises -
     var bi = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is not bi.int:
-        if strict or (cls is not bi.float and cls is not bi.bool and cls is not bi.str and cls is not bi.bytes):
+        if strict or (cls is not bi.str and cls is not bi.bytes and not neural_native_scalar(value, corpus_context())):
             raise Error("TypeError: corpus " + name + " requires a native integer; Python conversion hooks are unsupported")
     return Int(py=py_call(bi.int, value))
+
+
+def corpus_batch_base(step: PythonObject, batch: Int, length: Int) raises -> Int:
+    return corpus_numeric_base(step, batch, length, corpus_context())
 
 
 def corpus_dict(value: PythonObject) raises:
