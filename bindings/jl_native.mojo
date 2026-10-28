@@ -15,6 +15,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_type
+from bindings.py_typed_call import typed_python_error
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.jl_scalar_pyapi import jl_scalar
 from x_metrics.epilogue import portable_log_c
@@ -112,7 +113,7 @@ def jl_min_dim(n_samples: PythonObject, eps: PythonObject, context: PythonObject
     ref cpy = Python().cpython()
     var result = cpy.lib.get_function[PyObjectPtr]("PyLong_FromDouble")(bound)
     if not result:
-        raise cpy.unsafe_get_error()
+        raise typed_python_error()
     return PythonObject(from_owned=result)
 
 
