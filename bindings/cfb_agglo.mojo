@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # AgglomerativeClustering public operation owner: native lifecycle, admission,
-# binding selection, preparation and finished results. Solver linkage uses its
-# native descriptor. General x_cluster and resident-reference extension ABI
+# binding selection, preparation and finished results. Solver linkage and the
+# general x_cluster route use native descriptors. Resident-reference numerical
 # calls remain explicit debt before this family can be called complete.
 from std.memory import memcpy
 from std.os import getenv
@@ -15,7 +15,6 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_entry, family_array, family_as_f32,
     family_field, family_is_str, family_f32_snapshot, family_view,
 )
-from bindings.cluster_native import _xc_array
 from bindings.mode_metadata_native import _fields
 from bindings.metrics_native_support import metric_warn
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_metadata_once, array_shape_once
@@ -24,12 +23,12 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit, xn_execute
 from providers.python.hierarchy_public_lifecycle_pyapi import hierarchy_public_begin, hierarchy_public_end, hierarchy_public_finish, hierarchy_public_refusal
 from providers.python.hierarchy_connectivity_pyapi import HierarchyConnectivity, hierarchy_connectivity
+from providers.python.hierarchy_cluster_descriptor_pyapi import hierarchy_cluster_admit, hierarchy_cluster_execute
 from providers.python.hierarchy_resident_pyapi import hierarchy_fresh_holder, hierarchy_mint, hierarchy_reference_labels
 from providers.python.hierarchy_solver_descriptor_pyapi import hierarchy_solver_admit, hierarchy_solver_linkage
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 
-comptime _E_AGGLO = 11
 #: The dense connectivity matrix is `m * m` of cuVS's `int`.
 comptime _PAIRWISE_MAX_ROWS = 46340
 
@@ -212,18 +211,20 @@ def _agglo_x(fields: PythonObject, settings: PythonObject, args: PythonObject, x
         if d == 0:
             raise Error("Cosine affinity cannot be used when X contains zero vectors")
         var zrow = family_array(Python.tuple(n), "<i4", context)
-        xn_execute(args[3], "row_all_zero", Python.list(PythonObject(x_snapshot.source.addr), classical_address(zrow)),
+        var zrow_address = Int(py=classical_address(zrow))
+        xn_execute(args[3], "row_all_zero", Python.list(PythonObject(x_snapshot.source.addr), PythonObject(zrow_address)),
                    Python.list(PythonObject(n), PythonObject(d)), Python.list())
         _ = zrow  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
-        if cfb_any_positive_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(zrow))), n):
+        if cfb_any_positive_i32(FAMILY_I32P(unsafe_from_address=zrow_address), n):
             raise Error("Cosine affinity cannot be used when X contains zero vectors")
         _ = zrow  # keep the Python object alive through the native calls above
     var n_clusters = family_field(settings, "n_clusters")
+    var requested_clusters = 0
     if n_clusters is not None:
-        var k = Int(py=family_call(b.int, n_clusters))
-        if k < 1 or k > n:
-            raise Error("Cannot extract more clusters than samples: " + String(k) + " clusters "
+        requested_clusters = Int(py=family_call(b.int, n_clusters))
+        if requested_clusters < 1 or requested_clusters > n:
+            raise Error("Cannot extract more clusters than samples: " + String(requested_clusters) + " clusters "
                         + "were given for a tree with " + String(n) + " leaves.")
     var connectivity = family_field(settings, "_connectivity")
     var thr = family_field(settings, "distance_threshold")
@@ -236,52 +237,58 @@ def _agglo_x(fields: PythonObject, settings: PythonObject, args: PythonObject, x
             var bound = 0.02 * Float64(n)
             if bound < 100.0:
                 bound = 100.0
-            full = thr is not None or Float64(Int(py=family_call(b.int, n_clusters))) < bound
+            full = thr is not None or Float64(requested_clusters) < bound
         else:
             full = _truth(tree)
-    var n_merges = n - 1 if full else n - Int(py=family_call(b.int, n_clusters))
+    var n_merges = n - 1 if full else n - requested_clusters
     var aux = HierarchyConnectivity(PythonObject(None), PythonObject(None), 0, 0, -1, 0)
     if constrained:
         aux = hierarchy_connectivity(connectivity, n, context)
     var cut = 0
     if full:
-        cut = 1 if thr is not None else Int(py=family_call(b.int, n_clusters))
-    var ip = Python.list(PythonObject(n), PythonObject(d),
-                         context["family_cfb_agglo_linkages"][family_field(settings, "linkage")],
-                         PythonObject(metric), PythonObject(aux.edges), PythonObject(n_merges), PythonObject(aux.mode),
-                         PythonObject(cut), PythonObject(1 if (full and thr is not None) else 0))
-    var fp = Python.list(PythonObject(2.0), family_call(b.float, thr) if thr is not None else PythonObject(0.0))
-    var entry = neural_descriptor_entry(args[2], "x_cluster_call")
-    # The legacy packed extension ABI is still a numerical CPython dispatch.
-    # Keep this explicit until solver/x_cluster publish native descriptors.
-    var result = family_call(entry, PythonObject(_E_AGGLO), PythonObject(x_snapshot.source.addr), PythonObject(x_snapshot.count),
-                             PythonObject(aux.address), PythonObject(aux.count), ip, fp)
-    _ = x
+        cut = 1 if thr is not None else requested_clusters
+    var ip = List[Int](x_snapshot.count, aux.count, n, d,
+                       Int(py=context["family_cfb_agglo_linkages"][family_field(settings, "linkage")]),
+                       metric, aux.edges, n_merges, aux.mode, cut,
+                       1 if (full and thr is not None) else 0)
+    var fp = List[Float64](2.0, Float64(py=family_call(b.float, thr)) if thr is not None else 0.0)
+    var provider = hierarchy_cluster_admit(args[2])
+    # Capture each fresh output address once. The descriptor copies the typed
+    # ClusterOut slots directly; no array.array/result-list extension ABI.
+    var children = family_array(Python.tuple(n_merges, 2), "<i4", context)
+    var labels = family_array(Python.tuple(n), "<i4", context)
+    var distances = family_array(Python.tuple(n_merges), "<f4", context)
+    var children_address = Int(py=classical_address(children))
+    var labels_address = Int(py=classical_address(labels))
+    var distances_address = Int(py=classical_address(distances))
+    var scalars = List[Float64](length=2, fill=Float64(0))
+    hierarchy_cluster_execute(provider,
+        [x_snapshot.source.addr, aux.address, children_address, labels_address,
+         distances_address, Int(scalars.unsafe_ptr())], ip, fp)
+    _ = provider^
+    _ = x_snapshot
     _ = aux^
-    var f = result[0]
-    _ = x  # keep the Python object alive through the native call above
-    var i = result[1]
-    _ = x  # keep the Python object alive through the native call above
-    var sc = result[2]
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, "children_", _xc_array(i[0], Python.tuple(n_merges, 2), "<i4", "i", context))
+    py_setitem(fields, "children_", children)
     py_setitem(fields, "n_leaves_", PythonObject(n))
-    var components = Int(py=family_call(b.int, sc[0]))
+    var components = Int(scalars[0])
     py_setitem(fields, "n_connected_components_", PythonObject(components))
     if constrained and components > 1:
         metric_warn("the number of connected components of the connectivity matrix is " + String(components)
                     + " > 1. Completing it to avoid stopping the tree early.", b.UserWarning, context)
     if thr is not None or Bool(py=family_field(settings, "_compute_distances")):
-        py_setitem(fields, "distances_", _xc_array(f[0], Python.tuple(n_merges), "<f4", "f", context))
+        py_setitem(fields, "distances_", distances)
     else:
         _ = py_call(fields.pop, PythonObject("distances_"), PythonObject(None))
     var clusters = PythonObject(None)
     if thr is not None and full:
-        clusters = family_call(b.int, sc[1])
+        clusters = PythonObject(Int(scalars[1]))
     else:
-        clusters = family_call(b.int, n_clusters)
+        clusters = PythonObject(requested_clusters)
+    _ = scalars^
+    _ = children^
+    _ = distances^
     py_setitem(fields, "n_clusters_", clusters)
-    py_setitem(fields, "labels_", _xc_array(i[1], Python.tuple(n), "<i4", "i", context))
+    py_setitem(fields, "labels_", labels)
     py_setitem(fields, "n_boruvka_rounds_", PythonObject(-1))
     py_setitem(fields, "n_features_in_", PythonObject(d))
     var fit_x = PythonObject(None)
@@ -292,8 +299,8 @@ def _agglo_x(fields: PythonObject, settings: PythonObject, args: PythonObject, x
     _ = x^
     hierarchy_fresh_holder(fields)
     if predicting:
-        var labels = fields["labels_"]
-        hierarchy_mint(fields, args[0], fit_x, labels, Int(py=classical_address(fit_x)), Int(py=classical_address(labels)), n, d)
+        hierarchy_mint(fields, args[0], fit_x, labels, Int(py=classical_address(fit_x)), labels_address, n, d)
+    _ = labels^
 
 
 def _predicts(settings: PythonObject, context: PythonObject) raises -> Bool:
