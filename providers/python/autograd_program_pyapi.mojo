@@ -386,40 +386,6 @@ def _imported_tuple(dims: List[Int]) raises -> PythonObject:
     return py_call(Python.import_module("builtins").tuple, out)
 
 
-def _imported_is_array(a: PythonObject) raises -> Bool:
-    # a NumPy ndarray (subclasses included): read through its own buffer
-    return is_ndarray(a)
-
-
-def _imported_given_dims(a: PythonObject, name: PythonObject) raises -> List[Int]:
-    """The shape the former `np.asarray(x)` had: an ndarray's own; a nested
-    list or tuple's down its first items (rectangularity is checked when its
-    values are read); a number's (a Python or NumPy scalar) (). Another
-    array-like object (a torch tensor, a DataFrame) is refused: the caller
-    converts it to a NumPy array first."""
-    var b = Python.import_module("builtins")
-    var dims = List[Int]()
-    if _imported_is_array(a):
-        var shape = py_call(b.tuple, a.shape)
-        for k in range(len(shape)):  # small-loop(shape: an array's rank): shape metadata, never array elements
-            dims.append(Int(py=shape[k]))
-        return dims^
-    var item = a
-    while Bool(py=py_call(b.isinstance, item, b.list)) or Bool(py=py_call(b.isinstance, item, b.tuple)):  # driver-loop: down a nested sequence's first items (its rank)
-        var n = len(item)
-        dims.append(n)
-        if n == 0 or len(dims) > 8:
-            return dims^
-        item = item[0]
-    var numpy_scalar = String(py=py_type(a).__module__) == "numpy"
-    if len(dims) == 0 and not numpy_scalar and (Bool(py=py_call(b.hasattr, a, "__array__"))
-                                                       or Bool(py=py_call(b.hasattr, a, "__array_interface__"))):
-        raise Error("TypeError: input " + _imported_repr(name) + " must be a NumPy array, a nested list of numbers "
-                    + "or a number, got " + String(py_type(a).__name__) + " (convert it with numpy.asarray, "
-                    + "or .detach().cpu().numpy() for a torch tensor)")
-    return dims^
-
-
 def _imported_session_dims(dims: List[Int]) -> List[Int]:
     # importers/_table.session_shape: a session tensor has at least two axes,
     # a scalar is (1, 1) and a [n] vector (1, n).
@@ -431,46 +397,51 @@ def _imported_session_dims(dims: List[Int]) -> List[Int]:
     return out^
 
 
-def _imported_input(a: PythonObject, dims: List[Int], integer: Bool, what: String) raises -> ProgramInput:
-    """One admitted input as the program reads it: an array by its own
-    buffer (a rank-0 or rank-1 one with the row descriptor of its former
-    reshape view, rank two and above exactly as `array_input`), a nested
-    sequence or number converted once into the session shape."""
+def _imported_capture_input(value: PythonObject, integer: Bool) raises -> Tuple[ProgramInput, List[Int]]:
+    # Exact admission precedes every protocol read. Capture ndarray shape,
+    # strides, dtype and address once, then use only native descriptors.
+    var a = program_native_input(value)
+    var dims = List[Int]()
     var values = List[Float64]()
     var ids = List[Int64]()
-    var sdims = _imported_session_dims(dims)
-    if _imported_is_array(a):
-        if len(dims) >= 2:
-            var parsed = array_input(a, what)
-            if integer and parsed[0].kind != CAST_KIND_SIGNED and parsed[0].kind != CAST_KIND_UNSIGNED:
-                raise Error("TypeError: program input holds ids and must be integers (an integer array)")
-            return ProgramInput(parsed[0], parsed[1], values^, ids^)
-        if Int(py=a.size) == 0:
+    if is_ndarray(a):
+        var shape = a.shape
+        var strides = a.strides
+        var dtype = a.dtype
+        var rank = len(shape)
+        if rank > 8:
+            raise Error("ValueError: tensor rank must be at most 8")
+        for k in range(rank):  # small-loop(rank: admitted ndarray shape)
+            dims.append(Int(py=shape[k]))
+        var sh = ShapeN.of(_imported_session_dims(dims))
+        if sh.count() == 0:
             raise Error("ValueError: input must not be empty")
-        var size = Int(py=a.itemsize)
-        if not Bool(py=a.dtype.isnative):
-            raise Error("TypeError: " + what + " must be in native byte order")
-        var kind: Int
-        try:
-            kind = cast_in_kind(Int(py=a.dtype.num), size, what)
-        except error:
-            raise Error("TypeError: " + String(error))
+        var size = Int(py=dtype.itemsize)
+        if not Bool(py=dtype.isnative):
+            raise Error("TypeError: numeric program input must be in native byte order")
+        var kind = cast_in_kind(Int(py=dtype.num), size, "numeric program input")
         if integer and kind != CAST_KIND_SIGNED and kind != CAST_KIND_UNSIGNED:
             raise Error("TypeError: program input holds ids and must be integers (an integer array)")
-        var cols = sdims[1]
-        var s1 = size if len(dims) == 0 else Int(py=a.strides[0])
-        var src = CastIn(Int(py=a.__array_interface__["data"][0]), kind, size, 1, cols, cols * size, s1)
-        src.check(what)
-        return ProgramInput(src, ShapeN.of(sdims), values^, ids^)
-    var got = List[Int]()
+        var s0 = sh.cols() * size
+        var s1 = size
+        if rank == 1:
+            s1 = Int(py=strides[0])
+        elif rank == 2:
+            s0 = Int(py=strides[0])
+            s1 = Int(py=strides[1])
+        elif rank > 2 and not Bool(py=a.flags.c_contiguous):
+            raise Error("ValueError: tensors above rank two must be C-contiguous")
+        var src = CastIn(Int(py=a.__array_interface__["data"][0]), kind, size, sh.rows(), sh.cols(), s0, s1)
+        src.check("numeric program input")
+        return (ProgramInput(src, sh, values^, ids^), dims^)
     var leaf_depth = -1
-    _sequence_values(a, 0, got, values, ids, integer, leaf_depth)
-    var shape = ShapeN.of(sdims)
+    _sequence_values(a, 0, dims, values, ids, integer, leaf_depth)
+    var sh = ShapeN.of(_imported_session_dims(dims))
     if integer:
-        var id_src = CastIn(Int(ids.unsafe_ptr()), CAST_KIND_SIGNED, 8, shape.rows(), shape.cols(), shape.cols() * 8, 8)
-        return ProgramInput(id_src, shape, values^, ids^)
-    var src = CastIn(Int(values.unsafe_ptr()), CAST_KIND_FLOAT, 8, shape.rows(), shape.cols(), shape.cols() * 8, 8)
-    return ProgramInput(src, shape, values^, ids^)
+        var src = CastIn(Int(ids.unsafe_ptr()), CAST_KIND_SIGNED, 8, sh.rows(), sh.cols(), sh.cols() * 8, 8)
+        return (ProgramInput(src, sh, values^, ids^), dims^)
+    var src = CastIn(Int(values.unsafe_ptr()), CAST_KIND_FLOAT, 8, sh.rows(), sh.cols(), sh.cols() * 8, 8)
+    return (ProgramInput(src, sh, values^, ids^), dims^)
 
 
 def ops_imported_run_py(
@@ -480,6 +451,12 @@ def ops_imported_run_py(
     var metadata = imported_program_snapshot(program)
     var declared = metadata[2]
     var outputs = metadata[3]
+    if (py_type(arrays) is not b.tuple and py_type(arrays) is not b.list) or py_type(named) is not b.dict:
+        raise Error("TypeError: imported inputs require native positional and keyword containers")
+    var keys = py_call(b.list, named)
+    for k in range(len(keys)):  # driver-loop: exact keyword names before hash/comparison
+        if py_type(keys[k]) is not b.str:
+            raise Error("TypeError: imported input names require exact strings")
     var given = arrays
     if len(named) > 0:
         if len(arrays) > 0:
@@ -487,7 +464,6 @@ def ops_imported_run_py(
         var names = Python.list()
         for k in range(len(declared)):  # driver-loop: over the model's declared inputs
             _ = py_call(names.append, declared[k][0])
-        var keys = py_call(b.list, named)
         for k in range(len(keys)):  # driver-loop: over the keyword argument names
             if not py_contains(names, keys[k]):
                 raise Error("ValueError: the model has no input " + _imported_repr(keys[k]) + " (inputs: "
@@ -500,30 +476,23 @@ def ops_imported_run_py(
         given = ordered
     if len(given) != len(declared):
         raise Error("ValueError: the model takes " + String(len(declared)) + " inputs, got " + String(len(given)))
-    # every shape is checked before the program is touched, as before
-    var dims = List[List[Int]]()
-    for k in range(len(declared)):  # driver-loop: over the model's declared inputs
-        var want = List[Int]()
-        var shape = py_call(b.tuple, declared[k][1])
-        for j in range(len(shape)):  # small-loop(shape: a declared input's rank): shape metadata, never array elements
-            want.append(Int(py=shape[j]))
-        var got = _imported_given_dims(given[k], declared[k][0])
-        var same = len(got) == len(want)
-        for j in range(min(len(got), len(want))):  # small-loop(want: a declared input's rank): shape metadata, never array elements
-            same = same and got[j] == want[j]
-        if not same:
-            raise Error("ValueError: input " + _imported_repr(declared[k][0]) + " must have the shape "
-                        + _imported_repr(shape) + ", got " + _imported_repr(_imported_tuple(got)))
-        dims.append(want^)
-    var sid = Int(py=metadata[1]["_id"])
     var request = NativeProgramHostRun()
     imported_host_provider_request(metadata, request, 0)
     ref plan = request.plan
     if len(declared) != plan.program.n_in:
         raise Error("ValueError: this program takes " + String(plan.program.n_in) + " input arrays, got " + String(len(declared)))
     var inputs = List[ProgramInput]()
-    for k in range(len(declared)):  # driver-loop: over input descriptors, owners retained through replay
-        var item = _imported_input(given[k], dims[k], plan.program.in_kinds[k] == PROGRAM_IN_IDS, "numeric program input")
+    for k in range(len(declared)):  # driver-loop: input descriptors captured once before replay
+        var captured = _imported_capture_input(given[k], plan.program.in_kinds[k] == PROGRAM_IN_IDS)
+        var item = captured[0]^
+        var got = captured[1]^
+        var want = declared[k][1]
+        var same = len(got) == len(want)
+        for j in range(min(len(got), len(want))):  # small-loop(want: declared input rank)
+            same = same and got[j] == Int(py=want[j])
+        if not same:
+            raise Error("ValueError: input " + _imported_repr(declared[k][0]) + " must have the shape "
+                        + _imported_repr(want) + ", got " + _imported_repr(_imported_tuple(got)))
         if not same_shape(item.shape, plan.program.in_shapes[k]):
             raise Error("ValueError: input " + String(k) + " must keep its captured shape "
                         + shape_text(plan.program.in_shapes[k]) + "; got " + shape_text(item.shape))
