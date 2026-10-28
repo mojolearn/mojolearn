@@ -1,109 +1,82 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native public operations of the sequence-expansion layers, routed through
-the optimizer native door (bindings/optimizer_native_router.mojo):
-`layer_norm_forward`, `layer_norm_backward` and `LayerNorm.forward`
-(python/mojolearn/_x_sequence_norm.py), and `MoEBlock.forward`
-(python/mojolearn/_x_sequence_moe.py).
-
-The host-array route runs the `_mojolearn_x_sequence` host entry
-(`layer_norm`, `moe_forward`), a resident `SequenceDeviceTensor` the device
-entry (`layer_norm_dev` with the kept statistics, `moe_forward_dev` with the
-block's resident weights), with the same argument words as the Python
-bodies, so no bit moves. The fields the Python `backward` methods and the
-routing properties read (`_x`, `_stats`, `_routing`, `_wdev`) are written
-under the same names.
-"""
+# Whole public LayerNorm operations and the sequence-layer dispatcher. Input
+# shape/storage/ownership are pinned once and reused for admission and execution.
 from std.python import Python, PythonObject
-from bindings.sequence_moe_native import sequence_moe_operation
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.native_loaded_module import native_loaded_module
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
+from bindings.mode_metadata_native import _fields, _class_fields
+from bindings.optimizer_public_door import py_ints, same_shape
 from bindings.optimizer_device_native import device_shape, shape_count
-from bindings.optimizer_admission import opt_scalar, opt_value
-from core.scaler_fit_impl import scaler_fill
-from bindings.optimizer_public_door import TensorView, tensor_view, base_format
-from bindings.sequence_optimizer_native import seq_binding, seq_device, seq_device_get, seq_cast
-from bindings.sequence_device_native import seq_device_make, seq_device_input
-from bindings.classical_arrays import classical_input, classical_typed, classical_address, classical_dtype_str
+from bindings.optimizer_admission import opt_scalar
+from bindings.sequence_optimizer_native import seq_binding
+from bindings.sequence_device_native import seq_device_make
+from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
+from providers.python.sequence_layer_buffer_pyapi import SequenceFloatBuffer, SequenceResidentSnapshot, _array
+from bindings.sequence_moe_native import sequence_moe_operation
+from core.scaler_fit_impl import scaler_fill
 
 
 def _b() raises -> PythonObject:
-    return Python.import_module("builtins")
-
-
-def _text(value: PythonObject) raises -> String:
-    return String(py=py_call(_b().str, value))
-
-
-def _ints(values: List[Int]) raises -> PythonObject:
-    var out = Python.list()
-    for i in range(len(values)):  # driver-loop: over shape words
-        _ = py_call(py_call(_b().getattr, out, "append"), PythonObject(values[i]))
-    return py_call(_b().tuple, out)
-
-
-# ---------------------------------------------------------------- inputs and outputs
-
-def _f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`np.asarray(a)`, float64 refused by name, as C-ordered float32."""
-    var input = context["input_context"]
-    classical_connect_numpy(input)
-    var source = classical_input(value, input, name)
-    if classical_dtype_str(source, input) == "<f8":
-        raise Error("TypeError: " + name + ": float64 is refused; pass float32")
-    var view = TensorView()
-    _ = tensor_view(source, view)
-    if base_format(view.fmt) == "f" and view.itemsize == 4 and view.c_contig:
-        return source
-    return seq_cast(source, context)
-
-
-def _host(shape: List[Int], context: PythonObject) raises -> PythonObject:
-    """A new float32 host array of `shape`."""
-    var input = context["input_context"]
-    classical_connect_numpy(input)
-    return classical_typed(_ints(shape), "<f4", input)
-
-
-def _shape(value: PythonObject, context: PythonObject) raises -> List[Int]:
-    if seq_device(value, context):
-        return device_shape(seq_device_get(value, "shape", context), context)
-    return device_shape(py_call(_b().tuple, value.shape), context)
+    return native_loaded_module("builtins")
 
 
 def _new(entries: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
-    """`SequenceDeviceTensor._new(b, shape)`: an unwritten resident tensor."""
     var handle = py_call_typed(entries["seq_tensor_alloc"], PythonObject(max(1, shape_count(shape))), PythonObject(0))
     return seq_device_make(entries["module"], shape, handle, PythonObject(None), context)
 
 
-def _wrap(entries: PythonObject, array: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`SequenceDeviceTensor._wrap(b, a)`: one upload."""
-    var input = seq_device_input(array, False, context)
-    var shape = device_shape(py_call(_b().tuple, input.shape), context)
-    var n = shape_count(shape)
-    var handle = py_call_typed(entries["seq_tensor_alloc"], PythonObject(max(n, 1)), PythonObject(0))
-    try:
-        if n > 0:
-            _ = py_call_typed(entries["seq_tensor_upload"], handle, classical_address(input), PythonObject(n))
-            _ = input  # keep the Python object alive through the native call above
-    except error:
-        _ = py_call_typed(entries["seq_tensor_free"], handle)
-        raise error^
-    _ = input^
-    return seq_device_make(entries["module"], shape, handle, PythonObject(None), context)
+def _handle(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Only freshly allocated, native-owned outputs are read here.
+    return py_call(context["sequence_device_getters"]["h"], value)
 
 
-def _reshape(value: PythonObject, shape: List[Int]) raises -> PythonObject:
-    return py_call(py_call(_b().getattr, value, "reshape"), _ints(shape))
+struct LayerInput(Movable):
+    var owner: PythonObject
+    var host: Optional[SequenceFloatBuffer]
+    var resident: Optional[SequenceResidentSnapshot]
+    var shape: List[Int]
+    var count: Int
+    var address: Int
+    var handle: PythonObject
+    var entries: PythonObject
+    var device: Bool
+    var absent: Bool
+
+    def __init__(out self, value: PythonObject, context: PythonObject) raises:
+        self.owner = value
+        self.host = None
+        self.resident = None
+        self.shape = List[Int]()
+        self.count = 0
+        self.address = 0
+        self.handle = PythonObject(None)
+        self.entries = PythonObject(None)
+        self.device = False
+        self.absent = value is None
+        if value is None:
+            return
+        if py_type(value) is context["sequence_device_class"]:
+            self.resident = SequenceResidentSnapshot(value, context)
+            self.device = True
+            self.shape = self.resident.value().shape.copy()
+            self.count = self.resident.value().count
+            self.handle = self.resident.value().handle
+            self.entries = self.resident.value().entries
+        else:
+            self.host = SequenceFloatBuffer(value, context)
+            self.owner = self.host.value().array
+            self.shape = self.host.value().shape.copy()
+            self.count = self.host.value().count
+            self.address = self.host.value().address
 
 
-def _addr_or_zero(value: PythonObject) raises -> PythonObject:
-    return PythonObject(0) if value is None else classical_address(value)
-
-
-# ---------------------------------------------------------------- LayerNorm
-
+def _upload(input: LayerInput, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    var output = _new(entries, input.shape, context)
+    if input.count > 0:
+        _ = py_call_typed(entries["seq_tensor_upload"], _handle(output, context), PythonObject(input.address), PythonObject(input.count))
+    return output
 def _norm_shape(normalized_shape: PythonObject, context: PythonObject) raises -> List[Int]:
     opt_scalar(normalized_shape, context)
     var b = _b()
@@ -139,7 +112,13 @@ def _ln_fields(owner: PythonObject, context: PythonObject) raises -> PythonObjec
         var row = py_call(b.type.__dict__["__dict__"].__get__, hooks[i][0])
         if py_get(row, hooks[i][1]) is not hooks[i][2]:
             raise Error("TypeError: LayerNorm refuses replaced Python storage hooks")
-    var fields = py_call(layout[2], owner, cls)
+    var ancestry = layout[1]
+    for i in range(len(ancestry)):  # driver-loop: over connected native owner classes
+        var namespace = _class_fields(ancestry[i])
+        for name in ["normalized_shape", "_D", "eps", "numeric_mode", "weight", "bias", "weight_grad", "bias_grad", "_x", "_stats"]:  # driver-loop: over native layer state schema
+            if py_contains(namespace, name):
+                raise Error("TypeError: LayerNorm state cannot be replaced by class descriptors")
+    var fields = _fields(owner)
     var keys = py_call(b.list, fields)
     for i in range(len(keys)):  # small-loop(instance metadata keys)
         if py_type(keys[i]) is not b.str:
@@ -162,178 +141,124 @@ def _ln_device_entries(fields: PythonObject, context: PythonObject) raises -> Py
         return PythonObject(None)
 
 
-def _param(value: PythonObject, name: String, d: Int, context: PythonObject) raises -> PythonObject:
-    """`_f32(value, name).reshape(-1)` with its `d`-value check (None stays None)."""
-    if value is None:
-        return value
-    var a = _f32(value, name, context)
-    if Int(py=a.size) != d:
-        raise Error("ValueError: layer_norm: " + name + " must hold " + String(d) + " values")
-    return _reshape(a, [d])
+
+def _width(input: LayerInput, normalized_shape: PythonObject, context: PythonObject) raises -> Int:
+    if input.absent or len(input.shape) == 0:
+        raise Error("ValueError: layer_norm input requires at least one dimension")
+    var d = input.shape[len(input.shape) - 1] if normalized_shape is None else _norm_d(normalized_shape, context)
+    if d < 1 or d > 2147483647 or input.shape[len(input.shape) - 1] == 0 or input.count % d != 0:
+        raise Error("ValueError: layer_norm: trailing dimensions must match normalized_shape")
+    return d
 
 
-def _ln_run_dev(x: PythonObject, d: Int, weight: PythonObject, bias: PythonObject, eps: Float64, dy: PythonObject,
-                stats: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_run_dev`: (y, dx, dweight, dbias), the absent ones None."""
-    var binding = seq_device_get(x, "b", context)
-    var entries = seq_binding(PythonObject(None), context, binding)
-    var entry = py_get(entries, "layer_norm_dev")
-    if entry is None:
-        raise Error("RuntimeError: layer_norm: this binding has no device LayerNorm; pass a NumPy x")
-    var xs = _shape(x, context)
-    var size = shape_count(xs)
-    if len(xs) == 0 or xs[len(xs) - 1] == 0 or size % d != 0:
-        raise Error("ValueError: layer_norm: the trailing dimensions must match normalized_shape")
-    var m = size // d
-    var w = _param(weight, "weight", d, context)
-    var bb = _param(bias, "bias", d, context)
-    var flags = Python.list(m, d, 0 if w is None else 1, 0 if bb is None else 1)
-    var handles = Python.list()
-    var stat_flag = Python.list()
-    if stats is not None:
-        var b = _b()
-        if (py_type(stats) is not b.tuple and py_type(stats) is not b.list) or len(stats) != 2:
-            raise Error("TypeError: layer_norm stats require two native tensor handles")
-        var ok = (seq_device(stats[0], context) and seq_device(stats[1], context)
-                  and seq_device_get(stats[0], "b", context) is binding and seq_device_get(stats[1], "b", context) is binding
-                  and shape_count(_shape(stats[0], context)) == m and shape_count(_shape(stats[1], context)) == m)
-        if not ok:
-            raise Error("ValueError: layer_norm: stats must be two resident tensors of M floats on x's binding")
-        handles = Python.list(seq_device_get(stats[0], "h", context), seq_device_get(stats[1], "h", context))
-        stat_flag = Python.list(1)
-    var xh = seq_device_get(x, "h", context)
+def _parameter(value: LayerInput, d: Int, name: String) raises:
+    if not value.absent and (value.device or value.count != d):
+        raise Error("ValueError: layer_norm: " + name + " must hold " + String(d) + " host values")
+
+
+def _run(input: LayerInput, d: Int, weight: PythonObject, bias: PythonObject, eps: Float64,
+         dy: PythonObject, mode: PythonObject, stats: PythonObject, grad_shape: List[Int],
+         context: PythonObject) raises -> PythonObject:
+    var w = LayerInput(weight, context)
+    var b = LayerInput(bias, context)
+    _parameter(w, d, "weight")
+    _parameter(b, d, "bias")
+    var gradient = LayerInput(dy, context)
+    var backward = not gradient.absent
+    var had_weight = not w.absent
+    var had_bias = not b.absent
+    if backward and not same_shape(gradient.shape, input.shape):
+        raise Error("ValueError: layer_norm_backward: dy must have x's shape")
+    var m = input.count // d
+    var flags = Python.list(m, d, 0 if w.absent else 1, 0 if b.absent else 1, 1 if backward else 0)
     var fp = Python.list(eps)
-    if dy is None:
-        var y = _new(entries, xs, context)
-        var hs = Python.list(xh, seq_device_get(y, "h", context), 0, 0)
-        _ = py_call(py_call(_b().getattr, hs, "extend"), handles)
-        var ip = py_call(_b().list, flags)
-        _ = py_call(py_call(_b().getattr, ip, "append"), PythonObject(0))
-        _ = py_call(py_call(_b().getattr, ip, "extend"), stat_flag)
-        _ = py_call_typed(entry, hs, Python.list(_addr_or_zero(w), _addr_or_zero(bb), 0, 0), ip, fp)
-        _ = bb  # keep the Python object alive through the native call above
-        _ = w  # keep the Python object alive through the native call above
-        return Python.tuple(y, PythonObject(None), PythonObject(None), PythonObject(None))
-    var dyt: PythonObject
-    if seq_device(dy, context):
-        if seq_device_get(dy, "b", context) is not binding or shape_count(_shape(dy, context)) != size or len(_shape(dy, context)) != len(xs):
-            raise Error("ValueError: layer_norm_backward: dy must have x's shape (on x's binding)")
-        var ds = _shape(dy, context)
-        for i in range(len(xs)):  # driver-loop: over shape words
-            if ds[i] != xs[i]:
-                raise Error("ValueError: layer_norm_backward: dy must have x's shape (on x's binding)")
-        dyt = dy
-    else:
-        var dyv = _f32(dy, "dy", context)
-        var ds = _shape(dyv, context)
-        var same = len(ds) == len(xs)
-        if same:
-            for i in range(len(xs)):  # driver-loop: over shape words
-                if ds[i] != xs[i]:
-                    same = False
-        if not same:
-            raise Error("ValueError: layer_norm_backward: dy must have x's shape")
-        dyt = _wrap(entries, dyv, context)
-    var dx = _new(entries, xs, context)
-    var dw = _host([d], context)   # written by the binding when weight is given
-    var db = _host([d], context)   # written by the binding when bias is given
-    var hs = Python.list(xh, 0, seq_device_get(dyt, "h", context), seq_device_get(dx, "h", context))
-    _ = py_call(py_call(_b().getattr, hs, "extend"), handles)
-    var ip = py_call(_b().list, flags)
-    _ = py_call(py_call(_b().getattr, ip, "append"), PythonObject(1))
-    _ = py_call(py_call(_b().getattr, ip, "extend"), stat_flag)
-    _ = py_call_typed(entry, hs, Python.list(_addr_or_zero(w), _addr_or_zero(bb), classical_address(dw), classical_address(db)), ip, fp)
-    _ = db  # keep the Python object alive through the native call above
-    _ = dw  # keep the Python object alive through the native call above
-    _ = bb  # keep the Python object alive through the native call above
-    _ = w  # keep the Python object alive through the native call above
-    return Python.tuple(PythonObject(None), dx, dw, db)
-
-
-def _ln_run(x: PythonObject, d: Int, weight: PythonObject, bias: PythonObject, eps: Float64, dy: PythonObject,
-            mode: PythonObject, stats: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_run`: (y, dx, dweight, dbias)."""
-    if seq_device(x, context):
-        return _ln_run_dev(x, d, weight, bias, eps, dy, stats, context)
-    var a = _f32(x, "x", context)
-    var xs = _shape(a, context)
-    var size = shape_count(xs)
-    if len(xs) == 0 or xs[len(xs) - 1] == 0 or size % d != 0:
-        raise Error("ValueError: layer_norm: the trailing dimensions must match normalized_shape")
-    var m = size // d
-    var w = _param(weight, "weight", d, context)
-    var bb = _param(bias, "bias", d, context)
-    var backward = dy is not None
-    # backward never reads y; y and dx are written whole by the binding
-    var y = PythonObject(None) if backward else _host(xs, context)
-    var dyv = PythonObject(None)
-    if backward:
-        dyv = _f32(dy, "dy", context)
-        var ds = _shape(dyv, context)
-        var same = len(ds) == len(xs)
-        if same:
-            for i in range(len(xs)):  # driver-loop: over shape words
-                if ds[i] != xs[i]:
-                    same = False
-        if not same:
-            raise Error("ValueError: layer_norm_backward: dy must have x's shape")
-    var dx = _host(xs, context) if backward else _host([1], context)
-    var dw = _host([d], context)
-    var db = _host([d], context)
+    if input.device:
+        var entry = py_get(input.entries, "layer_norm_dev")
+        if entry is None:
+            raise Error("RuntimeError: layer_norm: this binding has no device LayerNorm; pass a host input")
+        var means = PythonObject(None)
+        var inverse = PythonObject(None)
+        if stats is not None:
+            if (py_type(stats) is not _b().tuple and py_type(stats) is not _b().list) or len(stats) != 2:
+                raise Error("TypeError: layer_norm stats require two native tensor handles")
+            means = stats[0]
+            inverse = stats[1]
+        var mean = LayerInput(means, context)
+        var rstd = LayerInput(inverse, context)
+        var handles = Python.list()
+        if stats is not None:
+            if not mean.device or not rstd.device or mean.count != m or rstd.count != m:
+                raise Error("ValueError: layer_norm: stats must be two resident tensors of M floats")
+            if mean.entries["module"] is not input.entries["module"] or rstd.entries["module"] is not input.entries["module"]:
+                raise Error("ValueError: layer_norm: stats must use x's native binding")
+            handles = Python.list(mean.handle, rstd.handle)
+            _ = py_call(flags.append, PythonObject(1))
+        var output = _new(input.entries, input.shape, context)
+        var dy_owner = PythonObject(None)
+        var dy_handle = PythonObject(0)
+        var dw = PythonObject(None)
+        var db = PythonObject(None)
+        if backward:
+            if gradient.device:
+                if gradient.entries["module"] is not input.entries["module"]:
+                    raise Error("ValueError: layer_norm_backward: dy must use x's native binding")
+                dy_handle = gradient.handle
+            else:
+                dy_owner = _upload(gradient, input.entries, context)
+                dy_handle = _handle(dy_owner, context)
+            dw = _array(grad_shape, context)
+            db = _array(grad_shape, context)
+        var hs = Python.list(input.handle, PythonObject(0) if backward else _handle(output, context),
+                             dy_handle, _handle(output, context) if backward else PythonObject(0))
+        _ = py_call(hs.extend, handles)
+        var addrs = Python.list(w.address, b.address, classical_address(dw) if backward else PythonObject(0),
+                                classical_address(db) if backward else PythonObject(0))
+        _ = py_call_typed(entry, hs, addrs, flags, fp)
+        _ = dy_owner^
+        _ = mean^
+        _ = rstd^
+        _ = gradient^
+        _ = w^
+        _ = b^
+        return Python.tuple(PythonObject(None) if backward else output, output if backward else PythonObject(None),
+            dw if had_weight else PythonObject(None), db if had_bias else PythonObject(None))
+    if gradient.device:
+        raise Error("TypeError: layer_norm host input requires a host output gradient")
     var entries = seq_binding(mode, context, PythonObject(None))
     var entry = py_get(entries, "layer_norm")
     if entry is None:
         raise Error("ImportError: the sequence binding lacks layer_norm; rebuild it")
-    _ = py_call_typed(entry, Python.list(classical_address(a), _addr_or_zero(w), _addr_or_zero(bb), _addr_or_zero(y),
-                                          _addr_or_zero(dyv), classical_address(dx), classical_address(dw), classical_address(db)),
-                      Python.list(m, d, 0 if w is None else 1, 0 if bb is None else 1, 1 if backward else 0), Python.list(eps))
-    _ = y  # keep the Python object alive through the native call above
-    _ = bb  # keep the Python object alive through the native call above
-    _ = w  # keep the Python object alive through the native call above
-    _ = a  # keep the Python object alive through the native call above
-    _ = db  # keep the Python object alive through the native call above
-    _ = dw  # keep the Python object alive through the native call above
-    _ = dx  # keep the Python object alive through the native call above
-    _ = dyv  # keep the Python object alive through the native call above
-    _ = a^
-    return Python.tuple(y, dx, dw, db)
-
-
-def _ln_x(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`x if is_seq_tensor(x) else _f32(x, "x")`."""
-    if seq_device(value, context):
-        return value
-    return _f32(value, "x", context)
-
-
-def _ln_width(x: PythonObject, normalized_shape: PythonObject, context: PythonObject) raises -> Int:
-    if normalized_shape is None:
-        var xs = _shape(x, context)
-        if len(xs) == 0:
-            raise Error("IndexError: tuple index out of range")
-        return _norm_d(PythonObject(xs[len(xs) - 1]), context)
-    return _norm_d(normalized_shape, context)
+    var output = _array(input.shape, context)
+    var scratch = _array([1], context) if not backward else PythonObject(None)
+    var dw = _array(grad_shape, context)
+    var db = _array(grad_shape, context)
+    var addrs = Python.list(input.address, w.address, b.address,
+        PythonObject(0) if backward else classical_address(output), gradient.address,
+        classical_address(output) if backward else classical_address(scratch), classical_address(dw), classical_address(db))
+    _ = py_call_typed(entry, addrs, flags, fp)
+    _ = scratch^
+    _ = gradient^
+    _ = w^
+    _ = b^
+    return Python.tuple(PythonObject(None) if backward else output, output if backward else PythonObject(None),
+            dw if had_weight else PythonObject(None), db if had_bias else PythonObject(None))
 
 
 def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject,
                         context: PythonObject) raises -> PythonObject:
-    var b = _b()
     if operation == "seqln_forward" or operation == "seqln_backward":
-        for i in range(len(values)):  # small-loop(functional layer arguments)
-            if not seq_device(values[i], context):
-                opt_value(values[i], context)
-    if operation == "seqln_forward":
-        # values: (x, normalized_shape, weight, bias, eps)
-        var x = _ln_x(values[0], context)
-        var d = _ln_width(x, values[1], context)
-        return _ln_run(x, d, values[2], values[3], Float64(py=py_call_typed(b.float, values[4])), PythonObject(None),
-                       mode, PythonObject(None), context)[0]
-    if operation == "seqln_backward":
-        # values: (dy, x, normalized_shape, weight, bias, eps)
-        var x = _ln_x(values[1], context)
-        var d = _ln_width(x, values[2], context)
-        var result = _ln_run(x, d, values[3], values[4], Float64(py=py_call_typed(b.float, values[5])), values[0],
-                             mode, PythonObject(None), context)
+        var backward = operation == "seqln_backward"
+        var offset = 1 if backward else 0
+        opt_scalar(values[offset + 1], context)
+        opt_scalar(values[offset + 4], context)
+        opt_scalar(mode, context)
+        var input = LayerInput(values[offset], context)
+        var d = _width(input, values[offset + 1], context)
+        var result = _run(input, d, values[offset + 2], values[offset + 3], Float64(py=py_call_typed(_b().float, values[offset + 4])),
+            values[0] if backward else PythonObject(None), mode, PythonObject(None), [d], context)
+        _ = input^
+        if not backward:
+            return result[0]
         return Python.tuple(result[1], PythonObject(None) if values[3] is None else result[2],
                             PythonObject(None) if values[4] is None else result[3])
     var fields = _ln_fields(owner, context)
@@ -342,82 +267,82 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
         opt_scalar(mode, context)
         var shape = _norm_shape(values[0], context)
         var d = shape_count(shape)
+        if d > 2147483647:
+            raise Error("ValueError: normalized_shape exceeds native indexing")
         var affine = Bool(py=values[2])
         var with_bias = affine and Bool(py=values[3])
         var weight = PythonObject(None)
         var bias = PythonObject(None)
         if affine:
-            weight = _host(shape, context)
+            weight = _array(shape, context)
             scaler_fill(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(weight))), d, Float32(1))
         if with_bias:
-            bias = _host(shape, context)
-        py_setitem(fields, "normalized_shape", _ints(shape))
+            bias = _array(shape, context)
+        py_setitem(fields, "normalized_shape", py_ints(shape))
         py_setitem(fields, "_D", d)
         py_setitem(fields, "eps", Float64(py=values[1]))
         py_setitem(fields, "elementwise_affine", affine)
         py_setitem(fields, "weight", weight)
         py_setitem(fields, "bias", bias)
         py_setitem(fields, "numeric_mode", mode)
-        for name in ["weight_grad", "bias_grad", "_x", "_stats"]:  # small-loop(initial native state fields)
+        for name in ["weight_grad", "bias_grad", "_x", "_stats"]:  # driver-loop: over initial native state fields
             py_setitem(fields, name, PythonObject(None))
         return PythonObject(None)
     if operation == "seqln_device_binding" or operation == "seqln_device_io":
         var entries = _ln_device_entries(fields, context)
-        if operation == "seqln_device_io":
-            return PythonObject(entries is not None)
-        return PythonObject(None) if entries is None else entries["module"]
+        return PythonObject(entries is not None) if operation == "seqln_device_io" else (
+            PythonObject(None) if entries is None else entries["module"])
     if operation == "seqln_to_device":
-        if seq_device(values[0], context):
-            return values[0]
-        opt_value(values[0], context)
-        var input = _f32(values[0], "x", context)
+        var input = LayerInput(values[0], context)
+        if input.absent:
+            raise Error("TypeError: layer_norm input requires a native array")
+        if input.device:
+            return input.owner
         var entries = _ln_device_entries(fields, context)
-        return input if entries is None else _wrap(entries, input, context)
-    for name in ["normalized_shape", "_D", "eps", "numeric_mode"]:  # small-loop(layer configuration metadata)
+        var result = input.owner if entries is None else _upload(input, entries, context)
+        _ = input^
+        return result
+    for name in ["normalized_shape", "_D", "eps", "numeric_mode"]:  # driver-loop: over layer configuration metadata
         opt_scalar(fields[PythonObject(name)], context)
-    if Int(py=fields["_D"]) <= 0:
-        raise Error("ValueError: normalized_shape must be positive")
-    opt_value(fields["weight"], context)
-    opt_value(fields["bias"], context)
+    var d = Int(py=fields["_D"])
+    var shape = _norm_shape(fields["normalized_shape"], context)
+    if d < 1 or d > 2147483647 or d != shape_count(shape):
+        raise Error("ValueError: normalized_shape and native layer width must agree")
     if operation == "seqln_layer_backward":
         var x = py_get(fields, "_x")
         if x is None:
             raise Error("RuntimeError: LayerNorm.backward: call forward first")
-        if not seq_device(x, context):
-            opt_value(x, context)
-        if not seq_device(values[0], context):
-            opt_value(values[0], context)
-        var shape = device_shape(fields["normalized_shape"], context)
-        var result = _ln_run(x, Int(py=fields["_D"]), fields["weight"], fields["bias"], Float64(py=fields["eps"]),
-                             values[0], py_get(fields, "numeric_mode"), py_get(fields, "_stats"), context)
-        py_setitem(fields, "weight_grad", PythonObject(None) if fields["weight"] is None else _reshape(result[2], shape))
-        py_setitem(fields, "bias_grad", PythonObject(None) if fields["bias"] is None else _reshape(result[3], shape))
+        var input = LayerInput(x, context)
+        _ = _width(input, PythonObject(d), context)
+        var result = _run(input, d, fields["weight"], fields["bias"], Float64(py=fields["eps"]), values[0],
+            py_get(fields, "numeric_mode"), py_get(fields, "_stats"), shape, context)
+        _ = input^
+        py_setitem(fields, "weight_grad", result[2])
+        py_setitem(fields, "bias_grad", result[3])
         return result[1]
-    # `LayerNorm.forward(x)`
-    if not seq_device(values[0], context):
-        opt_value(values[0], context)
-    var x = _ln_x(values[0], context)
-    var xs = _shape(x, context)
-    var ns = fields["normalized_shape"]
-    var k = len(ns)
-    var same = len(xs) >= k
+    if operation != "seqln_layer":
+        raise Error("ValueError: unknown LayerNorm public operation")
+    var input = LayerInput(values[0], context)
+    _ = _width(input, PythonObject(d), context)
+    var k = len(shape)
+    var same = len(input.shape) >= k
     if same:
         for i in range(k):  # driver-loop: over normalized shape words
-            if xs[len(xs) - k + i] != Int(py=ns[i]):
-                same = False
+            same = same and input.shape[len(input.shape) - k + i] == shape[i]
     if not same:
-        raise Error("ValueError: LayerNorm: trailing shape " + _text(_ints(xs)) + " does not end in " + _text(ns))
-    py_setitem(fields, "_x", x)
-    py_setitem(fields, "_stats", PythonObject(None))
-    var d = Int(py=fields["_D"])
+        raise Error("ValueError: LayerNorm input trailing shape differs from normalized_shape")
     var stats = PythonObject(None)
-    if seq_device(x, context) and not Bool(py=context["seqln_keep_stats_off"]):
-        var entries = seq_binding(PythonObject(None), context, seq_device_get(x, "b", context))
-        var m = shape_count(xs) // d
-        stats = Python.tuple(_new(entries, [m], context), _new(entries, [m], context))
-        py_setitem(fields, "_stats", stats)
-    return _ln_run(x, d, fields["weight"], fields["bias"], Float64(py=fields["eps"]), PythonObject(None),
-                   py_get(fields, "numeric_mode"), stats, context)[0]
+    if input.device and not Bool(py=context["seqln_keep_stats_off"]):
+        var m = input.count // d
+        stats = Python.tuple(_new(input.entries, [m], context), _new(input.entries, [m], context))
+    # Keep the same normalized input owner and resident statistics for the
+    # next public backward; its metadata is refreshed at that next operation.
+    py_setitem(fields, "_x", input.owner)
+    py_setitem(fields, "_stats", stats)
+    var result = _run(input, d, fields["weight"], fields["bias"], Float64(py=fields["eps"]), PythonObject(None),
+        py_get(fields, "numeric_mode"), stats, shape, context)
+    _ = input^
+    return result[0]
 
 
 def sequence_layers_operation(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject,
