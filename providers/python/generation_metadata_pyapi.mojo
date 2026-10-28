@@ -3,6 +3,7 @@
 # No snapshot survives a public forward/generate/read call. A stream's next
 # read recaptures current model fields and owners; this adds no thread-safety
 # promise for concurrent model mutation during execution.
+from std.collections import Dict
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_get, py_type, py_call, py_contains
@@ -401,6 +402,10 @@ struct GenerationEngineAdmission(Movable):
         if len(layers) != len(snapshot.layers):
             raise Error("CausalLM: state layer count differs from the captured model")
         var cpu = _generation_bool(entries["cpu"])
+        # The field schema is constant across layers; retain one tuple rather
+        # than constructing the same Python metadata for each state admission.
+        var state_fields = Python.tuple("_resident_session", "arithmetic_profile", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window", "h", "profile_id", "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens")
+        var state_indices = Dict[Int, Int]()
         for i in range(len(snapshot.layers)):  # driver-loop: admit layer/state owners once before native execution
             ref layer = snapshot.layers[i]
             var st = layers[i]
@@ -408,7 +413,7 @@ struct GenerationEngineAdmission(Movable):
             var identity = st
             var native_layer = NativeGenerationLayer(self.owners[0].endpoint(), 33 if cpu else 11, [], [], 0)
             try:
-                fields = _generation_fields(st, Python.tuple("_resident_session", "arithmetic_profile", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window", "h", "profile_id", "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens"), True)
+                fields = _generation_fields(st, state_fields, True)
                 identity = py_get(fields, "_native_state_identity", py_get(fields, "_causal_original", st))
                 var admission_failure = py_get(fields, "_causal_admission_failure")
                 if admission_failure is not None:
@@ -509,15 +514,16 @@ struct GenerationEngineAdmission(Movable):
                     native_layer.cached = cached
                     native_layer.addresses = addresses^
                     native_layer.parameters = parameters^
-                var state_index = -1
-                for index in range(len(self.state_keys)):  # driver-loop: exact alias identity of admitted state records
-                    if self.state_keys[index] is identity:
-                        state_index = index
-                        break
+                # Pointer identity has the same alias semantics as `is`.
+                # state_keys pins every inserted owner for the whole operation,
+                # so the native map cannot collide with a recycled address.
+                var identity_key = Int(identity._obj_ptr)
+                var state_index = state_indices.get(identity_key, -1)
                 if state_index < 0:
                     state_index = len(self.state_keys)
                     self.state_keys.append(identity)
                     self.native.state_counters.append(cached)
+                    state_indices[identity_key] = state_index
                 native_layer.state_index = state_index
             except problem:
                 # Defer this refusal to its original execution position. Earlier

@@ -1,0 +1,28 @@
+{
+  "base_commit": "dde8d170c4",
+  "compile_exit": 0,
+  "scope": "CausalLM public forward and generate CPU source closure, including operation-local generation engine/admission; compile only",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/generation-metadata-hoist-20261028 -I /Users/andrewhendel/mojolearn-wt/generation-metadata-hoist-20261028/bindings /Users/andrewhendel/mojolearn-wt/generation-metadata-hoist-20261028/experiments/native_owner_hot_20261028/compile_engine.mojo -o /Users/andrewhendel/mojolearn-evidence/generation-metadata-hoist-20261028/compile_engine",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "compile_slots": 4,
+  "compiler_workers": "compiler default; no explicit -j; CPU saturation not measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/generation-metadata-hoist-20261028/compile_engine",
+  "binary_sha256": "8757fd8260dfb31ce1114e3fa2b237d19c0203e93a16e6fdc10124be5648bdbc",
+  "log": "/Users/andrewhendel/mojolearn-evidence/generation-metadata-hoist-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/generation-metadata-hoist-20261028/source-sha256.json",
+  "source_manifest_scope": "SHA256 of all tracked Mojo sources plus Pixi manifest/lock: conservative source-closure superset, not a claim that all sources compiled",
+  "modified_source_sha256": {
+    "providers/python/generation_metadata_pyapi.mojo": "426e27b9ba138e1acfb6f9153b0b932579b81ca3e33c554bed91da422e1ed1b7",
+    "transformer/native_generation_engine.mojo": "53b89dd5bae2094ce929af1f2f50a401202caaf14341d3f3c630e04d31b00920"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_verified": false,
+  "earlier_failure": {
+    "exit": 1,
+    "reason": "Direct mojo binary invocation lacked Pixi standard-library environment; corrected invocation through Pixi passed",
+    "log": "/Users/andrewhendel/mojolearn-evidence/generation-metadata-hoist-20261028/compile-missing-environment.log"
+  },
+  "rented_boxes": []
+}

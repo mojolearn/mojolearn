@@ -126,42 +126,44 @@ struct NativeGenerationModel(Movable):
             var hidden = List[Float32](length=rows * self.width, fill=0)
             self.primitive_call(0, [Int(hidden.unsafe_ptr()), self.embedding, ids], [rows, self.vocab, self.width], [])
             for i in range(len(self.layers)):  # driver-loop: ordered native layer descriptors
-                self.layers[i].visited = True
-                if self.layers[i].failure.byte_length() != 0:
-                    raise Error(self.layers[i].failure)
-                for j in range(len(self.layers[i].refresh_layouts)):  # driver-loop: ordered deferred weight/state byte copies
-                    self.layers[i].refresh_layouts[j].copy_to(self.layers[i].refresh_addresses[j])
+                ref layer = self.layers[i]
+                layer.visited = True
+                if layer.failure.byte_length() != 0:
+                    raise Error(layer.failure)
+                for j in range(len(layer.refresh_layouts)):  # driver-loop: ordered deferred weight/state byte copies
+                    layer.refresh_layouts[j].copy_to(layer.refresh_addresses[j])
                 var next = List[Float32](length=rows * self.width, fill=0)
-                var addresses = self.layers[i].addresses.copy()
-                addresses[0] = Int(hidden.unsafe_ptr())
-                addresses[self.layers[i].output_slot] = Int(next.unsafe_ptr())
-                var parameters = self.layers[i].parameters.copy()
-                parameters[0] = self.batch
-                parameters[1] = length
-                if self.layers[i].state_index >= 0:
-                    self.layers[i].cached = self.state_counters[self.layers[i].state_index]
-                var kind = self.layers[i].kind
-                var operation = self.layers[i].operation
+                # Admission owns these vectors exclusively for this operation.
+                # Only token-dependent slots change; the synchronous endpoint
+                # consumes them before the next layer/token. Keep stable weights
+                # and launch words in place instead of copying every token.
+                layer.addresses[0] = Int(hidden.unsafe_ptr())
+                layer.addresses[layer.output_slot] = Int(next.unsafe_ptr())
+                layer.parameters[1] = length
+                if layer.state_index >= 0:
+                    layer.cached = self.state_counters[layer.state_index]
+                var kind = layer.kind
+                var operation = layer.operation
                 if kind == 0:
-                    parameters[8] = self.layers[i].cached
+                    layer.parameters[8] = layer.cached
                 elif kind == 2:
-                    parameters[3] = self.layers[i].cached
+                    layer.parameters[3] = layer.cached
                 # Local _run_snapshot always uses forward(step=False), including
                 # one-token continuations. remote_step selects only distributed
                 # execution; changing to decode here would change the algorithm.
-                var report = List[Float32](length=self.layers[i].report_size, fill=0)
+                var report = List[Float32](length=layer.report_size, fill=0)
                 if kind == 2:
-                    addresses[15] = Int(report.unsafe_ptr())
-                self.layers[i].attempted = True
-                var result = self.layers[i].endpoint.call(operation, addresses, parameters, self.layers[i].floats)
-                self.layers[i].cached = self.layers[i].cached + length if kind == 1 else result
+                    layer.addresses[15] = Int(report.unsafe_ptr())
+                layer.attempted = True
+                var result = layer.endpoint.call(operation, layer.addresses, layer.parameters, layer.floats)
+                layer.cached = layer.cached + length if kind == 1 else result
                 if kind == 2:
-                    self.layers[i].report = report^
-                self.layers[i].completed = True
-                for j in range(len(self.layers[i].writeback_layouts)):  # driver-loop: successful layer publication before the next alias reads
-                    self.layers[i].writeback_layouts[j].copy_from(self.layers[i].writeback_addresses[j])
-                if self.layers[i].state_index >= 0:
-                    self.state_counters[self.layers[i].state_index] = self.layers[i].cached
+                    layer.report = report^
+                layer.completed = True
+                for j in range(len(layer.writeback_layouts)):  # driver-loop: successful layer publication before the next alias reads
+                    layer.writeback_layouts[j].copy_from(layer.writeback_addresses[j])
+                if layer.state_index >= 0:
+                    self.state_counters[layer.state_index] = layer.cached
                 _ = hidden
                 hidden = next^
             if self.head_failure.byte_length() != 0:

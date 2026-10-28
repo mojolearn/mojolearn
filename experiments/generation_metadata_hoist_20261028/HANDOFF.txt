@@ -1,0 +1,43 @@
+Generation metadata/descriptor reuse, 2026-10-28
+Branch: lane/generation-metadata-hoist-20261028
+Base: dde8d170c4
+
+Changes:
+- NativeGenerationModel.forward updates its operation-owned layer address and
+  parameter vectors in place. Token-dependent input/output addresses, length
+  and cache position still update for every execution; stable batch/model/weight
+  slots no longer copy on every layer/token. The synchronous native endpoint
+  consumes the vectors before their next update.
+- GenerationEngineAdmission indexes state aliases with a native Dict[Int, Int]
+  instead of scanning previously admitted PythonObject identities per layer.
+  Retained state_keys still pin owners, preserving exact identity/alias handling
+  and preventing address reuse throughout the operation.
+- Construct the fixed state-field admission tuple once outside the layer loop.
+
+Reuse/invalidation boundary:
+All reuse is within one admitted public operation. A subsequent forward,
+generate or stream read recaptures current metadata through the existing
+boundary. No new cross-operation cache was introduced. Token-dependent slots
+are overwritten before each synchronous call, and owner lifetimes and existing
+partial-progress/failure publication remain in place.
+
+Validation:
+- Focused CausalLM public forward/generate Mac arm64 CPU compile passed, rc0,
+  identical define, optimization level 0. See compile.json for exact command,
+  binary hash, source hashes and scope. No runtime/performance/identity run.
+- Initial direct compiler invocation missed Pixi's standard-library environment,
+  rc1; retained its complete log and corrected the invocation, without source
+  workaround. The successful build used Pixi's configured environment.
+- no_host_routes.py, no_python_in_kernels.py and no_compute_in_shells.py
+  --tree HEAD --branch passed, rc0 each; full logs and exit receipts retained.
+  Root integration still owns final main/push guards.
+
+Evidence: ~/mojolearn-evidence/generation-metadata-hoist-20261028/
+Complete logs, compiled binary and conservative full tracked-Mojo source hash
+manifest remain on the Mac. No rented box and no watcher service was used.
+
+Remaining:
+Boundary Python snapshots, output construction, state publication and specialized
+routes remain transitional. This is an overhead reduction within admitted local
+nonresident fp32 routes, not full Python removal or qualified runtime behavior.
+No algorithm, arithmetic, tuning switch or default changed. No measured gain.
