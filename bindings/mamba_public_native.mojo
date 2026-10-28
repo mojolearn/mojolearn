@@ -48,7 +48,17 @@ def _m3_entries(block: PythonObject, fields: PythonObject, context: PythonObject
     # host binding for the CPU inference class, the block's tier otherwise.
     var bi = Python.import_module("builtins")
     if Bool(py=py_call(bi.isinstance, block, context["block_classes"]["cpu"]["mamba3"])):
-        return _model_bindings(PythonObject("cpu"), "mamba3", context, PythonObject("identical"))["mamba3"]
+        var entries = _model_bindings(PythonObject("cpu"), "mamba3", context, PythonObject("identical"))["mamba3"]
+        var block_provider = PythonObject(None)
+        var state_provider = PythonObject(None)
+        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            block_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
+                _native_function(entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
+            state_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
+                _native_function(entries, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME), 6)
+        py_setitem(fields, "_native_mamba_block_provider_cache", block_provider)
+        py_setitem(fields, "_native_mamba_state", state_provider)
+        return entries
     return neural_training_entries(fields, context)
 
 
