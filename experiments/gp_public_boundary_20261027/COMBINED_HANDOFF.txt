@@ -1,0 +1,49 @@
+GP combined provider batch — 2026-10-28
+Source8443166119, lane/peer5-gp-trees-20261027.
+Root alone serializes main integration. Initial794f4004fc already integrated;
+merge the remaining branch ancestry with this final combined receipt.
+
+Completed changes:
+- GPR/GPC installed public fit, prediction, scoring and likelihood routes now
+  use native binding selection and lifecycle checks/output conversion. Explicit
+  HostGP inherited routes preserve CPU/identical selection independently of
+  process defaults. Existing native field-only constructors remain reused.
+- GP kernel constructors, metadata properties, composition, repr and postfix
+  node packing use one native public owner with passive typed input/state
+  admission and retained owners. Shared leaves keep one dictionary capture.
+- GP native extension lookup refuses Python replacements and module getattr
+  hooks, including covariance prediction. Retry warnings use the native warning
+  owner; score reads numeric prediction shape without Array.__len__ callbacks.
+- Typed Array label snapshots preserve declared float16 values, signed/unsigned
+  integer precision, logical scalar/vector/matrix shape, byte strides and owners.
+  ClassLabels metadata is connected to both GP family and archive contexts;
+  native list access avoids ClassLabels.__getitem__ Python execution.
+- Archive GP nodes use the same strict native node reader. Class-table admission
+  no longer calls numeric Python ABCs or foreign input conversion hooks. Native
+  archive storage admission precedes field reads; GP consumed scalar, buffer
+  and BinaryLaplace namespace checks are shared with execution. Existing archive
+  packing/writer is reused.
+
+Validation: combined_compile.json records PASS exit0,49.01seconds, Mojo compiler
+hash, exact command, target apple-m1 / CPU column / identical / O0 / 10 workers,
+source archive+manifest and artifact hashes. Both complete gp_operation and
+archive_schema_save are exported by checks/gp_public_boundary_compile.mojo.
+The extension was NOT loaded or executed. No runtime, GPU, identity or benchmark
+campaign ran. This is not a whole-library Python-free or runtime-correctness claim.
+Shared archive admission is compiled here; unrelated algorithms' runtime behavior
+and all device runtime behavior remain outside this evidence.
+
+Evidence:
+  ~/mojolearn-evidence/peer5-gp-public-20261027/attempt5/
+    compile.log, result.json, source-manifest.json, source-bytes.tgz,
+    _mojolearn_gp_public_compile.so
+  prior attempts1..4 retained; attempt1 fixture failure retained explicitly.
+  experiments/gp_kernel_public_20261027/ and gp_public_lifecycle_20261027/ retain
+  sibling scope receipts. CURRENT.txt records exact cherry-picked provenance.
+  ~/mojolearn-evidence/gp-peer5-source-review-20261028/findings.txt records the
+  four source-review findings now repaired. No review finding is runtime proof.
+No rented machine; all complete outputs/binaries/source are on the Mac.
+
+Remaining: final push guards/serialized main integration; next tree GBDTAdapter
+constructor/get/set-parameter migration belongs to the active tree subagent.
+The broad library/native-helper migration is not declared complete by this batch.

@@ -7,9 +7,10 @@ No pod rented. Do not touch other worktrees or disabled watchers.
 Worktree / branch:
   /Users/andrewhendel/CascadeProjects/mojolearn-peer5
   lane/peer5-gp-trees-20261027
-Latest source8443166119; parent compile attempt5 RUNNING at this checkpoint.
-DO NOT merge uncompiled current head until its successful receipt is recorded.
-The remote currently contains initial794f4004fc, already merged to main by root.
+Latest source8443166119; parent compile attempt5 PASSED, exit0,49.01seconds.
+Final receipt: experiments/gp_public_boundary_20261027/combined_compile.json.
+Final branch push/required guards are in progress; final handoff follows below.
+Initial794f4004fc was already merged to main by root.
 
 Completed root-integrated batches:
 - tree auxiliary48cebc5fbd and lifecycle586ee57745, pushed in
@@ -42,7 +43,7 @@ Full evidence retained under ~/mojolearn-evidence/peer5-gp-public-20261027/.
 - attempt3 passed208.36s: intermediate kernel/GP transitive repair bytes.
 - attempt4 passed61.36s: integrated87c62b4a0f GP dispatcher. Review subsequently
   identified bugs; this receipt DOES NOT qualify latest review fixes.
-- attempt5 RUNNING on8443166119: actual full GP public dispatcher AND complete
+- attempt5 PASSED exit0/49.01seconds on8443166119: actual full GP public dispatcher AND complete
   archive_schema_save exported by checks/gp_public_boundary_compile.mojo.
   Source snapshot, manifest, command and full compile.log retained per attempt.
 All are local Mac CPU column, apple-m1, identical, O0, configured10workers from
@@ -57,7 +58,8 @@ Agent accepted evidence remains in:
 - ~/mojolearn-evidence/gp-kernel-public-20261027/
 - ~/mojolearn-evidence/peer5-gp-lifecycle-20261027/
 Readonly review: ~/mojolearn-evidence/gp-peer5-source-review-20261028/findings.txt.
-All four reported findings are repaired in current source; compilation pending.
+All four reported findings and the associated archive admission followups are
+repaired in current source; combined CPU compilation passed.
 
 Active sibling:
 /root/tree_auxiliary continuing _GBDTAdapter public constructor/get/set_params
@@ -67,13 +69,11 @@ batch is separate. Host CPU review files _mojolearn_gbdt_host.mojo and
  gbdt_host_entries_impl.mojo remain excluded from this peer's ownership.
 
 Next steps:
-1. Inspect attempt5 result.json exit/status then bounded error diagnostics.
-2. Repair genuine compile errors, preserve failed logs/snapshots, compile only
-   affected source. Do not execute product/runtime checks.
-3. Record final scoped receipt and handoff, commit, push through all guards.
-4. Send root exact green combined head, coverage/evidence/remaining limits for
+1. Finish final branch push through all required guards.
+2. Send root exact green combined head, coverage/evidence/remaining limits for
    serialized main integration. Do not merge main from this worktree.
-5. Receive and forward next coherent tree batch; keep remaining scope explicit.
+3. Receive and forward next coherent tree batch; keep remaining scope explicit.
+No additional runtime/identity/vendor validation is authorized.
 
 Keep logs out of context: save complete output to files, use targeted rg/grep
 with bounded surrounding lines and short tails, and summarize exit status,
