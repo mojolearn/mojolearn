@@ -831,6 +831,13 @@ TRAINING_LANE_NAMES = {
     # from the same binding.
     "gbdt-ranking-defaults": "gradient boosting ranking losses with default Bayesian bootstrap and score noise",
     "gbdt-query-rmse": "gradient boosting with the QueryRMSE ranking loss on query groups",
+    # Isolated CPU ranking draft: selection declared, compilation and actual
+    # CPU runtime/negative-control results pending. PairLogit/YetiRank reuse
+    # existing lanes; QueryRMSE pointwise gains its own configuration lane.
+    # No reference data is admitted by declaring these routes.
+    "gbdt-query-rmse-pointwise": "QueryRMSE with the doc-parallel pointwise tree searcher",
+    "gbdt-pair-logit-pointwise": "PairLogit with the doc-parallel pointwise tree searcher",
+    "gbdt-yeti-rank-pointwise": "YetiRank with the doc-parallel pointwise tree searcher",
     # lane/gbdt-learning-to-rank stage 3 (2026-09-15): the PairLogit ranking
     # loss on generated and explicit pairs trains through
     # gbdt/host/gbdt_oracle_losses.mojo with the pairwise target restated in
@@ -1400,8 +1407,9 @@ ADAPTED_MODULES = {
 #: pointwise lane predate this review; CTR training with all permutations has
 #: existed since 2026-09-28. The former blanket weight/CTR refusals were stale.
 #: Plain numeric Logloss now admits sample weights through the existing
-#: weighted owners. That extension requires its own runtime/identity evidence;
-#: this source inventory and its compile receipt do not supply that evidence.
+#: weighted owners; CTR evaluation uses the shared final-table expander and
+#: held-out owner. Their runtime/identity evidence remains pending; this source
+#: inventory and the compile receipts do not supply that evidence.
 NO_CPU_PATH = (
     "gradient boosting training with sample weights outside Plain numeric "
     "Logloss and the dedicated pointwise Logloss configuration; weighted "
@@ -1410,11 +1418,9 @@ NO_CPU_PATH = (
     "Logloss, MultiClass and MultiClassOneVsAll, and in Ordered boosting "
     "or the pointwise searcher",
 
-    "gradient boosting training with an eval set on a CTR categorical "
-    "column: CPU CTR training and saved-model inference exist, but this "
-    "training route does not yet apply its CTR tables to held-out rows. "
-    "The separate ExperimentalTwoLevelFeatureFreq CPU route also refuses "
-    "a tree whose level winner is the tensor column itself",
+    "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
+    "tree's level winner is the tensor column itself: the separate CPU "
+    "feature-frequency route refuses that case",
 
     "gradient boosting training with a categorical or one-hot column "
     "outside SymmetricTree with Logloss and Plain boosting, or with "
@@ -2717,6 +2723,9 @@ FAMILIES = (
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank", "gbdt-ranking-defaults",
+            # Native route declared by the uncompiled ranking draft. The
+            # existing HOST_SABOTAGE arm reaches its grouped leaf estimator.
+            "gbdt-query-rmse-pointwise", "gbdt-pair-logit-pointwise", "gbdt-yeti-rank-pointwise",
             # lane/catboost-parity (2026-09-19): the non-default border
             # types run the device fit's own host function
             # (`select_borders`) on the CPU column
@@ -2759,6 +2768,7 @@ FAMILIES = (
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
             "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
             "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
+            "gbdt/host/gbdt_oracle_pointwise_rank.mojo",
             # lane/close-no-cpu-path-gbdt: the held-out cursor, curve,
             # detector and shrink of the Plain SymmetricTree Logloss fit
             "gbdt/host/gbdt_oracle_eval.mojo",
@@ -3631,33 +3641,17 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #:                     vocabulary and when the shipped table's cells have
 #:                     GAINED it on every part, so the hold cannot outlive the
 #:                     column that pays it.
-#:   no cpu route      THE ONE REASON A COVERED LANE CANNOT HAVE, and the
-#:                     only entry here that is not a covered lane
-#:                     (lane/unlaned-public-algorithms, 2026-09-20).
-#:                     IN USE BY NOTHING SINCE 2026-09-20
-#:                     (lane/cpu-routes-gpu-only-four). All four lanes that
-#:                     carried it now have CPU columns, and the reason they
-#:                     did not is worth keeping in the vocabulary rather
-#:                     than deleting: each of the four refusals was read as
-#:                     a statement about arithmetic when three were about
-#:                     RESIDENCY and one about a DEVICE INVENTORY. "Refuses
-#:                     by name on a CPU-only install" is what the entry
-#:                     requires and it was true of all four; what nobody
-#:                     had asked was whether the thing being refused was
-#:                     the thing being hashed. The next lane to reach for
-#:                     this reason should answer that question first, and
-#:                     `identity_break.GPU_ONLY_LANES` -- now empty --
-#:                     still holds the reason per lane. The rest of the
-#:                     original entry stands as written:
-#:
-#:                     The
-#:                     lane's public surface REFUSES BY NAME on a CPU-only
-#:                     install, so no CPU column can ever carry it and no
-#:                     host family can ever declare it: the reference it owes
-#:                     is owed on a GPU column and on no other. Every other
-#:                     reason here says "the evidence has not been taken
-#:                     yet"; this one says "this box is the wrong box, and
-#:                     always will be". It is CHECKED against
+#:   no cpu route      A lane with no current CPU implementation cannot be
+#:                     declared covered. The four original holds were removed
+#:                     in September 2026, but later lanes use this reason too.
+#:                     Inspect the fully registered GPU_ONLY_LANES: extensions
+#:                     in tools/identity_lanes add device-buffer/pool entries
+#:                     beyond the GBDT entries in identity_break.py's literal.
+#:                     A GPU-resource operation and missing CPU algorithm
+#:                     arithmetic are different reasons for a CPU refusal.
+#:                     Once a CPU implementation exists, missing execution or
+#:                     reference evidence belongs under a different hold.
+#:                     This reason is checked against
 #:                     `identity_break.GPU_ONLY_LANES`, which is what
 #:                     `tools/identity_break.py` uses to drop the lane from a
 #:                     full-column CPU run, so the reason cannot be used as
@@ -3965,13 +3959,15 @@ PUBLIC_PENDING_LANES = {
     # Weighted Extra Trees already has nine admitted fixtures with Apple,
     # NVIDIA and AMD train/infer/model columns in table.json (records 112,
     # 114, 116, 117). Keep those references comparable; no new admission here.
-    # f63ef2235 (2026-10-14): PairLogit and YetiRank on the pointwise searcher.
-    # The gbdt host binding's pointwise arm trains Logloss only and refuses
-    # every other loss by name (bindings/_mojolearn_gbdt_host.mojo,
-    # `_refuse_pointwise`), so the lane's fit has no CPU arithmetic
-    # (identity_break.GPU_ONLY_LANES).
-    "gbdt-pair-logit-pointwise": "no cpu route",
-    "gbdt-yeti-rank-pointwise": "no cpu route",
+    # The isolated CPU ranking draft declares a native pointwise route and
+    # registers these existing lanes with the gbdt host family. Compilation,
+    # CPU execution and caught negative controls are still pending; no hash or
+    # release admission is created here. Keep existing GPU references usable.
+    "gbdt-pair-logit-pointwise": "unwatched",
+    "gbdt-yeti-rank-pointwise": "unwatched",
+    # New configuration-specific lane. The existing gbdt-query-rmse lane
+    # remains the greedy-searcher reference and is unchanged.
+    "gbdt-query-rmse-pointwise": "no reference",
     # lane/verify-coverage-audit (2026-10-21): lanes for endpoints new or changed
     # since the last release that no lane reached
     # (docs/plans/VERIFY_COVERAGE_20261021.md); no release record yet.
@@ -4561,7 +4557,7 @@ def inference_sentence():
 
 
 def no_cpu_path_sentence():
-    """`NO_CPU_PATH` as the README states it, NUMBERED and semicolon-joined.
+    """`NO_CPU_PATH` for the generated support matrix, numbered and joined.
 
     `_join`'s comma-and is right for a list of short nouns and wrong here:
     every entry below carries its own commas and its own structural reason,

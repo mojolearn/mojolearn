@@ -1,5 +1,8 @@
 PROVIDER MIGRATION HANDOFF — 2026-10-27
 
+CURRENT ROOT HANDOFF: PROVIDER_MIGRATION_HANDOFF_2026-10-28.txt
+Read that newer file first. The checkpoints below are retained history.
+
 LATEST INTEGRATION CHECKPOINT — 2026-10-28 00:06 EDT
 Source main before this checkpoint commit: cf4c89dd1d2b29f85b1f1cdc4158ec2f0383d6ec.
 Since the progress checkpoint below, compiled accepted source now also includes:
