@@ -48,5 +48,6 @@
     "GPU-specific compiled binding registration/build not run",
     "Shared archive transitive admission not qualified by this batch",
     "Other cluster/density/mixture/linear algebra operations remain in this lane"
-  ]
+  ],
+  "superseded_by": "cholesky_lifetime_compile.json"
 }

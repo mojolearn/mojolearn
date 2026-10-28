@@ -1,7 +1,8 @@
 Cluster/density/linear algebra lane — 2026-10-27
 
 First coherent batch: Cholesky public operations
-Source dea80b857f0d5fafd85fb4bc30ef28aa05a5f2fe.
+Final source db4a14967ada7b5f0d5796702902883a9735aa1e.
+Prior source dea80b857f compile is retained but superseded.
 Constructor, fit binding selection, solve, determinant property, profile jitter,
 vendor readback and private binding accessors now hand over directly to the
 native family owner. Cholesky opts out of Python _mode lifecycle wrappers;
@@ -10,10 +11,15 @@ admission of scalar state and a factor-buffer size guard before dispatch.
 Exact module entry reads avoid optional module __getattr__ callbacks. Model
 settings and input owners remain retained for the whole operation.
 
-Validation: small local compile PASS, Mac CPU column, O0, ten workers,20.94s.
+Review repair: native_release_admit checks all overwritten constructor fields
+before any mutation; the owner context is explicitly connected at import. Fit
+checks all replaced learned-state owners too. Reinitialization with omitted mode
+retains the previous instance numeric_mode, matching the former wrapper.
+
+Validation: final small compile PASS, Mac CPU column,O0,ten workers,91.69s.
 Compiled true native linalg_operation plus shared classical_family_admit. No
 runtime execution, GPU/identity result or full-library completion claimed.
-See cholesky_compile.json for compiler/flags/source/binary hashes and full logs.
+See cholesky_lifetime_compile.json for compiler/flags/source/binary hashes and full logs.
 
 Remaining scope (not completed by this batch):
 - mixture.GaussianMixture still resolves bindings and has Python _mode wrappers;
