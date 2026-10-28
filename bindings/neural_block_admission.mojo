@@ -185,7 +185,14 @@ def neural_block_snapshot(block: PythonObject, context: PythonObject) raises -> 
             py_setitem(snapshot, name, neural_metadata_snapshot(fields[name]))
     for name in ["_w", "_wopt"]:  # driver-loop: native admission metadata and retained owner registry
         if py_contains(fields, name):
-            py_setitem(snapshot, name, neural_weights_snapshot(fields[name], context))
+            var values = fields[name]
+            if py_type(values) is not b.list and py_type(values) is not b.tuple:
+                raise Error("TypeError: neural weights require exact native slot lists")
+            var originals = py_call(b.list, values)
+            # Public parameters expose the original live buffers. Retain those
+            # identities now rather than rereading caller slots after kernels.
+            py_setitem(snapshot, PythonObject("_neural_original" + name), originals)
+            py_setitem(snapshot, name, neural_weights_snapshot(originals, context))
     var packed = py_get(fields, "_int15")
     if packed is not None:
         if py_type(packed) is not b.list and py_type(packed) is not b.tuple:
