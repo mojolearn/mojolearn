@@ -653,8 +653,7 @@ class _Splitter:
     (train, test) Int64 index Arrays; get_n_splits."""
 
     def __repr__(self):
-        params = ', '.join(f'{k}={v!r}' for k, v in sorted(self.get_params().items()))  # glue: repr and params over the splitter attributes
-        return f'{type(self).__name__}({params})'
+        return _NATIVE(self, "family_msel_splitter_repr", (), _NATIVE_CONTEXT)
 
     def get_params(self, deep=True):
         """Return the splitter's constructor parameters as a dict."""
@@ -1471,7 +1470,7 @@ class _Scorer:
         self._name = name
 
     def __repr__(self):
-        return f'make_scorer({getattr(self._score_func, "__name__", self._score_func)})'
+        return _NATIVE(self, "family_msel_scorer_repr", (), _NATIVE_CONTEXT)
 
     def __call__(self, estimator, X, y, sample_weight=None, *, _memo=None):
         return _NATIVE(self, "family_msel_scorer_call", (estimator, X, y, sample_weight, _memo), _NATIVE_CONTEXT)
@@ -1872,12 +1871,6 @@ class _BaseSearch:
         """
         return _NATIVE(self, "family_msel_search_fit", (X, y, groups), _NATIVE_CONTEXT)
 
-    def _best(self):
-        if not hasattr(self, 'best_estimator_'):
-            raise AttributeError(f'This {type(self).__name__} instance was initialized with refit=False or '
-                                 'is not fitted.')
-        return self.best_estimator_
-
     # The delegations and `score` are one native call each
     # (bindings/model_selection_native.mojo): the refit check, then the
     # best estimator's own method (or the search's scorer) on X.
@@ -1907,7 +1900,7 @@ class _BaseSearch:
     @property
     def classes_(self):
         """The class labels of ``best_estimator_``."""
-        return self._best().classes_
+        return _NATIVE(self, "family_msel_search_classes", (), _NATIVE_CONTEXT)
 
 
 class GridSearchCV(_BaseSearch):
