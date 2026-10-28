@@ -18,28 +18,43 @@ print(json.dumps(dict(allocated_cores=cores, affinity=len(os.sched_getaffinity(0
 PYEOF
 CORES=$("$PY" -c "import json;print(json.load(open('$O/resources.json'))['allocated_cores'])")
 AVAIL_GIB=$("$PY" -c "import json;print(int(json.load(open('$O/resources.json'))['available_bytes']/2**30))")
-PER_JOB_GIB=7
-J_MEM=$(( AVAIL_GIB * 8 / 10 / PER_JOB_GIB )); [ "$J_MEM" -ge 1 ] || J_MEM=1
-W=$(( CORES / J_MEM )); [ "$W" -ge 2 ] || W=2
-J=$(( CORES / W )); [ "$J" -ge 1 ] || J=1
-export MOJOLEARN_COMPILE_JOBS="$W"
-export MOJOLEARN_MOJO_BUILD_FLAGS="--optimization-level 0"
-echo "cores=$CORES avail_gib=$AVAIL_GIB jobs=$J compiler_workers=$W per_job_gib=$PER_JOB_GIB opt=O0" | tee "$O/build_settings.txt"
-git rev-parse HEAD > "$O/source_commit.txt" 2>/dev/null || cp .leg_commit "$O/source_commit.txt" 2>/dev/null || true
-"$PY" -c "import subprocess;print(subprocess.run(['$PWD/.pixi/envs/default/bin/mojo','--version'],capture_output=True,text=True).stdout)" > "$O/compiler_version.txt" 2>&1
-
-# Build: hard cap 30 minutes so the probe and the fetch fit the 60-minute lease.
+PER_JOB_GIB=12
+# Attempt 1 (2026-10-28, pod 5tuclj99stxbe8): at 7 GiB the RSS guard stopped
+# tokenizer/runtime_classical/x_sequence (exit 124), and three groups do not
+# lower at O0 (llvm.masked.gather alignment must be a constant), so those
+# three build at the default optimization level in a second cache.
+DEFAULT_OPT="_mojolearn_dev_x_decomp_host _mojolearn_dev_estimators_host _mojolearn_dev_x_linear_host"
+NB=3; WB=3
+CORES_A=$(( CORES - NB * WB )); [ "$CORES_A" -ge 4 ] || CORES_A=4
+J_MEM=$(( (AVAIL_GIB * 8 / 10 - NB * PER_JOB_GIB) / PER_JOB_GIB )); [ "$J_MEM" -ge 1 ] || J_MEM=1
+W=$(( CORES_A / J_MEM )); [ "$W" -ge 2 ] || W=2
+J=$(( CORES_A / W )); [ "$J" -ge 1 ] || J=1
+echo "cores=$CORES avail_gib=$AVAIL_GIB O0: jobs=$J workers=$W; default-opt: jobs=$NB workers=$WB; per_job_gib=$PER_JOB_GIB" | tee "$O/build_settings.txt"
+git rev-parse HEAD > "$O/source_commit.txt" 2>/dev/null || true
+"$PWD/.pixi/envs/default/bin/mojo" --version > "$O/compiler_version.txt" 2>&1
+CACHE_A=/root/.cache/mojolearn-development
+CACHE_B=/root/.cache/mojolearn-development-defaultopt
+"$PY" tools/development_build.py plan --sets host --json "$O/plan.json" > "$O/plan.log" 2>&1
+GROUPS_A=$("$PY" -c "
+import json;skip=set('$DEFAULT_OPT'.split())
+print(' '.join('--group '+g['stem'] for g in json.load(open('$O/plan.json'))['groups'] if g['stem'] not in skip))")
+GROUPS_B=$(for g in $DEFAULT_OPT; do printf -- '--group %s ' "$g"; done)
 B0=$(date +%s)
-timeout -k 30 1800 "$PY" tools/development_build.py build --sets host --jobs "$J" \
-    --memory-per-job-gib "$PER_JOB_GIB" --evidence "$O/devbuild" > "$O/devbuild.log" 2>&1
-BRC=$?
-echo "$BRC" > "$O/devbuild.rc"
-echo "build rc=$BRC seconds=$(( $(date +%s) - B0 ))" | tee -a "$O/build_settings.txt"
-if [ "$BRC" != 0 ]; then
-    "$PY" experiments/python_runtime_probe_20261028/partial_activate.py "$O/partial_activation.json" \
-        > "$O/partial_activate.log" 2>&1
-    echo "partial activation rc=$?" | tee -a "$O/build_settings.txt"
-fi
+( MOJOLEARN_COMPILE_JOBS=$W MOJOLEARN_MOJO_BUILD_FLAGS="--optimization-level 0" PYTHONUNBUFFERED=1 \
+  timeout -k 30 2280 "$PY" tools/development_build.py build --sets host $GROUPS_A --cache "$CACHE_A" --jobs "$J" \
+    --memory-per-job-gib "$PER_JOB_GIB" --evidence "$O/devbuild" > "$O/devbuild.log" 2>&1; echo $? > "$O/devbuild.rc" ) &
+PA=$!
+sleep 90  # let attempt A's generator finish before B's runs
+( MOJOLEARN_COMPILE_JOBS=$WB PYTHONUNBUFFERED=1 \
+  timeout -k 30 $(( 2280 - 90 )) "$PY" tools/development_build.py build --sets host $GROUPS_B --cache "$CACHE_B" --jobs "$NB" \
+    --memory-per-job-gib "$PER_JOB_GIB" --evidence "$O/devbuild-defaultopt" > "$O/devbuild-defaultopt.log" 2>&1; echo $? > "$O/devbuild-defaultopt.rc" ) &
+PB=$!
+wait $PA; wait $PB
+echo "build rcA=$(cat $O/devbuild.rc) rcB=$(cat $O/devbuild-defaultopt.rc) seconds=$(( $(date +%s) - B0 ))" | tee -a "$O/build_settings.txt"
+PROBE_PLANS="[{\"cache\": \"$CACHE_A\", \"flags\": \"--optimization-level 0\", \"jobs\": $W}, {\"cache\": \"$CACHE_B\", \"flags\": \"\", \"jobs\": $WB}]" \
+  MOJOLEARN_COMPILE_JOBS=$W "$PY" experiments/python_runtime_probe_20261028/partial_activate.py "$O/partial_activation.json" \
+    > "$O/partial_activate.log" 2>&1
+echo "activation rc=$? $(tail -n 1 $O/partial_activate.log)" | tee -a "$O/build_settings.txt"
 # Binary manifest (the binaries stay in the box cache; their hashes come home).
 ( cd python/mojolearn && find host -type f \( -name '*.so' -o -name '*.json' -o -name '*.dylib' \) -print0 \
     | xargs -0 sha256sum ) > "$O/binary_manifest.sha256" 2>/dev/null
@@ -51,7 +66,7 @@ MOJOLEARN_VENDOR=cpu PYTHONPATH=python "$PY" -c "import mojolearn,mojolearn._bac
     > "$O/import_check.log" 2>&1
 echo "import rc=$?" | tee -a "$O/build_settings.txt"
 ELAPSED=$(( $(date +%s) - T0 ))
-LEFT=$(( 46 * 60 - ELAPSED ))
+LEFT=$(( 50 * 60 - ELAPSED ))
 DEADLINE=$(( LEFT - 330 )); [ "$DEADLINE" -ge 60 ] || DEADLINE=60
 echo "probe deadline=${DEADLINE}s workers=$CORES" | tee -a "$O/build_settings.txt"
 MOJOLEARN_VENDOR=cpu "$PY" tools/python_runtime_probe.py --out "$O/probe" --workers "$CORES" \
