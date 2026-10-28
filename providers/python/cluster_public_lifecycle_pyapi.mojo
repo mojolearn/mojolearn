@@ -220,7 +220,8 @@ def cluster_public_operation(model: PythonObject, operation: String, args: Pytho
         else:
             result = mixture_operation(model, operation, prepared, context)
     except error:
-        raise _refusal(error, fitting, nested, rows, columns, name)
+        var refused = _refusal(error, fitting, nested, rows, columns, name)
+        raise refused^
     finally:
         if fitting:
             estimator_fit_end(model, depth)

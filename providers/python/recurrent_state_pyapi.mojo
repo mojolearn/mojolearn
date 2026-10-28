@@ -70,17 +70,17 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
     for layer in range(layers):  # driver-loop: over recurrent parameter block layout
         var input_width = features if layer == 0 else hidden
         names.append("weight_ih_l" + String(layer))
-        dimensions.append(List[Int](gates * hidden, input_width))
+        dimensions.append(List[Int]([gates * hidden, input_width]))
         names.append("weight_hh_l" + String(layer))
-        dimensions.append(List[Int](gates * hidden, hidden))
+        dimensions.append(List[Int]([gates * hidden, hidden]))
         names.append("bias_ih_l" + String(layer))
-        dimensions.append(List[Int](gates * hidden))
+        dimensions.append(List[Int]([gates * hidden]))
         names.append("bias_hh_l" + String(layer))
-        dimensions.append(List[Int](gates * hidden))
+        dimensions.append(List[Int]([gates * hidden]))
     names.append("head.weight")
-    dimensions.append(List[Int](outputs, hidden))
+    dimensions.append(List[Int]([outputs, hidden]))
     names.append("head.bias")
-    dimensions.append(List[Int](outputs))
+    dimensions.append(List[Int]([outputs]))
     for i in range(len(names)):  # driver-loop: over named parameter buffers
         var count = 1
         for j in range(len(dimensions[i])):  # small-loop(parameter shape words)
