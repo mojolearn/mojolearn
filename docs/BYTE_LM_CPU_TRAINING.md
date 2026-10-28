@@ -31,17 +31,18 @@ The wrong-gradient build got 8 of 10 arrays wrong and 2 right, and the 2 right
 are the loss: a backward-only corruption leaves the forward exact and then
 propagates from the gradient into both moments and the updated parameters. The
 gate named the tensor, `block0.w_q` element 0, with both bit patterns.
-- The GPU trainer class on a CPU-only install, for the internal verifier only
-  (2026-09-15, lane/cpu-training-embedding-ivf). Inside
-  `_cpu_reference.reference_training()` (which `tools/identity_break.py` enters),
+- The shared trainer class on a CPU-only install, initially added for the
+  verifier (2026-09-15, lane/cpu-training-embedding-ivf) and available through
+  the public CPU API since 2026-09-20. Select `MOJOLEARN_VENDOR=cpu` before
+  import; `_cpu_reference.reference_training()` is now a compatibility no-op.
   `SmallByteLanguageModelTrainer` and its alias `LanguageModelTrainer`,
   stateless or `resident=True`, run through
   `python/mojolearn/_byte_lm_trainer_host.py`, which serves the GPU binding's
   single-device entries (the step, evaluation, logits and the resident session)
   over this binding's step, loss and reference-path logits and holds no
-  arithmetic; the multi-GPU entries are absent and refuse by name. Outside that
-  scope the class refuses on a CPU-only install, as every public CPU fit does;
-  `LanguageModelHostTrainer` stays the published CPU trainer. The `byte-lm` and
+  arithmetic; the multi-GPU entries are absent and refuse by name because they
+  require multiple GPUs. `LanguageModelHostTrainer` also remains available.
+  The `byte-lm` and
   `byte-lm-resident` identity_break lanes (three AdamW steps at that time, two
   and one now; weight decay
   0.01, the exported gradient, the logits, the checkpoint bytes and the batch
