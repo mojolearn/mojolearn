@@ -20,6 +20,7 @@ from bindings.classical_arrays import (
 )
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from core.family_cast_impl import family_cast_rows, family_cast_rows_f64, family_min_f32
+from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_FLOAT, NPY_DOUBLE
 from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.optimizer_public_words import stash_python_error
 from core.family_weights_impl import (
@@ -328,54 +329,107 @@ def family_nonfinite(error: Error, name: String) -> Bool:
 
 def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, context: PythonObject,
                          wide: Bool = False) raises -> PythonObject:
-    """`_sample_weight.check_sample_weight(source, n, dtype=..., allow_negative=...)`
-    as a float32 (or, `wide`, float64) vector: a scalar fills a new vector,
-    a sequence or buffer of `n` entries is cast (borrowed when it already
-    has the dtype in C order), and the shape, non-finite, negative and
-    all-zero refusals keep scikit-learn's wording and order."""
-    var b = native_loaded_module("builtins")
-    var weights = PythonObject(None)
-    var typestr = String("<f8") if wide else String("<f4")
-    var zero_d = False
-    if not family_is_real(source):
-        zero_d = (Bool(py=py_call(b.hasattr, source, "ndim")) and Bool(py=py_call(b.hasattr, source, "shape"))
-                  and Int(py=family_call(b.int, source.ndim)) == 0)
-    if family_is_real(source) or zero_d:
-        var value = Float64(py=family_call(b.float, source))
-        weights = family_array(Python.tuple(n), typestr, context)
-        if wide:
-            family_fill_f64(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(weights))), n, value)
-            _ = weights  # keep the Python object alive through the native call above
-        else:
-            family_fill_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, Float32(value))
-            _ = weights  # keep the Python object alive through the native call above
+    var snapshot = family_sample_weight_snapshot(source, n, allow_negative, context, wide)
+    return snapshot.keep
+
+
+def _family_weight_scalar(value: Float64, n: Int, wide: Bool,
+                          context: PythonObject) raises -> ArrayMetadata:
+    var item = 8 if wide else 4
+    var weights = family_array(Python.tuple(n), "<f8" if wide else "<f4", context)
+    var address = Int(py=classical_address(weights))
+    if wide:
+        family_fill_f64(FAMILY_F64P(unsafe_from_address=address), n, value)
     else:
-        var view = classical_view(source, context, "sample_weight")
-        if Int(py=view.size) == 0:
-            # as_f32_c's empty refusal, as check_sample_weight rewords it.
-            raise Error("sample_weight.shape == (0,), expected (" + String(n) + ",)!")
-        if Int(py=view.ndim) != 1:
+        family_fill_f32(FAMILY_F32P(unsafe_from_address=address), n, Float32(value))
+    var descriptor = CastIn(address, CAST_KIND_FLOAT, item, n, 1, item, 0)
+    return ArrayMetadata(weights, List[Int](n), descriptor, n, NPY_DOUBLE if wide else NPY_FLOAT,
+                         True, True, True, weights, True)
+
+
+def _family_weight_buffer(source: PythonObject, n: Int, wide: Bool,
+                          context: PythonObject) raises -> ArrayMetadata:
+    # Admit supported native storage before reading any user attributes. One
+    # shape and dtype/stride snapshot is retained through validation and use.
+    var view = classical_view(source, context, "sample_weight")
+    var shape = array_shape_once(view, context)
+    var count = 1
+    for dimension in shape:  # small-loop(admitted sample-weight rank)
+        count *= dimension
+    if count == 0:
+        raise Error("sample_weight.shape == (0,), expected (" + String(n) + ",)!")
+    var nd = len(shape)
+    if nd == 0:
+        # Existing zero-dimensional buffer semantics are a broadcast scalar.
+        # Read it with the existing native widening cast; never float(Array).
+        if py_type(source) is py_type(PythonObject(True)):
             raise Error("Sample weights must be 1D array or scalar")
-        if Int(py=view.shape[0]) != n:
-            raise Error("sample_weight.shape == " + family_shape_repr(view) + ", expected (" + String(n) + ",)!")
-        weights = family_cast_view_f64(view, "sample_weight", context) if wide else family_cast_view(view, "sample_weight", context)
-        _ = view^
-    # prepare_targets' weight checks: finiteness, then the minimum, then
-    # the maximum.
+        var scalar = array_metadata_once(view, shape^, "sample_weight", context, True)
+        var one = family_array(Python.tuple(1), "<f8", context)
+        var ptr = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(one)))
+        var raw = scalar.source
+        var scalar_address = raw.addr
+        var reversed = family_array(Python.tuple(raw.itemsize), "<u1", context)
+        if not scalar.native_byte_order:
+            # float(zero_dim_ndarray) previously accepted swapped scalars.
+            # Preserve that scalar-only behavior before the unchanged cast.
+            var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=raw.addr)
+            var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(reversed)))
+            for byte in range(raw.itemsize):  # small-loop(one admitted scalar word)
+                dst[byte] = src[raw.itemsize - 1 - byte]
+            scalar_address = Int(py=classical_address(reversed))
+        family_cast_rows_f64(scalar_address, 0, 0, 1, 1, raw.itemsize, raw.kind, ptr)
+        var result = _family_weight_scalar(ptr[0], n, wide, context)
+        _ = scalar
+        _ = one
+        _ = reversed
+        return result^
+    if nd != 1:
+        raise Error("Sample weights must be 1D array or scalar")
+    if shape[0] != n:
+        var words = Python.list()
+        for dimension in shape:  # small-loop(admitted rank for original error)
+            _ = py_call(words.append, dimension)
+        raise Error("sample_weight.shape == " + family_repr(py_call(py_type(Python.tuple()), words))
+                    + ", expected (" + String(n) + ",)!")
+    var snapshot = array_metadata_once(view, shape^, "sample_weight", context)
+    var ready = snapshot.c_order and snapshot.dtype_number == (NPY_DOUBLE if wide else NPY_FLOAT)
+    if not ready:
+        var weights = family_array(Python.tuple(n), "<f8" if wide else "<f4", context)
+        var address = Int(py=classical_address(weights))
+        var raw = snapshot.source
+        if wide:
+            family_cast_rows_f64(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
+                                 FAMILY_F64P(unsafe_from_address=address))
+            snapshot.replace_f64(weights, address)
+        else:
+            family_cast_rows(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
+                             FAMILY_F32P(unsafe_from_address=address))
+            snapshot.replace_f32(weights, address)
+    return snapshot^
+
+
+def family_sample_weight_snapshot(source: PythonObject, n: Int, allow_negative: Bool,
+                                  context: PythonObject, wide: Bool = False) raises -> ArrayMetadata:
+    var b = native_loaded_module("builtins")
+    var snapshot: ArrayMetadata
+    if py_type(source) is b.int or py_type(source) is b.float:
+        snapshot = _family_weight_scalar(Float64(py=source), n, wide, context)
+    else:
+        snapshot = _family_weight_buffer(source, n, wide, context)
+    var address = snapshot.source.addr
     var status: Int
     if wide:
-        status = family_weight_status_f64(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(weights))), n, allow_negative)
-        _ = weights  # keep the Python object alive through the native call above
+        status = family_weight_status_f64(FAMILY_F64P(unsafe_from_address=address), n, allow_negative)
     else:
-        status = family_weight_status(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, allow_negative)
-        _ = weights  # keep the Python object alive through the native call above
+        status = family_weight_status(FAMILY_F32P(unsafe_from_address=address), n, allow_negative)
     if status == FAMILY_WEIGHTS_NONFINITE:
         raise Error(FAMILY_NONFINITE_WEIGHTS)
     if status == FAMILY_WEIGHTS_NEGATIVE:
         raise Error(FAMILY_NEGATIVE_WEIGHTS)
     if status == FAMILY_WEIGHTS_ALL_ZERO:
         raise Error(FAMILY_ZERO_WEIGHTS)
-    return weights
+    return snapshot^
 
 
 def family_field(fields: PythonObject, name: String) raises -> PythonObject:

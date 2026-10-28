@@ -29,7 +29,7 @@ from bindings.classical_arrays import classical_address, classical_is_array, cla
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
-    family_call, family_entry, family_array, family_sample_weight,
+    family_call, family_entry, family_array, family_sample_weight_snapshot,
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs
 from bindings.svc_common import (
@@ -317,8 +317,13 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     if sample_weight is None and class_weight is None:
         return PythonObject(None)
     var sw = PythonObject(None)
+    var sw_owner = PythonObject(None)
+    var sw_address = 0
     if sample_weight is not None:
-        sw = family_sample_weight(sample_weight, n_rows, False, context, True)
+        var weights = family_sample_weight_snapshot(sample_weight, n_rows, False, context, True)
+        sw = weights.keep
+        sw_owner = Python.tuple(weights.keep, weights.owner)
+        sw_address = weights.source.addr
     var codes = PythonObject(None)
     var cwa = PythonObject(None)
     var n_classes = 0
@@ -366,7 +371,7 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     var out = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
     if n_rows > 0:
         _ = svc_epilogue_execute(binding, native,
-                        PythonObject(0) if sw is None else classical_address(sw),
+                        PythonObject(sw_address),
                         PythonObject(0) if cwa is None else classical_address(codes),
                         PythonObject(0) if cwa is None else classical_address(cwa),
                         classical_address(out),
@@ -377,6 +382,7 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
         _ = cwa  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
     _ = sw^
+    _ = sw_owner
     _ = codes^
     _ = cwa^
     return out

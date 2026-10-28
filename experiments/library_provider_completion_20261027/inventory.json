@@ -355,5 +355,18 @@
       "CPU SVM and linear SVM",
       "runtime qualification"
     ]
+  },
+  "shared_weight_snapshot": {
+    "status": "source_candidate_uncompiled",
+    "changes": [
+      "family_sample_weight reuses common native snapshot across scalar/vector cast and validation",
+      "scalar buffers bypass Python numeric protocol, including prior byte-swapped zero-dimensional scalar behavior",
+      "SVC retains admitted weight storage owners/address through epilogue"
+    ],
+    "remaining": [
+      "other family execution consumers still receive legacy PythonObject weights",
+      "compile/public validation and byte comparison",
+      "remaining SVC class label admission and CPU native tables"
+    ]
   }
 }
