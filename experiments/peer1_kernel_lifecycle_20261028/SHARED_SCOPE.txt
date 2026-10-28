@@ -56,7 +56,8 @@ Proposed shared scope:
   and retained device-resource operations. Preserve source owners until their
   last upload/consumption and preserve the selected supported route.
 - bindings/_mojolearn_x_metrics.mojo and _host: capsule registration over the
-  existing x_metrics.device run_program/run_program_out/run_program_ranges
+  existing x_metrics.device run_program_device/run_program_device_out/
+  run_program_device_ranges
   and x_metrics.host.program.run_program_host owners, retaining their existing
   output-range validation. No CPython call from the numerical descriptor.
 - Never replace multioutput R2 with the average of scalar R2 calls: that changes
