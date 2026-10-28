@@ -1,0 +1,82 @@
+Peer 2 decomposition/cross-decomposition boundary work, 2026-10-27
+
+Branch: lane/peer2-decomposition-20261027
+Worktree: /Users/andrewhendel/mojolearn-wt/peer2-decomposition-20261027
+Base local main: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+
+Chunk 1: a1b998d91563183f4887bcd75a459d7991dace3b
+Eleven Isomap/ClassicalMDS/MDS/LLE shells pass binding placeholders into the
+native owner. Remove the Python _manifold_binding helper. This commit MUST
+travel with the manifold lane's native placeholder-resolution change; it is
+not a standalone main-merge candidate. Shared _expansion_decomp.py was edited
+only by this lane as agreed with the coordinator and manifold lane.
+
+Chunk 2: PLS preparation/score boundary
+The inherited _PLS.score used by PLSRegression/PLSCanonical/CCA now passes the
+model, original X/y/sample_weight and context into one native call. Import
+setup connects the existing metrics binding provider; the PLS native owner
+checks the selected mode and directly calls metrics_cls_operation for R2.
+No Python getattr or _get_binding runs before the native score operation.
+
+The PLS target path no longer invokes __array__, source.shape, source.reshape,
+list(source), or arbitrary input indexing before native admission. Its dedicated
+provider captures admitted metadata once, casts/scans in native code, and keeps
+original storage owners. Native kit input_snapshot retains owners separately
+from mutable Array slots and caches addresses; device writes invalidate cached
+host addresses. Vector targets retain the existing row-then-transpose numerical
+route; matrix targets retain matrix layout. No arithmetic kernel changed.
+
+Actual call path reviewed:
+public cross_decomposition.py aliases -> _expansion_decomp._PLS operation ->
+import-connected _PLS_CALL -> tokenizer host legacy alias registered by
+host_surface.HOST_IMPORT_ALIASES -> runtime_classical_host.pls_native_call ->
+pls_operation -> decomp_input_snapshot/DecompKit -> existing x_decomp exports ->
+native result publishing. The legacy tokenizer names are replaced at import by
+the exact runtime_classical entries; the placeholder declarations alone do not
+identify the executing owner.
+
+Validation completed:
+8 source tests passed, exit 0: tools/test_peer2_pls_boundary.py,
+tools/test_peer2_manifold_frontdoors.py, tools/test_native_decomp_params_connection.py.
+Python syntax checked for the edited shell and new public runtime probes.
+git diff --check passed. The first source-test attempt failed because its text
+assertion included a comment; the corrected assertion checks code lines. Both
+outputs retained. An earlier system-python pytest invocation failed because
+pytest was absent; the coordinator's test-only virtualenv ran the final suite.
+
+Evidence root: ~/mojolearn-evidence/peer2-decomposition-20261027/
+  manifold-shell-tests.log (pytest absent; exit 1)
+  manifold-shell-tests-direct.log (one source check / 11 shells; exit 0)
+  pls-source-tests.log (one source assertion failed, seven passed)
+  pls-source-tests-fixed.log (8 passed; exit 0)
+
+Pending, not claimed:
+- Native compile. No lane compilation was performed. Smallest supported host
+  group is bindings/build_runtime_classical_host.sh. A focused native import
+  probe covering bindings.pls_native.pls_c and its changed dependencies can
+  establish the development compile before root's integration merge.
+- Runtime controls in python/mojolearn/tests/test_pls_native_boundary.py (16
+  parameterized cases): vector/column/strided/list targets across the three
+  public estimators, protocol refusal without hook invocation, finite/length/
+  fitted checks. These are UNRUN against the changed native binary.
+- Cross-vendor/runtime identity and installed artifact verification after
+  final integration. No broad benchmark, GPU campaign, publish or main merge.
+
+Remaining migration debt (family not declared complete):
+- PLS/decomposition model py_fields admission, mutable scalar conversion,
+  class constants and inherited attribute lifecycle remain shared dependencies.
+  py_fields currently reaches object.__getattribute__(model, '__dict__'). Root
+  owns the schema/admission repair; this lane did not edit those shared files.
+- DecompKit uses packed CPython calls to existing compiled x_decomp entries.
+  No raw native x_decomp descriptor table was added by this chunk. Existing
+  scalar conversions, iteration-result list construction and warning delivery
+  remain. Native warning delivery may transitively execute Python hooks.
+- Scoring still uses existing labels_f32 and native metrics preparation paths;
+  their transitive metadata/callback audit remains required. The score wrapper
+  change alone does not qualify the whole score operation as Python-free.
+- Other decomposition owners (PCA/TruncatedSVD/IncrementalPCA, ICA/NMF/FA/LDA,
+  dictionary learning/sparse PCA, random projection, standalone decomp linalg)
+  still need complete transitive provider/metadata/admission qualification.
+- Random projection components_/__getstate__ retained bodies include Python
+  work. Do not extend this review into a dedicated Apple fast/lazy campaign.
+- Existing source inventory native_boundary labels are not runtime evidence.
