@@ -25,7 +25,7 @@ _MODE_CODE = {"fast": 0, "identical": 1}
 # predict, predict_proba, score_samples, score, bic and aic of
 # GaussianMixture and BayesianGaussianMixture (bindings/mixture_native.mojo)
 # and `sample` (bindings/svm_mixture_native.mojo) are one native call each,
-# handed the binding `_bind` resolves. The covariance-type and init tables
+# with binding selection owned by native code. The covariance-type and init tables
 # are the option-parity solver's codes (x_cluster/entries.mojo::bgmm_entry).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(
@@ -130,6 +130,7 @@ class GaussianMixture(NumericModeMixin):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "density_estimator"
 
+    _mojolearn_native_public = True
     _BINDING = "_mojolearn_mixture"
 
     def __init__(
@@ -146,19 +147,9 @@ class GaussianMixture(NumericModeMixin):
         means_init=None,
         weights_init=None,
         precisions_init=None,
+        *, numeric_mode=None,
     ):
-        self.n_components = n_components
-        self.covariance_type = covariance_type
-        self.tol = tol
-        self.reg_covar = reg_covar
-        self.max_iter = max_iter
-        self.init_params = init_params
-        self.random_state = random_state
-        self.n_init = n_init
-        self.warm_start = warm_start
-        self.means_init = means_init
-        self.weights_init = weights_init
-        self.precisions_init = precisions_init
+        return _NATIVE(self, "family_mix_gmm_public_initialize", (n_components, covariance_type, tol, reg_covar, max_iter, init_params, random_state, n_init, warm_start, means_init, weights_init, precisions_init, numeric_mode,), _NATIVE_CONTEXT)
 
     # EM runs one shot on the device (`gaussian_mixture_fit`). Option parity
     # (2026-09-27, lane/algos-cluster): any option this binding does not carry
@@ -166,19 +157,7 @@ class GaussianMixture(NumericModeMixin):
     # (`x_cluster/bgmm.mojo`, plain mode; bindings/mixture_native.mojo `_gmm_ext_fit`).
     # The default fit is untouched and keeps its recorded bits.
     def _extension(self):
-        """This object's tier of the mixture binding, its compile-time mode
-        read back (glue: binding choice). The parallel driver's workers
-        (the multi-GPU driver's native `family_par_run`) reach the binding through it."""
-        from . import _backend
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "mixture_numeric_mode", None)
-        if fn is not None and int(fn()) != _MODE_CODE.get(want):
-            raise RuntimeError(
-                f"mojolearn GaussianMixture: numeric_mode={want!r} was requested "
-                f"but {mod.__name__} reports another compile-time mode; "
-                "rebuild it with bash bindings/build_mixture.sh")
-        return mod
+        return _NATIVE(self, "family_mix_gmm_public_binding", (), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the mixture to `X` by expectation-maximization.
@@ -211,7 +190,7 @@ class GaussianMixture(NumericModeMixin):
             If `n_components` is not an int or `tol`/`reg_covar` is not a
             number.
         """
-        return _NATIVE(self, "family_mix_gmm_fit", (self._bind(), self._bind("_mojolearn_x_cluster"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_fit", (X, y), _NATIVE_CONTEXT)
 
 
     def score_samples(self, X):
@@ -225,7 +204,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         log_likelihood : Array of shape (n_samples,), float32
         """
-        return _NATIVE(self, "family_mix_gmm_score_samples", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_score_samples", (X,), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Return the posterior probability of each component for each row.
@@ -238,7 +217,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         proba : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_mix_gmm_predict_proba", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_predict_proba", (X,), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Return the most likely component for each row of `X`.
@@ -253,7 +232,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         labels : Array of shape (n_samples,), int32
         """
-        return _NATIVE(self, "family_mix_gmm_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_predict", (X,), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model, then return `predict(X)`.
@@ -262,7 +241,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         labels : Array of shape (n_samples,), int32
         """
-        return _NATIVE(self, "family_mix_gmm_fit_predict", (self._bind(), self._bind("_mojolearn_x_cluster"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_fit_predict", (X, y), _NATIVE_CONTEXT)
 
     def save(self, path):
         """Save the fitted model to `path` as an `.npz` file.
@@ -324,7 +303,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         score : float
         """
-        return _NATIVE(self, "family_mix_gmm_score", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_score", (X,), _NATIVE_CONTEXT)
 
     def bic(self, X):
         """Return the Bayesian information criterion of the model on `X`.
@@ -339,7 +318,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         bic : float
         """
-        return _NATIVE(self, "family_mix_gmm_bic", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_bic", (X,), _NATIVE_CONTEXT)
 
     def aic(self, X):
         """Return the Akaike information criterion of the model on `X`.
@@ -354,7 +333,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         aic : float
         """
-        return _NATIVE(self, "family_mix_gmm_aic", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_aic", (X,), _NATIVE_CONTEXT)
 
     # Reference: scikit-learn `BaseMixture.sample`. Draws are position-mapped
     # Philox keyed by `random_state` (DEVIATION 2791, `mixture/checks/sample.mojo`);
@@ -392,7 +371,7 @@ class GaussianMixture(NumericModeMixin):
             If the model was fitted with options outside the default
             configuration.
         """
-        return _NATIVE(self, "family_svm_gmm_sample", (self._bind(), n_samples), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_gmm_public_sample", (n_samples,), _NATIVE_CONTEXT)
 
 
 # The saved model, written natively from this schema (bindings/
@@ -427,3 +406,17 @@ __all__ = ["GaussianMixture"]
 from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
 __getattr__ = _lazy_exports("mixture")
 __all__ += _SKLEARN_LAYOUT["mixture"]
+
+# Import-time provider, constructor and lifetime metadata. Runtime public methods
+# retain one native call and select their current bindings inside the owner.
+from ._native_owner_lifetime import connect_owner_context as _connect_gmm_owner_context
+_connect_gmm_owner_context(_NATIVE_CONTEXT)
+_native_family_bridge.connect_bindings("_mojolearn_mixture", "_mojolearn_x_cluster")
+_native_family_bridge.tables(
+    gmm_public_class=GaussianMixture,
+    gmm_public_parameters=(
+        "n_components", "covariance_type", "tol", "reg_covar", "max_iter",
+        "init_params", "random_state", "n_init", "warm_start", "means_init",
+        "weights_init", "precisions_init", "numeric_mode",
+    ),
+)
