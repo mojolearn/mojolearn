@@ -24,6 +24,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.estimator_binding_pyapi import estimator_binding
 from providers.python.estimator_lifecycle_pyapi import estimator_fit_begin, estimator_fit_end
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from bindings.native_owner_lifetime import native_release_admit
 
 
 def _chol_binding(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -55,6 +56,15 @@ def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObj
     if mode is not None and py_type(mode) is not b.str:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var fields = py_fields(model)
+    # Reinitialization must admit every released owner before publishing any
+    # replacement. A user can have assigned an object with a Python finalizer
+    # since the previous constructor; retaining the dictionary until this pass
+    # succeeds keeps refusal atomic and runs none of those lifecycle hooks.
+    var names = Python.tuple("jitter", "numeric_mode")
+    var replacements = Python.tuple(jitter, mode)
+    for i in range(len(names)):  # driver-loop: two constructor-owned fields, admitted before any replacement
+        if py_contains(fields, names[i]) and fields[names[i]] is not replacements[i]:
+            native_release_admit(fields[names[i]], context)
     py_setitem(fields, "jitter", jitter)
     py_setitem(fields, "numeric_mode", mode)
     return PythonObject(None)

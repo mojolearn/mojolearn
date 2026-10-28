@@ -57,6 +57,8 @@ _MODE_CODE = {"fast": 0, "identical": 1}
 # The compiled family owner (bindings/linalg_native.mojo), connected once at
 # import: each public operation selects its binding inside the native owner.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+from ._native_owner_lifetime import connect_owner_context as _connect_chol_owner_context
+_connect_chol_owner_context(_NATIVE_CONTEXT)
 _native_family_bridge.tables(family_chol_mode_codes=dict(_MODE_CODE))
 
 #: The saved-model format tag (`save`, `load`, `mojolearn.host_model`).
