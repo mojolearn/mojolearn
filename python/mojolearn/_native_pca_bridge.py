@@ -44,8 +44,9 @@ def connect(pca_class):
             connected[mode] = entries
             # glue: immutable identities for the query's six compiled entries;
             # runtime table replacement is admitted before any reader runs.
-            query_connections.append((mode, tuple(entries.get(name) for name in
-                required + ("pca_whiten_transform", "pca_whiten_inverse_transform"))))
+            query_connections.append((mode, tuple(
+                (entries[name], entries[name].__self__, entries[name].__name__) if name in entries else None
+                for name in required + ("pca_whiten_transform", "pca_whiten_inverse_transform"))))
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
     # A densified SciPy sparse X is written as an Array (host_sparse_native).

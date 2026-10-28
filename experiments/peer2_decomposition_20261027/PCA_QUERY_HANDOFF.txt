@@ -84,8 +84,9 @@ descriptor table or independent arithmetic implementation in this chunk.
 Independent coordinator review follow-up:
 Query binding dictionaries are now copied only after exact dict/string-key
 admission. All six required/optional consumed entries are compared with the
-import-connected immutable identity records and checked as named compiled
-module functions before vendor/mode readback executes. Optional whitening
+import-connected immutable identity/owner/name records and checked as compiled
+builtin functions before vendor/mode readback executes. No universal module
+owner or exported-name assumption narrows legitimate import-time bindings. Optional whitening
 None/missing entries retain their existing later NotImplementedError behavior.
 Mutable native container truth (bytearray/list/tuple/dict) is frozen to Bool
 while original references remain in scalar_owners. No verification was run.
