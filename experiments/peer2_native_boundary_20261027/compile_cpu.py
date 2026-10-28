@@ -27,8 +27,8 @@ def sha256(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--groups", nargs="+", choices=("scalers_pls", "manifold", "umap_init", "jl_rp"),
-                        default=["scalers_pls", "manifold", "umap_init", "jl_rp"])
+    parser.add_argument("--groups", nargs="+", choices=("scalers_pls", "scalers", "pls", "manifold", "umap_init", "jl_rp"),
+                        default=["scalers", "pls", "manifold", "umap_init", "jl_rp"])
     parser.add_argument("--out", type=Path, default=Path(os.environ.get("LEG_OUT", "/root/results-peer2")))
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -69,6 +69,7 @@ def main():
         str(path.relative_to(compiler.parent.parent)): sha256(path)
         for path in sorted((compiler.parent.parent / "lib/mojo").rglob("*.mojoc"))
     }
+    deadline = time.monotonic() + 2700  # Retention and teardown precede the 60-minute lease.
     for group in args.groups:
         source = Path("experiments/peer2_native_boundary_20261027") / f"compile_{group}.mojo"
         if group == "jl_rp":
@@ -76,7 +77,7 @@ def main():
         elif group == "manifold":
             # Typed matrix/device owners also require their module registration
             # to compile; the real dedicated host entry covers that boundary.
-            source = Path("bindings/_mojolearn_runtime_manifold_host.mojo")
+            source = Path("bindings/entry/entry__mojolearn_runtime_manifold_host.mojo")
         binary = args.out / f"{group}.so"
         # Use the repository's supported activated toolchain, as build_host_family.sh
         # does. Invoking the executable alone omits the installed std search path.
@@ -89,7 +90,7 @@ def main():
             process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
                                        start_new_session=True)
             try:
-                status = process.wait(timeout=1200)
+                status = process.wait(timeout=max(1, min(1200, deadline - time.monotonic())))
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGTERM)
                 try:
