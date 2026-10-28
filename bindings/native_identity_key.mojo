@@ -54,7 +54,7 @@ struct NativeIdentityKey(Movable, Writable):
         return True
 
     def retains(self, value: PythonObject) -> Bool:
-        for i in range(len(self.objects)):  # driver-loop: retained identity references
+        for i in range(len(self.objects)):  # driver-loop: over retained identity references
             if self.objects[i] is value:
                 return True
         return False
@@ -71,11 +71,13 @@ struct NativeIdentityKey(Movable, Writable):
             var pos = Int(0)
             var key = PyObjectPtr()
             var item = PyObjectPtr()
-            while cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: exact dictionary metadata
+            for _ in range(size):  # driver-loop: over exact dictionary metadata
+                if not cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+                    raise Error("native identity snapshot: dictionary changed during capture")
                 self.add(PythonObject(from_borrowed=key), depth + 1, limit)
                 self.add(PythonObject(from_borrowed=item), depth + 1, limit)
         else:
-            for i in range(size):  # driver-loop: retained exact container metadata
+            for i in range(size):  # driver-loop: over retained exact container metadata
                 var item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")(value._obj_ptr, i) if cls is self.list_type else cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")(value._obj_ptr, i)
                 self.add(PythonObject(from_borrowed=item), depth + 1, limit)
 
@@ -94,11 +96,13 @@ struct NativeIdentityKey(Movable, Writable):
             var pos = Int(0)
             var key = PyObjectPtr()
             var item = PyObjectPtr()
-            while cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: exact dictionary metadata
+            for _ in range(size):  # driver-loop: over exact dictionary metadata
+                if not cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+                    raise Error("native identity snapshot: dictionary changed during capture")
                 if not self.matches(PythonObject(from_borrowed=key), offset, depth + 1, limit) or not self.matches(PythonObject(from_borrowed=item), offset, depth + 1, limit):
                     return False
         else:
-            for i in range(size):  # driver-loop: compare live retained container pointers
+            for i in range(size):  # driver-loop: over live retained container pointers
                 var item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")(value._obj_ptr, i) if cls is self.list_type else cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")(value._obj_ptr, i)
                 if not self.matches(PythonObject(from_borrowed=item), offset, depth + 1, limit):
                     return False
@@ -119,7 +123,9 @@ struct NativeIdentityKey(Movable, Writable):
         var pos = Int(0)
         var key = PyObjectPtr()
         var item = PyObjectPtr()
-        while cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: admitted instance fields
+        for _ in range(len(fields)):  # driver-loop: over admitted instance fields
+            if not cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+                raise Error("native identity snapshot: fields changed during capture")
             var name = PythonObject(from_borrowed=key)
             if not self._skip(name, skip):
                 self.add(name)
@@ -136,7 +142,9 @@ struct NativeIdentityKey(Movable, Writable):
         var pos = Int(0)
         var key = PyObjectPtr()
         var item = PyObjectPtr()
-        while cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: admitted instance fields
+        for _ in range(len(fields)):  # driver-loop: over admitted instance fields
+            if not cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+                raise Error("native identity snapshot: fields changed during capture")
             var name = PythonObject(from_borrowed=key)
             if not self._skip(name, skip):
                 if not self.matches(name, offset) or not self.matches(PythonObject(from_borrowed=item), offset, 1):

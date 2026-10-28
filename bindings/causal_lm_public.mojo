@@ -458,9 +458,11 @@ def causal_lm_blocks_binding(model: PythonObject) raises -> PythonObject:
 
 
 def causal_layer_allocate(mut mods: NativeModules, model: PythonObject, i: Int, b: Int, cap: Int) raises -> PythonObject:
+    return causal_layer_allocate_fields(mods, String(model.kind), _block(mods, model, i), model._native_entries, model.numeric_profile, b, cap)
+
+
+def causal_layer_allocate_fields(mut mods: NativeModules, kind: String, blk: PythonObject, entries: PythonObject, numeric_profile: PythonObject, b: Int, cap: Int) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var kind = String(model.kind)
-    var blk = _block(mods, model, i)
     var st = py_call(g[].bi.object.__new__, g[].layer_classes[kind])
     _ = model_record_fields(mods, st, g[].layer_classes[kind], Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "k_cache", "v_cache", "cached_tokens", "_resident_session", "_numeric_profile", "conv_window", "h", "profile_id", "absolute_position", "_nn34_usable", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw", "buffered_tokens"))
     if kind == "transformer":
@@ -477,10 +479,10 @@ def causal_layer_allocate(mut mods: NativeModules, model: PythonObject, i: Int, 
         py_setattr(st, "v_cache", generation_array([n]))
         py_setattr(st, "cached_tokens", PythonObject(0))
         py_setattr(st, "_resident_session", PythonObject(None))
-        py_setattr(st, "_numeric_profile", model.numeric_profile)
+        py_setattr(st, "_numeric_profile", numeric_profile)
     elif kind == "mamba1":
         var di = Int(py=blk["d_inner"])
-        var profile = Int(py=model._native_entries["mamba1_profile"])
+        var profile = Int(py=entries["mamba1_profile"])
         py_setattr(st, "conv_window", generation_array([b, di, 4]))
         py_setattr(st, "h", generation_array([b, di, 16]))
         py_setattr(st, "profile_id", PythonObject(profile))
@@ -706,6 +708,25 @@ def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: Py
         mods.released()
         return _causal_layer_run_prepared(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step)
     var layer = GenerationLayerSnapshot(_block(mods, model, i), kind, planes)
+    mods.released()
+    return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
+
+
+def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, kind: String, d: Int, packed: Bool, prepared: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
+    # Standalone callers supply the retained native plan directly: no temporary
+    # namespace or Python attribute dispatch to reconstruct execution metadata.
+    _causal_array_guard(mods)
+    var shape = x.shape
+    var b = Int(py=shape[0])
+    var l = Int(py=shape[1])
+    var profile = kind == "transformer" and packed
+    var planes = profile and py_contains(entries, "forward15")
+    if prepared is not None:
+        var reused = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer.copy()
+        reused.rebind(fields, kind)
+        mods.released()
+        return _causal_layer_run_prepared(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step)
+    var layer = GenerationLayerSnapshot(fields, kind, planes)
     mods.released()
     return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
 

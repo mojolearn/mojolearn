@@ -1,0 +1,30 @@
+Native standalone execution owner, 2026-10-28
+
+NativeIdentityKey keeps identities and container delimiters in Mojo vectors.
+An unchanged standalone block walks exact live dictionaries/lists/tuples with
+native CPython API reads; it does not construct a Python identity list.
+Pointer-only segments retain the object, avoiding address reuse false hits.
+Container depth overflow or invalid metadata falls back to full admission.
+A captured direct reference to the block declines caching.
+
+NativeBlockPlan retains stable block kind, width, context, entries, numeric
+profile and prepared generation layer. NativeBlockExecution contains the
+per-operation fields and the retained plan. Standalone forward/step/allocate
+now pass native records and explicit arguments into causal layer helpers,
+without building a SimpleNamespace or lists wrapping the block/field record.
+The parallel-worker construction ABI remains unchanged (one-time owner setup).
+NativeBlockPlan and NativeIdentityKey must be registered in tokenizer host.
+
+Remaining: per-operation snapshot dictionary copies, mutable state snapshots,
+Python entry dictionaries and some downstream CPython methods still exist.
+Snapshot dictionaries are deliberately operation-local across GIL releases;
+sharing a mutable retained snapshot would introduce reentrancy/race hazards.
+The cache-miss bootstrap still uses the original namespace admission code.
+The standalone backward snapshot key has not yet been migrated in this batch.
+
+Validation: compile_block.mojo compiles the forward and allocate CPU call paths,
+not a runtime test. Command:
+bash tools/compile_slot.sh pixi run -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/native_owner_hot_20261028/compile_block.mojo -o <evidence>/compile_block
+Full logs/binary/initial fixture under:
+/Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/
+No runtime, identity, performance or GPU execution was run.
