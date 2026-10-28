@@ -18,6 +18,7 @@ def connect_training(backend, vendor, inference_bindings):
             "transformer_tape_create_native_v1", "transformer_tape_handle_native_v1",
             "transformer_session_create", "transformer_session_close",
             "transformer_session_backward", "transformer_session_invalidate_tape",
+            "transformer_session_discard_tape",
             "transformer_arithmetic_profile", "transformer_arithmetic_profile_changed",
             "transformer_forward_tape_enabled", "transformer_forward_tape",
             "transformer_backward_tape", "transformer_close_tape",

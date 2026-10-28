@@ -167,6 +167,10 @@ def _block(model: PythonObject, index: Int) raises -> PythonObject:
     # PublicOutputsMixin.__getattribute__ is Python even for private metadata.
     # Access the object's plain dictionary with CPython's base implementation,
     # bypassing that overridden getter; every field below is stored metadata.
+    # Standalone blocks provide one operation-local admission snapshot.
+    var local = py_get(py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.object.__getattribute__, model, "__dict__"), "_native_block_fields")
+    if local is not None:
+        return local[index]
     var parallel = py_get(model._native_entries, "parallel_call")
     if parallel is not None:
         return py_call(parallel, "block_fields", Python.list(model, index))
