@@ -107,7 +107,7 @@ def _i32(n: Int, context: PythonObject) raises -> PythonObject:
 
 
 def _gradient_outputs(mut mods: NativeModules, shape: _Shape, named: Bool, context: PythonObject) raises -> PythonObject:
-    """`_gradient_outputs(mods, shape, named)`: (flat, {name: Array})."""
+    """`_gradient_outputs(shape, named)`: (flat, {name: Array})."""
     var flat = _f32(shape.n_total(), context)
     var by_name = _b(mods).dict()
     if named:
@@ -140,7 +140,7 @@ def _copy_i32(source: PythonObject, n: Int, context: PythonObject) raises -> Pyt
 # ---------------------------------------------------------------- the binding and the session
 
 def _mode(mut mods: NativeModules, context: PythonObject) raises -> PythonObject:
-    """`_mode(mods)`: the process-selected tier."""
+    """`_mode()`: the process-selected tier."""
     # the backend's own answers, as `_backend.default_mode()` /
     # `_backend.numeric_mode()` gave them (a setting changed after import
     # is seen; the bare `_DEFAULT_MODE` constant is not that answer)
@@ -164,7 +164,7 @@ def _has(binding: PythonObject, name: String) raises -> Bool:
 
 
 def _load_snapshot(mut mods: NativeModules, shape: _Shape, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, String, PythonObject]:
-    """`_load(mods, shape)`: the byte LM binding of the process tier, its profile,
+    """`_load(shape)`: the byte LM binding of the process tier, its profile,
     mode and vendor read back."""
     var mode = _mode(mods, context)
     var binding = context["byte_lm_bindings"][mode]
@@ -358,7 +358,7 @@ def _suspend(mut mods: NativeModules, fields: PythonObject, shape: _Shape, conte
 
 
 def _binding(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
-    """`_binding(mods)`: a binding change suspends the open session first; the
+    """`_binding()`: a binding change suspends the open session first; the
     run metadata is then computed on its next read (`run_metadata`)."""
     var admitted = _load_snapshot(mods, shape, context)
     var binding = admitted[0]
@@ -381,7 +381,7 @@ def _is_resident(fields: PythonObject, binding: PythonObject, context: PythonObj
 
 
 def _parameters(mut mods: NativeModules, state: PythonObject, train: Bool) raises -> PythonObject:
-    """`_parameters(mods, train)`: the twelve scalars every native step reads."""
+    """`_parameters(train)`: the twelve scalars every native step reads."""
     var cfg = state["config"]
     var b = _b(mods)
     return Python.list(1 if train else 0, state["completed_steps"], cfg["kind"], cfg["lr"], cfg["beta1"], cfg["beta2"],
