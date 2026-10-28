@@ -16,6 +16,7 @@
 # codes are the ones `encode_labels` returned for a flat label list.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address, classical_is_array, classical_wrap_array
@@ -37,7 +38,7 @@ comptime _CM_COUNT = 2
 
 
 def svc_builtins() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def svc_field(fields: PythonObject, name: String) raises -> PythonObject:
