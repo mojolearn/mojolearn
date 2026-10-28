@@ -1,0 +1,11 @@
+{
+ "lane": "overhead-mamba-bwd",
+ "before": "30928487f1 (origin/main; arm = lane tree with experiments/overhead-mamba-bwd/before.patch applied)",
+ "after": "lane/overhead-mamba-bwd head",
+ "status": "RUN OWED",
+ "reason": "Andrew 2026-10-28: the self-merge gate is compile only; the orchestrator runs every fixture once at the end",
+ "fixture": "tools/tests/overhead_mamba_bwd_fixture.py (--out per arm, then --compare before.json after.json); driver experiments/overhead-mamba-bwd/pod_fixture.sh",
+ "ops": ["mamba1.backward", "mamba1_conv2d.backward", "mamba2.backward", "mamba2_dt_limit.backward", "mamba3.backward"],
+ "refusal_cases_per_kind": ["wrong_shape", "wrong_rank", "wrong_dtype", "none_weight", "short_weight_list", "nonfinite_grad", "grad_shape", "bad_mode", "bad_d_model", "fortran_weight (success, digest)"],
+ "refusal_cases_mamba2_only": ["bad_dt_limit", "short_dt_limit"]
+}
