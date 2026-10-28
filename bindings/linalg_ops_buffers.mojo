@@ -395,6 +395,26 @@ def lin_c_order(obj: PythonObject, v: TensorView, typestr: String, name: String,
     return out^
 
 
+def lin_admit_exporter(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    # Preserve the native mmap/array owners already connected by the classical
+    # boundary. The context-free provider helper intentionally knows fewer
+    # import-time owners; no Python protocol is used to broaden that set here.
+    if depth > 64:
+        raise Error("TypeError: native linalg buffer owner nesting exceeds its bound")
+    var cls = py_type(value)
+    var b = native_loaded_module("builtins")
+    if cls is b.memoryview:
+        var owner = value.obj
+        if owner is not None:
+            lin_admit_exporter(owner, context, depth + 1)
+        return
+    var owners = context["buffer_owner_types"]
+    for i in range(len(owners)):  # small-loop: exact import-connected native storage classes
+        if cls is owners[i]:
+            return
+    admit_native_buffer_exporter(value)
+
+
 def lin_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
               context: PythonObject) raises -> LinBuf:
     # Native exporters cross the metadata boundary directly. Existing native
@@ -404,7 +424,7 @@ def lin_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
     var prepared = source
     if not classical_is_array(source, context):
         try:
-            admit_native_buffer_exporter(source)
+            lin_admit_exporter(source, context)
         except:
             prepared = classical_view(source, context, name)
     var input = LinAdmission(prepared, context)
@@ -475,7 +495,7 @@ struct LinAdmission(Movable):
             view.c_contig = _contiguous(view.shape, view.strides, True, view.itemsize)
             self.view = view^
             return
-        admit_native_buffer_exporter(value)
+        lin_admit_exporter(value, context)
         self.pin = AdmittedBorrowedBuffer(value)
         ref layout = self.pin.value().layout.value()
         view.addr = layout.address
