@@ -288,7 +288,7 @@ def _replace(fields: PythonObject, changes: PythonObject, context: PythonObject)
                 native_release_admit(previous_owner[].state[5], context)
         elif py_type(value) is b.list or py_type(value) is b.tuple:
             native_release_weakrefs(value, context)
-            for i in range(len(value)):
+            for i in range(len(value)):  # driver-loop: over a displaced owner container
                 _ = py_call(todo.append, value[i])
         else:
             var host = py_get(context, "trees_explainer_host_forest")
@@ -296,17 +296,17 @@ def _replace(fields: PythonObject, changes: PythonObject, context: PythonObject)
             for group_index in range(2):  # driver-loop: connected class tables
                 var group = "trees_classes" if group_index == 0 else "trees_boost_classes"
                 var keys = py_call(b.list, context[group])
-                for i in range(len(keys)):
+                for i in range(len(keys)):  # driver-loop: over connected exact tree classes
                     tree = tree or py_type(value) is keys[i]
             if tree:
                 native_release_weakrefs(value, context)
                 var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(value))
-                for i in range(len(mro)):
+                for i in range(len(mro)):  # driver-loop: over the model class ancestry
                     if py_contains(_class_fields(mro[i]), "__del__"):
                         raise Error("TypeError: TreeExplainer reinitialization cannot release Python model finalizers")
                 var previous = _fields(value)
                 var values = py_call(b.list, previous.values())
-                for i in range(len(values)):
+                for i in range(len(values)):  # driver-loop: over a displaced model's state fields
                     _ = py_call(todo.append, values[i])
             else:
                 _release_tree_values(Python.tuple(value), py_call(b.list, changes.values()), context)
@@ -360,7 +360,7 @@ def _construct(fields: PythonObject, args: PythonObject, context: PythonObject) 
     # Hold backing storage independently; public Array slots can change.
     # The private owner must not retain mutable exposed Array metadata.
     var keep = Python.list()
-    for i in range(5):
+    for i in range(5):  # driver-loop: over the five flat forest arrays
         _ = py_call(addresses.append, trees_address(forest[i]))
         _ = py_call(keep.append, array_owner_once(forest[i], context))
     _ = py_call(keep.append, array_owner_once(scales, context))
@@ -382,7 +382,7 @@ def _construct(fields: PythonObject, args: PythonObject, context: PythonObject) 
     var slots = Int(mp[0])
     var depth = Int(mp[1])
     var width = 8
-    while width < min(slots, depth) + 1:
+    while width < min(slots, depth) + 1:  # small-loop(path width power of two, at most 6 steps)
         width *= 2
     if width > 256:
         raise Error("NotImplementedError: TreeExplainer supports paths with at most 255 distinct split features")
@@ -401,7 +401,7 @@ def _construct(fields: PythonObject, args: PythonObject, context: PythonObject) 
     var names = Python.tuple("model", "data", "feature_perturbation", "model_output", "numeric_mode", "_bg", "n_outputs_", "_forest", "_tscale", "_cover", "_shape", "expected_value", "n_features_in_", "_shap_native", "_shap_cache", "_shap_closed")
     var expected = PythonObject(Float64(_F32(unsafe_from_address=trees_address(ev))[0])) if k == 1 else ev
     var values = Python.tuple(model, data, perturb, output, requested, bg, k, forest, scales, cover, shape, expected, d, owner, PythonObject(held[].handle) if held[].handle > 0 else PythonObject(None), False)
-    for i in range(len(names)):
+    for i in range(len(names)):  # driver-loop: over fixed explainer state fields
         py_setitem(changes, names[i], values[i])
     _replace(fields, changes, context)
     _ = captures
