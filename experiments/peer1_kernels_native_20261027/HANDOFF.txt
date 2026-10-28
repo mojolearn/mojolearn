@@ -1,0 +1,99 @@
+Peer 1 kernel sublane — 2026-10-27
+
+Branch: lane/peer1-kernels-20261027
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-kernels-20261027
+Starting local main: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+No main/other worktree modifications. No builds, GPU runs, benchmarks, rented
+machines, publication, or main merge.
+
+Changes
+- b0c38d9e25: KernelRidge.score hands (None, X, y, sample_weight) to its
+  native family owner; both estimator/metrics binding choices are native.
+- be6c4d9fae: exact scalar/tuple admission; single KRR target snapshot;
+  fitted array snapshots and shape checks; retained owners; combined Nystroem
+  and RBF fallback fit_transform execution reuses the same captured X;
+  native Nystroem warning behavior; validated compiled legacy entries.
+- 60a60ab787: PCS native binding admission, one captured X for fit_transform,
+  xn provider transform dispatch, captured hash array owners; Radius fit
+  stores a native owned snapshot without rereading input metadata.
+- 7e3b17bf68: dedicated kernel public lifecycle envelope and nine method
+  markers for KernelRidge/Nystroem/RBFSampler fit/predict/score/transform/
+  fit_transform. The envelope preserves fitted-state checks, ignored y
+  validation, column-target warning/squeeze, fit-depth cleanup, feature names,
+  internal Array results and external NumPy views; external KRR predictions
+  widen to float64 natively. Capture X once across the envelope/algorithm.
+- f2f421fcf1: preserve arbitrary-size PCS integer seeds with native word
+  admission through the documented CPython integer extraction API.
+
+Integration dependencies
+- Parent owns the shared _mode._guard_cpu_training skip for native_method
+  markers. Without that shared repair, its no-op Python training wrapper
+  still surrounds marked fit methods. Do not claim the branch alone removes
+  the complete installed Python call chain.
+- Parent must change three PolynomialCountSketch wrappers in
+  _expansion_neighbors.py to (None, X), for family_xn_pcs_fit,
+  family_xn_pcs_transform and family_xn_pcs_fit_transform. Do not mark the PCS
+  full lifecycle native merely because the numerical wrapper is thin.
+- Root owns estimator_binding_pyapi, array_metadata_pyapi and classical
+  pre-dispatch model/input admission. This lane did not edit those files.
+- Existing _native_full_reset_params installs the three kernel constructors
+  through the native initializer; retained Python constructor source is not
+  the active installed slot (source evidence only; runtime remains unrun).
+
+Affected native entries / smallest compile targets
+- classical_native_call -> family_km_krr_fit/predict/score,
+  family_km_nys_fit/transform/fit_transform, family_km_rbf_fit/transform/
+  fit_transform; native pickle/par dispatch retained.
+- classical_native_call -> family_xn_pcs_fit/transform/fit_transform and
+  family_xn_radius_fit. Numerical kernel implementations are unchanged.
+- Small root compile smoke: an entry importing and retaining callable
+  kernel_methods_operation from bindings.kernel_methods_native, plus
+  neighbors_operation from bindings.neighbors_native, with the normal
+  identical host defines. Shipping owner is
+  bindings/_mojolearn_runtime_classical_host.mojo / build_runtime_classical_host.sh.
+  A tokenizer-only build that excludes this split owner does not compile these.
+
+Remaining Python / transitive paths (NOT a family-complete claim)
+1. The shared kernel_method_provider/xn_admit provider switch still defaults
+   off; legacy CPython extension numerical dispatch remains reachable when
+   MOJOLEARN_CLASSICAL_NATIVE_DISPATCH is not 1. Root owns provider policy.
+2. KRR score calls shared mcls_cluster._r2/metrics_reg_native; those owners
+   still have CPython numerical entry dispatch and repeated metadata paths.
+   Their migration is separate from selecting metrics natively here.
+3. PCS _pcs_seed retains NumPy import/RandomState.randint for None/RandomState
+   and legacy custom protocol admission. No unsupported replacement or
+   behavioral deletion was introduced. Native RNG state admission is required.
+4. PCS table drawing still calls the compiled x_neighbors_kfeat_pcs_draw_idn
+   entry through CPython. Exact proposed root provider scope: add
+   ('kfeat_pcs_draw_idn', (2,3,0)) to tools/gen_x_neighbors_provider.py EXTRA;
+   append a new auxiliary operation in x_neighbors/native_descriptor_aux_gpu
+   and _host that invokes existing kfeat_pcs_draw_idn /
+   op_kfeat_pcs_draw_idn_host with two output addresses and seed,nc,total;
+   preserve compile-time availability checks; regenerate descriptor tables.
+   Consumer then uses xn_execute rather than family_call. No arithmetic fork.
+5. PCS wrappers/lifecycle and Radius lifecycle are parent/neighbor-lane work.
+6. AdditiveChi2Sampler/SkewedChi2Sampler/KernelPCA/OneClassSVM/SVGP have separate
+   native owners; this sublane did not repair them. In particular
+   neighbors_semi_native still contains NumPy RNG and scipy sparse callbacks.
+7. Shared archive save/load/legacy load decorator, __getstate__/__setstate__,
+   finalization, inherited parameter/attribute metadata, and multi-device
+   lifecycle/adapter paths require the parent/root installed-slot and
+   transitive audit. The new ordinary data envelope does not qualify them.
+8. New kernel envelope reuses estimator_lifecycle_pyapi, classical warnings,
+   array/buffer admission, public attribute plans, and native NumPy views.
+   Their transitive correctness remains dependent on shared owner repairs.
+
+Validation
+- source-check.log: Python AST parses; nine data methods have a single native
+  call and native_method marker; lexical delimiters balance in three changed
+  Mojo sources. Exit 0. This is source inspection, not Mojo typechecking.
+- diff-check.log: git diff --check, exit 0.
+- Root compile pending. All public runtime, installed-slot decorator, callback
+  negative controls, correctness and within-release vendor checks pending.
+- Parent audit_tests owns independent regression tests; no duplicated tests or
+  numerical identity lanes were introduced by this sublane.
+
+Evidence paths
+experiments/peer1_kernels_native_20261027/source-check.log
+experiments/peer1_kernels_native_20261027/diff-check.log
+/tmp/peer1-kernels-worktree.log (worktree creation, exit 0)

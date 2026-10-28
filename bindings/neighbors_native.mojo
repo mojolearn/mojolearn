@@ -2,8 +2,8 @@
 # PolynomialCountSketch `fit`, `transform` and `fit_transform`, one native
 # call each (python/mojolearn/_expansion_neighbors.py), and RadiusNeighbors
 # `fit` (python/mojolearn/neighbors.py: its refusals, shared with `load`, then
-# the stored index). The shell hands over
-# the binding `_bind` resolved; this owner reads the parameters with the
+# the stored index). The PCS owner selects the import-connected binding after
+# native admission; this owner reads the parameters with the
 # Python methods' refusals, draws the hash tables with the binding's
 # counter-based generator (`x_neighbors_kfeat_pcs_draw_idn`) and runs the
 # sketch (`xn_pcs_resident`, or `xn_pcs` under the MOJOLEARN_XN_OLD_ITEMS A/B
@@ -11,7 +11,7 @@
 # same inputs: the bits do not move.
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_view
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
@@ -21,7 +21,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from core.cast_in import CAST_KIND_SIGNED
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    family_repr, family_is_int, family_call, family_call_kw, family_entry, family_array,
+    family_repr, family_call, family_call_kw, family_array,
     family_field, family_f32_snapshot, family_owned_snapshot,
 )
 from bindings.host_archive_native import host_archive_radius_refusals
