@@ -55,3 +55,14 @@ def test_record_rejects_python_protocol_before_invoking_it():
     with pytest.raises(TypeError, match='Python hooks are unsupported'):
         repr(record)
     assert calls == []
+
+
+def test_public_reader_errors_keep_native_exception_categories():
+    from mojolearn.importers.onnx import reader_error
+    with pytest.raises(ValueError, match='not an ONNX model'):
+        reader_error(1, 'bad header', False, 'bad.onnx')
+    with pytest.raises(FileNotFoundError) as error:
+        reader_error(2, 'missing', True, 'absent.onnx')
+    assert error.value.filename == 'absent.onnx'
+    with pytest.raises(RuntimeError, match='returned status 99'):
+        reader_error(99, '', False, 'bad.onnx')
