@@ -1,0 +1,17 @@
+Linalg decomposition provider admission — 2026-10-27
+
+Frozen source945d0eaddf9c5a34e38d1248b9c960ad89432335.
+QR/eigh/SVD/svdvals native orchestration no longer calls Python backend binding
+or default-mode functions. It uses shared estimator_binding and live linalg
+provider admission. LinKit accepts exact compiled modules, reads optional/required
+entries from native module dictionaries and no longer probes a profiler proxy.
+Public scalar options are admitted before truth/equality conversion. The existing
+algorithm kernels, branch/shape rules and launch arguments remain unchanged.
+
+Compile PASS actual lin_decomp_operation/LinKit, Mac CPU O0-j10,96.47s.
+Receipt linalg_decomp_public_compile.json. Full source/log/binary under
+~/mojolearn-evidence/cluster-density-linalg-20261027/linalg-decomp-public-compile/.
+No runtime/identity/GPU qualification claimed. Legacy ordinary/lowbit buffer
+metadata readers and public tuple-result metadata are assigned to a follow-up
+sublane; this batch closes provider callbacks and does not claim that broader
+transitive audit complete.
