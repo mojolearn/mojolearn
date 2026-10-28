@@ -53,7 +53,7 @@ def _neural_descriptor_dictionary(fields: PythonObject) raises:
     if py_type(fields) is not bi.dict:
         raise Error("TypeError: neural provider metadata requires an exact dictionary")
     var keys = py_call(bi.list, fields.keys())
-    for i in range(len(keys)):  # driver-loop: admit every metadata key before keyed native lookup
+    for i in range(len(keys)):  # small-loop(keys: entry names of one descriptor metadata dictionary): checks key types only, never data
         if py_type(keys[i]) is not bi.str:
             raise Error("TypeError: neural provider metadata keys require exact strings")
 
