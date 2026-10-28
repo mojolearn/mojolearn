@@ -162,7 +162,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         if len(captured.shape) != 2 or captured.shape[0] != n or captured.shape[1] != k:
             raise Error("mojolearn TSNE: an init array must have shape (" + String(n) + ", " + String(k)
                         + "), got " + family_repr(captured.python_shape()))
-        var prepared = _cast(captured, "init", context)
+        var prepared = _cast(captured^, "init", context)
         y0 = prepared.keep
         y0_address = prepared.source.addr
         initial_snapshot = Optional(prepared^)
