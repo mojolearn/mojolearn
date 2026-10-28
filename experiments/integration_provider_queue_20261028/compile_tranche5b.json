@@ -1,0 +1,1250 @@
+{
+ "scope": "tranche 5b: 5d099ca49b native-label rebase, cb205f5146 full-reset tests (+8c33), import fixes; compile + import smoke; no runtime/identity/GPU execution",
+ "runs": {
+  "build_8c33_tip": {
+   "pod": "gyie4heky1hh6f",
+   "summary": [
+    "smoke_after rc=1",
+    "smoke_before_8c33 rc=1",
+    "INTEG_BUILD total=49 ok=46"
+   ],
+   "results": [
+    {
+     "kind": "host",
+     "name": "trees",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "forest",
+     "status": "rc=0",
+     "seconds": "23s"
+    },
+    {
+     "kind": "host",
+     "name": "arima",
+     "status": "rc=0",
+     "seconds": "17s"
+    },
+    {
+     "kind": "host",
+     "name": "byte_lm",
+     "status": "rc=0",
+     "seconds": "37s"
+    },
+    {
+     "kind": "host",
+     "name": "embedding",
+     "status": "rc=0",
+     "seconds": "10s"
+    },
+    {
+     "kind": "host",
+     "name": "gbdt",
+     "status": "rc=0",
+     "seconds": "76s"
+    },
+    {
+     "kind": "host",
+     "name": "embedding_infer",
+     "status": "rc=0",
+     "seconds": "11s"
+    },
+    {
+     "kind": "host",
+     "name": "core",
+     "status": "rc=0",
+     "seconds": "47s"
+    },
+    {
+     "kind": "host",
+     "name": "forecast",
+     "status": "rc=0",
+     "seconds": "16s"
+    },
+    {
+     "kind": "host",
+     "name": "gp",
+     "status": "rc=0",
+     "seconds": "24s"
+    },
+    {
+     "kind": "host",
+     "name": "gp_infer",
+     "status": "rc=0",
+     "seconds": "16s"
+    },
+    {
+     "kind": "host",
+     "name": "estimators",
+     "status": "rc=0",
+     "seconds": "45s"
+    },
+    {
+     "kind": "host",
+     "name": "hdbscan",
+     "status": "rc=0",
+     "seconds": "22s"
+    },
+    {
+     "kind": "host",
+     "name": "hdbscan_infer",
+     "status": "rc=0",
+     "seconds": "18s"
+    },
+    {
+     "kind": "host",
+     "name": "ivf",
+     "status": "rc=0",
+     "seconds": "23s"
+    },
+    {
+     "kind": "host",
+     "name": "ivf_search",
+     "status": "rc=0",
+     "seconds": "15s"
+    },
+    {
+     "kind": "host",
+     "name": "kernel_methods",
+     "status": "rc=0",
+     "seconds": "19s"
+    },
+    {
+     "kind": "host",
+     "name": "linalg",
+     "status": "rc=0",
+     "seconds": "29s"
+    },
+    {
+     "kind": "host",
+     "name": "metrics",
+     "status": "rc=0",
+     "seconds": "35s"
+    },
+    {
+     "kind": "host",
+     "name": "mixture",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "mixture_infer",
+     "status": "rc=0",
+     "seconds": "12s"
+    },
+    {
+     "kind": "host",
+     "name": "preprocessing",
+     "status": "rc=0",
+     "seconds": "11s"
+    },
+    {
+     "kind": "host",
+     "name": "mamba",
+     "status": "rc=0",
+     "seconds": "77s"
+    },
+    {
+     "kind": "host",
+     "name": "neural",
+     "status": "rc=0",
+     "seconds": "33s"
+    },
+    {
+     "kind": "host",
+     "name": "resample",
+     "status": "rc=0",
+     "seconds": "19s"
+    },
+    {
+     "kind": "host",
+     "name": "rf",
+     "status": "rc=0",
+     "seconds": "24s"
+    },
+    {
+     "kind": "host",
+     "name": "x_sequence",
+     "status": "rc=0",
+     "seconds": "267s"
+    },
+    {
+     "kind": "host",
+     "name": "solver",
+     "status": "rc=0",
+     "seconds": "15s"
+    },
+    {
+     "kind": "host",
+     "name": "svm",
+     "status": "rc=0",
+     "seconds": "22s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_manifold",
+     "status": "rc=0",
+     "seconds": "93s"
+    },
+    {
+     "kind": "host",
+     "name": "training",
+     "status": "rc=0",
+     "seconds": "34s"
+    },
+    {
+     "kind": "host",
+     "name": "transformer",
+     "status": "rc=0",
+     "seconds": "28s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_sequential",
+     "status": "rc=0",
+     "seconds": "107s"
+    },
+    {
+     "kind": "host",
+     "name": "tsa",
+     "status": "rc=0",
+     "seconds": "15s"
+    },
+    {
+     "kind": "host",
+     "name": "x_ann",
+     "status": "rc=0",
+     "seconds": "23s"
+    },
+    {
+     "kind": "host",
+     "name": "x_cnn",
+     "status": "rc=0",
+     "seconds": "43s"
+    },
+    {
+     "kind": "host",
+     "name": "x_cluster",
+     "status": "rc=0",
+     "seconds": "48s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_model_selection",
+     "status": "rc=0",
+     "seconds": "175s"
+    },
+    {
+     "kind": "host",
+     "name": "x_metrics",
+     "status": "rc=0",
+     "seconds": "19s"
+    },
+    {
+     "kind": "host",
+     "name": "x_decomp",
+     "status": "rc=0",
+     "seconds": "57s"
+    },
+    {
+     "kind": "host",
+     "name": "x_linear",
+     "status": "rc=0",
+     "seconds": "34s"
+    },
+    {
+     "kind": "root",
+     "name": "tree_auxiliary",
+     "status": "rc=1",
+     "seconds": "0s"
+    },
+    {
+     "kind": "root",
+     "name": "native_label_protocol",
+     "status": "rc=1",
+     "seconds": "0s"
+    },
+    {
+     "kind": "root",
+     "name": "svm_public_lifecycle",
+     "status": "rc=1",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "x_neighbors",
+     "status": "rc=0",
+     "seconds": "39s"
+    },
+    {
+     "kind": "host",
+     "name": "x_trees",
+     "status": "rc=0",
+     "seconds": "34s"
+    },
+    {
+     "kind": "host",
+     "name": "x_prep",
+     "status": "rc=0",
+     "seconds": "71s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_classical",
+     "status": "rc=0",
+     "seconds": "1255s"
+    },
+    {
+     "kind": "host",
+     "name": "tokenizer",
+     "status": "rc=0",
+     "seconds": "1260s"
+    }
+   ],
+   "logs": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-5b/remote/leg_out/logs",
+   "resources": [
+    "cores_affinity=32",
+    "cgroup_cpu_max=max 100000",
+    "parallel=6",
+    "jobs=5",
+    "mojo_version=Mojo 1.0.0 (ed45d567)",
+    "gen_unicode_rc=0"
+   ]
+  },
+  "build_full": {
+   "pod": "s3e0228b806edh",
+   "summary": [
+    "smoke_after rc=1",
+    "probe_tier_dir rc=1",
+    "INTEG_BUILD total=51 ok=51"
+   ],
+   "results": [
+    {
+     "kind": "host",
+     "name": "forest",
+     "status": "rc=0",
+     "seconds": "10s"
+    },
+    {
+     "kind": "host",
+     "name": "trees",
+     "status": "rc=0",
+     "seconds": "12s"
+    },
+    {
+     "kind": "host",
+     "name": "arima",
+     "status": "rc=0",
+     "seconds": "9s"
+    },
+    {
+     "kind": "host",
+     "name": "byte_lm",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "gbdt",
+     "status": "rc=0",
+     "seconds": "38s"
+    },
+    {
+     "kind": "host",
+     "name": "embedding",
+     "status": "rc=0",
+     "seconds": "6s"
+    },
+    {
+     "kind": "host",
+     "name": "core",
+     "status": "rc=0",
+     "seconds": "23s"
+    },
+    {
+     "kind": "host",
+     "name": "embedding_infer",
+     "status": "rc=0",
+     "seconds": "6s"
+    },
+    {
+     "kind": "host",
+     "name": "forecast",
+     "status": "rc=0",
+     "seconds": "9s"
+    },
+    {
+     "kind": "host",
+     "name": "gp",
+     "status": "rc=0",
+     "seconds": "13s"
+    },
+    {
+     "kind": "host",
+     "name": "gp_infer",
+     "status": "rc=0",
+     "seconds": "9s"
+    },
+    {
+     "kind": "host",
+     "name": "estimators",
+     "status": "rc=0",
+     "seconds": "25s"
+    },
+    {
+     "kind": "host",
+     "name": "hdbscan_infer",
+     "status": "rc=0",
+     "seconds": "9s"
+    },
+    {
+     "kind": "host",
+     "name": "hdbscan",
+     "status": "rc=0",
+     "seconds": "13s"
+    },
+    {
+     "kind": "host",
+     "name": "ivf",
+     "status": "rc=0",
+     "seconds": "12s"
+    },
+    {
+     "kind": "host",
+     "name": "ivf_search",
+     "status": "rc=0",
+     "seconds": "8s"
+    },
+    {
+     "kind": "host",
+     "name": "kernel_methods",
+     "status": "rc=0",
+     "seconds": "10s"
+    },
+    {
+     "kind": "host",
+     "name": "linalg",
+     "status": "rc=0",
+     "seconds": "15s"
+    },
+    {
+     "kind": "host",
+     "name": "metrics",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "mixture",
+     "status": "rc=0",
+     "seconds": "12s"
+    },
+    {
+     "kind": "host",
+     "name": "mixture_infer",
+     "status": "rc=0",
+     "seconds": "8s"
+    },
+    {
+     "kind": "host",
+     "name": "preprocessing",
+     "status": "rc=0",
+     "seconds": "8s"
+    },
+    {
+     "kind": "host",
+     "name": "mamba",
+     "status": "rc=0",
+     "seconds": "41s"
+    },
+    {
+     "kind": "host",
+     "name": "neural",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "resample",
+     "status": "rc=0",
+     "seconds": "11s"
+    },
+    {
+     "kind": "host",
+     "name": "rf",
+     "status": "rc=0",
+     "seconds": "15s"
+    },
+    {
+     "kind": "host",
+     "name": "x_sequence",
+     "status": "rc=0",
+     "seconds": "142s"
+    },
+    {
+     "kind": "host",
+     "name": "solver",
+     "status": "rc=0",
+     "seconds": "9s"
+    },
+    {
+     "kind": "host",
+     "name": "svm",
+     "status": "rc=0",
+     "seconds": "12s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_manifold",
+     "status": "rc=0",
+     "seconds": "57s"
+    },
+    {
+     "kind": "host",
+     "name": "training",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "tsa",
+     "status": "rc=0",
+     "seconds": "9s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_sequential",
+     "status": "rc=0",
+     "seconds": "59s"
+    },
+    {
+     "kind": "host",
+     "name": "transformer",
+     "status": "rc=0",
+     "seconds": "15s"
+    },
+    {
+     "kind": "host",
+     "name": "x_ann",
+     "status": "rc=0",
+     "seconds": "12s"
+    },
+    {
+     "kind": "host",
+     "name": "x_cnn",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "x_cluster",
+     "status": "rc=0",
+     "seconds": "25s"
+    },
+    {
+     "kind": "host",
+     "name": "x_metrics",
+     "status": "rc=0",
+     "seconds": "11s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_model_selection",
+     "status": "rc=0",
+     "seconds": "102s"
+    },
+    {
+     "kind": "host",
+     "name": "x_linear",
+     "status": "rc=0",
+     "seconds": "16s"
+    },
+    {
+     "kind": "host",
+     "name": "x_decomp",
+     "status": "rc=0",
+     "seconds": "30s"
+    },
+    {
+     "kind": "host",
+     "name": "x_neighbors",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "x_trees",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "x_prep",
+     "status": "rc=0",
+     "seconds": "43s"
+    },
+    {
+     "kind": "root",
+     "name": "native_label_protocol",
+     "status": "rc=0",
+     "seconds": "28s"
+    },
+    {
+     "kind": "root",
+     "name": "tree_auxiliary",
+     "status": "rc=0",
+     "seconds": "73s"
+    },
+    {
+     "kind": "dev",
+     "name": "x_sequence_gfx942",
+     "status": "rc=0",
+     "seconds": "175s"
+    },
+    {
+     "kind": "root",
+     "name": "svm_public_lifecycle",
+     "status": "rc=0",
+     "seconds": "124s"
+    },
+    {
+     "kind": "dev",
+     "name": "x_sequence_sm89",
+     "status": "rc=0",
+     "seconds": "280s"
+    },
+    {
+     "kind": "host",
+     "name": "tokenizer",
+     "status": "rc=0",
+     "seconds": "701s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_classical",
+     "status": "rc=0",
+     "seconds": "739s"
+    }
+   ],
+   "logs": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-5b2/remote/leg_out/logs",
+   "resources": [
+    "cores_affinity=32",
+    "cgroup_cpu_max=max 100000",
+    "parallel=6",
+    "jobs=5",
+    "mojo_version=Mojo 1.0.0 (ed45d567)",
+    "gen_unicode_rc=0"
+   ]
+  },
+  "smoke1": {
+   "pod": "wougu5dln8kmgi",
+   "summary": [
+    "smoke_after rc=1",
+    "probe_tier_dir rc=1",
+    "INTEG_BUILD total=46 ok=25"
+   ],
+   "results": [
+    {
+     "kind": "host",
+     "name": "forest",
+     "status": "rc=0",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "arima",
+     "status": "rc=0",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "trees",
+     "status": "rc=2",
+     "seconds": "3s"
+    },
+    {
+     "kind": "host",
+     "name": "core",
+     "status": "rc=0",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "embedding",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "embedding_infer",
+     "status": "rc=0",
+     "seconds": "6s"
+    },
+    {
+     "kind": "host",
+     "name": "byte_lm",
+     "status": "rc=1",
+     "seconds": "19s"
+    },
+    {
+     "kind": "host",
+     "name": "forecast",
+     "status": "rc=0",
+     "seconds": "10s"
+    },
+    {
+     "kind": "host",
+     "name": "estimators",
+     "status": "rc=0",
+     "seconds": "25s"
+    },
+    {
+     "kind": "host",
+     "name": "gp_infer",
+     "status": "rc=0",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "gbdt",
+     "status": "rc=1",
+     "seconds": "39s"
+    },
+    {
+     "kind": "host",
+     "name": "gp",
+     "status": "rc=1",
+     "seconds": "12s"
+    },
+    {
+     "kind": "host",
+     "name": "ivf",
+     "status": "rc=0",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "hdbscan",
+     "status": "rc=1",
+     "seconds": "12s"
+    },
+    {
+     "kind": "host",
+     "name": "hdbscan_infer",
+     "status": "rc=1",
+     "seconds": "10s"
+    },
+    {
+     "kind": "host",
+     "name": "linalg",
+     "status": "rc=0",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "ivf_search",
+     "status": "rc=1",
+     "seconds": "9s"
+    },
+    {
+     "kind": "host",
+     "name": "kernel_methods",
+     "status": "rc=1",
+     "seconds": "10s"
+    },
+    {
+     "kind": "host",
+     "name": "mixture",
+     "status": "rc=0",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "mixture_infer",
+     "status": "rc=0",
+     "seconds": "9s"
+    },
+    {
+     "kind": "host",
+     "name": "metrics",
+     "status": "rc=1",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "preprocessing",
+     "status": "rc=0",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "resample",
+     "status": "rc=0",
+     "seconds": "2s"
+    },
+    {
+     "kind": "host",
+     "name": "neural",
+     "status": "rc=1",
+     "seconds": "17s"
+    },
+    {
+     "kind": "host",
+     "name": "rf",
+     "status": "rc=0",
+     "seconds": "13s"
+    },
+    {
+     "kind": "host",
+     "name": "mamba",
+     "status": "rc=1",
+     "seconds": "38s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_sequential",
+     "status": "rc=0",
+     "seconds": "2s"
+    },
+    {
+     "kind": "host",
+     "name": "solver",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "svm",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "training",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "transformer",
+     "status": "rc=0",
+     "seconds": "14s"
+    },
+    {
+     "kind": "host",
+     "name": "tsa",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_ann",
+     "status": "rc=0",
+     "seconds": "13s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_manifold",
+     "status": "rc=1",
+     "seconds": "52s"
+    },
+    {
+     "kind": "host",
+     "name": "x_sequence",
+     "status": "rc=1",
+     "seconds": "150s"
+    },
+    {
+     "kind": "host",
+     "name": "x_cluster",
+     "status": "rc=0",
+     "seconds": "30s"
+    },
+    {
+     "kind": "host",
+     "name": "x_cnn",
+     "status": "rc=0",
+     "seconds": "20s"
+    },
+    {
+     "kind": "host",
+     "name": "x_metrics",
+     "status": "rc=0",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "x_neighbors",
+     "status": "rc=0",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_linear",
+     "status": "rc=1",
+     "seconds": "15s"
+    },
+    {
+     "kind": "host",
+     "name": "x_decomp",
+     "status": "rc=1",
+     "seconds": "28s"
+    },
+    {
+     "kind": "host",
+     "name": "x_trees",
+     "status": "rc=0",
+     "seconds": "21s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_model_selection",
+     "status": "rc=1",
+     "seconds": "101s"
+    },
+    {
+     "kind": "host",
+     "name": "x_prep",
+     "status": "rc=0",
+     "seconds": "40s"
+    },
+    {
+     "kind": "host",
+     "name": "tokenizer",
+     "status": "rc=0",
+     "seconds": "695s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_classical",
+     "status": "rc=0",
+     "seconds": "779s"
+    }
+   ],
+   "logs": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-5b3/remote/leg_out/logs",
+   "resources": [
+    "cores_affinity=32",
+    "cgroup_cpu_max=max 100000",
+    "parallel=6",
+    "jobs=5",
+    "mojo_version=Mojo 1.0.0 (ed45d567)",
+    "gen_unicode_rc=0"
+   ]
+  },
+  "smoke_final": {
+   "pod": "r0vcjiqzgo0wuq",
+   "summary": [
+    "smoke_after rc=0",
+    "probe_tier_dir rc=0",
+    "INTEG_BUILD total=46 ok=5"
+   ],
+   "results": [
+    {
+     "kind": "host",
+     "name": "forest",
+     "status": "rc=0",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "arima",
+     "status": "rc=0",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "tokenizer",
+     "status": "rc=0",
+     "seconds": "5s"
+    },
+    {
+     "kind": "host",
+     "name": "core",
+     "status": "rc=0",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "embedding",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "embedding_infer",
+     "status": "rc=2",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "estimators",
+     "status": "rc=2",
+     "seconds": "2s"
+    },
+    {
+     "kind": "host",
+     "name": "forecast",
+     "status": "rc=2",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "gp",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "gp_infer",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "trees",
+     "status": "rc=1",
+     "seconds": "12s"
+    },
+    {
+     "kind": "host",
+     "name": "hdbscan",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "ivf",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "hdbscan_infer",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "ivf_search",
+     "status": "rc=2",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "kernel_methods",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "linalg",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "mamba",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "metrics",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "mixture",
+     "status": "rc=2",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "mixture_infer",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "preprocessing",
+     "status": "rc=2",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "neural",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "resample",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "rf",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_manifold",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_model_selection",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "solver",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_sequential",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "svm",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "training",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "byte_lm",
+     "status": "rc=1",
+     "seconds": "19s"
+    },
+    {
+     "kind": "host",
+     "name": "transformer",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "tsa",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_ann",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_cluster",
+     "status": "rc=2",
+     "seconds": "0s"
+    },
+    {
+     "kind": "host",
+     "name": "x_cnn",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_decomp",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_linear",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_metrics",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_neighbors",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_prep",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "x_trees",
+     "status": "rc=2",
+     "seconds": "1s"
+    },
+    {
+     "kind": "host",
+     "name": "gbdt",
+     "status": "rc=1",
+     "seconds": "36s"
+    },
+    {
+     "kind": "host",
+     "name": "x_sequence",
+     "status": "rc=1",
+     "seconds": "126s"
+    },
+    {
+     "kind": "host",
+     "name": "runtime_classical",
+     "status": "rc=0",
+     "seconds": "706s"
+    }
+   ],
+   "logs": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-5b4/remote/leg_out/logs",
+   "resources": [
+    "cores_affinity=32",
+    "cgroup_cpu_max=max 100000",
+    "parallel=6",
+    "jobs=5",
+    "mojo_version=Mojo 1.0.0 (ed45d567)",
+    "gen_unicode_rc=0"
+   ]
+  }
+ },
+ "import_smoke": {
+  "command": "python smoke.py: import mojolearn + ensemble, neighbors, decomposition, svm, cluster, linear_model, preprocessing, metrics; probe python -c \"import mojolearn._backend as b; b.tier_dir('identical')\"",
+  "install": "CPU-only x86 host set (46 host families, python/mojolearn/host) on RunPod CPU; no GPU set laid out (no GPU on box)",
+  "history": [
+   "pod gyie4heky1hh6f @8c33 tip: FAIL importers/_native_reader_bridge.py:38 ValueError fast tier on CPU-only (same before and after 8c33 patch)",
+   "pod s3e0228b806edh: FAIL parallel_training.py:232 byte LM ._host",
+   "pod wougu5dln8kmgi: FAIL _native_mode_metadata.py:45 AgglomerativeClustering._bind",
+   "pod r0vcjiqzgo0wuq: PASS smoke rc=0 missing_bindings 0; tier_dir rc=0 -> python/mojolearn/identical"
+  ],
+  "before_after_8c33": "both failed earlier at the reader bridge, so the boost numeric_mode import question was masked; final tree with cb205 passes"
+ },
+ "builds": "pod s3e0228b806edh: 51/51 exit 0 (46 host families via bincache miss+build, x_sequence sm_89 O0 + gfx942 default, tree_auxiliary, native_label_protocol, svm_public_lifecycle O0). Later pods: no .mojo change; host .so restored from bincache (41 bypass-destination-exists entries are cache layout, not source failures)",
+ "gates": {
+  "test_no_python_runtime": "OK prohibited_source 196",
+  "test_tombstones_preserved": "OK",
+  "full_reset_and_declared_constructor_tests": "110 passed"
+ }
+}
