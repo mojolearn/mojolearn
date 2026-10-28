@@ -18,6 +18,7 @@ import platform
 import subprocess
 import sys
 import tarfile
+import tempfile
 import urllib.error
 import urllib.request
 import zipfile
@@ -88,7 +89,46 @@ def archive(path, members):
                 local_path=str(Path(path).resolve()), status="local")
 
 
-def source_snapshot(directory, repo=ROOT, drivers=()):
+def source_archive(path, members, cache_dir=None):
+    """Keep self-contained run paths while sharing identical, immutable bytes.
+
+    Always build a fresh file: overwriting a linked archive in place would
+    corrupt older runs. The cache is optional storage optimization, never a
+    retention prerequisite. Removing a cache entry leaves run links intact.
+    """
+    path = Path(path)
+    cache = Path(cache_dir) if cache_dir is not None else Path(os.environ.get(
+        "MOJOLEARN_SOURCE_ARCHIVE_CACHE",
+        str(Path.home() / ".cache/mojolearn/measurement-sources/v1")))
+    with tempfile.TemporaryDirectory(prefix=".source-", dir=path.parent) as tmp:
+        fresh = Path(tmp) / "source.tar.gz"
+        ref = archive(fresh, members)
+        candidate = fresh
+        try:
+            cache.mkdir(parents=True, exist_ok=True)
+            shared = cache / (ref["sha256"] + ".tar.gz")
+            # Publishing with link is atomic and cannot overwrite another writer.
+            fresh.chmod(0o444)
+            try:
+                os.link(fresh, shared)
+            except FileExistsError:
+                pass
+            # Never reuse a corrupt cache entry or a symlink. Leave any old
+            # run's bytes untouched; the freshly built archive is the fallback.
+            if (not shared.is_symlink() and shared.stat().st_size == ref["bytes"]
+                    and file_hash(shared) == ref["sha256"]):
+                linked = Path(tmp) / "linked.tar.gz"
+                os.link(shared, linked)
+                candidate = linked
+        except OSError:
+            # Different filesystems, no hard-link support, or inaccessible cache.
+            pass
+        os.replace(candidate, path)
+    ref["local_path"] = str(path.resolve())
+    return ref
+
+
+def source_snapshot(directory, repo=ROOT, drivers=(), cache_dir=None):
     repo, directory = Path(repo), Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     names = subprocess.check_output(["git", "-C", str(repo), "ls-files", "-z"]).decode().split("\0")
@@ -111,7 +151,7 @@ def source_snapshot(directory, repo=ROOT, drivers=()):
     manifest = dict(commit=commit, files={k: digest(v) for k, v in members.items()},
                     scope="tracked repository code and explicit driver files, actual working bytes")
     members["source-manifest.json"] = encoded(manifest)
-    ref = archive(directory / "source.tar.gz", members)
+    ref = source_archive(directory / "source.tar.gz", members, cache_dir)
     ref.update(commit=commit, manifest_sha256=digest(encoded(manifest)))
     return ref, inventory
 
