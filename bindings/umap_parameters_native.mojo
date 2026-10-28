@@ -46,6 +46,18 @@ def _scalar_word(value: ArrayMetadata) -> UInt64:
     return cast_w64_bits(raw, value.source.kind, width)
 
 
+def _parameter_array(value: PythonObject, name: String, integer: Bool,
+                     context: PythonObject) raises -> ArrayMetadata:
+    # The former constructor translated index/float failures to its own
+    # ValueError. Preserve that public error for exact ndarrays without ever
+    # invoking object elements' conversion protocols.
+    try:
+        return _scalar_array(value, name, context)
+    except:
+        var detail = " must be an integer" if integer else " must be a finite float32 value"
+        raise Error("ValueError: UMAP " + name + detail)
+
+
 def umap_integer(value: PythonObject, name: String, minimum: Int, maximum: Int,
                  context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
@@ -54,7 +66,7 @@ def umap_integer(value: PythonObject, name: String, minimum: Int, maximum: Int,
     # Exact integer identities admit the native NumPy scalar variants while
     # refusing user __index__/__int__ and bool, before their protocols run.
     if cls is py_get(context, "ndarray"):
-        var scalar = _scalar_array(value, name, context)
+        var scalar = _parameter_array(value, name, True, context)
         var word = _scalar_word(scalar)
         var signed = scalar.source.kind == CAST_KIND_SIGNED
         if not signed and scalar.source.kind != CAST_KIND_UNSIGNED:
@@ -82,7 +94,7 @@ def umap_scalar(value: PythonObject, name: String, context: PythonObject) raises
     classical_connect_numpy(context)
     var result: Float64
     if py_type(value) is py_get(context, "ndarray"):
-        var scalar = _scalar_array(value, name, context)
+        var scalar = _parameter_array(value, name, False, context)
         var word = _scalar_word(scalar)
         if scalar.source.kind == CAST_KIND_FLOAT:
             result = bitcast[Float64](word)
