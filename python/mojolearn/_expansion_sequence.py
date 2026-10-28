@@ -79,6 +79,9 @@ def __getattr__(name):
         from . import _mode
         from ._native_params_metadata import connect_classes
         if _mode._PARAMS_METADATA_CONTEXT['ready']:
+            from ._native_mode_reconstruction import connect_lazy
+            from ._native_full_reset_params import _CONTEXT as reset_context, NativeFullResetParams
+            connect_lazy(loaded, reset_context, NativeFullResetParams.set_params)
             from ._native_public_attributes import connect_classes as connect_attributes
             connect_attributes(sys.modules[__package__])
             connect_classes(_mode._PARAMS_METADATA_CONTEXT, sys.modules[__package__])

@@ -167,6 +167,8 @@ def connect_classes(package):
         context['descriptor'] = factory(MethodType(entry, context))
         _CONTEXT = context
     context = _CONTEXT
+    from ._native_mode_properties import connect as connect_mode_properties
+    connect_mode_properties(context, package)
     archives = _archive_finalizers(package)
     prep_availability = _prep_availability(package, context['missing'])
     neighbor_availability = _neighbor_availability(package)
