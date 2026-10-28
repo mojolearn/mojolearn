@@ -102,7 +102,7 @@ def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var result = PythonObject(None)
         if operation == "rnn_state_dict" or operation == "rnn_load_state_dict":
             result = recurrent_state(model, operation, args, context)
-        elif (operation.startswith("rnn_") or operation.startswith("mlp_")) and operation != "rnn_hidden_sequence":
+        elif operation.startswith("rnn_") or operation.startswith("mlp_"):
             var lifecycle = XseqPublicLifecycle(model, operation, args, context)
             if lifecycle.fitting:
                 var depth = estimator_fit_begin(py_fields(model))
