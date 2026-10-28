@@ -162,3 +162,12 @@ IMPORTANT NEW WIP: neural checkpoint contains a Mamba generation route issue:
 original local _run_snapshot always uses forward(step=False); current WIP selects
 decode for later tokens. Correct before activation; do not call that WIP numerically
 unchanged. Lane handoff explicitly records it. No more source work after checkpoint.
+
+CHECKPOINT RETENTION CORRECTION
+The historical AMD board exceeds the repository 50 MiB file limit. The complete
+ten-file AMD/NVIDIA board snapshot is retained on the Mac and in R2 with GET
+sha256 verification. Main records its manifest at
+experiments/provider_migration_checkpoint_20261027/measurement-board-archive.json.
+Existing tracked boards remain at their prior committed snapshot; the archived
+checkpoint is separate and has not been published or regenerated. Local archive:
+/Users/andrewhendel/mojolearn-evidence/provider-migration-checkpoint-20261027/stopped-measurement-boards.tar.gz
