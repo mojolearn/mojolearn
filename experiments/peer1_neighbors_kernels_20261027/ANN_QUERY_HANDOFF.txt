@@ -1,0 +1,63 @@
+ANN search operation owner — source handoff, 2026-10-27
+
+Native file: bindings/neighbors_ann_query_native.mojo
+Entry: neighbors_ann_search(model, kind: Int, args, context)
+Kinds: 0 IVFPQIndex, 1 IVFSQIndex, 2 IVFRaBitQIndex, 3 CagraIndex.
+Arguments: (already selected exact x_ann module, queries, filter).
+
+Parent owns Python wrappers and dispatch wiring. Route the four public search
+methods through family_xn_ann_pq_search/sq_search/rabitq_search/cagra_search;
+select _mojolearn_x_ann natively before calling this entry. Decorate wrappers
+only when they directly call the native operation, with native output ownership.
+This module imports neither neighbors_ann_native nor neighbor_query_native.
+
+Changes
+-------
+- Native fitted-state, exact integer settings, query width and boolean filter
+  admission. _fields reads native instance storage before any dictionary lookup.
+- Query metadata is captured once using family_f32_snapshot. Each saved array
+  gets one shape/dtype/stride/address capture, with its owner retained through
+  execution. PQ rank-three codebooks retain a local storage snapshot because
+  the shared CastIn metadata type supports at most rank two.
+- Resident keys compare only native tuple/int/string metadata; module entries
+  are admitted with neural_descriptor_entry, avoiding Python module __getattr__.
+  Search reuses matching handles or prepares a replacement. Device-only PQ codes
+  are exported only when a changed resident key or a per-call route requires it.
+- Resident unfiltered search reuses its existing device all-ones mask. Explicit
+  boolean masks are copied in Mojo, including strided buffers and boolean lists.
+  Cagra filtering preserves traversal-before-filter and the existing filter_topk
+  operation. Final distance/index arrays are shaped once and converted by the
+  native public-result helper.
+- RaBitQ code words use the next-power-of-two padded feature count, matching the
+  current fitter. PQ bits keep the existing [1,8] bound. Cagra arbitrary-size
+  integer seeds retain exact byte representation and native int31 reduction.
+
+No numerical algorithm was rewritten. Existing exports and parameter/address
+orders remain: x_ann_index_prepare/search/release/export_codes,
+x_ann_ivf_pq_search, x_ann_ivf_sq_search, x_ann_ivf_rabitq_search,
+x_ann_cagra_search, x_ann_filter_topk.
+
+Required integration checks
+---------------------------
+No Mojo compile or product runtime was run by this lane. Root must compile the
+new module with its parent dispatch wired; the affected production owner is
+bindings/_mojolearn_tokenizer_host.mojo (entry wrapper under bindings/entry),
+via bindings/build_tokenizer_host.sh. A focused import/call compile of
+neighbors_ann_search is the smallest meaningful source target if root's build
+controller supports such a driver. No x_ann numerical binary changes are needed.
+
+Final bounded runtime: all four public searches, resident reuse and per-call
+route, explicit mask/no mask, strided queries and boolean masks, PQ deferred code
+export after changed fitted-array identity, malformed metadata and protocols,
+both internal Array and completed external ndarray outputs. Existing numerical
+evidence is reusable where source closures/flags/targets match; this source
+handoff is not runtime or vendor verification.
+
+Remaining provider debt
+-----------------------
+The numerical entries still execute through the existing packed CPython ABI.
+This is an explicit incomplete provider migration even though public validation,
+preparation, residency and result handling now have a native owner. Root's
+shared binding admission must also admit model layout before any older
+estimator_binding.py_fields access. Global lifecycle/attribute/serialization
+work is not qualified by this operation-owner change.
