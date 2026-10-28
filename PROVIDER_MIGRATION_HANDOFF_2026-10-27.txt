@@ -1,5 +1,43 @@
 PROVIDER MIGRATION HANDOFF — 2026-10-27
 
+LATEST INTEGRATION CHECKPOINT — 2026-10-28 00:06 EDT
+Source main before this checkpoint commit: cf4c89dd1d2b29f85b1f1cdc4158ec2f0383d6ec.
+Since the progress checkpoint below, compiled accepted source now also includes:
+- DBSCAN/KDE lifecycle and shared resident entry admission; LinearRegression,
+  Ridge and LogisticRegression replacement-owner admission; QNRegressor;
+  linalg public metadata; GaussianMixture retained-provider follow-up.
+- Full native AutoARIMA search/fit/predict; final CV scalar, split and scorer
+  boundaries; Fowlkes-Mallows native empty-label handling.
+- Neural graph/CNNClassifier, MLPInference/trainer, Embedding, recurrent/MLP
+  snapshots, shared native labels and stream seed admission; forest restoration
+  and fitted metadata; GP binding selection/classifier likelihood.
+- Selected Peer2 batch6 manifold lifecycle/TSNE and PCA query/sparse snapshots.
+  All19 selected native/other product files exactly match the compiled freeze;
+  shared ANN facade retains Peer1 work and its TSNE AST matches the freeze.
+  The failed preprocessing target is explicitly EXCLUDED, with errors retained.
+- Andrew's separate CPU coverage thread's compiled Plain numeric Logloss sample
+  weights and CPU documentation fixes (source567ec53f94). Its uncompiled CTR and
+  ranking branches are excluded; CTR is queued for a separate CPU compile.
+
+Compilation scope and unresolved runtime paths stay explicit in each receipt.
+GP inherited host score/sample_y/latent route follow-up is owned by Peer5;
+shared estimator archive scalar/path/key admission by the classical lane;
+legacy linalg buffer metadata by its density child; native_codec and neural
+cached-descriptor admission by Peer3. Program partition/distribute/Session.run,
+distributed execution and pooled/offloaded training remain active separate work.
+No whole-library Python-free or runtime correctness claim is made.
+
+The prior multi-ref push passed all source guards but main was concurrently
+updated to8d3409f692 (external verification tooling). That separate update was
+merged without conflict. The exception branch did push successfully; main is
+being retried after this compiled batch. Full push/merge logs are retained in
+~/mojolearn-evidence/provider-migration-resume-20261027/.
+
+CPU rental policy remains full actual allocation,60-minute deadman, complete
+Mac+R2 retention before teardown. Peer2 batch6 used32 allocated cores/-j32 and
+has been retained/deleted. New Peer1 descriptor and Peer2 prep/serial CTR leases
+are separately owned; inspect current keeper state before touching either.
+
 LATEST PROGRESS CHECKPOINT — 2026-10-27 23:47 EDT
 Root is serializing incremental main merges after focused compile evidence.
 Main before this checkpoint commit: 5bedbe70a3f0dd77756c8464819434be63fae438.
