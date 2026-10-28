@@ -134,7 +134,7 @@ TREE_LANES = ("gbdt-symmetric", "gbdt-symmetric-1000", "gbdt-depthwise", "gbdt-l
               "rf", "et", "iforest")
 CLASSICAL_LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan", "hdbscan")
 FAMILIES = ("trees", "classical", "classical2", "neural", "algos")
-NEURAL_SHAPES = ("full", "small")
+NEURAL_SHAPES = ("full", "small", "target")   # target: the 162 M LM shape, LM lanes only (NEURAL.LM_ONLY_SHAPES)
 DATASETS = ("taxi", "istella")
 VENDORS = ("apple", "nvidia", "amd")
 MODES = ("fast", "identical")
@@ -954,6 +954,8 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
             if fam == "neural":
                 if NEURAL.DEVICE_OF.get(lane) == "cpu":
                     continue                  # ours would run on the CPU: never raced, no mode
+                if neural_shape in NEURAL.LM_ONLY_SHAPES and NEURAL.MODEL_OF.get(lane) != "lm":
+                    continue                  # an LM-only shape (target): no dimensions for this model
                 # one race per lane: its own data, not taxi/Istella; IDENTICAL
                 # everywhere, plus the FAST arm (`ours-fast`) on Apple
                 ours = our_arms(fam, modes, lane)
@@ -4773,8 +4775,9 @@ def build_parser():
                    help="full (default) or a row cap for a smoke test (the board says SMOKE)")
     p.add_argument("--neural-shape", default="full", choices=NEURAL_SHAPES,
                    help="neural family shape: full (the board; the 20.45 M-parameter LM "
-                        "control shape, 4096^3 GEMM, L2048 blocks) or small (a smoke; the board "
-                        "says SMOKE). --rows does not apply to neural lanes")
+                        "control shape, 4096^3 GEMM, L2048 blocks), small (a smoke; the board "
+                        "says SMOKE) or target (the 162.15 M-parameter LM shape; LM lanes only). "
+                        "--rows does not apply to neural lanes")
     p.add_argument("--rounds", type=int, default=DEFAULT_ROUNDS,
                    help="timed rounds after one warm-up (default 1)")
     p.add_argument("--evidence-local-only", action="store_true",
@@ -4978,7 +4981,8 @@ def print_plan(vendor, modes, races, args, rows, data):
                   "IDENTICAL + FAST (ours-fast, the Apple tier)" if "fast" in modes else "IDENTICAL",
                   "/".join(NEURAL.GPU_SETTINGS[vendor]), "/".join(NEURAL.CPU_SETTINGS),
                   args.neural_shape, NEURAL.shape_text("lm-train-step", args.neural_shape),
-                  NEURAL.shape_text("gemm", args.neural_shape)))
+                  "n/a (LM-only shape)" if args.neural_shape in NEURAL.LM_ONLY_SHAPES
+                  else NEURAL.shape_text("gemm", args.neural_shape)))
         for why in NEURAL.NOT_PLANNED[vendor]:
             print("neural not planned: %s" % why)
     print("mojolearn=%s (from the installed wheel; %s)" % (
@@ -5392,16 +5396,25 @@ def main(argv=None):
         _load_tool("race_fairness").apply(result)
         save_result(rpath, result)
         write_board(out, result)
+        # Outside the measured operation; preserve partial/failed boards too.
+        _load_tool('retain_run_summary').try_retain(
+            _load_tool('retain_run_summary').retain_board, out, result, smoke=args.smoke)
         print("bench_board:   %s rc=%s %.0fs" % (rec["status"], rec["rc"], rec["wall_s"]), flush=True)
         if _load_tool("bench_board_evidence").blocks_campaign(rec):
             print("bench_board: stopped after retaining local evidence: " + rec["evidence_failure"], flush=True)
             return 1
     print("bench_board: board %s" % os.path.join(out, "BOARD.md"), flush=True)
     if args.smoke:
-        return 1 if write_smoke(out, races, result, vendor, args.shard) else 0
+        code = 1 if write_smoke(out, races, result, vendor, args.shard) else 0
+        _load_tool('retain_run_summary').try_retain(
+            _load_tool('retain_run_summary').retain_board, out, result, smoke=True, exit_code=code)
+        return code
     failed = [rid for rid, rec in result["races"].items()
               if rid in result["plan"] and rec.get("status") not in ("done", "unsupported")]
-    return 1 if failed or result.get("failed_preflight_recipes") else 0
+    code = 1 if failed or result.get("failed_preflight_recipes") else 0
+    _load_tool('retain_run_summary').try_retain(
+        _load_tool('retain_run_summary').retain_board, out, result, exit_code=code)
+    return code
 
 
 if __name__ == "__main__":
