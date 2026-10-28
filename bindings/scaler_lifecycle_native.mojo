@@ -90,8 +90,12 @@ def scaler_initialize(model: PythonObject, args: PythonObject) raises -> PythonO
     return PythonObject(None)
 
 
+def _write_back(source: PythonObject, values: PythonObject, output: PythonObject, copy: Bool, context: PythonObject) raises -> PythonObject:
+    return _write_back(source, values, output, copy, context, PythonObject(None))
+
+
 def _write_back(source: PythonObject, values: PythonObject, output: PythonObject, copy: Bool, context: PythonObject,
-                snapshot: PythonObject = PythonObject(None)) raises -> PythonObject:
+                snapshot: PythonObject) raises -> PythonObject:
     if snapshot is not None:
         return scaler_snapshot_write_back(snapshot, output, copy)
     if copy or native_pandas_exact(source):
@@ -156,8 +160,12 @@ def _nan_fill(values: PythonObject, entries: PythonObject, context: PythonObject
     return output
 
 
+def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, copy_option: PythonObject, context: PythonObject) raises -> PythonObject:
+    return scaler_transform(model, source, inverse, copy_option, context, PythonObject(None))
+
+
 def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, copy_option: PythonObject, context: PythonObject,
-                     input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
+                     input_cache: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var copy = _bool(fields["copy"] if copy_option is None else copy_option, context)
     if not _fitted(fields):
@@ -391,8 +399,12 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     return model
 
 
+def scaler_fit_transform(model: PythonObject, source: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+    return scaler_fit_transform(model, source, options, context, PythonObject(None))
+
+
 def scaler_fit_transform(model: PythonObject, source: PythonObject, options: PythonObject, context: PythonObject,
-                         var input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
+                         var input_cache: PythonObject) raises -> PythonObject:
     if input_cache is None:
         input_cache = Python.list()
     var b = native_loaded_module("builtins")
@@ -585,8 +597,12 @@ def _outside(context: PythonObject, depth: Int) raises -> Bool:
     return outside
 
 
+def _public_result(result: PythonObject, context: PythonObject) raises -> PythonObject:
+    return _public_result(result, context, PythonObject(None))
+
+
 def _public_result(result: PythonObject, context: PythonObject,
-                   input_cache: PythonObject = PythonObject(None)) raises -> PythonObject:
+                   input_cache: PythonObject) raises -> PythonObject:
     if classical_is_array(result,context) and py_get(context,"ndarray") is not None and _outside(context,1):
         if input_cache is not None and len(input_cache) > 0:
             var captured = input_cache[0].downcast_value_ptr[ScalerInputSnapshot]()
