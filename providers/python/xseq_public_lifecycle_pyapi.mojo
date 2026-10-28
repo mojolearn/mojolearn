@@ -46,12 +46,42 @@ def xseq_public_owner(model: PythonObject, context: PythonObject) raises -> Pyth
             opt_schedule(value, context["optimizer_context"])
         else:
             classical_admit_value(value, lifecycle)
-    for name in ["_mojolearn_fitted", "_mojolearn_fitting", "_y_1d", "_LOSS_CODE", "n_features_in_",
+    for name in ["_mojolearn_fitted", "_mojolearn_fitting", "_y_1d", "_LOSS_CODE", "n_features_in_",  # driver-loop: over consumed or replaced fitted state owners
                  "n_outputs_", "n_layers_", "n_timesteps_", "out_activation_", "params_", "coefs_",
-                 "intercepts_", "n_iter_", "loss_curve_", "loss_", "best_loss_", "t_", "feature_names_in_"]:  # driver-loop: consumed or replaced fitted state owners
+                 "intercepts_", "n_iter_", "loss_curve_", "loss_", "best_loss_", "t_", "feature_names_in_"]:
         if py_contains(fields, name):
             classical_admit_value(fields[PythonObject(name)], lifecycle)
     return fields
+
+
+def xseq_private_input(source: PythonObject, context: PythonObject, name: String) raises -> PythonObject:
+    # Exact ndarray.view is a native C storage operation. It snapshots shape,
+    # strides, dtype and the data pointer into a private header, with its base
+    # retaining the data owner. Exact-type admission excludes array-finalize
+    # callbacks. Array/buffer/sequence conversion already yields native views;
+    # giving those their own header keeps the same contract for every input.
+    var lifecycle = context["xseq_lifecycle_context"]
+    var view = classical_view(source, lifecycle, name)
+    if py_type(view) is not lifecycle["ndarray"]:
+        raise Error("TypeError: native sequence input requires an admitted ndarray view")
+    return py_call(lifecycle["ndarray"].view, view)
+
+
+def _private_argument(source: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
+    if depth > 64:
+        raise Error("TypeError: native sequence input nesting exceeds the supported depth")
+    var b = native_loaded_module("builtins")
+    var lifecycle = context["xseq_lifecycle_context"]
+    var cls = py_type(source)
+    if cls is b.list or cls is b.tuple:
+        var items = Python.list()
+        for i in range(len(source)):  # driver-loop: snapshot admitted argument container metadata once
+            _ = py_call(items.append, _private_argument(source[i], context, depth + 1))
+        return items if cls is b.list else py_call(b.tuple, items)
+    if (cls is lifecycle["ndarray"] or cls is b.memoryview or cls is b.bytearray
+            or cls is lifecycle["array_type"] or cls is lifecycle["array_class"]):
+        return xseq_private_input(source, context, "argument")
+    return source
 
 
 def xseq_public_labels(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -87,6 +117,7 @@ def _finite(view: PythonObject, name: String, model_name: String, context: Pytho
 
 struct XseqPublicLifecycle(Movable):
     var source: PythonObject
+    var original_arguments: PythonObject
     var arguments: PythonObject
     var lifecycle: PythonObject
     var fitting: Bool
@@ -101,6 +132,7 @@ struct XseqPublicLifecycle(Movable):
                  context: PythonObject) raises:
         var fields = xseq_public_owner(model, context)
         self.source = args[0]
+        self.original_arguments = args  # retain every original owner through finish
         self.arguments = args
         self.lifecycle = context["xseq_lifecycle_context"]
         self.fitting = operation.endswith("_fit")
@@ -118,11 +150,21 @@ struct XseqPublicLifecycle(Movable):
         self.nested = Int(py=depth) > 0
         if not self.fitting:
             classical_require_fitted(model, False, self.method, self.lifecycle)
-        if self.nested:
-            return
         classical_connect_numpy(self.lifecycle)
         classical_refuse_sparse(self.source, self.name)
-        var x = classical_view(self.source, self.lifecycle, "X")
+        var x = xseq_private_input(self.source, context, "X")
+        var prepared = Python.list(x)
+        for i in range(1, len(args)):  # driver-loop: snapshot targets/weights before validation and native execution
+            classical_admit_value(args[i], self.lifecycle)
+            var value = args[i]
+            if i == 1 and not self.classifier and value is not None:
+                value = xseq_private_input(value, context, "y")
+            else:
+                value = _private_argument(value, context)
+            _ = py_call(prepared.append, value)
+        self.arguments = prepared
+        if self.nested:
+            return
         var kind = String(py=x.dtype.kind)
         if kind == "c":
             raise Error("Complex data not supported: " + self.name + " got a complex X.")
@@ -144,39 +186,28 @@ struct XseqPublicLifecycle(Movable):
             if py_type(columns) is b.int:
                 classical_check_width(self.shape[1], Int(py=columns), self.name)
             estimator_feature_check(model, fields, self.source, self.lifecycle)
-        var prepared = Python.list(x)
         if self.fitting:
             var source_y = args[1]
             if source_y is None:
                 raise Error(self.name + " requires y to be passed, but the target y is None.")
-            classical_admit_value(source_y, self.lifecycle)
-            var y = source_y
+            var y = prepared[1]
             if self.classifier:
-                lda_native_labels(source_y, self.lifecycle, True, self.name)
-            var target_shape = labels_shape_of(source_y, self.lifecycle)
+                lda_native_labels(y, self.lifecycle, True, self.name)
+            var target_shape = labels_shape_of(y, self.lifecycle)
             if rank > 0 and len(target_shape) > 0 and self.shape[0] != target_shape[0]:
                 raise Error("Found input variables with inconsistent numbers of samples: [" + String(self.shape[0]) + ", " + String(target_shape[0]) + "]")
             # String labels remain in their native container for the label
             # encoder. Numeric targets retain the former column-warning path.
             if not self.classifier:
-                y = classical_view(source_y, self.lifecycle, "y")
                 if String(py=y.dtype.kind) == "c":
                     raise Error("Complex data not supported: " + self.name + " got a complex y.")
                 _finite(y, "y", self.name, context)
             if len(target_shape) == 2 and target_shape[1] == 1 and py_type(source_y) is not b.list and py_type(source_y) is not b.tuple and py_type(source_y) is not b.memoryview:
                 if not self.classifier:
                     classical_warn_column(self.lifecycle)
-                y = classical_view(source_y, self.lifecycle, "y")
-                y = py_call(y.reshape, Python.tuple(-1))
-            _ = py_call(prepared.append, y)
-            for i in range(2, len(args)):  # small-loop(remaining admitted public arguments)
-                classical_admit_value(args[i], self.lifecycle)
-                _ = py_call(prepared.append, args[i])
-        else:
-            for i in range(1, len(args)):  # small-loop(score target and weight arguments)
-                classical_admit_value(args[i], self.lifecycle)
-                _ = py_call(prepared.append, args[i])
-        self.arguments = prepared
+                # This is the captured target header, never source_y again.
+                y = py_call(classical_view(y, self.lifecycle, "y").reshape, Python.tuple(-1))
+            py_setitem(prepared, 1, y)
 
     def refusal(self, problem: Error) -> Error:
         # Preserve _sk_validate.reraise's single-sample/feature explanation;
