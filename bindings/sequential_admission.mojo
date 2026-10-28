@@ -7,7 +7,8 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_torch_admission import native_torch_exact, native_torch_admit
 from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_get, py_setitem
-from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_add, prepared_key_same
+from bindings.native_prepared_owner import prepared_get, prepared_put
+from bindings.native_identity_key import NativeIdentityKey
 
 
 def _one_of(cls: PythonObject, types: PythonObject) raises -> Bool:
@@ -174,7 +175,7 @@ def _read_fields_full(operation: String) raises -> PythonObject:
     return PythonObject(None)
 
 
-comptime _SEQUENTIAL_ADMIT_SLOT = "sequential_admit_v1"
+comptime _SEQUENTIAL_ADMIT_SLOT = "sequential_admit_v2"
 
 
 def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises:
@@ -195,30 +196,49 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
         # only when one of them, or any container item within the admitted
         # depth, changed identity (fit, set_params, load). Arguments are
         # admitted on every call.
-        var key = b.list()
-        _ = py_call(key.append, context)
-        prepared_key_add(mods, key, names)
-        for k in range(len(names)):  # driver-loop: over model fields read by this operation, identity only
-            _ = py_call(key.append, PythonObject(py_contains(fields, names[k])))
-            if py_contains(fields, names[k]):
-                prepared_key_add(mods, key, fields[names[k]], 0, 65)
         var cache = prepared_get(mods, _SEQUENTIAL_ADMIT_SLOT, model)
         var seen = PythonObject(None) if cache is None else py_get(cache, PythonObject(operation))
-        if seen is None or not prepared_key_same(seen, key):
+        var hit = False
+        if seen is not None:
+            try:
+                var retained = seen.downcast_value_ptr[NativeIdentityKey]()
+                var offset = 0
+                hit = retained[].matches_identity(context, offset) and retained[].matches(names, offset)
+                for k in range(len(names)):  # driver-loop: over admitted model field identities
+                    if not hit:
+                        break
+                    var present = py_contains(fields, names[k])
+                    hit = retained[].matches_identity(PythonObject(present), offset)
+                    if hit and present:
+                        hit = retained[].matches(fields[names[k]], offset, 0, 65)
+                hit = hit and retained[].complete(offset)
+            except:
+                hit = False
+        if not hit:
+            var key = NativeIdentityKey(mods)
+            var stable = True
+            try:
+                key.add_identity(context)
+                key.add(names)
+                for k in range(len(names)):  # driver-loop: over model fields captured before admission
+                    var present = py_contains(fields, names[k])
+                    key.add_identity(PythonObject(present))
+                    if present:
+                        key.add(fields[names[k]], 0, 65)
+            except:
+                # Uncacheable nesting still follows ordinary public admission.
+                stable = False
             for k in range(len(names)):  # driver-loop: over model metadata and native buffer owners used by execution
                 if py_contains(fields, names[k]):
                     sequential_admit_value(mods, fields[names[k]], context)
-            # A defaultdict's factory is an attribute, not an item: such a
-            # model is admitted on every call.
             var factory_class = py_get(context, "defaultdict_class")
-            var stable = True
-            for k in range(len(key)):  # small-loop(key: admitted field objects): identity type check only
-                if factory_class is not None and py_type(key[k]) is factory_class:
+            for k in range(len(key.objects)):  # driver-loop: over captured field ownership references
+                if factory_class is not None and py_type(key.objects[k]) is factory_class:
                     stable = False
                     break
-            if stable:
+            if stable and not key.retains(model):
                 if cache is None:
                     cache = b.dict()
-                py_setitem(cache, PythonObject(operation), key)
+                py_setitem(cache, PythonObject(operation), PythonObject(alloc=key^))
                 prepared_put(mods, _SEQUENTIAL_ADMIT_SLOT, model, cache)
     sequential_admit_value(mods, args, context)
