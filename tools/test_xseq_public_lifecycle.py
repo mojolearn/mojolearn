@@ -34,3 +34,12 @@ def test_common_feature_and_caller_boundary_are_reused():
     assert 'xseq_lifecycle_context=lifecycle' in bridge
     assert 'classifier_labels_namespace=dict(vars(ClassLabels))' in bridge
     assert '"all_finite_f64"' in bridge
+
+
+def test_finite_validation_walks_admitted_bytes_without_packed_dispatch():
+    source = (ROOT/'providers/python/xseq_public_lifecycle_pyapi.mojo').read_text()
+    finite = source.split('def _finite(', 1)[1].split('\n\n\nstruct ', 1)[0]
+    assert 'host_inference_raw_finite(' in finite
+    assert 'xseq_base(' not in finite
+    assert 'py_call(' not in finite
+    assert 'byte_strides = view.strides' in finite
