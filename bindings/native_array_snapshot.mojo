@@ -215,7 +215,7 @@ struct NativeArrayAdmission(Copyable, Movable):
         for i in range(len(self.rows)):  # small-loop(self.rows: Array namespaces): fixed native storage class hierarchy
             var row = py_call(self.dict_get, self.rows[i])
             var keys = py_call(self.list_fn, row.keys())
-            for k in range(len(keys)):  # small-loop(class namespace keys before metadata reads)
+            for k in range(len(keys)):  # small-loop(keys: class namespace): validate storage metadata names only
                 if py_type(keys[k]) is not self.str_cls:
                     return False
             if py_contains(row, "__getattr__") or py_contains(row, "__del__"):

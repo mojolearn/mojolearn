@@ -178,7 +178,7 @@ def _configuration_value(model: PythonObject, fields: PythonObject, name: String
                     raise failure^
                 return PythonObject(from_owned=value)
             var value_ancestry = py_call(b.type.__dict__["__mro__"].__get__, kind)
-            for j in range(len(value_ancestry)):  # driver-loop: refuse descriptor hooks before attribute access
+            for j in range(len(value_ancestry)):  # driver-loop: over descriptor class ancestry before attribute access
                 if py_contains(_class_fields(value_ancestry[j]), "__get__"):
                     raise Error("TypeError: native mode metadata cannot invoke Python properties; store " + name + " as a native value")
             break

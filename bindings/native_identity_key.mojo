@@ -231,7 +231,7 @@ struct NativeIdentityKey(Movable, Writable):
             var keys = py_call(bi.list, row.keys())
             var native_keys = List[PythonObject]()
             var native_values = List[PythonObject]()
-            for j in range(len(keys)):  # small-loop(self.array_rows: Array namespaces): fixed storage class hierarchy not tensor rows
+            for j in range(len(keys)):  # small-loop(keys: Array class namespace): fixed storage metadata names only
                 if py_type(keys[j]) is not self.str_type:
                     raise Error("native identity snapshot: class namespace needs exact string keys")
                 native_keys.append(keys[j])
