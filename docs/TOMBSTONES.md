@@ -400,6 +400,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF`](#gbdt-oracle-multi-dimensional-host-walk) | Trees | removed (host arm retired) | 2026-10-17 | [GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch](../experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch) |
 | GPU oracle multi-dimensional host walk (no define) | Trees | removed (host loops on the GPU path) | 2026-10-17 | [GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch](../experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch) |
 | [`MOJOLEARN_AUTOGRAD_TRANSFORMER`](#mojolearn_autograd_transformer) | Neural | PROMOTED (hand arm deleted) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch) |
+| [`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`](#mojolearn_idn_mamba1_chunked_scan) | Neural | REJECTED (breaks decode==prefill) | 2026-10-28 | none (recoverable at lane/mamba-folds@db803a1337) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3678,3 +3679,30 @@ removed. Direct imports of the former backend receive a native refusal.
 Graph/weights are imported explicitly; input metadata is captured per execution.
 The implementation is on the provider integration branch pending compilation and
 public runtime qualification; this entry is not release or performance evidence.
+
+## MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN
+
+- **What it tried** (lane mamba-folds, 2026-10-28; idea 11 of the 2026-10-28 neural report, roadmap B5): the Mamba-1
+  selective scan as a chunked parallel scan. Chunks of W = 64 tokens were anchored at the first token of each CALL. Inside a
+  chunk the affine map `(P, Lc)` folded serially (`P = da`, `Lc = dbu`, then `P = ftz(da * P)`,
+  `Lc = ftz(fma(da, Lc, dbu))`) and the state was `ftz(fma(P, H_k, Lc))`. The chunk-entry states `H_k` were carried serially.
+  It ran as three cell launches (summaries, carry, outputs) plus a backward-checkpoint variant. The host column and both host
+  oracles carried the same fold.
+- **Files**: `mamba/impl/ops/m1_chunked_scan.mojo` (new, and its generated twin `mamba/host/gen/m1_chunked_scan.mojo`).
+  Wiring in `mamba/impl/ops/selective_scan_interface.mojo` (selective_scan_fn) and
+  `autograd/kernels/mamba1_scan.mojo` (selective_scan_checkpoint_fn). Oracle fold `M1ChainFold` in
+  `mamba/checks/mamba_oracle.mojo`, used by `mamba/checks/mamba_backward_oracle.mojo`. `tools/mamba_host_gen.py` SOURCES entry.
+  Contract note in `mamba/IDENTICAL_MAMBA_CONTRACT.md` section 10.
+- **Verdict**: REJECTED: breaks decode==prefill at 64-token chunk boundaries (owner decision 2026-10-28, relayed by the
+  orchestrator). A one-token decode call kept the v1 bits, but a multi-token prefill re-associated at every chunk boundary.
+  A generation's bits would therefore depend on how its tokens were fed: a semantics change, not a fold-order change.
+  No A/B was run and no NVIDIA/AMD ratio exists (not measured). Quality: not measured.
+- **Run ids**: none. It compiled green on the CPU column and sm_89 at lane/mamba-folds@139c65a5dc
+  (experiments/mamba_folds_20261028/compile.json at that commit).
+- **Recoverable**: lane/mamba-folds@db803a1337 (the code never reached main, so there is no patch file).
+- **Guard**: `core/six_lane_experiment_guards.mojo` refuses `-D MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`. The removed entry is in
+  `experiments/six_lane_integration/grid_controls/mamba-folds.json`; the `docs/apple-fast/EXPERIMENTS.md` row says REJECTED.
+- **For a future chunking lane**: anchor the chunks at ABSOLUTE token positions, not at the start of each call. Carry the open
+  chunk's state across decode calls (the chunk-entry state, the running `(P, Lc)` and the position within the chunk), as the
+  Mamba-2 decode carries its open chunk (DEVIATION 786). Then a decode step and a prefill fold every token identically, and
+  decode == prefill holds by construction. That changes the decode state the bindings carry, so it is a state-ABI change.

@@ -6,7 +6,7 @@
 #          device (bindings/_mojolearn_mamba.mojo, shared-lib)
 #          oracle (mamba/checks/mamba_backward_host_oracle_check.mojo, executable)
 #          training (bindings/_mojolearn_training.mojo, shared-lib; the Samba train step)
-#   DEFSETS: space-separated arms; "off" or a comma list of defines (default: off m1 bwd both)
+#   DEFSETS: space-separated arms; "off" or a comma list of defines (default: off bwd; MAMBA1_CHUNKED_SCAN was rejected and is refused)
 set -u
 WT=$(cd "$(dirname "$0")/../.." && pwd)
 EV=${1:?evidence dir}; shift
@@ -19,7 +19,7 @@ else
   MOJO_RUN=(pixi run --manifest-path "$MAIN/pixi.toml" --environment default --locked --no-install --executable "$COMPILER")
 fi
 JOBS=${JOBS:-10}
-DEFSETS=${DEFSETS:-"off m1 bwd both"}
+DEFSETS=${DEFSETS:-"off bwd"}
 mkdir -p "$EV"
 cd "$WT" || exit 2
 git rev-parse HEAD > "$EV/source-commit.txt"
@@ -37,9 +37,7 @@ for root in $ROOTS; do
     defs=(-D MOJOLEARN_NUMERIC_IDENTICAL=1 ${COLUMN_DEFS--D MOJOLEARN_COLUMN_CPU})
     case $arm in
       off) ;;
-      m1) defs+=(-D MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1) ;;
       bwd) defs+=(-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1) ;;
-      both) defs+=(-D MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1 -D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1) ;;
     esac
     tag=$root-$arm
     t0=$(date +%s)
