@@ -24,6 +24,8 @@ from bindings.native_caller_frame import native_frame_globals
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_validate import classical_view
 from bindings.classical_warnings import classical_warning
+from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_bool
+from bindings.host_inference_scalars import host_inference_primitive_number
 from core.cast_in import CAST_KIND_SIGNED
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
@@ -78,11 +80,16 @@ def _km_int(value: PythonObject, name: String) raises -> Int:
     return Int(py=value)
 
 
-def _km_number(value: PythonObject, name: String) raises -> Float64:
-    var cls = py_type(value)
-    if cls is not py_type(PythonObject(0)) and cls is not py_type(PythonObject(0.0)):
+def _km_number(value: PythonObject, name: String, context: PythonObject) raises -> Float64:
+    if not metric_is_real(value, context) or metric_is_bool(value, context):
         raise Error("TypeError: mojolearn kernel methods: " + name + " must be a native real number")
-    return Float64(py=value)
+    return metric_float(value, context)
+
+
+def _km_seed(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Native NumPy scalar seeds remain supported without their number slots.
+    var word = host_inference_primitive_number(value, context, True)
+    return PythonObject(_km_int(word, "random_state"))
 
 
 def _km_bool(value: PythonObject, name: String) raises -> Bool:
@@ -99,11 +106,11 @@ def _km_tuple(value: PythonObject, count: Int, name: String) raises -> PythonObj
     return value
 
 
-def _km_params(fields: PythonObject, ridge: Bool) raises -> PythonObject:
+def _km_params(fields: PythonObject, ridge: Bool, context: PythonObject) raises -> PythonObject:
     var params = _km_tuple(family_field(fields, "_kernel_params"), 5, "_kernel_params")
-    var last = PythonObject(_km_number(params[4], "alpha")) if ridge else PythonObject(_km_int(params[4], "random_state"))
+    var last = PythonObject(_km_number(params[4], "alpha", context)) if ridge else PythonObject(_km_int(params[4], "random_state"))
     return Python.tuple(_km_int(params[0], "kernel"), _km_int(params[1], "degree"),
-                        _km_number(params[2], "gamma"), _km_number(params[3], "coef0"), last)
+                        _km_number(params[2], "gamma", context), _km_number(params[3], "coef0", context), last)
 
 
 def _km_i32_snapshot(value: PythonObject, count: Int, context: PythonObject) raises -> ArrayMetadata:
@@ -146,17 +153,17 @@ def _km_kernel_code(kernel: PythonObject, where: String, precomputed: Bool, cont
     return _km_int(kernel, "kernel")
 
 
-def _km_real(value: PythonObject, name: String, where: String) raises -> PythonObject:
-    return PythonObject(_km_number(value, where + "." + name))
+def _km_real(value: PythonObject, name: String, where: String, context: PythonObject) raises -> PythonObject:
+    return PythonObject(_km_number(value, where + "." + name, context))
 
 
-def _km_gamma(gamma: PythonObject, n_features: Int, where: String, kernel: Int) raises -> PythonObject:
+def _km_gamma(gamma: PythonObject, n_features: Int, where: String, kernel: Int, context: PythonObject) raises -> PythonObject:
     """`kernel_methods._gamma_for`: None is 1 / n_features (1.0 for chi2)."""
     if gamma is None and kernel == _KERNEL_CHI2:
         return PythonObject(1.0)
     if gamma is None:
         return PythonObject(1.0 / Float64(n_features))
-    return _km_real(gamma, "gamma", where)
+    return _km_real(gamma, "gamma", where, context)
 
 
 def _km_chi2_input(x: ArrayMetadata, kernel: Int, where: String) raises:
@@ -233,13 +240,13 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     # `_kp`: the kernel, degree, gamma and coef0, in that order.
     var kernel = _km_kernel_code(family_field(fields, "kernel"), where, True, context)
     var degree = _km_degree(fields, where)
-    var gamma = _km_gamma(family_field(fields, "gamma"), d, where, kernel)
-    var coef0 = _km_real(family_field(fields, "coef0"), "coef0", where)
+    var gamma = _km_gamma(family_field(fields, "gamma"), d, where, kernel, context)
+    var coef0 = _km_real(family_field(fields, "coef0"), "coef0", where, context)
     _km_chi2_input(x_meta, kernel, where)
     if kernel == _KERNEL_PRECOMPUTED and d != n:
         raise Error("mojolearn " + where + ": kernel='precomputed' needs the square "
                     + "n x n kernel matrix as X, got " + String(n) + " x " + String(d))
-    var alpha = _km_real(family_field(fields, "alpha"), "alpha", where)
+    var alpha = _km_real(family_field(fields, "alpha"), "alpha", where, context)
     var dual = family_array(Python.tuple(n) if squeeze else Python.tuple(n, t), "<f4", context)
     var scalars = family_array(Python.tuple(1), "<f8", context)
     var weights = PythonObject(None)
@@ -323,7 +330,7 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var x_fit = x_fit_meta.keep
     var n = x_fit_meta.source.rows
     var t = _km_int(family_field(fields, "n_targets_"), "n_targets_")
-    var kp = _km_params(fields, True)
+    var kp = _km_params(fields, True, context)
     var kernel = Int(py=kp[0])
     _km_chi2_input(xq_meta, kernel, where)
     var dual_obj = family_field(fields, "dual_coef_")
@@ -409,10 +416,10 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                           native_loaded_module("builtins").UserWarning, context,
                           _km_warning_location())
         q = n
-    var gamma = _km_gamma(family_field(fields, "gamma"), d, where, kernel)
+    var gamma = _km_gamma(family_field(fields, "gamma"), d, where, kernel, context)
     _km_chi2_input(x_meta, kernel, where)
-    var coef0 = _km_real(family_field(fields, "coef0"), "coef0", where)
-    var seed = PythonObject(_km_int(family_field(fields, "random_state"), "random_state"))
+    var coef0 = _km_real(family_field(fields, "coef0"), "coef0", where, context)
+    var seed = _km_seed(family_field(fields, "random_state"), context)
     var components = family_array(Python.tuple(q, d), "<f4", context)
     var indices = family_array(Python.tuple(q), "<i4", context)
     var normalization = family_array(Python.tuple(q, q), "<f4", context)
@@ -517,7 +524,7 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var components_meta = family_f32_snapshot(family_field(fields, "components_"), 2, "components_", context)
     var components = components_meta.keep
     var q = components_meta.source.rows
-    var kp = _km_params(fields, False)
+    var kp = _km_params(fields, False, context)
     _km_chi2_input(x_meta, Int(py=kp[0]), where)
     var out = family_array(Python.tuple(m, q), "<f4", context)
     var indices_meta = _km_i32_snapshot(family_field(fields, "component_indices_"), q, context)
@@ -596,7 +603,7 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var weights = weights_meta.keep
     var q = weights_meta.source.cols
     var params_in = _km_tuple(family_field(fields, "_params"), 2, "_params")
-    var params = Python.tuple(_km_number(params_in[0], "gamma"), _km_int(params_in[1], "random_state"))
+    var params = Python.tuple(_km_number(params_in[0], "gamma", context), _km_int(params_in[1], "random_state"))
     var offset_meta = family_f32_snapshot(family_field(fields, "random_offset_"), 1, "random_offset_", context)
     var offset = offset_meta.keep
     if weights_meta.source.rows != d or offset_meta.count != q:
@@ -609,7 +616,7 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_transform_binding:
     # weights, offset, x, out; d, q, gamma, seed, sigma, scale, m.
     var addresses = Python.list(PythonObject(weights_meta.source.addr), PythonObject(offset_meta.source.addr), PythonObject(x_meta.source.addr), classical_address(out))
-    var parameters = Python.list(PythonObject(d), PythonObject(q), params[0], params[1], PythonObject(_km_number(family_field(fields, "sigma_"), "sigma_")), PythonObject(_km_number(family_field(fields, "scale_"), "scale_")), PythonObject(m))
+    var parameters = Python.list(PythonObject(d), PythonObject(q), params[0], params[1], PythonObject(_km_number(family_field(fields, "sigma_"), "sigma_", context)), PythonObject(_km_number(family_field(fields, "scale_"), "scale_", context)), PythonObject(m))
     if native is not None:
         _ = kernel_method_execute(native, "rbf_sampler_transform", addresses, parameters)
     else:
@@ -765,13 +772,13 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         native = admission[1]
         gamma = _km_scale_gamma(extension, x_meta, d, context, native)
     else:
-        gamma = _km_real(gamma_param, "gamma", where)
+        gamma = _km_real(gamma_param, "gamma", where, context)
     var components_param = family_field(fields, "n_components")
     var q = _km_int(components_param, where + ".n_components")
     if q < 1:
         # BY NAME, BEFORE ANY BUFFER (the MI300X n_components=0 run, 2026-09-14).
         raise Error("mojolearn " + where + ": n_components must be positive, got " + String(q))
-    var seed = PythonObject(_km_int(family_field(fields, "random_state"), "random_state"))
+    var seed = _km_seed(family_field(fields, "random_state"), context)
     var weights = family_array(Python.tuple(d, q), "<f4", context)
     var offset = family_array(Python.tuple(q), "<f4", context)
     var scalars = family_array(Python.tuple(2), "<f8", context)
