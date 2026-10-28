@@ -39,8 +39,6 @@ Changes delivered
 - KNN/KDE pickle owners are native. Reset-aware fitted checks preserve
   _mojolearn_params_reset behavior. Existing native constructor replacements
   were traced and retained rather than duplicating constructor migrations.
-- Peer2-requested TSNE-only tuples changed to (None, None, X); these depend
-  on Peer2's native manifold binding selection. No other TSNE code changed.
 - Root later assigned AgglomerativeClustering. Its dedicated native owner now
   handles lifecycle, binding selection, explicit dense/sparse connectivity,
   retained snapshots/resident state, finished labels and pickle state. The
@@ -53,8 +51,8 @@ Changes delivered
   recursion without changing native dictionary/descriptor precedence.
   Internal compiler cause remains unconfirmed. Independent source review:
   ~/mojolearn-evidence/peer1-audit-tests-20261027/public-attribute-leaf-review.txt.
-- TSNE companion27bba573f6 adds y and connects Peer2's native manifold lifecycle;
-  it requires Peer2's bridge commit2dc27d16fb in the integrated tree.
+- TSNE companion 27bba573f6 adds y and connects Peer2's native manifold lifecycle;
+  it requires Peer2's bridge commit 2dc27d16fb in the integrated tree.
 - Root-requested neighbor import/SVC compile repairs were delivered in
   7c4d0635c0. Root's mode-selection, retained-array-owner and family-admission
   source commits were reused as dependencies; they were not reimplemented.
