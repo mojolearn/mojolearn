@@ -19,7 +19,7 @@
 # integer math (core/scale_gamma_exact.mojo). A binding without a door
 # takes the entries it has, as before.
 from std.python import Python, PythonObject
-from providers.python.estimator_binding_pyapi import estimator_arguments
+from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
 from providers.python.kernel_method_descriptor_pyapi import kernel_method_provider, kernel_method_execute, kernel_method_metadata
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_close,
@@ -824,12 +824,14 @@ def _kernel_methods_operation(model: PythonObject, operation: String, args: Pyth
         # `RegressorScoreMixin.score`: y as float32 (`as_f32_c(y, ndim=None,
         # name="y")`), the native predict, then `metrics.r2_score(y, pred,
         # sample_weight=..., numeric_mode=...)` through the metrics owner;
-        # args[4] is the metrics binding `_get_binding` resolved.
+        # Resolve the metrics binding inside this same native public operation;
+        # no Python _bind/_get_binding callback runs before admission.
         classical_connect_numpy(context)
         var truth = family_f32(args[2], -1, "y", context)
         var prediction = _krr_predict(model, args, context)
         var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
-        return mcls_cluster_operation("family_mcls_r2", Python.tuple(args[4], truth, prediction, args[3],
+        var metrics = estimator_binding(model, "_mojolearn_metrics", context)
+        return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
                                       PythonObject("uniform_average"), PythonObject(True), mode), context)
     if operation == "family_km_nys_fit":
         _ = _nys_fit(model, args, context)
