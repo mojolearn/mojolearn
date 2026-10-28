@@ -113,9 +113,6 @@ __all__ = [
     'VotingClassifier', 'VotingRegressor',
 ]
 
-import numbers
-from . import _portable_math as math
-import struct
 
 # GBDT HAS ITS OWN EXTENSION, built by `bindings/build_gbdt.sh`, for the
 # reason `_mojolearn_estimators` has one: an independently changing binding
@@ -130,7 +127,6 @@ import struct
 # cache that does not key on it, and the basename never mattered.
 from . import _backend, _mojolearn_gbdt, _native_archive_bridge, _native_trees_bridge
 from ._mode import NumericModeMixin
-from ._labels import is_bool
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
@@ -500,14 +496,6 @@ OD_TYPES = ("None", "IncToDec", "Iter")
 # on the host side of this module. None of them touches a result bit.
 
 
-def _f32(value):
-    """`float(np.float32(value))`: one round-to-nearest-even to float32
-    (an underflowing value becomes 0.0, exactly as the cast does)."""
-    return struct.unpack("<f", struct.pack("<f", float(value)))[0]
-
-
-#: `np.finfo(np.float32).max`, as the literal.
-_F32_MAX = 3.4028234663852886e+38
 #: `np.iinfo(np.uint32).max`, as the literal.
 _U32_MAX = 4294967295
 
@@ -1204,18 +1192,11 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
     def __init__(
         self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0
     ):
-        super().__init__(
-            loss="RMSE", n_estimators=1, max_depth=2,
-            learning_rate=learning_rate, l2_leaf_reg=l2_leaf_reg,
-            random_state=random_state,
-        )
-        try:
-            parsed = tuple(int(i) for i in sources)  # glue: parses the sources argument tuple
-        except (TypeError, ValueError):
-            raise ValueError("mojolearn: sources must be integer indices") from None
-        if len(parsed) < 2 or len(set(parsed)) != len(parsed):
-            raise ValueError("mojolearn: sources need at least two unique indices")
-        self.sources = parsed
+        # The GradientBoosting constructor and the sources checks are the
+        # native owner's (bindings/trees_public_gbdt_fit.mojo
+        # `gbdt_feature_freq_construct`).
+        _TREES(self, "trees_gbdt_feature_freq_init",
+               (sources, learning_rate, l2_leaf_reg, random_state), _TREES_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):
         """Fit the tree.
@@ -1261,42 +1242,11 @@ class OrderedRMSE(GradientBoosting):
         self, n_estimators=100, max_depth=6, learning_rate=0.03,
         l2_leaf_reg=3.0, border_count=128,
     ):
-        self._ordered_options(n_estimators, max_depth, border_count,
-                              learning_rate, l2_leaf_reg)
-        super().__init__(
-            loss="RMSE", n_estimators=n_estimators, max_depth=max_depth,
-            learning_rate=learning_rate, l2_leaf_reg=l2_leaf_reg,
-            border_count=border_count, boost_from_average=False,
-            nan_mode="Forbidden",
-        )
-
-    @staticmethod
-    def _ordered_options(n_estimators, max_depth, border_count,
-                         learning_rate, l2_leaf_reg):
-        for name, value, lower, upper in (  # glue: four integer hyperparameter checks
-            ("n_estimators", n_estimators, 1, 2**31 - 1),
-            ("max_depth", max_depth, 1, 8),
-            ("border_count", border_count, 1, 255),
-        ):
-            if (is_bool(value)
-                    or not isinstance(value, numbers.Integral)
-                    or not lower <= value <= upper):
-                raise ValueError(f"mojolearn: {name} must be an integer in {lower}..{upper}")
-        for name, value, positive in (  # glue: two real hyperparameter checks
-            ("learning_rate", learning_rate, True),
-            ("l2_leaf_reg", l2_leaf_reg, False),
-        ):
-            # DEVIATION 2336: `numbers.Real` is every Python and NumPy
-            # int and float; the float32 bound is the literal
-            # `np.finfo(np.float32).max`; `_f32` is the cast that sent
-            # 1e-100 to 0.0 and refused it as non-positive.
-            if (is_bool(value)
-                    or not isinstance(value, numbers.Real)
-                    or not math.isfinite(value)
-                    or abs(value) > _F32_MAX
-                    or value < 0 or (positive and _f32(value) <= 0)):
-                raise ValueError(f"mojolearn: {name} must be finite float32 and "
-                                 + ("positive" if positive else "non-negative"))
+        # The ordered settings' checks and the GradientBoosting constructor
+        # are the native owner's (bindings/trees_public_gbdt_fit.mojo
+        # `gbdt_ordered_construct`).
+        _TREES(self, "trees_gbdt_ordered_init",
+               (n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count), _TREES_CONTEXT)
 
     def fit(self, X, y, *, permutation, sample_weight=None):
         """Fit with the ordering given by ``permutation``.
