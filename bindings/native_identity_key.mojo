@@ -231,7 +231,7 @@ struct NativeIdentityKey(Movable, Writable):
             var keys = py_call(bi.list, row.keys())
             var native_keys = List[PythonObject]()
             var native_values = List[PythonObject]()
-            for j in range(len(keys)):  # driver-loop: over admitted class namespace metadata
+            for j in range(len(keys)):  # small-loop(self.array_rows: Array namespaces): fixed storage class hierarchy not tensor rows
                 if py_type(keys[j]) is not self.str_type:
                     raise Error("native identity snapshot: class namespace needs exact string keys")
                 native_keys.append(keys[j])
@@ -245,7 +245,7 @@ struct NativeIdentityKey(Movable, Writable):
         if context["array_class"] is not self.array_class or py_call(self.array_mro_getter, self.array_class) is not self.array_mro:
             return False
         ref cpy = Python().cpython()
-        for i in range(len(self.array_rows)):  # driver-loop: over admitted class namespace metadata
+        for i in range(len(self.array_rows)):  # small-loop(self.array_rows: Array namespaces): fixed storage class hierarchy not tensor rows
             var row = self.array_rows[i]
             if len(row) != self.array_row_sizes[i]:
                 return False

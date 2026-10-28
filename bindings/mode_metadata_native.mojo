@@ -38,7 +38,7 @@ def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject
     # Native type descriptors read actual MRO/storage, including buffers with
     # native metaclasses. They do not consult a metaclass's Python hooks.
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for i in range(len(ancestry)):  # driver-loop: refuse dictionary protocol overrides before storage access
+    for i in range(len(ancestry)):  # driver-loop: over class ancestry to reject storage protocol overrides
         var namespace = _class_fields(mods, ancestry[i])
         if py_contains(namespace, "__dict__"):
             var descriptor = namespace["__dict__"]
@@ -55,7 +55,7 @@ def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject
     if py_type(fields) is not b.dict:
         raise Error("TypeError: native metadata requires an ordinary instance dictionary")
     var keys = py_call(b.list, fields.keys())
-    for i in range(len(keys)):  # driver-loop: dictionary keys before any keyed read
+    for i in range(len(keys)):  # driver-loop: over instance field names before keyed reads
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: native metadata requires exact string state keys")
     return fields
@@ -84,7 +84,7 @@ def _fitted(model: PythonObject) raises -> PythonObject:
         var b = native_loaded_module("builtins")
         if py_type(reset) is not b.tuple:
             raise Error("TypeError: native parameter reset metadata requires an ordinary tuple")
-        for i in range(len(reset)):  # driver-loop: connected fitted-field names, never user output hooks
+        for i in range(len(reset)):  # driver-loop: over connected fitted-field metadata names
             if py_type(reset[i]) is not b.str:
                 raise Error("TypeError: native parameter reset metadata requires exact string names")
             var name = String(reset[i])
@@ -93,7 +93,7 @@ def _fitted(model: PythonObject) raises -> PythonObject:
                 return PythonObject(True)
         return PythonObject(False)
     var names = py_call(native_loaded_module("builtins").list, fields.keys())
-    for i in range(len(names)):  # driver-loop: fitted public attribute names, including legacy models
+    for i in range(len(names)):  # driver-loop: over fitted public attribute metadata names
         var name = String(names[i])
         if name.endswith("_") and not name.startswith("_") and fields[names[i]] is not None:
             return PythonObject(True)
@@ -110,7 +110,7 @@ def _class_fields(mut mods: NativeModules, cls: PythonObject) raises -> PythonOb
     var b = mods.module("builtins")
     var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
     var names = py_call(b.list, fields.keys())
-    for i in range(len(names)):  # driver-loop: native class namespace keys before metadata reads
+    for i in range(len(names)):  # driver-loop: over native class namespace metadata names
         if py_type(names[i]) is not b.str:
             raise Error("TypeError: native metadata requires exact string class keys")
     return fields
@@ -127,7 +127,7 @@ def _plan(model: PythonObject, state: PythonObject, context: PythonObject) raise
     var binding = PythonObject(None)
     var bind = PythonObject(None)
     var plan = PythonObject(None)
-    for i in range(len(ancestry)):  # driver-loop: resolve the connected native route through ordinary subclasses
+    for i in range(len(ancestry)):  # driver-loop: over class ancestry to resolve the native route
         if py_type(ancestry[i]) is not b.type:
             raise Error("TypeError: native metadata refuses Python metaclass protocols")
         var fields = _class_fields(ancestry[i])
@@ -158,7 +158,7 @@ def _configuration_value(model: PythonObject, fields: PythonObject, name: String
     var cls = py_type(model)
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var inherited = PythonObject(None)
-    for i in range(len(ancestry)):  # driver-loop: preserve plain class defaults without invoking Python properties
+    for i in range(len(ancestry)):  # driver-loop: over class ancestry for plain metadata defaults
         var namespace = _class_fields(ancestry[i])
         if py_contains(namespace, PythonObject(name)):
             inherited = namespace[name]
@@ -204,7 +204,7 @@ def _readback(model: PythonObject, operation: String, context: PythonObject) rai
             if py_type(defaults) is not b.dict:
                 raise Error("TypeError: native default mode requires its connected module dictionary")
             var names = py_call(b.list, defaults.keys())
-            for i in range(len(names)):  # driver-loop: reject foreign equality hooks before reading mutable process metadata
+            for i in range(len(names)):  # driver-loop: over connected process metadata names
                 if py_type(names[i]) is not b.str:
                     raise Error("TypeError: native default mode requires exact string module keys")
             selected = _mode(defaults["_DEFAULT_MODE"])
