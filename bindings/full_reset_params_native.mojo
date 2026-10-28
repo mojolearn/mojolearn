@@ -132,7 +132,7 @@ def _replacement(model: PythonObject, values: PythonObject, plan: PythonObject,
                 value = PythonObject(None)
         _ = py_call(packed.append, value)
     var args = Python.tuple(owner, recipe["operation"], py_call(b.tuple, packed), recipe["context"])
-    var result = mode_recipe_call(entry, args)
+    _ = mode_recipe_call(entry, args)
     if post_mode:
         var fields = _fields(owner)
         var mode = values["numeric_mode"]

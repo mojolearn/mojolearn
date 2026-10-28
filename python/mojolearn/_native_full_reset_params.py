@@ -331,7 +331,8 @@ def connect(parameter_metadata, linear, declared, estimator_context):
     # glue: final method/storage identities and already-supported native setters
     from ._native_public_attributes import _CONTEXT as attributes
     _connect(_CLASSES, parameter_metadata)
-    _connect(_CONTEXT.get('reconstruction_classes', ()), parameter_metadata)
+    from ._native_mode_reconstruction import finish as finish_reconstruction
+    finish_reconstruction(_CONTEXT, parameter_metadata, tuple(_CONTEXT.get('reconstruction_classes', ())))
     native_setters = {}
     # Export identity and ABI are connection metadata, not transitive runtime
     # qualification. The nested ownership/callback tests must pass before

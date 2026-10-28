@@ -39,10 +39,12 @@ def install(context, setter, modules=None):
     # a later subclass can have a different constructor despite inheritance.
     candidates = []
     for module_name, module in selected:  # glue: loaded module/class metadata only
-        if type(module) is not ModuleType or not module_name.startswith(__package__ + '.'):
+        if (type(module) is not ModuleType or not module_name.startswith(__package__ + '.')
+                or module_name.startswith(__package__ + '.tests')):
             continue
         for cls in tuple(vars(module).values()):  # glue: exact built-in class identities
-            if type(cls) is not type or cls in context['plans'] or vars(cls).get('__module__') != module_name:
+            if (type(cls) is not type or cls in context['plans'] or cls in pending
+                    or vars(cls).get('__module__') != module_name):
                 continue
             if _resolved(cls, 'set_params', context['missing']) is _mode.ParamsMixin.set_params:
                 if cls not in candidates:
@@ -94,7 +96,7 @@ def install(context, setter, modules=None):
         table.append(cls)
         added.append(cls)
         pending.pop(cls, None)
-    for cls in candidates:  # glue: keep pending descendant contracts before changing a base
+    for cls in tuple(candidates) + tuple(pending):  # glue: keep pending descendant contracts before changing a base
         if cls not in added and 'set_params' not in vars(cls):
             if any(base in added for base in cls.__mro__[1:]):  # glue: source-connected native ancestry
                 cls.set_params = _mode.ParamsMixin.set_params
@@ -103,16 +105,37 @@ def install(context, setter, modules=None):
     return tuple(added)
 
 
+def finish(context, parameter_metadata, classes):
+    # glue: final snapshots for connected recipes. A class whose getter schema
+    # or storage layout cannot be admitted keeps its original visible setter
+    # instead of a native setter that would refuse every call.
+    from . import _mode
+    from ._native_full_reset_params import _connect
+    table = context.setdefault('reconstruction_classes', [])
+    pending = context.setdefault('reconstruction_pending', {})
+    for cls in tuple(classes):  # glue: one import-time admission per connected class
+        try:
+            if cls not in parameter_metadata['plans']:
+                raise TypeError('no connected native parameter getter schema')
+            _connect((cls,), parameter_metadata)
+        except TypeError as error:
+            context['plans'].pop(cls, None)
+            if cls in table:
+                table.remove(cls)
+            cls.set_params = _mode.ParamsMixin.set_params
+            pending[cls] = str(error)
+
+
 def connect_lazy(module, context, setter):
-    # glue: complete the same install order for a newly imported sequence module.
+    # glue: complete the same install order for a newly imported sequence
+    # module; its own imports (an ARIMA under AutoARIMA) connect with it.
     import sys
     from . import _mode
     from ._native_public_attributes import connect_classes as connect_attributes
     from ._native_params_metadata import connect_classes as connect_parameters
-    from ._native_full_reset_params import _connect
-    added = install(context, setter, ((module.__name__, module),))
+    added = install(context, setter)
     if added and context['ready']:
         package = sys.modules[__package__]
         connect_attributes(package)
         connect_parameters(_mode._PARAMS_METADATA_CONTEXT, package)
-        _connect(added, context['parameter_metadata'])
+        finish(context, context['parameter_metadata'], added)
