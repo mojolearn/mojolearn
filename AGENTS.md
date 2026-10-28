@@ -1,5 +1,25 @@
 # Agent working rules
 
+## Provider migration CPU builds and peer autonomy (Andrew, 2026-10-27)
+
+- Any peer or subagent may rent a RunPod CPU box when useful for this migration.
+  Use all allocated CPU cores for compiler workers or bounded build concurrency;
+  determine the allocation from affinity/cgroup limits, not the host CPU count.
+  Do not inherit one- or two-core development caps. Record the actual allocation
+  and settings; configured parallelism does not prove every phase saturates CPUs.
+- Arm a 60-minute deadman. A box may remain available for reuse within its
+  protected lease. Record ownership and state so other sessions do not delete
+  it. Preserve complete run outputs and required binaries on the Mac and in R2
+  before teardown. Existing disabled watcher services remain disabled.
+- This authorizes focused CPU compilation by peers/subagents, superseding the
+  older lane-never-compiles restriction for this migration. Avoid duplicate
+  same-source builds; a small successful compile remains required before merge.
+- Peers may fan out and resolve routine implementation and merge decisions
+  autonomously. Report completed coherent batches, genuine blockers/ownership
+  conflicts, and rented-box ownership. Put routine findings in handoff files
+  rather than sending repeated coordination messages. Main integration remains
+  serialized; do not mutate another agent's worktree.
+
 ## Provider migration delivery (Andrew, 2026-10-27)
 
 - Move the whole public operation into native code: validation, fitted-state
