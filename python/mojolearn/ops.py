@@ -1510,6 +1510,12 @@ class Program:
         return self._session_native(self._s, "free_program", (self,))
 
 
+# Import-time connection only; save never calls a Python layout/provenance helper.
+from ._native_program_save_bridge import connect_program as _connect_program_save
+_connect_program_save(Program)
+del _connect_program_save
+
+
 # Distribution setup: resolve installed extension modules and CPU proxy
 # attributes while importing this connector. Session construction and every
 # later operation use cached native entries; no backend Python is called.
