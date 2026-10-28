@@ -27,6 +27,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_pandas import classical_admit_value
+from bindings.host_sparse_native import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.family_common import (
@@ -948,7 +949,8 @@ def neighbors_local_operation(model: PythonObject, operation: String, var args: 
     classical_connect_numpy(context)
     _admit_local_state(model, context)
     for i in range(1, len(args)):  # small-loop(public data arguments, before native preparation)
-        classical_admit_value(args[i], context)
+        if host_sparse_format(args[i]).byte_length() == 0:
+            classical_admit_value(args[i], context)
     args = xn_admit_arguments(args, context)
     if operation == "family_xn_loc_lof_fit":
         _lof_fit(model, args, context)
