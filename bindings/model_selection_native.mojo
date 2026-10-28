@@ -25,7 +25,7 @@ from bindings.msel_search import (
 from bindings.msel_search_state import msel_search_fields, msel_search_plan, msel_search_initialize
 from bindings.msel_split import (
     msel_split, msel_n_splits, msel_loo_at, msel_lpo_at, msel_logo_at, msel_lpgo_at, msel_check_cv,
-    msel_train_test_split, msel_truth,
+    msel_train_test_split, msel_truth, msel_flag_truth, msel_splitter_initialize,
 )
 
 
@@ -132,6 +132,8 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
             scorer = scorers[refit]
         var best = _msel_best(model, context)
         return msel_score(best, args[0], args[1], scorer, context)
+    if operation == "family_msel_splitter_init":
+        return msel_splitter_initialize(model, args, context)
     if operation == "family_msel_split":
         # Preserve the public iterator contract without a Python generator
         # wrapper resuming around every native fold. Lazy native splitters
@@ -148,7 +150,10 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_split_lpgo_at":
         return msel_lpgo_at(args, context)
     if operation == "family_msel_check_cv":
-        return msel_check_cv(args[0], args[1], msel_truth(args[2]), args[3], args[4], context)
+        var classifier = msel_flag_truth(args[2], context)
+        _ = msel_flag_truth(args[3], context)
+        msel_admit(args[4], context)
+        return msel_check_cv(args[0], args[1], classifier, args[3], args[4], context)
     if operation == "family_msel_train_test_split":
         return msel_train_test_split(args[0], args[1], args[2], args[3], args[4], args[5], context)
     if operation == "family_msel_cross_validate":
