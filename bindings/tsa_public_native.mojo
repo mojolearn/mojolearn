@@ -21,8 +21,9 @@ from bindings.classical_pandas import classical_admit_value
 from core.xseq_marshal import xseq_cast_nd, tsa_flags_u8
 from bindings.tsa_hw_native import hw_fit, hw_predict, hw_score
 from bindings.tsa_arima_native import arima_fit, arima_predict
-from bindings.tsa_autoarima_native import autoarima_fit, autoarima_predict
-from providers.python.autoarima_lifecycle_pyapi import autoarima_initialize, autoarima_forecast
+from bindings.tsa_autoarima_native import autoarima_fit
+from providers.python.autoarima_lifecycle_pyapi import autoarima_initialize, autoarima_forecast, autoarima_predict_native
+from providers.python.autoarima_search_pyapi import autoarima_search
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -161,6 +162,8 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if operation == "arima_predict":
             return arima_predict(call[0], call[2], context).steal_data()
         # AutoARIMA (bindings/tsa_autoarima_native.mojo)
+        if operation == "autoarima_search":
+            return autoarima_search(call[0], call[2], context).steal_data()
         if operation == "autoarima_initialize":
             return autoarima_initialize(call[0], call[2], context).steal_data()
         if operation == "autoarima_forecast":
@@ -168,7 +171,7 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if operation == "autoarima_fit":
             return autoarima_fit(call[0], call[2], context).steal_data()
         if operation == "autoarima_predict":
-            return autoarima_predict(call[0], call[2], context).steal_data()
+            return autoarima_predict_native(call[0], call[2], context).steal_data()
         raise Error("RuntimeError: unknown tsa operation " + operation)
     except error:
         var text = String(error)
@@ -182,6 +185,8 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if text.startswith("IndexError:"):
             return raise_python_exception(error_without_class(error, "IndexError"), ExceptionType("PyExc_IndexError"))
+        if text.startswith("ZeroDivisionError:"):
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
         if text.startswith("AttributeError:"):
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
