@@ -1,0 +1,358 @@
+{
+ "scope": "tranche 2 provider queue integration; affected roots (closure intersects main...HEAD) of all receipts; compile only, no runtime/identity/GPU execution",
+ "source_commit": "2b85533b77",
+ "pod": "uwr13guyoqe3vm",
+ "pod_reaped_verified": true,
+ "earlier_attempt": "ad0h8odft6dxsl READY TIMEOUT (no ssh), deleted verified, no compile; evidence pod-run-t2-readytimeout",
+ "resources": {
+  "cores_affinity": "32",
+  "cgroup_cpu_max": "none",
+  "parallel_builds": "4",
+  "jobs_per_build": "8",
+  "mojo": "/root/mojolearn/.pixi/envs/default/bin/mojo",
+  "mojo_version": "Mojo 1.0.0 (ed45d567)",
+  "mojo_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+  "nproc": "32",
+  "gen_unicode_rc": "0"
+ },
+ "source_manifest": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/source-manifest.sha256",
+ "results": [
+  {
+   "name": "archive_schema_admission_compile",
+   "entry": "checks/archive_schema_admission_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 23.7,
+   "binary_sha256": "7819159e3ea620232ed27950777419e0a57ad1467429bd7812df9aff2ec0db5f",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/archive_schema_admission_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/archive_schema_admission_compile.log"
+  },
+  {
+   "name": "cluster_constructor_boundary_compile",
+   "entry": "checks/cluster_constructor_boundary_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 38.2,
+   "binary_sha256": "5a7915d9f4da10651b3dbb3a6c7d0984e5bde1b1361ebff425991223b9778e9f",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/cluster_constructor_boundary_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/cluster_constructor_boundary_compile.log"
+  },
+  {
+   "name": "compile_arena_rows",
+   "entry": "experiments/peer2_native_boundary_20261027/compile_arena_rows.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 43.7,
+   "binary_sha256": "5cb2cd739e0ae5a89722e10d8e66b6c25aeec165c5bfe3cf5d3c909b06e8f443",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/peer2_native_boundary_20261027/compile_arena_rows.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/compile_arena_rows.log"
+  },
+  {
+   "name": "compile_hierarchy",
+   "entry": "experiments/provider_hierarchy_20261027/compile_hierarchy.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 59.0,
+   "binary_sha256": "2000919e0bc30ccba6fab0799603efc9072e70368dae9219aabfb0f1b9a74abf",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/provider_hierarchy_20261027/compile_hierarchy.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/compile_hierarchy.log"
+  },
+  {
+   "name": "compile_prep",
+   "entry": "experiments/peer2_preprocessing_boundary_20261027/compile_prep.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 62.2,
+   "binary_sha256": "fc47310c52a81bff274189b221389d54ec8044531ea2c1ca5df396452734db0f",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/peer2_preprocessing_boundary_20261027/compile_prep.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/compile_prep.log"
+  },
+  {
+   "name": "compile_radius",
+   "entry": "experiments/provider_radius_20261027/compile_radius.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 104.5,
+   "binary_sha256": "08d71ca80b11230b2dc01f172ba8486f624ffd0ce766396f7e8b15d08f7e09a8",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/provider_radius_20261027/compile_radius.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/compile_radius.log"
+  },
+  {
+   "name": "entry__mojolearn_runtime_classical_host",
+   "entry": "bindings/entry/entry__mojolearn_runtime_classical_host.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 849.2,
+   "binary_sha256": "e84b61a4f84933a89f2deb73b4daa058fee5e183cd6d03bc97ae0bc5ce04b3e7",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_runtime_classical_host.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/entry__mojolearn_runtime_classical_host.log"
+  },
+  {
+   "name": "entry__mojolearn_runtime_manifold_host",
+   "entry": "bindings/entry/entry__mojolearn_runtime_manifold_host.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 41.4,
+   "binary_sha256": "f77dffcb676acb3d23ad2b443f9ac647b818db05bd9210835249aa4535dffdd8",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_runtime_manifold_host.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/entry__mojolearn_runtime_manifold_host.log"
+  },
+  {
+   "name": "entry__mojolearn_tokenizer_host",
+   "entry": "bindings/entry/entry__mojolearn_tokenizer_host.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 833.0,
+   "binary_sha256": "dd1e3805fad2517ae84498e2a2a55eb6b84ed24776208104d9e860e27fb7ba09",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings bindings/entry/entry__mojolearn_tokenizer_host.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/entry__mojolearn_tokenizer_host.log"
+  },
+  {
+   "name": "expansion_linear_public_lifecycle_compile",
+   "entry": "checks/expansion_linear_public_lifecycle_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 36.9,
+   "binary_sha256": "c8902c80568df99c95e2867ee45d8e9e78a56d174580458d581ce08d91aa81e2",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/expansion_linear_public_lifecycle_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/expansion_linear_public_lifecycle_compile.log"
+  },
+  {
+   "name": "gbdt_parameter_owner_compile",
+   "entry": "checks/gbdt_parameter_owner_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 16.6,
+   "binary_sha256": "606ab99ebcd81a207db648dcad4e7df884b5f52bafb7500084d90028eea1eb25",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/gbdt_parameter_owner_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/gbdt_parameter_owner_compile.log"
+  },
+  {
+   "name": "gp_kernel_public_compile",
+   "entry": "checks/gp_kernel_public_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 17.0,
+   "binary_sha256": "4df7e36c24aeae63643b66ebdfa9b3cf2740882ff399a8b60ce50976af63b083",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/gp_kernel_public_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/gp_kernel_public_compile.log"
+  },
+  {
+   "name": "gp_public_boundary_compile",
+   "entry": "checks/gp_public_boundary_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 57.9,
+   "binary_sha256": "0feae2dbf0c158d3996fe2be2d43099203fb6c228c07f87e30abc6a57c7e6a7b",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/gp_public_boundary_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/gp_public_boundary_compile.log"
+  },
+  {
+   "name": "gp_public_lifecycle_compile",
+   "entry": "checks/gp_public_lifecycle_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 53.1,
+   "binary_sha256": "cf78195bead92faeeced87b458b124ca042a18305913692de93557a9a4cb748b",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/gp_public_lifecycle_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/gp_public_lifecycle_compile.log"
+  },
+  {
+   "name": "iforest_public_boundary_compile",
+   "entry": "checks/iforest_public_boundary_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 106.3,
+   "binary_sha256": "f705e23a5e2fdcd27fa28fbd92964038336838b2a12dff634e5a9f3896e34045",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/iforest_public_boundary_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/iforest_public_boundary_compile.log"
+  },
+  {
+   "name": "linalg_buffer_boundary_compile",
+   "entry": "checks/linalg_buffer_boundary_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 40.4,
+   "binary_sha256": "b0c749457061bbb82b5419fd4c72d388fd01ef7b007b0d2ac8ebd9976911f02d",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/linalg_buffer_boundary_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/linalg_buffer_boundary_compile.log"
+  },
+  {
+   "name": "metrics_boundaries_compile",
+   "entry": "checks/metrics_boundaries_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 46.7,
+   "binary_sha256": "895524dce3f2cdfd325dba1112b3fa1b731abbc525f974b68bce9092f0f4ad28",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/metrics_boundaries_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/metrics_boundaries_compile.log"
+  },
+  {
+   "name": "metrics_program_fields_compile",
+   "entry": "checks/metrics_program_fields_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 48.4,
+   "binary_sha256": "6671d9944004c66d7a5b474cc50b5e7c4ec90d7c79e16cf4a1ac519d527bb61c",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/metrics_program_fields_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/metrics_program_fields_compile.log"
+  },
+  {
+   "name": "pca_public_compile",
+   "entry": "experiments/peer2_decomposition_20261027/pca_public_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 50.4,
+   "binary_sha256": "01efe8738f399c7cf82ea1fc89514c9ea2cf1ce3501e144aba8a52c01fa4fb79",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/peer2_decomposition_20261027/pca_public_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/pca_public_compile.log"
+  },
+  {
+   "name": "pca_query_compile",
+   "entry": "experiments/peer2_decomposition_20261027/pca_query_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 39.4,
+   "binary_sha256": "48e08a113353e64889c5634d3b04b223949eb29ccb8a6bd05fb1d26be2cd2bf6",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/peer2_decomposition_20261027/pca_query_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/pca_query_compile.log"
+  },
+  {
+   "name": "peer1_kernel_owner_compile",
+   "entry": "checks/peer1_kernel_owner_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 46.8,
+   "binary_sha256": "0932c4e72a9e4704dae7878797b89418386cfcb19110043cb712ce9f1f3b9148",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/peer1_kernel_owner_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/peer1_kernel_owner_compile.log"
+  },
+  {
+   "name": "peer1_query_owner_compile",
+   "entry": "checks/peer1_query_owner_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 26.3,
+   "binary_sha256": "5b0d1192c72cdee2554b4175c713804c9461d9ea656a77e75ea80c3b1a6701c1",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/peer1_query_owner_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/peer1_query_owner_compile.log"
+  },
+  {
+   "name": "peer4_mode_boundaries_20261028",
+   "entry": "experiments/peer4_mode_boundaries_20261028/compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 48.4,
+   "binary_sha256": "782b2b18f710c804456b099942b568da197b59ec006b9f648b972112d9ae1a6b",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/peer4_mode_boundaries_20261028/compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/peer4_mode_boundaries_20261028.log"
+  },
+  {
+   "name": "peer6_autoarima_lifecycle_compile",
+   "entry": "checks/peer6_autoarima_lifecycle_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 33.7,
+   "binary_sha256": "e66e1e86a3d10493c4d7fc3062a7cb91ecfd2730f3c53835f2928084cda60cf8",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/peer6_autoarima_lifecycle_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/peer6_autoarima_lifecycle_compile.log"
+  },
+  {
+   "name": "peer6_forecast_convenience_compile",
+   "entry": "checks/peer6_forecast_convenience_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 63.3,
+   "binary_sha256": "784e0f3b2bc3a10ed8a30895b46ede582fd69a69872201e797a7dba6db02cf13",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/peer6_forecast_convenience_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/peer6_forecast_convenience_compile.log"
+  },
+  {
+   "name": "peer6_resample_pandas_compile",
+   "entry": "checks/peer6_resample_pandas_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 24.5,
+   "binary_sha256": "8bf828c22baa48bb62d3b40f816c30979852f2e9aba38a2782524fc3293582f5",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/peer6_resample_pandas_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/peer6_resample_pandas_compile.log"
+  },
+  {
+   "name": "resample_public_compile",
+   "entry": "checks/resample_public_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 38.1,
+   "binary_sha256": "d89ff7696088652e7a8cb7960eb7d1cb9b88ec20fc17eb666f96f5f670c26fb1",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/resample_public_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/resample_public_compile.log"
+  },
+  {
+   "name": "spectral_public_lifecycle_compile",
+   "entry": "checks/spectral_public_lifecycle_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 42.9,
+   "binary_sha256": "80246f0a87b463873f3b71d5352c828e0f1c76bf313ff8fe7a1bbf873586c9b8",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/spectral_public_lifecycle_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/spectral_public_lifecycle_compile.log"
+  },
+  {
+   "name": "svm_public_lifecycle_compile",
+   "entry": "checks/svm_public_lifecycle_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 319.8,
+   "binary_sha256": "d4246d6eb3a7b6c0d6f7923b008c7a2986d96112d0f86353e5d976d5a8568b8f",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/svm_public_lifecycle_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/svm_public_lifecycle_compile.log"
+  },
+  {
+   "name": "svm_state_coef_compile",
+   "entry": "checks/svm_state_coef_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 54.7,
+   "binary_sha256": "23e62063188139f06c0470851cf5c5243e4df04d37f23236cec9c85a8521dd5b",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/svm_state_coef_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/svm_state_coef_compile.log"
+  },
+  {
+   "name": "tree_auxiliary_public_compile",
+   "entry": "checks/tree_auxiliary_public_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 170.2,
+   "binary_sha256": "fe62fd64ca01a4dd53f90a056d7d077ad4f3d9c75bf4192f3981cc731e34a6c4",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/tree_auxiliary_public_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/tree_auxiliary_public_compile.log"
+  },
+  {
+   "name": "tree_boost_public_compile",
+   "entry": "checks/tree_boost_public_compile.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 175.1,
+   "binary_sha256": "0a6b9165303043bd56d3a35d77c3b16bcf983ccbdd39abee0988340c515137d4",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/tree_boost_public_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/tree_boost_public_compile.log"
+  },
+  {
+   "name": "umap_init",
+   "entry": "experiments/_integ_roots/compile_umap_init.mojo",
+   "target": "cpu",
+   "exit": 0,
+   "seconds": 27.0,
+   "binary_sha256": "94b23ae1c270d4517ceef1056125390455eb8892408c201cb561cbaad9cc0e5e",
+   "command": "pixi run -e default mojo build --optimization-level 0 -j 8 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/_integ_roots/compile_umap_init.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/integration-provider-queue-20261028/pod-run-t2/remote/leg_out/logs/umap_init.log"
+  }
+ ],
+ "left_out": [
+  "b395d0f541 native-label-protocol: conflicts with spectral 1d4b51bec0 in classical_labels/svc_* (not additive)"
+ ],
+ "not_compiled": [
+  "unaffected roots (closure unchanged vs main) reuse their receipts",
+  "full host binding set not run"
+ ]
+}
