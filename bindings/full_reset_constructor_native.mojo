@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native public constructors for the 77 source-vetted full-reset owners
+# Native public constructors for the source-vetted full-reset owners
 # (python/mojolearn/_native_full_reset_params.py, proof
 # tools/native_full_reset_constructor_schemas.json) and the 52 field-only
 # declared prep/decomp and plain owners (python/mojolearn/_native_declared_constructors.py,
@@ -29,6 +29,7 @@ from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.params_metadata_native import _resolved
 from bindings.full_reset_params_native import _release_owned
 from bindings.declared_params_native import _release as _declared_release
+from bindings.umap_parameters_native import umap_parameters_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 
@@ -186,6 +187,9 @@ def _construct(model: PythonObject, positional: PythonObject, keywords: PythonOb
     var missing = context["missing"]
     var cls = py_type(model)
     var fields = _fields(model)
+    if py_get(plan, "validation_kind") is not None and String(plan["validation_kind"]) == "umap":
+        if py_contains(fields, "_parameters") or py_contains(fields, "_extras"):
+            raise Error("TypeError: native UMAP construction refuses instance validation callbacks")
     # Replay the original writes. The NumericModeMixin rule writes a None mode
     # only when hasattr(self, name) was false: no instance field (old or
     # written earlier in this constructor) and no class attribute.
@@ -227,8 +231,18 @@ def _construct(model: PythonObject, positional: PythonObject, keywords: PythonOb
                 _declared_release(previous[i], context["declared"])
         else:
             _release_owned(previous, retained, context)
+    var validated = False
+    var umap = py_get(plan, "validation_kind") is not None and String(plan["validation_kind"]) == "umap"
     for i in range(len(targets)):  # driver-loop: original field assignment order into the same dictionary
+        if umap and String(targets[i]) == "numeric_mode":
+            # UMAP validates after its own writes, before NumericModeMixin's
+            # mode injection. A failed re-initialization preserves that order.
+            _ = umap_parameters_fields(fields, context["umap_validation_context"])
+            validated = True
         py_setitem(fields, targets[i], sources[i])
+    if umap and not validated:
+        # A pre-existing mode can suppress the wrapper's None write.
+        _ = umap_parameters_fields(fields, context["umap_validation_context"])
     return PythonObject(None)
 
 
@@ -242,6 +256,10 @@ def full_reset_constructor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error)
+        if String(error).startswith("ValueError:"):
+            return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
+        if String(error).startswith("NotImplementedError:"):
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if String(error).startswith("AttributeError:"):
