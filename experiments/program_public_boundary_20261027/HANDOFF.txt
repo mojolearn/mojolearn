@@ -21,7 +21,11 @@ The new compiled entry is included in both binding exports and the CPU manifest.
 
 Validation: the actual C entry and native Session dispatch root compiled with
 HostExec on the local Mac, Mojo 1.0.0 (ed45d567), O0, -j 10, CPU identical flags,
-exit 0 in 396.630 seconds. All 244 retained source-manifest files still match.
+exit 0 in 396.630 seconds. All 244 source-manifest files matched at compile completion. The required
+push guard then required five ownership-loop comment annotations in
+native_owner_lifetime.mojo; executable lines remain identical. The original
+refusal, exact annotation diff and before/after hashes are retained. This
+comment-only correction does not require another compilation.
 Four structural source checks passed; pytest was unavailable, so their pure
 assertion functions ran directly with runpy. No product runtime, identity,
 vendor, installed-wheel or performance campaign ran. The GPU export was edited

@@ -100,7 +100,7 @@
   "connector_manifest": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/public-attempt3/connector-source-manifest.json",
   "connector_manifest_sha256": "2c5a060e880ab35a5491c1dca55d7e43c98e83363e5fd67ec6bd5b04d16adc70",
   "connector_source_archive": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/public-attempt3/connector-source-bytes.tgz",
-  "compile_source_manifest_unchanged": true,
+  "compile_source_manifest_unchanged": false,
   "pending": [
     "Program.partition and Program.distribute frontend migration",
     "DistributedProgram and PartitionedProgram owner lifecycle and native request dispatch",
@@ -122,6 +122,24 @@
       "directory": "public-attempt3",
       "exit_code": 0,
       "reason": "Final actual HostExec public root compiled successfully."
+    }
+  ],
+  "post_compile_comment_only_changes": [
+    {
+      "file": "bindings/native_owner_lifetime.mojo",
+      "compiled_sha256": "567dbe0a046dd0961a5cf599d1ddcd91d617d4ea8d566dd99615408b5a5933e9",
+      "final_sha256": "506d8ea40f29f3229c67f943d8014444c4e52d6ed95241da32070fe7feb8470d",
+      "changed_lines": [
+        15,
+        35,
+        105,
+        111,
+        134
+      ],
+      "executable_source_unchanged": true,
+      "reason": "Required source guard wording for weak-reference/type/owner admission loops newly reached by the Program public route",
+      "guard_refusal_log": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/public-push.log",
+      "patch": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/public-guard-annotation.patch"
     }
   ]
 }
