@@ -539,7 +539,7 @@ struct LinBufferPin[MODE: Int = LIN_PIN_MODE](Movable, Writable):
 def register_lin_buffer_pin(mut module: PythonModuleBuilder) raises:
     # The module that owns the linalg public operations registers the pin
     # once; lin_borrow_array allocates it with PythonObject(alloc=...).
-    _ = module.add_type[LinBufferPin]("_LinBufferPin")
+    _ = module.add_type[LinBufferPin[]]("_LinBufferPin")
 
 
 def lin_borrow_array(var input: LinAdmission, typestr: String, context: PythonObject) raises -> LinBuf:
@@ -550,7 +550,7 @@ def lin_borrow_array(var input: LinAdmission, typestr: String, context: PythonOb
     var array = native_storage_allocate(context["array_class"])
     var held_pin = Optional[AdmittedBorrowedBuffer]()
     swap(held_pin, input.pin)
-    var pin = PythonObject(alloc=LinBufferPin(held_pin^))
+    var pin = PythonObject(alloc=LinBufferPin[](held_pin^))
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromMemory")(
         MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=v.addr), v.nbytes,
