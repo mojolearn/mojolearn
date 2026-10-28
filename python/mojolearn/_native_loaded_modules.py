@@ -85,7 +85,7 @@ connect_module('operator', operator, tuple(name for name in vars(operator)  # gl
 connect_module('math', math, ('floor', 'ceil', 'comb'))
 connect_module('itertools', itertools, tuple(name for name in vars(itertools) if not name.startswith('_')))  # glue: fixed native iterator types
 connect_module('os', os, ('stat', 'urandom', 'getcwd'))
-connect_module('types', types, ('ModuleType', 'MemberDescriptorType', 'MethodDescriptorType',
+connect_module('types', types, ('ModuleType', 'SimpleNamespace', 'MemberDescriptorType', 'MethodDescriptorType',
                                 'MethodType', 'BuiltinFunctionType'))
 connect_module('warnings', warnings, ())  # warning filters are mutable native configuration, validated by their owner
 

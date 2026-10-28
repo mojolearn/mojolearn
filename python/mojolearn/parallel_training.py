@@ -6,42 +6,6 @@ are SUMMED, not averaged. Keep logical_shards, shard order, shape, inputs and
 starting state fixed when changing the number of physical devices. Hardware
 identity requires cloud qualification; this module alone is not evidence.
 """
-import threading
-
-from ._byte_lm_impl import SmallByteLanguageModelTrainer, _array, _float32, _validate_state
-from ._byte_lm_config import state_shape
-from ._buffer import Buf, addr, addr_ro, empty, flat_bytes, typestr_of
-
-
-STATE_ARRAYS = ('parameters', 'm', 'v', 'flags')
-
-
-def _export_target(obj, count, typestr, name):
-    """The address of a caller-provided export buffer (the `into=` forms).
-
-    DEVIATION 3120: a per-step export at 162M parameters allocated four
-    fresh zero-filled 648.6 MB arrays every call (about 1.4 s a step on an
-    H100 host). A caller that exports every step passes the same buffers
-    back instead. Each must be a writable, C-contiguous, one-dimensional
-    buffer of exactly `count` elements of `typestr`; anything else is
-    refused BEFORE the binding is called, so nothing is written to it. The
-    caller keeps `obj` alive for the call, as for `addr`. If the export
-    then raises, the buffer holds an unspecified partial export."""
-    with Buf(obj, writable=True, name=name) as b:
-        if b.readonly:
-            raise ValueError('mojolearn: %s is read-only, refusing to write to it' % name)
-        try:
-            got = typestr_of(b)
-        except TypeError:
-            got = b.format
-        if got != typestr:
-            raise TypeError('mojolearn: %s must be %s, got %s' % (name, typestr, got))
-        if b.ndim != 1 or not b.c_contiguous:
-            raise ValueError('mojolearn: %s must be a contiguous one-dimensional buffer' % name)
-        if b.shape[0] != count or b.nbytes != count * b.itemsize:
-            raise ValueError('mojolearn: %s must hold exactly %d elements, got %d' % (name, count, b.shape[0]))
-        return b.addr
-
 
 class ParallelByteLanguageModelTrainer:
     """Resident model replicas with pooled optimizer state and a fixed left fold.
@@ -60,6 +24,11 @@ class ParallelByteLanguageModelTrainer:
     @property
     def step_(self):
         return _native_parallel_byte("step", (self,))
+
+    @property
+    def _state(self):
+        # Diagnostic: a detached copy of the native owner's admitted state.
+        return _native_parallel_byte("admitted_state", (self,))
 
     def _open(self):
         return _native_parallel_byte("open", (self,))
@@ -90,7 +59,9 @@ class ParallelByteLanguageModelTrainer:
         caller-owned buffers (float32[n_total] three times, int32[n_tensors]
         for flags) that are written in place and returned as the dict;
         nothing is allocated. The bytes are the same as the no-argument
-        form's (`_export_target` says what is refused)."""
+        form's. Each buffer must be a writable, C-contiguous, one-dimensional
+        buffer of exactly its element count and dtype; anything else is
+        refused before anything is written."""
         return _native_parallel_byte("export_raw", (self, rank, into))
 
     def set_lr(self, lr):
@@ -181,17 +152,6 @@ class ParallelByteLanguageModelTrainer:
         return _native_parallel_byte("close", (self,))
 
 
-def _floats(value):
-    """A float32 buffer from raw little-endian bytes (a gradient off the wire)
-    or any float32 array; `_array` then copies and admits it."""
-    if isinstance(value, (bytes, bytearray)):
-        import array as _pyarray
-        out = _pyarray.array('f')
-        out.frombytes(value)
-        return out
-    return value
-
-
 def ordered_sum_gradients(parts):
     """Copy shard zero, then add shards 1..K-1 using IDENTICAL GPU pair adds.
 
@@ -241,7 +201,9 @@ class ParallelNeuralTrainer:
 
 
 def _connect_parallel_byte_native():
-    # ABI connection only. Product methods below hand off once to native Mojo.
+    # glue: import-time ABI connection only. Product methods hand off once to
+    # native Mojo (bindings/parallel_byte_native.mojo), which admits the exact
+    # trainer classes and the installed binding's schedule descriptor table.
     from . import _backend
     from ._array import Array
     from ._byte_lm_config import ByteLanguageModelConfig
@@ -249,7 +211,7 @@ def _connect_parallel_byte_native():
     runtime = _tokenizer_binding()._module.parallel_byte_call
     mode = _backend.default_mode()
     vendor = _backend.vendor()
-    try:
+    try:  # glue: installed byte-LM binding selection at import
         selected = _backend.binding("_mojolearn_byte_lm", mode)
     except (ImportError, ValueError):
         # ValueError: a CPU-only install refuses a non-identical tier by
@@ -267,8 +229,9 @@ def _connect_parallel_byte_native():
         # legacy adapter. Cache its stored native module, never adapter methods.
         # Byte-LM owns registered Mojo types: preserve the one-mode-per-process
         # contract, including a fresh process selected as Apple fast at import.
-        modes = {mode: selected._host if vendor == "cpu" else selected}
+        modes = {mode: selected._host if vendor == "cpu" else selected}  # glue: installed native mode connection
     runtime("initialize", (Array, ByteLanguageModelConfig, modes, vendor))
+    runtime("admit_class", (ParallelByteLanguageModelTrainer, "replica"))
     return runtime
 
 
