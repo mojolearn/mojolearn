@@ -141,17 +141,17 @@ def int_slices_quantize_kernel(
         if v > best:
             best = v
         p += INT_SLICES_TPB
-    red[tid] = best
+    red[unsafe_offset=tid] = best
     barrier()
     var active = INT_SLICES_TPB // 2
     while active > 0:
         if tid < active:
-            var o = red[tid + active]
-            if o > red[tid]:
-                red[tid] = o
+            var o = red[unsafe_offset=tid + active]
+            if o > red[unsafe_offset=tid]:
+                red[unsafe_offset=tid] = o
         barrier()
         active = active // 2
-    var ex = int_slices_row_exponent(red[0])
+    var ex = int_slices_row_exponent(red[unsafe_offset=0])
     if tid == 0:
         e.unsafe_store(r, Int32(ex))
     p = tid
