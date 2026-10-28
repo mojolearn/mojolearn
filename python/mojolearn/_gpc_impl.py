@@ -259,6 +259,10 @@ class GaussianProcessClassifier(NumericModeMixin):
 
     _BINDING = "_mojolearn_gp"
 
+    # The native public owner replaces _mode lifecycle/output decorators.
+    # The shared full-reset installer still owns the field-only constructor.
+    _mojolearn_native_public = True
+
     def __init__(
         self,
         kernel=None,
@@ -271,6 +275,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         random_state=None,
         multi_class="one_vs_rest",
         n_jobs=None,
+        numeric_mode=None,
     ):
         # Stored verbatim, as scikit-learn requires; `_validate_params`
         # checks them when `fit` (or `load`) runs.
@@ -283,6 +288,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         self.random_state = random_state
         self.multi_class = multi_class
         self.n_jobs = n_jobs
+        self.numeric_mode = numeric_mode
 
     def _validate_params(self):
         """The constructor checks, run first in `fit` and `load`; the
@@ -685,6 +691,7 @@ _native_archive_bridge.register(GaussianProcessClassifier, _GPC_FORMAT, (
 # this file's saved kernel), the binary fit class and the default bounds.
 _native_family_bridge.tables(family_gp_kernel_nodes=dict(_GPC_KERNEL_NODES),
                              family_gp_binary_laplace=_BinaryLaplace,
+                             family_gp_binary_namespace=dict(vars(_BinaryLaplace)),
                              family_gp_default_bounds=(1e-5, 1e5))
 
 
