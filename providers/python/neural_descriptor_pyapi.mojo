@@ -6,7 +6,8 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_namespace_admitted, prepared_namespace_admit
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 
@@ -68,6 +69,14 @@ def _neural_descriptor_entry_fields(entries: PythonObject) raises -> PythonObjec
         if not raw:
             raise cpy.unsafe_get_error()
         fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
+        # A compiled module's namespace is admitted once per dictionary and
+        # size (an inserted key changes the size), not on every lookup.
+        var mods = NativeModules()
+        if prepared_namespace_admitted(mods, entries, fields):
+            return fields
+        _neural_descriptor_dictionary(fields)
+        prepared_namespace_admit(mods, entries, fields)
+        return fields
     elif cls is native_loaded_module("types").SimpleNamespace:
         var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
         if not raw:

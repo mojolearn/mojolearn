@@ -163,3 +163,24 @@ def prepared_class_stamp(mut mods: NativeModules, cls: PythonObject, extras: Pyt
             _ = py_call(stamp.append, items[k][0])
             _ = py_call(stamp.append, items[k][1])
     return stamp
+
+
+comptime _NAMESPACE_SLOT = "module_namespace_keys_v1"
+
+
+def prepared_namespace_admitted(mut mods: NativeModules, module: PythonObject, fields: PythonObject) raises -> Bool:
+    """True when `fields` (the module's namespace dictionary) already passed
+    its string-key admission and neither the dictionary nor its size changed
+    since (an inserted key changes the size)."""
+    var record = prepared_get(mods, _NAMESPACE_SLOT, module)
+    if record is None or record[0] is not fields:
+        return False
+    ref cpy = Python().cpython()
+    return Int(py=record[1]) == cpy.lib.get_function[Int]("PyDict_Size")(fields._obj_ptr)
+
+
+def prepared_namespace_admit(mut mods: NativeModules, module: PythonObject, fields: PythonObject) raises:
+    """Record that `fields` passed its string-key admission."""
+    ref cpy = Python().cpython()
+    var size = cpy.lib.get_function[Int]("PyDict_Size")(fields._obj_ptr)
+    prepared_put(mods, _NAMESPACE_SLOT, module, Python.list(fields, PythonObject(size)))
