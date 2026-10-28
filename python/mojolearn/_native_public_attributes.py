@@ -158,6 +158,11 @@ def connect_classes(package):
     if not context['stl_connected'] and type(stl_module) is ModuleType:
         context['property_schemas'][vars(vars(stl_module)['STL'])['config']] = 'stl_config'
         context['stl_connected'] = True
+    boost_module = sys.modules.get(package.__name__ + '._expansion_trees')
+    if type(boost_module) is ModuleType:
+        bagging = vars(boost_module).get('_BaggingBase')
+        if type(bagging) is type:
+            context['property_schemas'][vars(bagging)['estimators_']] = 'bagging_estimators'
     candidates = set()
     for name, module in tuple(sys.modules.items()):  # glue: loaded product declarations only; no optional module imports
         if (name == package.__name__ or name.startswith(package.__name__ + '.')) and not name.startswith(package.__name__ + '.tests'):

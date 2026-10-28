@@ -1,3 +1,4 @@
+from bindings.trees_bagging_members_native import bagging_members
 # SPDX-License-Identifier: Apache-2.0
 # Native public attribute resolution and zero-copy fitted-output boundary.
 # No generic object getter, property invocation, Array.__array__, or Python
@@ -201,6 +202,8 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
 
 def _property(model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
               plan: PythonObject, context: PythonObject) raises -> PythonObject:
+    if kind == "bagging_estimators":
+        return bagging_members(model)
     if kind == "cholesky_logdet":
         var info = PythonObject(None)
         try:
