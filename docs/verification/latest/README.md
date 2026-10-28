@@ -1,5 +1,11 @@
 # Latest verifier summaries (copied 2026-10-28)
 
+Retention: the repo holds only the latest run's small summary; it is overwritten on each new run. The full history
+of every run is retained in `~/mojolearn-evidence/<run dir>` (here `full-api-verifier-20261027/`,
+`neural-provider-verifier-20261027/`, `cpu-verifier-coverage-20261028/`, `gbdt-cpu-ranking-verifier-20261028/`) and in
+R2 (`measurements/<date>/<job>.tar.gz`, `measurements/box-archive/<box>/`, indexed in `bench/results/r2-index.tsv`),
+and the per-release boards under `bench/results/bench_board/`.
+
 Small summary and receipt files copied from `~/mojolearn-evidence/` so the most recent verifier state is in git.
 Raw outputs, logs, fault-run JSON and tarballs stay in the evidence dirs and R2 (see `docs/EVIDENCE_LAYOUT.md`).
 The light verifier's own retained record is `bench/results/light_verifier/<date>/`.

@@ -4,6 +4,14 @@ Rule (Andrew, 2026-10-28): everything core is versioned in the repo; bulk stays 
 enters the repo, and no binaries (`.so`, `.tgz`, `.npz`) or raw logs. Copies into the repo never delete or move the
 original in `~/mojolearn-evidence/`.
 
+Retention (Andrew, 2026-10-28): the repo holds only the latest run's small summary (`docs/measurements/latest/`,
+`docs/verification/latest/`); it is overwritten on each new run. The full history of every run is retained in
+`~/mojolearn-evidence/<run dir>` (for example `full-measurement-nvidia-20261027/`, `full-api-verifier-20261027/`) and in
+R2 (`measurements/<date>/<job>.tar.gz`, `boards/<box>/<root>.tar.gz`, `measurements/box-archive/<box>/`, indexed in
+`bench/results/r2-index.tsv`), and the per-release boards under `bench/results/bench_board/` (old roots in
+`bench/results/board-archive/`). Lane briefs (`docs/briefs/<YYYYMMDD>/`) and lane handoffs
+(`experiments/handoffs_<YYYYMMDD>/`) stay dated and accumulate.
+
 ## Where things live
 
 | Kind | Where | Examples |
@@ -27,7 +35,8 @@ original in `~/mojolearn-evidence/`.
 ## Adding something
 
 1. If a rule, tool or brief names a file that exists only in `~/mojolearn-evidence/`, copy it into the repo and record
-   its origin (scripts: `tools/ops/README.md`; summaries: the README of the target dir).
+   its origin (scripts: `tools/ops/README.md`; summaries: the README of the target dir). A new run's summary
+   replaces the previous one in `latest/`; update its README to name the new source dir, run tag and date.
 2. Keep only what a reader needs to know what ran and what it showed: summaries, manifests, receipts, one-line
    results. Leave the logs and binaries where they are and make sure they reach R2.
 3. Never keep the only copy of a script in an evidence folder.

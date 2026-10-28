@@ -1,5 +1,12 @@
 # Latest full-measurement summaries (copied 2026-10-28)
 
+Retention: the repo holds only the latest run's small summary; it is overwritten on each new run. The full history
+of every run is retained in `~/mojolearn-evidence/<run dir>` (here `full-measurement-nvidia-20261027/` and
+`full-measurement-amd-20261027-r3/`; earlier runs in their own `full-measurement-*` dirs) and in R2
+(`measurements/<date>/<job>.tar.gz`, `boards/<box>/<root>.tar.gz`, `measurements/box-archive/<box>/`, indexed in
+`bench/results/r2-index.tsv`), and the per-release boards under `bench/results/bench_board/` (old roots in
+`bench/results/board-archive/`).
+
 Small summary files from the two most recent full-measurement runs. The canonical published board stays in
 `bench/results/bench_board/main-<box>/` (written by `tools/main_board_ingest.py` and `tools/bench_board.py`); these
 files only make the run inputs and per-race results visible in git. Per-recipe board JSON, race tarballs, source
