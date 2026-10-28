@@ -281,7 +281,7 @@ def _m3_fresh(mut mods: NativeModules, block: PythonObject, fields: PythonObject
     return windowed_result7^
 
 
-def _mamba3_forward_captured(mut mods: NativeModules, 
+def _mamba3_forward_captured(mut mods: NativeModules,
     block: PythonObject, input: PythonObject, state: PythonObject, lengths: PythonObject, step: Bool,
     context: PythonObject, fields: PythonObject,
 ) raises -> PythonObject:
@@ -325,7 +325,7 @@ def _mamba3_publish_runtime(fields: PythonObject, block: PythonObject) raises:
             py_setitem(live, name, fields[name])
 
 
-def mamba3_forward(mut mods: NativeModules, 
+def mamba3_forward(mut mods: NativeModules,
     block: PythonObject, input: PythonObject, state: PythonObject, lengths: PythonObject, step: Bool,
     context: PythonObject,
 ) raises -> PythonObject:
@@ -576,7 +576,7 @@ def _shape_of(value: PythonObject) raises -> PythonObject:
     return py_call(g[].bi.memoryview, value).shape
 
 
-def mamba3_set_input_states(mut mods: NativeModules, 
+def mamba3_set_input_states(mut mods: NativeModules,
     state: PythonObject, theta: PythonObject, h: PythonObject, k: PythonObject, v: PythonObject,
     context: PythonObject,
 ) raises -> PythonObject:

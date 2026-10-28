@@ -173,7 +173,7 @@ def _native_function(module: PythonObject, name: String) raises -> PythonObject:
     return _native_function(mods, module, name)
 
 
-def causal_lm_admit_binding(mut mods: NativeModules, 
+def causal_lm_admit_binding(mut mods: NativeModules,
     model: PythonObject, block_binding: PythonObject, primitives: PythonObject,
     int15_binding: PythonObject,
 ) raises -> PythonObject:
@@ -666,7 +666,7 @@ def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: Py
     return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
 
 
-def _causal_layer_run_prepared(mut mods: NativeModules, 
+def _causal_layer_run_prepared(mut mods: NativeModules,
     e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
     head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
 ) raises -> PythonObject:
@@ -1210,7 +1210,7 @@ def _resident_close(entries: PythonObject, lm: PythonObject, sessions: PythonObj
             _ = py_call_typed(entries["transformer_decode_session_close"], sessions[i])
 
 
-def _resident_open_all(mut mods: NativeModules, 
+def _resident_open_all(mut mods: NativeModules,
     model: PythonObject, e: PythonObject, state: PythonObject, b: Int, l: Int, int15: Bool,
     mut keep: List[PythonObject],
 ) raises -> PythonObject:
