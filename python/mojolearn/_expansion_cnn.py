@@ -1255,26 +1255,13 @@ class BatchNorm2d(_Layer):
 
     def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True,
                  input_shape=None, numeric_mode=None):
-        np = _np()
-        self.num_features = int(num_features)
-        self.eps, self.affine = float(eps), bool(affine)
-        self.momentum = None if momentum is None else float(momentum)
-        self.track_running_stats = bool(track_running_stats)
-        self.num_batches_tracked_ = 0
-        self.input_shape = input_shape
-        self.numeric_mode = numeric_mode
-        self.weight_ = np.ones(self.num_features, np.float32)
-        self.bias_ = np.zeros(self.num_features, np.float32)
-        self.running_mean_ = np.zeros(self.num_features, np.float32) if self.track_running_stats else None
-        self.running_var_ = np.ones(self.num_features, np.float32) if self.track_running_stats else None
-        self.training = True
+        return _XCNN(self, "bn_init", (num_features, eps, momentum, affine, track_running_stats, input_shape, numeric_mode), _XCNN_CONTEXT)
 
     def train(self, mode=True):
-        self.training = bool(mode)
-        return self
+        return _XCNN(self, "bn_train", (mode,), _XCNN_CONTEXT)
 
     def eval(self):
-        return self.train(False)
+        return _XCNN(self, "bn_train", (False,), _XCNN_CONTEXT)
 
     # lane cnn-resident-glue (G3, CNN resident grads, default on; _OFF clears it): on a
     # resident forward the running statistics stay in the resident array
@@ -1298,23 +1285,19 @@ class BatchNorm2d(_Layer):
 
     @property
     def running_mean_(self):
-        self._sync_running()
-        return self.__dict__.get("running_mean_")
+        return _XCNN(self, "bn_running_get", ("running_mean_",), _XCNN_CONTEXT)
 
     @running_mean_.setter
     def running_mean_(self, v):
-        self._sync_running()
-        self.__dict__.update(running_mean_=v, _run_dev=None)
+        return _XCNN(self, "bn_running_set", ("running_mean_", v), _XCNN_CONTEXT)
 
     @property
     def running_var_(self):
-        self._sync_running()
-        return self.__dict__.get("running_var_")
+        return _XCNN(self, "bn_running_get", ("running_var_",), _XCNN_CONTEXT)
 
     @running_var_.setter
     def running_var_(self, v):
-        self._sync_running()
-        self.__dict__.update(running_var_=v, _run_dev=None)
+        return _XCNN(self, "bn_running_set", ("running_var_", v), _XCNN_CONTEXT)
 
     def _grads_host(self):
         """Download the pending resident dgamma / dbeta (G3)."""
@@ -1334,27 +1317,19 @@ class BatchNorm2d(_Layer):
 
     @property
     def grad_weight_(self):
-        self._grads_host()
-        if "grad_weight_" not in self.__dict__:
-            raise AttributeError("grad_weight_")
-        return self.__dict__["grad_weight_"]
+        return _XCNN(self, "bn_grad_get", ("grad_weight_",), _XCNN_CONTEXT)
 
     @grad_weight_.setter
     def grad_weight_(self, v):
-        self._grads_host()
-        self.__dict__["grad_weight_"] = v
+        return _XCNN(self, "bn_grad_set", ("grad_weight_", v), _XCNN_CONTEXT)
 
     @property
     def grad_bias_(self):
-        self._grads_host()
-        if "grad_bias_" not in self.__dict__:
-            raise AttributeError("grad_bias_")
-        return self.__dict__["grad_bias_"]
+        return _XCNN(self, "bn_grad_get", ("grad_bias_",), _XCNN_CONTEXT)
 
     @grad_bias_.setter
     def grad_bias_(self, v):
-        self._grads_host()
-        self.__dict__["grad_bias_"] = v
+        return _XCNN(self, "bn_grad_set", ("grad_bias_", v), _XCNN_CONTEXT)
 
     def _res_bn(self, b):
         return self.track_running_stats and _resident(b)
@@ -1396,41 +1371,7 @@ class BatchNorm2d(_Layer):
         return _XCNN(self, "bn_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
-        np = _np()
-        if _is_t(grad_out):
-            b = self._binding()
-            xh0 = self.__dict__.get("_xdev")
-            own0 = self.__dict__.get("_xdev_dev")
-            if (_on_dev(b, grad_out) and _idn(b, _F_LAYER_IO) and xh0 is not None and own0 is not None
-                    and own0.b is b and grad_out.size == _size(self._x3shape)):
-                dx = DeviceTensor._new_out(b, self._shape)   # the dx pass stores every word
-                self._backward_dev(b, xh0, grad_out.h, dx.h, dev_dx=True)
-                return dx
-        g = _f32(grad_out, "grad_out")
-        g3 = np_reshape(g if g.ndim != 2 else g[:, :, None], self._x3shape)
-        n, c, hw = self._x3shape
-        C = self.num_features
-        b = self._binding()
-        dx = np.empty(self._x3shape, np.float32)
-        xh = self.__dict__.get("_xdev")
-        owner = self.__dict__.get("_xdev_dev")
-        if (xh is not None and owner is not None and owner.b is b and _mixed(b)
-                and self._backward_res(b, xh, g3.ctypes.data, dx.ctypes.data, False, False)):
-            return dx.reshape(self._shape) if len(self._shape) != 2 else dx[:, :, 0]
-        if xh is not None and owner is not None and owner.b is b and _mixed(b):
-            aux = self._aux.copy()
-            b.x_cnn_batchnorm_backward_m([xh, g3.ctypes.data, dx.ctypes.data, aux.ctypes.data], 0b0001,
-                                         [n, c, hw, 1 if self._mode else 0])
-        else:
-            aux = self._aux.copy()
-            b.x_cnn_batchnorm_backward(self._x.ctypes.data, g3.ctypes.data, dx.ctypes.data,
-                                       aux.ctypes.data, [n, c, hw, 1 if self._mode else 0])
-        self.grad_bias_ = aux[2 + 3 * C:2 + 4 * C].copy()
-        self.grad_weight_ = aux[2 + 4 * C:2 + 5 * C].copy()
-        if not self.affine:
-            self.grad_weight_[:] = 0
-            self.grad_bias_[:] = 0
-        return dx.reshape(self._shape) if len(self._shape) != 2 else dx[:, :, 0]
+        return _XCNN(self, "bn_backward", (grad_out,), _XCNN_CONTEXT)
 
     def _rows(self, X):
         X = _f32(X, "X")

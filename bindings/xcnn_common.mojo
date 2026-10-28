@@ -388,17 +388,38 @@ def xcnn_addr(value: PythonObject) raises -> PythonObject:
 
 # ---------------------------------------------------------------- the layer's resident arrays
 
+def xcnn_dev_fields(dev: PythonObject, context: PythonObject) raises -> PythonObject:
+    if py_type(dev) is not context["xcnn_dev_class"]:
+        raise Error("TypeError: CNN resident state requires its connected native owner")
+    var fields = _fields(dev)
+    _ = xcnn_module_entries(fields["b"], context)
+    var table = fields["h"]
+    var b = xcnn_builtins()
+    if py_type(table) is not b.dict:
+        raise Error("TypeError: CNN resident handles require an exact dictionary")
+    var names = py_call(b.list, table.keys())
+    for i in range(len(names)):  # driver-loop: native resident buffer allocation metadata
+        if py_type(names[i]) is not b.str:
+            raise Error("TypeError: CNN resident buffer names require native strings")
+    for i in range(len(names)):  # driver-loop: native resident handle and capacity metadata
+        var item = table[names[i]]
+        if (py_type(item) is not b.tuple or len(item) != 2 or py_type(item[0]) is not b.int
+                or py_type(item[1]) is not b.int or Int(py=item[0]) < 1 or Int(py=item[1]) < 1):
+            raise Error("TypeError: CNN resident buffers require native handle/capacity pairs")
+    return fields
+
+
 def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_dev_of(layer, b)`: the layer's `_Dev` on this binding, a new one
     (the old one's arrays freed) when the binding changed."""
     var b = xcnn_builtins()
     var fields = _fields(layer)
     var dev = py_get(fields, "_dev")
-    if dev is not None and dev.b is entries["module"]:
+    if dev is not None and xcnn_dev_fields(dev, context)["b"] is entries["module"]:
         return dev
     if dev is not None:
         # `_Dev.free()`: every handle of the old binding released, the table emptied
-        var old = _fields(dev)
+        var old = xcnn_dev_fields(dev, context)
         var table = old["h"]
         var owner = xcnn_module_entries(old["b"], context)
         var handles = py_call(b.list, py_call(py_call(b.getattr, table, "values")))
@@ -419,7 +440,7 @@ def xcnn_dev_get(layer: PythonObject, entries: PythonObject, name: String, count
     reallocated only when its size changes."""
     var n = max(count, 1)
     var dev = xcnn_dev(layer, entries, context)
-    var table = py_fields(dev)["h"]
+    var table = xcnn_dev_fields(dev, context)["h"]
     var cur = py_get(table, PythonObject(name))
     if cur is not None and Int(py=cur[1]) == n:
         return cur[0]
@@ -445,19 +466,19 @@ def xcnn_dev_upload(layer: PythonObject, entries: PythonObject, name: String, ar
 
 def xcnn_dev_has(dev: PythonObject, name: String) raises -> Bool:
     """`name in dev.h`."""
-    return py_contains(py_fields(dev)["h"], PythonObject(name))
+    return py_contains(_fields(dev)["h"], PythonObject(name))
 
 
 def xcnn_dev_handle(dev: PythonObject, name: String) raises -> PythonObject:
     """`dev.h[name][0]`."""
-    return py_fields(dev)["h"][PythonObject(name)][0]
+    return _fields(dev)["h"][PythonObject(name)][0]
 
 
 def xcnn_download(dev: PythonObject, h: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
     """`dev.download(h, np.empty(count, np.float32))`."""
     var out = xcnn_host_f32([count], context)
     if count:
-        var owner = xcnn_module_entries(py_fields(dev)["b"], context)
+        var owner = xcnn_module_entries(xcnn_dev_fields(dev, context)["b"], context)
         _ = py_call_typed(owner["symbols"]["x_cnn_res_download"], h, xcnn_addr(out), PythonObject(count))
         _ = out  # keep the Python object alive through the native call above
     return out
