@@ -147,6 +147,9 @@ from core.identity_trace import IdentityTrace
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mamba.impl.ops.identical_scan_window import identical_selective_scan_window
 from mamba.impl.ops.m1_persistent_scan import m1_persistent_scan
+#: lane mamba-folds (2026-10-28): `-D MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN=1` runs
+#: the v2 chunked fold (m1_chunked_scan.mojo) on every column, host included.
+from mamba.impl.ops.m1_chunked_scan import IDN_MAMBA1_CHUNKED_SCAN, m1_chunked_scan
 #: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA1_CHUNKSCAN`
 #: runs the scan as a chunked parallel scan (afn_selective_scan.mojo); every
 #: other build takes the kernel below unchanged.
@@ -599,7 +602,17 @@ def selective_scan_fn(
 
     var total = batch * dim
     if total > 0:
-        comptime if IDN_M1_PERSISTENT_SCAN:
+        comptime if IDN_MAMBA1_CHUNKED_SCAN:
+            # A BITS CHANGE (v2 fold, m1_chunked_scan.mojo); it supersedes the
+            # v1 execution plans below, which all compute the v1 serial fold.
+            comptime assert not ANY_SABOTAGE, (
+                "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN: the sabotage arms belong to"
+                " the v1 serial kernel; build them without the chunked scan"
+            )
+            m1_chunked_scan[MAX_DSTATE](
+                ctx, output, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
+            )
+        elif IDN_M1_PERSISTENT_SCAN:
             comptime assert not IDN_M1_STATE_WINDOW, (
                 "MOJOLEARN_IDN_M1_SCAN persistent and state_window are two"
                 " plans for one scan; choose one"

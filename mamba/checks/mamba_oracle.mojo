@@ -34,6 +34,8 @@ from checks.numerics import (
 )
 # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.contract import OP_NT
 from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_list
 from gemm.host.neural_gemm import gemm_oracle
@@ -151,6 +153,59 @@ struct MambaStages(Movable):
         self.conv_win = List[Float32]()
 
 
+#: lane mamba-folds (2026-10-28): the v2 chunked S9 fold, restated here from
+#: its definition (mamba/impl/ops/m1_chunked_scan.mojo's docstring) rather than
+#: imported, so the oracle stays an independent transcription. The switch and
+#: the chunk width are the profile's; they must equal the device's.
+comptime ORACLE_M1_CHUNKED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime ORACLE_M1_CHUNK_W = 64
+
+
+struct M1ChainFold(Copyable, Movable):
+    """One `(b, d)` row of the scan's state under the active profile.
+
+    v1: `h = ftz(fma(da, h, dbu))`, serial.
+    v2 (ORACLE_M1_CHUNKED): token `li` sits at offset `li % W` of its chunk.
+    At offset 0 the chunk's entry state `H` is the current state and the
+    chunk's affine map restarts (`P = da`, `Lc = dbu`); later tokens fold
+    `P = ftz(da * P)`, `Lc = ftz(fma(da, Lc, dbu))`; the state is
+    `ftz(fma(P, H, Lc))`. Written as ONE serial walk on purpose: the device
+    spells the same values as three parallel passes, and this walk is the
+    definition those passes must reproduce."""
+
+    var h: List[Float32]
+    var hk: List[Float32]
+    var p: List[Float32]
+    var lc: List[Float32]
+
+    def __init__(out self, var h0: List[Float32]):
+        self.hk = h0.copy()
+        self.p = List[Float32]()
+        self.lc = List[Float32]()
+        for _ in range(len(h0)):
+            self.p.append(0.0)
+            self.lc.append(0.0)
+        self.h = h0^
+
+    def step(mut self, li: Int, n: Int, da: Float32, dbu: Float32):
+        comptime if ORACLE_M1_CHUNKED:
+            var j = li % ORACLE_M1_CHUNK_W
+            if j == 0:
+                self.hk[n] = self.h[n]
+                self.p[n] = da
+                self.lc[n] = dbu
+            else:
+                self.p[n] = ftz(identical_mul(da, self.p[n]))
+                self.lc[n] = ftz(identical_mul_add(da, self.lc[n], dbu))
+            self.h[n] = ftz(identical_mul_add(self.p[n], self.hk[n], self.lc[n]))
+        else:
+            self.h[n] = ftz(identical_mul_add(da, self.h[n], dbu))
+
+
 def selective_scan_oracle(
     u: List[Float32],       # [M, d_inner] token-major
     delta: List[Float32],   # [M, d_inner] (post-softplus)
@@ -191,9 +246,10 @@ def selective_scan_oracle(
         y.append(0.0)
     for bb in range(b):
         for d in range(d_inner):
-            var h = List[Float32]()
+            var h0 = List[Float32]()
             for n in range(D_STATE):
-                h.append(ftz(h_state[(bb * d_inner + d) * D_STATE + n]))
+                h0.append(ftz(h_state[(bb * d_inner + d) * D_STATE + n]))
+            var chain = M1ChainFold(h0^)
             for li in range(l):
                 var t = bb * l + li
                 var uv = ftz(u[t * d_inner + d])
@@ -204,15 +260,15 @@ def selective_scan_oracle(
                     )
                     var db = ftz(identical_mul(dl, ftz(bmat[t * D_STATE + n])))
                     var dbu = ftz(identical_mul(db, uv))
-                    h[n] = ftz(identical_mul_add(da, h[n], dbu))
+                    chain.step(li, n, da, dbu)
                 var acc = Float32(0.0)
                 for n in range(D_STATE):
                     acc = ftz(
-                        identical_mul_add(ftz(cmat[t * D_STATE + n]), h[n], acc)
+                        identical_mul_add(ftz(cmat[t * D_STATE + n]), chain.h[n], acc)
                     )
                 y[t * d_inner + d] = acc
             for n in range(D_STATE):
-                h_state[(bb * d_inner + d) * D_STATE + n] = h[n]
+                h_state[(bb * d_inner + d) * D_STATE + n] = chain.h[n]
     return y^
 
 

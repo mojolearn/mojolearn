@@ -23,6 +23,7 @@ from mamba.checks.mamba_fixture import (
     RMS_EPS,
 )
 from mamba.checks.mamba_oracle import (
+    M1ChainFold,
     MambaStages,
     MambaState,
     refuse_nonfinite,
@@ -327,6 +328,9 @@ def mamba_h_checkpoint_oracle(
                 h.append(ftz(h_in[(bb * d_inner + d) * D_STATE + n]))
             for n in range(D_STATE):
                 out[((bb * (l + 1) + 0) * d_inner + d) * D_STATE + n] = h[n]
+            # The forward's own fold, v1 or v2 (lane mamba-folds): the
+            # checkpoint holds the states the forward produced.
+            var chain = M1ChainFold(h^)
             for li in range(l):
                 var t = bb * l + li
                 var uv = ftz(u[t * d_inner + d])
@@ -335,11 +339,11 @@ def mamba_h_checkpoint_oracle(
                     var da = _forward_da(dl, ftz(a[d * D_STATE + n]))
                     var dbb = _forward_dbb(dl, ftz(bmat[t * D_STATE + n]))
                     var dbu = ftz(identical_mul(dbb, uv))
-                    h[n] = ftz(identical_mul_add(da, h[n], dbu))
+                    chain.step(li, n, da, dbu)
                 for n in range(D_STATE):
                     out[
                         ((bb * (l + 1) + li + 1) * d_inner + d) * D_STATE + n
-                    ] = h[n]
+                    ] = chain.h[n]
     return out^
 
 

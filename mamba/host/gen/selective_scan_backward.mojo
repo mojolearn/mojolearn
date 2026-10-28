@@ -153,6 +153,13 @@ from mamba.host.gen.selective_scan_interface import (
     SAB_S8_CUDA_PAIRING,
     SAB_S9_UNFUSED,
 )
+#: lane mamba-folds (2026-10-28): under MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN the
+#: forward folds h with the v2 chunked spelling, so the checkpoint must hold
+#: THOSE states (DEVIATION 1081's rule: a checkpoint of the forward that ran).
+#: The reverse recurrence below is unchanged: it differentiates the exact
+#: function `h = da h + dbu`, which the v2 fold rounds differently but does
+#: not change.
+from mamba.host.gen.m1_chunked_scan import IDN_MAMBA1_CHUNKED_SCAN, m1_chunked_checkpoint
 
 
 # ===========================================================================
@@ -547,6 +554,14 @@ def selective_scan_checkpoint_fn(
     )
 
     var total = batch * dim
+    comptime if IDN_MAMBA1_CHUNKED_SCAN:
+        if total > 0 and seqlen > 0:
+            # SYNCHRONOUS (its scratch must outlive the launches); same buffer
+            # contract as the kernel below. L = 0 falls through to it (slot 0).
+            m1_chunked_checkpoint[MAX_DSTATE](
+                ctx, h_ckpt, h_in, u, delta, A, B, batch, seqlen, dim
+            )
+            return
     if total > 0:
         comptime kern = selective_scan_checkpoint_kernel[MAX_DSTATE]
         var _l1_a0 = h_ckpt.unsafe_ptr()
