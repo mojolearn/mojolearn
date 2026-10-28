@@ -9,7 +9,7 @@ LAYOUTS = {}
 def _descriptor(value):
     # Raw native class metadata; do not resolve a descriptor's own __get__.
     return any('__get__' in type.__dict__['__dict__'].__get__(base)
-               for base in type.__dict__['__mro__'].__get__(type(value)))
+               for base in type.__dict__['__mro__'].__get__(type(value)))  # glue: import-time descriptor class metadata
 
 
 def connect(package):
@@ -30,7 +30,7 @@ def connect(package):
         if cls in LAYOUTS:
             continue
         mro = type.__dict__['__mro__'].__get__(cls)
-        if any(type(base) is not type for base in mro):
+        if any(type(base) is not type for base in mro):  # glue: import-time ordinary class ancestry
             continue
         rows = tuple((base, dict(type.__dict__['__dict__'].__get__(base))) for base in mro)  # glue: import-time class metadata
         fields = next((row['__dict__'] for _, row in rows if '__dict__' in row), None)  # glue: native instance storage
@@ -40,5 +40,5 @@ def connect(package):
         for _, row in reversed(rows):  # glue: effective inherited member identities
             names.update(row)
         LAYOUTS[cls] = dict(cls=cls, mro=mro, fields=fields, fields_get=fields.__get__, names=names,
-                           descriptors=tuple((base, {name: value for name, value in row.items() if _descriptor(value)})
+                           descriptors=tuple((base, {name: value for name, value in row.items() if _descriptor(value)})  # glue: import-time descriptor identity table
                                              for base, row in rows))  # glue: immutable descriptor identities
