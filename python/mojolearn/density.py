@@ -5,7 +5,6 @@
 from . import _mojolearn_estimators, _native_archive_bridge, _native_family_bridge
 from ._buffer import all_finite, as_f32_c
 from ._mode import NumericModeMixin, available_if
-from ._native_robust_bridge import native_method as _native_kde_method
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
 _KDE_FORMAT = "mojolearn-kde-1"
@@ -230,6 +229,8 @@ class DBSCAN(NumericModeMixin):
     #: this query on this hardware, and adding one would give a caller a
     #: slower answer under a familiar name. Refusing by name is input
     #: validation.
+    _mojolearn_native_public = True
+
     def __init__(
         self,
         eps=0.5,
@@ -240,14 +241,9 @@ class DBSCAN(NumericModeMixin):
         max_mbytes_per_batch=None,
         max_iterations=None,
         prediction_data=False,
+        numeric_mode=None,
     ):
-        self.eps = eps
-        self.min_samples = min_samples
-        self.metric = metric
-        self.algorithm = algorithm
-        self.max_mbytes_per_batch = max_mbytes_per_batch
-        self.max_iterations = max_iterations
-        self.prediction_data = prediction_data
+        return _NATIVE(self, "family_density_dbscan_initialize", (eps, min_samples, metric, algorithm, max_mbytes_per_batch, max_iterations, prediction_data, numeric_mode,), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         """Cluster ``X``.
@@ -276,13 +272,11 @@ class DBSCAN(NumericModeMixin):
             ``eps``, ``min_samples < 1`` or a mismatched
             ``sample_weight``.
         """
-        return _NATIVE(self, "family_cfb_dbscan_fit", (self._bind("_mojolearn_estimators"), X, sample_weight),
-                       _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_dbscan_fit", (X, y, sample_weight), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None, sample_weight=None):
         """Fit and return ``labels_``; see :meth:`fit`."""
-        return _NATIVE(self, "family_cfb_dbscan_fit_predict", (self._bind("_mojolearn_estimators"), X, sample_weight),
-                       _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_dbscan_fit_predict", (X, y, sample_weight), _NATIVE_CONTEXT)
 
     # The core rows of a `prediction_data=True` fit stay on the device under
     # a handle held in `_resident_holder` (bindings/cfb_resident.mojo); no
@@ -292,13 +286,10 @@ class DBSCAN(NumericModeMixin):
         """A pickle or a deepcopy carries no device handle (the integer is
         meaningful only in the process that minted it); the copy uploads its
         own core rows at its first predict."""
-        state = self.__dict__.copy()
-        state.pop("_resident_holder", None)
-        return state
+        return _NATIVE(self, "family_density_dbscan_getstate", (), _NATIVE_CONTEXT)
 
     def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.__dict__["_resident_holder"] = {}
+        return _NATIVE(self, "family_density_dbscan_setstate", (state,), _NATIVE_CONTEXT)
 
     # predict (DEVIATION 2740): the fit's eps predicate is the brute arm's accumulator
     # (`dbscan/impl/neighbors/epsilon_neighborhood.mojo::_eps_acc`, features ascending, the core row
@@ -336,7 +327,7 @@ class DBSCAN(NumericModeMixin):
         -------
         labels : Array of int32, shape (n_queries,)
         """
-        return _NATIVE(self, "family_cfb_dbscan_predict", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_dbscan_predict", (X,), _NATIVE_CONTEXT)
 
     # npz layout: `components` <f4 (core rows), `core_sample_indices` and `core_labels` <i4, `labels`
     # <i4, `eps` <f8, `metric` and `algorithm` as names, `meta` <i8 [n_features_in_, n_samples_fit_,
@@ -480,6 +471,8 @@ class KernelDensity(NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
 
+    _mojolearn_native_public = True
+
     def __init__(
         self,
         *,
@@ -492,18 +485,10 @@ class KernelDensity(NumericModeMixin):
         breadth_first=True,
         leaf_size=40,
         metric_params=None,
+        numeric_mode=None,
     ):
-        # Stored verbatim, as scikit-learn requires; `_validate_params`
-        # checks them when `fit` (or `load`) runs.
-        self.bandwidth = bandwidth
-        self.kernel = kernel
-        self.metric = metric
-        self.algorithm = algorithm
-        self.atol = atol
-        self.rtol = rtol
-        self.breadth_first = breadth_first
-        self.leaf_size = leaf_size
-        self.metric_params = metric_params
+        # Stored verbatim; native fit/score own parameter admission.
+        return _NATIVE(self, "family_density_kde_initialize", (bandwidth, algorithm, kernel, metric, atol, rtol, breadth_first, leaf_size, metric_params, numeric_mode,), _NATIVE_CONTEXT)
 
     # The constructor checks (`_validate_params`), the device-resident fit
     # handle and its release live in the native owner
@@ -514,7 +499,7 @@ class KernelDensity(NumericModeMixin):
         """Drop the device copy, if one is held. Quiet on a binding that
         cannot be reached any more (interpreter shutdown) and on a handle
         already released (a copied instance)."""
-        return _NATIVE(self, "family_xn_kde_release", (), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_kde_release", (), _NATIVE_CONTEXT)
 
     # No Python `__del__`: dropping an instance releases its device fit
     # through the native finalizer connected below the class
@@ -524,9 +509,11 @@ class KernelDensity(NumericModeMixin):
         """A pickle or a deepcopy carries no device handle (the integer is
         meaningful only in the process and registry that minted it); the
         copy uploads its own fit set at its first call."""
-        return _NATIVE(self, "family_xn_kde_getstate", (), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_kde_getstate", (), _NATIVE_CONTEXT)
 
-    @_native_kde_method
+    def __setstate__(self, state):
+        return _NATIVE(self, "family_density_kde_setstate", (state,), _NATIVE_CONTEXT)
+
     def fit(self, X, y=None, sample_weight=None):
         """Store the training data.
 
@@ -548,10 +535,8 @@ class KernelDensity(NumericModeMixin):
         ValueError
             For a non-finite value or invalid ``sample_weight``.
         """
-        return _NATIVE(self, "family_xn_kde_fit", (None, X, sample_weight, y),
-                       _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_kde_fit", (X, y, sample_weight), _NATIVE_CONTEXT)
 
-    @_native_kde_method
     def score_samples(self, X):
         """Log density at each row of ``X``.
 
@@ -567,13 +552,11 @@ class KernelDensity(NumericModeMixin):
             Rows no training point reaches under a compact kernel get
             ``-3.4028235e+38``.
         """
-        return _NATIVE(self, "family_xn_kde_score_samples", (None, X),
-                       _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_kde_score_samples", (X,), _NATIVE_CONTEXT)
 
     # The per-row float32 scores are summed in the binding's fixed order (`core/device_fold.mojo`: on the
     # device on a GPU install, the same order on the host column); lane pyglue-numeric replaced a host
     # sum of the downloaded scores.
-    @_native_kde_method
     def score(self, X, y=None):
         """Total log density of ``X``: the sum of :meth:`score_samples`.
 
@@ -588,15 +571,12 @@ class KernelDensity(NumericModeMixin):
         -------
         float
         """
-        return _NATIVE(self, "family_xn_kde_score", (None, X),
-                       _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_density_kde_score", (X,), _NATIVE_CONTEXT)
 
     def sample(self, n_samples=1, random_state=None):
         """Not implemented; always raises ``NotImplementedError`` (cuML has
         no ``sample`` either)."""
-        raise NotImplementedError(
-            "mojolearn KernelDensity: sample() is not implemented (cuML has none)"
-        )
+        return _NATIVE(self, "family_density_kde_sample", (n_samples, random_state), _NATIVE_CONTEXT)
 
     # npz layout (kde svc host lane, 2026-09-14): `x` <f4 as fitted, `weights` <f4 only when fit took
     # sample_weight, `bandwidth` <f8, `kernel` and `metric` as the names score_samples passes to the
@@ -652,3 +632,14 @@ _native_archive_bridge.lifetime(KernelDensity, "kde_fit_release")
 
 # KernelDensity resolves the import-connected entry inside native execution.
 _native_family_bridge.connect_bindings("_mojolearn_estimators")
+
+# Import-only constructor schemas and retained provider ownership. Runtime
+# admission/selection and all public state changes belong to the native owner.
+from ._native_owner_lifetime import connect_owner_context as _connect_density_owner_context
+_connect_density_owner_context(_NATIVE_CONTEXT)
+_native_family_bridge.tables(
+    density_dbscan_class=DBSCAN, density_kde_class=KernelDensity,
+    density_retained_bindings=[],
+    density_dbscan_parameters=('eps', 'min_samples', 'metric', 'algorithm', 'max_mbytes_per_batch', 'max_iterations', 'prediction_data', 'numeric_mode'),
+    density_kde_parameters=('bandwidth', 'algorithm', 'kernel', 'metric', 'atol', 'rtol', 'breadth_first', 'leaf_size', 'metric_params', 'numeric_mode'),
+)

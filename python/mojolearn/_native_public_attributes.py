@@ -113,6 +113,19 @@ def _hierarchy_availability(package):
     return {cls: {'predict': ((vars(member)['check'],), 'hierarchy_predict')}}
 
 
+def _density_availability(package):
+    # glue: the declared DBSCAN predicate is frozen import metadata only.
+    import sys
+    module = sys.modules.get(package.__name__ + '.density')
+    if type(module) is not ModuleType:
+        return {}
+    cls = vars(module).get('DBSCAN')
+    if type(cls) is not type:
+        return {}
+    member = vars(cls)['predict']
+    return {cls: {'predict': ((vars(member)['check'],), 'density_predict')}}
+
+
 def connect_classes(package):
     # glue: establish native slots once, before dependent estimator/parameter
     # tables capture method identities; lazy imports admit only new classes.
@@ -140,6 +153,7 @@ def connect_classes(package):
     prep_availability = _prep_availability(package, context['missing'])
     neighbor_availability = _neighbor_availability(package)
     neighbor_availability.update(_hierarchy_availability(package))
+    neighbor_availability.update(_density_availability(package))
     stl_module = sys.modules.get(package.__name__ + '._x_sequence_stl')
     if not context['stl_connected'] and type(stl_module) is ModuleType:
         context['property_schemas'][vars(vars(stl_module)['STL'])['config']] = 'stl_config'

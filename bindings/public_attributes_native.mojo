@@ -13,6 +13,7 @@ from bindings.native_array_view import native_array_ndarray_view as _array_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_error_class import error_without_class
 from bindings.native_instance_item import native_instance_item
+from bindings.host_inference_scalars import host_inference_scalar
 
 
 def _string_keys(fields: PythonObject) raises:
@@ -155,7 +156,19 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
             if py_type(condition) is not py_type(PythonObject("")):
                 raise Error("TypeError: native availability requires its connected condition")
             var rule = String(condition)
-            if rule == "hierarchy_predict":
+            if rule == "density_predict":
+                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
+                var b = native_loaded_module("builtins")
+                var kind = py_type(requested)
+                var enabled = False
+                if requested is None or kind is b.bool or kind is b.int or kind is b.float or kind is b.str or kind is b.bytes or kind is b.list or kind is b.tuple or kind is b.dict:
+                    enabled = _truth(requested)
+                else:
+                    host_inference_scalar(requested, context, True)
+                    enabled = Bool(py=requested)
+                if not enabled:
+                    raise Error("AttributeError: prediction data was not requested")
+            elif rule == "hierarchy_predict":
                 var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
                 if py_type(requested) is not py_type(PythonObject(True)) and py_type(requested) is not py_type(PythonObject(0)):
                     raise Error("TypeError: prediction_data availability requires an exact native boolean or integer")

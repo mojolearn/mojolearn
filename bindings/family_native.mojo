@@ -23,6 +23,7 @@ from bindings.metrics_cls_native import metrics_cls_operation
 from bindings.metrics_exp_native import metrics_exp_operation
 from bindings.cluster_fit_a_native import cluster_fit_a_operation
 from providers.python.hdbscan_public_lifecycle_pyapi import hdbscan_public_operation
+from providers.python.density_public_lifecycle_pyapi import density_public_operation
 from bindings.cluster_fit_b_native import cluster_fit_b_operation
 from bindings.mixture_native import mixture_operation
 from bindings.linalg_ops_native import linalg_ops_operation
@@ -91,6 +92,8 @@ def family_operation(model: PythonObject, operation: String, var args: PythonObj
                 and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_")):
         if len(args) > 0 and args[0] is None:
             return cluster_public_operation(model, operation, args, context)
+    if operation.startswith("family_density_"):
+        return density_public_operation(model, operation, args, context)
     if operation == "family_par_public":
         return parallel_public_operation(model, args, context)
     if operation == "family_par_run":
