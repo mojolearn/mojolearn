@@ -225,6 +225,16 @@ class SplitWheels(unittest.TestCase):
         self.assertEqual(len(list(out.glob("*.whl"))), 1)
         self.assertEqual(json.loads(next(out.glob("SPLIT-*.json")).read_text())["problems"], [])
         self.assertFalse(list(out.glob("API-*.json")))
+
+    def test_core_checks_committed_verification_inputs_before_writing(self):
+        out = Path(tempfile.mkdtemp(dir=self.root))
+        args = [a for s in self.set_dirs for a in ("--set", s)]
+        with mock.patch("verification_repository.validate_payload",
+                        side_effect=ValueError("uncommitted verification fixture")) as gate:
+            with self.assertRaisesRegex(ValueError, "uncommitted verification"):
+                pw.main(args + ["--wheels", pw.gpu_plugins.CORE_PROFILE, "--out", str(out)])
+        gate.assert_called_once()
+        self.assertFalse(list(out.glob("*.whl")))
     def test_the_three_wheels_are_the_combined_wheel(self):
         """Identity: same members, same paths, same bytes; only .dist-info differs."""
         single = {pw.gpu_plugins.installed_member(n): b for n, b in members(self.single).items() if ".dist-info/" not in n}

@@ -644,7 +644,9 @@ def pack(output, adapters, adapters_proof, stage_only=False, source_ref=None):
                 refresh_source(output, document, runner, adapters, adapters_proof, source_ref)
         document["state"] = "packing"
         payload(stage, document["source_commit"], runner, python, env)
-        runner.run("wheel-build", [python, "-m", "build", "--wheel", "--no-isolation"], cwd=stage / "python", env=env)
+        wheel_env = dict(env, MOJOLEARN_VERIFICATION_GIT_ROOT=str(root),
+                         MOJOLEARN_VERIFICATION_SOURCE_COMMIT=document["source_commit"])
+        runner.run("wheel-build", [python, "-m", "build", "--wheel", "--no-isolation"], cwd=stage / "python", env=wheel_env)
         wheels = list((stage / "python/dist").glob("*.whl"))
         require(len(wheels) == 1, "expected exactly one assembled wheel")
         wheel = wheels[0]
