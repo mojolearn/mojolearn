@@ -62,5 +62,29 @@
    "log": "/Users/andrewhendel/mojolearn-evidence/seq-predict-tiled-20261028/pod/leg_out/remote/leg_out/build-off.log",
    "source_commit": "bdaa8554f8 (tracked tree shipped by tools/runpod_cpu_leg.sh, 0 dirty)"
   }
- ]
+ ],
+ "rerun_after_merge": {
+  "source_commit": "efdffc918a (merge of origin/main 45b0630582)",
+  "results": [
+   {
+    "name": "x_sequence_host_on",
+    "entry": "bindings/entry/entry__mojolearn_x_sequence_host.mojo",
+    "host": "Mac, tools/compile_slot.sh -j 10",
+    "exit": 0,
+    "seconds": 578,
+    "binary_sha256": "2773395aa592b7878dee0593d9da739c2929f69a89fb6e3b2914f59c28d99abd",
+    "log": "/Users/andrewhendel/mojolearn-evidence/seq-predict-tiled-20261028/mac2/build-on.log"
+   },
+   {
+    "name": "x_sequence_host_off",
+    "entry": "bindings/entry/entry__mojolearn_x_sequence_host.mojo",
+    "host": "Mac, tools/compile_slot.sh -j 10",
+    "exit": 0,
+    "seconds": 532,
+    "binary_sha256": "dbcba4d358524c30584c91d629cc92a626d9c1218bf5a066dc337d9f9f5ad860",
+    "log": "/Users/andrewhendel/mojolearn-evidence/seq-predict-tiled-20261028/mac2/build-off.log"
+   }
+  ],
+  "note": "CPU root only; the sm_89 results above are at bdaa8554f8 (pre-merge)"
+ }
 }
