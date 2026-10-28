@@ -133,3 +133,70 @@ def test_payload_corruption_is_not_rebuilt(tmp_path):
     (directory / "tokens.i32").write_bytes(array("i", [7] * 48).tobytes())
     with pytest.raises(ValueError, match="length/SHA mismatch"):
         lm_corpus.TokenBatches(directory, 1, 3)
+
+
+@pytest.mark.parametrize("step", [0.5, -0.1, True])
+def test_batch_offset_multiplies_before_integer_conversion(tmp_path, step):
+    batches, _ = _tokens(tmp_path)
+    result = batches.ids(step)
+    base = int(step * batches.batch * batches.length)
+    expected = []
+    for row in range(batches.batch):
+        start = batches.lo + (base + row * batches.length) % batches.modulus
+        expected.extend(range(start, start + batches.length + 1))
+    assert list(memoryview(result._store)) == expected
+
+
+def test_constructor_retains_native_numpy_scalar_conversion(tmp_path):
+    np = pytest.importorskip("numpy")
+    _, directory = _tokens(tmp_path)
+    batches = lm_corpus.TokenBatches(directory, np.int64(2), np.float32(3.9))
+    assert batches.batch == 2 and batches.length == 3
+
+
+@pytest.mark.parametrize("kind,value,batch", [("float16", 0.1, 10), ("float32", 0.7, 10),
+                                               ("float64", -0.01, 2), ("int8", 2, 2),
+                                               ("uint64", 2 ** 53 + 1, 2), ("bool_", True, 2)])
+@pytest.mark.parametrize("promotion", ["legacy", "weak"])
+def test_numpy_step_uses_installed_scalar_promotion(tmp_path, kind, value, batch, promotion):
+    np = pytest.importorskip("numpy")
+    setter = getattr(np, "_set_promotion_state", None)
+    if setter is None and promotion != "weak":
+        pytest.skip("NumPy 2.2 and later have only weak scalar promotion")
+    prior = np._get_promotion_state() if setter is not None else None
+    batches, _ = _tokens(tmp_path, batch=batch, length=1)
+    step = getattr(np, kind)(value)
+    try:
+        if setter is not None:
+            setter(promotion)
+        base = int(step * batches.batch * batches.length)  # independent legacy expression oracle
+        result = batches.ids(step)
+    finally:
+        if setter is not None:
+            setter(prior)
+    expected = []
+    for row in range(batches.batch):
+        start = batches.lo + (base + row * batches.length) % batches.modulus
+        expected.extend(range(start, start + batches.length + 1))
+    assert list(memoryview(result._store)) == expected
+
+
+def test_numpy_step_overflow_refuses_before_seterrcall(tmp_path):
+    np = pytest.importorskip("numpy")
+    setter = getattr(np, "_set_promotion_state", None)
+    prior = np._get_promotion_state() if setter is not None else None
+    prior_callback = np.geterrcall()
+    batches, _ = _tokens(tmp_path)
+    touched = []
+    try:
+        if setter is not None:
+            setter("weak")
+        np.seterrcall(lambda *arguments: touched.append(arguments))
+        with np.errstate(over="call"):
+            with pytest.raises(ValueError, match="overflows"):
+                batches.ids(np.int8(100))
+    finally:
+        np.seterrcall(prior_callback)
+        if setter is not None:
+            setter(prior)
+    assert touched == []

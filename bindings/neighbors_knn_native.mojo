@@ -915,6 +915,27 @@ def _neighbors_knn_operation(model: PythonObject, operation: String, var args: P
 
 def neighbors_knn_operation(model: PythonObject, operation: String, args: PythonObject,
                                 context: PythonObject) raises -> PythonObject:
+    if operation == "family_xn_knn_clf_classes":
+        # The public `classes_` property: sorted unique labels seen at fit
+        # (the saved label names when fit kept them), a list per column for a
+        # 2-D `y`. Reads the fit's own stored owners only.
+        classical_connect_numpy(context)
+        var fields = _fields(model)
+        if py_get(fields, "_y_cols") is None:
+            raise Error("AttributeError: classes_ is set by fit")
+        var names = py_get(fields, "_label_names")
+        if names is not None:
+            return names
+        if not py_contains(fields, "_classes_list") or not py_contains(fields, "outputs_2d_"):
+            raise Error("AttributeError: classes_ is set by fit")
+        var classes = fields["_classes_list"]
+        var two_d = fields["outputs_2d_"]
+        host_inference_scalar(two_d, context, True)
+        if Bool(py=two_d):
+            return classes
+        if py_type(classes) is not _b().list:
+            raise Error("TypeError: neighbor classes must be the native list fit stored")
+        return classes[0]
     if operation == "family_xn_knn_getstate":
         var fields = _fields(model)
         var state = py_call(native_loaded_module("builtins").dict, fields)

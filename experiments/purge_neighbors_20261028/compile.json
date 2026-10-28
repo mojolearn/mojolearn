@@ -1,0 +1,41 @@
+{
+  "lane": "purge-neighbors-20261028",
+  "branch": "lane/purge-neighbors-20261028",
+  "source_commit": "0cd03d36ec00678ad44d1cd601d233e6266f3759",
+  "source_status": "clean",
+  "entry": "experiments/provider_radius_20261027/compile_radius.mojo",
+  "closure": "bindings/neighbors_native.mojo neighbors_operation: neighbors_semi_native, neighbors_graph_native, neighbors_knn_native, neighbors_ann_native, neighbors_local_native, neighbors_kde_native, providers/python/neighbors_feature_names_pyapi.mojo, pcs/radius lifecycle providers",
+  "command": "bash ~/mojolearn-evidence/compile_slot.sh bash experiments/purge_neighbors_20261028/compile-command.sh <out> (mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings)",
+  "machine": "Mac (local), compile_slot nice 19, -j 10",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "exit_code": 0,
+  "seconds": 9,
+  "binary_sha256": "280c1f25ad8f3674ad1492972d73dc5d62bfc4fd4cd28b5b4c834b1357ae3f84",
+  "log": "/Users/andrewhendel/mojolearn-evidence/purge-neighbors-20261028/attempt3/compile.log",
+  "attempts": [
+    {
+      "dir": "/Users/andrewhendel/mojolearn-evidence/purge-neighbors-20261028/attempt1",
+      "exit": 1,
+      "cause": "neighbors_feature_names_pyapi.mojo:31 aliasing error raising an Error returned from a call; fixed by raising from a temporary message"
+    },
+    {
+      "dir": "/Users/andrewhendel/mojolearn-evidence/purge-neighbors-20261028/attempt2",
+      "exit": 0,
+      "seconds": 46,
+      "note": "before merging the queue update 26e64df4af (neural prefill/samba only, outside this closure)"
+    },
+    {
+      "dir": "/Users/andrewhendel/mojolearn-evidence/purge-neighbors-20261028/attempt3",
+      "exit": 0,
+      "note": "final head source after the queue merge"
+    }
+  ],
+  "not_covered": [
+    "family_native.mojo full dispatcher (unchanged)",
+    "neighbor_query_native root (unchanged)",
+    "GPU targets",
+    "runtime, identity, Python import execution"
+  ],
+  "runtime_executed": false
+}

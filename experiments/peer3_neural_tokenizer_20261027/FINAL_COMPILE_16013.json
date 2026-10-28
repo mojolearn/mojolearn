@@ -1,0 +1,161 @@
+{
+  "source_commit": "16013e73db3a1d387637337c3cc70a67545371cb",
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "host": "Mac arm64 (no rented box)",
+  "jobs": 10,
+  "flags": "--optimization-level 0 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings",
+  "controller": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/compile_frozen.py (KEEP_GOING=1) via compile_slot.sh",
+  "evidence_dir": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013",
+  "controller_log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013-controller.log",
+  "overall_exit": 0,
+  "runtime_executed": false,
+  "not_covered": [
+    "compile_transformer_session_tape_gpu (GPU target, never compiled)",
+    "NVIDIA/AMD/Apple GPU targets",
+    "full extension/wheel assembly",
+    "any runtime, identity or behavioral fixture execution"
+  ],
+  "roots": [
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_parallel_causal.mojo",
+      "exit": 0,
+      "seconds": 42.1,
+      "artifact_sha256": "db742c0343de7e3c5950244e682f2f5079ee747cea39cfb75099ba2c5b8a26ca",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_parallel_causal.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_causal_construct.mojo",
+      "exit": 0,
+      "seconds": 5.9,
+      "artifact_sha256": "58fea5684422cf4b75f6043d4cc8d11f32f953578f2e3704565706dedbb5c7dd",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_causal_construct.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_native_codec.mojo",
+      "exit": 0,
+      "seconds": 2.0,
+      "artifact_sha256": "93cd6ae7cda77df4195a7fa4469fc00e646f09e71c71e7ad273516348efa9459",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_native_codec.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_tokenizer.mojo",
+      "exit": 0,
+      "seconds": 5.5,
+      "artifact_sha256": "4362eab0cb102f800d3760d3b2510b2520e097bc829d6e5964644bdf913a345f",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_tokenizer.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_causal_public_metadata.mojo",
+      "exit": 0,
+      "seconds": 6.3,
+      "artifact_sha256": "caa05270e6c46e09c6a25ed9f0dba2f3e001f0a267480718010fdd02f885ae77",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_causal_public_metadata.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_causal_execution.mojo",
+      "exit": 0,
+      "seconds": 7.2,
+      "artifact_sha256": "b899d249102c64c1ff572bc3c618fdf0eef6a204b97b2fa8c4c48754f41d4bdd",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_causal_execution.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_causal_generation.mojo",
+      "exit": 0,
+      "seconds": 8.2,
+      "artifact_sha256": "cf14f3d4b3b841ac5ebab05bf7f50a4de4557325f5b06a133a4cfffb98dd3154",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_causal_generation.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_neural.mojo",
+      "exit": 0,
+      "seconds": 5.0,
+      "artifact_sha256": "dbd89f320e62e138aa4c46ba224e14bcb7b25f4fd7182c8e05aa85ffbf319d9a",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_neural.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_mamba.mojo",
+      "exit": 0,
+      "seconds": 4.2,
+      "artifact_sha256": "855aa4e8d7dca59b382fe8bffc3bd6e09681a6ab4e3f930833e02c89bb1cd62d",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_mamba.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_transformer.mojo",
+      "exit": 0,
+      "seconds": 2.8,
+      "artifact_sha256": "a7a7b212a05d4f3d6fa062d25f931285b2029e1a334feb43006e1ecc2fae8a0a",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_transformer.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_transformer_decode.mojo",
+      "exit": 0,
+      "seconds": 17.8,
+      "artifact_sha256": "d02b4a81d9a9425be8e541d613ee17edb4ab082d9931f3e312cab3cb0b251eaf",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_transformer_decode.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_causal_model.mojo",
+      "exit": 0,
+      "seconds": 37.8,
+      "artifact_sha256": "c6b4f5938a18cddfbb2bef815880c0b9b08217384e73fad95f455cc51493d505",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_causal_model.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_generation_buffers.mojo",
+      "exit": 0,
+      "seconds": 1.9,
+      "artifact_sha256": "92cef45b5452c71ec3b1b3f2ec325ad64ed89f04985af86c7deb2ccdf712ab0f",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_generation_buffers.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_model_config.mojo",
+      "exit": 0,
+      "seconds": 3.5,
+      "artifact_sha256": "3f89d3e0651ea2bc338114962438ec7d8398d35aebda87fa5171d6dde2b95a12",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_model_config.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_checkpoint.mojo",
+      "exit": 0,
+      "seconds": 25.9,
+      "artifact_sha256": "6e294aa80dc3edd934838174bfae8a8bbf69d0aa5ed49619e79be4c4466928ba",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_checkpoint.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_catalog.mojo",
+      "exit": 0,
+      "seconds": 36.0,
+      "artifact_sha256": "dcede7195882644df2236549f950a6ac37a9f33b3e71c974b2c6b1540305933f",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_catalog.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_lm_corpus.mojo",
+      "exit": 0,
+      "seconds": 46.2,
+      "artifact_sha256": "e63939fd0b118f1282c70e8e9fd51fad8a9fcd772c27dfe68e8f88a89a19eaa2",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_lm_corpus.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_corpus_files.mojo",
+      "exit": 0,
+      "seconds": 10.7,
+      "artifact_sha256": "21837b8572c7d253a0f7857cec21abd08350c283e0e88a8777ce32bd9c2919e5",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_corpus_files.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_corpus_public.mojo",
+      "exit": 0,
+      "seconds": 34.1,
+      "artifact_sha256": "3d2335672f566ff8d63f4b44928bdadbdb34ee5e02bef7562e934b7f4d8dad6b",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_corpus_public.log"
+    },
+    {
+      "entry": "experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_transformer_session_tape_host.mojo",
+      "exit": 0,
+      "seconds": 16.7,
+      "artifact_sha256": "41055cc0cab4b1c546b462c179075db834ba990ee5ffd2e5653b2d7e1ad1e0af",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer3-neural-tokenizer-20261028/freeze-16013/compile_transformer_session_tape_host.log"
+    }
+  ]
+}

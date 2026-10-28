@@ -214,3 +214,52 @@ UMAP execution snapshot increment
   inherited public decorators. Those remain explicit required work; no whole
   UMAP operation is claimed native-complete. No new verification run.
 - Focused compile target: runtime_manifold host.
+
+2026-10-28 scalar numeric-conversion increment (not whole-operation completion)
+- ManifoldSettings now retains the original field-owner ledger, and an
+  operation-local native scalar cache owns numeric bits, temporal/raw bytes,
+  rank/count and nonnumeric scalar references. Decomp and TSNE int/float
+  conversions consume those snapshots instead of NumPy number slots.
+- Native numeric decoding includes long double and complex scalars. F/D
+  ndarray complex values retain builtin-complex conversion refusal; extended
+  complex G retains warning plus real-part conversion for both int and float.
+  Temporal conversion uses manifold_temporal_native's category/range logic.
+- Bytearray, array.array and memoryview keep their original public scalar
+  parser behavior while parsing private bytes. Float errors retain wrapper
+  repr, including the original memoryview identity. Int's bytes normalization
+  follows CPython's existing parser. Deferred native CPython exceptions travel
+  through stash_python_error and the existing classical error boundary.
+- StringDType scalar settings capture shape and a retained native unboxed
+  singleton value; they never copy indirect StringDType pointer words or add
+  a blanket StringDType refusal. Object references are recursively admitted
+  and frozen before conversion. Ordinary array snapshots keep private bytes.
+- Numeric scalar dtype is captured once and passed to the shared
+  native_scalar_buffer_dtype helper (dependency 5d0762dfe281 / root cbca14).
+  The private ManifoldScalarSnapshot type is registered in the actual
+  _mojolearn_runtime_manifold_host module builder. Focused compile target is
+  that builder, including its complete transitive native owner closure.
+- No new tests, runtime checks, benchmarks or lane compilation were run,
+  following the owner's stop-verification steering. Required commit/push
+  hooks retain their complete output in the lane evidence directory.
+  Parent reports the preceding 9fb/01342 closure passed focused batch8 CPU
+  compilation; that evidence does not qualify this new scalar increment.
+- Remaining product work is explicit: decomp truth/rich-comparison slots,
+  TSNE component membership/auto comparison, NumPy setting repr/str in error
+  messages, UMAP dedicated parameter metadata recapture and categorical
+  callbacks/decorators. Structured subarray truth and temporal/record
+  comparisons require native behavior before their existing slots can go.
+  The broader draft is retained outside the repo in lane evidence as
+  scalar-adapter-comparison-truth-draft-20261028.mojo.
+- The fixed CPython decimal parser can call Python _pylong.int_from_string
+  for more than 6000 digits when the configured interpreter digit limit
+  permits it (CPython3.13 longobject.c). This existing transitive parser debt
+  is reported to root; no arbitrary input cap or shared parser edit is added.
+- Public lifecycle gaps still under review: static sklearn-input tag and
+  nested-fitting exemptions, and _mojolearn_fitted publication before finished
+  output conversion. The former wrappers' X-scan exemption tables contain
+  none of these manifold classes, so no unconditional finite-X scan is added.
+  Shared context/provider constructor pinning belongs to root. Runtime and
+  supported-vendor identity coverage remain pending after final integration.
+- Evidence: ~/mojolearn-evidence/peer2-manifold-20261027/ retains the complete
+  CPython3.13 abstract.c/floatobject.c/longobject.c sources, temporal source
+  review, earlier test failures and logs. Source review is not runtime proof.
