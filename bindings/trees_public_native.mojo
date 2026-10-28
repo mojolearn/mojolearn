@@ -12,7 +12,10 @@ from bindings.trees_constructor_native import forest_construct
 from bindings.trees_public_lifecycle_native import forest_public_operation
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_iforest import iforest_operation
+from bindings.iforest_public_lifecycle import iforest_public_operation
+from bindings.trees_bagging_members_native import bagging_members, bagging_members_set
 from bindings.trees_public_boost import boost_operation
+from providers.python.tree_boost_public_lifecycle_pyapi import tree_boost_public_operation
 from bindings.trees_public_auxiliary import embedding_apply, tree_export_state
 from bindings.trees_public_state import tree_is_fitted
 from bindings.trees_gbdt_adapter_lifecycle import gbdt_adapter_public_operation
@@ -49,6 +52,8 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return embedding_apply(model, args, context)
     if operation == "trees_forest_construct":
         return forest_construct(model, args, context)
+    if operation.startswith("trees_public_iforest_"):
+        return iforest_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_forest_"):
         return forest_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_gbdt_adapter_"):
@@ -76,6 +81,12 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return forest_score(model, args, context)
     if operation.startswith("trees_iforest_"):
         return iforest_operation(model, operation, args, context)
+    if operation == "trees_bagging_members" or operation == "trees_bagging_members_slice":
+        return bagging_members(model, operation == "trees_bagging_members_slice")
+    if operation == "trees_bagging_members_set":
+        return bagging_members_set(model, args[0], context)
+    if operation.startswith("trees_public_boost_"):
+        return tree_boost_public_operation(model, operation, args, context)
     if operation == "trees_boost_score":
         return boost_score(model, args, context)
     if operation.startswith("trees_boost_"):

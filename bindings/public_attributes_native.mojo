@@ -1,3 +1,4 @@
+from bindings.trees_bagging_members_native import bagging_members
 # SPDX-License-Identifier: Apache-2.0
 # Native public attribute resolution and zero-copy fitted-output boundary.
 # No generic object getter, property invocation, Array.__array__, or Python
@@ -223,6 +224,8 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
         if neural_descriptor_entry(entry.__self__, "classical_native_call", False) is not entry:
             raise Error("TypeError: SVM coefficient property owner changed after connection")
         return py_call(entry, model, PythonObject("family_svc_svc_coef" if kind == "svm_svc_coef" else "family_svc_svr_coef"), Python.tuple(None), owner[1])
+    if kind == "bagging_estimators":
+        return bagging_members(model)
     if kind == "cholesky_logdet":
         var info = PythonObject(None)
         try:

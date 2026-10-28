@@ -148,8 +148,8 @@ def connect():
     tables = tuple(table for modes in context['trees_bindings'].values()  # glue: fixed native binding tables retained independently of model lifetime
                    for table in modes.values() if type(table) is dict)  # glue: exclude import-time refusal strings
     context['trees_state_retained'] = tables
-    context['trees_state_releases'] = tuple(table[name] for table in tables  # glue: native resident release identities, once at connection
-                                           for name in ('forest_release_gpu', 'gbdt_resident_release')  # glue: existing compiled release ABIs
+    context['trees_state_releases'] = tuple(table[name] for table in tables  # glue: native forest/GBDT/IsolationForest resident release identities, once at connection
+                                           for name in ('forest_release_gpu', 'gbdt_resident_release', 'iforest_resident_release')  # glue: existing compiled release ABIs
                                            if name in table)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
@@ -203,6 +203,21 @@ def register(cls, kind, **tables):
         from ._native_classical_bridge import _layout
         context['trees_state_layouts'][cls] = {
             'classical_public_layouts': {cls: _layout(cls, None)}, 'classical_public_installed': True}
+    elif kind == "iforest":
+        _connect_public_iforest(cls)
+
+
+def _connect_public_iforest(cls):
+    # glue: import-time removal of the former validation/output decorators;
+    # iforest_public_lifecycle owns the complete public operation natively.
+    import inspect
+    for name in ('fit', 'fit_predict', 'score_samples', 'decision_function', 'predict'):  # glue: fixed native public doors
+        setattr(cls, name, inspect.unwrap(getattr(cls, name)))
+    # The native archive loader already publishes fitted state; no Python
+    # loader callback is needed after the one archive binding call.
+    loader = inspect.getattr_static(cls, 'load')
+    cls.load = classmethod(inspect.unwrap(loader.__func__))
+    cls._mojolearn_native_public = True
 
 
 def connect_gbdt_parameters(base, classes, metadata):
