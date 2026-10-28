@@ -88,6 +88,10 @@ Remaining Python / transitive paths (NOT a family-complete claim)
    requires the common label-metadata capture audit (no numeric coercion).
 
 Validation
+- Kernel query fitted checks reuse mode_metadata_native._fitted so parameter
+  reset metadata prevents unrelated user fields ending in '_' from reviving
+  a reset estimator. Native NotFittedError selection is retained. Source-only
+  repair; public reset regression execution remains integration work.
 - source-check.log: Python AST parses; nine data methods have a single native
   call and native_method marker; lexical delimiters balance in three changed
   Mojo sources. Exit 0. This is source inspection, not Mojo typechecking.

@@ -5,11 +5,11 @@ from std.python import Python, PythonObject
 from std.math import isfinite
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
-from bindings.mode_metadata_native import _fields
+from bindings.mode_metadata_native import _fields, _fitted
 from bindings.public_attributes_native import _plan, _lookup, _string_keys
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_exceptions import classical_require_fitted
+from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import _ordinary_torch
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
@@ -59,7 +59,10 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
     if py_type(depth) is not py_type(PythonObject(0)):
         raise Error("TypeError: kernel fit depth must be a native integer")
     if not fitting:
-        classical_require_fitted(model, False, method, context)
+        if not Bool(py=_fitted(model)):
+            _ = classical_not_fitted_class(context)
+            raise Error("NotFittedError: This " + String(py_type(model).__name__) +
+                        " instance is not fitted yet. Call 'fit' with appropriate arguments before using " + method + ".")
         var kernel = py_get(fields, "kernel")
         var precomputed = py_type(kernel) is py_type(PythonObject("")) and String(kernel) == "precomputed"
         if Int(py=depth) == 0 and not precomputed:
