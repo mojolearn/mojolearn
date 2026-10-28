@@ -1,0 +1,28 @@
+Shared saved-model scalar/field-path admission — 2026-10-28
+
+Frozen sourcea31bfb9fc22b6ba6fe083b84446667a255e76018.
+archive_schema_save now admits the connected estimator storage before copying
+its fields. Native integer/real/truth/comparison/hash-key conversions admit exact
+native scalar owners, including primitive NumPy scalars/0-D arrays; object
+arrays and Python conversion hooks are refused before invocation. Saved mode
+truth/conversion and retained forest-mode equality receive the same guard.
+
+Nested field paths require exact containers and exact string/integer keys before
+hashing/indexing. Sum metadata uses that same path admission. Shape/size metadata
+uses admitted array shape words; length uses explicit native container descriptors
+so a list-backed ClassLabels owner does not invoke Python __len__. Invalid-value
+messages avoid arbitrary repr/type-name hooks. Builtins/numbers are read from the
+connected native loaded-module boundary. No native_codec or arithmetic edits.
+
+Compile PASS actual archive_schema_save owner, Mac CPU O0-j10,26.60s. Initial
+compile failed on direct __len__ member overload syntax; native descriptor lookup
+fix compiled successfully, and original diagnostics/source are retained. See
+archive_schema_admission_compile.json and full source/log/binary in
+~/mojolearn-evidence/cluster-density-linalg-20261027/
+archive-schema-admission-fixed-compile/. No runtime verification was run.
+
+This is the requested narrow scalar/path/container-key repair, not a claim that
+every schema variant is callback-free. Remaining dedicated audit points include
+_schema_classes/_schema_class_table class-label iteration and _schema_kernel_nodes
+length-scale/saved-node iteration; those are separate from the repaired scalar
+helpers and from Program.save.

@@ -40,6 +40,7 @@ def connect():
     from types import BuiltinFunctionType, GetSetDescriptorType
     from . import _backend
     from ._native_classical_bridge import _state_context
+    from ._labels import ClassLabels
     try:
         from .tokenizer import _binding
         entry = _binding()._module.classical_native_call
@@ -57,7 +58,10 @@ def connect():
                    host_archive_formats={}, host_archive_fitted_estimators=[],
                    host_archive_classical_formats=(), host_archive_forest_formats=(),
                    host_archive_lifetime_layouts={}, archive_class_formats={})
-    save.update(archive_save_schemas={}, host_archive_context=archive)
+    save.update(archive_save_schemas={}, host_archive_context=archive,
+                classifier_labels_class=ClassLabels,
+                classifier_labels_namespace=dict(vars(ClassLabels)),
+                classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
     _ENTRY, _CONTEXT = entry, save
     return _ENTRY, _CONTEXT
 

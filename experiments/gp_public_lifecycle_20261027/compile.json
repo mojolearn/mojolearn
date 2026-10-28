@@ -1,0 +1,75 @@
+{
+  "exit_code": 0,
+  "seconds": 61.4093112089904,
+  "command": [
+    "pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-gp-lifecycle",
+    "-I",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-gp-lifecycle/bindings",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-gp-lifecycle/checks/gp_public_lifecycle_compile.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/peer5-gp-lifecycle-20261027/attempt5/_mojolearn_gp_lifecycle_compile.so"
+  ],
+  "workers": 10,
+  "allocation_source": "sysctl hw.logicalcpu=10 on local Mac; other peer builds may overlap, not a CPU-saturation claim",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer5-gp-lifecycle-20261027/attempt5/source-bytes.tgz",
+  "source_archive_sha256": "a3bffeee58ad8c2f704b6f615108dbfb635691b1052e87e021ed7abd1b252233",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer5-gp-lifecycle-20261027/attempt5/source-manifest.json",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer5-gp-lifecycle-20261027/attempt5/compile.log",
+  "runtime_executed": false,
+  "scope": "GP public lifecycle owner, regressor/classifier numerical owners, input/target preparation, fitted checks, output conversion and native kernel admission; Mac CPU column only",
+  "artifact_sha256": "cbaaa92cbc4fea8db330047215233dcca8a890cbb5ab5b94fb3f0e4bb3101606",
+  "source_commit": "e595a0a269f21124ff2f389a3ba808ee19378eb2",
+  "prior_attempts": [
+    {
+      "attempt": 1,
+      "exit_code": 1,
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/peer5-gp-lifecycle-20261027/attempt1/result.json"
+    },
+    {
+      "attempt": 2,
+      "exit_code": 0,
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/peer5-gp-lifecycle-20261027/attempt2/result.json"
+    },
+    {
+      "attempt": 3,
+      "exit_code": 0,
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/peer5-gp-lifecycle-20261027/attempt3/result.json"
+    },
+    {
+      "attempt": 4,
+      "exit_code": 0,
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/peer5-gp-lifecycle-20261027/attempt4/result.json"
+    }
+  ],
+  "integration_required": "Parent gp_native dispatcher hook plus parent transitive GP companion fixes; compile combined final source before main merge.",
+  "pending": [
+    "Runtime behavior (not run by owner instruction)",
+    "GPU compilation and within-release cross-vendor identity",
+    "Final integrated dispatcher and latest GP numerical/helper bytes"
+  ]
+}
