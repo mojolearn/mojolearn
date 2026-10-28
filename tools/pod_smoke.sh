@@ -7,7 +7,8 @@
 #    allocated core (parallel builds x per-build jobs = sched_getaffinity count);
 # 2. import smoke: import mojolearn and the main public modules on the CPU-only host set;
 # 3. the board preflight probe: mojolearn._backend.tier_dir('identical');
-# 4. a CPU-column runtime check: linalg.matmul, Ridge and KMeans fit+predict on 50 rows, identical mode.
+# 4. a CPU-column runtime check: linalg.matmul, Ridge and KMeans fit+predict on 50 rows and one
+#    LanguageModelTrainer construct (default config), identical mode.
 # Exits non-zero on any failure. Results land in $LEG_OUT (summary.txt, results.tsv, logs/, *.log).
 set -u
 OUT=${LEG_OUT:?LEG_OUT is set by the CPU leg runner}
@@ -72,6 +73,11 @@ p = np.asarray(Ridge(alpha=1.0).fit(X, y).predict(X))
 print("ridge ok", p.shape, float(np.abs(p - y).max()))
 labels = np.asarray(KMeans(n_clusters=3, n_init=1, random_state=0).fit(X).predict(X))
 print("kmeans ok", labels.shape)
+import mojolearn
+shape = mojolearn.ByteLanguageModelConfig()
+flat = rng.uniform(-0.125, 0.125, shape.n_total).astype(np.float32)
+trainer = mojolearn.LanguageModelTrainer(flat, shape=shape, data_schedule={"dataset": "pod-smoke"})
+print("lm trainer ok", type(trainer).__name__)
 print("RUNTIME-OK")
 EOF
 step() {
