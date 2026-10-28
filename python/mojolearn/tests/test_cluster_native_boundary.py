@@ -77,3 +77,15 @@ def test_cluster_fit_returns_finished_public_result_and_tracks_state(monkeypatch
     assert vars(model)['_mojolearn_fitted'] is True
     assert '_mojolearn_fitting' not in vars(model)
     assert calls == []
+
+
+def test_cluster_missing_context_does_not_invoke_module_hook(monkeypatch):
+    import mojolearn._native_public_attributes as attributes
+    calls = []
+    model = ml.AffinityPropagation(numeric_mode='identical')
+    fit = model.fit
+    monkeypatch.delattr(attributes, '_CONTEXT')
+    monkeypatch.setattr(attributes, '__getattr__', _poison(calls), raising=False)
+    with pytest.raises(TypeError, match='connected dictionary'):
+        fit(np.ones((4, 2), dtype=np.float32))
+    assert calls == []

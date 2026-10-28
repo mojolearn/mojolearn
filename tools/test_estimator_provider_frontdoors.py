@@ -130,3 +130,10 @@ def test_cluster_lifecycle_keeps_required_checks_and_result_wrapping_native():
         assert required in source
     assert 'finally:\n        if fitting:\n            estimator_fit_end(model, depth)' in source
     assert 'Python init callbacks are not accepted' in source
+
+
+def test_cluster_context_lookup_cannot_enter_module_getattr():
+    source = (ROOT / 'providers/python/cluster_public_lifecycle_pyapi.mojo').read_text()
+    assert 'native_loaded_module("mojolearn._native_public_attributes")._CONTEXT' not in source
+    assert 'py_get(module_fields, "_CONTEXT")' in source
+    assert 'py_type(attributes) is not b.dict' in source
