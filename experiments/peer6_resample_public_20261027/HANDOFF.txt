@@ -1,0 +1,24 @@
+Peer6 resampling numerical public operations
+
+bootstrap, permutation_test, monte_carlo_integrate and resample_indices now
+hand arguments directly to one native owner, which selects the import-connected
+mode/binding, admits scalar options before their C conversions, prepares inputs,
+executes existing entries and returns finished results. Direct ndarray/Array
+numeric buffers use LinAdmission and lin_admitted_c to capture metadata and
+retain exporter/owner lifetimes. Monte Carlo corners use native shape/flatten
+handling instead of invoking Array iteration. Result dictionary writes avoid
+Python setters. Extension entry and mode lookups refuse Python substitutions.
+
+Mac CPU-column compile exited 0, O0, 10 workers. No runtime, identity or GPU
+claim. Full source/log/binary retained at ~/mojolearn-evidence/peer6-resample-20261027.
+See compile.json. AST source check confirms the four wrappers are one native call.
+One initial compile failed on an ambiguous __getitem__ spelling in an abandoned
+row-conversion edit; diagnostic log retained. Intermediate compile succeeded;
+current scoped source was then compiled again after removing row-conversion edits.
+
+Pending: general resample (*arrays) retains its previous Python binding selection
+and generic container gather. A native row rewrite must preserve pandas/object
+dtypes and arbitrary trailing dimensions; do not replace it with pandas_f32.
+Public result constructors remain Python metadata methods. Capture-once review
+of nested materializers and older metric helpers remains open. No dedicated
+Apple fast work or rented machine.
