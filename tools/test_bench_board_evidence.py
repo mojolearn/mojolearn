@@ -3,6 +3,8 @@ import copy
 import importlib.util
 import io
 import json
+import errno
+import os
 from pathlib import Path
 import subprocess
 import tarfile
@@ -123,11 +125,58 @@ class Evidence(unittest.TestCase):
                         "commit","-qm","source"],check=True,capture_output=True)
         p.write_text("actual working bytes\n")
         other=self.root/"external.py";other.write_text("external\n")
-        ref, inventory=E.source_snapshot(self.root/"out",repo,[other])
+        ref, inventory=E.source_snapshot(self.root/"out",repo,[other],self.root/"cache")
         with tarfile.open(ref["local_path"]) as t:
             self.assertEqual(t.extractfile("driver.py").read(),p.read_bytes())
             self.assertTrue(any(n.startswith("external/") for n in t.getnames()))
         self.assertEqual(inventory[str(p.resolve())],E.file_hash(p))
+
+    def test_source_archives_share_bytes_without_changing_format(self):
+        cache = self.root / "cache"
+        members = {"driver.py": b"actual source", "source-manifest.json": b"{}"}
+        original = E.archive(self.root / "original.tgz", members)
+        a = E.source_archive(self.root / "a.tgz", members, cache)
+        b = E.source_archive(self.root / "b.tgz", members, cache)
+        self.assertEqual(a["sha256"], original["sha256"])
+        self.assertEqual(a["bytes"], original["bytes"])
+        self.assertTrue(os.path.samefile(a["local_path"], b["local_path"]))
+        # Reusing a run path must not alter any other run's shared inode.
+        E.source_archive(self.root / "a.tgz", {"driver.py": b"changed"}, cache)
+        self.assertEqual(E.file_hash(b["local_path"]), original["sha256"])
+        for p in cache.iterdir():
+            p.unlink()
+        with tarfile.open(b["local_path"]) as t:
+            self.assertEqual(t.extractfile("driver.py").read(), b"actual source")
+
+    def test_source_archive_cache_failure_preserves_standalone_archive(self):
+        members = {"driver.py": b"source"}
+        with patch.object(E.os, "link", side_effect=OSError(errno.EXDEV, "cross-device")):
+            ref = E.source_archive(self.root / "run.tgz", members, self.root / "cache")
+        with tarfile.open(ref["local_path"]) as t:
+            self.assertEqual(t.extractfile("driver.py").read(), b"source")
+        self.assertEqual(E.file_hash(ref["local_path"]), ref["sha256"])
+
+    def test_corrupt_source_cache_is_not_reused(self):
+        cache = self.root / "cache"
+        members = {"driver.py": b"source"}
+        first = E.source_archive(self.root / "first.tgz", members, cache)
+        entry = cache / (first["sha256"] + ".tar.gz")
+        entry.unlink()
+        entry.write_bytes(b"x" * first["bytes"])
+        ref = E.source_archive(self.root / "next.tgz", members, cache)
+        self.assertEqual(ref["sha256"], E.file_hash(ref["local_path"]))
+        self.assertFalse(os.path.samefile(entry, ref["local_path"]))
+
+    def test_concurrent_source_archives_share_complete_bytes(self):
+        from concurrent.futures import ThreadPoolExecutor
+        cache = self.root / "cache"
+        def make(i):
+            return E.source_archive(self.root / (str(i) + ".tgz"), {"driver.py": b"source"}, cache)
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            refs = list(pool.map(make, range(8)))
+        for ref in refs:
+            self.assertEqual(E.file_hash(ref["local_path"]), ref["sha256"])
+            self.assertTrue(os.path.samefile(refs[0]["local_path"], ref["local_path"]))
 
     def test_readback_is_required_and_failure_preserves_local_bytes(self):
         p=self.root/"run.tar.gz";ref=E.archive(p,{"log.txt":b"full evidence"})
