@@ -9,6 +9,11 @@ from mojolearn import _backend
 from mojolearn._native_xseq_bridge import connect
 from mojolearn._verify_native_runtime import audit_native_call
 
+# Both the direct reference and profiled call exercise the public output
+# contract. Without this marker, this module's mojolearn.tests name selects
+# internal float32 output while the audit controller selects public float64.
+__mojolearn_user_boundary__ = True
+
 
 def poison_packed_entries(monkeypatch):
     _, context = connect()
