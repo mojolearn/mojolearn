@@ -73,6 +73,10 @@ def main():
         source = Path("experiments/peer2_native_boundary_20261027") / f"compile_{group}.mojo"
         if group == "jl_rp":
             source = Path("experiments/peer2_decomposition_20261027/jl_rp_compile.mojo")
+        elif group == "manifold":
+            # Typed matrix/device owners also require their module registration
+            # to compile; the real dedicated host entry covers that boundary.
+            source = Path("bindings/_mojolearn_runtime_manifold_host.mojo")
         binary = args.out / f"{group}.so"
         # Use the repository's supported activated toolchain, as build_host_family.sh
         # does. Invoking the executable alone omits the installed std search path.
