@@ -1,0 +1,57 @@
+{
+ "scope": "setup-once batch 1: prepared neural block owner (Mamba1/2/3, Transformer, Samba block step/forward/allocate_state), prepared state views and generation layer, NativeModules handle in Array/field/class readers, native module connections validated once per process then stamped",
+ "source_commit": "80c61505e0",
+ "compile_only": true,
+ "legs": {
+  "b1-cpu": {
+   "pod": "l0eno7y1e76hgs",
+   "summary": [
+    "host_builds total=46 ok=46",
+    "import_smoke rc=0",
+    "probe_tier_dir rc=0",
+    "runtime_check rc=0",
+    "POD_SMOKE status=PASS",
+    "POD_GATE set=cpu rc=0"
+   ],
+   "resources": [
+    "cores_affinity=32",
+    "cgroup_cpu_max=max 100000",
+    "parallel_builds=4",
+    "jobs_per_build=8",
+    "mojo_version=Mojo 1.0.0 (ed45d567)"
+   ]
+  },
+  "b1-sm-89": {
+   "pod": "d7drbzaavwfryk",
+   "summary": [
+    "ROOTS set=sm_89 total=25 ok=25"
+   ],
+   "resources": [
+    "set=sm_89",
+    "cores_affinity=32",
+    "cgroup_cpu_max=max 100000",
+    "parallel=4 jobs=8",
+    "mojo_version=Mojo 1.0.0 (ed45d567)"
+   ]
+  },
+  "b1-gfx942": {
+   "pod": "ly9pthv7vnhsu1",
+   "summary": [
+    "ROOTS set=gfx942 total=25 ok=25"
+   ],
+   "resources": [
+    "set=gfx942",
+    "cores_affinity=32",
+    "cgroup_cpu_max=max 100000",
+    "parallel=4 jobs=8",
+    "mojo_version=Mojo 1.0.0 (ed45d567)"
+   ]
+  }
+ },
+ "roots_gpu": "experiments/setup_once_20261028/gpu_roots.tsv (25 roots, closure reaches bindings/native_loaded_module.mojo)",
+ "command": "tools/runpod_cpu_leg.sh --vcpu 32 --lease 60 --release-bincache --cmd 'SET=<cpu|sm_89|gfx942> bash experiments/setup_once_20261028/pod_gate.sh'",
+ "logs": "/Users/andrewhendel/mojolearn-evidence/setup-once-20261028",
+ "run_owed": [
+  "mamba2-decode race nv+amd (board lane) to confirm the per-token setup removal; same-bits ID check nv+amd for tokenizer host neural block paths (bits unchanged by construction)"
+ ]
+}
