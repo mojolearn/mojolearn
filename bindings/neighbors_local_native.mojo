@@ -18,6 +18,7 @@
 # checks) are the same binary64 operations in the same order; products that
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.math import floor, isinf
 from std.memory import memcpy
 from std.os import getenv
@@ -25,13 +26,18 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
+from bindings.classical_pandas import classical_admit_value
+from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.host_sparse_native import host_sparse_format
+from bindings.host_inference_scalars import host_inference_scalar
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_call, family_entry,
     family_as_f32_dense, family_field, family_isinstance,
 )
 from bindings.classical_labels import (
-    labels_empty, labels_vector, labels_cast, labels_helper, classical_encode_labels,
+    labels_empty, labels_vector, labels_cast, labels_view, labels_check_rank, labels_helper, classical_encode_labels,
     classical_decode_labels, classical_accuracy,
 )
 from checks.numerics import pinned_mul_f64
@@ -42,6 +48,27 @@ comptime _U_IDENTITY = 6
 
 
 # ------------------------------------------------------------------ glue
+
+
+def _admit_local_state(model: PythonObject, context: PythonObject) raises:
+    # Mutable settings are re-admitted before comparison, coercion or truth
+    # slots. Input metadata is captured by the consuming native buffer helper.
+    classical_check_layout(model, context)
+    var fields = py_fields(model)
+    var scalars = Python.tuple("metric", "p", "contamination", "n_neighbors", "novelty", "shrink_threshold",
+        "missing_values", "weights", "add_indicator", "keep_empty_features", "n_features_in_",
+        "n_neighbors_", "n_samples_fit_", "offset_")
+    for i in range(len(scalars)):  # small-loop(fixed scalar parameter and fitted-state schema)
+        var value = py_get(fields, scalars[i])
+        if value is not None:
+            host_inference_scalar(value, context, True)
+    var values = Python.tuple("metric_params", "priors", "classes_", "_fit_X", "_fit_dist", "_lrd",
+        "centroids_", "class_prior_", "within_class_std_dev_", "_valid", "_miss_cols",
+        "negative_outlier_factor_")
+    for i in range(len(values)):  # small-loop(fixed native container and buffer owners)
+        var value = py_get(fields, values[i])
+        if value is not None:
+            classical_admit_value(classifier_label_list(value, context) if String(values[i]) == "classes_" else value, context)
 
 
 def _b() raises -> PythonObject:
@@ -484,7 +511,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var priors = family_field(fields, "priors")
     var prior = labels_vector(C, "<f8", context)
     var pp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(prior)))
-    if _eq(priors, PythonObject("empirical")):
+    if py_type(priors) is b.str and String(priors) == "empirical":
         # count / n per class in the base binding (`class_ratio_f64`)
         var ca = labels_vector(C, "<i8", context)
         var cap = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(ca)))
@@ -493,19 +520,25 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         _ = family_call(labels_helper(context, "class_ratio_f64"), classical_address(ca), _i(C), _i(n), _i(1),
                         classical_address(prior))
         _ = ca  # keep the Python object alive through the native call above
-    elif _eq(priors, PythonObject("uniform")):
+    elif py_type(priors) is b.str and String(priors) == "uniform":
         for c in range(C):  # driver-loop: over the k uniform class priors
             pp[c] = 1.0 / Float64(C)
     else:
-        var source = priors
-        if Bool(py=py_call(b.hasattr, priors, PythonObject("tolist"))):
-            source = family_call(py_call(b.getattr, priors, PythonObject("tolist")))
-        var given = family_call(b.list, source)
-        var values = List[Float64]()
-        for i in range(len(given)):  # driver-loop: over the user priors argument (k sized)
-            values.append(Float64(py=family_call(b.float, given[i])))
-        if len(values) != C:
+        # Parse admitted primitive storage once; ndarray.tolist (including
+        # object-element conversions) is not part of native model execution.
+        var given = labels_view(priors, "priors", context)
+        labels_check_rank(given, 1, "priors")
+        if given.size() != C:
             raise Error("priors must have one entry per class")
+        var packed = labels_vector(C, "<f8", context)
+        var packed_address = Int(py=classical_address(packed))
+        labels_cast(given.addr, given.typestr, packed_address, "<f8", C, context)
+        var source = FAMILY_F64P(unsafe_from_address=packed_address)
+        var values = List[Float64]()
+        for i in range(C):  # driver-loop: over admitted native class priors
+            values.append(source[i])
+        _ = given
+        _ = packed
         for i in range(C):  # driver-loop: over the user priors argument checks
             if values[i] < 0:
                 raise Error("priors must be non-negative")
@@ -611,9 +644,9 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     py_setitem(fields, "n_features_in_", _i(d))
 
 
-def _nc_uniform(fields: PythonObject) raises -> Bool:
+def _nc_uniform(fields: PythonObject, context: PythonObject) raises -> Bool:
     """`NearestCentroid._uniform`: every prior within isclose of 1/C."""
-    var C = len(family_field(fields, "classes_"))
+    var C = len(classifier_label_list(family_field(fields, "classes_"), context))
     var prior = family_field(fields, "class_prior_")
     var count = _size(prior)
     var pp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(prior)))
@@ -632,7 +665,7 @@ def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: Pyt
     if _ne(family_field(fields, "metric"), PythonObject("euclidean")):
         raise Error("AttributeError: decision_function is available for metric='euclidean' only")
     var q = _f32(source, context)
-    var C = len(family_field(fields, "classes_"))
+    var C = len(classifier_label_list(family_field(fields, "classes_"), context))
     # `Array.from_list(class_prior_.tolist(), "<f4")`: each prior rounded once
     var given = family_field(fields, "class_prior_")
     var count = _size(given)
@@ -662,8 +695,8 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject) 
     var fields = py_fields(model)
     var binding = args[0]
     var q = _f32(args[1], context)
-    var classes = family_field(fields, "classes_")
-    if _nc_uniform(fields):
+    var classes = classifier_label_list(family_field(fields, "classes_"), context)
+    if _nc_uniform(fields, context):
         var cent = family_field(fields, "centroids_")
         var dmat: PythonObject
         if _eq(family_field(fields, "metric"), PythonObject("euclidean")):
@@ -717,12 +750,26 @@ def _nc_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     var binding = args[0]
     var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
     var shape = py_call(b.tuple, dec.shape)
-    var wide = Bool(py=py_call(b.hasattr, binding, PythonObject("xn_softmax64")))
+    var wide = not xn_is_module(binding) or neural_descriptor_entry(binding, "xn_softmax64", False) is not None
     var out = _out(shape, "<f8" if wide else "<f4", context)
     _op(binding, "softmax64" if wide else "softmax", Python.list(classical_address(dec), classical_address(out)),
         Python.list(_i(_rows(dec)), _i(_cols(dec))), Python.list(), context)
     _ = dec  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
+    return out
+
+
+def _nc_predict_log_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The public result is the existing float32 log-softmax, including the
+    # metric/fitted checks and native decision matrix preparation.
+    var binding = args[0]
+    var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
+    var rows = _rows(dec)
+    var cols = _cols(dec)
+    var out = _out(Python.tuple(rows, cols), "<f4", context)
+    _op(binding, "log_softmax", Python.list(classical_address(dec), classical_address(out)),
+        Python.list(_i(rows), _i(cols)), Python.list(), context)
+    _ = dec
     return out
 
 
@@ -899,15 +946,23 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
 # ------------------------------------------------------------------ door
 
 
-def neighbors_local_operation(model: PythonObject, operation: String, var args: PythonObject,
+def _neighbors_local_operation(model: PythonObject, operation: String, var args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
-    args = xn_admit_arguments(args, context)
     classical_connect_numpy(context)
+    _admit_local_state(model, context)
+    for i in range(1, len(args)):  # small-loop(public data arguments, before native preparation)
+        if host_sparse_format(args[i]).byte_length() == 0:
+            classical_admit_value(args[i], context)
+    args = xn_admit_arguments(args, context)
     if operation == "family_xn_loc_lof_fit":
         _lof_fit(model, args, context)
         return model
     if operation == "family_xn_loc_lof_fit_predict":
         return _lof_fit_predict(model, args, context)
+    if operation == "family_xn_loc_lof_score_samples":
+        var fields = py_fields(model)
+        _lof_novelty(fields, "score_samples")
+        return _lof_score_samples(args[0], fields, args[1], context)
     if operation == "family_xn_loc_lof_decision_function":
         return _lof_decision(model, args, context)
     if operation == "family_xn_loc_lof_predict":
@@ -921,6 +976,8 @@ def neighbors_local_operation(model: PythonObject, operation: String, var args: 
         return _nc_decision(model, args, context)
     if operation == "family_xn_loc_nc_predict_proba":
         return _nc_predict_proba(model, args, context)
+    if operation == "family_xn_loc_nc_predict_log_proba":
+        return _nc_predict_log_proba(model, args, context)
     if operation == "family_xn_loc_nc_score":
         return _nc_score(model, args, context)
     if operation == "family_xn_loc_imp_fit":
@@ -932,3 +989,17 @@ def neighbors_local_operation(model: PythonObject, operation: String, var args: 
         _imp_fit(model, args, context)
         return _imp_transform(model, args, context)
     raise Error("RuntimeError: unknown neighbors operation " + operation)
+
+
+def neighbors_local_operation(model: PythonObject, operation: String, args: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    var call = neighbors_public_begin(model, operation, args, context)
+    var result = PythonObject(None)
+    try:
+        result = _neighbors_local_operation(model, operation, call.args, context)
+    except error:
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
+    finally:
+        neighbors_public_end(model, call)
+    return neighbors_public_finish(model, operation, result, call, context)

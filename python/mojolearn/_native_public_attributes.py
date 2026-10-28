@@ -82,6 +82,37 @@ def _availability_plan(member, checks, missing):
                             for name in ('__get__', '__set__', '__delete__', '__getattribute__', '__getattr__')))  # glue: fixed import-time protocol metadata
 
 
+def _neighbor_availability(package):
+    # glue: the four fixed LOF declarations are data at import; runtime
+    # evaluates the native novelty word without invoking these predicates.
+    import sys
+    module = sys.modules.get(package.__name__ + '._expansion_neighbors')
+    if type(module) is not ModuleType:
+        return {}
+    cls = vars(module).get('LocalOutlierFactor')
+    if type(cls) is not type:
+        return {}
+    result = {}
+    for name in ('fit_predict', 'score_samples', 'decision_function', 'predict'):  # glue: fixed public availability declarations
+        member = vars(cls)[name]
+        condition = 'not_novelty' if name == 'fit_predict' else 'novelty'
+        result[name] = ((vars(member)['check'],), condition)
+    return {cls: result}
+
+
+def _hierarchy_availability(package):
+    # glue: pin the hierarchy prediction predicate without invoking it.
+    import sys
+    module = sys.modules.get(package.__name__ + '._hierarchy_impl')
+    if type(module) is not ModuleType:
+        return {}
+    cls = vars(module).get('AgglomerativeClustering')
+    if type(cls) is not type:
+        return {}
+    member = vars(cls)['predict']
+    return {cls: {'predict': ((vars(member)['check'],), 'hierarchy_predict')}}
+
+
 def connect_classes(package):
     # glue: establish native slots once, before dependent estimator/parameter
     # tables capture method identities; lazy imports admit only new classes.
@@ -107,6 +138,8 @@ def connect_classes(package):
     context = _CONTEXT
     archives = _archive_finalizers(package)
     prep_availability = _prep_availability(package, context['missing'])
+    neighbor_availability = _neighbor_availability(package)
+    neighbor_availability.update(_hierarchy_availability(package))
     stl_module = sys.modules.get(package.__name__ + '._x_sequence_stl')
     if not context['stl_connected'] and type(stl_module) is ModuleType:
         context['property_schemas'][vars(vars(stl_module)['STL'])['config']] = 'stl_config'
@@ -156,6 +189,11 @@ def connect_classes(package):
                 elif (cls in prep_availability and name == 'fit_transform'
                       and type(member) is _mode.available_if):
                     availability[name] = _availability_plan(member, prep_availability[cls], context['missing'])
+                elif (cls in neighbor_availability and name in neighbor_availability[cls]
+                      and type(member) is _mode.available_if):
+                    checks, condition = neighbor_availability[cls][name]
+                    availability[name] = _availability_plan(member, checks, context['missing'])
+                    availability[name]['condition'] = condition
                 elif type(member) is ClassMethodDescriptorType and member.__objclass__ is object:
                     plan['bindings'][name] = (member, member.__get__)
                 elif _resolved(type(member), '__get__', context['missing']) is not context['missing'] and name not in plan['bindings']:

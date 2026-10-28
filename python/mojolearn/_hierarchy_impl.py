@@ -16,7 +16,8 @@ whoever owns that file decides the public namespace.
 """
 
 
-from . import _backend, _expansion_cluster, _mojolearn_solver, _native_archive_bridge, _native_family_bridge
+from . import _native_archive_bridge, _native_family_bridge
+from ._native_robust_bridge import native_method
 from ._mode import ParamsMixin, available_if
 
 #: `AgglomerativeClustering.save`'s format tag
@@ -50,6 +51,7 @@ _METRICS = {
 # The compiled family owner (bindings/cluster_native.mojo): predict is one
 # native call, handed the binding `_bind` resolves; it reads this table.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.connect_bindings("_mojolearn_estimators", "_mojolearn_solver", "_mojolearn_x_cluster", "_mojolearn_x_neighbors")
 
 #: scikit-learn's metric names on the x_cluster route (`x_cluster/agglo.mojo`):
 #: -1 euclidean through the squared distance, 1 manhattan, 4 cosine
@@ -149,11 +151,11 @@ class AgglomerativeClustering(ParamsMixin):
         value, including a callable, raises NotImplementedError. Ward
         linkage requires 'euclidean' or 'l2'; 'cosine' rejects rows that are
         all zeros.
-    connectivity : None, 'pairwise', array-like, sparse matrix or callable, default None
+    connectivity : None, 'pairwise', array-like or sparse matrix, default None
         'pairwise' and None both mean no constraint (the full dense graph).
-        A matrix of shape (n_samples, n_samples), or a callable that returns
-        one from `X`, restricts merges to its nonzero entries, as in
-        scikit-learn. 'knn' raises NotImplementedError.
+        A matrix of shape (n_samples, n_samples) restricts merges to its
+        nonzero entries, as in scikit-learn. Evaluate connectivity callbacks
+        before calling fit; native execution requires an explicit matrix. 'knn' raises NotImplementedError.
     linkage : {'single', 'complete', 'average', 'ward'}, default 'single'
         Merge criterion.
     c : int, default 15
@@ -235,9 +237,7 @@ class AgglomerativeClustering(ParamsMixin):
         self.compute_distances = compute_distances
         self.prediction_data = prediction_data
 
-    def _bind(self, name=None):
-        return _backend.binding(name or self._BINDING, getattr(self, "numeric_mode", None))
-
+    @native_method
     def fit(self, X, y=None):
         """Build the merge tree of `X` and cut it into clusters.
 
@@ -276,15 +276,9 @@ class AgglomerativeClustering(ParamsMixin):
         UserWarning
             If a connectivity matrix has more than one connected component.
         """
-        # The estimators binding (residency), the solver binding (the Boruvka
-        # route), the x_cluster binding (every other linkage) and the
-        # x_neighbors binding (the cosine zero-row test), then X
-        # (bindings/cfb_agglo.mojo).
-        return _NATIVE(self, "family_cfb_agglo_fit", (
-            self._bind(self._BINDING), _mojolearn_solver,
-            _backend.binding(_expansion_cluster._XCluster._BINDING, getattr(self, "numeric_mode", None)),
-            _backend.binding("_mojolearn_x_neighbors", getattr(self, "numeric_mode", None)), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_agglo_fit", (None, X, y), _NATIVE_CONTEXT)
 
+    @native_method
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the training labels.
 
@@ -301,16 +295,10 @@ class AgglomerativeClustering(ParamsMixin):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        # The estimators binding (residency), the solver binding (the Boruvka
-        # route), the x_cluster binding (every other linkage) and the
-        # x_neighbors binding (the cosine zero-row test), then X
-        # (bindings/cfb_agglo.mojo).
-        return _NATIVE(self, "family_cfb_agglo_fit_predict", (
-            self._bind(self._BINDING), _mojolearn_solver,
-            _backend.binding(_expansion_cluster._XCluster._BINDING, getattr(self, "numeric_mode", None)),
-            _backend.binding("_mojolearn_x_neighbors", getattr(self, "numeric_mode", None)), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_agglo_fit_predict", (None, X, y), _NATIVE_CONTEXT)
 
     @available_if(lambda self: bool(self.prediction_data) or getattr(self, "_fit_X", None) is not None)
+    @native_method
     def predict(self, X):
         """Label new rows with the cluster of their nearest training row.
 
@@ -356,7 +344,7 @@ class AgglomerativeClustering(ParamsMixin):
         # itself need not be 0. One thread per query row, no fold across rows;
         # the GPU binding and the CPU host binding
         # (`core/labeled_reference_host_predict.mojo`) compute the same bytes.
-        return _NATIVE(self, "family_cfb_agglo_predict", (self._bind(self._BINDING), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_agglo_predict", (None, X), _NATIVE_CONTEXT)
 
     # The training rows of a `prediction_data=True` fit stay on the device
     # under a handle held in `_resident_holder` (bindings/cfb_resident.mojo),
@@ -364,13 +352,10 @@ class AgglomerativeClustering(ParamsMixin):
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle; the copy uploads
         its own training rows at its first predict."""
-        state = self.__dict__.copy()
-        state.pop("_resident_holder", None)
-        return state
+        return _NATIVE(self, "family_cfb_agglo_getstate", (), _NATIVE_CONTEXT)
 
     def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.__dict__["_resident_holder"] = {}
+        return _NATIVE(self, "family_cfb_agglo_setstate", (state,), _NATIVE_CONTEXT)
 
     def save(self, path):
         """Save the model's prediction data to `path`.

@@ -124,8 +124,8 @@ def _availability_member(cls: PythonObject, name: PythonObject, missing: PythonO
 
 def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
                fields: PythonObject, plan: PythonObject, context: PythonObject) raises -> PythonObject:
-    # The only admitted prep rule is presence of transform. Never call the
-    # Python available_if descriptor, its check, or the wrapped method body.
+    # Admitted rules are presence of transform and LOF's novelty word. Never
+    # call the Python available_if descriptor, its check, or its wrapped body.
     var ancestry = _type_mro(py_type(member))
     if len(ancestry) != len(schema["mro"]):
         raise Error("TypeError: native availability descriptor ancestry changed")
@@ -150,7 +150,29 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
     if PythonObject(from_borrowed=code) is not schema["code"]:
         raise Error("TypeError: native availability predicate code changed")
     try:
-        _ = _lookup(model, PythonObject("transform"), fields, plan, context)
+        var condition = py_get(schema, "condition")
+        if condition is not None:
+            if py_type(condition) is not py_type(PythonObject("")):
+                raise Error("TypeError: native availability requires its connected condition")
+            var rule = String(condition)
+            if rule == "hierarchy_predict":
+                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
+                if py_type(requested) is not py_type(PythonObject(True)) and py_type(requested) is not py_type(PythonObject(0)):
+                    raise Error("TypeError: prediction_data availability requires an exact native boolean or integer")
+                if not Bool(py=requested):
+                    var references = _lookup_impl[False](model, PythonObject("_fit_X"), fields, plan, context)
+                    if references is None:
+                        raise Error("AttributeError: prediction data was not requested or stored")
+            elif rule == "novelty" or rule == "not_novelty":
+                var novelty = _lookup_impl[False](model, PythonObject("novelty"), fields, plan, context)
+                if py_type(novelty) is not py_type(PythonObject(True)) and py_type(novelty) is not py_type(PythonObject(0)):
+                    raise Error("TypeError: novelty must be an exact native boolean or integer")
+                if Bool(py=novelty) != (rule == "novelty"):
+                    raise Error("AttributeError: method unavailable for this novelty setting")
+            else:
+                raise Error("TypeError: unknown native availability condition")
+        else:
+            _ = _lookup_impl[False](model, PythonObject("transform"), fields, plan, context)
     except error:
         if String(error).startswith("AttributeError:"):
             var name = schema["attribute_name"]
@@ -169,7 +191,7 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
     if kind == "cholesky_logdet":
         var info = PythonObject(None)
         try:
-            info = _lookup(model, PythonObject("info_"), fields, plan, context)
+            info = _lookup_impl[False](model, PythonObject("info_"), fields, plan, context)
         except error:
             if String(error).startswith("AttributeError:"):
                 raise Error("AttributeError: mojolearn Cholesky: logdet_ is set by fit")
@@ -179,18 +201,28 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
             raise Error("TypeError: Cholesky info_ must be native numeric status")
         if _truth(info):
             raise Error("ValueError: mojolearn Cholesky: the factorization failed (info=" + String(py_call(b.str, info)) + "), so there is no determinant to report (DEVIATION 1634)")
-        return _lookup(model, PythonObject("_logdet"), fields, plan, context)
+        return _lookup_impl[False](model, PythonObject("_logdet"), fields, plan, context)
     if kind == "stl_config":
         var out = Python.dict()
         var names = Python.tuple("period", "seasonal", "seasonal_deg", "seasonal_jump", "trend", "trend_deg", "trend_jump", "low_pass", "low_pass_deg", "low_pass_jump", "robust")
         for i in range(len(names)):  # driver-loop: supported STL configuration fields
-            py_setitem(out, names[i], _lookup(model, names[i], fields, plan, context))
+            py_setitem(out, names[i], _lookup_impl[False](model, names[i], fields, plan, context))
         return out
     raise Error("TypeError: unconnected native property schema")
 
 
-def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
-            plan: PythonObject, context: PythonObject) raises -> PythonObject:
+# Connected property/predicate schemas depend on ordinary fields or methods,
+# never another connected property/predicate. Keep those dependency reads in
+# the leaf specialization while preserving exact descriptor precedence and
+# native_instance_item ownership. This makes the finite schema explicit.
+# The former mutually recursive resolver stalled compilation on Mojo 1.0.0
+# ed45d567 (including the unchanged 7de54456bd baseline); the internal compiler
+# cause is unconfirmed. Reproduction and complete logs are retained under
+# experiments/peer1_neighbors_kernels_20261027 and the corresponding evidence
+# directory's cpu-compile results. No Python fallback or toolchain change.
+def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
+                                    fields: PythonObject, plan: PythonObject,
+                                    context: PythonObject) raises -> PythonObject:
     var found = _member(model, name)
     var present = Bool(py=found[0])
     var member = found[1]
@@ -201,9 +233,10 @@ def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
     var binding = py_get(plan["bindings"], name)
     var known = binding is not None and member is binding[0]
     if data:
-        var property_plan = py_get(plan["properties"], name)
-        if property_plan is not None and member is property_plan[0]:
-            return _property(model, name, String(property_plan[1]), fields, plan, context)
+        comptime if allow_special:
+            var property_plan = py_get(plan["properties"], name)
+            if property_plan is not None and member is property_plan[0]:
+                return _property(model, name, String(property_plan[1]), fields, plan, context)
         if not known:
             raise Error("TypeError: Python attribute properties/descriptors require a native owner")
         return _classical_descriptor_get(binding, model, cls, plan)
@@ -212,11 +245,12 @@ def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
         return native_instance_item(fields, name)
     if not present:
         raise Error("AttributeError: native model has no attribute '" + String(name) + "'")
-    var availability = py_get(plan, "availability")
-    if availability is not None:
-        var schema = py_get(availability, name)
-        if schema is not None and member is schema["member"]:
-            return _available(model, member, schema, fields, plan, context)
+    comptime if allow_special:
+        var availability = py_get(plan, "availability")
+        if availability is not None:
+            var schema = py_get(availability, name)
+            if schema is not None and member is schema["member"]:
+                return _available(model, member, schema, fields, plan, context)
     if descriptor:
         # Creating a bound method does not execute its body. Preserve ordinary
         # subclass functions and later import-time native setter connections.
@@ -227,6 +261,11 @@ def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
             raise Error("TypeError: Python attribute descriptor requires a native owner")
         return _classical_descriptor_get(binding, model, cls, plan)
     return member
+
+
+def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
+            plan: PythonObject, context: PythonObject) raises -> PythonObject:
+    return _lookup_impl[True](model, name, fields, plan, context)
 
 
 def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
