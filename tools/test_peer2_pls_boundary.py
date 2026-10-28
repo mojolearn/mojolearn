@@ -34,7 +34,7 @@ def test_score_passes_original_arguments_and_returns_finished_native_result():
 
 def test_native_score_uses_connected_binding_and_direct_native_metric_owner():
     owner = (ROOT / "bindings/pls_native.mojo").read_text()
-    assert 'estimator_binding(model, "_mojolearn_metrics", context, False)' in owner
+    assert 'estimator_binding_mode(mode, "_mojolearn_metrics", context, False)' in owner
     assert 'metrics_cls_operation(PythonObject(None), "family_mcls_r2"' in owner
     assert 'py_call(owner[0]' not in owner
     assert '_native_family_bridge.connect_bindings("_mojolearn_metrics")' in SHELL.read_text()
@@ -71,11 +71,13 @@ def test_public_lifecycle_replaces_decorators_only_for_pls_family():
     assert len(flags) == 1 and ast.literal_eval(flags[0].value) is True
     assert not any(isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "_mojolearn_native_public" for target in node.targets) for node in classes["_Base"].body)
     owner = (ROOT / "bindings/pls_native.mojo").read_text()
-    for step in ("classical_require_fitted(model, False, operation, context)",
+    for step in ("_pls_require_fitted(fields, operation, context)",
                  "classical_check_width(x.shape[1], Int(py=features), name)",
                  "estimator_feature_check(model, fields, args[0], context)",
-                 "estimator_fit_begin(fields)", "estimator_fit_end(model, depth)",
-                 "estimator_fit_complete(model, args[0], False, context)",
+                 'py_setitem(state, "_mojolearn_fitting", PythonObject(depth + 1))',
+                 'py_setitem(state, "_mojolearn_fitted", PythonObject(True))',
+                 'py_setitem(state, "feature_names_in_", feature_names)',
+                 'py_call(state.pop, "_mojolearn_fitting", PythonObject(None))',
                  'parallel_public_result(result, operation, PythonObject("regressor"), context)'):
         assert step in owner
     assert 'var result = pls_public_operation(call[0]' in owner
@@ -92,3 +94,43 @@ def test_snapshot_addresses_survive_shared_host_views():
     score = (ROOT / "bindings/pls_native.mojo").read_text()
     default = score[score.index('mode = context["backend_fields"]["_DEFAULT_MODE"]'):]
     assert default.index('if py_type(mode) is not b.str:') < default.index('mode.strip')
+
+
+def test_scalar_admission_never_converts_object_dtype_payloads():
+    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    scalar = owner[owner.index("def _pls_scalar("):owner.index("def _pls_settings(")]
+    assert 'cls is py_get(context, "ndarray")' in scalar
+    assert 'not _one_of(cls, context["scalar_types"])' in scalar
+    assert 'Int(py=value.ndim) != 0' in scalar
+    assert 'var scalar = native_scalar_buffer(value)' in scalar
+    code = '\n'.join(line.split('#', 1)[0] for line in scalar.splitlines())
+    assert 'py_call(' not in code and 'Bool(py=value)' not in code
+    assert 'decomp_int(value)' not in code and 'decomp_float(value)' not in code
+
+
+def test_execution_uses_one_private_settings_snapshot_and_separate_state():
+    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    assert owner.count('classical_family_admit(model)') == 1
+    assert owner.count('var fields = py_call(b.dict.copy, state)') == 1
+    assert 'py_fields(' not in owner
+    assert 'pls_operation(model, operation, args, context, fields, state, x, y)' in owner
+    assert 'pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x)' in owner
+    assert 'estimator_binding(model,' not in owner
+    assert 'var modes = Python.tuple("numeric_mode") if fitting' in owner
+
+
+def test_completed_iteration_counts_are_published_from_native_words():
+    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    assert 'var its = native_array_zeros("i", nc)' in owner
+    assert 'py_call(b.list, its)' not in owner
+    assert 'py_attr(all_iterations' not in owner
+    assert 'PythonObject(Int(iterations[index]))' in owner
+
+
+def test_fitted_check_precedes_defaults_and_fit_transform_uses_private_outputs():
+    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    assert owner.index('_pls_require_fitted(fields, operation, context)') < owner.index('var default_mode = PythonObject(None)')
+    assert '_transform(kit, held[0], held[1], fields, context)' in owner
+    assert '_transform(kit, held[0], held[1], state, context)' not in owner
+    assert '_pls_store(fields, state, "x_rotations_"' in owner
+    assert '_pls_store(fields, state, "_x_scores"' in owner

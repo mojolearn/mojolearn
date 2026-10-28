@@ -40,8 +40,15 @@ PLSRegression/PLSCanonical/CCA now inherit _PLS._mojolearn_native_public only
 because their native door implements the former fit, fitted-state, validation,
 feature-name, fit completion and finished public output behavior. The base
 family remains wrapped; this flag does not exempt other decomposition classes.
-The PLS bridge registers exact class layouts using existing shared admission.
-Declared parameters and fitted scalar flags are admitted before conversions.
+The PLS door uses root's shared classical_family_admit before copying model
+fields into a private operation snapshot. Passive connected subclasses retain
+shared admission support; there is no duplicate exact-class-only layout rule.
+NumPy scalar/0D numeric settings are decoded from native bytes once; object
+scalar arrays are refused before their payload's conversion/truth hooks. Modes
+are checked as exact strings, and native binding selection takes the captured
+mode directly. Model writes remain separate from the read snapshot. Generated fit outputs also
+enter the private snapshot so fit_transform never rereads exposed model fields.
+Fitted detection precedes synthesized mode defaults, retaining unfitted errors.
 Native fit depth is restored on errors; successful fits set the fitted flag and
 feature names. Native NotFittedError retains the optional sklearn relationship.
 Public predict widens to float64, projections remain float32, and completed
@@ -52,13 +59,16 @@ it as before. Native warnings use metric_warn instead of _warnings.warn.
 
 The shared array_metadata_once complex_error argument (owned by preprocessing)
 preserves complex X/y refusals before numeric CastIn construction, without a
-second dtype read. Integration must include that shared-provider commit.
+second dtype read. Integration must include d2f9c654cdd6bd5b9262ed5980e950a3a72574b5 atop
+root ownership repair e688891b58. PLS shared admission also requires
+346cb95a21b2; frozen mode selection uses estimator_binding_mode from
+0af79a009e. Root coordinates those dependencies and compilation.
 Device/host vector views retain frozen host addresses across transpose/reshape;
 host rows/columns/stack/scalar reads use the same address cache. The process
 numeric-mode default is checked as an exact string before normalization.
 
 Validation completed:
-10 source tests passed, exit 0: tools/test_peer2_pls_boundary.py,
+14 source tests passed, exit 0: tools/test_peer2_pls_boundary.py,
 tools/test_peer2_manifold_frontdoors.py, tools/test_native_decomp_params_connection.py.
 Python syntax checked for the edited shell and new public runtime probes.
 git diff --check passed. The first source-test attempt failed because its text
@@ -72,17 +82,19 @@ Evidence root: ~/mojolearn-evidence/peer2-decomposition-20261027/
   pls-source-tests.log (one source assertion failed, seven passed)
   pls-source-tests-fixed.log (8 passed; exit 0)
   pls-lifecycle-source-tests-final2.log (10 passed; exit 0)
+  pls-settings-source-tests-final.log (14 passed; exit 0)
 
 Pending, not claimed:
 - Native compile. No lane compilation was performed. Smallest supported host
   group is bindings/build_runtime_classical_host.sh. A focused native import
   probe covering bindings.pls_native.pls_c and its changed dependencies can
   establish the development compile before root's integration merge.
-- Runtime controls in python/mojolearn/tests/test_pls_native_boundary.py (27
+- Runtime controls in python/mojolearn/tests/test_pls_native_boundary.py (38
   parameterized cases): vector/column/strided/list targets across the three
   public estimators, protocol refusal without hook invocation, finite/length/
   fitted checks, public lifecycle/dtypes, scalar hooks, sparse policy and complex
-  X/y errors. These are UNRUN against the changed native binary.
+  X/y errors, scalar object-payload refusals, native scalar storage and original
+  setting object identities. These are UNRUN against the changed native binary.
 - Cross-vendor/runtime identity and installed artifact verification after
   final integration. No broad benchmark, GPU campaign, publish or main merge.
 
@@ -93,8 +105,10 @@ Remaining migration debt (family not declared complete):
   Other decomposition owners still need corresponding complete lifecycle work.
 - DecompKit uses packed CPython calls to existing compiled x_decomp entries.
   No raw native x_decomp descriptor table was added by this chunk. Existing
-  scalar conversions and iteration-result list construction remain. Native
-  warning behavior now uses the existing metric_warn implementation; its
+  scalar publication/conversion helpers remain at the boundary; arbitrary
+  original input scalar slots are no longer invoked. Completed iteration
+  counts are now published from native Int32 words without list(its)/slicing.
+  Native warning behavior uses the existing metric_warn implementation; its
   transitive behavior still needs the final public runtime audit.
 - Scoring still uses existing labels_f32 and native metrics preparation paths;
   their transitive metadata/callback audit remains required. The score wrapper

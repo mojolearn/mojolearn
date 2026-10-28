@@ -133,3 +133,61 @@ def test_pls_public_complex_error_before_numerical_execution(argument, dtype):
         y = y.astype(dtype)
     with pytest.raises(ValueError, match=f"Complex data not supported: PLSRegression got a complex {argument}."):
         ml.PLSRegression(n_components=1, numeric_mode="identical").fit(x, y)
+
+
+@pytest.mark.parametrize("setting", ["n_components", "max_iter", "tol", "scale", "copy", "_mojolearn_fitting"])
+def test_pls_refuses_object_scalar_fit_settings_without_conversion(setting):
+    calls = []
+    class Hook:
+        def __int__(self):
+            calls.append("int")
+            return 1
+        def __float__(self):
+            calls.append("float")
+            return 1.0
+        def __bool__(self):
+            calls.append("bool")
+            return True
+    value = np.empty((), dtype=object)
+    value[()] = Hook()
+    model = ml.PLSRegression(n_components=1, numeric_mode="identical")
+    vars(model)[setting] = value
+    x = np.arange(24, dtype=np.float32).reshape(8, 3)
+    with pytest.raises(TypeError):
+        model.fit(x, np.arange(8, dtype=np.float32))
+    assert calls == []
+
+
+@pytest.mark.parametrize("setting", ["_predict_1d", "_mojolearn_fitted", "_mojolearn_fitting", "numeric_mode_"])
+def test_pls_refuses_object_scalar_fitted_settings_without_conversion(setting):
+    calls = []
+    class Hook:
+        def __int__(self):
+            calls.append("int")
+            return 1
+        def __float__(self):
+            calls.append("float")
+            return 1.0
+        def __bool__(self):
+            calls.append("bool")
+            return True
+    x = np.arange(24, dtype=np.float32).reshape(8, 3)
+    model = ml.PLSRegression(n_components=1, numeric_mode="identical").fit(x, np.arange(8, dtype=np.float32))
+    value = np.empty((), dtype=object)
+    value[()] = Hook()
+    vars(model)[setting] = value
+    with pytest.raises(TypeError if setting != "numeric_mode_" else ValueError):
+        model.predict(x)
+    assert calls == []
+
+
+def test_pls_accepts_native_numeric_scalar_storage_and_keeps_parameter_identity():
+    x = np.arange(24, dtype=np.float32).reshape(8, 3)
+    y = np.array([1, 3, 2, 5, 4, 8, 6, 9], dtype=np.float32)
+    count, tolerance, scale = np.array(1, dtype=np.int64), np.float32(1e-6), np.array(True)
+    baseline = ml.PLSRegression(n_components=1, tol=float(tolerance), numeric_mode="identical").fit(x, y)
+    model = ml.PLSRegression(n_components=count, tol=tolerance, scale=scale, numeric_mode="identical").fit(x, y)
+    assert vars(model)["n_components"] is count
+    assert vars(model)["tol"] is tolerance
+    assert vars(model)["scale"] is scale
+    np.testing.assert_array_equal(model.predict(x), baseline.predict(x))
