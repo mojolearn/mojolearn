@@ -29,6 +29,8 @@ from bindings.prep_lda_admission import (
     lda_native_get_params, lda_native_set_params, lda_require_fitted,
 )
 from bindings.classifier_public_lifecycle import classifier_label_list, classifier_after_fit
+from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result, lifecycle_fitting
+from bindings.classical_validate import classical_estimator_name
 from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_pandas import classical_admit_value
 from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
@@ -1519,6 +1521,51 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
     raise Error("TypeError: unknown native classifier operation " + operation)
 
 
+def _public_kind(model: PythonObject, context: PythonObject) raises -> String:
+    """The kind of a naive Bayes / QDA model whose public operation runs the
+    native lifecycle here ("" for LDA, which keeps its own, the CV fixed
+    owner's private calls, and a metaclass the door refuses)."""
+    var b = native_loaded_module("builtins")
+    if py_type(py_type(model)) is not b.type or py_get(context, "cv_fixed_owner") is not None:
+        return ""
+    var kind = cls_kind(model, context)
+    if kind == "gnb" or kind == "mnb" or kind == "bnb" or kind == "cnb" or kind == "cat" or kind == "qda":
+        return kind
+    return ""
+
+
+def _classifier_public(model: PythonObject, kind: String, operation: String, args: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB and
+    QDA: the former `_mode` wrappers (NotFittedError, X refusals, width and
+    feature names, y admission, fit bookkeeping with ClassLabels `classes_`,
+    NumPy results outside the package) around the algorithm. The solvers read
+    `classes_` as a plain list; the public ClassLabels is swapped back after."""
+    var source = args[0] if len(args) > 0 else PythonObject(None)
+    # MultinomialNB and ComplementNB take CSR X (`_DiscreteNB._csr_ok`).
+    var sparse_ok = kind == "mnb" or kind == "cnb"
+    var depth = lifecycle_begin(model, operation, source, True, sparse_ok, True, context)
+    var fields = py_fields(model)
+    var public_labels = py_get(fields, "classes_")
+    var plain = classifier_label_list(public_labels, context)
+    var swapped = plain is not public_labels
+    var result = PythonObject(None)
+    try:
+        if lifecycle_fitting(operation) and len(args) > 1 and depth == 0:
+            lda_native_labels(args[1], lda_native_context(context), True, classical_estimator_name(model))
+        if swapped:
+            py_setitem(fields, "classes_", plain)
+        result = _dispatch(model, operation, args, context)
+    finally:
+        lifecycle_end(model, operation, depth)
+        if swapped:
+            var after = py_fields(model)
+            if py_get(after, "classes_") is plain:
+                py_setitem(after, "classes_", public_labels)
+    lifecycle_complete(model, operation, source, True, context)
+    return lifecycle_result(model, operation, result, "classifier", context)
+
+
 def prep_classify_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -1527,6 +1574,9 @@ def prep_classify_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var args = call[2]
         var context = call[3]
         classical_connect_numpy(context)
+        var public_kind = _public_kind(model, context)
+        if public_kind != "":
+            return _classifier_public(model, public_kind, operation, args, context).steal_data()
         var result = _dispatch(model, operation, args, context)
         if py_type(model) is py_get(context, "lda_native_class"):
             if operation == "fit" or operation == "fit_transform":
