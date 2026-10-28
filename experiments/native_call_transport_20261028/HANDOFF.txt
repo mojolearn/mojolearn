@@ -1,0 +1,66 @@
+Shared native call transport, 2026-10-28
+Branch: lane/native-call-transport-20261028
+Base: e3f3c1572c
+
+Repeated work removed:
+- native_execution_invoke no longer reconstructs address, integer and float
+  Lists from the caller's admitted spans. Sessionless execution forwards those
+  original spans directly rather than creating another integer words vector.
+- Session-prefixed calls perform the one required integer copy into an exclusive
+  retained vector; resize reuses capacity instead of append/reallocation per call.
+- Reserve/release calls reuse a retained session word instead of allocating a
+  one-element integer List each time.
+- NativeExecutionEndpoint and descriptor invocation reuse admission-owned,
+  List-backed result/error workspaces rather than allocating result wrappers
+  for every operation, reserve and release call.
+
+Setup/reuse/invalidation and lifetime:
+AdmittedNativeExecution owns two stable heap workspaces and one session-word
+vector alongside its existing provider/image/session/lock owners. The outer
+endpoint and inner descriptor use separate workspaces. Owning Lists are never
+resized after their addresses are published; moving the admission retains their
+allocations. Output result/error state resets before every call. Session prefix
+words refresh from the current input span every call, so no stale launch values
+are cached. No model/buffer/metadata cache or public invalidation rule was added.
+All storage is retired with its existing admission owner.
+
+A native atomic nonblocking claim protects each retained workspace. Reentry or
+concurrent use allocates a private transient workspace, preserving independent
+results/errors without a new wait or GIL-held lock. Finally blocks release the
+claim on success/failure and explicitly retain temporary argument vectors across
+the provider's GIL release window. RAII also releases abandoned claims.
+
+The recorded Mojo 1.0.0/Apple inline integer-address output issue remains honored:
+all writable ABI result/error fields remain in heap/List-owned storage. No stack
+output workaround, compiler patch or undocumented object-layout access is used.
+The C descriptor/execution ABI signatures are unchanged. Count/null admission,
+operation bounds, diagnostic counters, lock/GIL/reserve/release order, native
+error sink delivery and cleanup-error precedence are preserved. New raw-span
+helper callers retain the ABI's existing borrowed-until-return contract.
+
+Compile:
+Focused public CausalLM forward/generate Mac arm64 CPU compilation passed, rc0,
+identical define, optimization level 0. It compiles the changed transport paths;
+it is not runtime, concurrent/reentrant, GPU, bitwise or performance evidence.
+The earlier source also compiled; final compilation followed explicit lifetime
+pins found during source review. Both complete outputs/binaries remain retained.
+See compile.json for exact command, binary/source hashes and coverage.
+Main integration owns final source/push guards; lane guard results are reported
+with the commit handoff and retained in the evidence directory.
+
+Evidence: ~/mojolearn-evidence/native-call-transport-20261028/
+Logs, compiled binaries, exit receipts and a conservative tracked-Mojo source
+hash manifest are retained on the Mac. No rented box or watcher service used.
+
+Limits:
+- Workspace exclusivity adds native atomic claim/release work; no measured gain.
+- Two heap scratch owners and a session word are prepared per admission. Prefix
+  and error capacity may remain until that owner is released.
+- Nested/concurrent invocations still allocate private scratch; no runtime
+  concurrency qualification is claimed.
+- Session-prefix integers still copy because the current ABI requires a leading
+  session word. Other descriptor consumers can still materialize vectors.
+- The legacy native_descriptor_call(List, List, List) helper keeps its per-call
+  output allocation for callers without admitted workspace ownership.
+- Python ownership at admission, GIL transitions and error conversion remain.
+  No arithmetic, execution order or numerical-mode switch changed.

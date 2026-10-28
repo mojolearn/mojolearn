@@ -19,13 +19,34 @@ def native_descriptor_call(
     # the supported ABI roundtrip on Mojo 1.0.0/Apple (root reproduction).
     var output = List[NativeCallOutput]()
     output.append(NativeCallOutput())
-    var status = entry(operation, Int(addresses.unsafe_ptr()), len(addresses),
-        Int(ints.unsafe_ptr()), len(ints), Int(floats.unsafe_ptr()), len(floats),
-        Int(MutPointer(to=output[0].result)), Int(MutPointer(to=output[0].error)), native_descriptor_error)
+    try:
+        return native_descriptor_call_spans(entry, operation,
+            Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
+            Int(floats.unsafe_ptr()), len(floats), output[0])
+    finally:
+        # Raw span addresses do not themselves retain their List owners.
+        _ = addresses
+        _ = ints
+        _ = floats
+        _ = output
+
+
+def native_descriptor_call_spans(
+    entry: NativeDescriptorCall, operation: Int, addresses: Int, address_count: Int,
+    ints: Int, int_count: Int, floats: Int, float_count: Int, mut output: NativeCallOutput,
+) raises -> Int:
+    # The caller admits span bounds and pins their owners until this synchronous
+    # call returns. output must be a retained heap-owned field (see above).
+    # Reinitialize all writable state before every call, including cleanup calls.
+    output.result = 0
+    output.error.clear()
+    var status = entry(operation, addresses, address_count, ints, int_count,
+        floats, float_count, Int(MutPointer(to=output.result)),
+        Int(MutPointer(to=output.error)), native_descriptor_error)
     if status != 0:
-        output[0].error.append(0)
-        raise Error(String(unsafe_from_utf8_ptr=output[0].error.unsafe_ptr()))
-    return output[0].result
+        output.error.append(0)
+        raise Error(String(unsafe_from_utf8_ptr=output.error.unsafe_ptr()))
+    return output.result
 
 
 def native_descriptor_words(address: Int, count: Int) raises -> List[Int]:

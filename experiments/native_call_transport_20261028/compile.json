@@ -1,0 +1,31 @@
+{
+  "base_commit": "e3f3c1572c",
+  "compile_exit": 0,
+  "scope": "CausalLM public forward/generate CPU source closure, including shared native call transport, span borrowing, session prefix, retained/exclusive workspace and error cleanup source; compile only",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/native-call-transport-20261028 -I /Users/andrewhendel/mojolearn-wt/native-call-transport-20261028/bindings /Users/andrewhendel/mojolearn-wt/native-call-transport-20261028/experiments/native_owner_hot_20261028/compile_engine.mojo -o /Users/andrewhendel/mojolearn-evidence/native-call-transport-20261028/compile_engine",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "compile_slots": 4,
+  "compiler_workers": "compiler default; no explicit -j; CPU saturation not measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/native-call-transport-20261028/compile_engine",
+  "binary_sha256": "e5d29b26ebd8b33a4ec8c6a3decc48e00684ff11cc63308845e0ddac63a502d9",
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-call-transport-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/native-call-transport-20261028/source-sha256.json",
+  "source_manifest_scope": "SHA256 of all tracked Mojo sources plus Pixi manifest/lock: conservative source-closure superset, not a claim that all sources compiled",
+  "modified_source_sha256": {
+    "core/native_call_output.mojo": "55bf4027ae39da718c946a2ac982fa4d2ae3b02ad146bee978dab63925d4d82f",
+    "core/native_descriptor_call.mojo": "b3763efd7de2673bfa890bf27bff61750a958d012c565fe1b3b62665309cc6e3",
+    "core/native_execution.mojo": "713616813fe0c968e3db15ae16cfa94e16184f949c738b7c8388da86f0f5734f",
+    "providers/python/native_execution_pyapi.mojo": "fd71d81b6c2fe1c17bd1f43e7c01317a2c6b0164c450a6ed806642e7310087d1"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_verified": false,
+  "earlier_compile": {
+    "exit": 0,
+    "source_difference": "Before explicit finally owner pins for borrowed call-site Lists; final source recompiled after this lifetime improvement",
+    "log": "/Users/andrewhendel/mojolearn-evidence/native-call-transport-20261028/compile-before-lifetime-pins.log",
+    "binary": "/Users/andrewhendel/mojolearn-evidence/native-call-transport-20261028/compile_engine_before_lifetime_pins"
+  },
+  "rented_boxes": []
+}
