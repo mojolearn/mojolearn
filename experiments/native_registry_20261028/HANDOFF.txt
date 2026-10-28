@@ -31,3 +31,24 @@ Expanded compile probe covers actual classical family/layout admission paths.
 Logs class-compile2.log retain rejected native List initializer syntax;
 class-compile3.log records the corrected compilation. Module namespace loops are
 bounded by namespace size, with explicit metadata tags for source/push guards.
+
+Native registry followup b504e2cc87:
+- PreparedOwners tables, slot/address indexing, unique record IDs and entries
+  now use Mojo Dict storage. No Python dict/list registry operations.
+- Public weakref APIs validate owner identity without Python-object dispatch;
+  Py_GetVersion selects GetRef >=3.13 and GetObject at the 3.10-3.12 floor once.
+- Supported PythonModuleBuilder creates a retained private native cleanup module
+  once; PyMethod_New binds the opaque ID and PyWeakref_NewRef registers prompt
+  cleanup. No sys.modules mutation, Python function implementation, custom
+  PyMethodDef layout or toolchain patch. Native callback removes entries before
+  releasing their references, and monotonic IDs protect replacements.
+- Remaining CPython bookkeeping is the external ownership boundary: creating
+  weakrefs/callback objects cold, reading weakref validity, retaining/returning
+  boundary references. Registry values are still existing caller records, often
+  Python objects; this is not a claim those execution owners are fully migrated.
+- Caller records must not retain their own weak-key owner. Class cold stamps
+  retain ancestry and still require caller-level cycle repair/explicit invalidation.
+- Scoped compile rc=0; registry-v2-compile2.log preserves initial typed-Dict-error
+  inference and ExceptionType spelling failures; compile3 and final compile4 pass.
+  Obsolete method-layout probe was cancelled while queued (no build/run).
+  No runtime, identity or performance run. Registry receipt beside this handoff.

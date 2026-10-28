@@ -1,0 +1,18 @@
+{
+  "source_commit": "b504e2cc87",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "Mac arm64 native default CPU",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run mojo build --emit shared-lib -I . -I bindings experiments/native_registry_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/native-registry-20261028/registry-v2-final.dylib",
+  "exit_code": 0,
+  "binary_sha256": "3b5da90164f2d6949bfef06ec92d0ef69940fdf2065c929f8b54dbc5bdc42e77",
+  "coverage": [
+    "native registry get/put/drop and compiled weakref callback",
+    "native module/descriptor/XN admission",
+    "classical family/layout admission"
+  ],
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-registry-20261028/registry-v2-compile4.log",
+  "runtime": "not run",
+  "identity": "not run",
+  "performance": "not measured",
+  "source_note": "Only documentation wording (public versus stable API) changed after successful compilation."
+}
