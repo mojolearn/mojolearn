@@ -85,7 +85,7 @@ def connect(pca_class):
         training_scalar_locations={name: (getattr(pca_class, name).__code__.co_filename,
                                           getattr(pca_class, name).__code__.co_firstlineno,
                                           pca_class.__module__)
-                                   for name in ("fit", "fit_transform")})  # glue: fixed public scalar warning locations
+                                   for name in ("fit", "fit_transform", "transform", "inverse_transform")})  # glue: fixed public scalar warning locations
     context["pca_fit_scalar_context"] = scalar_context
     entry = _binding()._module.pca_native_call
     if not isinstance(entry, BuiltinFunctionType):

@@ -123,6 +123,9 @@ struct PCAFitScalarError(Copyable, Movable):
 
 
 def pca_fit_scalar_admit(value: PythonObject, context: PythonObject) raises:
+    if py_get(context, "ndarray") is None:
+        sequential_admit_value(value, context)
+        return
     var cls = py_type(value)
     var scalar = context["pca_fit_scalar_context"]
     var classes = sequence_dtype_classes(scalar)
