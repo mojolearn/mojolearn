@@ -230,7 +230,7 @@ struct PCAFitScalar(Copyable, Movable):
                     # retaining mutable source bytes for later conversion.
                     var storage = py_call(b.bytes, 4)
                     var view = py_call(b.memoryview, storage)
-                    self.value = py_call(view.__getitem__, py_call(b.slice, 0, 4, 2))
+                    self.value = view[py_call(b.slice, 0, 4, 2)]
                 break
             if cls is context["array_type"]:
                 # Retain the exact native buffer wrapper/typecode, including
