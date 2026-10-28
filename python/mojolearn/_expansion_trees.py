@@ -683,6 +683,10 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         ``RandomState`` object raises ``ValueError``.
     verbose : int, default=0
         Only 0 is accepted.
+    numeric_mode : {"identical", "fast"} or None, default=None
+        Numeric mode for this estimator. None uses the process default (see
+        ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
+        only.
 
     Attributes
     ----------
@@ -719,9 +723,10 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
 
     def __init__(self, estimator=None, n_estimators=10, *, max_samples=1.0, max_features=1.0,
                  bootstrap=True, bootstrap_features=False, oob_score=False, warm_start=False,
-                 n_jobs=None, random_state=None, verbose=0):
+                 n_jobs=None, random_state=None, verbose=0, numeric_mode=None):
         super().__init__(estimator, n_estimators, max_samples, max_features, bootstrap,
                          bootstrap_features, oob_score, warm_start, n_jobs, random_state, verbose)
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the bag.
@@ -817,6 +822,10 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
         ``RandomState`` object raises ``ValueError``.
     verbose : int, default=0
         Only 0 is accepted.
+    numeric_mode : {"identical", "fast"} or None, default=None
+        Numeric mode for this estimator. None uses the process default (see
+        ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
+        only.
 
     Attributes
     ----------
@@ -847,9 +856,10 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
 
     def __init__(self, estimator=None, n_estimators=10, *, max_samples=1.0, max_features=1.0,
                  bootstrap=True, bootstrap_features=False, oob_score=False, warm_start=False,
-                 n_jobs=None, random_state=None, verbose=0):
+                 n_jobs=None, random_state=None, verbose=0, numeric_mode=None):
         super().__init__(estimator, n_estimators, max_samples, max_features, bootstrap,
                          bootstrap_features, oob_score, warm_start, n_jobs, random_state, verbose)
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the bag.
@@ -939,6 +949,10 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         Seed for the members' seeds. None means seed 0, so repeated fits
         are the same (unlike scikit-learn). A ``RandomState`` object raises
         ``ValueError``.
+    numeric_mode : {"identical", "fast"} or None, default=None
+        Numeric mode for this estimator. None uses the process default (see
+        ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
+        only.
 
     Attributes
     ----------
@@ -970,9 +984,10 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
     _mojolearn_native_public = True
 
     def __init__(self, estimator=None, *, n_estimators=50, learning_rate=1.0, algorithm="SAMME",
-                 random_state=None):
+                 random_state=None, numeric_mode=None):
         super().__init__(estimator, n_estimators, learning_rate, random_state)
         self.algorithm = algorithm
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the boosted ensemble.
@@ -1067,6 +1082,10 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
         Seed for the members' seeds and the bootstrap draws. None means seed 0, so repeated fits
         are the same (unlike scikit-learn). A ``RandomState`` object raises
         ``ValueError``.
+    numeric_mode : {"identical", "fast"} or None, default=None
+        Numeric mode for this estimator. None uses the process default (see
+        ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
+        only.
 
     Attributes
     ----------
@@ -1095,9 +1114,10 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     _LOSSES = {"linear": 0, "square": 1, "exponential": 2}
 
     def __init__(self, estimator=None, *, n_estimators=50, learning_rate=1.0, loss="linear",
-                 random_state=None):
+                 random_state=None, numeric_mode=None):
         super().__init__(estimator, n_estimators, learning_rate, random_state)
         self.loss = loss
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the boosted ensemble.
@@ -1510,6 +1530,10 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         Only 0 is accepted.
     warm_start : bool, default=False
         Only False is accepted.
+    numeric_mode : {"identical", "fast"} or None, default=None
+        Numeric mode for this estimator. None uses the process default (see
+        ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
+        only.
 
     Attributes
     ----------
@@ -1535,7 +1559,8 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
 
     def __init__(self, n_estimators=100, *, max_depth=5, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0.0, max_leaf_nodes=None, min_impurity_decrease=0.0,
-                 sparse_output=False, n_jobs=None, random_state=None, verbose=0, warm_start=False):
+                 sparse_output=False, n_jobs=None, random_state=None, verbose=0, warm_start=False,
+                 numeric_mode=None):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.n_estimators = n_estimators
         self.max_depth = max_depth
@@ -1549,6 +1574,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         self.random_state = random_state
         self.verbose = verbose
         self.warm_start = warm_start
+        self.numeric_mode = numeric_mode
 
     # sk-edges: no `sample_weight` parameter. The totally random trees here
     # take no row weights (scikit-learn drops zero-weight rows from every node
