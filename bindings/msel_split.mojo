@@ -1254,7 +1254,7 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
     var n_test = sizes[1]
     var train = PythonObject(None)
     var test = PythonObject(None)
-    if not msel_truth(shuffle):
+    if not msel_flag_truth(shuffle, context):
         if stratify is not None:
             raise Error("Stratified train/test split is not implemented for shuffle=False")
         train = msel_range_index(0, n_train, context)
