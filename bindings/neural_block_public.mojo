@@ -17,7 +17,7 @@ from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
-from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape
+from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
 from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, _addr, _native_function, causal_transformer_admin, _native_has_entry, _native_entry_fields
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
@@ -600,20 +600,19 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
             finite = all_finite_f32(grad_pointer, grad_count)
         if finite != 1:
             raise Error("neural backward: grad_output must be finite")
-        # Preserve the existing current-weight shape validation without
-        # calling a Python block constructor from the operation.
-        var plan = py_call(native_loaded_module("types").SimpleNamespace)
-        py_setattr(plan, "kind", PythonObject(kind))
-        py_setattr(plan, "d_model", PythonObject(d))
-        py_setattr(plan, "block_kwargs", bi.dict())
+        # Check the current weights and configuration directly: the same
+        # admissions (connected binding, float32, key set, per-kind config
+        # and shapes) the block constructor makes, without building a block.
+        var plan = bi.dict()
+        py_setitem(plan, "block_kwargs", bi.dict())
         if kind == "mamba2":
-            py_setitem(plan.block_kwargs, "dt_limit", fields["dt_limit"])
+            py_setitem(plan["block_kwargs"], "dt_limit", fields["dt_limit"])
         var named = bi.dict()
         var names = fields["_neural_weight_names"]
         for i in range(len(names)):  # driver-loop: over the fixed block weight registry
             py_setitem(named, names[i], weights[i])
-        var checked = _model_block(named, plan, PythonObject("fp32_v1"), fields["_native_route"], _model_bindings(fields["_native_route"], kind, context, mode), context)
-        weights = neural_block_fields(checked, context)["_w"]
+        var route = fields["_native_route"]
+        weights = model_recurrent_weights_check(named, kind, d, plan, route, _model_bindings(route, kind, context, mode), context)
     var keep = List[PythonObject]()
     var addresses = py_ints([_addr(x, keep)])
     var gradients = bi.list()
