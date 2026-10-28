@@ -401,6 +401,15 @@ def _check_metric_input(cls_name: String, value: Int, x: ArrayMetadata) raises:
                     + "(it takes logarithms of the coordinates)")
 
 
+def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: PythonObject) raises:
+    # Existing native shard workers supply their prepared array, not the
+    # public operation snapshot. Keep that internal ABI while their owner
+    # migrates; plain operations above consume the retained snapshot directly.
+    if value == _DIST_JS:
+        var snapshot = family_f32_snapshot(x, 2, "X", context)
+        _check_metric_input(cls_name, value, snapshot)
+
+
 # ------------------------------------------------------------------ fit
 
 
