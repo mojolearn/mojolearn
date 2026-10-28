@@ -1,0 +1,66 @@
+Sequential native shape reuse, 2026-10-28
+Branch: lane/sequential-shape-reuse-20261028
+Base: e3f3c1572c
+Implementation: fcb15e3b7380ddb90f2a23a96a61ab2bd2599a28
+
+Removed repeated work:
+- Inferred sample shapes are freshly allocated tuples during fit. Their object
+  identity no longer forces a complete native description rebuild. A retained
+  native sample schema compares ranked/unranked mode, rank and converted native
+  dimensions; equivalent fresh tuples reuse the native program/scalar vectors.
+  Cache-hit shape checks allocate neither a Python container nor a native vector.
+- Successful parameter/output counts are retained in that description. Repeated
+  fit/resume operations no longer reparse the unchanged model just to recover
+  those counts. The execution provider retains its own ordinary validation.
+- Sample inspection skips the layer-kind loop when an explicit shape or input
+  rank already establishes the ranked schema, and stops the loop once a shape
+  layer establishes it. Matrix inputs with an explicit shape no longer build an
+  unused Python sample list.
+
+Setup/reuse and invalidation:
+- Native dimensions are captured while constructing a description, beside the
+  corresponding ABI program words. None versus ranked schemas remain distinct.
+  Layer identities, recursively checked container contents/lengths, flat input
+  width, sample rank and native dimension values determine reuse.
+- Editing a sample list in place changes the native comparison when its ABI
+  dimensions change. Replacing a tuple with equivalent dimensions is a reuse
+  hit. A new description begins with uncached counts; changed layers/shape/
+  width therefore invalidate count reuse together with the program.
+- Exact list/tuple shapes containing exact builtin int/float/bool scalars are
+  eligible. Mutable-buffer scalar conversions and other native containers still
+  rebuild each operation. Layer metadata retains the earlier immutable-scalar
+  eligibility rule. No new Python hooks or fallback paths were introduced.
+- Counts are computed lazily at their original position after binding selection;
+  errors do not publish counts_ready. Sample inspection keeps the original
+  field reads and len(layers) validation before its early returns. Existing
+  fit/resume/warm-start shape validation remains before description selection.
+
+Ownership:
+- Sample dimensions and counts are native values; no sample object or buffer
+  pointer is retained. The description still owns its layer identity references.
+  The existing description_owner remains live through synchronous provider
+  execution and GIL release windows. This batch hoists no raw buffer pointer.
+  The prepared owner registry retains its existing weak model lifecycle rules.
+
+Compilation/guards:
+See compile.json for exact command, source commit, result and binary hashes.
+Focused runtime_sequential host root only, Mac arm64 CPU identical; no separate
+GPU target or other importing family compile. Required source/push guards run
+on the implementation commit; logs and status are retained with the receipt.
+
+Remaining limits:
+- Public mutable boundaries still walk layer identities and Python metadata.
+  Shape comparison still reads each dimension from its admitted Python owner.
+  Full native-owned model metadata and explicit mutation generations remain
+  future work. The public inferred tuple and some shape-validation temporaries
+  still exist; they no longer determine native-description cache identity.
+- The provider still parses its execution model; this batch only reuses the
+  separate parameter-count parse. Other specialized routes remain unchanged.
+- No runtime, performance, identity or cross-vendor campaign ran. Compilation
+  is not runtime qualification, a measured speedup, or bitwise identity evidence.
+
+Complete logs/binary/source bytes/environment:
+/Users/andrewhendel/mojolearn-evidence/sequential-shape-reuse-20261028/
+The retained source envelope is a conservative superset of all tracked Mojo
+sources, binding build scripts, compile-slot script and dependency manifests,
+not a claim that every source file compiled. No rented boxes were used.
