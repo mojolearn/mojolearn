@@ -105,6 +105,33 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
     sequential_admit_value(mods, value, context, depth)
 
 
+def _read_fields(operation: String) raises -> PythonObject:
+    """The model fields a read-only operation reads, in inventory order, or
+    None for an operation that gets the full inventory walk.
+
+    Each list is the exact set of fields the operation's native path reads
+    (sequential_description, sequential_weights, sequential_execution):
+    layers/table/program/parameter_layers read `_layers`; sample reads
+    `input_shape` and `_layers`; forward also reads the fitted metadata and
+    `params_`; predict/predict_proba also read `_fit_loss`, `_y_1d` and
+    `classes_`. Optimizer state, training history and the other fit fields
+    are never read by these operations, so walking them only re-admitted
+    values the operation ignores. fit, save, load_weights, targets and the
+    description edits (construct/add/append/compile) mutate or serialize
+    the whole model and keep the full walk.
+    """
+    if operation == "layers" or operation == "table" or operation == "program" or operation == "parameter_layers":
+        return Python.tuple("_layers")
+    if operation == "sample":
+        return Python.tuple("input_shape", "_layers")
+    if operation == "forward":
+        return Python.tuple("numeric_mode", "_layers", "params_", "n_features_in_", "n_outputs_", "_sample_shape")
+    if operation == "predict" or operation == "predict_proba":
+        return Python.tuple("numeric_mode", "_layers", "params_", "n_features_in_", "n_outputs_", "_sample_shape",
+                            "_fit_loss", "_y_1d", "classes_")
+    return PythonObject(None)
+
+
 def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises:
     var b = mods.module("builtins")
     if operation == "load_checkpoint":
@@ -114,7 +141,11 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
         if py_type(model) is not context["sequential_class"]:
             raise Error("TypeError: Sequential requires its native public class, without Python subclass hooks")
         var fields = py_fields(model)
-        var names = context["model_fields"]
+        # One admission per public call, before any native read and before the
+        # provider call releases the GIL; nothing re-reads a field after it.
+        var names = _read_fields(operation)
+        if names is None:
+            names = context["model_fields"]
         for k in range(len(names)):  # driver-loop: over model metadata and native buffer owners used by execution
             if py_contains(fields, names[k]):
                 sequential_admit_value(mods, fields[names[k]], context)
