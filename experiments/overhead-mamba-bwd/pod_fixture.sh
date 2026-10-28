@@ -2,8 +2,8 @@
 # Lane overhead-mamba-bwd: build the before arm's tokenizer host (origin/main
 # 30928487f1 = this tree with before.patch applied) next to the after arm the
 # leg's --build produced, then run the light same-bits/same-refusals fixture
-# on both arms on the CPU column. Run through the CPU pod leg tool with
-# --build tokenizer,neural,mamba,core,linalg; $LEG_OUT comes back to the Mac.
+# on both arms on the CPU column. Run from pod_all.sh after the pod smoke
+# built every host family into python/mojolearn/host; $LEG_OUT returns home.
 set -u
 OUT=${LEG_OUT:?}
 REPO=$(pwd)
