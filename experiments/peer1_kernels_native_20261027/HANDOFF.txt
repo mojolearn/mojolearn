@@ -22,6 +22,8 @@ Changes
   validation, column-target warning/squeeze, fit-depth cleanup, feature names,
   internal Array results and external NumPy views; external KRR predictions
   widen to float64 natively. Capture X once across the envelope/algorithm.
+- a373a36570: preserve ignored categorical/sparse target validation and
+  decode native NumPy real settings/seeds through existing scalar helpers.
 - f2f421fcf1: preserve arbitrary-size PCS integer seeds with native word
   admission through the documented CPython integer extraction API.
 
@@ -82,6 +84,8 @@ Remaining Python / transitive paths (NOT a family-complete claim)
 8. New kernel envelope reuses estimator_lifecycle_pyapi, classical warnings,
    array/buffer admission, public attribute plans, and native NumPy views.
    Their transitive correctness remains dependent on shared owner repairs.
+   Ignored y uses shared labels_shape_of/_flatten_labels; that path still
+   requires the common label-metadata capture audit (no numeric coercion).
 
 Validation
 - source-check.log: Python AST parses; nine data methods have a single native
