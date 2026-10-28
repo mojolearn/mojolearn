@@ -58,9 +58,9 @@ struct NativeSambaLayer(Movable):
     def __init__(out self, endpoint: NativeExecutionEndpoint, operation: Int,
                  var addresses: List[Int], var parameters: List[Int], var scalars: List[Float64],
                  input_slot: Int, output_slot: Int, report_slot: Int, var report_sizes: List[Int]):
-        self.endpoint = endpoint
-        self.backward_endpoint = endpoint
-        self.close_endpoint = endpoint
+        self.endpoint = endpoint.copy()
+        self.backward_endpoint = endpoint.copy()
+        self.close_endpoint = endpoint.copy()
         self.backward_operation = -1
         self.close_operation = -1
         self.backward_parameters = List[Int]()
@@ -187,7 +187,7 @@ struct NativeSambaModel(Movable):
 
     def __init__(out self, primitive: NativeExecutionEndpoint, embedding: Int, norm: Int, head: Int,
                  norm_eps: Float64, rows: Int, width: Int, vocab: Int):
-        self.primitive = primitive
+        self.primitive = primitive.copy()
         self.embedding = embedding
         self.norm = norm
         self.head = head

@@ -171,7 +171,7 @@ def ops_import_model_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> Py
         return _import(args[0], args[1], args[2], args[3], args[4]).steal_data()
     except error:
         if io_error.pending:
-            return io_error.restore()
+            return io_error^.restore()
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error)
         return graph_python_error(error)

@@ -1455,7 +1455,7 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
         raise Error("RuntimeError: unknown byte LM trainer operation " + operation)
     except error:
         if io_error.pending:
-            return io_error.restore()
+            return io_error^.restore()
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error)
         var text = String(error)

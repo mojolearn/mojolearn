@@ -370,7 +370,7 @@ struct AdmittedSambaExecution(Movable):
                     var base = 6 if publication.transformer else 10
                     self.owners.append(AdmittedNativeExecution(publication.provider, owner, handle, base, base + 1, lock_owner, lock_handle))
                     layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
-                    layer.backward_endpoint = layer.endpoint
+                    layer.backward_endpoint = layer.endpoint.copy()
                     self.owners.append(AdmittedNativeExecution(publication.provider, owner, handle, base, base + 1, PythonObject(None), 0))
                     layer.close_endpoint = self.owners[len(self.owners) - 1].endpoint()
                     layer.operation = base + 2
@@ -392,7 +392,7 @@ struct AdmittedSambaExecution(Movable):
                     publication.publish_reports = False
                     publication.restore_owned = False
                 else:
-                    layer.backward_endpoint = layer.endpoint
+                    layer.backward_endpoint = layer.endpoint.copy()
                     if publication.transformer:
                         layer.backward_operation = 3 if publication.session is not None else 5
                     elif layer.operation == 8:

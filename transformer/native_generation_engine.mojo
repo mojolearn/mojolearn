@@ -31,7 +31,7 @@ struct NativeGenerationLayer(Movable):
 
     def __init__(out self, endpoint: NativeExecutionEndpoint, operation: Int,
                  var addresses: List[Int], var parameters: List[Int], cached: Int):
-        self.endpoint = endpoint
+        self.endpoint = endpoint.copy()
         self.operation = operation
         self.addresses = addresses^
         self.parameters = parameters^
@@ -81,7 +81,7 @@ struct NativeGenerationModel(Movable):
     def __init__(out self, primitive: NativeExecutionEndpoint, embedding: Int, norm: Int, head: Int,
                  norm_eps: Float64, batch: Int, width: Int, vocab: Int, position: Int,
                  capacity: Int, limited: Bool, max_positions: Int):
-        self.primitive = primitive
+        self.primitive = primitive.copy()
         self.embedding = embedding
         self.norm = norm
         self.head = head

@@ -236,7 +236,7 @@ def byte_lm_host_inference_construct(model: PythonObject, args: PythonObject,
         raise Error("TypeError: host inference requires the connected native inference class")
     classical_connect_numpy(context)
     var captured = _host_shape(args[1], context)
-    var shape = captured[0]
+    var shape = captured[0].copy()
     if py_type(args[2]) is not bi.bool:
         raise Error("TypeError: threaded must be a bool")
     var pending = bi.dict()
@@ -296,7 +296,7 @@ def byte_lm_host_construct(trainer: PythonObject, args: PythonObject, context: P
     if py_type(profile) is not bi.str or not Bool(py=context["byte_lm_profiles"][profile]["training"]):
         raise Error("NotImplementedError: the selected numeric profile is unavailable for Byte-LM training")
     var captured = _host_shape(args[3], context)
-    var shape = captured[0]
+    var shape = captured[0].copy()
     var binding = context["byte_lm_host_binding"]
     if py_type(binding) is bi.str:
         raise Error(String(binding))
@@ -600,7 +600,7 @@ def byte_lm_host_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C")
         return result.steal_data()
     except error:
         if io_error.pending:
-            return io_error.restore()
+            return io_error^.restore()
         var text = String(error)
         if text.startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)

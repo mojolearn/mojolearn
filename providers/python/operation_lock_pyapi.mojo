@@ -158,4 +158,4 @@ def operation_lock_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr
             return raise_python_exception(error_without_class(problem, "OverflowError"), ExceptionType("PyExc_OverflowError"))
         if String(problem).startswith("InterruptedError:"):
             return raise_python_exception(error_without_class(problem, "InterruptedError"), ExceptionType("PyExc_InterruptedError"))
-        return raise_python_exception(error_without_class(problem, "RuntimeError"), ExceptionType.RuntimeError)
+        return raise_python_exception(error_without_class(problem, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))

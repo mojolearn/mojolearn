@@ -76,7 +76,7 @@ def graph_record_bound(args: PythonObject) raises -> PythonObject:
         _admit(other, context, seen)
         # Both tuples contain only admitted native protocols. Nested records
         # dispatch to this compiled descriptor, never a Python dataclass hook.
-        return PythonObject(values == other)
+        return values == other
     if operation == "__hash__":
         return py_call(b.hash, values)
     if operation == "__repr__":
@@ -110,7 +110,7 @@ def _message(source: PythonObject, problems: PythonObject, context: PythonObject
         if source is None or cls is b.int or cls is b.float or cls is b.bool or cls is b.bytes:
             source_text = py_call(b.str, source)
         else:
-            source_text = PythonObject(native_path(source))
+            source_text = native_path(source)
     var seen = List[Int]()
     _admit(problems, context, seen)
     if py_type(problems) is not b.tuple and py_type(problems) is not b.list:
