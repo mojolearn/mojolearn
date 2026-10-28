@@ -382,6 +382,8 @@ def build__mojolearn_mamba_host() -> PythonObject:
         m.def_function[mamba2_backward_binding]("mamba2_backward")
         m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
         m.def_function[mamba3_owned_create_binding]("mamba3_prefill_session_create")
+        # mamba3_prefill_session_create returns PythonObject(alloc=M3OwnedHostSession()).
+        _ = m.add_type[M3OwnedHostSession]("_M3OwnedHostSession")
         m.def_function[mamba3_owned_reports_optional_binding]("mamba3_prefill_session_reports_optional")
         m.def_function[mamba3_owned_info_binding]("mamba3_prefill_session_info")
         m.def_function[mamba3_owned_close_binding]("mamba3_prefill_session_close")
