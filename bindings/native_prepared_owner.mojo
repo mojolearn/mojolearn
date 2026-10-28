@@ -193,7 +193,7 @@ def prepared_class_matches(mut mods: NativeModules, cls: PythonObject, extras: L
     # its supported mappingproxy iterator; PyType_GetDict requires >=3.12,
     # so this boundary still creates a proxy and iterator per mutable row.
     var offset = 0
-    for i in range(len(extras)):  # small-loop(extras: fixed admission inputs)
+    for i in range(len(extras)):  # small-loop(extras: fixed admission inputs): compares only connected metadata identities
         if not _class_stamp_identity(stamp, extras[i], offset):
             return False
     var bi = mods.module("builtins")
