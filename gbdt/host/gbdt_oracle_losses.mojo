@@ -125,6 +125,7 @@ from gbdt.host.gbdt_oracle import (
     gbdt_bootstrap_seeds,
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
+    GBDT_PINNED_SM,
     GBDT_ORACLE_HOST_SABOTAGE,
     GBDT_SENTINEL,
     GbdtHostModel,
@@ -138,6 +139,7 @@ from gbdt.host.gbdt_oracle import (
     _binary_block,
     _half_byte_block,
     _halving_fold,
+    _pinned_partition_stat,
     _one_byte_block,
     _oracle_move_to,
     _partition_stat,
@@ -767,8 +769,26 @@ def _estimate_leaves_for_loss(
         for k in range(sizes[leaf]):
             bins[offsets[leaf] + k] = leaf
     var weights_cpu = List[Float64]()
+    # Both CPU searcher callers compiled on Apple M1 at O0 (2026-10-28);
+    # runtime/identity remain pending. GPU setup replaces row weights with per-row
+    # pair weights. Gradient leaves and Regularize need their partition sums,
+    # not row counts; this also repairs the existing greedy grouped owner.
+    var pair_row_weights = List[Float32]()
+    if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+        pair_row_weights = List[Float32](length=n_rows, fill=Float32(0))
+        for pos in range(n_rows):
+            var row = row_index[pos]
+            pair_row_weights[pos] = (
+                pairs.value().group_row_weights[row] if pairs.value().group_layout
+                else pairs.value().prep.row_weights[row]
+            )
     for leaf in range(n_leaves):
-        weights_cpu.append(Float64(sizes[leaf]))
+        if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+            weights_cpu.append(Float64(_pinned_partition_stat(
+                pair_row_weights, offsets[leaf], sizes[leaf], 2 * GBDT_PINNED_SM
+            )))
+        else:
+            weights_cpu.append(Float64(sizes[leaf]))
     if loss.method == GBDT_LEAF_EXACT:
         return _exact_estimate(
             loss, g_target, g_cursor, offsets, sizes, weights_cpu, n_rows

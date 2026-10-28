@@ -153,11 +153,13 @@ from gbdt.host.gbdt_oracle import (
     GBDT_BOOT_POISSON,
     GBDT_LOGLOSS_NEWTON_ITERATIONS,
     GBDT_ORACLE_HOST_SABOTAGE,
+    GbdtHostModel,
     GbdtHostParams,
     gbdt_host_fit,
     gbdt_host_fit_eval,
     gbdt_host_model_text,
 )
+from gbdt.host.gbdt_oracle_pointwise_rank import gbdt_ranking_pointwise_host_fit
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_EXACT,
     GBDT_LEAF_GRADIENT,
@@ -1194,7 +1196,15 @@ def gbdt_fit_binding(
         )
     if use_pointwise and border_type != BORDER_TYPE_GREEDY_LOG_SUM:
         _refuse("feature_border_type under use_pointwise_searcher")
-    if use_pointwise:
+    # CPU binding compilation passed on Apple M1 at O0 (2026-10-28);
+    # runtime/identity remain pending. Existing ranking CPU derivatives are
+    # shared; this owner performs the distinct doc-parallel tree search.
+    var ranking_pointwise = use_pointwise and (
+        pw_objective == GBDT_OBJ_QUERY_RMSE
+        or pw_objective == GBDT_OBJ_PAIR_LOGIT
+        or pw_objective == GBDT_OBJ_YETI_RANK
+    )
+    if use_pointwise and not ranking_pointwise:
         # the gbdt-pointwise-l2-bayesian-eval lane, its own arm and refusals
         # (`_gbdt_fit_pointwise_arm`, gbdt/host/gbdt_oracle_pointwise.mojo)
         return _gbdt_fit_pointwise_arm(
@@ -1226,6 +1236,14 @@ def gbdt_fit_binding(
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
         if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
             _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2 and NewtonCosine)")
+    elif ranking_pointwise:
+        if (
+            score_function != GBDT_HOST_SCORE_COSINE
+            and score_function != GBDT_HOST_SCORE_NEWTON_COSINE
+            and score_function != GBDT_HOST_SCORE_L2
+            and score_function != GBDT_HOST_SCORE_NEWTON_L2
+        ):
+            _refuse("score_function code " + String(score_function) + " under grouped pointwise search (Cosine, NewtonCosine, L2 or NewtonL2)")
     elif score_function != GBDT_HOST_SCORE_COSINE:
         _refuse("score_function code " + String(score_function) + " (only Cosine)")
     if grow_code == 1:
@@ -1583,11 +1601,23 @@ def gbdt_fit_binding(
                             QUANTILE_CONST_DELTA,
                         )
                     )
-            var pw_model = gbdt_losses_host_fit(
-                x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
-                host_pair_winners, host_pair_losers, host_pair_weights,
-                pw_start, random_strength,
-            )
+            var pw_model: GbdtHostModel
+            if ranking_pointwise:
+                pw_model = gbdt_ranking_pointwise_host_fit(
+                    x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
+                    host_pair_winners, host_pair_losers, host_pair_weights,
+                    score_function == GBDT_HOST_SCORE_NEWTON_COSINE
+                    or score_function == GBDT_HOST_SCORE_NEWTON_L2,
+                    score_function == GBDT_HOST_SCORE_COSINE
+                    or score_function == GBDT_HOST_SCORE_NEWTON_COSINE,
+                    random_strength,
+                )
+            else:
+                pw_model = gbdt_losses_host_fit(
+                    x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
+                    host_pair_winners, host_pair_losers, host_pair_weights,
+                    pw_start, random_strength,
+                )
             losses = pw_model.losses.copy()
             best_iteration = pw_model.best_iteration
             stopped_early = pw_model.stopped_early
@@ -1608,21 +1638,25 @@ def gbdt_fit_binding(
         ):
             # the CTR categorical arm (gbdt-categorical-ctr-tables):
             # gbdt/host/gbdt_oracle_ctr.mojo, every permutation
-            if n_eval_rows != 0:
-                raise Error(
-                    "no CPU implementation of _mojolearn_gbdt.gbdt_fit for"
-                    " eval_set with a CTR categorical column (the held-out"
-                    " rows need the CTR tables applied; not restated on the"
-                    " host)"
-                )
+            # Full CPU binding compiled at 2d5c5081a83e, 2026-10-28:
+            # x86-64-v3/O0, 32 jobs, exit 0. Runtime/identity are pending.
+            # Receipt: docs/plans/gbdt-cpu-ctr-eval-20261028-compile.json.
+            # The owner expands eval rows with its final learn-only tables
+            # and reuses the existing held-out boost/detector/shrink arm.
+            var ev = _gbdt_host_eval_arm(
+                eval_x_address, eval_y_address, n_eval_rows, n_features,
+                od_kind, od.auto_stop_p_value, od.iterations_wait,
+                use_best_model, best_model_min_trees,
+            )
             var ctr_fit = gbdt_ctr_host_fit(
                 x, y, n_rows, n_features, p, flags, permutation_count,
-                ctr_permutation_id,
+                ctr_permutation_id, ev^,
             )
             text = gbdt_ctr_host_model_text(ctr_fit)
             losses = ctr_fit.fit.model.losses.copy()
             best_iteration = ctr_fit.fit.eval.best_iteration
             stopped_early = ctr_fit.fit.eval.stopped_early
+            test_losses = ctr_fit.fit.eval.test_losses.copy()
         elif grow_code == 0 and len(flags) != 0:
             # the one-hot categorical arm (gbdt-categorical-ctr):
             # gbdt/host/gbdt_oracle_onehot.mojo
