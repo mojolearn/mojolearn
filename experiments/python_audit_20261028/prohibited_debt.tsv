@@ -1,0 +1,200 @@
+# Known prohibited_source endpoints (tools/public_runtime_inventory.py endpoint ledger), recorded 2026-10-28
+# by lane/python-audit-static-20261028. DEBT TO REMOVE, NEVER AN EXEMPTION (AGENTS.md "No Python in the runtime":
+# existing checker baseline entries are debt). Only shrink this list: tools/tests/test_no_python_runtime.py --prune.
+file	name	owner	reason
+python/mojolearn/_expansion_decomp.py	mojolearn.AlternatingLeastSquares.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.AlternatingLeastSquares
+python/mojolearn/_expansion_decomp.py	mojolearn.DictionaryLearning.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.DictionaryLearning
+python/mojolearn/_expansion_decomp.py	mojolearn.DictionaryLearning.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.DictionaryLearning
+python/mojolearn/_expansion_decomp.py	mojolearn.DictionaryLearning.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.DictionaryLearning
+python/mojolearn/_expansion_decomp.py	mojolearn.DictionaryLearning.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.DictionaryLearning
+python/mojolearn/_expansion_decomp.py	mojolearn.EllipticEnvelope.decision_function	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.EllipticEnvelope
+python/mojolearn/_expansion_decomp.py	mojolearn.EllipticEnvelope.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.EllipticEnvelope
+python/mojolearn/_expansion_decomp.py	mojolearn.EllipticEnvelope.fit_predict	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.EllipticEnvelope
+python/mojolearn/_expansion_decomp.py	mojolearn.EllipticEnvelope.predict	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.EllipticEnvelope
+python/mojolearn/_expansion_decomp.py	mojolearn.EllipticEnvelope.score	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.EllipticEnvelope
+python/mojolearn/_expansion_decomp.py	mojolearn.EllipticEnvelope.score_samples	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.EllipticEnvelope
+python/mojolearn/_expansion_decomp.py	mojolearn.FactorAnalysis.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.FactorAnalysis
+python/mojolearn/_expansion_decomp.py	mojolearn.FactorAnalysis.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.FactorAnalysis
+python/mojolearn/_expansion_decomp.py	mojolearn.FactorAnalysis.score	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.FactorAnalysis
+python/mojolearn/_expansion_decomp.py	mojolearn.FactorAnalysis.score_samples	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.FactorAnalysis
+python/mojolearn/_expansion_decomp.py	mojolearn.FactorAnalysis.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.FactorAnalysis
+python/mojolearn/_expansion_decomp.py	mojolearn.FastICA.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.FastICA
+python/mojolearn/_expansion_decomp.py	mojolearn.FastICA.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.FastICA
+python/mojolearn/_expansion_decomp.py	mojolearn.FastICA.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.FastICA
+python/mojolearn/_expansion_decomp.py	mojolearn.FastICA.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.FastICA
+python/mojolearn/_expansion_decomp.py	mojolearn.GaussianRandomProjection.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp._RandomProjection
+python/mojolearn/_expansion_decomp.py	mojolearn.GaussianRandomProjection.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.GaussianRandomProjection
+python/mojolearn/_expansion_decomp.py	mojolearn.GaussianRandomProjection.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.GaussianRandomProjection
+python/mojolearn/_expansion_decomp.py	mojolearn.GaussianRandomProjection.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.GaussianRandomProjection
+python/mojolearn/_expansion_decomp.py	mojolearn.IncrementalPCA.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.IncrementalPCA
+python/mojolearn/_expansion_decomp.py	mojolearn.IncrementalPCA.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.IncrementalPCA
+python/mojolearn/_expansion_decomp.py	mojolearn.IncrementalPCA.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.IncrementalPCA
+python/mojolearn/_expansion_decomp.py	mojolearn.IncrementalPCA.partial_fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.IncrementalPCA
+python/mojolearn/_expansion_decomp.py	mojolearn.IncrementalPCA.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.IncrementalPCA
+python/mojolearn/_expansion_decomp.py	mojolearn.LatentDirichletAllocation.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.LatentDirichletAllocation
+python/mojolearn/_expansion_decomp.py	mojolearn.LatentDirichletAllocation.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.LatentDirichletAllocation
+python/mojolearn/_expansion_decomp.py	mojolearn.LatentDirichletAllocation.partial_fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.LatentDirichletAllocation
+python/mojolearn/_expansion_decomp.py	mojolearn.LatentDirichletAllocation.score	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.LatentDirichletAllocation
+python/mojolearn/_expansion_decomp.py	mojolearn.LatentDirichletAllocation.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.LatentDirichletAllocation
+python/mojolearn/_expansion_decomp.py	mojolearn.MinCovDet.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MinCovDet
+python/mojolearn/_expansion_decomp.py	mojolearn.MinCovDet.score	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MinCovDet
+python/mojolearn/_expansion_decomp.py	mojolearn.MiniBatchDictionaryLearning.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MiniBatchDictionaryLearning
+python/mojolearn/_expansion_decomp.py	mojolearn.MiniBatchDictionaryLearning.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MiniBatchDictionaryLearning
+python/mojolearn/_expansion_decomp.py	mojolearn.MiniBatchDictionaryLearning.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MiniBatchDictionaryLearning
+python/mojolearn/_expansion_decomp.py	mojolearn.MiniBatchDictionaryLearning.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MiniBatchDictionaryLearning
+python/mojolearn/_expansion_decomp.py	mojolearn.MiniBatchSparsePCA.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MiniBatchSparsePCA
+python/mojolearn/_expansion_decomp.py	mojolearn.MiniBatchSparsePCA.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MiniBatchSparsePCA
+python/mojolearn/_expansion_decomp.py	mojolearn.MiniBatchSparsePCA.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MiniBatchSparsePCA
+python/mojolearn/_expansion_decomp.py	mojolearn.MiniBatchSparsePCA.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.MiniBatchSparsePCA
+python/mojolearn/_expansion_decomp.py	mojolearn.NMF.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.NMF
+python/mojolearn/_expansion_decomp.py	mojolearn.NMF.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.NMF
+python/mojolearn/_expansion_decomp.py	mojolearn.NMF.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.NMF
+python/mojolearn/_expansion_decomp.py	mojolearn.NMF.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.NMF
+python/mojolearn/_expansion_decomp.py	mojolearn.SparseCoder.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparseCoder
+python/mojolearn/_expansion_decomp.py	mojolearn.SparseCoder.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparseCoder
+python/mojolearn/_expansion_decomp.py	mojolearn.SparseCoder.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparseCoder
+python/mojolearn/_expansion_decomp.py	mojolearn.SparseCoder.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparseCoder
+python/mojolearn/_expansion_decomp.py	mojolearn.SparsePCA.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparsePCA
+python/mojolearn/_expansion_decomp.py	mojolearn.SparsePCA.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparsePCA
+python/mojolearn/_expansion_decomp.py	mojolearn.SparsePCA.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparsePCA
+python/mojolearn/_expansion_decomp.py	mojolearn.SparsePCA.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparsePCA
+python/mojolearn/_expansion_decomp.py	mojolearn.SparseRandomProjection.fit	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp._RandomProjection
+python/mojolearn/_expansion_decomp.py	mojolearn.SparseRandomProjection.fit_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparseRandomProjection
+python/mojolearn/_expansion_decomp.py	mojolearn.SparseRandomProjection.inverse_transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparseRandomProjection
+python/mojolearn/_expansion_decomp.py	mojolearn.SparseRandomProjection.transform	peer2	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_decomp.SparseRandomProjection
+python/mojolearn/_expansion_neighbors.py	mojolearn.AdditiveChi2Sampler.fit	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.AdditiveChi2Sampler
+python/mojolearn/_expansion_neighbors.py	mojolearn.AdditiveChi2Sampler.fit_transform	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.AdditiveChi2Sampler
+python/mojolearn/_expansion_neighbors.py	mojolearn.AdditiveChi2Sampler.transform	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.AdditiveChi2Sampler
+python/mojolearn/_expansion_neighbors.py	mojolearn.KernelPCA.fit	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.KernelPCA
+python/mojolearn/_expansion_neighbors.py	mojolearn.KernelPCA.fit_transform	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.KernelPCA
+python/mojolearn/_expansion_neighbors.py	mojolearn.KernelPCA.transform	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.KernelPCA
+python/mojolearn/_expansion_neighbors.py	mojolearn.LabelPropagation.fit	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors._LabelPropagationBase
+python/mojolearn/_expansion_neighbors.py	mojolearn.LabelPropagation.predict	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.LabelPropagation
+python/mojolearn/_expansion_neighbors.py	mojolearn.LabelPropagation.predict_proba	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.LabelPropagation
+python/mojolearn/_expansion_neighbors.py	mojolearn.LabelPropagation.score	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.LabelPropagation
+python/mojolearn/_expansion_neighbors.py	mojolearn.LabelSpreading.fit	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.LabelSpreading
+python/mojolearn/_expansion_neighbors.py	mojolearn.LabelSpreading.predict	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.LabelSpreading
+python/mojolearn/_expansion_neighbors.py	mojolearn.LabelSpreading.predict_proba	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.LabelSpreading
+python/mojolearn/_expansion_neighbors.py	mojolearn.LabelSpreading.score	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.LabelSpreading
+python/mojolearn/_expansion_neighbors.py	mojolearn.Louvain.fit	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.Louvain
+python/mojolearn/_expansion_neighbors.py	mojolearn.Louvain.fit_predict	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.Louvain
+python/mojolearn/_expansion_neighbors.py	mojolearn.OneClassSVM.decision_function	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.OneClassSVM
+python/mojolearn/_expansion_neighbors.py	mojolearn.OneClassSVM.fit	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.OneClassSVM
+python/mojolearn/_expansion_neighbors.py	mojolearn.OneClassSVM.fit_predict	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.OneClassSVM
+python/mojolearn/_expansion_neighbors.py	mojolearn.OneClassSVM.predict	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.OneClassSVM
+python/mojolearn/_expansion_neighbors.py	mojolearn.OneClassSVM.score_samples	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.OneClassSVM
+python/mojolearn/_expansion_neighbors.py	mojolearn.PageRank.fit	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.PageRank
+python/mojolearn/_expansion_neighbors.py	mojolearn.SVGP.fit	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.SVGP
+python/mojolearn/_expansion_neighbors.py	mojolearn.SVGP.predict	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.SVGP
+python/mojolearn/_expansion_neighbors.py	mojolearn.SVGP.score	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.SVGP
+python/mojolearn/_expansion_neighbors.py	mojolearn.SkewedChi2Sampler.fit	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.SkewedChi2Sampler
+python/mojolearn/_expansion_neighbors.py	mojolearn.SkewedChi2Sampler.fit_transform	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.SkewedChi2Sampler
+python/mojolearn/_expansion_neighbors.py	mojolearn.SkewedChi2Sampler.transform	peer1	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_neighbors.SkewedChi2Sampler
+python/mojolearn/_expansion_prep.py	mojolearn.BernoulliNB.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep._DiscreteNB
+python/mojolearn/_expansion_prep.py	mojolearn.BernoulliNB.partial_fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep._DiscreteNB
+python/mojolearn/_expansion_prep.py	mojolearn.BernoulliNB.predict	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.BernoulliNB
+python/mojolearn/_expansion_prep.py	mojolearn.BernoulliNB.predict_log_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.BernoulliNB
+python/mojolearn/_expansion_prep.py	mojolearn.BernoulliNB.predict_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.BernoulliNB
+python/mojolearn/_expansion_prep.py	mojolearn.BernoulliNB.score	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.BernoulliNB
+python/mojolearn/_expansion_prep.py	mojolearn.Binarizer.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.Binarizer
+python/mojolearn/_expansion_prep.py	mojolearn.Binarizer.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.Binarizer
+python/mojolearn/_expansion_prep.py	mojolearn.Binarizer.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.Binarizer
+python/mojolearn/_expansion_prep.py	mojolearn.CategoricalNB.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.CategoricalNB
+python/mojolearn/_expansion_prep.py	mojolearn.CategoricalNB.partial_fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.CategoricalNB
+python/mojolearn/_expansion_prep.py	mojolearn.CategoricalNB.predict	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.CategoricalNB
+python/mojolearn/_expansion_prep.py	mojolearn.CategoricalNB.predict_log_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.CategoricalNB
+python/mojolearn/_expansion_prep.py	mojolearn.CategoricalNB.predict_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.CategoricalNB
+python/mojolearn/_expansion_prep.py	mojolearn.CategoricalNB.score	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.CategoricalNB
+python/mojolearn/_expansion_prep.py	mojolearn.ComplementNB.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep._DiscreteNB
+python/mojolearn/_expansion_prep.py	mojolearn.ComplementNB.partial_fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep._DiscreteNB
+python/mojolearn/_expansion_prep.py	mojolearn.ComplementNB.predict	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.ComplementNB
+python/mojolearn/_expansion_prep.py	mojolearn.ComplementNB.predict_log_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.ComplementNB
+python/mojolearn/_expansion_prep.py	mojolearn.ComplementNB.predict_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.ComplementNB
+python/mojolearn/_expansion_prep.py	mojolearn.ComplementNB.score	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.ComplementNB
+python/mojolearn/_expansion_prep.py	mojolearn.GaussianNB.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.GaussianNB
+python/mojolearn/_expansion_prep.py	mojolearn.GaussianNB.partial_fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.GaussianNB
+python/mojolearn/_expansion_prep.py	mojolearn.GaussianNB.predict	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.GaussianNB
+python/mojolearn/_expansion_prep.py	mojolearn.GaussianNB.predict_log_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.GaussianNB
+python/mojolearn/_expansion_prep.py	mojolearn.GaussianNB.predict_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.GaussianNB
+python/mojolearn/_expansion_prep.py	mojolearn.GaussianNB.score	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.GaussianNB
+python/mojolearn/_expansion_prep.py	mojolearn.KBinsDiscretizer.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.KBinsDiscretizer
+python/mojolearn/_expansion_prep.py	mojolearn.KBinsDiscretizer.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.KBinsDiscretizer
+python/mojolearn/_expansion_prep.py	mojolearn.KBinsDiscretizer.inverse_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.KBinsDiscretizer
+python/mojolearn/_expansion_prep.py	mojolearn.KBinsDiscretizer.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.KBinsDiscretizer
+python/mojolearn/_expansion_prep.py	mojolearn.LabelBinarizer.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.LabelBinarizer
+python/mojolearn/_expansion_prep.py	mojolearn.LabelBinarizer.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.LabelBinarizer
+python/mojolearn/_expansion_prep.py	mojolearn.LabelBinarizer.inverse_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.LabelBinarizer
+python/mojolearn/_expansion_prep.py	mojolearn.LabelBinarizer.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.LabelBinarizer
+python/mojolearn/_expansion_prep.py	mojolearn.LabelEncoder.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.LabelEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.LabelEncoder.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.LabelEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.LabelEncoder.inverse_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.LabelEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.LabelEncoder.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.LabelEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.MultiLabelBinarizer.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.MultiLabelBinarizer
+python/mojolearn/_expansion_prep.py	mojolearn.MultiLabelBinarizer.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.MultiLabelBinarizer
+python/mojolearn/_expansion_prep.py	mojolearn.MultiLabelBinarizer.inverse_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.MultiLabelBinarizer
+python/mojolearn/_expansion_prep.py	mojolearn.MultiLabelBinarizer.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.MultiLabelBinarizer
+python/mojolearn/_expansion_prep.py	mojolearn.MultinomialNB.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep._DiscreteNB
+python/mojolearn/_expansion_prep.py	mojolearn.MultinomialNB.partial_fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep._DiscreteNB
+python/mojolearn/_expansion_prep.py	mojolearn.MultinomialNB.predict	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.MultinomialNB
+python/mojolearn/_expansion_prep.py	mojolearn.MultinomialNB.predict_log_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.MultinomialNB
+python/mojolearn/_expansion_prep.py	mojolearn.MultinomialNB.predict_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.MultinomialNB
+python/mojolearn/_expansion_prep.py	mojolearn.MultinomialNB.score	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.MultinomialNB
+python/mojolearn/_expansion_prep.py	mojolearn.OneHotEncoder.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.OneHotEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.OneHotEncoder.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.OneHotEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.OneHotEncoder.inverse_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.OneHotEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.OneHotEncoder.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.OneHotEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.OrdinalEncoder.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.OrdinalEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.OrdinalEncoder.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.OrdinalEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.OrdinalEncoder.inverse_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.OrdinalEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.OrdinalEncoder.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.OrdinalEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.PolynomialFeatures.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.PolynomialFeatures
+python/mojolearn/_expansion_prep.py	mojolearn.PolynomialFeatures.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.PolynomialFeatures
+python/mojolearn/_expansion_prep.py	mojolearn.PolynomialFeatures.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.PolynomialFeatures
+python/mojolearn/_expansion_prep.py	mojolearn.PowerTransformer.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.PowerTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.PowerTransformer.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.PowerTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.PowerTransformer.inverse_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.PowerTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.PowerTransformer.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.PowerTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.QuadraticDiscriminantAnalysis.decision_function	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuadraticDiscriminantAnalysis
+python/mojolearn/_expansion_prep.py	mojolearn.QuadraticDiscriminantAnalysis.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuadraticDiscriminantAnalysis
+python/mojolearn/_expansion_prep.py	mojolearn.QuadraticDiscriminantAnalysis.predict	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuadraticDiscriminantAnalysis
+python/mojolearn/_expansion_prep.py	mojolearn.QuadraticDiscriminantAnalysis.predict_log_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuadraticDiscriminantAnalysis
+python/mojolearn/_expansion_prep.py	mojolearn.QuadraticDiscriminantAnalysis.predict_proba	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuadraticDiscriminantAnalysis
+python/mojolearn/_expansion_prep.py	mojolearn.QuadraticDiscriminantAnalysis.score	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuadraticDiscriminantAnalysis
+python/mojolearn/_expansion_prep.py	mojolearn.QuantileTransformer.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuantileTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.QuantileTransformer.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuantileTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.QuantileTransformer.inverse_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuantileTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.QuantileTransformer.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.QuantileTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.SelectKBest.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.SelectKBest
+python/mojolearn/_expansion_prep.py	mojolearn.SelectKBest.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.SelectKBest
+python/mojolearn/_expansion_prep.py	mojolearn.SelectKBest.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.SelectKBest
+python/mojolearn/_expansion_prep.py	mojolearn.SimpleImputer.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.SimpleImputer
+python/mojolearn/_expansion_prep.py	mojolearn.SimpleImputer.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.SimpleImputer
+python/mojolearn/_expansion_prep.py	mojolearn.SimpleImputer.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.SimpleImputer
+python/mojolearn/_expansion_prep.py	mojolearn.SplineTransformer.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.SplineTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.SplineTransformer.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.SplineTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.SplineTransformer.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.SplineTransformer
+python/mojolearn/_expansion_prep.py	mojolearn.TargetEncoder.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.TargetEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.TargetEncoder.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.TargetEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.TargetEncoder.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.TargetEncoder
+python/mojolearn/_expansion_prep.py	mojolearn.VarianceThreshold.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.VarianceThreshold
+python/mojolearn/_expansion_prep.py	mojolearn.VarianceThreshold.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.VarianceThreshold
+python/mojolearn/_expansion_prep.py	mojolearn.VarianceThreshold.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._expansion_prep.VarianceThreshold
+python/mojolearn/_umap_impl.py	mojolearn.UMAP.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._umap_impl.UMAP
+python/mojolearn/_umap_impl.py	mojolearn.UMAP.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._umap_impl.UMAP
+python/mojolearn/_umap_impl.py	mojolearn.UMAP.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn._umap_impl.UMAP
+python/mojolearn/cluster.py	mojolearn.KMeans.fit	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.cluster.KMeans
+python/mojolearn/cluster.py	mojolearn.KMeans.fit_predict	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.cluster.KMeans
+python/mojolearn/cluster.py	mojolearn.KMeans.fit_transform	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.cluster.KMeans
+python/mojolearn/cluster.py	mojolearn.KMeans.predict	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.cluster.KMeans
+python/mojolearn/cluster.py	mojolearn.KMeans.transform	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.cluster.KMeans
+python/mojolearn/decomposition.py	mojolearn.TruncatedSVD.fit	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.decomposition.TruncatedSVD
+python/mojolearn/decomposition.py	mojolearn.TruncatedSVD.fit_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.decomposition.TruncatedSVD
+python/mojolearn/decomposition.py	mojolearn.TruncatedSVD.inverse_transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.decomposition.TruncatedSVD
+python/mojolearn/decomposition.py	mojolearn.TruncatedSVD.transform	peer2 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.decomposition.TruncatedSVD
+python/mojolearn/svm.py	mojolearn.LinearSVC.decision_function	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.svm.LinearSVC
+python/mojolearn/svm.py	mojolearn.LinearSVC.fit	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.svm.LinearSVC
+python/mojolearn/svm.py	mojolearn.LinearSVC.predict	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.svm.LinearSVC
+python/mojolearn/svm.py	mojolearn.LinearSVC.score	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.svm.LinearSVC
+python/mojolearn/svm.py	mojolearn.LinearSVR.fit	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.svm.LinearSVR
+python/mojolearn/svm.py	mojolearn.LinearSVR.predict	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.svm.LinearSVR
+python/mojolearn/svm.py	mojolearn.LinearSVR.score	peer1 (family rule)	class-creation Python wrapper (_mode hooks) on mojolearn.svm.LinearSVR

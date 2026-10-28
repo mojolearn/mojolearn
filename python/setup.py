@@ -78,6 +78,16 @@ class bdist_wheel(_bdist_wheel):
         # Package-data globs must never smuggle internal reference bindings
         # from an earlier source build into an inference wheel.
         root = Path(__file__).resolve().parent
+        sys.path.insert(0, str(root.parent / "tools"))
+        from verification_repository import validate_payload, check_staged
+        verification = validate_payload(root.parent,
+            os.environ.get("MOJOLEARN_VERIFICATION_SOURCE_COMMIT", "HEAD"),
+            os.environ.get("MOJOLEARN_VERIFICATION_GIT_ROOT"))
+        verification_commit = subprocess.check_output([
+            "git", "-C", os.environ.get("MOJOLEARN_VERIFICATION_GIT_ROOT", str(root.parent)),
+            "rev-parse", os.environ.get("MOJOLEARN_VERIFICATION_SOURCE_COMMIT", "HEAD")
+        ]).decode().strip()
+        check_staged(root.parent, verification, verification_commit)
         manifest = runpy.run_path(str(root / "mojolearn" / "host_surface.py"))
         allowed = {name + ".so" for name in manifest["wheel_bindings"]()}
         # A merged host file (bindings/merged_build.sh, mojolearn/_merged.py)

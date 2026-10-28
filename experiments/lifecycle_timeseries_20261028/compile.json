@@ -1,0 +1,31 @@
+{
+ "source_commit": "9bc7408b38ec24e29eb91b595aab7d20a5c12a63",
+ "compiler": "Mojo 1.0.0 (ed45d567)",
+ "jobs": 10,
+ "host": "Mac (compile_slot, nice 19)",
+ "flags": "-O0 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings",
+ "command_script": "/Users/andrewhendel/mojolearn-evidence/lifecycle-timeseries-20261028/compile.sh",
+ "roots": {
+  "xseq_dispatcher": {
+   "entry": "checks/peer6_forecast_convenience_compile.mojo",
+   "exit_code": 0,
+   "seconds": 665,
+   "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-timeseries-20261028/compile_xseq.log",
+   "binary_sha256": "7167cc1e2f140cd8ce75a325be74da5d25bc62cec21506acdb45e1fd3df7fe47"
+  },
+  "tsa_dispatcher": {
+   "entry": "checks/peer6_autoarima_lifecycle_compile.mojo",
+   "exit_code": 0,
+   "seconds": 40,
+   "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-timeseries-20261028/compile_tsa.log",
+   "binary_sha256": "bb25779b716f2960e96e5694f7bd5942ae28f213401e767f907bd60b2ce128b9"
+  }
+ },
+ "runtime_executed": false,
+ "not_covered": [
+  "GPU targets",
+  "fast mode",
+  "full _mojolearn_* binding roots",
+  "any runtime, Python or identity test"
+ ]
+}
