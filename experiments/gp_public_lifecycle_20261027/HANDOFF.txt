@@ -1,6 +1,7 @@
 GP public lifecycle migration — 2026-10-27
 
 Branch: lane/peer5-gp-lifecycle-20261027
+Source commit: e595a0a269f21124ff2f389a3ba808ee19378eb2
 Base dependencies already supplied by peer5: dispatch 2a1b52376b and kernel
 metadata/admission 549fece273d8ad39c4353f89e53e3887ff01ca7b (cherry-picked here).
 Do not replay those dependency commits a second time during integration.
@@ -56,8 +57,9 @@ Attempt3: CPU compilation passed (103.59 seconds), including Array/Torch label
 retention and BinaryLaplace namespace admission.
 Attempt4: CPU compilation passed (76.21 seconds), including explicit-host
 binding dispatch and unused GPC RandomState compatibility.
-Attempt5: final owner preserves fitted-check precedence and admits constructor
-settings only when fit consumes them; result retained in compile.json.
+Attempt5: CPU compilation passed (61.41 seconds) for the final owner, preserving
+fitted-check precedence and admitting constructor settings only when fit consumes
+them; result retained in compile.json.
 Python source syntax compilation passed; neither Python module was imported.
 All local builds configured 10 workers from sysctl hw.logicalcpu; this records
 allocation/settings and does not claim full CPU saturation. No pod was rented.
