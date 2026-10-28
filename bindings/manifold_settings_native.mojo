@@ -6,8 +6,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.classical_attributes import classical_connect_numpy, _type_mro
 from bindings.mode_metadata_native import _class_fields
 from bindings.classical_pandas import classical_admit_value
-from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_array_storage import native_array_from_bytes
+from bindings.manifold_scalar_native import ManifoldScalarSnapshot, manifold_buffer_bytes, manifold_scalar_type, _snapshot
+from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 
 
@@ -15,9 +16,16 @@ def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
              freeze_buffers: Bool = True) raises -> PythonObject:
     if depth > 64:
         raise Error("TypeError: manifold settings exceed the supported nesting depth")
-    classical_admit_value(value, context)
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
+    var scalar = manifold_scalar_type(value, context)
+    if not scalar:
+        classical_admit_value(value, context)
+    elif freeze_buffers:
+        # Immutable native scalar storage is captured before any numerical
+        # cell can release the GIL. Number conversion/errors stay deferred to
+        # the algorithm's existing validation point.
+        _ = _snapshot(value, context)
     if cls is b.list or cls is b.tuple:
         var result = Python.list()
         for i in range(len(value)):  # driver-loop: copy configuration contents before execution can release the GIL
@@ -33,6 +41,11 @@ def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
         return result
     elif cls is py_get(context, "ndarray"):
         var dtype = value.dtype
+        var native_dtype = sequence_dtype_instance(dtype, sequence_dtype_classes(context))
+        for code in ["q", "Q"]:  # small-loop(dtype: platform long-long descriptor aliases)
+            native_dtype = native_dtype or py_type(dtype) is py_type(sequence_dtype_create(PythonObject(code), context))
+        if not native_dtype:
+            raise Error("TypeError: manifold configuration arrays require a built-in native dtype")
         if Bool(py=dtype.hasobject) and String(dtype.kind) != "O":
             raise Error("TypeError: manifold configuration refuses structured object arrays")
         if String(dtype.kind) == "O":
@@ -44,21 +57,43 @@ def _setting(value: PythonObject, context: PythonObject, depth: Int = 0,
                 var item = _setting(flat[i], context, depth + 1, freeze_buffers)
                 if freeze_buffers:
                     py_setitem(output, i, item)
+            if freeze_buffers:
+                _ = _snapshot(result, context)
             return result
         if freeze_buffers:
+            if String(dtype.kind) == "T":
+                # StringDType owns indirect storage, so copying its pointer
+                # words would be invalid. The scalar adapter needs only the
+                # captured shape and one unboxed value when size is one.
+                # Native ndarray getitem transports a unicode/missing-value
+                # reference; recursively admit and freeze that reference
+                # before any truth, comparison, or conversion can consume it.
+                # Multi-element arrays keep their ordinary rank/size errors.
+                var captured = _snapshot(value, context, dtype)
+                ref state = captured.downcast_value_ptr[ManifoldScalarSnapshot]()[]
+                if state.count == 1:
+                    state.item = _setting(state.item, context, depth + 1, True)
+                return value
             # Keep ndarray scalar conversion/rank semantics, but give the
             # operation private native bytes. This is a buffer copy, never a
             # NumPy numerical conversion or a call to the input's .copy().
             var shape = value.shape
-            var buffer = native_buffer_view(value)
-            var store = native_array_from_bytes(String("B"), py_call(buffer.tobytes, "C"))
-            return py_call(cls, shape, dtype=dtype, buffer=store)
+            var store = native_array_from_bytes(String("B"), manifold_buffer_bytes(value))
+            var result = py_call(cls, shape, dtype=dtype, buffer=store)
+            _ = _snapshot(result, context)
+            return result
+    elif freeze_buffers and (cls is b.bytearray or cls is b.memoryview or cls is context["array_type"]):
+        # Keep the public native buffer type while capturing its scalar text
+        # payload now. Later numeric parsing reads the private byte snapshot;
+        # truth and error behavior keep the captured source layout.
+        _ = _snapshot(value, context)
     return value
 
 
 struct ManifoldSettings(Copyable, Movable):
     var fields: PythonObject
     var values: PythonObject
+    var owners: PythonObject
     var requested: PythonObject
     var fitted: PythonObject
     var default_mode: PythonObject
@@ -78,6 +113,10 @@ struct ManifoldSettings(Copyable, Movable):
                 if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
                     raise Error("TypeError: native manifold fitting does not accept Python after-fit callbacks")
         self.values = py_call(b.dict, self.fields)
+        # Retain original field owners as well as the private scalar copies;
+        # concurrent application field replacement cannot release an exporter
+        # while this operation still owns its captured configuration.
+        self.owners = py_call(b.tuple, py_call(self.values.values))
         self.default_mode = context["backend_fields"]["_DEFAULT_MODE"]
         self.requested = py_get(self.values, "numeric_mode")
         self.fitted = py_get(self.values, "numeric_mode_")
