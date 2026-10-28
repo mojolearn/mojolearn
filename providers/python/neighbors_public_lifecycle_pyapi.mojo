@@ -52,8 +52,9 @@ struct NeighborPublicCall(Movable):
 
 
 def _method(operation: String) -> String:
-    for suffix in ["fit_predict", "fit_transform", "predict_log_proba", "predict_proba", "score_samples",
-                   "decision_function", "transform", "predict", "score", "fit"]:  # small-loop(public neighbor operation names)
+    var names = ["fit_predict", "fit_transform", "predict_log_proba", "predict_proba", "score_samples",
+                 "decision_function", "transform", "predict", "score", "fit"]
+    for suffix in names:  # small-loop(public neighbor operation names)
         if operation.endswith(suffix):
             return suffix
     raise Error("RuntimeError: unknown native neighbor lifecycle operation " + operation)
