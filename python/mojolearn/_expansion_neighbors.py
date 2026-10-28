@@ -33,9 +33,8 @@ from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
 from ._mode import RegressorScoreMixin
-from . import _backend, _native_family_bridge
+from . import _native_family_bridge
 from ._native_robust_bridge import native_method as _native_local_method
-from ._metrics_impl import _get_binding as _metrics_binding
 
 # The compiled family owner (bindings/neighbors_native.mojo), connected once
 # at import: PolynomialCountSketch's `fit`, `transform` and `fit_transform`
@@ -100,28 +99,6 @@ def _dense(X):
 def _f32(X, name="X"):
     a, _ = as_f32_c(_dense(X), ndim=2, name=name)
     return a
-
-
-def _feature_names_in(est, input_features):
-    d = est.n_features_in_
-    if input_features is None:
-        return [f"x{i}" for i in range(d)]  # glue: feature names over the d columns
-    names = [str(v) for v in input_features]  # glue: feature names over the d columns
-    if len(names) != d:
-        raise ValueError(f"input_features should have length equal to number of features ({d}), got {len(names)}")
-    return names
-
-
-def _names_out(names):
-    """sklearn returns an object ndarray of str; an Array holds numbers only,
-    so the names come back as a list of str, in the same order."""
-    return list(names)
-
-
-def _prefixed_names(est, count):
-    """sklearn's ClassNamePrefixFeaturesOutMixin: `<classname lower><i>`."""
-    base = type(est).__name__.lower()
-    return _names_out([f"{base}{i}" for i in range(count)])  # glue: feature names over the d columns
 
 
 def _accuracy(y_true, y_pred, sample_weight=None):
@@ -1173,7 +1150,7 @@ class KernelPCA(_XNeighbors):
         -------
         names : list of str
         """
-        return _prefixed_names(self, self.eigenvalues_.shape[0])
+        return _NATIVE(self, "family_xn_names_kpca", (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== RandomState
@@ -1440,13 +1417,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         -------
         names : list of str
         """
-        names = _feature_names_in(self, input_features)
-        base = type(self).__name__.lower()
-        out = [f"{base}_{nm}_sqrt" for nm in names]  # glue: feature names over the d columns
-        for j in range(1, int(self.sample_steps)):  # glue: feature names over the d columns
-            out += [f"{base}_{nm}_cos{j}" for nm in names]  # glue: feature names over the d columns
-            out += [f"{base}_{nm}_sin{j}" for nm in names]  # glue: feature names over the d columns
-        return _names_out(out)
+        return _NATIVE(self, "family_xn_names_achi2", (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== SkewedChi2Sampler
@@ -1529,27 +1500,15 @@ class SkewedChi2Sampler(_XNeighbors):
     @property
     def random_weights_(self):
         """Random projection weights, shape (n_features, n_components)."""
-        # SCHI2_LAZYW: made from z on the first read (one binding call, main's
+        # SCHI2_LAZYW: made from z on the first read (one native call:
+        # bindings/neighbors_semi_native.mojo `schi2_public_weights`, main's
         # kernel and words) when no transform has made it yet. Stored under
         # `_random_weights` (an older pickle's plain attribute still reads).
-        st = self.__dict__
-        z = st.get("_schi2_z")
-        if z is not None:
-            w = _empty_out(z.shape, "<f4")
-            self._bind().x_neighbors_kfeat_schi2_weights(addr_ro(z, name="schi2 z"),
-                                                         addr(w, name="random_weights_"), z.size)
-            st["_random_weights"] = w
-            del st["_schi2_z"]
-        if "_random_weights" in st:
-            return st["_random_weights"]
-        if "random_weights_" in st:
-            return st["random_weights_"]
-        raise AttributeError("'SkewedChi2Sampler' object has no attribute 'random_weights_'")
+        return _NATIVE(self, "family_xn_schi2_weights", (), _NATIVE_CONTEXT)
 
     @random_weights_.setter
     def random_weights_(self, value):
-        self.__dict__.pop("_schi2_z", None)
-        self.__dict__["_random_weights"] = value
+        _NATIVE(self, "family_xn_schi2_set_weights", (value,), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Apply the approximate feature map to X.
@@ -1594,7 +1553,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         names : list of str
         """
-        return _prefixed_names(self, int(self.n_components))
+        return _NATIVE(self, "family_xn_names_schi2", (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== LabelPropagation
@@ -2021,11 +1980,7 @@ class KNNImputer(_XNeighbors):
         -------
         names : list of str
         """
-        names = _feature_names_in(self, input_features)
-        out = [nm for f, nm in enumerate(names) if self._valid[f] or self.keep_empty_features]  # glue: feature names over the d columns
-        if self.add_indicator:
-            out += [f"missingindicator_{names[f]}" for f in self._miss_cols]  # glue: feature names over the d columns
-        return _names_out(out)
+        return _NATIVE(self, "family_xn_names_imputer", (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== PageRank
@@ -2163,8 +2118,7 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     >>> n_components, labels = mojolearn.connected_components(A, directed=False)
     """
     return _NATIVE(None, "family_xn_graph_connected_components",
-                   (_backend.binding(_XNeighbors._BINDING, numeric_mode), A, directed, connection, return_labels),
-                   _NATIVE_CONTEXT)
+                   (numeric_mode, A, directed, connection, return_labels), _NATIVE_CONTEXT)
 
 
 # ====================================================================== Louvain
@@ -2395,24 +2349,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         mean : Array of shape (n_queries,), float32
         var : Array of shape (n_queries,), float32
         """
-        Q = _f32(X)
-        M = self.Z_.shape[0]
-        if not _OLD_ITEMS and Q.shape[0]:
-            # the fused chain (lane/py-dn-kern): Ksu, the mean and the
-            # variance per row tile on the device (`xn_svgp_predict`)
-            nq = Q.shape[0]
-            mean = _empty_out((nq,), "<f4")
-            var = _empty_out((nq,), "<f4")
-            self._op("svgp_predict", [(Q, 0), (self.Z_, 0), (self._alpha, 0), (self._C, 0), (mean, 1), (var, 1)],
-                     (nq, M, Q.shape[1]),
-                     (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance),
-                      _f32_scalar(self.kernel_variance)))
-            return mean, var
-        Ksu = self._k(Q, self.Z_)
-        mean = self._matmul(Ksu, self._alpha.reshape((M, 1))).reshape((Q.shape[0],))
-        var = _empty_out((Q.shape[0],), "<f4")
-        self._op("svgp_var", [(Ksu, 0), (self._C, 0), (var, 1)], (Q.shape[0], M), (_f32_scalar(self.kernel_variance),))
-        return mean, var
+        return _NATIVE(self, "family_xn_graph_svgp_predict_f", (None, X), _NATIVE_CONTEXT)
 
     def predict_y(self, X):
         """Mean and variance of the observations at X (latent variance plus
@@ -2428,8 +2365,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         mean : Array of shape (n_queries,), float32
         var : Array of shape (n_queries,), float32
         """
-        mean, var = self.predict_f(X)
-        return mean, self._unary(var, _U_IDENTITY, 1.0, _f32_scalar(self.noise_variance))
+        return _NATIVE(self, "family_xn_graph_svgp_predict_y", (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predictive mean at X (the mean of :meth:`predict_f`).
@@ -2462,9 +2398,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         float
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
-        return _NATIVE(self, "family_xn_graph_svgp_score",
-                       (None, X, y, sample_weight, _metrics_binding(getattr(self, "numeric_mode", None))),
-                       _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_graph_svgp_score", (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
 # The compiled owner of KernelPCA's fit, fit_transform and transform
 # (bindings/kpca_native.mojo through the decomposition owner door).
@@ -2475,4 +2409,4 @@ _KPCA_CALL, _KPCA_CONTEXT = _native_decomp_bridge.connect_public(
               "kpca_old_items": _OLD_ITEMS})
 
 # Import connection; selected public operations admit the live native binding.
-_native_family_bridge.connect_bindings("_mojolearn_x_neighbors")
+_native_family_bridge.connect_bindings("_mojolearn_x_neighbors", "_mojolearn_metrics")
