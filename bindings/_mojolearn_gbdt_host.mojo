@@ -1601,8 +1601,9 @@ def gbdt_fit_binding(
         ):
             # the CTR categorical arm (gbdt-categorical-ctr-tables):
             # gbdt/host/gbdt_oracle_ctr.mojo, every permutation
-            # COMPILE REQUIRED BEFORE MERGE: the CTR eval owner and this
-            # route are uncompiled on lane/gbdt-cpu-ctr-eval (2026-10-27).
+            # Full CPU binding compiled at 2d5c5081a83e, 2026-10-28:
+            # x86-64-v3/O0, 32 jobs, exit 0. Runtime/identity are pending.
+            # Receipt: docs/plans/gbdt-cpu-ctr-eval-20261028-compile.json.
             # The owner expands eval rows with its final learn-only tables
             # and reuses the existing held-out boost/detector/shrink arm.
             var ev = _gbdt_host_eval_arm(

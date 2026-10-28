@@ -574,10 +574,10 @@ def gbdt_ctr_host_fit(
                     flat.append(columns[c][r])
         cindexes.append(_binarize_columns(flat, n_rows, n_columns, grid, layout))
 
-    # COMPILE REQUIRED BEFORE MERGE (2026-10-27, lane/gbdt-cpu-ctr-eval):
-    # this newly connected held-out path has source review only. Compile
-    # the GBDT host binding before integration; runtime/identity evidence
-    # remains pending. See docs/plans/gbdt-cpu-ctr-eval-20261027.md.
+    # Compiled 2026-10-28 at 2d5c5081a83e: full CPU GBDT host binding,
+    # Mojo 1.0.0 (ed45d567), x86-64-v3, O0, 32 allocated CPUs/jobs, exit 0.
+    # Runtime and identity remain pending; this is compilation evidence.
+    # Receipt: docs/plans/gbdt-cpu-ctr-eval-20261028-compile.json.
     # Match `train`'s eval prelude: use final learn-only CTR statistics,
     # not the ordered training columns or an eval-pool target histogram.
     # `expand_raw_columns` is the same host helper the GPU path calls; its

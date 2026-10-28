@@ -1,15 +1,19 @@
-# CPU CTR held-out evaluation handoff — 2026-10-27
+# CPU CTR held-out evaluation handoff — updated 2026-10-28
 
-**UNCOMPILED. MUST COMPILE THE AFFECTED PATH BEFORE MERGE.** This branch is
-source work authorized by Andrew's request to leave larger CPU configuration
-repairs in separate worktrees, with their compilation requirement explicit.
-No runtime, identity or vendor campaign was run. Source checks do not establish
-that Mojo accepts this change or that the public operation runs correctly.
+**Full CPU GBDT binding compiled successfully. Runtime and identity remain
+pending.** Source commit `2d5c5081a83eab132a56a2ef0e199e23c9bf7ed6` was built on
+the authorized Peer2 RunPod CPU allocation on 2026-10-28. This replaces the
+initial uncompiled handoff and satisfies the affected-path compilation
+prerequisite for that source. It does not establish runtime behavior or
+bitwise identity. This follow-up changes comments and evidence only.
 
 Branch: `lane/gbdt-cpu-ctr-eval-20261027`.
 Base: `b3239afc49478f01ff338b35121ee749396417aa`.
 Worktree: `/Users/andrewhendel/mojolearn-wt/gbdt-cpu-ctr-eval-20261027`.
 Evidence: `/Users/andrewhendel/mojolearn-evidence/gbdt-cpu-ctr-eval-20261027/`.
+Compile evidence:
+`/Users/andrewhendel/mojolearn-evidence/peer2-native-boundary-20261027/cpu-batch-7/remote/leg_out/gbdt-ctr/`.
+Tracked receipt: [gbdt-cpu-ctr-eval-20261028-compile.json](gbdt-cpu-ctr-eval-20261028-compile.json).
 
 The change connects evaluation sets to the existing CPU categorical CTR fit.
 It does not introduce another CTR algorithm. The GPU fit already calls the
@@ -48,28 +52,35 @@ Changed files:
   unchanged, that the held-out loss agrees with final-model prediction, and
   that best-model shrink honors its minimum-tree threshold.
 
-`git diff --check` and Python AST parsing of the modified fixture passed.
-The fixture was not imported or executed. Required source guards run through
-the normal pre-push hook; its complete output and exit status are retained in
-the evidence directory. `receipt.json` records the final commit and guard
-result after pushing. There is no binary or compilation receipt for this lane.
+`git diff --check`, Python AST parsing of the modified fixture and all four
+source guards passed for the implementation commit. The fixture was not
+imported or executed. The normal pre-push hook remains required for this
+comments/evidence follow-up, with complete logs retained in the evidence
+directory. Its original `receipt.json` records the source-only handoff as it
+stood then; the tracked compile receipt above records the subsequent build.
 
-Before integration, compile the actual host binding with the supported local
-Mojo toolchain, `MOJOLEARN_NUMERIC_IDENTICAL=1`, `MOJOLEARN_COLUMN_CPU`, and the
-Mac CPU target. The repository entry is
-`bindings/entry/entry__mojolearn_gbdt_host.mojo`, used by
-`bindings/build_gbdt_host.sh`. A focused entry that actually instantiates
-`gbdt_fit_binding` and its CTR owner is also acceptable. Use the actual CPU
-allocation for compiler workers; do not inherit the builder's two-worker
-default. Retain command, source closure, compiler, flags, exit status, complete
-log and binary hash. Repair compile failures and replace the inline
-compilation-pending notes with that receipt before merging.
+The full entry `bindings/entry/entry__mojolearn_gbdt_host.mojo` compiled with
+Mojo `1.0.0 (ed45d567)`, `--optimization-level 0`, `--target-cpu x86-64-v3`,
+`MOJOLEARN_NUMERIC_IDENTICAL=1` and `MOJOLEARN_COLUMN_CPU`; exit status was 0.
+Affinity provided 32 CPUs, the cgroup CPU quota was unlimited, and the compiler
+used `-j 32`. CPU saturation was not measured. The retained binary is
+18,735,176 bytes, SHA-256
+`5cc38580b1dc644a3164943b2bc374e75c6b7d113f8f0b25d504723d85bd4c30`.
+The source archive and binary hashes were checked against the compile records,
+and both changed Mojo files in the archive matched the implementation commit.
 
-Runtime behavior and identity remain pending after any successful compile.
+Source bytes, complete compiler output and binary are retained on the Mac
+under the compile evidence path above and in R2's complete archive:
+`measurements/runpod-cpu/mojolearn-cpu-peer2-native-20261027-20261028-040353/results-complete.tgz`.
+The owner recorded verified termination of pod `b8o973bpjz3685` after retention.
+No build or runtime test was repeated for this comments/evidence update.
+Main integration remains serialized by the coordinating thread.
+
+Runtime behavior and identity remain pending after this successful compile.
 Future affected-path checks should cover no-eval preservation, explicit/default
 best-model behavior, Iter and IncToDec stopping, constant eval targets, more
 than one CTR permutation, unseen categorical codes, a mixture of numeric,
 one-hot and CTR columns, and malformed/NaN categorical inputs. This handoff
 does not authorize a new runtime or cross-vendor campaign; follow the current
-owner instruction when that work is scheduled. Do not change public support
-claims or identity evidence on the strength of this uncompiled branch.
+owner instruction when that work is scheduled. Do not promote this compilation
+to runtime success or identity evidence, or extend it to another target.
