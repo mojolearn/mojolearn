@@ -1175,6 +1175,10 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
     )
     for i in range(len(stored)):  # driver-loop: over the constructor's stored fields
         py_setitem(fields, stored[i][0], stored[i][1])
+    if len(args) > len(names):
+        # GradientBoosting.__init__'s own numeric_mode= (the class is
+        # _mojolearn_native_public, so no _mode wrapper stores it)
+        _gbdt_store_mode(model, args[len(names)])
     return PythonObject(None)
 
 
@@ -1219,13 +1223,22 @@ def _gbdt_default_mode(model: PythonObject) raises:
         py_setitem(fields, "numeric_mode", PythonObject(None))
 
 
+def _gbdt_store_mode(model: PythonObject, mode: PythonObject) raises:
+    """The former numeric-mode wrapper's rule: a given mode is stored; None
+    stores None unless the model already has a numeric_mode."""
+    if mode is not None:
+        py_setitem(py_fields(model), "numeric_mode", mode)
+    else:
+        _gbdt_default_mode(model)
+
+
 def gbdt_ordered_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`OrderedRMSE.__init__(n_estimators, max_depth, learning_rate,
     l2_leaf_reg, border_count)`: the ordered settings' checks, then the
     GradientBoosting constructor with loss RMSE, no boost-from-average and
     nan_mode Forbidden."""
-    if py_type(args) is not _b().tuple or len(args) != 5:
-        raise Error("TypeError: the OrderedRMSE constructor takes its five parameters")
+    if py_type(args) is not _b().tuple or (len(args) != 5 and len(args) != 6):
+        raise Error("TypeError: the OrderedRMSE constructor takes its five parameters and numeric_mode")
     ordered_option_values(Python.tuple(args[0], args[1], args[4], args[2], args[3]), context)
     _gbdt_subclass_storage(model, Python.tuple("numeric_mode"), context)
     var overrides = Python.dict()
@@ -1238,7 +1251,7 @@ def gbdt_ordered_construct(model: PythonObject, args: PythonObject, context: Pyt
     py_setitem(overrides, "boost_from_average", PythonObject(False))
     py_setitem(overrides, "nan_mode", PythonObject("Forbidden"))
     _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
-    _gbdt_default_mode(model)
+    _gbdt_store_mode(model, args[5] if len(args) == 6 else PythonObject(None))
     return PythonObject(None)
 
 
@@ -1247,8 +1260,8 @@ def gbdt_feature_freq_construct(model: PythonObject, args: PythonObject, context
     l2_leaf_reg, random_state)`: the GradientBoosting constructor (one
     depth-two RMSE tree), then the sources: at least two distinct integers."""
     var b = _b()
-    if py_type(args) is not b.tuple or len(args) != 4:
-        raise Error("TypeError: the FeatureFreq constructor takes its four parameters")
+    if py_type(args) is not b.tuple or (len(args) != 4 and len(args) != 5):
+        raise Error("TypeError: the FeatureFreq constructor takes its four parameters and numeric_mode")
     _gbdt_subclass_storage(model, Python.tuple("numeric_mode", "sources"), context)
     var overrides = Python.dict()
     py_setitem(overrides, "loss", PythonObject("RMSE"))
@@ -1258,7 +1271,7 @@ def gbdt_feature_freq_construct(model: PythonObject, args: PythonObject, context
     py_setitem(overrides, "l2_leaf_reg", args[2])
     py_setitem(overrides, "random_state", args[3])
     _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
-    _gbdt_default_mode(model)
+    _gbdt_store_mode(model, args[4] if len(args) == 5 else PythonObject(None))
     var parsed = Python.list()
     try:
         var items = py_call_typed(b.tuple, args[0])

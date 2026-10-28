@@ -16,6 +16,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_exceptions import classical_require_fitted
 from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _fields
 from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
@@ -515,6 +516,12 @@ def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, co
         _setting(args[0], context["xseq_lifecycle_context"])
     elif operation == "garch_fit":
         _setting(args[1], context["xseq_lifecycle_context"])
+    if operation.endswith("_predict"):
+        # The fitted check the former `_mode` class-creation guard made:
+        # NotFittedError (the xseq error boundary raises the active class)
+        # unless a fit completed (`_mojolearn_fitted`) or a public fitted
+        # attribute is set (scikit-learn's check_is_fitted rule).
+        classical_require_fitted(model, False, "predict", context["xseq_lifecycle_context"])
     var result = PythonObject(None)
     if operation == "theta_fit":
         result = _theta_fit(model, fields, args, context)
@@ -532,5 +539,9 @@ def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, co
         result = _garch_fit(model, fields, args, context)
     else:
         raise Error("RuntimeError: unknown sequence forecaster operation " + operation)
+    if operation.endswith("_fit"):
+        # Fit bookkeeping of the former `_mode` fit wrapper: a completed fit
+        # marks the instance fitted (staged, committed with the fitted state).
+        _store(fields, "_mojolearn_fitted", PythonObject(True))
     forecast_commit(target, fields, context["xseq_forecast_ownership"])
     return result

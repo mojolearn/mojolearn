@@ -1,0 +1,18 @@
+{
+ "exit_code": 0,
+ "seconds": 755,
+ "source_commit": "f7b9ea953cea2d1f277346bc3e9f65a90f3ebb44",
+ "tracked_dirty": false,
+ "entry": "checks/tree_auxiliary_public_compile.mojo",
+ "command_script": "/Users/andrewhendel/mojolearn-evidence/lifecycle-gbdt-20261028/compile-command.sh",
+ "command": "pixi run ... mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/tree_auxiliary_public_compile.mojo",
+ "compiler_version": "Mojo 1.0.0 (ed45d567)",
+ "jobs": 10,
+ "resource": "Mac, ~/mojolearn-evidence/compile_slot.sh nice 19",
+ "scope": "Complete tree public dispatcher incl. GBDT adapter lifecycle and the new GradientBoosting gbdt_model_public_operation envelope; CPU column, identical, O0",
+ "not_covered": "GPU/NVIDIA/AMD/Apple builds, fast mode, full runtime binding modules, Python import/tests, runtime, identity",
+ "runtime_executed": false,
+ "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-gbdt-20261028/compile1/compile.log",
+ "binary": "/Users/andrewhendel/mojolearn-evidence/lifecycle-gbdt-20261028/compile1/tree_auxiliary_public_compile.so",
+ "binary_sha256": "f27378d8e0555b031b4096e0eb8477d16785f1f00a47ef2d62fc585871f7b0fc"
+}
