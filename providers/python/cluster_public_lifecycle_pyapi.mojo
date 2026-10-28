@@ -80,6 +80,12 @@ def _admit_model(model: PythonObject, context: PythonObject) raises -> PythonObj
         if String(name) == "metric_params" and value is not None:
             # OPTICS consumes only p from this native mapping. An admitted
             # object ndarray still must not invoke element conversion hooks.
+            var mappings = context["mapping_types"]
+            var mapping = False
+            for j in range(len(mappings)):  # driver-loop: exact native mapping owners, before method lookup
+                mapping = mapping or py_type(value) is mappings[j]
+            if not mapping:
+                raise Error("TypeError: OPTICS metric_params requires a native mapping or None")
             var p = py_call(value.get, "p", PythonObject(None))
             if p is not None:
                 host_inference_scalar(p, context)
