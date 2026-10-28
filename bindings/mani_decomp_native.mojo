@@ -20,6 +20,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
+from bindings.manifold_storage_native import matrix_device, device_identifier
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.metrics_native_support import metric_warn
 from bindings.family_common import (
@@ -228,8 +229,8 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
             # `_lanczos_batch`: steps j .. m - 1, then their alphas and betas
             # up to the first breakdown
             if resident:
-                _ = family_call(k.fn("x_decomp_dev_lanczos"), aid, qd._d.id, abd._d.id, mk_ints([n, j, m, cap]))
-                _ = family_call(k.fn("x_decomp_dev_download"), abd._d.id, mk_store_addr(ab), PythonObject(2 * cap))
+                _ = family_call(k.fn("x_decomp_dev_lanczos"), aid, device_identifier(matrix_device(qd)), device_identifier(matrix_device(abd)), mk_ints([n, j, m, cap]))
+                _ = family_call(k.fn("x_decomp_dev_download"), device_identifier(matrix_device(abd)), mk_store_addr(ab), PythonObject(2 * cap))
                 _ = ab  # keep the Python object alive through the native call above
             else:
                 var pa = mk_addr(a, ctx)
@@ -284,7 +285,7 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
     var yt = mk_take_cols(yv, top, ctx)
     var qm: PythonObject
     if mk_on_dev(qd):
-        qm = mk_dev_view(qd._d, j, n, ctx)
+        qm = mk_dev_view(matrix_device(qd), j, n, ctx)
     else:
         var store = mk_store(qd, ctx)
         qm = mk_new(py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice, PythonObject(0),
