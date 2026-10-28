@@ -48,3 +48,5 @@ Remaining Python/CPython-dispatched paths (not a completion claim)
   claimed identical. Ordinary supported buffer behavior was source reviewed only.
 - No runtime/identity/vendor verification or benchmark runs authorized/performed.
   Compilation qualifies only the actual target/source closure recorded in provenance.
+
+Compile result: both roots PASS. neighbors-public at44015afec9 (round3), query-public at7f7ef0822d (round2). Later Radius-only fix does not affect query closure. All failures retained. Mojo1.0.0(ed45d567), LinuxCPU x86-64-v3 O0 identical, actual32 affinity CPUs/unlimited cgroup; jobs32. Full logs/source updates/binaries on Mac+R2; podosk7s6ype0o51m deleted VERIFIED, controller exit0. See compile-provenance.json. No runtime or identity verification.
