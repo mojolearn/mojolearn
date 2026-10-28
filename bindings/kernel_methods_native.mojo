@@ -969,7 +969,8 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     try:
         result = _kernel_methods_operation(model, operation, admitted, context, x)
     except error:
-        raise kernel_public_refusal(error, fitting, depth > 0, x.source.rows, x.source.cols, model)
+        var failure = kernel_public_refusal(error, fitting, depth > 0, x.source.rows, x.source.cols, model)
+        raise failure^
     finally:
         if fitting:
             estimator_fit_end(model, depth)
