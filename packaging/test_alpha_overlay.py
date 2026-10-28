@@ -26,6 +26,9 @@ class AlphaOverlayTests(unittest.TestCase):
         package.mkdir(parents=True)
         (package / '__init__.py').write_text('from ._version import __version__\n')
         (package / '_backend.py').write_text("_MODULES = ('_mojolearn', '_mojolearn_byte_lm')\n")
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
+        from test_verification_repository import seed_repo
+        seed_repo(self.root)
         self.dist = 'mojolearn-0.6.0.dist-info/'
         self.wheel = self.root / 'mojolearn-0.6.0-py3-none-manylinux_2_28_x86_64.whl'
         self.files = {
@@ -135,6 +138,25 @@ class AlphaOverlayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'explicit alpha'):
             overlay.assemble(self.wheel, self.python, '0.6.0', self.root / 'out')
 
+    def test_overlay_drops_stale_verification_assets_from_base(self):
+        self.files['mojolearn/verify_reference/models/stale.npz'] = b'stale model'
+        self.files['mojolearn/reference_cards/stale.card'] = b'stale reference'
+        self.files['mojolearn/identity_columns/old/stale.json'] = b'{}'
+        self.write()
+        result = overlay.assemble(self.wheel, self.python, '0.6.1a1', self.root / 'out')
+        with zipfile.ZipFile(result) as archive:
+            self.assertNotIn('mojolearn/verify_reference/models/stale.npz', archive.namelist())
+            self.assertNotIn('mojolearn/reference_cards/stale.card', archive.namelist())
+            self.assertNotIn('mojolearn/identity_columns/old/stale.json', archive.namelist())
+            self.assertEqual(archive.read('mojolearn/verify_reference/table.json'),
+                             (self.python / 'mojolearn/verify_reference/table.json').read_bytes())
+
+    def test_overlay_refuses_uncommitted_reference_table(self):
+        self.write()
+        (self.python / 'mojolearn/verify_reference/table.json').write_text('{"records": []}')
+        with self.assertRaisesRegex(ValueError, 'source commit'):
+            overlay.assemble(self.wheel, self.python, '0.6.1a1', self.root / 'out')
+
     def test_python_reference_patch_reuses_native_bytes_and_refuses_native_edits(self):
         def git(*args):
             return subprocess.check_output(['git', '-C', str(self.root), *args], stderr=subprocess.DEVNULL).decode().strip()
@@ -143,10 +165,10 @@ class AlphaOverlayTests(unittest.TestCase):
         git('config', 'user.name', 'Fixture')
         package = self.python / 'mojolearn'
         (package / '_version.py').write_text("__version__ = '0.6.0'\n")
-        (package / 'verify_reference').mkdir()
+        (package / 'verify_reference').mkdir(exist_ok=True)
         reference = package / 'verify_reference/table.json'
-        reference.write_text('{"cells": {}}\n')
-        (self.root / 'tools').mkdir()
+        reference.write_text('{"cells": {}, "records": []}\n')
+        (self.root / 'tools').mkdir(exist_ok=True)
         for name in ('identity_break.py', 'identity_trace_diff.py'):
             (self.root / 'tools' / name).write_text('# packaged harness fixture\n')
         native = self.root / 'kernel.mojo'
@@ -161,7 +183,7 @@ class AlphaOverlayTests(unittest.TestCase):
         payload = dict(schema='mojolearn.linux-payload.v1', source_commit=parent, version='0.6.0')
         self.files[self.dist + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()
         self.write()
-        reference.write_text('{"cells": {"new": "measured"}}\n')
+        reference.write_text('{"cells": {"new": "measured"}, "records": []}\n')
         (package / '_version.py').write_text("__version__ = '0.6.1'\n")
         citation.write_text('version: "0.6.1"\n')
         git('add', 'python', 'CITATION.cff'); git('commit', '-m', 'reference patch')
