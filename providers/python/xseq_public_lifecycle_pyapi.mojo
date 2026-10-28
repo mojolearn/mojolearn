@@ -29,7 +29,8 @@ def _finite(view: PythonObject, name: String, model_name: String, context: Pytho
         return
     var input = view
     if not Bool(py=view.flags.c_contiguous):
-        input = py_call(view.copy, "C")
+        # Resolve the admitted ndarray method, not PythonObject.copy's Mojo overload.
+        input = py_call(py_call(native_loaded_module("builtins").getattr, view, "copy"), "C")
     var entry = xseq_base(context, "all_finite_f32" if code == 11 else "all_finite_f64")
     if Int(py=py_call(entry, sequential_address(input), Int(py=input.size))) != 1:
         raise Error("Input " + name + " contains NaN or infinity (" + model_name + ").")
