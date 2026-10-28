@@ -37,10 +37,10 @@ passed. Full output is retained under
 syntax-final.log,syntax-final.exit}. No native compilation, product runtime,
 performance or GPU execution was performed in this lane.
 
-24 focused public runtime cases are UNRUN in
+28 focused public runtime cases are UNRUN in
 python/mojolearn/tests/test_scaler_input_snapshot_provider.py: StandardScaler and
 MinMaxScaler, combined/direct-disabled fallback, NaN fallback, native/strided/
-big-endian/readonly/Array-view storage, copy=False ownership, readonly Array
+big-endian/readonly/Array-view/mapped-arena storage, copy=False ownership, readonly Array
 views and mutated _mv protocol rejection. Reuse existing scaler fit/lifecycle,
 NumPy-free buffer, fitted-error and checkpoint tests at integration. Small
 native target: bindings/_mojolearn_runtime_classical_host.mojo via
