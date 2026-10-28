@@ -7,7 +7,8 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_arrays import classical_input, classical_is_array, classical_typed, classical_address
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_locations
-from bindings.classical_validate import classical_refuse_sparse, RESHAPE_HINT
+from bindings.classical_validate import RESHAPE_HINT
+from bindings.host_sparse_native import host_sparse_format
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch, _one_of, sequential_admit_value
 from bindings.sequential_inputs import _promote
@@ -264,7 +265,11 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
         return snapshot^
     # Normalizer's sparse tag admits the wrapper, but its existing x_prep
     # preparation refuses sparse with the shared dense-owner wording.
-    classical_refuse_sparse(source, "MaxAbsScaler")
+    # Match loaded native sparse class identities before general admission.
+    # Reading an unadmitted class's __module__ could invoke metaclass or
+    # descriptor hooks even on this refusal path.
+    if host_sparse_format(source).byte_length() > 0:
+        raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (MaxAbsScaler takes dense X only.)")
     classical_admit_value(source, context)
     if native_pandas_exact(source):
         return _pandas_snapshot(source, name, validate, scan, context)
