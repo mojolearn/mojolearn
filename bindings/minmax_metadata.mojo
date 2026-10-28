@@ -3,9 +3,11 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
+from bindings.classical_arrays import classical_input, classical_is_array
 from bindings.sequential_admission import _one_of
 from core.classical_pandas_impl import pd_raw_at, _pd_double
+from core.cast_in import cast_in_kind, NPY_BOOL
+from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
 
 def _flag(value: PythonObject, name: String, context: PythonObject) raises -> Bool:
     var b = Python.import_module("builtins")
@@ -28,11 +30,11 @@ def _endpoint(value: PythonObject, context: PythonObject) raises -> Float64:
     if not _one_of(cls,context["scalar_types"]):
         raise Error("feature_range must contain two numeric endpoints")
     var input = classical_input(value,context)
-    var item = Int(py=input.itemsize)
-    var kind = classical_cast_kind(input,item,"feature_range",context)
-    var native = classical_is_array(input,context) or Bool(py=input.dtype.isnative)
-    var result = _pd_double(pd_raw_at(Int(py=classical_address(input)),0,item,native),kind,item)
-    _ = input^
+    var shape = array_shape_once(input,context)
+    var metadata = array_metadata_once(input,shape^,"feature_range",context,allow_non_native=True)
+    var item = metadata.source.itemsize
+    var result = _pd_double(pd_raw_at(metadata.source.addr,0,item,metadata.native_byte_order),metadata.source.kind,item)
+    _ = metadata^
     return result
 
 
@@ -47,24 +49,33 @@ def minmax_range_pair(value: PythonObject, context: PythonObject) raises -> Pyth
         if len(value) != 2:
             raise Error("feature_range must contain two numeric endpoints")
         return Python.tuple(_endpoint(value[0],context),_endpoint(value[1],context))
-    var input = classical_input(value,context)
-    if Int(py=input.ndim) != 1:
+    # An exact Array already owns native storage; converting it to an ndarray
+    # here would recapture mutable slots before the operation snapshot.
+    var input = value if classical_is_array(value,context) else classical_input(value,context)
+    var shape = array_shape_once(input,context)
+    if len(shape) != 1:
         raise Error("feature_range must be one-dimensional")
-    if Int(py=input.size) != 2:
+    if shape[0] != 2:
         raise Error("feature_range must contain two numeric endpoints")
-    if not classical_is_array(input,context) and String(input.dtype.kind) == "b":
+    var metadata = array_metadata_once(input,shape^,"feature_range",context,
+                                      allow_non_native=True,allow_unsupported=True)
+    if not metadata.is_array and metadata.dtype_number == NPY_BOOL:
         raise Error("feature_range must contain two numeric endpoints")
-    if not classical_is_array(input,context) and String(input.dtype.kind) == "O":
+    if not metadata.is_array and metadata.dtype_number == 17:  # NumPy NPY_OBJECT
+        # Exact ndarray indexing only returns the retained object references;
+        # _endpoint refuses callback/protocol values before converting them.
         var result = Python.tuple(_endpoint(input[0],context),_endpoint(input[1],context))
-        _ = input^
+        _ = metadata^
         return result
-    var item = Int(py=input.itemsize)
-    var kind = classical_cast_kind(input,item,"feature_range",context)
-    var native = classical_is_array(input,context) or Bool(py=input.dtype.isnative)
-    var addr = Int(py=classical_address(input))
-    var stride = Int(py=input.strides[0])
-    var low = _pd_double(pd_raw_at(addr,0,item,native),kind,item)
-    var high = _pd_double(pd_raw_at(addr,stride,item,native),kind,item)
-    _ = input^
+    if not metadata.castable:
+        # Reproduce the existing refusal from captured words, never reread
+        # dtype or execute an admission-only CastIn placeholder.
+        _ = cast_in_kind(metadata.dtype_number,metadata.source.itemsize,"feature_range")
+        raise Error("feature_range must contain two numeric endpoints")
+    var item = metadata.source.itemsize
+    var kind = metadata.source.kind
+    var low = _pd_double(pd_raw_at(metadata.source.addr,0,item,metadata.native_byte_order),kind,item)
+    var high = _pd_double(pd_raw_at(metadata.source.addr,metadata.source.s0,item,metadata.native_byte_order),kind,item)
+    _ = metadata^
     return Python.tuple(low,high)
 
