@@ -345,6 +345,12 @@ def neighbor_query(model: PythonObject, op: String, args: PythonObject, context:
     if op == "extend" and String(kind[0]) == "ivf":
         return _ivf_extend(model, args, context)
     _admit_state(model, kind, context)
+    if op == "getstate" and String(kind[0]) == "ivf":
+        var fields = py_fields(model)
+        _ivf_materialize(fields, context)
+        var state = py_call(fields.copy)
+        _ = py_call(state.pop, "_resident", PythonObject(None))
+        return state
     if op == "search" and String(kind[0]) == "ivf":
         return _ivf_search(model, args, context)
     var binding = _query_route(model, "base", context)

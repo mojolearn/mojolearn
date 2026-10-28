@@ -278,7 +278,7 @@ class IVFIndex(NumericModeMixin):
         self : IVFIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_ivf_fit", (self._bind(), X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_ivf_fit", (None, X), _FAMILY_CONTEXT)
 
     # -- the resident index (lane/py-dn-ann, 2026-09-28; ivf/resident.mojo,
     # the closure of DEVIATION 1804) --
@@ -345,10 +345,7 @@ class IVFIndex(NumericModeMixin):
         """A pickle or a deepcopy carries no handle: the integer means
         something only in the process and registry that minted it. A resident
         build's list vectors are exported first, so the copy carries them."""
-        self._materialize_list_data()
-        state = self.__dict__.copy()
-        state.pop("_resident", None)
-        return state
+        return _NATIVE_QUERY(self, "getstate", (), _QUERY_CONTEXT)
 
     @staticmethod
     def _search_filter(filter, n):
@@ -545,3 +542,6 @@ _NATIVE_QUERY, _QUERY_CONTEXT = _connect_queries(
 IVFFlat = IVFIndex
 
 __all__ = ["IVFIndex", "IVFFlat"]
+
+# Import-time connection; native operations select the live configured binding.
+_native_family_bridge.connect_bindings("_mojolearn_ivf")

@@ -407,7 +407,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self : IVFPQIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_pq_fit", (self._bind(), X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_pq_fit", (None, X), _FAMILY_CONTEXT)
 
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
@@ -745,7 +745,7 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self : CagraIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_cagra_fit", (self._bind(), X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_cagra_fit", (None, X), _FAMILY_CONTEXT)
 
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
@@ -969,7 +969,7 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self : IVFSQIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_sq_fit", (self._bind(), X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_sq_fit", (None, X), _FAMILY_CONTEXT)
 
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
@@ -1146,7 +1146,7 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self : IVFRaBitQIndex
             The fitted index.
         """
-        return _FAMILY(self, "family_xn_ann_rabitq_fit", (self._bind(), X), _FAMILY_CONTEXT)
+        return _FAMILY(self, "family_xn_ann_rabitq_fit", (None, X), _FAMILY_CONTEXT)
 
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
@@ -1329,3 +1329,6 @@ _native_archive_bridge.register(IVFRaBitQIndex, IVFRaBitQIndex._SAVE_FORMAT, _an
 # The device index of every x_ann kind is released by the native finalizer,
 # through the minting binding's `x_ann_index_release`.
 _native_archive_bridge.lifetime(_AnnResident, "x_ann_index_release")
+
+# Import-time connection; native operations select the live configured binding.
+_native_family_bridge.connect_bindings("_mojolearn_x_ann")
