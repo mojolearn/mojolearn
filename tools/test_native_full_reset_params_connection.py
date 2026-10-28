@@ -488,3 +488,8 @@ def test_umap_parameter_source_keeps_scalar_arrays_and_native_bounds():
     assert 'result = bitcast[Float64](word)' in source
     assert 'result = Float64(Float32(result))' not in source  # final return rounds once
     assert 'return Float64(Float32(result))' in source
+    array_refusal = source.split('def _parameter_array(', 1)[1].split('def umap_integer(', 1)[0]
+    assert 'except:' in array_refusal
+    assert 'raise Error("ValueError: UMAP " + name + detail)' in array_refusal
+    assert '_parameter_array(value, name, True, context)' in source
+    assert '_parameter_array(value, name, False, context)' in source
