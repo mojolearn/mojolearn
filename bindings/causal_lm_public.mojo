@@ -840,7 +840,7 @@ def _engine_admission(model: PythonObject, state: PythonObject, batch: Int, leng
         raise problem
 
 
-def _run_engine(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+def _run_engine(model: PythonObject, ids: PythonObject, state: PythonObject, step: Bool = False) raises -> PythonObject:
     var shape = ids.shape
     var batch = Int(py=shape[0])
     var length = Int(py=shape[1])
@@ -851,7 +851,7 @@ def _run_engine(model: PythonObject, ids: PythonObject, state: PythonObject) rai
     try:
         # Common endpoints own per-call GIL release, lock acquisition and
         # session reservation. The native layer loop enters GIL-held.
-        logits = owner.native.forward(address, length)
+        logits = owner.native.forward(address, length, step)
     except problem:
         owner.publish()
         raise problem
@@ -867,7 +867,7 @@ def _run_engine(model: PythonObject, ids: PythonObject, state: PythonObject) rai
 
 def _run(model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
     if getenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0") == "1":
-        return _run_engine(model, ids, state)
+        return _run_engine(model, ids, state, remote_step)
     var snapshot: Optional[GenerationOperationSnapshot] = None
     return _run_prepared(model, ids, state, snapshot, remote_step)
 

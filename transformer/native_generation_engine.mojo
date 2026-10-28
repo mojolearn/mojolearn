@@ -22,6 +22,12 @@ struct NativeGenerationLayer(Movable):
     var writeback_layouts: List[BorrowedBufferLayout]
     var writeback_addresses: List[Int]
     var state_index: Int
+    var kind: Int
+    var output_slot: Int
+    var floats: List[Float64]
+    var report_size: Int
+    var report: List[Float32]
+    var completed: Bool
 
     def __init__(out self, endpoint: NativeExecutionEndpoint, operation: Int,
                  var addresses: List[Int], var parameters: List[Int], cached: Int):
@@ -39,6 +45,12 @@ struct NativeGenerationLayer(Movable):
         self.writeback_layouts = List[BorrowedBufferLayout]()
         self.writeback_addresses = List[Int]()
         self.state_index = -1
+        self.kind = 0
+        self.output_slot = 12
+        self.floats = List[Float64]()
+        self.report_size = 0
+        self.report = List[Float32]()
+        self.completed = False
 
 
 struct NativeGenerationModel(Movable):
@@ -97,7 +109,7 @@ struct NativeGenerationModel(Movable):
         self.calls[op] += 1
         _ = self.primitive.call(op, a, p, f)
 
-    def forward(mut self, ids: Int, length: Int) raises -> List[Float32]:
+    def forward(mut self, ids: Int, length: Int, step: Bool = False) raises -> List[Float32]:
         # These checks precede execution/failure invalidation, matching _state.
         if length < 0 or self.position < 0:
             raise Error("CausalLM: negative sequence position")
@@ -122,15 +134,34 @@ struct NativeGenerationModel(Movable):
                 var next = List[Float32](length=rows * self.width, fill=0)
                 var addresses = self.layers[i].addresses.copy()
                 addresses[0] = Int(hidden.unsafe_ptr())
-                addresses[12] = Int(next.unsafe_ptr())
+                addresses[self.layers[i].output_slot] = Int(next.unsafe_ptr())
                 var parameters = self.layers[i].parameters.copy()
                 parameters[0] = self.batch
                 parameters[1] = length
                 if self.layers[i].state_index >= 0:
                     self.layers[i].cached = self.state_counters[self.layers[i].state_index]
-                parameters[8] = self.layers[i].cached
+                var kind = self.layers[i].kind
+                var operation = self.layers[i].operation
+                if kind == 0:
+                    parameters[8] = self.layers[i].cached
+                elif kind == 2:
+                    parameters[3] = self.layers[i].cached
+                if kind != 0 and step:
+                    operation += 1
+                    var decode = List[Int]()
+                    for index in range(len(parameters)):  # small-loop(Mamba decode omits the length word)
+                        if index != 1:
+                            decode.append(parameters[index])
+                    parameters = decode^
+                var report = List[Float32](length=self.layers[i].report_size, fill=0)
+                if kind == 2:
+                    addresses[15] = Int(report.unsafe_ptr())
                 self.layers[i].attempted = True
-                self.layers[i].cached = self.layers[i].endpoint.call(self.layers[i].operation, addresses, parameters, [])
+                var result = self.layers[i].endpoint.call(operation, addresses, parameters, self.layers[i].floats)
+                self.layers[i].cached = self.layers[i].cached + length if kind == 1 else result
+                if kind == 2:
+                    self.layers[i].report = report^
+                self.layers[i].completed = True
                 for j in range(len(self.layers[i].writeback_layouts)):  # driver-loop: successful layer publication before the next alias reads
                     self.layers[i].writeback_layouts[j].copy_from(self.layers[i].writeback_addresses[j])
                 if self.layers[i].state_index >= 0:
@@ -185,7 +216,7 @@ def native_generation_read(
     # The entire token/layer loop owns native state. Sampling is the exact
     # existing native policy; partial counters remain in progress on failure.
     while progress.wrote < count and progress.produced < maximum and not causal_lm_rows_done(finished):  # driver-loop: native autoregressive tokens
-        var logits = model.forward(Int(progress.current.unsafe_ptr()), progress.length)
+        var logits = model.forward(Int(progress.current.unsafe_ptr()), progress.length, progress.produced != 0)
         var next = List[Int32](length=model.batch, fill=0)
         causal_lm_pick_step(
             MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(logits.unsafe_ptr())),
