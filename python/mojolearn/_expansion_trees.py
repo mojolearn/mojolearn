@@ -2731,49 +2731,6 @@ _native_trees_bridge.register_meta(CalibratedClassifierCV, "calibrated")
 # pairs (a draw and its complement) without de-duplication (cuML's
 # schedule), carries no l1 feature selection (`l1_reg` is refused) and
 # treats every feature as varying.
-def _trees_forest_arrays(est):
-    """(offsets, colid, quesval, left, leaves, k, scale) of a fitted flat
-    forest, or None."""
-    if not hasattr(est, "_offsets"):
-        return None
-    k = int(getattr(est, "_num_outputs", 1))
-    return (est._offsets, est._colid, est._quesval, est._left_child, est._leaves, k,
-            1.0 / int(est._n_trees))
-
-
-def _trees_dart_forest(b, model, K):
-    """(arrays, tscale) of a DART model as ONE flat forest, in boosting order:
-    the node arrays joined as bytes (memory copies, no per-node Python), a
-    multiclass tree's leaf values spread into column j % K natively
-    (x_trees_spread_leaves). The words the per-node Python lists built (lane
-    apple-fast-py2mojo-trees); O(trees) Python for the offsets and scales."""
-    offs = [0]
-    for tree in model.trees_:  # glue: tree offsets over the fitted trees
-        to = tree._offsets
-        if len(to) != 2:
-            raise ValueError("a DART tree must hold one tree")
-        offs.append(offs[-1] + int(to[1]) - int(to[0]))
-
-    def join(arrs, conv, dtype):
-        raw = b"".join(conv(a, ndim=1, name="tree")[0].tobytes() for a in arrs)  # glue: joins the fitted trees byte blocks
-        return frombytes(raw, dtype, (len(raw) // 4,))
-
-    col = join([t._colid for t in model.trees_], as_i32_c, "<i4")  # glue: tree offsets over the fitted trees
-    q = join([t._quesval for t in model.trees_], as_f32_c, "<f4")  # glue: tree offsets over the fitted trees
-    lc = join([t._left_child for t in model.trees_], as_i32_c, "<i4")  # glue: tree offsets over the fitted trees
-    vals = join(model.tree_values_, as_f32_c, "<f4")
-    if K > 1:
-        nn = len(vals)
-        lv = empty((nn * K,), "<f4")
-        offs_a = Array.from_list(offs, "<i4")
-        b.x_trees_spread_leaves(addr_ro(vals, name="values"), addr_ro(offs_a, name="offsets"), addr(lv, name="leaves"),
-                                [nn, len(model.trees_), K])
-    else:
-        lv = vals
-    tscale = Array.from_list([float(c) for c in model.tree_coefs_], "<f4")  # glue: tree coefficients as float32 words
-    return (Array.from_list(offs, "<i4"), col, q, lc, lv), tscale
-
-
 # GPU installs run it on the device (xtrees/shap_device.mojo), CPU-only
 # installs on the host (xtrees/shap_host.mojo); both run the units of
 # xtrees/shap.mojo in the same fixed orders, so the values are the same
@@ -2835,139 +2792,45 @@ class TreeExplainer(_TreesEnsembleBase):
     (10, 8)
     """
 
-    def __init__(self, model, data=None, *, feature_perturbation="tree_path_dependent", model_output="raw"):
-        if feature_perturbation not in ("tree_path_dependent", "auto"):
-            _refuse(f"feature_perturbation={feature_perturbation!r}", "the interventional algorithm is not"
-                    " carried; the path-dependent one is.")
-        if model_output != "raw":
-            _refuse(f"model_output={model_output!r}", "only the raw model output is explained.")
-        if data is None:
-            _refuse("data=None", "the flat forests store no node sample counts, so the cover comes from a"
-                    " background dataset; pass data=.")
-        self.model = model
-        self.data = data
-        self.feature_perturbation = feature_perturbation
-        self.model_output = model_output
-        self.numeric_mode = getattr(model, "numeric_mode", None)
-        bg, _ = as_f32_c(data, ndim=2, name="data")
-        self._bg = bg
-        init = 0.0
-        if isinstance(model, _DARTBase):
-            if not hasattr(model, "trees_"):
-                raise RuntimeError("the model is not fitted yet")
-            K = int(getattr(model, "n_classes_", 1))
-            init = float(model.init_score_) if K == 1 else [float(v) for v in model.init_score_]  # glue: class start scores as floats
-            # one forest of every boosted tree, in boosting order, each tree
-            # scaled by its coefficient; a multiclass tree scores one class:
-            # its leaf values in column j % K.
-            arrays, tscale = _trees_dart_forest(self._bind(), model, K)
-            k = K
-        else:
-            fa = _trees_forest_arrays(model)
-            if fa is None:
-                _refuse(f"TreeExplainer over {type(model).__name__}", "the explainer reads the flat forests"
-                        " (RandomForest*, ExtraTrees*, DecisionTree*) and DART models.")
-            arrays = fa[:5]
-            k = fa[5]
-            tscale = full((len(arrays[0]) - 1,), fa[6], "<f4")
-        self.n_outputs_ = k
-        n_trees = len(arrays[0]) - 1
-        n_nodes = int(arrays[0].tolist()[-1])
-        if n_trees < 1 or n_nodes < 1:
-            raise ValueError("TreeExplainer: the model holds no trees")
-        ev = Array.from_list(init, "<f4") if isinstance(init, list) else full((k,), init, "<f4")
-        cover = zeros((n_nodes,), "<i4")
-        meta = zeros((3,), "<i4")
-        native = self._bind()
-        prep_args = ([addr_ro(a, name="forest") for a in arrays],  # glue: forest array addresses for the binding
-                     addr_ro(tscale, name="tscale"), addr_ro(bg, name="data"),
-                     addr(cover, name="cover"), addr(ev, name="ev"), addr(meta, name="meta"),
-                     [bg.shape[0], bg.shape[1], n_trees, k, n_nodes])
-        # lane gap-shap-nb: the device binding's retained prepare uploads the
-        # forest once, keeps the device cover and builds the leaf table here;
-        # `shap_values` then uploads X only (xtrees/shap_device.mojo). The
-        # same outputs and the same bits as the plain prepare + shap call.
-        retain = getattr(native, "x_trees_tree_shap_prepare_retain", None)
-        self._shap_cache = None
-        self._shap_closed = False
-        if callable(retain):
-            self._shap_cache = retain(*prep_args)
-            self._shap_cache_finalizer = weakref.finalize(
-                self, native.x_trees_tree_shap_cache_release, self._shap_cache)
-        else:
-            native.x_trees_tree_shap_prepare(*prep_args)
-        slots, depth, _ = meta.tolist()
-        need = min(depth, slots) + 1
-        width = 8
-        while width < need:
-            width *= 2
-        if width > 256:
-            _refuse("a leaf path of more than 255 distinct split features", "the device path is compiled up to"
-                    " 255 features per root-to-leaf path.")
-        self._forest = arrays
-        self._tscale = tscale
-        self._cover = cover
-        self._shape = (n_trees, k, n_nodes, int(slots), width)
-        self.expected_value = ev.tolist()[0] if k == 1 else ev
-        self.n_features_in_ = bg.shape[1]
-        # T44/C51 (the host binding's opt-in snapshot; the device binding's
-        # retained prepare above replaces it there) owns an immutable native
-        # snapshot for this explainer. A model refit cannot leave pointers
-        # into mutable/released model arrays.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        enabled = getattr(native, "x_trees_tree_shap_cache_enabled", None)
-        if self._shap_cache is None and callable(enabled) and enabled():
-            self._shap_cache = native.x_trees_tree_shap_cache_create(
-                [addr_ro(a, name="forest") for a in self._forest],  # glue: five model addresses
-                addr_ro(self._tscale, name="tscale"), addr_ro(self._cover, name="cover"),
-                [self.n_features_in_, n_trees, k, n_nodes])
-            self._shap_cache_finalizer = weakref.finalize(
-                self, native.x_trees_tree_shap_cache_release, self._shap_cache)
+    _mojolearn_native_public = True
+
+    def __init__(self, model, data=None, *, feature_perturbation="tree_path_dependent",
+                 model_output="raw", numeric_mode=None):
+        return _TREES(self, "trees_explainer_init",
+                      (model, data, feature_perturbation, model_output, numeric_mode), _TREES_CONTEXT)
 
     def close(self):
-        """Release the explainer's native resources.
-
-        After ``close``, ``shap_values`` raises ``RuntimeError``.
-        """
-        finalizer = getattr(self, "_shap_cache_finalizer", None)
-        if finalizer is not None and finalizer.alive:
-            finalizer()
-        self._shap_cache = None
-        self._shap_closed = True
+        """Release native resources; subsequent ``shap_values`` raises RuntimeError."""
+        return _TREES(self, "trees_explainer_close", (), _TREES_CONTEXT)
 
     def shap_values(self, X):
-        """SHAP values of the rows of ``X``.
+        """Return float32 SHAP values, shape (rows, features[, outputs])."""
+        return _TREES(self, "trees_explainer_values", (X,), _TREES_CONTEXT)
 
-        Parameters
-        ----------
-        X : array of shape (n_samples, n_features)
-            Rows to explain, converted to float32. A feature count different from
-            ``data`` raises ``ValueError``.
 
-        Returns
-        -------
-        array, float32
-            Shape (n_samples, n_features) for one output, else
-            (n_samples, n_features, n_outputs).
-        """
-        if getattr(self, "_shap_closed", False):
-            raise RuntimeError("this TreeExplainer has been closed")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = Xa.shape
-        if d != self.n_features_in_:
-            raise ValueError(f"X has {d} features, data has {self.n_features_in_}")
-        n_trees, k, n_nodes, slots, width = self._shape
-        phi = zeros((n * d * k,), "<f4")
-        if self._shap_cache is not None:
-            self._bind().x_trees_tree_shap_cache_values(
-                self._shap_cache, addr_ro(Xa, name="X"), addr(phi, name="phi"),
-                [n, slots, width])
-            return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
-        self._bind().x_trees_tree_shap([addr_ro(a, name="forest") for a in self._forest],  # glue: forest array addresses for the binding
-                                       addr_ro(self._tscale, name="tscale"), addr_ro(self._cover, name="cover"),
-                                       addr_ro(Xa, name="X"), addr(phi, name="phi"),
-                                       [n, d, n_trees, k, n_nodes, slots, width])
-        return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
+def _connect_tree_explainer():
+    # glue: install the native attribute descriptor once at class definition;
+    # the inherited Python output getter must not surround public operations.
+    if "trees_unavailable" in _TREES_CONTEXT:
+        return
+    from types import BuiltinFunctionType, MethodType
+    from .tokenizer import _binding
+    from ._native_classical_bridge import _layout
+    from ._forest_host import HostForest
+    _TREES_CONTEXT["trees_explainer_host_forest"] = HostForest
+    module = _binding()._module
+    attribute = module.standard_scaler_attribute_call
+    factory = module.classical_attribute_descriptor
+    if type(attribute) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
+        raise TypeError("native explainers require compiled attribute entries")
+    descriptor = factory(MethodType(attribute, _TREES_CONTEXT))
+    TreeExplainer.__getattribute__ = descriptor
+    _TREES_CONTEXT.setdefault("classical_public_layouts", {})[TreeExplainer] = _layout(TreeExplainer, descriptor)
+    _TREES_CONTEXT["classical_public_installed"] = True
+    _TREES_CONTEXT["classical_attribute_descriptor"] = descriptor
+
+
+_connect_tree_explainer()
 
 
 #: xtrees/agnostic.mojo AGN_BUDGET: synthetic words per explainer chunk
