@@ -170,7 +170,7 @@ def test_host_checkpoint_reuses_native_codec_and_full_state_validator():
     native = (ROOT / 'bindings/byte_lm_host_trainer_native.mojo').read_text()
     assert 'byte_json_payload(byte_json_read(args[0], io_error))' in native
     assert '_validated_state(source, state_context)' in native
-    assert 'if io_error.pending:' in native and 'return io_error.restore()' in native
+    assert 'if io_error.pending:' in native and 'return io_error^.restore()' in native
 
 
 def test_imported_program_constructor_enters_native_metadata_boundary():

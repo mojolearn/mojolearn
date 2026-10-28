@@ -1,0 +1,157 @@
+Independent provider boundary audit — 2026-10-27
+
+Audited source: b2dccf5dd8 on integration/provider-library-20261027.
+Audit branch: lane/provider-boundary-audit-20261027.
+Read-only follow-up: integration repair 6fd7f1aca9.
+No builds, installed-product execution, GPU work, measurements or main merges
+were performed by this lane. These findings are source findings, not runtime
+qualification. Root owns all product repairs and merge status.
+
+Result
+------
+The six native neural trees satisfy the current dependency guard. The library
+as a whole does not yet satisfy the requested boundary contract. New artifact
+admission defects and older classical wrapper/callback paths remain distinct
+from allowed native handling of Python objects at the binding boundary.
+
+Prioritized findings
+--------------------
+1. P1: public ImportedProgram execution fetches a callable from mutable instance
+   state before native admission. At b2dccf5dd8, _program.py run() calls
+   self._run_native and run_torch() calls self._run_torch_native. Replacing either
+   field with a Python callable executes it. A previously bound method followed
+   by an instance class change also reaches __getattribute__ inside the wrapper.
+   Evidence: python/mojolearn/importers/_program.py:46 and :67.
+   This remains in the reviewed 6fd7f1aca9 repair. Root notified; fix pending at
+   this report's snapshot. Fixed module-connected dispatch must enter native
+   layout/provider admission before examining mutable instance state.
+
+2. P1: public import_model(tuple_source) could enter private graph-record
+   dispatch and execute a source element's __str__. The dispatcher treated any
+   tuple in args[0] as a private descriptor, including the five-argument public
+   artifact call. graph_record_bound converted args[0][0] to String first.
+   Evidence: providers/python/autograd_import_frontend_pyapi.mojo:161;
+   providers/python/autograd_graph_metadata_pyapi.mojo:57.
+   Source repair reviewed in 6fd7f1aca9: separate ops_graph_record export and
+   descriptor admission remove the public tuple ambiguity. Runtime verification
+   remains pending; this report does not certify the new compiled export.
+
+3. P1: Torch execution consumed mutable metadata before exact admission.
+   _torch_artifact_context read len(inputs)/len(outputs); output allocation read
+   dtype through String and passed shape into torch.empty. The CPU replay path
+   read program/session fields and coerced IDs and declared dimensions directly.
+   These paths can invoke __len__, __getitem__, __str__, __int__/__index__, or a
+   substituted __dict__ descriptor before refusing invalid metadata. The GPU
+   provider's later recursive admission did not protect earlier allocation.
+   Evidence: providers/python/autograd_torch_program_pyapi.mojo:109, :157,
+   :201; bindings/py_balanced.mojo:82. object.__getattribute__ itself does not
+   bypass a data descriptor named __dict__.
+   Source repair reviewed in 6fd7f1aca9: imported_program_snapshot uses pinned
+   exact program/session layouts, retains copied field dictionaries/lifetime,
+   and creates exact descriptor snapshots before array/Torch consumption. Both
+   Torch routes use the snapshot. No additional hook path was identified in
+   those repaired snippets. Compilation and public runtime controls are pending.
+
+4. P1: existing non-neural public work still enters Python outside the provider
+   abstraction; moving a call site into Mojo did not remove its callbacks.
+   - AffinityPropagation.fit evaluates self._bind() before _NATIVE. _bind calls
+     Python _backend.binding, which normalizes mode and selects/loads a binding.
+     The reviewed import-time installers replace constructors, parameter setters
+     and selected attribute slots; they do not replace this fit/_bind body.
+     Evidence: python/mojolearn/_expansion_cluster.py:919;
+     python/mojolearn/_mode.py:674; python/mojolearn/_backend.py:2424.
+   - MiniBatchKMeans native _init_array accepts a callable initializer and calls
+     _callable_init. That helper imports NumPy, calls asarray and RandomState,
+     then invokes the caller's initializer through family_call_kw/PyObject_Call.
+     No narrow Mojo-bug exception is documented inline on this path.
+     Evidence: bindings/cluster_fit_a_native.mojo:193–226, :257;
+     bindings/family_common.mojo:96–107. Public fit and native dispatcher connect
+     this path; it is not test-only. No runtime reproduction was attempted.
+   - The same family also uses generic getattr/float/int and operator calls.
+     For example _affinity_fit reads damping through _attr/_float, and _seed
+     accepts int subclasses then calls operator.and_. These are transitive
+     protocol/CPython-dispatch risks, not proof of compiled Mojo arithmetic.
+     Evidence: bindings/cluster_fit_a_native.mojo:47, :67, :141–152, :632–644.
+   These examples establish remaining migration work, not a complete list.
+
+Coverage and retained evidence
+------------------------------
+Evidence directory:
+  /Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/
+Hashes and machine-readable coverage: evidence_summary.json beside this file.
+
+- check_neural_provider_layout.py: exit 0; 750 roots, 1125 dependency closure
+  modules, 0 violations, 3 explicit test-fixture exclusions. Roots are autograd,
+  sequence, training, transformer, mamba and core. Local imports are followed;
+  trusted standard/upstream modules are not compiled/transitively audited here.
+  Full output: layout.log.
+- check_neural_native_boundary.py: exit 0; 173 closure modules, 0 failures.
+  Full structured result: neural-closure.json; output: neural-closure.log.
+- public_runtime_inventory.py --check: exit 1. 3808 endpoints: 2414
+  native_boundary, 714 prohibited_source, 475 unresolved, 194 allowed_tag_metadata,
+  11 refusal_only. 1189 prohibited/unresolved classifications include aliases,
+  inherited surfaces and source-only uncertainty; they are not 1189 independent
+  defects. No installed attribute-slot witness was supplied. Static native_boundary
+  classification alone is not callback freedom or runtime success.
+  Full result: endpoints.json; output: endpoints.log.
+- Source pytest suite (test_framework_native_provider, test_native_import_boundary,
+  test_native_runtime_audit): original exit 1, 43 passed/1 failed/2 subtests.
+  The failing test asserted io_error.restore(), while the committed compiler
+  repair correctly transfers ownership with io_error^.restore(). The audit
+  updates that one source expectation. After repair: exit 0, 44 passed/2 subtests.
+  Logs: source-tests.log, source-tests-after.log. This did not execute the product.
+- Added test_provider_boundary_audit_controls.py: 17 parametrized public runtime
+  cases; syntax checked only, NONE EXECUTED by this lane. They exercise tuple
+  source refusal, mutable metadata/IDs/layouts, instance-callable dispatch,
+  captured-method attribute hooks, and an ordinary CPU Relu Torch smoke. Independent
+  hook counters are used so profiler blind spots cannot hide callback execution.
+  The positive smoke is not within-release vendor identity evidence.
+- Lexical inventory: 665 .mojo paths have Python-related tokens, predominantly
+  bindings (525) and providers (108). The remaining hits include tests and harmless
+  documentation; these are not 665 violations. In particular x_ann/abi.mojo,
+  xtrees/api_kernels.mojo, svm/host/svm_host_impl.mojo, x_linear/x_linear_host_impl.mojo,
+  gaussian_process/gp_binding_entries.mojo only matched explanatory docstrings in
+  the inspected snippets. Full paths: python-token-source-paths.txt.
+
+Can the checks become grep?
+--------------------------
+For pure native trees, a small lexical rule plus transitive import closure is a
+useful, simple invariant. The current layout guard already implements that idea,
+stripping comments/docstrings and rejecting Python API/provider dependencies.
+Keep it independent of large estimator runtime matrices and consider extending
+approved native root coverage as migration completes.
+
+At the boundary, plain grep cannot distinguish retaining a Python buffer owner
+from calling its __array__, __int__, property or callback. Native C calls can
+dispatch Python; PythonObject can also be passive ownership. A literal grep
+would both report harmless documentation/allowed handles and miss indirect
+callback dispatch. Preserve three small complementary layers:
+  1. Native tree dependency/token guard.
+  2. Public wrapper AST/installed-entry checks and focused transitive boundary
+     review: fixed native dispatch, exact protocol admission, one per-operation
+     metadata snapshot, no callback before admission.
+  3. Bounded public runtime smokes plus hostile-protocol counters, profiling and
+     approved-exception accounting, on the actually loaded artifact.
+
+_verify_native_runtime.py already checks one wrapper, further Python frames,
+forbidden/unresolved native origins and unobserved threads. It explicitly warns
+that CPython audit hooks can evade profiler events; profile silence alone is not
+proof. Source string assertions (including one textual metadata read) likewise
+do not establish an actual once-only read at runtime.
+
+Allowed categories must remain explicit: import-time package connection, tests,
+scikit-learn tag-only metadata, passive/native buffer ownership, and documented
+owner-approved Mojo interoperability exceptions. An exception must retain its
+actual public-operation evidence and must never be labeled Python-free. The
+native dictionary API repair in bindings/native_instance_item.mojo is legitimate
+boundary handling, not a reason to reject every occurrence of PythonObject.
+
+Remaining work
+--------------
+Root must qualify the repaired import/graph export and shared execution boundary
+with the affected compiled artifacts, run the 17 new public cases, close the
+mutable-dispatch hole, and retain focused vendor adapter/affected arithmetic
+evidence. No duplicate adapter identity column or cross-version bit comparison
+is required. Broader classical provider/callback migration and inventory triage
+remain incomplete. No library-wide Python-free, all-vendor, or main-merged claim
+is supported by this audit.
