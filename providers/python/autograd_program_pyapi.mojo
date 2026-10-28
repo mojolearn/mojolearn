@@ -23,6 +23,7 @@ from autograd.program_tools import ProgramTrace, program_op_name
 from autograd.program_optimize import ProgramOptimization, program_optimize
 from autograd.program_runtime import replay_values, parameter_buffers, train_program_control
 from providers.python.autograd_pyapi import _dims_out
+from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
 
 
 def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
@@ -474,8 +475,9 @@ def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
     program: PythonObject, arrays: PythonObject, named: PythonObject,
 ) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    var declared = program.inputs
-    var outputs = program.outputs
+    var metadata = imported_program_snapshot(program)
+    var declared = metadata[2]
+    var outputs = metadata[3]
     var given = arrays
     if len(named) > 0:
         if len(arrays) > 0:
@@ -511,11 +513,8 @@ def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
             raise Error("ValueError: input " + _imported_repr(declared[k][0]) + " must have the shape "
                         + _imported_repr(shape) + ", got " + _imported_repr(_imported_tuple(got)))
         dims.append(want^)
-    var session = program._s
-    if session._id is None:
-        raise Error("ValueError: this session is closed")
-    var sid = Int(py=session._id)
-    var plan = program_execute_prepare[E, KIND](sid, Int(py=program._id), sid, False, False)
+    var sid = Int(py=metadata[1]["_id"])
+    var plan = program_execute_prepare[E, KIND](sid, Int(py=metadata[0]["_id"]), sid, False, False)
     if len(declared) != plan.program.n_in:
         raise Error("ValueError: this program takes " + String(plan.program.n_in) + " input arrays, got " + String(len(declared)))
     var inputs = List[ProgramInput]()

@@ -23,6 +23,7 @@ from autograd.program_io import ProgramInput
 from autograd.program_entries import program_execute_prepare, program_execute_run
 from providers.python.autograd_program_pyapi import _imported_session_dims
 from providers.python.autograd_device_provider_pyapi import imported_device_provider_run
+from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
 
 
 def _torch_entry(context: PythonObject, name: String) raises -> PythonObject:
@@ -82,7 +83,7 @@ def _torch_devices(inputs: PythonObject) raises -> List[TorchDeviceSnapshot]:
     return devices^
 
 
-def _torch_route_with_devices(program: PythonObject, devices: List[TorchDeviceSnapshot]) raises -> PythonObject:
+def _torch_route_with_devices(snapshot: PythonObject, devices: List[TorchDeviceSnapshot]) raises -> PythonObject:
     if len(devices) == 0:
         return Python.tuple("host", "the graph has no tensor inputs")
     ref device = devices[0]
@@ -96,26 +97,26 @@ def _torch_route_with_devices(program: PythonObject, devices: List[TorchDeviceSn
         ref other = devices[i]
         if other.kind != "cuda" or other.index != 0:
             return Python.tuple("host", "the inputs use different devices")
-    if py_get(py_fields(program), "_run_device") is None:
+    if py_get(snapshot[0], "_run_device") is None:
         return Python.tuple("host", "this mojolearn binding takes no device buffers")
     return Python.tuple("device", "")
 
 
-def _torch_route(program: PythonObject, inputs: PythonObject) raises -> PythonObject:
+def _torch_route(snapshot: PythonObject, inputs: PythonObject) raises -> PythonObject:
     # Untimed route diagnostic uses the same operation-local device snapshot.
-    return _torch_route_with_devices(program, _torch_devices(inputs))
+    return _torch_route_with_devices(snapshot, _torch_devices(inputs))
 
 
 def _torch_run_host[E: Exec & Movable & Deinitable, KIND: Int](
-    program: PythonObject, inputs: PythonObject, outputs: PythonObject,
+    snapshot: PythonObject, inputs: PythonObject, outputs: PythonObject,
 ) raises:
-    var fields = py_fields(program)
-    var session = py_fields(fields["_s"])
+    var fields = snapshot[0]
+    var session = snapshot[1]
     if session["_id"] is None:
         raise Error("ValueError: this session is closed")
     var sid = Int(py=session["_id"])
     var plan = program_execute_prepare[E, KIND](sid, Int(py=fields["_id"]), sid, False, False)
-    var declared = fields["inputs"]
+    var declared = snapshot[2]
     if len(inputs) != len(declared) or len(inputs) != plan.program.n_in:
         raise Error("ValueError: Torch program input count differs from the captured graph")
     var owners = List[ProgramInput]()
@@ -154,7 +155,7 @@ def _torch_run_host[E: Exec & Movable & Deinitable, KIND: Int](
     _ = outputs
 
 
-def _torch_artifact_context(program: PythonObject) raises -> PythonObject:
+def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
     # Resolve only loaded framework native entries. No capture, model callbacks,
     # weight-version polling or export runs when executing an artifact snapshot.
     var torch = native_loaded_module("torch")
@@ -180,14 +181,13 @@ def _torch_artifact_context(program: PythonObject) raises -> PythonObject:
     py_setitem(context, "cpu", py_call(device_type, "cpu"))
     py_setitem(context, "f32", public["float32"])
     py_setitem(context, "i32", public["int32"])
-    var model = py_fields(program)
-    var count = len(model["inputs"])
+    var count = len(snapshot[2])
     var free = Python.list()
     for index in range(count):  # driver-loop: declared graph input positions
         py_call(free.append, index)
     py_setitem(context, "free", free)
     py_setitem(context, "n_args", count)
-    py_setitem(context, "sequence", len(model["outputs"]) != 1)
+    py_setitem(context, "sequence", len(snapshot[3]) != 1)
     return context
 
 
@@ -195,13 +195,14 @@ def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
     program: PythonObject, args: PythonObject, var context: PythonObject, route_only: Bool = False,
 ) raises -> PythonObject:
     var b = native_loaded_module("builtins")
+    var snapshot = imported_program_snapshot(program)
     if context is None:
-        context = _torch_artifact_context(program)
+        context = _torch_artifact_context(snapshot)
     var profile = Bool(py=py_get(context, "profile", False))
     var started = perf_counter_ns() if profile else 0
     native_torch_modes_admit()
     if route_only:
-        return _torch_route(program, args)
+        return _torch_route(snapshot, args)
     if len(args) != Int(py=context["n_args"]):
         raise Error("ValueError: compiled graph input count differs from its captured signature")
     var inputs = Python.list()
@@ -209,7 +210,7 @@ def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
     for i in range(len(free)):  # driver-loop: graph input selection
         py_call(inputs.append, args[Int(py=free[i])])
     var devices = _torch_devices(inputs)
-    var route = _torch_route_with_devices(program, devices)
+    var route = _torch_route_with_devices(snapshot, devices)
     if Bool(py=py_get(context, "force_host", False)):
         route = Python.tuple("host", "host route selected by the transfer test controller")
     var on_device = String(route[0]) == "device"
@@ -219,8 +220,8 @@ def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
     var prepared = Python.list()
     for k in range(len(inputs)):  # driver-loop: native framework buffer preparation
         py_call(prepared.append, native_torch_contiguous(inputs[k], not on_device))
-    var fields = py_fields(program)
-    var specs = fields["outputs"]
+    var fields = snapshot[0]
+    var specs = snapshot[3]
     var outputs = Python.list()
     var destination = target if on_device else context["cpu"]
     for k in range(len(specs)):  # driver-loop: native framework output allocation
@@ -249,14 +250,14 @@ def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
             if py_type(run) is not py_type(b.len):
                 raise Error("TypeError: Torch execution requires the compiled device program entry")
             ready = perf_counter_ns() if profile else 0
-            imported_device_provider_run(program, descriptors, addresses)
+            imported_device_provider_run(snapshot, descriptors, addresses)
             ran = perf_counter_ns() if profile else 0
             py_call(_torch_entry(context, "synchronize"))
         finally:
             py_call(_torch_entry(context, "set_device"), previous)
     else:
         ready = perf_counter_ns() if profile else 0
-        _torch_run_host[E, KIND](program, prepared, outputs)
+        _torch_run_host[E, KIND](snapshot, prepared, outputs)
         ran = perf_counter_ns() if profile else 0
         var copied = Python.list()
         for k in range(len(outputs)):  # driver-loop: native framework device transfer
@@ -265,6 +266,7 @@ def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
             py_call(_torch_entry(context, "synchronize_mps"))
         outputs = copied
     _ = prepared  # contiguous copies stay alive until native replay completes
+    _ = snapshot  # graph/session owners and admitted descriptors survive replay
     if profile:
         py_setitem(context, "last_profile", Python.tuple(route[0], ready - started, ran - ready, perf_counter_ns() - ran))
     if Bool(py=context["sequence"]):

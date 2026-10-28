@@ -6,7 +6,6 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_fields, py_type, py_get
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.autograd_program_arrays_pyapi import program_admit_value
-from providers.python.autograd_session_frontend_pyapi import ops_session_fields
 from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, NeuralDescriptorProvider, neural_descriptor_execute, neural_descriptor_entry
 from sequence.neural_model_dispatch import PROGRAM_DEVICE_RUN
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
@@ -40,11 +39,10 @@ def _descriptor_kind(dtype: String) raises -> Tuple[Int, Int]:
     raise Error("TypeError: unsupported Torch program input dtype " + dtype)
 
 
-def imported_device_provider_run(program: PythonObject, descriptors: PythonObject,
+def imported_device_provider_run(snapshot: PythonObject, descriptors: PythonObject,
                                  output_addresses: PythonObject) raises:
-    var fields = py_fields(program)
-    var session = fields["_s"]
-    var session_fields = ops_session_fields(session)
+    var fields = snapshot[0]
+    var session_fields = snapshot[1]
     if session_fields["_id"] is None:
         raise Error("ValueError: this session is closed")
     var b = native_loaded_module("builtins")
@@ -64,10 +62,8 @@ def imported_device_provider_run(program: PythonObject, descriptors: PythonObjec
         raise Error("TypeError: Session binding differs from its native provider")
     if provider[].factory is not neural_descriptor_entry(provider[].module, "model_native_api_v1"):
         raise Error("TypeError: Session provider factory changed; reconnect the compiled binding")
-    var inputs = fields["inputs"]
-    var outputs = fields["outputs"]
-    program_admit_value(inputs)
-    program_admit_value(outputs)
+    var inputs = snapshot[2]
+    var outputs = snapshot[3]
     program_admit_value(descriptors)
     program_admit_value(output_addresses)
     _metadata_sequence(inputs)
@@ -124,7 +120,6 @@ def imported_device_provider_run(program: PythonObject, descriptors: PythonObjec
     # registry and tape are not silently given new concurrent mutation semantics.
     _ = neural_descriptor_execute(owner[].provider, PROGRAM_DEVICE_RUN, addresses, words, List[Float64](), False)
     _ = lifetime
-    _ = session
-    _ = program
+    _ = snapshot
     _ = descriptors
     _ = output_addresses

@@ -19,7 +19,7 @@ def test_device_execution_is_shared_and_native():
 
 def test_torch_uses_common_provider_without_internal_packed_execution():
     frontend = (ROOT / 'providers/python/autograd_torch_program_pyapi.mojo').read_text()
-    assert 'imported_device_provider_run(program, descriptors, addresses)' in frontend
+    assert 'imported_device_provider_run(snapshot, descriptors, addresses)' in frontend
     assert 'py_call(run,' not in frontend
     provider = (ROOT / 'providers/python/autograd_device_provider_pyapi.mojo').read_text()
     assert 'neural_descriptor_execute(owner[].provider, PROGRAM_DEVICE_RUN,' in provider

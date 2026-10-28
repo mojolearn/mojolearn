@@ -5,6 +5,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setatt
 from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import stash_python_error
 from providers.python.autograd_python_errors_pyapi import graph_int
+from providers.python.neural_descriptor_pyapi import NativeDescriptorResource
 
 
 def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:
@@ -29,6 +30,58 @@ def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: artifact state requires exact string keys")
     return fields
+
+
+def _program_specs(value: PythonObject) raises -> PythonObject:
+    # Copy passive public metadata only after exact container/scalar admission.
+    # No length, index, string or integer hook on an arbitrary object may run.
+    var b = native_loaded_module("builtins")
+    if py_type(value) is not b.list and py_type(value) is not b.tuple:
+        raise Error("TypeError: program descriptors require native list or tuple metadata")
+    var result = Python.list()
+    for i in range(len(value)):  # driver-loop: one snapshot of declared graph inputs/outputs
+        var item = value[i]
+        if (py_type(item) is not b.list and py_type(item) is not b.tuple) or len(item) != 3:
+            raise Error("TypeError: program descriptors require name, shape and dtype")
+        if py_type(item[0]) is not b.str or py_type(item[2]) is not b.str:
+            raise Error("TypeError: program descriptor names and dtypes require exact strings")
+        var shape = item[1]
+        if py_type(shape) is not b.list and py_type(shape) is not b.tuple:
+            raise Error("TypeError: program shapes require native list or tuple metadata")
+        if len(shape) > 8:
+            raise Error("ValueError: program descriptor rank must be at most eight")
+        var dimensions = Python.list()
+        for axis in range(len(shape)):  # small-loop(shape: admitted graph rank)
+            if py_type(shape[axis]) is not b.int:
+                raise Error("TypeError: program dimensions require exact native integers")
+            if Int(py=shape[axis]) < 0:
+                raise Error("ValueError: program dimensions must be nonnegative")
+            py_call(dimensions.append, shape[axis])
+        py_call(result.append, Python.tuple(item[0], py_call(b.tuple, dimensions), item[2]))
+    return py_call(b.tuple, result)
+
+
+def imported_program_snapshot(program: PythonObject) raises -> PythonObject:
+    # Shared by array and Torch execution, before allocations or conversions.
+    # Retain owners and capture metadata once for the whole public operation.
+    var b = native_loaded_module("builtins")
+    var module = native_loaded_module("mojolearn.importers._program")
+    var context = py_fields(module)["_IMPORT_CONTEXT"]
+    if py_type(context) is not b.dict:
+        raise Error("TypeError: imported program requires its native connection")
+    var fields = py_call(b.dict, _fields(program, context["layouts"][context["imported"]]))
+    var session = fields["_s"]
+    var state = py_call(b.dict, _fields(session, context["layouts"][context["session"]]))
+    if state["_id"] is None:
+        raise Error("ValueError: this session is closed")
+    if py_type(fields["_id"]) is not b.int or py_type(state["_id"]) is not b.int:
+        raise Error("TypeError: program and Session handles require exact native integers")
+    var owner = state["_lifetime"].downcast_value_ptr[NativeDescriptorResource]()
+    if owner[].handle == 0 or owner[].handle != Int(py=state["_id"]):
+        raise Error("TypeError: Session handle differs from its native registry owner")
+    var inputs = _program_specs(fields["inputs"])
+    var outputs = _program_specs(fields["outputs"])
+    return Python.tuple(fields, state, inputs, outputs)
 
 
 def _one_of(cls: PythonObject, classes: PythonObject) raises -> Bool:
