@@ -3,7 +3,9 @@
 # Only exact native scalar owners can reach a conversion or buffer descriptor.
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_get, py_type
+from bindings.py_typed_call import typed_python_error
 from bindings.sequential_admission import _one_of
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.native_numpy_metadata import native_numpy_dtype
@@ -28,10 +30,13 @@ def jl_scalar(value: PythonObject, epsilon: Bool, context: PythonObject) raises 
             value._obj_ptr, zero._obj_ptr, Int32(1))
         _ = zero^
         if nonpositive < 0:
-            raise cpy.unsafe_get_error()
+            raise typed_python_error()
         if nonpositive != 0:
             raise Error(positive_error)
-        return Float64(py=value)
+        var number = cpy.lib.get_function[Float64]("PyLong_AsDouble")(value._obj_ptr)
+        if cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")():
+            raise typed_python_error()
+        return number
     if cls is float_type:
         var number = Float64(py=value)
         if epsilon:
