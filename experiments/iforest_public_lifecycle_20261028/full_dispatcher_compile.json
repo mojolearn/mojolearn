@@ -1,0 +1,45 @@
+{
+  "status": "passed",
+  "source_commit": "172b417204958c604c61fa26a3d37ca13bceb4d2",
+  "contents": "IsolationForest public lifecycle 115b5eb8bb + boost lifecycle lane/peer5-tree-boost-lifecycle-20261028 4bc490b6f3 + origin/main + 77ed135648 GBDTAdapter + 0f0b336d87 archive/GP",
+  "closure": "complete trees_public_operation dispatcher (both entries) + public_attributes_native _lookup",
+  "command": "pixi run --locked --no-install --executable .pixi/envs/default/bin/mojo build --optimization-level 0 -j 32 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings <entry>",
+  "compiler": "556 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12b580000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+  "allocation": {
+    "machine": "Linux-6.8.0-147-generic-x86_64-with-glibc2.35",
+    "affinity": 32,
+    "cgroup_cpus": [],
+    "jobs": 32
+  },
+  "entries": [
+    {
+      "entry": "checks/iforest_public_boundary_compile.mojo",
+      "exit_code": 0,
+      "seconds": 88,
+      "jobs": 32,
+      "binary_sha256": "c258d28403068376d4ef81f90fc332ee82a4e6ed7dcc94ba78b3ba0a3ceb9fc4",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer5-boost-iforest-20261028/pod-iforest/remote/leg_out/iforest_public_boundary_compile.log"
+    },
+    {
+      "entry": "checks/tree_boost_public_compile.mojo",
+      "exit_code": 0,
+      "seconds": 89,
+      "jobs": 32,
+      "binary_sha256": "c4d3e396a0f53f643b07f43432d5813a8af5b220fcb723a7bb8949bf770e7555",
+      "log": "/Users/andrewhendel/mojolearn-evidence/peer5-boost-iforest-20261028/pod-iforest/remote/leg_out/tree_boost_public_compile.log"
+    }
+  ],
+  "source_hashes": "/Users/andrewhendel/mojolearn-evidence/peer5-boost-iforest-20261028/pod-iforest/remote/leg_out/source-hashes.json",
+  "box": "RunPod CPU pod wrcr0qphvj32vs (32 vCPU), deleted and verified gone (HTTP 404)",
+  "preserved": [
+    "trees_state_releases tuple forest_release_gpu+gbdt_resident_release+iforest_resident_release",
+    "separate register elif branches for gbdt and iforest"
+  ],
+  "not_covered": [
+    "runtime/import/identity/GPU not run",
+    "NVIDIA/AMD GPU targets not compiled",
+    "FAST define not compiled",
+    "Python changes source-only"
+  ]
+}

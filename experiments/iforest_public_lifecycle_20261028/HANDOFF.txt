@@ -26,3 +26,11 @@ Root owns main integration. Shared bridge merge must preserve all resident relea
 
 Limits and pending coverage
 Compilation is not runtime behavior or bitwise identity evidence. No runtime, cross-vendor, installed-wheel or GPU checks were run or requested for this migration batch. KernelExplainer/PermutationExplainer remain separate callback-dependent tree migration work; TreeExplainer and boost/embedding are delegated batches.
+
+Full dispatcher compile (2026-10-28, peer5-boost-iforest)
+Merged origin/main, 77ed135648 (GBDTAdapter), 0f0b336d87 (archive/GP) and the boost lifecycle lane
+(lane/peer5-tree-boost-lifecycle-20261028). Bridge conflicts resolved keeping the release tuple
+(forest_release_gpu, gbdt_resident_release, iforest_resident_release) and both gbdt/iforest elif
+registrations; dispatcher imports keep iforest_public_lifecycle and trees_bagging_members_native.
+PASS: checks/iforest_public_boundary_compile.mojo and checks/tree_boost_public_compile.mojo, RunPod CPU
+identical/O0/x86-64-v3/-j 32, exit 0 (88 s, 89 s). Receipt full_dispatcher_compile.json. Compile only.
