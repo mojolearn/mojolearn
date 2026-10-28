@@ -1,0 +1,20 @@
+{
+  "source_commit": "12e8776372",
+  "base_commit": "db1c55a976",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "Mac arm64 native default CPU",
+  "command": "bash tools/compile_slot.sh pixi run mojo build --emit shared-lib -I . -I bindings experiments/native_registry_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/native-registry-20261028/class3.dylib",
+  "exit_code": 0,
+  "binary_sha256": "8d27e9ced5bc1bc4891543bdc2debd4346a0a76e4d764ca8c5b3faa062a5e174",
+  "coverage": [
+    "native_loaded_module",
+    "descriptor namespace admission/connect",
+    "x_neighbors admission",
+    "classical family admission",
+    "classical public layout admission"
+  ],
+  "logs": "/Users/andrewhendel/mojolearn-evidence/native-registry-20261028",
+  "runtime": "not run",
+  "identity": "not run",
+  "performance": "not measured"
+}
