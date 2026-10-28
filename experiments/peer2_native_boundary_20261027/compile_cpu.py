@@ -27,7 +27,7 @@ def sha256(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--groups", nargs="+", choices=("scalers_pls", "scalers", "pls", "manifold", "umap_init", "jl_rp", "prep"),
+    parser.add_argument("--groups", nargs="+", choices=("scalers_pls", "scalers", "pls", "manifold", "umap_init", "jl_rp", "prep", "pca_query"),
                         default=["scalers", "pls", "manifold", "umap_init", "jl_rp"])
     parser.add_argument("--out", type=Path, default=Path(os.environ.get("LEG_OUT", "/root/results-peer2")))
     args = parser.parse_args()
@@ -74,6 +74,8 @@ def main():
         source = Path("experiments/peer2_native_boundary_20261027") / f"compile_{group}.mojo"
         if group == "jl_rp":
             source = Path("experiments/peer2_decomposition_20261027/jl_rp_compile.mojo")
+        elif group == "pca_query":
+            source = Path("experiments/peer2_decomposition_20261027/pca_query_compile.mojo")
         elif group == "manifold":
             # Typed matrix/device owners also require their module registration
             # to compile; the real dedicated host entry covers that boundary.
