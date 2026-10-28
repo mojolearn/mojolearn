@@ -1,0 +1,34 @@
+{
+ "scope": "native-public-marks-20261028 touched .mojo roots: bindings/x_linear_native.mojo (cd_* lifecycle) via x_linear_c; bindings/sequential_weights.mojo (exact-type admission) via sequential_c. Compile only; no runtime, identity or GPU.",
+ "source_commit": "c4c0d001ef6acbaac69c4b9b0446ee0816f5bbfc",
+ "machine": "Mac (compile_slot, nice 19)",
+ "jobs": 10,
+ "compiler": "Mojo 1.0.0 (ed45d567)",
+ "results": [
+  {
+   "name": "expansion_linear_public_lifecycle_compile",
+   "entry": "checks/expansion_linear_public_lifecycle_compile.mojo",
+   "target": "cpu (host Mac, Apple M-series)",
+   "exit": 0,
+   "seconds": 268,
+   "binary_sha256": "ad9d544a8bc7b35f9c6bbf4720619343be5fc2453aa776e2c395c0783b7b846b",
+   "command": "bash tools/compile_slot.sh pixi run -e default mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/expansion_linear_public_lifecycle_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/native-public-marks-20261028/compile1/expansion_linear_public_lifecycle_compile.log"
+  },
+  {
+   "name": "sequential_weights_admission_compile",
+   "entry": "checks/sequential_weights_admission_compile.mojo",
+   "target": "cpu (host Mac, Apple M-series)",
+   "exit": 0,
+   "seconds": 293,
+   "binary_sha256": "35955c4c92c87989d8de935cf692b20139862968d893c19182b4b170b999ba7f",
+   "command": "bash tools/compile_slot.sh pixi run -e default mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings checks/sequential_weights_admission_compile.mojo",
+   "log": "/Users/andrewhendel/mojolearn-evidence/native-public-marks-20261028/compile1/sequential_weights_admission_compile.log"
+  }
+ ],
+ "not_compiled": [
+  "GPU targets",
+  "fast mode",
+  "the full _mojolearn binding roots that link these modules"
+ ]
+}
