@@ -211,9 +211,11 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
         py_setitem(columns, PythonObject(0), PythonObject(Int(py=columns[0]) + (Int(py=shape[0]) if transposed and len(shape) == 2 else 1)))
     if code.startswith(">") or code.startswith("!"):
         little = False
-        code = String(code[byte=1:])
+        var suffix = String(code[byte=1:])
+        code = suffix^
     elif code.startswith("<") or code.startswith("=") or code.startswith("@") or code.startswith("|"):
-        code = String(code[byte=1:])
+        var suffix = String(code[byte=1:])
+        code = suffix^
     if code.startswith("Z"):
         raise Error("Complex data not supported: " + name + " got a complex y.")
     if columns is None and reshape and len(shape) == 2 and Int(py=shape[1]) == 1:
