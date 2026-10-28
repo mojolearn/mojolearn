@@ -669,3 +669,12 @@ Receipt experiments/integration_provider_queue_20261028/compile_tranche5b.json: 
 x_sequence sm_89/gfx942, 3 roots); import smoke PASS (import mojolearn + 8 modules, missing_bindings 0) and
 tier_dir('identical') probe PASS on the x86 CPU-only host set. GPU-set import not exercised (no GPU box).
 Gates: test_no_python_runtime OK (196), test_tombstones_preserved OK, full-reset tests 110 passed.
+
+INTEGRATION 2026-10-28 (Claude integrator) — HOTFIX BATCH (LinBufferPin, grid planner, family layouts, compile slots)
+Also on main earlier: ebcd7f9477 bench_board race_data_sha git fallback for source-tree neural races.
+This batch: LinBufferPin registered in the classical host with a mode parameter (gemm crash on a0096);
+six_lane_grid_bb gives each neural lane its own bench_board call (+test); _native_family_layouts.py
+connect_module (every classical dispatch refused); tools/compile_slot.sh MOJOLEARN_COMPILE_SLOTS default 2.
+Receipt experiments/integration_provider_queue_20261028/compile_hotfix_linpin.json: x86 CPU-only host set,
+import smoke PASS, tier_dir PASS, runtime check PASS (matmul, Ridge, KMeans fit+predict); linalg sm_89/gfx942 rc=0.
+Pods vefpymixxwsth0, wz15xs7krsoh14 reaped.

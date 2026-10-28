@@ -3087,7 +3087,14 @@ def race_data_sha(ctx, race, box):
     if race["family"] == "neural" and race.get("dataset") != "higgs":
         w = ((box.get("mojolearn") or {}).get("wheel") or {}).get("sha256")
         v = (box.get("mojolearn") or {}).get("version")
-        return "mojolearn-sources:%s" % (w or v) if (w or v) else None
+        if w or v:
+            return "mojolearn-sources:%s" % (w or v)
+        # A source tree on PYTHONPATH (lq, six_lane_grid_bb) has no dist-info:
+        # name the tree's commit instead, a dirty tree as <sha>+dirty.
+        c = (box.get("repo") or {}).get("commit") or ctx.get("commit") or repo_commit()
+        if c and c != "unknown":
+            return "mojolearn-sources:git %s" % (c[:-len("-dirty")] + "+dirty" if c.endswith("-dirty") else c)
+        return None
     files = race_data_files(ctx, race)
     if not files:
         return "synthetic (seed %d)" % SEED
@@ -5385,16 +5392,25 @@ def main(argv=None):
         _load_tool("race_fairness").apply(result)
         save_result(rpath, result)
         write_board(out, result)
+        # Outside the measured operation; preserve partial/failed boards too.
+        _load_tool('retain_run_summary').try_retain(
+            _load_tool('retain_run_summary').retain_board, out, result, smoke=args.smoke)
         print("bench_board:   %s rc=%s %.0fs" % (rec["status"], rec["rc"], rec["wall_s"]), flush=True)
         if _load_tool("bench_board_evidence").blocks_campaign(rec):
             print("bench_board: stopped after retaining local evidence: " + rec["evidence_failure"], flush=True)
             return 1
     print("bench_board: board %s" % os.path.join(out, "BOARD.md"), flush=True)
     if args.smoke:
-        return 1 if write_smoke(out, races, result, vendor, args.shard) else 0
+        code = 1 if write_smoke(out, races, result, vendor, args.shard) else 0
+        _load_tool('retain_run_summary').try_retain(
+            _load_tool('retain_run_summary').retain_board, out, result, smoke=True, exit_code=code)
+        return code
     failed = [rid for rid, rec in result["races"].items()
               if rid in result["plan"] and rec.get("status") not in ("done", "unsupported")]
-    return 1 if failed or result.get("failed_preflight_recipes") else 0
+    code = 1 if failed or result.get("failed_preflight_recipes") else 0
+    _load_tool('retain_run_summary').try_retain(
+        _load_tool('retain_run_summary').retain_board, out, result, exit_code=code)
+    return code
 
 
 if __name__ == "__main__":
