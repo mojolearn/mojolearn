@@ -357,90 +357,54 @@ class DeviceTensor:
     _device_tensor = True
 
     def __init__(self, binding, shape, h=None, host=None, base=None):
-        self.b, self.shape = binding, tuple(int(v) for v in shape)  # glue: a shape tuple's few ints
-        self.h, self._host, self._base = h, host, base
+        return _XCNN(self, "tensor_init", (binding, shape, h, host, base), _XCNN_CONTEXT)
 
     @classmethod
     def _new(cls, b, shape):
         """An unwritten resident tensor of `shape` on mixed binding `b`."""
-        return cls(b, shape, h=int(b.x_cnn_res_alloc(max(_size(shape), 1))))
+        return _XCNN(cls, "tensor_new", (b, shape), _XCNN_CONTEXT)
 
     @classmethod
     def _new_out(cls, b, shape):
         """`_new` for an output whose every word the entry stores (lane
         neural-io-2, XCNN_RES_NEW_NOZERO): no +0.0 fill on the device, on a
         binding that has `x_cnn_res_alloc_nofill`."""
-        alloc = getattr(b, "x_cnn_res_alloc_nofill", None) or b.x_cnn_res_alloc
-        return cls(b, shape, h=int(alloc(max(_size(shape), 1))))
+        return _XCNN(cls, "tensor_new_out", (b, shape), _XCNN_CONTEXT)
 
     @classmethod
     def _wrap(cls, b, a):
         """Host float32 array `a` as a tensor on binding `b` (one upload)."""
-        np = _np()
-        a = np.ascontiguousarray(a, np.float32)
-        if not _mixed(b):
-            return cls(b, a.shape, host=a)
-        t = cls._new(b, a.shape)
-        if a.size:
-            b.x_cnn_res_upload(t.h, a.ctypes.data, a.size)
-        return t
+        return _XCNN(cls, "tensor_wrap", (b, a), _XCNN_CONTEXT)
 
     @property
     def size(self):
-        return _size(self.shape)
+        return _XCNN(self, "tensor_size", (), _XCNN_CONTEXT)
 
     @property
     def ndim(self):
-        return len(self.shape)
+        return _XCNN(self, "tensor_ndim", (), _XCNN_CONTEXT)
 
     dtype = "float32"
 
     def numpy(self):
-        np = _np()
-        if self.h is None:
-            return self._host.reshape(self.shape).copy()
-        out = np.empty(self.shape, np.float32)
-        if out.size:
-            self.b.x_cnn_res_download(self.h, out.ctypes.data, out.size)
-        return out
+        return _XCNN(self, "tensor_numpy", (), _XCNN_CONTEXT)
 
     def __array__(self, dtype=None, copy=None):
-        a = self.numpy()
-        return a if dtype is None else a.astype(dtype, copy=False)
+        return _XCNN(self, "tensor_array", (dtype, copy), _XCNN_CONTEXT)
 
     def reshape(self, *shape):
         """The same resident words under another shape (no copy; the view
         keeps this tensor alive)."""
-        if len(shape) == 1 and not isinstance(shape[0], int):
-            shape = tuple(shape[0])
-        shape = [int(v) for v in shape]  # glue: a shape tuple's few ints
-        if shape.count(-1) == 1:
-            known = _size(v for v in shape if v != -1)  # glue: a shape tuple's few ints
-            shape[shape.index(-1)] = self.size // known if known else 0
-        if _size(shape) != self.size:
-            raise ValueError(f"mojolearn: cannot reshape {self.shape} to {tuple(shape)}")
-        return DeviceTensor(self.b, shape, h=self.h, host=self._host, base=self)
+        return _XCNN(self, "tensor_reshape", (shape,), _XCNN_CONTEXT)
 
     def __del__(self):
-        if self._base is None and self.h is not None:
-            try:
-                self.b.x_cnn_res_free(self.h)
-            except Exception:  # noqa: BLE001  (interpreter shutdown)
-                pass
+        return _XCNN(self, "tensor_finalize", (), _XCNN_CONTEXT)
 
 
 def to_device(x, numeric_mode=None):
     """float32 array `x` as a `DeviceTensor` (uploaded once, here). The
     layers that take one keep their output on the device too."""
-    if isinstance(x, DeviceTensor):
-        return x
-    a = _f32(x, "x")
-    if _DEVICE_IO_OFF:
-        return a
-    b = _backend.binding(_BINDING, numeric_mode or _backend.default_mode())
-    if _device_io_off(b):
-        return a
-    return DeviceTensor._wrap(b, a)
+    return _XCNN(None, "tensor_to", (x, numeric_mode), _XCNN_CONTEXT)
 
 
 def _is_t(x):

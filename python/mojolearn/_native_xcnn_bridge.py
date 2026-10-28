@@ -128,6 +128,9 @@ def connect():
         entry = _binding()._module.xcnn_native_call
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("the CNN layers require the compiled xcnn_native_call entry")
+        # Import setup is outside product execution; the native owner only
+        # connects already loaded native NumPy metadata.
+        import numpy
         from ._native_classical_bridge import _state_context
         context = _state_context()
     except (ImportError, AttributeError, TypeError) as error:
@@ -151,6 +154,19 @@ def register(**tables):
     _, context = connect()
     if "xcnn_unavailable" not in context:
         context.update(tables)
+        cls = tables.get("xcnn_tensor_class")
+        if cls is not None:
+            context["xcnn_tensor_slots"] = {
+                name: vars(cls)[name] for name in ("b", "shape", "h", "_host", "_base")
+            }  # glue: retain native slot identities during package connection
+            from ._x_sequence_device import _SEQ_CONTEXT
+            context["xcnn_array_context"] = dict(_SEQ_CONTEXT)
+            warning = dict(_SEQ_CONTEXT["sequence_array_warnings"])
+            code = cls.__array__.__code__
+            warning.update(warning_filename=code.co_filename,
+                           warning_lineno=code.co_firstlineno,
+                           warning_module=cls.__module__, warning_source_line="")
+            context["xcnn_array_context"]["sequence_array_warnings"] = warning
 
 
 def connect_classifier():
