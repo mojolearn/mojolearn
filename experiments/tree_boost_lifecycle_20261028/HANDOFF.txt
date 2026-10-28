@@ -1,0 +1,18 @@
+Peer5 boost lifecycle (Bagging/AdaBoost/DART/RandomTreesEmbedding) — 2026-10-28
+Branch: lane/peer5-tree-boost-lifecycle-20261028
+
+Changes
+- Public fit/fit_transform/predict/predict_proba/decision_function/transform/score/apply of the
+  seven boost classes call trees_public_boost_* once; providers/python/tree_boost_public_lifecycle_pyapi.mojo
+  owns admission (bindings/trees_boost_admission.mojo), X/y checks, fitted checks, fit-depth tracking,
+  refusals and public output conversion. Internal trees_boost_* ABI unchanged.
+- Bagging estimators_ get/set and member slicing are native (bindings/trees_bagging_members_native.mojo);
+  property schema 'bagging_estimators' added additively in _native_public_attributes.py and
+  public_attributes_native.mojo _property.
+- The boost classes declare _mojolearn_native_public in their class bodies, so SklearnTagsMixin /
+  PublicOutputsMixin install no Python fit-tracking or output wrappers (replaces the draft's
+  register_boost inspect.unwrap loop; register_boost is unchanged from main).
+- Merged origin/main, 77ed135648 (GBDTAdapter parameters) and 0f0b336d87 (archive label/kernel, GP 5e7).
+
+Compile: compile.json (RunPod CPU, identical, O0, x86-64-v3, -j 32, exit 0, 54 s). Compile only;
+no runtime, identity or GPU evidence.
