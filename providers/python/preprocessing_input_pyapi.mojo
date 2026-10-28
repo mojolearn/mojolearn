@@ -135,8 +135,12 @@ def scaler_snapshot_write_back(snapshot: PythonObject, output: PythonObject, cop
     return captured[].original
 
 
+def scaler_operation_input(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    return scaler_operation_input(source, context, PythonObject(None))
+
+
 def scaler_operation_input(source: PythonObject, context: PythonObject,
-                           cache: PythonObject = PythonObject(None)) raises -> PythonObject:
+                           cache: PythonObject) raises -> PythonObject:
     # cache is an operation-local native list, never part of model state or
     # exposed to callers. Lazy capture preserves validation/refit ordering.
     if cache is None:
