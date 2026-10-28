@@ -101,8 +101,14 @@ def manifold_scalar_type(value: PythonObject, context: PythonObject) raises -> B
     return False
 
 
+def _snapshot(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # A PythonObject default argument is evaluated at compile time, where no
+    # interpreter exists; build the absent dtype at run time instead.
+    return _snapshot(value, context, PythonObject(None))
+
+
 def _snapshot(value: PythonObject, context: PythonObject,
-              captured_dtype: PythonObject = PythonObject(None)) raises -> PythonObject:
+              captured_dtype: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.int or cls is b.float or cls is b.bool or cls is b.complex or cls is b.str or cls is b.bytes or cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.frozenset or value is None:
