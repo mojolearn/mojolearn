@@ -16,6 +16,7 @@ from bindings.classical_labels import labels_shape_of
 from bindings.classical_warnings import classical_warn_column
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.native_array_view import native_array_ndarray_view
+from bindings.native_owner_lifetime import native_release_admit
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.family_common import family_f32
 from bindings.cluster_fit_a_native import cluster_fit_a_operation, _pending, _pending_text, _drop_pending
@@ -76,6 +77,18 @@ def _admit_model(model: PythonObject, context: PythonObject) raises -> PythonObj
             if cpy.lib.get_function[Int32]("PyCallable_Check")(value._obj_ptr) != 0:
                 raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers or use 'k-means++' or 'random'")
         classical_admit_value(value, context)
+        if String(name) == "metric_params" and value is not None:
+            # OPTICS consumes only p from this native mapping. An admitted
+            # object ndarray still must not invoke element conversion hooks.
+            var mappings = context["mapping_types"]
+            var mapping = False
+            for j in range(len(mappings)):  # driver-loop: exact native mapping owners, before method lookup
+                mapping = mapping or py_type(value) is mappings[j]
+            if not mapping:
+                raise Error("TypeError: OPTICS metric_params requires a native mapping or None")
+            var p = py_call(value.get, "p", PythonObject(None))
+            if p is not None:
+                host_inference_scalar(p, context)
         if (not py_contains(context["cluster_public_array_parameters"], name)
                 or (py_type(value) is py_get(context, "ndarray") and Int(py=value.ndim) == 0)):
             # Exact ndarray admission alone would still permit an object-dtype
@@ -96,6 +109,25 @@ def _admit_model(model: PythonObject, context: PythonObject) raises -> PythonObj
                     raise Error("TypeError: cluster warm state requires its native key and array pair")
                 _scalar_state(value[0], context)
     return fields
+
+
+def _admit_replaced_state(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
+    var b = native_loaded_module("builtins")
+    var ancestry = _type_mro(py_type(model))
+    var names = PythonObject(None)
+    for i in range(len(ancestry)):  # driver-loop: use the connected owner's fit-state schema
+        if names is None:
+            names = py_get(context["cluster_public_replaced_fields"], ancestry[i])
+    if py_type(names) is not b.tuple:
+        raise Error("TypeError: cluster refit requires its native replaced-field schema")
+    for i in range(len(names)):  # driver-loop: prior fitted owners before any numerical/state mutation
+        if py_type(names[i]) is not b.str:
+            raise Error("TypeError: cluster fitted-field names require exact strings")
+        if py_contains(fields, names[i]):
+            native_release_admit(fields[names[i]], context)
+    for name in ["_mojolearn_fitted", "_mojolearn_fitting", "feature_names_in_"]:  # driver-loop: shared lifecycle writes/removals
+        if py_contains(fields, name):
+            native_release_admit(fields[name], context)
 
 
 def _method(operation: String) -> String:
@@ -124,6 +156,8 @@ def cluster_public_operation(model: PythonObject, operation: String, args: Pytho
     var fields = _admit_model(model, context)
     var method = _method(operation)
     var fitting = method == "fit" or method == "partial_fit" or method == "fit_predict" or method == "fit_transform"
+    if fitting:
+        _admit_replaced_state(model, fields, context)
     var fitted_flag = py_get(fields, "_mojolearn_fitted", PythonObject(False))
     if py_type(fitted_flag) is not py_type(PythonObject(True)) and py_type(fitted_flag) is not py_type(PythonObject(0)):
         raise Error("TypeError: native fitted flags cannot invoke Python boolean hooks")
