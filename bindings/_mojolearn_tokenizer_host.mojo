@@ -120,6 +120,7 @@ from bindings.xcnn_native import xcnn_c
 from bindings.tsa_public_native import tsa_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.mode_metadata_native import mode_metadata_c
+from bindings.backend_public_native import backend_public_c
 from bindings.params_metadata_native import params_metadata_c
 from bindings.public_attributes_native import public_attribute_c
 from bindings.linear_constructor_native import linear_constructor_c
@@ -1270,6 +1271,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
         module.def_py_c_function(mode_metadata_c, "mode_metadata_native_call")
+        module.def_py_c_function(backend_public_c, "backend_public_native_call")
         module.def_py_c_function(params_metadata_c, "params_metadata_native_call")
         module.def_py_c_function(public_attribute_c, "public_attribute_native_call")
         module.def_py_c_function(linear_constructor_c, "linear_constructor_native_call")

@@ -726,3 +726,9 @@ del _connect_estimator_defaults
 from ._native_parallel_public import refresh as _refresh_parallel_public
 _refresh_parallel_public(parallel_ensemble._FAMILY_CONTEXT)
 del _refresh_parallel_public
+
+# Complete process backend metadata is native after import-time provider setup.
+from ._native_backend_public import connect as _connect_backend_public
+import sys as _backend_public_sys
+_connect_backend_public(_backend_public_sys.modules[__name__])
+del _connect_backend_public, _backend_public_sys
