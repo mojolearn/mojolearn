@@ -1,0 +1,45 @@
+Peer1 native descriptor continuation
+Starting local main: b3239afc49478f01ff338b35121ee749396417aa
+Compiled source: 8264f02f531522ac4899c0d5546667f1cc4c5453
+Branch: lane/peer1-native-next-20261027
+
+Delivered coherent compile-covered source:
+- CPU kernel_methods_api_v1 transport directly calls existing typed host
+  implementations. Identical kernel execution requires native descriptors,
+  independent of the former candidate environment switch. GPU descriptor
+  code is unchanged. Existing fast path remains explicit legacy debt.
+- Exact host factory registration and shared kernel mode-readback wiring
+  were authorized by root. Descriptor mode is checked once by the owner.
+- Kernel metadata uses native loaded-module dictionaries and exact state
+  admission. No numerical arithmetic was replaced.
+- Hierarchy legacy linkage now uses hierarchy_solver_native_api_v1 with
+  retained buffer owners. New host/device descriptor sources call existing
+  typed algorithms; solver factories registered in existing modules.
+- General x_cluster linkage and resident prediction are not migrated by
+  this slice. No density predicate/resident owner was edited.
+
+Compilation: four roots PASS, exit0; actual CPU kernel/solver module
+registration entries plus kernel and hierarchy public native owners.
+Mojo1.0.0(ed45d567), O0, identical CPU, x86-64-v3; allocated32 compiler
+workers determined from affinity/cgroup. Full provenance and binary hashes
+are in compile-provenance.json. No runtime/identity/vendor verification.
+CPU pod57liouihqtep8q was removed with deletion verified after complete
+Mac+R2 retention. Complete controller/logs/binaries are under
+~/mojolearn-evidence/peer1-native-next-20261027/cpu-compile/.
+
+Explicit remaining paths:
+- KernelRidge score still reaches shared metrics/mcls numerical CPython
+  dispatch and repeated target/score metadata captures. Exact follow-up
+  scope: peer1_kernel_descriptor_default_20261027/HANDOFF.txt.
+- Kernel fast numerical dispatch remains legacy; no dedicated fast changes
+  or compilation were performed.
+- Hierarchy general linkage still reaches x_cluster_call/ClusterOut through
+  CPython, cosine validation remains behind x_neighbors candidate dispatch,
+  and labeled-reference resident/predict/release plus loader/finalizer paths
+  need a shared native descriptor. See peer1_hierarchy_descriptor_20261027/HANDOFF.txt.
+- IVF query/fitted metadata reuse is separate work in progress, excluded
+  from this compiled commit. Filter/helper metadata and numerical packed
+  IVF/ANN dispatch remain explicit debt.
+- Radius lifecycle and the supported public BitGenerator PCS RNG repair
+  are separate lane commits; not included in this compile batch.
+- Source/push guards are not evidence of runtime or bitwise behavior.
