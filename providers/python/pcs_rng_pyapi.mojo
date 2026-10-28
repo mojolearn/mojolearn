@@ -13,15 +13,19 @@
 # RandomStates and NumPy's supported state/reseed/set_bit_generator APIs are in
 # this contract. We neither inspect private object layouts nor repair them.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from std.sys import size_of
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
 from bindings.mode_metadata_native import _class_fields
 
-comptime PCSNextUInt32 = def(Int) thin abi("C") -> UInt32
+comptime PCSStatePointer = MutPointer[UInt8, MutUntrackedOrigin]
+comptime PCSNextUInt32 = def(PCSStatePointer) thin abi("C") -> UInt32
 
 
 def pcs_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
+    comptime assert size_of[PCSStatePointer]() == size_of[Int](), "NumPy bitgen_t requires pointer-sized Int"
+    comptime assert size_of[PCSNextUInt32]() == size_of[PCSStatePointer](), "NumPy bitgen_t requires pointer-sized native function pointers"
     var b = native_loaded_module("builtins")
     if py_type(seed) is b.int:
         return seed
@@ -64,6 +68,7 @@ def pcs_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
     if cpy.lib.get_function[Int32]("PyCapsule_IsValid")(capsule._obj_ptr, cname) == 0:
         raise Error("TypeError: NumPy RNG requires its named BitGenerator capsule")
     var raw = cpy.lib.get_function[Optional[MutPointer[UInt8, MutUntrackedOrigin]]]("PyCapsule_GetPointer")(capsule._obj_ptr, cname)
+    _ = name^
     if not raw:
         raise cpy.unsafe_get_error()
     var address = Int(raw.value())
@@ -75,14 +80,30 @@ def pcs_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
     var next = MutPointer[PCSNextUInt32, MutUntrackedOrigin](unsafe_from_address=address + 2 * size_of[Int]())[0]
     # Pin exact native lock descriptors. acquire releases the GIL while blocked;
     # the one native draw needs no Python execution and keeps every owner alive.
-    _ = py_call(record["acquire"], lock)
+    # Allocate the call envelope before acquisition. In particular, do not use
+    # py_call in finally: a failed tuple allocation there could strand the lock.
+    var acquire = record["acquire"]
+    var release = record["release"]
+    var lock_args = cpy.PyTuple_New(1)
+    if not lock_args:
+        raise cpy.unsafe_get_error()
+    _ = cpy.PyTuple_SetItem(lock_args, 0, cpy.Py_NewRef(lock._obj_ptr))
+    var envelope = PythonObject(from_owned=lock_args)
+    var acquired = cpy.PyObject_Call(acquire._obj_ptr, envelope._obj_ptr, PyObjectPtr())
+    if not acquired:
+        raise cpy.unsafe_get_error()
+    var acquired_owner = PythonObject(from_owned=acquired)
     var word = UInt32(0)
     try:
-        word = next(words[0]) & UInt32(0x7FFFFFFF)
+        word = next(PCSStatePointer(unsafe_from_address=words[0])) & UInt32(0x7FFFFFFF)
     finally:
-        _ = py_call(record["release"], lock)
-    _ = state
-    _ = bitgen
-    _ = capsule
-    _ = lock
+        var released = cpy.PyObject_Call(release._obj_ptr, envelope._obj_ptr, PyObjectPtr())
+        if not released:
+            raise cpy.unsafe_get_error()
+        var released_owner = PythonObject(from_owned=released)
+    _ = acquired_owner^
+    _ = state^
+    _ = bitgen^
+    _ = capsule^
+    _ = lock^
     return PythonObject(Int(word))
