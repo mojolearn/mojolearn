@@ -139,7 +139,16 @@
       "executable_source_unchanged": true,
       "reason": "Required source guard wording for weak-reference/type/owner admission loops newly reached by the Program public route",
       "guard_refusal_log": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/public-push.log",
-      "patch": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/public-guard-annotation.patch"
+      "patch": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/public-guard-annotation.patch",
+      "r2": {
+        "local_archive": "/Users/andrewhendel/mojolearn-evidence/program-distributed-boundary-20261027/program-public-source-guard-evidence.tgz",
+        "r2_key": "measurements/provider-migration/program-public-20261027/43e3a47731b95e361cc07048e8f384d8c42260653590545552976a2bb9c83ce4/program-public-source-guard-evidence.tgz",
+        "sha256": "43e3a47731b95e361cc07048e8f384d8c42260653590545552976a2bb9c83ce4",
+        "bytes": 4178,
+        "put_status": 200,
+        "get_status": 200,
+        "readback_verified": true
+      }
     }
   ]
 }
