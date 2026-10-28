@@ -831,6 +831,13 @@ TRAINING_LANE_NAMES = {
     # from the same binding.
     "gbdt-ranking-defaults": "gradient boosting ranking losses with default Bayesian bootstrap and score noise",
     "gbdt-query-rmse": "gradient boosting with the QueryRMSE ranking loss on query groups",
+    # Isolated CPU ranking draft: selection declared, compilation and actual
+    # CPU runtime/negative-control results pending. PairLogit/YetiRank reuse
+    # existing lanes; QueryRMSE pointwise gains its own configuration lane.
+    # No reference data is admitted by declaring these routes.
+    "gbdt-query-rmse-pointwise": "QueryRMSE with the doc-parallel pointwise tree searcher",
+    "gbdt-pair-logit-pointwise": "PairLogit with the doc-parallel pointwise tree searcher",
+    "gbdt-yeti-rank-pointwise": "YetiRank with the doc-parallel pointwise tree searcher",
     # lane/gbdt-learning-to-rank stage 3 (2026-09-15): the PairLogit ranking
     # loss on generated and explicit pairs trains through
     # gbdt/host/gbdt_oracle_losses.mojo with the pairwise target restated in
@@ -2716,6 +2723,9 @@ FAMILIES = (
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank", "gbdt-ranking-defaults",
+            # Native route declared by the uncompiled ranking draft. The
+            # existing HOST_SABOTAGE arm reaches its grouped leaf estimator.
+            "gbdt-query-rmse-pointwise", "gbdt-pair-logit-pointwise", "gbdt-yeti-rank-pointwise",
             # lane/catboost-parity (2026-09-19): the non-default border
             # types run the device fit's own host function
             # (`select_borders`) on the CPU column
@@ -2758,6 +2768,7 @@ FAMILIES = (
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
             "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
             "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
+            "gbdt/host/gbdt_oracle_pointwise_rank.mojo",
             # lane/close-no-cpu-path-gbdt: the held-out cursor, curve,
             # detector and shrink of the Plain SymmetricTree Logloss fit
             "gbdt/host/gbdt_oracle_eval.mojo",
@@ -3948,13 +3959,15 @@ PUBLIC_PENDING_LANES = {
     # Weighted Extra Trees already has nine admitted fixtures with Apple,
     # NVIDIA and AMD train/infer/model columns in table.json (records 112,
     # 114, 116, 117). Keep those references comparable; no new admission here.
-    # f63ef2235 (2026-10-14): PairLogit and YetiRank on the pointwise searcher.
-    # The gbdt host binding's pointwise arm trains Logloss only and refuses
-    # every other loss by name (bindings/_mojolearn_gbdt_host.mojo,
-    # `_refuse_pointwise`), so the lane's fit has no CPU arithmetic
-    # (identity_break.GPU_ONLY_LANES).
-    "gbdt-pair-logit-pointwise": "no cpu route",
-    "gbdt-yeti-rank-pointwise": "no cpu route",
+    # The isolated CPU ranking draft declares a native pointwise route and
+    # registers these existing lanes with the gbdt host family. Compilation,
+    # CPU execution and caught negative controls are still pending; no hash or
+    # release admission is created here. Keep existing GPU references usable.
+    "gbdt-pair-logit-pointwise": "unwatched",
+    "gbdt-yeti-rank-pointwise": "unwatched",
+    # New configuration-specific lane. The existing gbdt-query-rmse lane
+    # remains the greedy-searcher reference and is unchanged.
+    "gbdt-query-rmse-pointwise": "no reference",
     # lane/verify-coverage-audit (2026-10-21): lanes for endpoints new or changed
     # since the last release that no lane reached
     # (docs/plans/VERIFY_COVERAGE_20261021.md); no release record yet.

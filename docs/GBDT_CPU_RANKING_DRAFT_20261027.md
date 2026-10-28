@@ -64,13 +64,35 @@ CPU parity. Sample-weight support for this route remains separate work.
    development merge evidence only, never evidence of runtime correctness or
    bitwise identity.
 
-## Evidence still pending
+## Verifier registration and evidence still pending
 
-The two pointwise ranking entries in `GPU_ONLY_LANES` remain unchanged because
-this draft has neither compilation nor runtime evidence. Do not remove those
-coverage exclusions or advertise this in public documentation on the strength
-of the implementation alone. Current work instructions prohibit a runtime or
-cross-vendor campaign; any later qualification must retain its actual scope.
+At Andrew's follow-up request, a separate commit registers CPU verifier
+selection for the existing `gbdt-pair-logit-pointwise` and
+`gbdt-yeti-rank-pointwise` lanes. They leave `GPU_ONLY_LANES`, join the gbdt
+family's training list and remain annotated `unwatched`. That permits the
+verifier to run and report real outcomes; it does not claim a passing CPU
+result or replace an existing GPU reference. The new
+`gbdt-query-rmse-pointwise` lane uses the same grouped fixture with the actual
+pointwise searcher and is marked `no reference`. The existing greedy
+`gbdt-query-rmse` lane and its records stay unchanged.
+
+All three lanes hash prediction and loss curves, retain the inference/model
+probe and register batch prediction. The existing `MOJOLEARN_HOST_SABOTAGE`
+negative control reaches their shared native leaf solver. Source reachability
+is checked statically; a caught negative-control execution is still pending.
+No new GPU lanes duplicate the two existing ranking lanes, and no numerical
+hashes, admission files or release evidence are created.
+
+The remaining explicit CPU exclusions are `optim-resident-io`,
+`sequence-device-release` and `training-device-cross-entropy`, all device
+resource/pool tests. Multi-GPU lanes have a separate applicability rule.
+Removing the two algorithm exclusions establishes declared selection only;
+it does not prove every parameter combination or all retained evidence exists.
+
+Do not advertise verified CPU coverage on the strength of this declaration.
+Current work instructions prohibit a runtime or cross-vendor campaign; any
+later qualification must retain its actual scope. Compilation before merge
+remains mandatory for the implementation and actual public binding.
 
 When runtime qualification is separately authorized, the affected cases include
 the existing `gbdt-pair-logit-pointwise` and `gbdt-yeti-rank-pointwise` lanes,

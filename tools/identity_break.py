@@ -4107,6 +4107,12 @@ def _querywise_pointwise_identity(ml, X, yr, Xh, loss):
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-query-rmse-pointwise")
+def _(ml, X, yc, yr, Xh=None):
+    """QueryRMSE grouped targets on the doc-parallel pointwise searcher."""
+    return _querywise_pointwise_identity(ml, X, yr, Xh, "QueryRMSE")
+
+
 @lane("gbdt-pair-logit-pointwise")
 def _(ml, X, yc, yr, Xh=None):
     """PairLogit grouped targets on the doc-parallel pointwise searcher."""
@@ -8436,8 +8442,7 @@ def _(ml, X, yc, yr, Xh=None):
 # are the driver's own Python and their shards are host arithmetic covered
 # lanes already hash, so on a CPU-only install a "device index" is one
 # WORKER PROCESS and all of it runs. The four lanes now take a CPU column
-# with an oracle in the cell, which emptied `GPU_ONLY_LANES` at that time.
-# The pointwise ranking entries added on 2026-10-14 remain below. The question
+# with an oracle in the cell, `GPU_ONLY_LANES` became empty at that time, and the question
 # that was not asked -- "is the thing that refuses the thing the lane
 # hashes?" -- is written down there as the bar for the next entry.
 #
@@ -8471,10 +8476,11 @@ def _(ml, X, yc, yr, Xh=None):
 #: record's scope on every column; this is one column's inability to state the
 #: proposition at all, the same fact `lane_applicability` derives for cpu-host.
 #:
-#: The four original entries were removed on 2026-09-20
-#: (lane/cpu-routes-gpu-only-four); the two pointwise ranking entries below
-#: were added on 2026-10-14. Preserve why the original entries were wrong.
-#: Every one of the four refusals was real, by name, on a
+#: The original four entries were removed on 2026-09-20
+#: (lane/cpu-routes-gpu-only-four). Later exclusions also live in the lane
+#: fragments, which extend this registry when loaded. The history stays because
+#: the four entries it held were WRONG in a way worth writing down rather
+#: than deleting. Every one of the four refusals was real, by name, on a
 #: CPU-only install, and every one was read as a statement about arithmetic:
 #:
 #:   `mamba1-decode-session` / `transformer-decode-session`
@@ -8499,16 +8505,13 @@ def _(ml, X, yc, yr, Xh=None):
 #: of recording a REFUSED cell that reads like coverage in a column total.
 #: The bar to add one is the question these four did not get asked: is the
 #: thing that refuses the thing the lane hashes?
-GPU_ONLY_LANES = {
-    # f63ef2235 (2026-10-14): the querywise losses on the pointwise searcher.
-    # The thing that refuses IS the thing the lane hashes: the gbdt host
-    # binding's pointwise arm (`_gbdt_fit_pointwise_arm`) restates Logloss
-    # only and refuses PairLogit and YetiRank by name (`_refuse_pointwise`).
-    "gbdt-pair-logit-pointwise": "the gbdt host binding's pointwise arm trains Logloss only; "
-                                 "PairLogit under use_pointwise_searcher=True refuses by name",
-    "gbdt-yeti-rank-pointwise": "the gbdt host binding's pointwise arm trains Logloss only; "
-                                "YetiRank under use_pointwise_searcher=True refuses by name",
-}
+# The isolated CPU ranking draft adds the native route for the two existing
+# pointwise ranking lanes. They now participate in CPU selection and the gbdt
+# family's existing sabotage gate. This registration is not compilation or
+# runtime evidence: host_surface marks them unwatched, and the branch must
+# compile before merge (docs/GBDT_CPU_RANKING_DRAFT_20261027.md).
+# The device-residency exclusions in native_owners.py and coverage.py remain.
+GPU_ONLY_LANES = {}
 
 
 def _decode_session_probe(blk, state_fn, rows, length, dm, Xh):
@@ -9513,7 +9516,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank", "gbdt-ranking-defaults",
-            "gbdt-pair-logit-pointwise", "gbdt-yeti-rank-pointwise",
+            "gbdt-query-rmse-pointwise", "gbdt-pair-logit-pointwise", "gbdt-yeti-rank-pointwise",
             "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
             "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile",
             "gbdt-catboost-defaults", "par-border-types", "gbdt-stochastic-arms")
