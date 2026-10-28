@@ -1,0 +1,134 @@
+PEER 2 SELF-HANDOFF — 2026-10-28
+Resume this migration after user compaction. This is a checkpoint, not completion.
+
+USER DIRECTION / NON-NEGOTIABLES
+- Own preprocessing, decomposition/cross-decomposition, manifold public operations and dedicated implementations/providers. Follow aliases and inherited decorators to the real complete call path.
+- Complete public operation: inputs/model/settings -> one native call -> native validation/preparation/execution -> finished result. Preserve checks, fitted behavior, errors, shapes, dtypes and owners. Capture metadata once and retain original exporters. Do not replace support with arbitrary refusals or hide NumPy/Python computation behind a native entry.
+- Latest steering: do focused local compilation and merge passing repairs into main; do not run further verification. RunPod CPU authorized. No new source tests, runtime tests, GPU/vendor verification, benchmarks or publication; required commit/push hooks still run. Runtime/vendor coverage stays explicitly pending.
+- Three lane agents authorized; already exist. Resume them, do not spawn replacements unnecessarily. Coordinator independently reviews public paths. No lane compiles.
+- Never edit main or another worktree. External root serializes main integration. No neighbor/kernel/cluster, neural, imported-model, Session or adapter work, except explicitly assigned narrow shared helper changes below.
+- Read AGENTS.md plus experiments/provider_boundary_audit_20261027/{UNIVERSAL_AUDIT.txt,operations.tsv} if context is lost. Already read. An inventory/grep or compile is not runtime compliance.
+- Every lane brief/resume MUST include: Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, summarize exit status, coverage, failures, evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output. Propagate to subagents.
+- Always bound rg diagnostics with --max-columns 240 --max-columns-preview. Compiler logs may contain gigantic IR lines. Never read whole subagent transcripts/tasks outputs.
+
+COORDINATOR CHECKOUT / CONTACTS
+Repo main location: /Users/andrewhendel/CascadeProjects/mojolearn (read/coordination only).
+Our worktree: /Users/andrewhendel/mojolearn-wt/peer2-preprocessing-decomposition-manifold-20261027
+Our branch: lane/peer2-preprocessing-decomposition-manifold-20261027
+Recorded base main: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Pre-handoff local HEAD: 8b499806864cbd1b9abadf03064b9b7985815f7e (batch7 receipt).
+Remote at checkpoint: 71cba19d87a9aef9a941190feb28c1ee85ed8414; the handoff/receipt push will be attempted next. Inspect git status/log and remote ref when resuming.
+Evidence: /Users/andrewhendel/mojolearn-evidence/peer2-native-boundary-20261027/
+Origin: https://github.com/mojolearn/mojolearn.git
+External root thread: 01a18001-c4b5-7ba2-a735-6250b366b07e
+Our external thread: 01a18031-8936-7040-9669-5f5e52352859
+Peer1 (owns _expansion_ann.py): 01a18031-31e2-72c1-bf74-64f2a4136f2c
+CPU GBDT coordinator: 01a18061-a347-72a3-849f-5197e96ca16f
+Discover tools.mcp__codex_tui__send_message_to_thread via ALL_TOOLS if necessary (1000-byte messages). Do not read full remote transcripts. collaboration tools directly address existing /root/preprocessing, /root/decomposition, /root/manifold.
+
+MAIN INTEGRATIONS ALREADY DONE
+- Selector get_support / source-fixture repair: root receipt ae523b60fb.
+- Batch4 PLS lifecycle/scalars, manifold settings/storage/routing, UMAP constructor/reset, JL/RP: main 5d490ccbff.
+- Scaler snapshots/MinMax settings/type registration: main caa72cfe1f (root receipt0f27aa6b48, registration991727d372, helper4862b37910).
+- Batch6 selected manifold lifecycle/native import/device-owner fixes, PCA query envelope, sparse metadata/owner helper: main receipt67c303bf6a. TSNE companion included. Failed prep excluded. Root was pushing main and has since advanced it with unrelated lanes; do not assume its current HEAD is this receipt.
+- No claim that whole families are compliant. Manifold scalar conversions and UMAP categorical/lifecycle paths, further prep/decomp operations, constructors/attributes/archive/shared infrastructure still have debt.
+
+RETAINED COMPILE RESULTS (NO PRODUCT EXECUTION)
+Machine-readable receipts: experiments/peer2_native_boundary_20261027/compiled_batch_{4,5,6,7}.json and integration.json. They contain exact commands, compiler/packages, source/binary hashes, retention, ready/excluded commits and limitations.
+All successful binaries AND source bytes retained on Mac and R2. No Peer2 rental is active. All pods1-7 were deleted verified; evidence remains. Do not delete anyone else's pod. State.env files may remain after a completed runner; teardown receipts establish deletion.
+
+Batch4 frozen5bfbe8118e: PLS PASS38.4s, manifold PASS31.9s, UMAPinit PASS17s, JL/RP PASS20.6s; scalers failed. Main merged passing groups.
+Batch5 frozend5a3291cce: scalers PASS22.6s, manifold new lifecycle failed explicit metadata ownership/String alias errors. Both fixed later. Full builder wiring two-line delta after freeze was explicitly recorded; helper plus actual registration call was compiled in focused init. No installed loading tested.
+Batch6 frozenf6a83c35517720759c0cdde0663e819a37769655:
+  manifold PASS35.2s, actual exported runtime_manifold_host module init + typed registration + native owner branches;
+  pca_query PASS18.1s, query body and transitive sparse providers;
+  prep FAIL2.3s: explicit ArrayMetadata copies at prep_transform_pyapi141/187 and UInt64 shift RHS in core/prep_boundary_impl24.
+  Pod4oyi1zqe8aua2h, total $0.0700, deleted verified.
+  Source products pushed throughf6; receipt c69443fcf7. 20 green commits listed in compiled_batch_6.json merged by root. PCA production pca_native dispatch was source-reviewed; focused query target does not rebuild fit/archive owner.
+  R2: measurements/runpod-cpu/mojolearn-cpu-peer2-native-20261027-20261028-034956/results-complete.tgz
+Batch7 frozen71cba19d87a9aef9a941190feb28c1ee85ed8414:
+  prep PASS36.2877s; SHA799b652ebae43da4c26df627876edd102d155f3ab6e98a1ef98ab1618ddcab16.
+  Separate serial GBDT CTR2d5c5081a83eab132a56a2ef0e199e23c9bf7ed6 PASS~48.7s, -O0 full CPU GBDT host binding, version exit0, SHA5cc38580b1dc644a3164943b2bc374e75c6b7d113f8f0b25d504723d85bd4c30, 18,735,176 bytes.
+  Foreign source tree/payload/pins/command/result/log/.so at cpu-batch-7/remote/leg_out/gbdt-ctr. Its owning thread already received PASS and retention for its own main handoff. Do not duplicate this build or merge GBDT source from Peer2.
+  Podb8o973bpjz3685, combined exit0, total $0.0812, deleted verified.
+  R2: measurements/runpod-cpu/mojolearn-cpu-peer2-native-20261027-20261028-040353/results-complete.tgz
+  Prep NOT yet requested for main: later source review found object/string error-order correction9608dee4e5, which must compile first. This is a known source defect, not a runtime-test result. See receipt8b49980686.
+Earlier batches1-3 failures (toolchain activation, unreachable SSH, parse errors) and successful JL binary remain retained in evidence; do not rerun unchanged passing groups.
+
+BUILD PROCEDURE
+- Local Mac compile guard blocked on insufficient memory; do not override it. Use focused RunPod CPU builds.
+- tools/runpod_cpu_leg.sh --lane peer2-native-20261027 --worktree OUR_WT --vcpu32 --jobs32 --flavors cpu5c --lease60 --no-bincache --out EVIDENCE/cpu-batch-N --rent, output redirected to EVIDENCE/cpu-batch-N.log.
+- Command normally: python3 experiments/peer2_native_boundary_20261027/compile_cpu.py --groups <only affected groups>.
+- Choices currently scalers_pls,scalers,pls,manifold,umap_init,jl_rp,prep,pca_query. Add pca_fit mapping to experiments/peer2_decomposition_20261027/pca_fit_compile.mojo before that freeze (not yet added).
+- Pinned Mojo1.0.0(ed45d567), activated pixi default environment is essential (direct compiler without activation failed missing std). x86-64-v3, MOJOLEARN_NUMERIC_IDENTICAL=1, MOJOLEARN_COLUMN_CPU, real affinity/cgroup CPU allocation, serial groups. Each group max1200s, controller overall2700s. No GPU builds/runs.
+- Freeze clean source, commit/push. Wait for push completion before edits because hooks inspect live worktree. Active runner records source bytes/commit; never mutate its staged source/binary. New edits need new freeze. Use passing evidence for unchanged targets.
+- Runner arms Mac deadman before creation and remote60m watchdog at SSH, retains complete LEG_OUT including .so and source archives to Mac+R2, verifies hashes, writes R2_OK and teardown.txt, then verified deletes. Write provisional ownership state with open('x') immediately after create if runner has not yet written state.env. Notify root pod/lease/resources. No background watchers.
+- Batch7 used local batch7-command.sh to run prep then serial isolated GBDT payload (staging wait<=300s, compile<=1200s). All done; no pending staging/box jobs. Do not reuse its stale SSH endpoint.
+- Full push logs retained. Batch6 initial push refused unannotated import-time comprehensions; truthful glue comments fixed both, final pushes exit0. No hook bypasses.
+
+LANE CHECKPOINTS / NEXT WORK
+All three lanes finished checkpointing and stopped new edits until resumed. No active lane pushes remain. Read its concise CHECKPOINT_20261028.txt, not transcript. Preserve all drafts.
+
+PREPROCESSING
+WT /Users/andrewhendel/mojolearn-wt/peer2-preprocessing-20261027
+Branch lane/peer2-preprocessing-20261027
+HEAD=remote9608dee4e55afb6db612dd37179598168c8574c2; pushes exit0.
+Checkpoint /Users/andrewhendel/mojolearn-evidence/peer2-preprocessing-20261027/CHECKPOINT_20261028.txt
+Pending coordinator cherry-pick:9608dee4e5 (2-line numeric dtype guard, object/string arrays must reach original inner cast refusal before outer width/feature-name warning).
+Already in coordinator but not main prep commits: d7079cc921,205aecfc07,4b15c0ac7b,adc9ec89ba,4a1d0b089a,043f6d6bb9,9a78d8df3e,71cba19d87. The last two are compile repair and sparse error/tag preservation. Corresponding lane fixes71c406b0cb andf10fbb18a0.
+Native Normalizer.transform envelope: fitted/tag/shape/complex/finite/width/warnings/settings admission, snapshot provider, same x_prep stage, finished output. Immutable import-connected entry identities admitted before reader/kernel calls. Sparse default error must name Normalizer; explicit sparse tag/nested call retains old inner MaxAbsScaler wording.
+Dirty tracked draft files: bindings/prep_normalizer_lifecycle.mojo, bindings/prep_stateless_native.mojo, core/prep_boundary_impl.mojo, providers/python/prep_transform_pyapi.mojo, python/mojolearn/_expansion_prep.py.
+Untracked drafts: bindings/prep_fit_error.mojo, bindings/prep_normalizer_fit.mojo, providers/python/prep_arrow_target_pyapi.mojo, providers/python/prep_category_pyapi.mojo, providers/python/prep_target_pyapi.mojo.
+Fit/fit_transform draft is UNCOMMITTED, UNCOMPILED, UNRUN. Known gaps: classifier/regressor subclass target metadata; malformed fitting-depth exact errors; X pandas Categorical/other extension preparation narrower than old __array__; Arrow/category/nullable promotion and longdouble scalar lists need source comparison. Target extensions have draft native handling. Output conversion belongs inside track_fit before success publication.
+Next: finish holistic transform/fit validator/order/owners review, commit coherent fixes, independently review; compile final affected prep entry and request main merge only after pass. Do not hide remaining supported-input gaps.
+This lane owns providers/python/array_metadata_pyapi.mojo and dedicated prep/scaler providers. Shared metadata dtype spelling already merged with batch6. Ask/assign before introducing shared pandas target factoring; manifold may later reuse it.
+
+DECOMPOSITION
+WT /Users/andrewhendel/mojolearn-wt/peer2-decomposition-20261027
+Branch lane/peer2-decomposition-20261027
+Checkpoint HEAD3733438ca64b9f0559bac0710c307d94d1b83f1e; clean worktree.
+Remote remainscc18ae9ef41c159b6bd2ea897d6351718b71b425. Latest push FAILED exit1: GitHub fatal commit_refs_rules error, not a compiler result. No retry started at checkpoint. Log pca-fit-scalar-snapshot-push.log. Retry ordinary push after inspecting status; never bypass hooks/force.
+Checkpoint /Users/andrewhendel/mojolearn-evidence/peer2-decomposition-20261027/CHECKPOINT_20261028.txt
+Locally committed, NOT integrated into coordinator or compiled:
+  fa442d9bf27e94c4614ba8c2dc2109e733601501 — shared training_scalar_native four decode calls reuse already captured dtype; root expressly assigned this narrow shared change. Depends on native_scalar_buffer_dtype factorcbca14a2d1 already integrated/merged batch6.
+  2387c6586f145824a4e8ff72d3f7e47557bc0f4f — PCA fit/fit_transform native settings/input/entry/output envelope; dedicated compile root pca_fit_compile.mojo.
+  db865858a92e7f0a265dc775711352c7252f13ad — NumPy float64 fraction type is context['float64'].type.
+  9d86e41ac06098a6e1225dc977f8ec73f67ae26c — native PCAFitScalar caches mutable ndarray settings BEFORE input prep; defers conversion/warnings/errors to old stages; fixes MLE keep==0 projection to shape(rows,0); corrects hook loop annotation.
+  3733438ca64b9f0559bac0710c307d94d1b83f1e — native void snapshot/terminal hook admission followup, NOT yet independently reviewed.
+Dedicated new files: bindings/pca_fit_native.mojo; providers/python/pca_fit_model_pyapi.mojo; providers/python/pca_fit_scalar_pyapi.mojo. Handoff experiments/peer2_decomposition_20261027/PCA_FIT_HANDOFF.txt.
+Coordinator reviewed initial fit and found fixed issues: output zero-axis collapsed to vector; mutable scalar array bytes were decoded after Torch input prep could release GIL. New native records fix both in source.
+STILL REVIEW/FIX before freeze: array.array settings currently cloned to bytes, which may change parser-error type/repr; preserve native wrapper/error contract. training_scalar_number falls through NumPy temporal M/m number slots; replace with native temporal semantics without dropping support. Coordinate manifold temporal helper7082db091c59dc662ccc035af65724834f2115d4 (not yet cherry-picked). Exact pending C item-access exceptions currently cannot be deferred like string refusals; review whether any supported path changes error order. No tests authorized.
+Next: resolve these source concerns, retry push, independent review, add controller pca_fit group, compile dedicated actual helper/caller scope; query target need not rerun absent a relevant change. Other decomp/IPCA/RP operations remain later work.
+This lane owns _expansion_decomp.py (exclude ALS/covariance), native_scalar_decode narrow factor, host_sparse_native snapshot repair (already compiled/merged batch6), and root-assigned training_scalar_native dtype reuse. No other neural work.
+
+MANIFOLD
+WT /Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027
+Branch lane/peer2-manifold-20261027
+Final HEAD=remote7082db091c59dc662ccc035af65724834f2115d4; final temporal push exit0. Lane stopped until resumed.
+Checkpoint /Users/andrewhendel/mojolearn-evidence/peer2-manifold-20261027/HANDOFF-20261028.txt.
+Scalar adapter draft is392lines; categorical draft411lines is unwired. Finite-code host capacity cap MUST NOT ship.
+Committed NOT integrated into coordinator or compiled:
+  01342fc3758eccd2413611be1d4e726ef8add922 — root-assigned arena_cache_get timedelta Int64 range-before-narrowing repair. Source-only finding; no runtime reproduction. Compile real helper/caller next freeze.
+  9fbfadd421cca89f2381f85928044e21d9d87d60 — UMAP exact admitted NumPy integer/real scalar branches use native_scalar_buffer instead of NumPy number slots. Affects runtime_manifold and full/reset UMAP constructor/params target; do not assume old umap_init compile covers changed source.
+  7082db091c59dc662ccc035af65724834f2115d4 — pure-native manifold_temporal_native.temporal_object_kind(Int64,dtype.str,Booldelta) ->0integer/1None/2date/3datetime/4timedelta, for decomp reuse. No callers added in this commit; helper-only source is not compliance.
+Dirty drafts: bindings/_mojolearn_runtime_manifold_host.mojo, mani_decomp_native.mojo, mani_tsne_native.mojo, manifold_native.mojo, manifold_settings_native.mojo; python/mojolearn/_native_runtime_manifold_bridge.py.
+Untracked drafts: bindings/manifold_scalar_native.mojo, bindings/umap_labels_native.mojo.
+Scalar adapter draft captures NumPy settings before execution, routes decomp/TSNE numeric/truth/text operations through native snapshots, registers private type in actual host builder. Needs final temporal/void/buffer compatibility review; no generic new refusal merely for convenience. Depends on decomp's captured-dtype helperfa442.
+UMAP categorical draft not wired/committed: must replace .tolist/set/sorted while preserving labels, dtype units, bool/int/NaN identity, incomparable/complex/aware-naive temporal sort errors, missing -1 and original owners. Equality-only graph consumer source review found only exact -1/equality checks, no ordering/casts. Proposed private normal-float bit codes avoid int->f32 collisions; host huge-row capacity/domain compatibility still needs careful review. Any algorithm/encoding change keeps affected identity coverage pending; no campaign now.
+UMAP inherited lifecycle and broader source paths still incomplete. No full-family compliance claim.
+Owned runtime imports already fixed to native_loaded_module in batch6. Resident Lanczos now uses typed matrix_device/device_identifier. Actual dedicated module is sole runtime route; no tokenizer fallback registration needed.
+
+SHARED OWNERS / COORDINATION
+- External root: family dispatch/admission, attributes/estimator lifecycle, classical_exceptions and classical_error_boundary admission fixes. We reported mutable exception constructor hooks; root took separate repair. Do not edit these concurrently.
+- Root explicitly assigned decomp narrow training_scalar_native captured-dtype replacements and manifold arena_cache_get timedelta range repair. These are limited shared exceptions to original family scope, not permission for neural/arena rewrites.
+- Peer1 owns _expansion_ann.py; TSNE companion27bba573f6 integrated as9c5c220893 and merged batch6. Earlier cherry conflict resolved ONLY TSNE call args/connect_lifecycle lines, not unrelated ANN work.
+- Root's classical lane owns linalg_ops_decomp.mojo and narrow LinKit native-selection repair; no Peer2 overlap.
+- All main merges through external root, with ordered coherent commits and exact successful compile receipt. Do not ask approval again for routine authorized compile/merge.
+
+IMMEDIATE RESUME ORDER
+1. Read this file and three concise lane checkpoints; inspect own git status/HEAD/remote and active agents. Confirm no new external messages changed ownership.
+2. Resume existing lane agents with explicit logs reminder and no-test/no-lane-compile instruction; preserve drafts. Retry decomp remote push normally when ready.
+3. Cherry-pick/review9608 prep guard and complete any remaining transform/fit compatibility work. Do not merge current Normalizer while known correction is uncompiled.
+4. Finish PCA fit scalar buffer/temporal review and manifold scalar/categorical review. Keep unrelated work disjoint; no extra shared edits without owner assignment.
+5. Freeze next coherent ready source, push with full hooks, compile only affected prep/pca_fit/manifold/umap_init roots. Do not delay a genuinely ready passing operation for an unrelated draft. Successful unchanged groups reuse prior evidence.
+6. Retain all logs/source/accepted binary bytes Mac+R2 and verified teardown, then send root ordered merge-ready commits + receipt. Runtime/cross-vendor verification remains pending at user request.
