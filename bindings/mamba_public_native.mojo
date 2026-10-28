@@ -36,7 +36,7 @@ from providers.python.neural_descriptor_pyapi import (
 )
 from bindings.samba_inference_native import _m3_shapes, _m3_names, _m3_state_call
 from core.neural_block_public_impl import neural_copy_row_prefixes
-from core.native_descriptor_abi import MAMBA_BLOCK_ABI_NAME
+from core.native_descriptor_abi import MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from mamba.impl.mamba_session_impl import mamba_copy_f32, mamba_host_copy
 
 
@@ -525,6 +525,9 @@ def mamba_session_init(session: PythonObject, block: PythonObject, state: Python
         else:
             _ = py_call(_native_function(binding, kind_name + "_session_open"), handle.device, addresses, params)
     else:
+        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            handle.provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
+                _native_function(binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME))
         # The host arm owns typed copies, the device arm's upload on the host.
         for i in range(len(weights)):  # driver-loop: over block weight slots
             handle.weights.append(mamba_host_copy(generation_address(weights[i], keep), Int(py=weights[i].size)))
@@ -611,9 +614,22 @@ def mamba_session_step(session: PythonObject, input: PythonObject, context: Pyth
         else:
             _ = py_call(params.append, h[].q)
             _ = py_call(params.append, 1 if h[].pending else 0)
-        var updated = py_call(_native_function(h[].binding, name + "_decode_step"), addresses, params)
-        if kind != 1:
-            h[].q = Int(py=updated)
+        if h[].provider is not None:
+            var p: List[Int] = [b, h[].d_model]
+            var f = List[Float64]()
+            if kind != 1:
+                p.append(h[].q)
+            if kind == 2:
+                f.append(Float64(py=h[].dt_limit[0])); f.append(Float64(py=h[].dt_limit[1]))
+            elif kind == 3:
+                p.append(Int(h[].pending))
+            var updated = neural_descriptor_execute(h[].provider, 2 * kind - 1, _neural_int_words(addresses), p, f)
+            if kind != 1:
+                h[].q = updated
+        else:
+            var updated = py_call(_native_function(h[].binding, name + "_decode_step"), addresses, params)
+            if kind != 1:
+                h[].q = Int(py=updated)
         if kind == 3:
             h[].pending = False
     if kind == 1 and h[].profile == 2:
