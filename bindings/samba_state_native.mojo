@@ -300,7 +300,7 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
     var nc = context["neural"]
     # Immutable ABI connection occurs once at model construction/restoration.
     _ = neural_descriptor_cached(samba_fields(model), samba_entries(context, model.numeric_mode),
-        "_native_primitives", "neural_primitives_api_v1", String(PRIMITIVE_ABI_NAME), String(route) == "gpu")
+        "_native_primitives", "neural_primitives_api_v1", String(PRIMITIVE_ABI_NAME), True)
     # Samba preserves its training block interfaces on CPU-only installs too.
     # The execution route still selects the installed native CPU kernels; only
     # the Python-facing class differs from checkpoint inference construction.

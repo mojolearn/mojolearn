@@ -71,10 +71,13 @@ from bindings.neural_gemm_boundary_host import neural_gemm_binding
 from training.neural_session_mlp_host import nn_mlp_sessions_host
 
 from std.os import abort
+from training.host.native_primitive_dispatch import NATIVE_HOST_TRAINING_PRIMITIVE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
 from bindings.sha256_door import sha256_hexdigest
 from core.mojolearn_training_host_impl import (
+    embedding_forward_host_into, embedding_backward_host_into, rms_norm_forward_host_into, rms_norm_backward_host_into, linear_forward_host_into, linear_backward_host_into, accumulate_host_into, chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into,
     _host_offsets,
     _host_refuse_hyperparameters,
     _write_f32,
@@ -405,14 +408,7 @@ def embedding_forward_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        if n_positions < 1 or vocab < 1 or width < 1:
-            raise Error("mojolearn samba ops: embedding shape must be positive")
-        var y = host_samba_embedding_forward(
-            read_f32(a[1], vocab * width), read_i32(a[2], n_positions),
-            n_positions, vocab, width,
-        )
-        _write_f32(y, f32_ptr(a[0]))
-        count = n_positions * width
+        count = embedding_forward_host_into(a, n_positions, vocab, width)
     return PythonObject(count)
 
 
@@ -428,14 +424,7 @@ def embedding_backward_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        if n_positions < 1 or vocab < 1 or width < 1:
-            raise Error("mojolearn samba ops: embedding shape must be positive")
-        var dw = host_samba_embedding_backward(
-            read_f32(a[1], n_positions * width), read_i32(a[2], n_positions),
-            n_positions, vocab, width,
-        )
-        _write_f32(dw, f32_ptr(a[0]))
-        count = vocab * width
+        count = embedding_backward_host_into(a, n_positions, vocab, width)
     return PythonObject(count)
 
 
@@ -451,13 +440,7 @@ def rms_norm_forward_binding(
     var eps = Float32(Float64(py=params[2]))
     var count = 0
     with GILReleased(Python()):
-        if m < 1 or dm < 1:
-            raise Error("mojolearn samba ops: rms_norm shape must be positive")
-        var y = host_samba_rms_norm_forward(
-            read_f32(a[1], m * dm), read_f32(a[2], dm), m, dm, eps
-        )
-        _write_f32(y, f32_ptr(a[0]))
-        count = m * dm
+        count = rms_norm_forward_host_into(a, m, dm, eps)
     return PythonObject(count)
 
 
@@ -473,15 +456,7 @@ def rms_norm_backward_binding(
     var eps = Float32(Float64(py=params[2]))
     var count = 0
     with GILReleased(Python()):
-        if m < 1 or dm < 1:
-            raise Error("mojolearn samba ops: rms_norm shape must be positive")
-        var r = host_samba_rms_norm_backward(
-            read_f32(a[2], m * dm), read_f32(a[3], m * dm), read_f32(a[4], dm),
-            m, dm, eps,
-        )
-        _write_f32(r[0], f32_ptr(a[0]))
-        _write_f32(r[1], f32_ptr(a[1]))
-        count = m * dm
+        count = rms_norm_backward_host_into(a, m, dm, eps)
     return PythonObject(count)
 
 
@@ -540,11 +515,7 @@ def linear_forward_binding(
     var k = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        if m < 1 or n < 1 or k < 1:
-            raise Error("mojolearn samba ops: linear shape must be positive")
-        var c = host_samba_linear_forward(read_f32(a[1], m * k), read_f32(a[2], n * k), m, n, k)
-        _write_f32(c, f32_ptr(a[0]))
-        count = m * n
+        count = linear_forward_host_into(a, m, n, k)
     return PythonObject(count)
 
 
@@ -560,14 +531,7 @@ def linear_backward_binding(
     var k = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        if m < 1 or n < 1 or k < 1:
-            raise Error("mojolearn samba ops: linear shape must be positive")
-        var r = host_samba_linear_backward(
-            read_f32(a[2], m * n), read_f32(a[3], m * k), read_f32(a[4], n * k), m, n, k
-        )
-        _write_f32(r[0], f32_ptr(a[0]))
-        _write_f32(r[1], f32_ptr(a[1]))
-        count = m * k
+        count = linear_backward_host_into(a, m, n, k)
     return PythonObject(count)
 
 
@@ -585,11 +549,7 @@ def accumulate_binding(
     var t_tokens = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        if n < 1 or steps < 1:
-            raise Error("mojolearn samba ops: accumulate n and accumulation_steps must be at least 1")
-        var out = host_samba_accumulate(read_f32(a[1], n * steps), n, steps, t_tokens)
-        _write_f32(out, f32_ptr(a[0]))
-        count = n
+        count = accumulate_host_into(a, n, steps, t_tokens)
     return PythonObject(count)
 
 
@@ -675,16 +635,7 @@ def chunked_lm_head_v2_loss_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        if rows < 1 or vocab < 2 or width < 1:
-            raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
-        var r = chunked_lm_head_v2_oracle_forward(
-            read_f32(a[3], rows * width), read_f32(a[4], vocab * width),
-            read_i32(a[5], rows), rows, vocab, width,
-        )
-        f32_ptr(a[0])[0] = r.loss
-        _write_f32(r.row_max, f32_ptr(a[1]))
-        _write_f32(r.row_denom, f32_ptr(a[2]))
-        count = rows
+        count = chunked_lm_head_v2_loss_host_into(a, rows, vocab, width)
     return PythonObject(count)
 
 
@@ -701,18 +652,7 @@ def chunked_lm_head_v2_train_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        if rows < 1 or vocab < 2 or width < 1:
-            raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
-        var r = chunked_lm_head_v2_oracle(
-            read_f32(a[5], rows * width), read_f32(a[6], vocab * width),
-            read_i32(a[7], rows), rows, vocab, width,
-        )
-        f32_ptr(a[0])[0] = r.loss
-        _write_f32(r.row_max, f32_ptr(a[1]))
-        _write_f32(r.row_denom, f32_ptr(a[2]))
-        _write_f32(r.d_hidden, f32_ptr(a[3]))
-        _write_f32(r.d_weight, f32_ptr(a[4]))
-        count = rows
+        count = chunked_lm_head_v2_train_host_into(a, rows, vocab, width)
     return PythonObject(count)
 
 def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
@@ -727,9 +667,15 @@ def neural_arithmetic_profile_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_training_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+def neural_primitives_api_binding() raises -> PythonObject:
+    var api = NATIVE_HOST_TRAINING_PRIMITIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_training_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_training_host")
+        module.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
         module.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
         module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_function[training_host_numeric_mode_binding]("training_host_numeric_mode")

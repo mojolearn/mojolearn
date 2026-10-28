@@ -21,6 +21,17 @@ def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: Lis
         if op == 13:
             owner[].closed = True
         return 0
+    if op == 33:
+        if (len(a) != 13 and len(a) != 13 + BLOCK_OPTION_ADDRS) or (len(p) != 10 and len(p) != 10 + BLOCK_OPTION_PARAMS):
+            raise Error("transformer_forward: invalid descriptor arity")
+        var raw = a.copy()
+        while len(raw) < 13 + BLOCK_OPTION_ADDRS:  # small-loop(optional address tail)
+            raw.append(0)
+        for i in range(13):  # small-loop(original carried-state address admission)
+            if i != 7 and raw[i] == 0:
+                raise Error("transformer_forward: null buffer address")
+        var opts = BlockOptions.from_params(p, 10)
+        return _run_forward(raw, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], True, opts)
     if op == 5:
         if len(a) != 21 or len(p) != 8:
             raise Error("transformer backward: expected 21 addresses and eight scalars")

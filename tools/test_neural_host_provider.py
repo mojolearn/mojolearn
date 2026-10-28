@@ -82,3 +82,24 @@ def test_cpu_mamba_public_admission_refreshes_both_tables():
     assert '_mamba3_run(a, p[0], length, width, p[tail], p[tail + 1], False)' in state
     binding=(ROOT/'bindings/_mojolearn_mamba_host.mojo').read_text()
     assert '[mamba_state_api_binding]("mamba_state_api_v1")' in binding
+
+
+def test_cpu_training_primitives_share_relocated_public_helpers():
+    _, failures=audit(ROOT,('training.host.native_primitive_dispatch',))
+    assert not failures, failures
+    binding=(ROOT/'bindings/_mojolearn_training_host.mojo').read_text()
+    core=(ROOT/'core/mojolearn_training_host_impl.mojo').read_text()
+    provider=(ROOT/'training/host/native_primitive_dispatch.mojo').read_text()
+    for name in ('embedding_forward','embedding_backward','rms_norm_forward','rms_norm_backward',
+                 'linear_forward','linear_backward','accumulate','chunked_lm_head_v2_loss','chunked_lm_head_v2_train'):
+        assert f'def {name}_host_into(' in core
+        assert f'count = {name}_host_into(a,' in binding
+        assert f'return {name}_host_into(a,' in provider
+    assert 'return optimizer_step_host_into(' in provider
+    assert 'return ce_loss_host_into(' in provider
+    assert 'op != 25' in provider
+    assert '[neural_primitives_api_binding]("neural_primitives_api_v1")' in binding
+    samba=(ROOT/'providers/python/samba_execution_pyapi.mojo').read_text()
+    assert 'var use_session = not cpu and' in samba
+    assert 'operation = 33 if cpu else (35 if packed else 11)' in samba
+    assert '12 if use_session or layer_state is not None else 10' in samba

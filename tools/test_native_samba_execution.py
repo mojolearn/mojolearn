@@ -109,7 +109,7 @@ def test_accumulation_reuses_admitted_native_metadata_and_keeps_original_reducti
 
 def test_packed_forward_retains_scratch_and_original_native_function():
     boundary=(ROOT/'providers/python/samba_execution_pyapi.mojo').read_text()
-    assert 'operation = 35 if packed else 11' in boundary
+    assert 'operation = 33 if cpu else (35 if packed else 11)' in boundary
     assert 'layer.scratch = scratch^' in boundary
     assert 'scratch.append(List[Float32](length=count, fill=0))' in boundary
     native=(ROOT/'transformer/native_block_dispatch.mojo').read_text()
