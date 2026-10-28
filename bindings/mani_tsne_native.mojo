@@ -8,6 +8,7 @@
 # argument lists it always took and stores the fitted attributes. The same
 # entries on the same operands: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.classical_arrays import classical_address, classical_word
 from bindings.classical_attributes import classical_connect_numpy
@@ -31,7 +32,7 @@ def _tsne_int(name: String, value: PythonObject) raises -> PythonObject:
     """`_ann_int("TSNE", name, value)`."""
     if not family_is_int(value):
         raise Error("TypeError: mojolearn TSNE: " + name + " must be an int, got " + family_type_name(value))
-    return family_call(Python.import_module("builtins").int, value)
+    return family_call(native_loaded_module("builtins").int, value)
 
 
 def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k: Int,
@@ -41,7 +42,7 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     refusal and its one `pca_fit_owned` call."""
     if k < 1 or k > d:
         raise Error("mojolearn n_components must be in [1, " + String(d) + "], got " + String(k))
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fit_owned = spectral_umap_optional_entry(estimators, "pca_fit_owned", context)
     if fit_owned is None:
         raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not "
@@ -78,8 +79,8 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
 def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, snapshot: ArrayMetadata, context: PythonObject) raises -> PythonObject:
     """`TSNE.fit(X)`; returns the embedding."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
-    var op = Python.import_module("operator")
+    var b = native_loaded_module("builtins")
+    var op = native_loaded_module("operator")
     var binding = estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]
     var estimators = estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]
     var fields = settings.values
@@ -194,8 +195,8 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
 
 
 def _tsne_is_bool(value: PythonObject) raises -> Bool:
-    return Bool(py=py_call(Python.import_module("builtins").isinstance, value,
-                           Python.import_module("builtins").bool))
+    return Bool(py=py_call(native_loaded_module("builtins").isinstance, value,
+                           native_loaded_module("builtins").bool))
 
 
 def tsne_operation(model: PythonObject, settings: ManifoldSettings, operation: String, args: PythonObject,

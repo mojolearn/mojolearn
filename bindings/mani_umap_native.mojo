@@ -12,6 +12,7 @@
 # The same entries on the same operands: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -38,7 +39,7 @@ comptime _I64_MAX = 9223372036854775807
 
 def _umap_mode(settings: ManifoldSettings, context: PythonObject) raises -> String:
     """`(self.numeric_mode or _backend.default_mode()).strip().lower()`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var want = settings.requested
     if want is not None and py_type(want) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
@@ -53,20 +54,20 @@ def _umap_check_mode(binding: PythonObject, mode: String, message: String, conte
         raise Error("KeyError: " + family_repr(PythonObject(mode)))
     var got = family_call(family_entry(binding, "umap_numeric_mode", context))
     var want = 0 if mode == "fast" else 1
-    if Bool(py=py_call(Python.import_module("operator").ne, got, PythonObject(want))):
+    if Bool(py=py_call(native_loaded_module("operator").ne, got, PythonObject(want))):
         raise Error("RuntimeError: " + message)
 
 
 def _umap_legacy_tail(config: PythonObject) raises -> Bool:
     """`config[8:] == [1.0, 1.0, 5]`."""
-    var op = Python.import_module("operator")
+    var op = native_loaded_module("operator")
     return (Bool(py=py_call(op.eq, config[8], PythonObject(1.0))) and Bool(py=py_call(op.eq, config[9], PythonObject(1.0)))
             and Bool(py=py_call(op.eq, config[10], PythonObject(5))))
 
 
 def _umap_default_extras(extras: PythonObject) raises -> Bool:
     """`extras == (-1, 2.0, 0.0, 0.0)`."""
-    return Bool(py=py_call(Python.import_module("operator").eq, extras,
+    return Bool(py=py_call(native_loaded_module("operator").eq, extras,
                            Python.tuple(PythonObject(-1), PythonObject(2.0), PythonObject(0.0), PythonObject(0.0))))
 
 
@@ -80,7 +81,7 @@ def _umap_head(config: PythonObject, count: Int) raises -> PythonObject:
 
 def _umap_concat(a: PythonObject, b: PythonObject) raises -> PythonObject:
     """`[*a, *b]`."""
-    var out = py_call(Python.import_module("builtins").list, a)
+    var out = py_call(native_loaded_module("builtins").list, a)
     _ = py_call(out.extend, b)
     return out
 
@@ -185,8 +186,8 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
 
 def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`_target(y, n)`: (kind, dims, codes, target_n_neighbors, weight)."""
-    var b = Python.import_module("builtins")
-    var op = Python.import_module("operator")
+    var b = native_loaded_module("builtins")
+    var op = native_loaded_module("operator")
     var fields = settings.values
     var tm = family_field(fields, "target_metric")
     var w = _umap_scalar(family_field(fields, "target_weight"), "target_weight", context)
@@ -256,7 +257,7 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var config = validated[0]
     var extras = validated[1]
     var x = family_f32_snapshot(source, 2, "X", context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var source_type = py_type(source)
     var copied = True
     if source_type is py_get(context, "ndarray") or source_type is context["array_class"]:
@@ -271,7 +272,7 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var n = x.source.rows
     var d = x.source.cols
     var nc = Int(py=config[1])
-    if Bool(py=py_call(Python.import_module("operator").gt, config[0], PythonObject(n))):
+    if Bool(py=py_call(native_loaded_module("operator").gt, config[0], PythonObject(n))):
         raise Error("UMAP n_neighbors exceeds n_samples")
     var initial = _umap_initial(settings, x, n, nc, config[7], context)
     if not initial and n < 2 * nc + 4:
@@ -321,7 +322,7 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         _ = x  # keep the Python object alive through the native call above
     _ = initial^
     _ = target^
-    if Bool(py=py_call(Python.import_module("operator").ne, columns, PythonObject(nc))) or not _umap_finite(embedding_address, n * nc):
+    if Bool(py=py_call(native_loaded_module("operator").ne, columns, PythonObject(nc))) or not _umap_finite(embedding_address, n * nc):
         raise Error("RuntimeError: UMAP returned an invalid embedding")
     # Prepare all retained state before publishing a successful fit. Copies
     # prevent caller edits of X or embedding_ from changing transform's model.
@@ -340,15 +341,15 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
 
 def _umap_concat_tuple(config: PythonObject, extras: PythonObject) raises -> PythonObject:
     """`tuple(config) + tuple(extras)`."""
-    var b = Python.import_module("builtins")
-    return py_call(Python.import_module("operator").add, py_call(b.tuple, config), py_call(b.tuple, extras))
+    var b = native_loaded_module("builtins")
+    return py_call(native_loaded_module("operator").add, py_call(b.tuple, config), py_call(b.tuple, extras))
 
 
 def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`UMAP.transform(X)`."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
-    var op = Python.import_module("operator")
+    var b = native_loaded_module("builtins")
+    var op = native_loaded_module("operator")
     if not py_contains(settings.values, "_transform_training"):
         raise Error("UMAP transform requires a successful fit")
     var validated = umap_parameters_fields(settings.values, context)

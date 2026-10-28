@@ -77,7 +77,7 @@ def mk_store_zeros(n: Int, ctx: PythonObject) raises -> PythonObject:
 
 
 def mk_store_len(store: PythonObject) raises -> Int:
-    return Int(py=py_call(Python.import_module("builtins").len, store))
+    return Int(py=py_call(native_loaded_module("builtins").len, store))
 
 
 def mk_store_addr(store: PythonObject) raises -> PythonObject:
@@ -272,7 +272,7 @@ def mk_rows(m: PythonObject, a: Int, b: Int, ctx: PythonObject) raises -> Python
             idx.append(i)
         return mk_dev_gather(m, MV_TAKE_ROWS, idx, ctx)
     var store = mk_store(m, ctx)
-    var part = py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice,
+    var part = py_call(py_attr(store, "__getitem__"), py_call(native_loaded_module("builtins").slice,
                                                   PythonObject(a * c), PythonObject(b * c)))
     return mk_new(part, b - a, c, ctx)
 
@@ -393,7 +393,7 @@ struct MKit(Movable):
         """`_kit_vendor`: the binding's compiled vendor, "" when it cannot say."""
         try:
             var f = spectral_umap_entry(self.raw, "x_decomp_vendor", self.ctx)
-            return String(py=py_call(Python.import_module("builtins").str, py_call(f)))
+            return String(py=py_call(native_loaded_module("builtins").str, py_call(f)))
         except:
             return String("")
 
@@ -401,7 +401,7 @@ struct MKit(Movable):
         """`w4_flags()`: 0 on a binding without the entry."""
         try:
             var f = spectral_umap_entry(self.raw, "x_decomp_w4_flags", self.ctx)
-            return Int(py=py_call(Python.import_module("builtins").int, py_call(f)))
+            return Int(py=py_call(native_loaded_module("builtins").int, py_call(f)))
         except:
             return 0
 
@@ -474,7 +474,7 @@ struct MKit(Movable):
         if cache is None:
             cache = Python.dict()
             py_setitem(self.ctx, "family_mani_native_dev_one", cache)
-        var key = py_call(Python.import_module("builtins").id, self.raw)
+        var key = py_call(native_loaded_module("builtins").id, self.raw)
         var d = py_get(cache, key, PythonObject(None))
         if d is None or not (device_binding(d) is self.raw):
             d = mk_devbuf(self.raw, 1, self.ctx)
@@ -664,8 +664,8 @@ struct MKit(Movable):
 
     def rand(mut self, r: Int, c: Int, seed: PythonObject, stream: Int, kind: Int) raises -> PythonObject:
         """`rand(r, c, seed, stream, kind)` (the Philox stream)."""
-        var op = Python.import_module("operator")
-        var b = Python.import_module("builtins")
+        var op = native_loaded_module("operator")
+        var b = native_loaded_module("builtins")
         var params = Python.list()
         mk_append(params, PythonObject(r * c))
         mk_append(params, py_call(op.and_, py_call(b.int, seed), PythonObject(0xFFFFFFFF)))
@@ -1025,12 +1025,12 @@ struct MKit(Movable):
         var c = 0
         if n > 0:
             var pa = mk_addr(a, self.ctx)
-            c = Int(py=py_call(Python.import_module("builtins").int,
+            c = Int(py=py_call(native_loaded_module("builtins").int,
                                family_call(self.fn("x_decomp_argmin_all"), pa, PythonObject(n),
                                            mk_addr(buf, self.ctx))))
             _ = buf  # keep the Python object alive through the native call above
         var store = mk_store(buf, self.ctx)
-        var part = py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice,
+        var part = py_call(py_attr(store, "__getitem__"), py_call(native_loaded_module("builtins").slice,
                                                       PythonObject(0), PythonObject(c)))
         return mk_new(part, c, 1, self.ctx)
 
@@ -1072,7 +1072,7 @@ struct MKit(Movable):
             return v
         # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
         var pm = mk_addr(m, self.ctx)
-        return Float64(py=py_call(Python.import_module("builtins").float,
+        return Float64(py=py_call(native_loaded_module("builtins").float,
                                   family_call(self.fn("x_decomp_dsum_sq"), pm, PythonObject(n))))
 
     # ---- neighbor graphs (x_decomp/graph_cells.mojo)
@@ -1174,7 +1174,7 @@ struct MKit(Movable):
 
     def graph_components(mut self, w: PythonObject) raises -> Tuple[PythonObject, Int]:
         var n = mk_r(w)
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if self.res():
             var comp = self.dout(n, 1)
             var iw = self.did(w)
@@ -1212,7 +1212,7 @@ struct MKit(Movable):
         var py = mk_addr(y, self.ctx)
         var pi = mk_addr(nbr, self.ctx)
         _ = family_call(self.fn("x_decomp_barycenter_rows"), px, py, pi, mk_addr(w, self.ctx), mk_addr(flags, self.ctx),
-                        mk_ints([n, mk_r(y), mk_c(x), k]), py_call(Python.import_module("builtins").float, reg))
+                        mk_ints([n, mk_r(y), mk_c(x), k]), py_call(native_loaded_module("builtins").float, reg))
         _ = flags  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         return w
