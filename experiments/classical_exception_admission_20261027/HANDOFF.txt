@@ -1,0 +1,22 @@
+CLASSICAL EXCEPTION ADMISSION — 2026-10-27
+Branch: lane/classical-exception-admission-20261027
+
+Changes
+- Admit own, sklearn and cached bridge NotFittedError classes before native
+  construction. Require exact native metaclasses/bases and reject changed
+  construction, finalizer and attribute hooks.
+- Inspect exact namespace keys before lookups; reject protocol-bearing keys
+  in sklearn module metadata and bridge registries.
+- Recheck the selected class at the C exception boundary for owners emitting
+  fitted-state errors directly; use connected builtins instead of importing.
+- Reduction reads BaseException's native args descriptor after class admission.
+- Add public-operation rejection controls for own/cached class hook mutation
+  and module key protocols. These tests are retained, NOT RUN.
+
+Compilation
+Actual selection/restoration/reduction/C error path root passed Mac CPU column,
+identical, O0, all10 configured workers, 41.040 seconds, exit0. No runtime,
+GPU, installed-wheel or identity verification. Source bytes/hashes, complete
+compiler/log/artifact information are retained by compile.json and at:
+~/mojolearn-evidence/classical-exception-admission-20261027/attempt1/
+No numerical kernels changed. Other shared error/warning paths remain separate.
