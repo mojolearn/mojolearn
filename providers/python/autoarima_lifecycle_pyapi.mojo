@@ -11,6 +11,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_onc
 from core.xseq_marshal import xseq_cast_nd
 from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_SIGNED
 from bindings.sequential_admission import _one_of
+from providers.python.forecast_owner_pyapi import forecast_commit
 
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -72,11 +73,13 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
             strides.append(source.source.s1)
         xseq_cast_nd(source.source.addr, source.shape, strides, source.source.itemsize, source.source.kind, True,
                      _F32(unsafe_from_address=Int(py=classical_address(out))))
-    py_setitem(fields, "endog", args[0])
-    py_setitem(fields, "_endog", out)
-    py_setitem(fields, "batch_size", rows)
-    py_setitem(fields, "n_obs", cols)
-    py_setitem(fields, "models", Python.list())
+    var updates = Python.dict()
+    py_setitem(updates, "endog", args[0])
+    py_setitem(updates, "_endog", out)
+    py_setitem(updates, "batch_size", rows)
+    py_setitem(updates, "n_obs", cols)
+    py_setitem(updates, "models", Python.list())
+    forecast_commit(fields, updates, context["tsa_owner_context"])
     _ = source
     return PythonObject(None)
 

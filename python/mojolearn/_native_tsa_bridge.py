@@ -18,6 +18,10 @@ def connect():
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("the stationarity functions require the compiled tsa_native_call entry")
     context = _state_context()
+    from ._native_owner_lifetime import connect_owner_context
+    ownership = dict(context)
+    connect_owner_context(ownership)
+    context["tsa_owner_context"] = ownership
     selected = _backend.default_mode()
     bindings = {}
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
