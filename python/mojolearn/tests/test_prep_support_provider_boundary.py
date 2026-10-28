@@ -1,0 +1,113 @@
+"""Selector support boundary controls; native runtime cases need integration.
+
+The source test exercises only the Python forwarding contract. It does not
+qualify the compiled operation. Runtime controls call the public aliases.
+"""
+import sys
+
+import pytest
+
+
+@pytest.fixture
+def public_classes():
+    # Delayed import allows the source-only selection to run without loading
+    # unbuilt native modules. Run these controls after root's local compile.
+    import mojolearn as ml
+    from mojolearn import feature_selection
+    assert ml.VarianceThreshold is feature_selection.VarianceThreshold
+    assert ml.SelectKBest is feature_selection.SelectKBest
+    return [feature_selection.VarianceThreshold, feature_selection.SelectKBest]
+
+
+def _fitted(cls):
+    model = cls()
+    # get_support consumes only completed fitted metadata. No numerical fit
+    # is necessary to exercise this complete public operation and its errors.
+    model.n_features_in_ = 3
+    model._mask = [True, False, True]
+    return model
+
+
+def test_public_support_preserves_list_values_and_ownership(public_classes):
+    for cls in public_classes:
+        model = _fitted(cls)
+        assert model.get_support() == [True, False, True]
+        assert model.get_support(indices=True) == [0, 2]
+        result = model.get_support()
+        assert type(result) is list
+        assert result is not model._mask
+        result[0] = False
+        assert model._mask == [True, False, True]
+
+
+def test_public_support_retains_unfitted_error(public_classes):
+    for cls in public_classes:
+        with pytest.raises(RuntimeError, match='not fitted yet'):
+            cls().get_support()
+
+
+@pytest.mark.parametrize('location', ['indices', 'mask', 'item'])
+def test_public_support_refuses_protocols_without_calling_them(public_classes, location):
+    calls = []
+
+    class Hook:
+        def __bool__(self):
+            calls.append('bool')
+            return True
+
+        def __iter__(self):
+            calls.append('iter')
+            return iter([True, False, True])
+
+    for cls in public_classes:
+        model = _fitted(cls)
+        if location == 'mask':
+            model._mask = Hook()
+        elif location == 'item':
+            model._mask = [Hook(), False, True]
+        with pytest.raises(TypeError):
+            model.get_support(indices=Hook() if location == 'indices' else True)
+        assert calls == []
+
+
+def test_public_support_has_no_python_preparation_or_result_frames(public_classes):
+    for cls in public_classes:
+        model = _fitted(cls)
+        method = model.get_support
+        calls = []
+
+        def record(frame, event, arg):
+            if event == 'call' and '/mojolearn/' in frame.f_code.co_filename:
+                calls.append(frame.f_code)
+
+        previous = sys.getprofile()
+        sys.setprofile(record)
+        try:
+            result = method(indices=True)
+        finally:
+            sys.setprofile(previous)
+        assert result == [0, 2]
+        assert calls == [method.__func__.__code__]
+
+
+def test_public_support_rejects_dictionary_property_before_hook(public_classes):
+    calls = []
+    for cls in public_classes:
+        model = _fitted(cls)
+        method = model.get_support
+        previous = vars(cls).get('__dict__')
+
+        def dictionary(self):
+            calls.append('__dict__')
+            return {}
+
+        cls.__dict__ = property(dictionary)
+        try:
+            with pytest.raises(TypeError):
+                method()
+        finally:
+            if previous is None:
+                del cls.__dict__
+            else:
+                cls.__dict__ = previous
+        assert calls == []

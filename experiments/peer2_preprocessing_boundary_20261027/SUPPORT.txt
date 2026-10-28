@@ -1,0 +1,39 @@
+Selector support native boundary (2026-10-27)
+
+Branch: lane/peer2-preprocessing-20261027
+Starting local main: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+
+Public path: mojolearn.{VarianceThreshold,SelectKBest} and their
+mojolearn.feature_selection aliases -> _SelectorMixin.get_support ->
+_STATELESS_CALL/prep_stateless_c -> prep_support -> completed list.
+_mode's _NEEDS_FIT and _OUTPUTS exclude get_support: this method has no
+inherited tracked/guarded/public method wrappers. Shared public attribute
+lookup remains root-owned. The entry checks the family, fitted field and
+native instance/class metadata before reading the mask; original mask owners
+survive construction of the independent returned list. Callback-bearing
+indices, masks, elements, __dict__ or field descriptors are refused.
+
+Validation: source forwarding control 1 passed (exit 0). Initial source test
+collection under the Python package exited 2 because this worktree has no
+compiled bindings; the test was moved to tests/ so source selection does not
+import product code. Original failure log is retained, not a runtime failure.
+Runtime controls cover public aliases, fitted error, output type/ownership,
+protocol rejection, dictionary descriptors and recorded Python frames. They
+are UNRUN until integration. No compile or GPU run was performed by this lane.
+Affected small native compile: bindings/_mojolearn_runtime_classical_host.mojo
+(via bindings/build_runtime_classical_host.sh); prep_stateless_native imports
+the new prep_support_native helper. No numerical kernel source was changed.
+
+Remaining work: fit/fit_transform/transform/inverse_transform of the broader
+stateless/encode prep classes still have inherited _mode wrappers performing
+_sk_validate, fitted lifecycle and public result conversion. Removing those
+wrappers without replacing their semantics is not authorized. Root owns the
+shared migration. Native numeric calls still use py_call/py_call_typed in
+scaler_native, scaler_lifecycle_native, minmax_native and x_prep_native_owner;
+those calls need typed provider admission/invocation. _input/xprep_values and
+fit_transform fallback routes reread metadata. None of the above is qualified
+by the support source test; whole-family runtime compliance is NOT claimed.
+
+Complete logs: ~/mojolearn-evidence/peer2-preprocessing-20261027/
+  support-source-tests.log / support-source-tests.exit (exit 2)
+  support-source-tests-standalone.log / support-source-tests-standalone.exit
