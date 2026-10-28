@@ -8,6 +8,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.mode_metadata_native import _fields
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.x_neighbors_admission_pyapi import xn_admit_checked
 
 
 def estimator_binding(model: PythonObject, name: String, context: PythonObject, check_mode: Bool = True) raises -> PythonObject:
@@ -79,6 +80,11 @@ def estimator_binding_mode(requested: PythonObject, name: String, context: Pytho
 
 def estimator_checked_mode(module: PythonObject, reader: String, name: String,
                            requested: String) raises -> PythonObject:
+    # XN identical estimators read mode/capabilities from their native table
+    # once. Downstream xn_admit reuses this operation-local retained snapshot.
+    # Existing fast admission and explicit legacy/module callers stay separate.
+    if name == "_mojolearn_x_neighbors" and requested == "identical":
+        return xn_admit_checked(module)
     # These families read mode from their admitted native table once per
     # operation. Preserve that single read instead of calling the legacy door
     # first; plain frontdoors below still perform the original checked readback.

@@ -1,0 +1,62 @@
+{
+ "step": "2: RandomProjection components_ get/set and __getstate__ to the native decomposition owner",
+ "coverage": "decomp_c whole dispatcher (FastICA/FA/KernelPCA/RP/LDA/NMF doors) incl. rp_components, rp_set_components, rp_getstate",
+ "not_covered": "_mojolearn_runtime_classical_host builder link, Python glue execution, runtime, identity, GPU targets",
+ "inventory": {
+  "file": "python/mojolearn/_expansion_decomp.py",
+  "prohibited_source_groups_before": 3,
+  "after": 0,
+  "endpoints_before": 6,
+  "after_endpoints": 0
+ },
+ "compiles": [
+  {
+   "group": "decomp",
+   "source_commit": "83b57f17a2771a02349e67c5c1d2a5e875df8459",
+   "tracked_dirty_files": 0,
+   "entry": "experiments/purge_decomp_manifold_20261028/compile_decomp.mojo",
+   "exit_status": 0,
+   "seconds": 20.63,
+   "binary_sha256": "39f7a09de88b08f2c007d8ea566b68e0491b776332f78b36f53764524873815e",
+   "compiler_version": "Mojo 1.0.0 (ed45d567)",
+   "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+   "log": "/Users/andrewhendel/mojolearn-evidence/purge-decomp-manifold-20261028/step2-a1/decomp/build.log",
+   "command": [
+    "pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027/bindings",
+    "/Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027/experiments/purge_decomp_manifold_20261028/compile_decomp.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/purge-decomp-manifold-20261028/step2-a1/decomp/out.so"
+   ],
+   "jobs": 10,
+   "target": "local Mac CPU apple-m1, MOJOLEARN_NUMERIC_IDENTICAL=1, MOJOLEARN_COLUMN_CPU, O0",
+   "runtime": "NOT_RUN",
+   "vendor_identity": "NOT_RUN"
+  }
+ ]
+}

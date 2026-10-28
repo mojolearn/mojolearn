@@ -13,7 +13,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.ica_native import ica_fit, ica_project
 from bindings.fa_native import fa_fit, fa_query
 from bindings.kpca_native import kpca_fit, kpca_fit_transform, kpca_transform
-from bindings.rp_native import rp_fit, rp_project, rp_query
+from bindings.rp_native import rp_components, rp_fit, rp_getstate, rp_project, rp_query, rp_set_components
 from bindings.lda_native import lda_fit, lda_partial_fit, lda_project, lda_query
 from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 
@@ -131,6 +131,12 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
                 result = rp_project(model, py_fields(model), args[0], x, False, context)
             elif operation == "transform" or operation == "inverse_transform":
                 result = rp_query(model, args[0], operation == "inverse_transform", context)
+            elif operation == "components":
+                result = rp_components(model)
+            elif operation == "set_components":
+                rp_set_components(model, args[0])
+            elif operation == "getstate":
+                result = rp_getstate(model)
             else:
                 raise Error("unknown private random projection operation")
         else:

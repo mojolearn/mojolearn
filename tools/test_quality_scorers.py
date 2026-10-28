@@ -100,12 +100,19 @@ def test_graph_metrics():
     ("nonzeros_per_row", 10.0, 9.99, "FAIL"),
 ])
 def test_declared_scorer_gap_metrics(metric, a, b, verdict):
-    assert cmp("ours", {metric: a}, "library", {metric: b})["verdict"] == verdict
-    assert cmp("ours", {metric: b}, "library", {metric: a})["verdict"] == verdict
+    # v8: a one-sided score (Q.HIGHER_IS_BETTER / Q.LOWER_IS_BETTER) fails only in the arm order where ours
+    # is the worse value; every other metric keeps one verdict in both orders.
+    if verdict == "FAIL" and (metric in Q.HIGHER_IS_BETTER or metric in Q.LOWER_IS_BETTER):
+        ours_better_first = (a > b) == (metric in Q.HIGHER_IS_BETTER)
+        first, second = ("PASS", "FAIL") if ours_better_first else ("FAIL", "PASS")
+    else:
+        first = second = verdict
+    assert cmp("ours", {metric: a}, "library", {metric: b})["verdict"] == first
+    assert cmp("ours", {metric: b}, "library", {metric: a})["verdict"] == second
 
 
 def test_policy_version_moved():
-    assert Q.POLICY == "mojolearn.quality-parity.v7"
+    assert Q.POLICY == "mojolearn.quality-parity.v8"
     for metric in Q.SELF_REFERENCE:
         assert metric in Q.REFERENCE or metric in Q.AGREEMENT, metric
 
