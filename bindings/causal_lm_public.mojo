@@ -49,7 +49,7 @@ from transformer.causal_lm_public_impl import (
 
 from bindings.tokenizer_public_native import tokenizer_vocab_encode, tokenizer_vocab_decode, tokenizer_vocab_fingerprint
 from bindings.mode_metadata_native import _fields as _native_record_fields, _truth
-from bindings.neural_block_admission import neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys
+from bindings.neural_block_admission import neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_block_weight_names
 from bindings.causal_model_config import model_record_fields, model_plan_snapshot
 
 
@@ -171,7 +171,7 @@ def causal_lm_admit_binding(
     py_setattr(model, "_native_vendor", PythonObject(vendor))
     py_setattr(model, "_native_numeric_mode", PythonObject(mode))
     var local_blocks = py_get(_standalone_record_fields(model), "_native_block_fields")
-    py_setitem(entries, "weight_names", local_blocks[0]["_neural_weight_names"] if local_blocks is not None else py_call(g[].bi.object.__getattribute__, model._blocks[0], "_W_NAMES"))
+    py_setitem(entries, "weight_names", local_blocks[0]["_neural_weight_names"] if local_blocks is not None else neural_block_weight_names(model._blocks[0]))
     for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:  # small-loop(primitive entry names)
         py_setitem(entries, name, _native_function(primitives, name))
     if kind == "transformer":

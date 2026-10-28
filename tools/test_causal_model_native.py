@@ -60,3 +60,33 @@ def test_model_modules_use_loaded_connections_and_safe_optional_entries():
         assert 'Python.import_module(' not in source
         assert '.hasattr' not in source
         assert '_native_has_entry(' in source
+
+
+def test_construct_captures_plan_options_and_all_weights_before_numerical_work():
+    source = (ROOT / "bindings/causal_lm_construct.mojo").read_text()
+    construct = source.split("def causal_model_init_binding", 1)[1].split("def causal_model_read_weights_binding", 1)[0]
+    for guard in ("_causal_model_fields(model)", "model_plan_snapshot(input_plan)", "_model_options_snapshot(input_options, context)", "_model_weights_snapshot(input_weights, context)"):
+        assert construct.index(guard) < construct.index("_causal_model_prepare_snapshot(")
+    block = source.split("def _model_block(", 1)[1].split("def causal_model_prepare", 1)[0]
+    assert '_model_block_plan(input_plan, context)' in block
+    assert 'neural_block_fields(block, context, False)' in block
+    assert 'neural_block_weight_names(block)' in block
+    assert 'plan.' not in block and 'cls._W_NAMES' not in block
+    assert 'object.__getattribute__' not in source
+    assert 'context["backend"]._DEFAULT_MODE' not in source
+    read = source.split("def causal_model_read_weights_binding", 1)[1].split("def causal_model_load_binding", 1)[0]
+    assert 'model_checkpoint_names_snapshot(plan)' in read and '_model_layer_weights(plan, i)' in read
+    assert 'infos[name].' not in read and '_info_snapshot(infos[info_names[i]])' in read
+
+
+def test_packed_weights_admit_metadata_and_keep_original_quantization_routes():
+    source = (ROOT / "bindings/causal_lm_construct.mojo").read_text()
+    unpack = source.split("def _model_unpack", 1)[1].split("def _model_quantize15", 1)[0]
+    assert '_model_packed_fields(value, context)' in unpack
+    assert 'value.shape' not in unpack and 'value.bits' not in unpack and 'value.codes' not in unpack
+    packed = source.split("def _model_native_buffer", 1)[1].split("def _model_pack(", 1)[0]
+    assert 'neural_array_snapshot(value, context)' in packed
+    assert packed.index('admit_native_buffer_exporter(value)') < packed.index('AdmittedBorrowedBuffer(value)')
+    assert 'layout.copy_to(Int(py=result._addr))' in packed
+    for numerical in ('to_bf16', 'from_bf16', 'quantize_int8', 'dequantize_int8', 'quantize_int15'):
+        assert f'_native_function(linalg, "{numerical}")' in source
