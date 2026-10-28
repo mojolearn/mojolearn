@@ -6,7 +6,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.native_loaded_module import native_loaded_module
 from bindings.manifold_settings_native import ManifoldSettings
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_validate import classical_view, classical_refuse_sparse, RESHAPE_HINT
+from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_warnings import _warning_category, COLUMN_WARNING
@@ -128,18 +128,24 @@ def _target_finite(snapshot: ArrayMetadata) raises -> Bool:
 def manifold_input(source: PythonObject, name: String, sparse_allowed: Bool,
                    context: PythonObject) raises -> ArrayMetadata:
     var prepared = source
+    var sparse = host_sparse_format(source)
     if sparse_allowed:
-        var sparse = host_sparse_format(source)
         if sparse.byte_length() > 0:
             if not py_contains(context, "output_context"):
                 py_setitem(context, "output_context", context)
             prepared = host_sparse_dense(source, sparse, context)
-    else:
-        classical_refuse_sparse(source, name)
+    elif sparse.byte_length() > 0:
+        # Identity-based sparse admission precedes all source/type attributes;
+        # a foreign metaclass must not execute from the sparse refusal itself.
+        raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + name + " takes dense X only.)")
     var view = classical_view(prepared, context, "X")
     var shape = array_shape_once(view, context)
     var snapshot = array_metadata_once(view, shape^, "X", context,
                                       allow_non_native=True, allow_unsupported=True)
+    # A converted view may own only new bytes. Keep the caller's original
+    # exporter and sparse/pandas/Torch preparation alive through execution as
+    # well as the provider's immediate storage owner, including after casts.
+    snapshot.owner = Python.tuple(source, prepared, snapshot.owner)
     var nd = len(snapshot.shape)
     var text = family_repr(snapshot.python_shape())
     if _complex_dtype(snapshot.dtype_number):
