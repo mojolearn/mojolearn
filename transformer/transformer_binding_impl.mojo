@@ -1795,6 +1795,15 @@ comptime _LM_ARGMAX_TPB = 256
 
 comptime _LM_ARGMAX_NONE: Int32 = 2147483647
 
+comptime LM_RESIDENT_GENERATE = is_defined["MOJOLEARN_IDN_LM_RESIDENT_GENERATE"]()
+"""Experiment, default off (lane lm-resident-generate-20261028): the resident
+session also opens for a model without a final norm (`final_norm=False`,
+norm address 0). Its head then reads the stack output itself, as the
+per-layer route's head does (`hn` is a device copy of `x`): no float
+operation changes. The B arm is today's behavior: such models are refused
+here and take the per-layer route, one stage allocation, upload and download
+per layer per token."""
+
 
 
 @always_inline
@@ -1873,11 +1882,16 @@ def _lm_last_argmax_kernel(
 def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: Int, d: Int, eps: Float32) raises:
     if b < 1 or v < 1 or d < 1:
         raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
-    if not isfinite(eps) or eps < Float32(0.0):
+    var has_norm = pn != 0
+    comptime if not LM_RESIDENT_GENERATE:
+        if not has_norm:
+            raise Error("causal_lm_session_open: null buffer address")
+    if has_norm and (not isfinite(eps) or eps < Float32(0.0)):
         raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
     s.ctx = neural_ctx[_NEURAL_CTX]()
     s.embed = _upload_addr(s.ctx.value(), pe, v * d)
-    s.norm = _upload_addr(s.ctx.value(), pn, d)
+    if has_norm:
+        s.norm = _upload_addr(s.ctx.value(), pn, d)
     s.tied = ph == 0
     if not s.tied:
         s.head = _upload_addr(s.ctx.value(), ph, v * d)
@@ -1885,7 +1899,8 @@ def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: I
     # copies on the device (same first flat index, same words); the entry
     # releases the session on the raise.
     _lm_refuse_nonfinite_device(s.ctx.value(), "embedding weight", s.embed.value(), v * d)
-    _lm_refuse_nonfinite_device(s.ctx.value(), "rms_norm weight", s.norm.value(), d)
+    if has_norm:
+        _lm_refuse_nonfinite_device(s.ctx.value(), "rms_norm weight", s.norm.value(), d)
     if not s.tied:
         _lm_refuse_nonfinite_device(s.ctx.value(), "linear weight", s.head.value(), v * d)
     s.ctx.value().synchronize()
@@ -1908,15 +1923,21 @@ def _lm_open_run_int15(
     `mojolearn.linalg.matmul_int15` makes on the per-layer route."""
     if b < 1 or v < 1 or d < 1:
         raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
-    if not isfinite(eps) or eps < Float32(0.0):
+    var has_norm = pn != 0
+    comptime if not LM_RESIDENT_GENERATE:
+        if not has_norm:
+            raise Error("causal_lm_session_open_int15: null buffer address")
+    if has_norm and (not isfinite(eps) or eps < Float32(0.0)):
         raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
     s.ctx = neural_ctx[_NEURAL_CTX]()
     ref ctx = s.ctx.value()
     s.embed = _upload_addr(ctx, pe, v * d)
-    s.norm = _upload_addr(ctx, pn, d)
+    if has_norm:
+        s.norm = _upload_addr(ctx, pn, d)
     # cpu2-l11-neural: device refusals of the uploaded copies (see `_lm_open_run`).
     _lm_refuse_nonfinite_device(ctx, "embedding weight", s.embed.value(), v * d)
-    _lm_refuse_nonfinite_device(ctx, "rms_norm weight", s.norm.value(), d)
+    if has_norm:
+        _lm_refuse_nonfinite_device(ctx, "rms_norm weight", s.norm.value(), d)
     s.tied = False
     var a: List[Int] = [planes[0], planes[1], planes[2]]
     s.head15 = _upload_planes_one(ctx, a, 0, v, d, "head")
@@ -1992,7 +2013,12 @@ def _lm_run(
         _lm_layers_run(ctx, layers, x, b, cur_l)
         var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
         var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
-        llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
+        if s.norm:
+            llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
+        else:
+            # No final norm (LM_RESIDENT_GENERATE): the head reads the stack
+            # output, as the per-layer route's head does; a copy, no arithmetic.
+            ctx.enqueue_copy(dst_buf=hn, src_buf=x)
         var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
         var ws_n = 1
         if not s.head15:
@@ -2007,9 +2033,12 @@ def _lm_run(
         # lane cgr4-download-loop: the two refusals scan on the device (the
         # first index by an integer minimum), not two m x d downloads walked
         # on the host
-        var bad_x = device_first_nonfinite(ctx, x, m * d)
-        if bad_x >= 0:
-            raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
+        if s.norm:
+            # Without a norm only the head's input scan applies (on `hn`, the
+            # copy of `x`), as on the per-layer route.
+            var bad_x = device_first_nonfinite(ctx, x, m * d)
+            if bad_x >= 0:
+                raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
         var bad_hn = device_first_nonfinite(ctx, hn, m * d)
         if bad_hn >= 0:
             raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))
@@ -2062,7 +2091,12 @@ def _lm_forward_run(
     _lm_layers_run(ctx, layers, x, b, l)
     var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
     var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
-    llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
+    if s.norm:
+        llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
+    else:
+        # No final norm (LM_RESIDENT_GENERATE): the head reads the stack
+        # output, as the per-layer route's head does; a copy, no arithmetic.
+        ctx.enqueue_copy(dst_buf=hn, src_buf=x)
     var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
     var ws_n = 1
     if not s.head15:
@@ -2074,9 +2108,12 @@ def _lm_forward_run(
         identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
     else:
         identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
-    var bad_x = device_first_nonfinite(ctx, x, m * d)
-    if bad_x >= 0:
-        raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
+    if s.norm:
+        # Without a norm only the head's input scan applies (on `hn`, the
+        # copy of `x`), as on the per-layer route.
+        var bad_x = device_first_nonfinite(ctx, x, m * d)
+        if bad_x >= 0:
+            raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
     var bad_hn = device_first_nonfinite(ctx, hn, m * d)
     if bad_hn >= 0:
         raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))

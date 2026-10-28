@@ -286,6 +286,7 @@ from transformer.transformer_binding_impl import (
     _lm_run,
     _lm_forward_run,
     _transformer_backward_run,
+    LM_RESIDENT_GENERATE,
 )
 
 
@@ -1171,8 +1172,10 @@ def causal_lm_session_create_binding() raises -> PythonObject:
 def causal_lm_session_open_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
-    """`addrs` = [embed (V * D f32), norm (D f32), head (V * D f32, or 0 for a
-    head tied to the embedding)]; `params` = [B, V, D, eps (float)]. Every
+    """`addrs` = [embed (V * D f32), norm (D f32; 0 for a model without a final
+    norm, admitted only under MOJOLEARN_IDN_LM_RESIDENT_GENERATE), head
+    (V * D f32, or 0 for a head tied to the embedding)]; `params` = [B, V, D,
+    eps (float)]. Every
     tensor is COPIED to the device; later edits are not observed."""
     var owner = session.downcast_value_ptr[CausalLMSession]()
     if len(addrs) != 3 or len(params) != 4:
@@ -1184,7 +1187,7 @@ def causal_lm_session_open_binding(
     var pe = Int(py=addrs[0])
     var pn = Int(py=addrs[1])
     var ph = Int(py=addrs[2])
-    if pe == 0 or pn == 0:
+    if pe == 0 or (pn == 0 and not LM_RESIDENT_GENERATE):
         raise Error("causal_lm_session_open: null buffer address")
     var b = Int(py=params[0])
     var v = Int(py=params[1])
@@ -1221,7 +1224,7 @@ def causal_lm_session_open_int15_binding(
     var pe = Int(py=addrs[0])
     var pn = Int(py=addrs[1])
     var planes: List[Int] = [Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4])]
-    if pe == 0 or pn == 0 or planes[0] == 0 or planes[1] == 0 or planes[2] == 0:
+    if pe == 0 or (pn == 0 and not LM_RESIDENT_GENERATE) or planes[0] == 0 or planes[1] == 0 or planes[2] == 0:
         raise Error("causal_lm_session_open_int15: null buffer address")
     var b = Int(py=params[0])
     var v = Int(py=params[1])
