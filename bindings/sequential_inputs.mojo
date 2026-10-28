@@ -3,7 +3,7 @@
 # rectangular scalar/array sequence inputs. Container traversal and scalar
 # serialization are host ABI work; existing kernels still own model math.
 from bindings.native_array_storage import native_array_empty, native_array_from_values, native_array_zeros
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view
@@ -46,8 +46,8 @@ def _promote(mut kind: String, mut size: Int, incoming: String, width: Int) rais
             size = 8
 
 
-def _buffer(value: PythonObject, context: PythonObject, samples: Bool) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def _buffer(mut mods: NativeModules, value: PythonObject, context: PythonObject, samples: Bool) raises -> PythonObject:
+    var b = mods.module("builtins")
     var view = native_buffer_view(value)
     if samples and Int(py=view.ndim) > 2 and not Bool(py=view.c_contiguous):
         raise Error("X with more than two dimensions must be C-contiguous")
@@ -81,11 +81,15 @@ def _buffer(value: PythonObject, context: PythonObject, samples: Bool) raises ->
     if Bool(py=view.contiguous):
         # Both C and Fortran contiguous buffers are borrowed without a copy.
         # ndarray's C type owns the memoryview and preserves read-only status.
-        return py_call(context["ndarray"], view.shape, dtype=dtype, buffer=view, strides=view.strides)
+        var windowed_result17 = py_call(context["ndarray"], view.shape, dtype=dtype, buffer=view, strides=view.strides)
+        mods.released()
+        return windowed_result17^
     # CPython's native buffer implementation packs signed/zero strides in
     # logical C order, including read-only views. No NumPy conversion runs.
     var packed = py_call(view.tobytes, "C")
-    return py_call(context["ndarray"], view.shape, dtype=dtype, buffer=packed)
+    var windowed_result16 = py_call(context["ndarray"], view.shape, dtype=dtype, buffer=packed)
+    mods.released()
+    return windowed_result16^
 
 
 def _leaf_shape(shape: PythonObject, depth: Int, mut dims: List[Int], mut leaf_depth: Int) raises:
@@ -107,9 +111,9 @@ def _leaf_shape(shape: PythonObject, depth: Int, mut dims: List[Int], mut leaf_d
         raise Error("input sequences must be rectangular")
 
 
-def _array_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
+def _array_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
                   mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject) raises:
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     var view = native_buffer_view(value)
     _leaf_shape(view.shape, depth, dims, leaf_depth)
     var dtype = value.dtype
@@ -131,25 +135,30 @@ def _array_values(value: PythonObject, depth: Int, mut dims: List[Int], mut valu
     _ = packed^
 
 
-def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
+def _sequence_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
                      mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject,
                      float_target: Bool = False) raises:
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     # A NumPy-free context connects no ndarray: its sequences hold Python
     # numbers only, and an array leaf is refused below as a non-number.
     var numpy = py_get(context, "ndarray") is not None
     if numpy and (Bool(py=py_call(b.isinstance, value, context["ndarray"])) or Bool(py=py_call(b.isinstance, value, context["scalar_type"]))):
-        _array_values(value, depth, dims, values, kind, size, leaf_depth, context)
+        _array_values(mods, value, depth, dims, values, kind, size, leaf_depth, context)
     elif numpy and py_type(value) is context["array_class"]:
         var view = py_call(context["array_fields"]["_mv"], value, context["array_class"])
+        mods.released()
         var shape = py_call(context["array_fields"]["shape"], value, context["array_class"])
+        mods.released()
         var dtype = py_call(context["array_fields"]["dtype"], value, context["array_class"])
+        mods.released()
         var order = py_call(context["array_fields"]["order"], value, context["array_class"])
+        mods.released()
         var array = py_call(context["ndarray"], shape, dtype=dtype, buffer=view, order=order)
-        _array_values(array, depth, dims, values, kind, size, leaf_depth, context)
+        mods.released()
+        _array_values(mods, array, depth, dims, values, kind, size, leaf_depth, context)
     elif numpy and (py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray):
-        var array = _buffer(value, context, False)
-        _array_values(array, depth, dims, values, kind, size, leaf_depth, context)
+        var array = _buffer(mods, value, context, False)
+        _array_values(mods, array, depth, dims, values, kind, size, leaf_depth, context)
     elif Bool(py=py_call(b.isinstance, value, b.list)) or Bool(py=py_call(b.isinstance, value, b.tuple)) or py_type(value) is b.range:
         var n = len(value)
         if depth >= 8 or n == 0:
@@ -162,7 +171,7 @@ def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut v
             raise Error("input sequences must be rectangular")
         # cpu-route: nested Python sequences are Python objects; walking them is the Python door's input step.
         for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-            _sequence_values(value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
+            _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
     else:
         _leaf_shape(Python.tuple(), depth, dims, leaf_depth)
         if Bool(py=py_call(b.isinstance, value, b.bool)):
@@ -178,8 +187,8 @@ def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut v
         py_call(values.append, value)
 
 
-def sequential_input(value: PythonObject, context: PythonObject, samples: Bool = False) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def sequential_input(mut mods: NativeModules, value: PythonObject, context: PythonObject, samples: Bool = False) raises -> PythonObject:
+    var b = mods.module("builtins")
     if Bool(py=py_call(b.isinstance, value, context["ndarray"])):
         return value
     if py_type(value) is context["array_class"]:
@@ -187,23 +196,31 @@ def sequential_input(value: PythonObject, context: PythonObject, samples: Bool =
         # or public outputs. Array._mv can be ownerless; retain its exporter.
         return native_array_ndarray_view(value, context)
     if py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
-        return _buffer(value, context, samples)
-    var packed = sequential_sequence(value, context)
+        return _buffer(mods, value, context, samples)
+    var packed = sequential_sequence(mods, value, context)
     var dtype = context["numeric_dtypes"][Python.tuple(packed[1], packed[2])]
-    return py_call(context["ndarray"], packed[0], dtype=dtype, buffer=packed[3])
+    var windowed_result15 = py_call(context["ndarray"], packed[0], dtype=dtype, buffer=packed[3])
+    mods.released()
+    return windowed_result15^
 
 
-def sequential_sequence(value: PythonObject, context: PythonObject) raises -> PythonObject:
+def sequential_input(value: PythonObject, context: PythonObject, samples: Bool = False) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return sequential_input(mods, value, context, samples)
+
+
+def sequential_sequence(mut mods: NativeModules, value: PythonObject, context: PythonObject) raises -> PythonObject:
     """A rectangular nest of numbers as (shape, kind, size, storage): the
     shape list, the promoted element kind letter and width, and a C-order
     `array.array` holding the elements in that type."""
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     var dims = List[Int]()
     var values = Python.list()
     var kind = String()
     var size = 0
     var leaf_depth = -1
-    _sequence_values(value, 0, dims, values, kind, size, leaf_depth, context)
+    _sequence_values(mods, value, 0, dims, values, kind, size, leaf_depth, context)
     var shape = Python.list()
     for k in range(len(dims)):  # driver-loop: over sequence result shape metadata
         py_call(shape.append, dims[k])
@@ -220,7 +237,13 @@ def sequential_sequence(value: PythonObject, context: PythonObject) raises -> Py
     return Python.tuple(shape, kind, size, storage)
 
 
-def sequential_sequence_f32(value: PythonObject, context: PythonObject) raises -> PythonObject:
+def sequential_sequence(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return sequential_sequence(mods, value, context)
+
+
+def sequential_sequence_f32(mut mods: NativeModules, value: PythonObject, context: PythonObject) raises -> PythonObject:
     # Array.from_list(..., '<f4') constructs array.array('f', flat) directly.
     # Preserve its Python-number -> C double -> float conversion, including
     # large integer inputs, without an int64 intermediate or a different cast.
@@ -229,9 +252,15 @@ def sequential_sequence_f32(value: PythonObject, context: PythonObject) raises -
     var kind = String()
     var size = 0
     var leaf_depth = -1
-    _sequence_values(value, 0, dims, values, kind, size, leaf_depth, context, True)
+    _sequence_values(mods, value, 0, dims, values, kind, size, leaf_depth, context, True)
     var shape = Python.list()
     for k in range(len(dims)):  # driver-loop: over admitted sequence shape
         py_call(shape.append, dims[k])
     var storage = native_array_from_values(String("f"), values)
     return Python.tuple(shape, storage)
+
+
+def sequential_sequence_f32(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Classical and other callers keep their per-call module checks.
+    var mods = NativeModules()
+    return sequential_sequence_f32(mods, value, context)

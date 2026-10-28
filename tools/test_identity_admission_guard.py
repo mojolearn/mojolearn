@@ -1,5 +1,6 @@
 """Reference publication with inert JSON and mocked verifier calls; no native code."""
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -248,7 +249,7 @@ def test_selection_preserves_whole_original_record_and_rejects_absent_lane(tmp_p
 def wrapper_fixture(tmp_path, candidate, base, fail_selftest=False):
     repo = tmp_path / "repo"
     (repo / "tools").mkdir(parents=True)
-    for name in ("admit_identity_columns.sh", "identity_admission_guard.py"):
+    for name in ("admit_identity_columns.sh", "identity_admission_guard.py", "retain_run_summary.py"):
         shutil.copyfile(ROOT / "tools" / name, repo / "tools" / name)
     table = repo / "python/mojolearn/verify_reference/table.json"
     table.parent.mkdir(parents=True)
@@ -271,11 +272,6 @@ def wrapper_fixture(tmp_path, candidate, base, fail_selftest=False):
     source_commit = git('rev-parse', 'HEAD')
     raw.write_text(json.dumps({"vendor": "apple-inert", "commit": source_commit,
                                "cells": {"selected/base": {}, "held/base": {"verdict": "DIVERGENT"}}}))
-    retained = repo / 'bench/results/identity_break/retained/fixture' / raw.name
-    retained.parent.mkdir(parents=True)
-    retained.write_bytes(raw.read_bytes())
-    git('add', 'bench/results/identity_break')
-    git('commit', '-m', 'retain input')
     stub = tmp_path / "candidate.json"
     stub.write_text(json.dumps(candidate))
     shim = tmp_path / "inert_python.py"
@@ -293,13 +289,12 @@ if a[0].endswith("identity_columns.py"):
 if a[:3] == ["-m", "mojolearn", "verify"]:
     if "--emit-reference" in a:
         assert "--reference-table" in a and a[a.index("--lanes")+1] == "selected"
-        inputs = []
+        records = []
         for index, arg in enumerate(a):
             if arg == "--records":
-                path = pathlib.Path(a[index+1])
-                inputs.extend(path.rglob("*.json") if path.is_dir() else [path])
-        checker = runpy.run_path("python/mojolearn/_verify_reference.py")["require_committed_records"]
-        checker(inputs, pathlib.Path.cwd())
+                records.append(a[index+1])
+        discover = runpy.run_path("python/mojolearn/_verify_reference.py")["repository_record_paths"]
+        inputs = discover(records, pathlib.Path.cwd())
         with open(os.environ["EMIT_CALLS"], "a") as log:
             log.write(json.dumps([str(p) for p in inputs]) + "\\n")
         pathlib.Path(a[a.index("--emit-reference")+1]).write_bytes(pathlib.Path(os.environ["STUB_CANDIDATE"]).read_bytes())
@@ -319,7 +314,8 @@ os.execv(sys.executable, [sys.executable] + a)
 
 
 @pytest.mark.parametrize("problem", ["apple", "nvidia", "amd", "cpu", "nocpu", "missing", "selftest"])
-def test_wrapper_failure_cannot_mutate_shipped_table(tmp_path, problem):
+@pytest.mark.parametrize('check_only', [False, True])
+def test_wrapper_failure_cannot_mutate_shipped_table(tmp_path, problem, check_only):
     base, candidate = tables()
     if problem == "nocpu":
         del candidate["cells"]["selected/base"]["train"]["cols"]["cpu"]
@@ -330,11 +326,14 @@ def test_wrapper_failure_cannot_mutate_shipped_table(tmp_path, problem):
         del candidate["cells"]["selected/base"]["train"]
     repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base, problem == "selftest")
     before, original = table.read_bytes(), raw.read_bytes()
-    result = subprocess.run(["bash", str(repo / "tools/admit_identity_columns.sh"), "--lanes", "selected", str(raw.parent)],
+    result = subprocess.run(["bash", str(repo / "tools/admit_identity_columns.sh"),
+                            *(['--check-only'] if check_only else []), "--lanes", "selected", str(raw.parent)],
                             env=env, capture_output=True, text=True)
     assert result.returncode != 0, result.stdout + result.stderr
     assert table.read_bytes() == before
     assert raw.read_bytes() == original
+    if check_only:
+        assert not list((repo/'bench/results/identity_break').rglob('*.json'))
 
 
 @pytest.mark.parametrize("check_only", [False, True])
@@ -342,6 +341,7 @@ def test_wrapper_checks_candidate_and_preserves_original_unselected_record(tmp_p
     base, candidate = tables()
     repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base)
     before, original = table.read_bytes(), raw.read_bytes()
+    head = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'])
     result = subprocess.run(["bash", str(repo / "tools/admit_identity_columns.sh"),
                              *(["--check-only"] if check_only else []), "--lanes", "selected", str(raw.parent)],
                             env=env, capture_output=True, text=True)
@@ -350,39 +350,51 @@ def test_wrapper_checks_candidate_and_preserves_original_unselected_record(tmp_p
     if check_only:
         assert table.read_bytes() == before
         assert not (repo / 'bench/results/reference_admissions').exists()
+        assert not list((repo/'bench/results/identity_break').rglob('*.json'))
     else:
         assert json.loads(table.read_text()) == candidate
-        retained = repo / 'bench/results/identity_break/retained/fixture' / raw.name
+        retained = repo / 'bench/results/identity_break/retained' / hashlib.sha256(original).hexdigest() / raw.name
         assert retained.read_bytes() == original
         assert (repo / 'bench/results/reference_admissions/2026-10-23-inert/agreement-summary.json').exists()
     calls = Path(env['EMIT_CALLS']).read_text().splitlines()
     assert len(calls) == 1
-    assert len(list((repo/'bench/results/identity_break').rglob('*.identical.json'))) == 1
+    assert len(list((repo/'bench/results/identity_break').rglob('*.identical.json'))) == (0 if check_only else 1)
     assert all(Path(p).is_relative_to(repo/'bench/results/identity_break') for p in json.loads(calls[0]))
+    assert subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD']) == head
 
 
-@pytest.mark.parametrize('change', ['uncommitted', 'modified', 'symlink'])
-def test_admission_requires_exact_committed_input_without_mutating_table(tmp_path, change):
+@pytest.mark.parametrize('change', ['corrupted-copy', 'symlink'])
+def test_admission_refuses_unsafe_input_without_mutating_table(tmp_path, change):
     base, candidate = tables()
     repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base)
-    retained = repo/'bench/results/identity_break/retained/fixture'/raw.name
-    if change == 'uncommitted':
-        data = json.loads(raw.read_text())
-        data['new_uncommitted_value'] = True
-        raw.write_text(json.dumps(data))
-        retained.write_bytes(raw.read_bytes())
-    elif change == 'modified':
+    if change == 'corrupted-copy':
+        retained = repo/'bench/results/identity_break/retained'/hashlib.sha256(raw.read_bytes()).hexdigest()/raw.name
+        retained.parent.mkdir(parents=True)
         retained.write_text('{}')
     else:
-        retained.unlink()
-        retained.symlink_to(raw)
+        target = raw.with_suffix('.original')
+        raw.rename(target)
+        raw.symlink_to(target)
     before = table.read_bytes()
     result = subprocess.run(['bash', str(repo/'tools/admit_identity_columns.sh'), '--lanes', 'selected', str(raw.parent)],
                             env=env, capture_output=True, text=True)
     assert result.returncode != 0
-    assert 'commit incoming identity records' in result.stderr
+    assert 'could not retain incoming records' in result.stderr
     assert table.read_bytes() == before
     assert not Path(env['EMIT_CALLS']).exists()
+
+
+def test_admission_reuses_an_uncommitted_repository_copy(tmp_path):
+    base, candidate = tables()
+    repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base)
+    retained = repo/'bench/results/identity_break/new-run'/raw.name
+    retained.parent.mkdir(parents=True)
+    retained.write_bytes(raw.read_bytes())
+    result = subprocess.run(['bash', str(repo/'tools/admit_identity_columns.sh'), '--lanes', 'selected', str(raw.parent)],
+                            env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(table.read_text()) == candidate
+    assert list((repo/'bench/results/identity_break').rglob('*.identical.json')) == [retained]
 
 
 def test_source_derived_host_only_cpu_is_sufficient(monkeypatch):
