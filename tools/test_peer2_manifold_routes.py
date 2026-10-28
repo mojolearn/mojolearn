@@ -60,7 +60,10 @@ def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
 
 def test_tsne_pca_and_optimizer_share_one_x_snapshot():
     source = _source("bindings/mani_tsne_native.mojo")
-    assert source.count('family_f32_snapshot(args[2], 2, "X", context)') == 1
+    entry = _source("bindings/manifold_native.mojo")
+    assert entry.count('manifold_input(source, name, not tsne, context)') == 1
+    assert 'snapshot: ArrayMetadata' in source
+    assert 'family_f32_snapshot(args[2]' not in source
     assert "_tsne_pca_start(estimators, x_address, n, d, k, context)" in source
     assert "family_call(fit, Python.list(PythonObject(x_address)," in source
     assert "x.shape" not in source
@@ -88,3 +91,17 @@ def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
             assert forbidden not in implementation, (owner, forbidden)
         assert 'settings.values' in implementation
         assert 'py_setitem(settings.fields,' in implementation
+
+
+def test_native_lifecycle_owns_checks_and_finished_results():
+    entry = _source("bindings/manifold_native.mojo")
+    assert entry.index('manifold_require_fitted(') < entry.index('var x = manifold_input(')
+    assert entry.index('manifold_ignored_target(') < entry.index('result = tsne_operation(')
+    assert 'return manifold_finish(settings, result, method, names, context)' in entry
+    source = _source("bindings/manifold_lifecycle_native.mojo")
+    conversion = source.split('def _cast(', 1)[1].split('def _target_finite(', 1)[0]
+    assert conversion.index('if not snapshot.castable:') < conversion.index('family_cast_rows(')
+    assert 'snapshot.source.kind' not in source.split('def _target_finite(', 1)[1].split('def manifold_input(', 1)[0]
+    assert 'parallel_public_result(result, method, PythonObject(None), context)' in source
+    for forbidden in ('before_fit(', 'before_call(', '._mojolearn_after_fit(', '.warnings.warn('):
+        assert forbidden not in source

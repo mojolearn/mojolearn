@@ -3,7 +3,8 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import classical_connect_numpy, _type_mro
+from bindings.mode_metadata_native import _class_fields
 from bindings.classical_pandas import classical_admit_value
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_array_storage import native_array_from_bytes
@@ -69,6 +70,13 @@ struct ManifoldSettings(Copyable, Movable):
         # still publish into the original admitted dictionary.
         self.fields = classical_family_admit(model)
         var b = native_loaded_module("builtins")
+        if operation.endswith("_fit") or operation.endswith("_fit_transform"):
+            if py_contains(self.fields, "_mojolearn_after_fit"):
+                raise Error("TypeError: native manifold fitting does not accept Python after-fit callbacks")
+            var ancestry = _type_mro(py_type(model))
+            for i in range(len(ancestry)):  # driver-loop: refuse application after-fit hooks before execution
+                if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
+                    raise Error("TypeError: native manifold fitting does not accept Python after-fit callbacks")
         self.values = py_call(b.dict, self.fields)
         self.default_mode = context["backend_fields"]["_DEFAULT_MODE"]
         self.requested = py_get(self.values, "numeric_mode")
