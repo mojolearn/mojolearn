@@ -28,6 +28,8 @@ from bindings.trees_public_inputs import (
     trees_all_finite, trees_call,
 )
 from bindings.trees_lifetime import trees_resident_new
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.metrics_native_support import metric_is_integral, metric_is_bool
 
 comptime _WANT_SCORE_SAMPLES = 0
 comptime _WANT_DECISION_FUNCTION = 1
@@ -40,16 +42,13 @@ def _repr(value: PythonObject) raises -> String:
     return String(py_call(trees_builtins().repr, value))
 
 
-def _is_bool(value: PythonObject) raises -> Bool:
-    var t = py_type(value)
-    return t is trees_builtins().bool or String(t.__name__) == "bool_"
-
-
 def _field(fields: PythonObject, model: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`self.<name>` of a stored constructor parameter."""
     var value = py_get(fields, PythonObject(name), context["trees_missing"])
     if value is context["trees_missing"]:
         raise Error("AttributeError: '" + String(py_type(model).__name__) + "' object has no attribute '" + name + "'")
+    if name != "n_jobs" and name != "output_type":
+        host_inference_scalar(value, context, True)
     return value
 
 
@@ -57,7 +56,6 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
     """`IsolationForest._validate_params()`: the parameter checks, in order,
     with their wording; each resolved knob is stored as it is checked."""
     var b = trees_builtins()
-    var integral = context["trees_integral_type"]
     var n_estimators = py_call_typed(b.int, _field(fields, model, "n_estimators", context))
     if Bool(py=n_estimators < PythonObject(1)):
         raise Error(_PREFIX + "n_estimators must be at least 1, got " + _repr(n_estimators))
@@ -69,9 +67,9 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
         py_setitem(fields, "_max_samples_mode", PythonObject(0))
         py_setitem(fields, "_max_samples_int", PythonObject(256))
         py_setitem(fields, "_max_samples_frac", PythonObject(1.0))
-    elif _is_bool(max_samples):
+    elif metric_is_bool(max_samples, context):
         raise Error(_PREFIX + "max_samples must be 'auto', an int, or a float, not a bool")
-    elif Bool(py=py_call(b.isinstance, max_samples, integral)):
+    elif metric_is_integral(max_samples, context):
         var count = py_call_typed(b.int, max_samples)
         if Bool(py=count <= PythonObject(0)):
             raise Error(_PREFIX + "max_samples must be a positive integer, got " + _repr(max_samples))
@@ -94,10 +92,10 @@ def iforest_validate(model: PythonObject, fields: PythonObject, context: PythonO
         if Bool(py=depth < PythonObject(1)):
             raise Error(_PREFIX + "max_depth is None (their auto) or a positive int, got " + _repr(max_depth))
     var max_features = _field(fields, model, "max_features", context)
-    if _is_bool(max_features):
+    if metric_is_bool(max_features, context):
         raise Error(_PREFIX + "max_features must be an int or a float, not a bool")
     var features_error = String(_PREFIX + "max_features must be an int in [1, n_features] or a float in (0.0, 1.0], got ")
-    if Bool(py=py_call(b.isinstance, max_features, integral)):
+    if metric_is_integral(max_features, context):
         var count = py_call_typed(b.int, max_features)
         if Bool(py=count < PythonObject(1)):
             raise Error(features_error + _repr(max_features))
@@ -156,6 +154,7 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
+    host_inference_scalar(mode, context)
     if not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
     var clean = String(py_call(py_call(mode.strip).lower))
@@ -280,13 +279,14 @@ def _device_scan(fields: PythonObject, context: PythonObject) raises -> Bool:
     return False
 
 
-def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject) raises -> PythonObject:
+def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
+         copy_source: PythonObject) raises -> PythonObject:
     """`fit` (want < 0: the one-row fresh run) or `fit_predict` (one fresh
     run that predicts X)."""
     var fields = py_fields(model)
     iforest_validate(model, fields, context)
     var x = trees_f32(X, 2, "C", "X", context)
-    py_setitem(fields, "input_copied_", PythonObject(_copied(x, X)))
+    py_setitem(fields, "input_copied_", PythonObject(_copied(x, X if copy_source is None else copy_source)))
     var device_scan = _device_scan(fields, context)
     if not device_scan and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
         raise Error(_NONFINITE)
@@ -331,12 +331,12 @@ def _score(model: PythonObject, X: PythonObject, want: Int, context: PythonObjec
     return _run(model, fields, x, fields["_x"], want, False, context)
 
 
-def iforest_operation(model: PythonObject, operation: String, args: PythonObject,
-                      context: PythonObject) raises -> PythonObject:
+def iforest_operation_with_source(model: PythonObject, operation: String, args: PythonObject,
+                                  context: PythonObject, copy_source: PythonObject) raises -> PythonObject:
     if operation == "trees_iforest_fit":
-        return _fit(model, args[0], -1, context)
+        return _fit(model, args[0], -1, context, copy_source)
     if operation == "trees_iforest_fit_predict":
-        return _fit(model, args[0], _WANT_PREDICT, context)
+        return _fit(model, args[0], _WANT_PREDICT, context, copy_source)
     if operation == "trees_iforest_score_samples":
         return _score(model, args[0], _WANT_SCORE_SAMPLES, context)
     if operation == "trees_iforest_decision_function":
@@ -344,3 +344,8 @@ def iforest_operation(model: PythonObject, operation: String, args: PythonObject
     if operation == "trees_iforest_predict":
         return _score(model, args[0], _WANT_PREDICT, context)
     raise Error("unknown IsolationForest operation " + operation)
+
+
+def iforest_operation(model: PythonObject, operation: String, args: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
+    return iforest_operation_with_source(model, operation, args, context, args[0])

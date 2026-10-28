@@ -12,6 +12,7 @@ from bindings.trees_constructor_native import forest_construct
 from bindings.trees_public_lifecycle_native import forest_public_operation
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_iforest import iforest_operation
+from bindings.iforest_public_lifecycle import iforest_public_operation
 from bindings.trees_public_boost import boost_operation
 from bindings.trees_public_auxiliary import embedding_apply, tree_export_state
 from bindings.trees_public_state import tree_is_fitted
@@ -43,6 +44,8 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return embedding_apply(model, args, context)
     if operation == "trees_forest_construct":
         return forest_construct(model, args, context)
+    if operation.startswith("trees_public_iforest_"):
+        return iforest_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_forest_"):
         return forest_public_operation(model, operation, args, context)
     if operation.startswith("trees_public_meta_"):

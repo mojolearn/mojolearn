@@ -201,7 +201,7 @@ class IsolationForest(NumericModeMixin):
         -------
         self
         """
-        return _TREES(self, "trees_iforest_fit", (X, y), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_iforest_fit", (X, y), _TREES_CONTEXT)
 
     def score_samples(self, X):
         """Anomaly score of each row; lower is more anomalous.
@@ -213,7 +213,7 @@ class IsolationForest(NumericModeMixin):
         -------
         Array of shape (n_samples,), float64
         """
-        return _TREES(self, "trees_iforest_score_samples", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_iforest_score_samples", (X,), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """`score_samples(X) - offset_`, computed in float32 and returned as float64; negative means
@@ -223,7 +223,7 @@ class IsolationForest(NumericModeMixin):
         -------
         Array of shape (n_samples,), float64
         """
-        return _TREES(self, "trees_iforest_decision_function", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_iforest_decision_function", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Label each row: -1 for an anomaly, 1 for an inlier.
@@ -232,11 +232,11 @@ class IsolationForest(NumericModeMixin):
         -------
         Array of shape (n_samples,), int32
         """
-        return _TREES(self, "trees_iforest_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_iforest_predict", (X,), _TREES_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit on `X` and return `predict(X)`."""
-        return _TREES(self, "trees_iforest_fit_predict", (X, y), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_iforest_fit_predict", (X, y), _TREES_CONTEXT)
 
     def save(self, path):
         """Write the fitted model to `path` as an npz file.
