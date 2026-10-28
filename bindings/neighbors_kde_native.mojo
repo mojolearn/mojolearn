@@ -28,6 +28,7 @@ from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_b
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_get, py_contains, py_setitem, py_fields, py_type
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
@@ -381,6 +382,10 @@ def _neighbors_kde_operation(model: PythonObject, operation: String, var args: P
 
 def neighbors_kde_operation(model: PythonObject, operation: String, args: PythonObject,
                                 context: PythonObject) raises -> PythonObject:
+    if operation == "family_xn_kde_getstate":
+        var state = py_call(_fields(model).copy)
+        _ = py_call(state.pop, "_resident", PythonObject(None))
+        return state
     if operation == "family_xn_kde_release":
         return _neighbors_kde_operation(model, operation, args, context)
     var call = neighbors_public_begin(model, operation, args, context)
