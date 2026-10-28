@@ -11,7 +11,7 @@ order and with the same arguments, as the Python bodies it replaces.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.sequential_admission import sequential_admit_value
+from bindings.sequential_admission import _one_of
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -275,7 +275,11 @@ struct XseqStream(Movable):
         else:
             # Admit exact built-in/NumPy scalars before the native int conversion;
             # user __int__/bitwise methods never participate in this operation.
-            sequential_admit_value(random_state, context)
+            var cls = py_type(random_state)
+            if (cls is not b.int and cls is not b.float and cls is not b.bool
+                    and cls is not b.str and cls is not b.bytes and cls is not b.bytearray
+                    and not _one_of(cls, context["scalar_types"])):
+                raise Error("TypeError: random_state requires a native scalar, without conversion hooks")
             var word = py_call_typed(b.int, random_state)
             self.seed = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLongMask")(word._obj_ptr)
             if cpy.PyErr_Occurred():

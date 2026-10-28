@@ -15,7 +15,7 @@ def connect_array_protocol(protocol, module_name, *, warning_lineno=None):
     warning = connect_warnings()
     code = protocol.__code__
     warning.update(warning_filename=code.co_filename,
-                   warning_lineno=(max(line for _, _, line in code.co_lines() if line is not None)
+                   warning_lineno=(max(line for _, _, line in code.co_lines() if line is not None)  # glue: retain the fixed protocol source location at import
                                    if warning_lineno is None else warning_lineno),  # glue: retain the public array-protocol warning location
                    warning_module=module_name, warning_source_line="")
     context["sequence_array_warnings"] = warning

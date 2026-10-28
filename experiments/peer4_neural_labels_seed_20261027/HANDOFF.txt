@@ -7,3 +7,21 @@ XseqStream initialization retains peer6 native module lookup work. Seed word con
 CNN array-protocol connection is independent of sequence-device import and NumPy remains optional until a host-array operation needs it. The generic protocol metadata helper is shared at import only. CNNClassifier host helpers explicitly require NumPy. Embedding import-time guard annotations are retained from the agent's final pushed source (2ee7273ffe).
 
 Validation: compile receipts and retained source bytes are recorded separately. Native compilation is compilation only; no runtime, identity, GPU, performance or cross-vendor campaign is run or claimed. The final push must pass the required repository guards. Main integration remains serialized by the parent.
+
+Focused follow-up
+- Native-owned object arrays retain exact text/bytes labels when fixed-width storage would discard a trailing NUL; native result gathering increments/decrements slot references explicitly. Ordinary text remains fixed-width U/S. Source-review evidence: ~/mojolearn-evidence/peer4-neural-label-source-review-20261028/.
+- Seed conversion accepts exact native scalar types; array/object conversion protocols cannot be reached through random_state.
+- Combined dispatcher/shared-label compile attempt1 passed in 398.413 seconds with 10 configured workers under concurrent local builds. This includes optional NumPy setup and all CNN graph/classifier native paths. It predates the two focused follow-ups above.
+- Focused attempt2 failed on a missing std.sys.size_of import (source error, no toolchain workaround); full log and exit status are retained. Attempt3 compiles only the changed shared labels and seed initializer via checks/neural_label_seed_compile.mojo. Other successful affected owner compilations are reused, without claiming a combined runtime check.
+
+Final affected follow-up compile: neural-label-seed-attempt3 exit0, 99.798 seconds, 10 configured workers. See experiments/peer4_neural_label_edges_20261027/compile.json. The native object-slot repair also received narrow source ownership review (no concrete defect found), retained at ~/mojolearn-evidence/peer4-neural-label-source-review-20261028/object-repair/. This review is not runtime validation.
+
+Integration range after the parent's accepted 696fe11893
+- 3a69cd0961 / fa22f37751 / d4138b03dc: graph owners, CNNClassifier native owner/labels, conv/graph review fixes. All covered by full xcnn dispatcher compile attempt1 above.
+- a0316efb9c: MLPInference and SmallMLPTrainer; selected owner compile in experiments/peer4_mlp_native_20261027.
+- 428cc6e3e4: Embedding native public owner; final annotation/evidence delta from 2ee7273ffe is included in c95a0db794. Compile receipt in experiments/peer4_embedding_20261027.
+- e190070316: optional NumPy/import-time array metadata setup, covered by full xcnn compile attempt1; final source-only guard annotation is included in the final follow-up.
+- c95a0db794: shared labels and seed initialization, with focused final corrections in the final follow-up.
+- cf832cdf7d / c05c868a27: recurrent/MLP public admission and private input snapshots; final selected-owner compile receipt in experiments/peer4_xseq_snapshots_20261027. Label hunks remain the shared helper above.
+
+Integration limits: compilation is CPU/identical only. It does not execute or qualify dynamic numerical entrypoints, full tokenizer registration, installed wheels, GPU vendors, runtime behavior, or bitwise identity. No rented boxes or watcher changes. Main integration is owned by the parent thread; do not merge intermediate source-only graph/helper commits in isolation.
