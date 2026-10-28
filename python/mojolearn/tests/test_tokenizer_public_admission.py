@@ -5,6 +5,7 @@ import pytest
 
 from mojolearn.tokenizer import BpeTokenizer, BpeVocabularyTrainer
 from mojolearn.models import Tokenizer
+from mojolearn.models import tokenizer as model_tokenizer
 
 
 @pytest.fixture
@@ -105,6 +106,7 @@ def test_mutated_state_descriptor_and_scalar_refuse_before_hooks(bpe, monkeypatc
 
 def test_model_tokenizer_has_no_mutable_provider_lookup(monkeypatch):
     tokenizer = Tokenizer([bytes([i]) for i in range(256)], [], pattern="gpt2")
+    fingerprint = model_tokenizer._NATIVE.vocab_fingerprint(tokenizer)
     seen = []
 
     class Provider:
@@ -115,6 +117,7 @@ def test_model_tokenizer_has_no_mutable_provider_lookup(monkeypatch):
     tokenizer._m = Provider()
     assert tokenizer.encode("abc") == list(b"abc")
     assert tokenizer.decode(list(b"abc")) == "abc"
+    assert model_tokenizer._NATIVE.vocab_fingerprint(tokenizer) == fingerprint
     assert seen == []
 
 

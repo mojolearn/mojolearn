@@ -72,6 +72,18 @@ class TokenizerPublicSource(unittest.TestCase):
                          "optimizer_python_error(error)", "_trained_finish(", "with open(String(path), \"w\")"):
             self.assertIn(expected, source)
 
+    def test_legacy_generation_consumers_have_a_connected_native_entry(self):
+        source = NATIVE.read_text()
+        for entry in ("tokenizer_vocab_encode", "tokenizer_vocab_decode",
+                      "tokenizer_vocab_pretokenize", "tokenizer_vocab_fingerprint"):
+            self.assertIn("def " + entry + "(", source)
+        fingerprint = source.split("def tokenizer_vocab_fingerprint(", 1)[1].split("def _vocab_config_pattern(", 1)[0]
+        self.assertIn("_owner(tokenizer, context[0])", fingerprint)
+        self.assertIn("vocab_fingerprint_hex(owner[].tok.value(), tail)", fingerprint)
+        self.assertNotIn("py_call(_native_function", fingerprint)
+        connection = (ROOT / "python/mojolearn/models/tokenizer.py").read_text()
+        self.assertIn('tokenizer_public_call("connect_vocab", (), _TOKENIZER_CONTEXT)', connection)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -35,7 +35,7 @@ Shared root wiring (not edited by this lane):
 Old low-level exports are retained for existing consumers.
 
 Validation:
-  python3 tools/test_tokenizer_public_native_source.py: exit 0, 5 tests.
+  python3 tools/test_tokenizer_public_native_source.py: exit 0, 6 tests.
   Python AST parse: exit 0, both wrappers plus source/runtime test modules.
   git diff --check (owned tracked Python files): exit 0.
   Full logs:
@@ -56,10 +56,23 @@ Remaining outside this public wrapper chunk (not silently qualified):
   tokenizer.py private _encode_corpus, _train_corpus, _read_trained and
   _identity_of_ranks_file retain Python preparation/result work. Their consumer
   is lm_corpus.py and should be migrated with that complete corpus operation.
-  Shared tokenizer-host legacy vocab_* entries, notably vocab_fingerprint,
-  still have historical mutable attribute/protocol access. The new public
-  wrappers bypass them. causal_lm_public.mojo generation checkpoint save/load
-  calls vocab_fingerprint through tokenizer._m; coordinate its native owner
-  repair with root, never count those checkpoint paths as qualified by this.
+  Shared tokenizer-host legacy vocab_* consumers: follow-up adds native
+  tokenizer_vocab_encode/decode/pretokenize/fingerprint helpers and retains
+  their context once through models.Tokenizer import-time setup. Root wires
+  these into legacy host wrappers and four causal_lm_public call sites, removing
+  tokenizer._m lookups. Fingerprint settings serialization and hash are retained.
+  That source integration is not checkpoint/runtime qualification.
   No root-owned recurrent, LayerNorm, Session, trainer, imported-model,
   adapter or shared-provider files were changed by this lane.
+
+Push attempt: pre-push failed on 44 untagged boundary loops across four
+in-progress files; complete output is push.log under the evidence directory.
+Tokenizer follow-up classifies its admission/marshaling/result loops; parent
+coordinates other files and the final push. No compile or runtime was hidden
+by this source-tag repair. A first attempted shell checker used the wrong path
+(tools/no_compute_in_shells.py, exit 2); the actual checker is under tools/hooks.
+
+Default-mode semantics are retained: import connects the optional providers,
+then native construction/training reads the connected backend dictionary's
+current admitted _DEFAULT_MODE. Existing instances retain their chosen encoder
+as before. This is route preservation, with no fast build, tuning or campaign.

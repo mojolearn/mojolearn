@@ -149,9 +149,10 @@ _FAST_EXTENSION = "_mojolearn_tokenizer_fast"
 _NO_FAST = (None, False, False, 0)
 
 
-def _fast_binding():
+def _fast_binding(*, connect_all=False):
     """`(module, train_device, encode_device, max_vocab)`, or `_NO_FAST`."""
-    if _backend.default_mode() != "fast":
+    selected = _backend.default_mode()
+    if not connect_all and selected != "fast":
         return _NO_FAST
     try:
         path = os.path.join(_backend.tier_dir("fast"), _FAST_EXTENSION + ".so")
@@ -750,9 +751,10 @@ import _codecs as _tokenizer_codecs
 from ._native_loaded_modules import connect_module as _connect_tokenizer_module
 _connect_tokenizer_module("_codecs", _tokenizer_codecs, ("lookup_error",))
 _TOKENIZER_NATIVE = _binding()._module
-_TOKENIZER_FAST = _fast_binding()
+_TOKENIZER_FAST = _fast_binding(connect_all=True)
 _TOKENIZER_FAST_ENTRIES = tuple(
     getattr(_TOKENIZER_FAST[0], name, None) for name in
     ("bpe_fast_load", "bpe_encode_batch", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy"))
 _TOKENIZER_CONTEXT = (BpeTokenizer, TrainedBpeVocabulary, BpeVocabularyTrainer,
-                      _TOKENIZER_NATIVE, _TOKENIZER_FAST, _TOKENIZER_FAST_ENTRIES)
+                      _TOKENIZER_NATIVE, _TOKENIZER_FAST, _TOKENIZER_FAST_ENTRIES,
+                      vars(_backend))

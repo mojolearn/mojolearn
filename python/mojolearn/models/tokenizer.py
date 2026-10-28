@@ -130,3 +130,4 @@ class Tokenizer:
 # Immutable import-time metadata; native execution owns all public operations.
 _TOKENIZER_CONTEXT = (Tokenizer, _NATIVE, _NAME_OF, unicodedata.unidata_version,
                       unicodedata.normalize)
+_NATIVE.tokenizer_public_call("connect_vocab", (), _TOKENIZER_CONTEXT)

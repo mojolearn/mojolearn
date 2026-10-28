@@ -6,6 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
+from std.ffi import _Global
 from std.memory import memcpy
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_instance_item import native_instance_item
@@ -35,6 +36,26 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     SPELLED_BAD_ID, SPELLED_NOT_STR, SPELLED_RAISED, SPELLED_NOT_PAIR,
     SPELLED_NOT_LEVEL, spelled_vocab_tokens, spelled_merges_text, spelled_merges_list,
 )
+
+
+struct TokenizerPublicConnection(Defaultable, Movable):
+    var vocab: PythonObject
+
+    def __init__(out self):
+        self.vocab = PythonObject(None)
+
+
+comptime TOKENIZER_PUBLIC_CONNECTION = _Global[
+    StorageType=TokenizerPublicConnection, name="MojoTokenizerPublicConnection",
+    init_fn=TokenizerPublicConnection.__init__,
+]
+
+
+def _vocab_context() raises -> PythonObject:
+    var context = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()[].vocab
+    if context is None:
+        raise Error("RuntimeError: tokenizer requires its import-time native connection")
+    return context
 
 
 def _int(value: PythonObject, name: String) raises -> Int:
@@ -92,7 +113,7 @@ def _dictionary(value: PythonObject) raises:
     if py_type(value) is not bi.dict:
         raise Error("TypeError: tokenizer metadata requires an exact dictionary")
     var keys = py_call(bi.list, value.keys())
-    for i in range(len(keys)):
+    for i in range(len(keys)):  # driver-loop: over admitted metadata dictionary key names
         _ = _str(keys[i], "dictionary key")
 
 
@@ -108,11 +129,11 @@ def _plain(value: PythonObject, depth: Int = 0) raises:
     if kind is bi.dict:
         _dictionary(value)
         var values = py_call(bi.list, value.values())
-        for i in range(len(values)):
+        for i in range(len(values)):  # driver-loop: over native JSON configuration members before conversion
             _plain(values[i], depth + 1)
         return
     _sequence(value, "metadata")
-    for i in range(len(value)):
+    for i in range(len(value)):  # driver-loop: over native JSON configuration members before conversion
         _plain(value[i], depth + 1)
 
 
@@ -129,9 +150,9 @@ def _owner(value: PythonObject, cls: PythonObject) raises -> PythonObject:
     # _fields checks a replaced __dict__ descriptor BEFORE storage access.
     var fields = _fields(value)
     var names = py_call(bi.list, fields.keys())
-    for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:
+    for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:  # driver-loop: over native class and instance field metadata before access
         _ = py_call(names.append, PythonObject(name))
-    for i in range(len(names)):
+    for i in range(len(names)):  # driver-loop: over native class and instance field metadata before access
         if py_contains(namespace, names[i]):
             var descriptor = namespace[names[i]]
             var slots = _class_fields(py_type(descriptor))
@@ -192,7 +213,7 @@ def _py_bytes(values: List[UInt8]) raises -> PythonObject:
 
 def _py_int_list(values: List[Int]) raises -> PythonObject:
     var out = Python.list()
-    for i in range(len(values)):
+    for i in range(len(values)):  # cpu-route: publish completed native token ids as Python integers
         _ = py_call(out.append, values[i])
     return out
 
@@ -206,7 +227,7 @@ def _ids(var value: PythonObject) raises -> List[Int]:
             or kind is py_type(py_call(bi.iter, py_call(bi.range, 0)))):
         value = py_call(bi.list, value)
     if py_type(value) is bi.list or py_type(value) is bi.tuple:
-        for i in range(len(value)):
+        for i in range(len(value)):  # cpu-route: capture admitted native integer input storage without scalar callbacks
             var item = value[i]
             if py_type(item) is bi.bool:
                 raise Error("TypeError: ids must be int, not bool, at position " + String(i))
@@ -235,11 +256,11 @@ def _ids(var value: PythonObject) raises -> List[Int]:
             raise Error("TypeError: tokenizer ids require a native integer buffer")
         var packed = List[UInt8](length=layout.count * layout.itemsize, fill=0)
         layout.copy_to(Int(packed.unsafe_ptr()))
-        for i in range(layout.count):
+        for i in range(layout.count):  # cpu-route: capture admitted native integer input storage without scalar callbacks
             var bits = UInt64(0)
             if layout.itemsize != 1 and layout.itemsize != 2 and layout.itemsize != 4 and layout.itemsize != 8:
                 raise Error("TypeError: tokenizer integer buffer is wider than 64 bits")
-            for byte in range(layout.itemsize):
+            for byte in range(layout.itemsize):  # cpu-route: capture admitted native integer input storage without scalar callbacks
                 var source = layout.itemsize - 1 - byte if big_endian else byte
                 bits |= UInt64(packed[i * layout.itemsize + source]) << (8 * byte)
             var signed = format == "b" or format == "h" or format == "i" or format == "l" or format == "q" or format == "n"
@@ -294,10 +315,22 @@ def _identity(text: String, ranks: Int) raises -> PythonObject:
 
 def _pack_tokens(tokens: PythonObject, mut arena: List[UInt8], mut lengths: List[Int]) raises:
     var values = _documents(tokens, "tokens")
-    for i in range(len(values)):
+    for i in range(len(values)):  # cpu-route: marshal admitted native token buffers into rank storage
         var bytes = _bytes(values[i], False)
         lengths.append(len(bytes))
         tokenizer_append_bytes(arena, bytes)
+
+
+def _fast_selected(context: PythonObject) raises -> Bool:
+    # Import connects available providers; native execution captures the
+    # mutable process default at the same boundary as the former Python
+    # selector. A later set_numeric_mode therefore retains its semantics.
+    var backend = context[6]
+    _dictionary(backend)
+    var selected = _str(native_instance_item(backend, PythonObject("_DEFAULT_MODE")), "default numeric mode")
+    if selected != "identical" and selected != "fast":
+        raise Error("ValueError: tokenizer numeric mode must be identical or fast")
+    return selected == "fast"
 
 
 def _bpe_adopt(tokenizer: PythonObject, handle: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -309,7 +342,7 @@ def _bpe_adopt(tokenizer: PythonObject, handle: PythonObject, source: PythonObje
     var text = ranks_text(owner[].tok.value().ranks)
     var count = owner[].tok.value().n_vocab()
     var fast = PythonObject(None)
-    if _bool(context[4][2], "connected fast encoder"):
+    if _fast_selected(context) and _bool(context[4][2], "connected fast encoder"):
         var entry = context[5][0]
         _native(entry)
         fast = Python.tuple(context[4][0], py_call(entry, PythonObject(text)))
@@ -361,7 +394,7 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
         documents = _documents(data, "encode_batch")
     var text = List[UInt8]()
     var lengths = List[Int64]()
-    for i in range(len(documents)):
+    for i in range(len(documents)):  # cpu-route: prepare native document buffers and publish completed token lists
         var bytes = _bytes(documents[i], not bytes_only, "document " + String(i) if batch else "text")
         lengths.append(len(bytes))
         tokenizer_append_bytes(text, bytes)
@@ -389,12 +422,12 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
         raise Error("RuntimeError: tokenizer returned an invalid encoded count")
     var result = Python.list()
     var at = 0
-    for i in range(len(lengths)):
+    for i in range(len(lengths)):  # cpu-route: prepare native document buffers and publish completed token lists
         var count = Int(counts[i])
         if count < 0 or at + count > total:
             raise Error("RuntimeError: tokenizer returned an invalid document count")
         var row = Python.list()
-        for j in range(count):
+        for j in range(count):  # cpu-route: prepare native document buffers and publish completed token lists
             _ = py_call(row.append, Int(ids[at + j]))
         at += count
         _ = py_call(result.append, row)
@@ -417,7 +450,7 @@ def _bpe_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool, b
     if batch:
         sequences = _documents(data, "decode_bytes_batch")
     var result = Python.list()
-    for i in range(len(sequences)):
+    for i in range(len(sequences)):  # cpu-route: marshal admitted id sequences and publish completed decoded bytes
         var ids = _ids(sequences[i])
         bpe_check_ids(ids, owner[].tok.value().n_vocab())
         var bytes = bpe_decode_seq_bytes(owner[], ids, len(ids) * owner[].max_token_bytes)
@@ -432,7 +465,7 @@ def _trained_value(tokens: PythonObject, merges: PythonObject) raises -> Trained
     var value = TrainedVocabulary()
     _pack_tokens(tokens, value.arena, value.length)
     _sequence(merges, "merges")
-    for i in range(len(merges)):
+    for i in range(len(merges)):  # cpu-route: capture native trained-vocabulary fields and merge ids
         _sequence(merges[i], "merge ids")
         if len(merges[i]) != 3:
             raise Error("ValueError: trained merges require (left, right, new) ids")
@@ -481,13 +514,13 @@ def _trainer_init(value: PythonObject, size: PythonObject, frequency: PythonObje
 
 def _trained_finish(value: TrainedVocabulary, size: Int, frequency: Int, context: PythonObject) raises -> PythonObject:
     var tokens = Python.list()
-    for i in range(value.n_tokens()):
+    for i in range(value.n_tokens()):  # cpu-route: publish completed native trained vocabulary and merge records
         var bytes = List[UInt8]()
-        for j in range(value.length[i]):
+        for j in range(value.length[i]):  # cpu-route: publish completed native trained vocabulary and merge records
             bytes.append(value.arena[value.offset[i] + j])
         _ = py_call(tokens.append, _py_bytes(bytes))
     var merges = Python.list()
-    for i in range(value.n_merges()):
+    for i in range(value.n_merges()):  # cpu-route: publish completed native trained vocabulary and merge records
         _ = py_call(merges.append, Python.tuple(value.merge_left[i], value.merge_right[i], 256 + i))
     var stats = Python.dict()
     py_setitem(stats, "n_tokens", PythonObject(value.n_tokens()))
@@ -518,14 +551,14 @@ def _trainer_train(trainer: PythonObject, input_documents: PythonObject, context
         raise Error("ValueError: train needs at least one document")
     var arena = List[UInt8]()
     var lengths = List[Int64]()
-    for i in range(len(documents)):
+    for i in range(len(documents)):  # cpu-route: capture documents into retained native training buffers
         var bytes = _bytes(documents[i])
         lengths.append(len(bytes))
         tokenizer_append_bytes(arena, bytes)
     var sabotage = getenv("MOJOLEARN_BPE_TRAINER_SABOTAGE", "")
     var reverse = sabotage != "" and sabotage != "0"
     var fast = context[4]
-    if _bool(fast[1], "connected fast trainer") and not reverse and size <= _int(fast[3], "connected fast vocabulary limit"):
+    if _fast_selected(context) and _bool(fast[1], "connected fast trainer") and not reverse and size <= _int(fast[3], "connected fast vocabulary limit"):
         var entry = context[5][2]
         var sizes_entry = context[5][3]
         var copy_entry = context[5][4]
@@ -604,7 +637,7 @@ def _table_from_spelled(
     var inv = codepoint_to_byte()
     var sv = SpelledVocab(n)
     var key_err = List[String](capacity=n)
-    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
+    for k in range(n):  # cpu-route: native public operation marshaling of admitted configuration values
         var key = items[k][0]
         var val = items[k][1]
         var is_int = py_type(val) is bi.int
@@ -643,7 +676,7 @@ def _table_from_spelled(
         var m = Int(py=py_call(bi.len, merges))
         var sm = SpelledMerges(m)
         var errs = List[String](capacity=3 * m)
-        for k in range(m):  # cpu-route: Python objects marshaled one element at a time before the runtime
+        for k in range(m):  # cpu-route: native public operation marshaling of admitted configuration values
             var item = merges[k]
             var it = py_type(item)
             var kind = 2
@@ -660,7 +693,7 @@ def _table_from_spelled(
             sm.str_kind.append(tk)
             sm.text.append(tb^)
             errs.append(te^)
-            comptime for p in range(2):
+            comptime for p in range(2):  # driver-loop: over admitted tokenizer configuration metadata
                 var pb = List[UInt8]()
                 var pe = String("")
                 var pk = 0
@@ -738,7 +771,7 @@ def _vocab_settle(tokenizer: PythonObject, options: PythonObject, context: Pytho
         added = py_call(native_loaded_module("builtins").dict, options[1])
     var by_id = Python.dict()
     var keys = py_call(native_loaded_module("builtins").list, added.keys())
-    for i in range(len(keys)):
+    for i in range(len(keys)):  # driver-loop: over admitted added-token configuration entries
         var id = _int(added[keys[i]], "added token id")
         if len(keys[i]) == 0 or id < 0:
             raise Error("ValueError: added token requires nonempty str and nonnegative int")
@@ -764,7 +797,7 @@ def _vocab_finish(fields: PythonObject, var tok: VocabTokenizer) raises:
     var arena = List[UInt8]()
     var lengths = List[Int]()
     var ids = List[Int]()
-    for i in range(len(keys)):
+    for i in range(len(keys)):  # cpu-route: marshal admitted special-token text into native table storage
         var bytes = _bytes(keys[i])
         lengths.append(len(bytes))
         ids.append(_int(added[keys[i]], "added token id"))
@@ -787,7 +820,7 @@ def _vocab_init(tokenizer: PythonObject, tokens: PythonObject, merges: PythonObj
     _sequence(merges, "merges")
     var left = List[List[UInt8]]()
     var right = List[List[UInt8]]()
-    for i in range(len(merges)):
+    for i in range(len(merges)):  # cpu-route: capture admitted native byte merge pairs
         _sequence(merges[i], "merge pair")
         if len(merges[i]) != 2:
             raise Error("ValueError: tokenizer every merge must be a pair of bytes")
@@ -836,11 +869,11 @@ def _vocab_encode(tokenizer: PythonObject, data: PythonObject, add_special: Pyth
         eos = _ids(native_instance_item(fields, PythonObject("eos_ids")))
     var ids = vocab_encode_ids(owner[].tok.value(), bytes, allow)
     var result = Python.list()
-    for i in range(len(bos)):
+    for i in range(len(bos)):  # cpu-route: publish completed native token ids with admitted BOS and EOS metadata
         _ = py_call(result.append, bos[i])
-    for i in range(len(ids)):
+    for i in range(len(ids)):  # cpu-route: publish completed native token ids with admitted BOS and EOS metadata
         _ = py_call(result.append, ids[i])
-    for i in range(len(eos)):
+    for i in range(len(eos)):  # cpu-route: publish completed native token ids with admitted BOS and EOS metadata
         _ = py_call(result.append, eos[i])
     _ = handle
     _ = data
@@ -871,13 +904,64 @@ def _vocab_pretokenize(tokenizer: PythonObject, data: PythonObject, context: Pyt
     var bytes = _bytes(data)
     var offsets = owner[].tok.value().pretokenize(bytes)
     var result = Python.list()
-    for i in range(len(offsets) - 1):
+    for i in range(len(offsets) - 1):  # cpu-route: publish completed native pre-token boundaries as bytes
         var part = List[UInt8]()
-        for j in range(offsets[i], offsets[i + 1]):
+        for j in range(offsets[i], offsets[i + 1]):  # cpu-route: publish completed native pre-token boundaries as bytes
             part.append(bytes[j])
         _ = py_call(result.append, _py_bytes(part))
     _ = handle
     _ = data
+    return result
+
+
+def tokenizer_vocab_encode(tokenizer: PythonObject, text: PythonObject, add_special: PythonObject, allow_special: PythonObject, bytes_only: PythonObject) raises -> PythonObject:
+    return _vocab_encode(tokenizer, text, add_special, allow_special, _bool(bytes_only, "bytes_only"), _vocab_context())
+
+
+def tokenizer_vocab_decode(tokenizer: PythonObject, ids: PythonObject, bytes_only: PythonObject, errors: PythonObject) raises -> PythonObject:
+    return _vocab_decode(tokenizer, ids, _bool(bytes_only, "bytes_only"), errors, _vocab_context())
+
+
+def tokenizer_vocab_pretokenize(tokenizer: PythonObject, data: PythonObject) raises -> PythonObject:
+    return _vocab_pretokenize(tokenizer, data, _vocab_context())
+
+
+def tokenizer_vocab_fingerprint(tokenizer: PythonObject) raises -> PythonObject:
+    var context = _vocab_context()
+    var fields = _owner(tokenizer, context[0])
+    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var owner = handle.downcast_value_ptr[VocabHandle]()
+    if not owner[].tok:
+        raise Error("ValueError: tokenizer vocabulary is not loaded")
+    var pattern = native_instance_item(fields, PythonObject("pattern"))
+    _ = _vocab_pattern(pattern)
+    var normalizer = native_instance_item(fields, PythonObject("normalizer"))
+    var unicode_version = PythonObject(UNICODE_VERSION_PINNED)
+    if normalizer is not None:
+        if _str(normalizer, "normalizer") != "NFC":
+            raise Error("ValueError: tokenizer normalizer must be null or NFC")
+        var namespace = _class_fields(context[0])
+        var version = py_get(fields, "unicode_version", py_get(namespace, "unicode_version"))
+        unicode_version = PythonObject(String(UNICODE_VERSION_PINNED) + "/normalizer:" + _str(version, "unicode_version"))
+    var bos = native_instance_item(fields, PythonObject("bos_ids"))
+    var eos = native_instance_item(fields, PythonObject("eos_ids"))
+    _sequence(bos, "bos_ids")
+    _sequence(eos, "eos_ids")
+    _plain(bos)
+    _plain(eos)
+    _ = _ids(bos)
+    _ = _ids(eos)
+    # Preserve the exact historical settings serialization and hash. All
+    # values are admitted native scalars/containers before CPython formats
+    # them; no user repr, field descriptor or tokenizer._m lookup is used.
+    var settings = Python.tuple(pattern, normalizer, unicode_version, bos, eos)
+    var tail = List[UInt8]()
+    for i in range(5):  # small-loop(the five historical tokenizer fingerprint settings)
+        var text = py_call(native_loaded_module("builtins").str, settings[i])
+        tokenizer_append_bytes(tail, _bytes(text))
+        tail.append(10)
+    var result = PythonObject(vocab_fingerprint_hex(owner[].tok.value(), tail))
+    _ = handle
     return result
 
 
@@ -1073,6 +1157,17 @@ def vocab_pretrained_public_binding(cls: PythonObject, path: PythonObject, modul
 def tokenizer_public_call(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     _sequence(args, "operation arguments")
     _sequence(context, "connected context")
+    if operation == "connect_vocab":
+        if len(context) != 5 or py_type(context[0]) is not native_loaded_module("builtins").type:
+            raise Error("TypeError: tokenizer connection requires its exact class and five metadata entries")
+        _dictionary(context[2])
+        _plain(context[2])
+        _native(context[4])
+        var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
+        if state[].vocab is not None and state[].vocab is not context:
+            raise Error("TypeError: tokenizer native context was already connected")
+        state[].vocab = context
+        return PythonObject(None)
     if operation == "bpe_init":
         return _bpe_init(args[0], args[1], context)
     if operation == "bpe_ranks":
