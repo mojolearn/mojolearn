@@ -64,9 +64,17 @@ def model_dict(mut mods: NativeModules, value: PythonObject) raises:
     var bi = mods.module("builtins")
     if py_type(value) is not bi.dict:
         raise Error("TypeError: model metadata requires an exact dictionary")
-    var keys = py_call(bi.list, value.keys())
-    for i in range(len(keys)):  # driver-loop: admit every key before keyed metadata access
-        _ = model_string(mods, keys[i])
+    # Admission must inspect current keys, including same-size substitutions.
+    # Iterate the exact dictionary in place instead of materializing keys on
+    # every model capture. PyDict_Next does not invoke hashing/equality hooks.
+    ref cpy = Python().cpython()
+    var pos = Int(0)
+    var key = PyObjectPtr()
+    var item = PyObjectPtr()
+    var string_type = bi.str
+    while cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):  # driver-loop: over current exact dictionary keys
+        if py_type(PythonObject(from_borrowed=key)) is not string_type:
+            raise Error("TypeError: model metadata requires exact strings")
 
 
 def model_dict(value: PythonObject) raises:
