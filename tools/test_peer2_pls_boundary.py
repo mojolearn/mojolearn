@@ -111,9 +111,9 @@ def test_scalar_admission_never_converts_object_dtype_payloads():
 def test_execution_uses_one_private_settings_snapshot_and_separate_state():
     owner = (ROOT / "bindings/pls_native.mojo").read_text()
     assert owner.count('classical_family_admit(model)') == 1
-    assert owner.count('var fields = py_call(b.dict.copy, state)') == 1
+    assert owner.count('var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)') == 1
     assert 'py_fields(' not in owner
-    assert 'pls_operation(model, operation, args, context, fields, state, x, y)' in owner
+    assert 'pls_operation(model, operation, args, context, fields, state, x.copy(), y)' in owner
     assert 'pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x)' in owner
     assert 'estimator_binding(model,' not in owner
     assert 'var modes = Python.tuple("numeric_mode") if fitting' in owner
