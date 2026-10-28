@@ -34,7 +34,7 @@ class _GBDTAdapter(PublicOutputsMixin):
         # every other estimator gets them (`_mode.install_fit_tracking`)
         super().__init_subclass__(**kw)
         from ._mode import install_fit_tracking
-        install_fit_tracking(cls)
+        install_fit_tracking(cls, own_only=getattr(cls, "_mojolearn_native_public", False))
         _connect_application_params(cls)
 
     # Every default is GradientBoosting's own, so a default adapter is the
@@ -90,7 +90,7 @@ class _GBDTAdapter(PublicOutputsMixin):
             raise not_fitted_error(f'{type(self).__name__} is not fitted')
 
     def __sklearn_is_fitted__(self):
-        return _TREES(self, "trees_gbdt_adapter_is_fitted", (), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_adapter_is_fitted", (), _TREES_CONTEXT)
 
     def __sklearn_tags__(self):
         """scikit-learn's tag protocol, read only by scikit-learn: the shared
@@ -104,12 +104,12 @@ class _GBDTAdapter(PublicOutputsMixin):
 
     def save(self, path):
         """Not available for this estimator; raises ``NotImplementedError``. Use pickle."""
-        raise NotImplementedError('GBDT adapter archives are not implemented; pickle retains adapter state')
+        return _TREES(self, "trees_public_gbdt_adapter_save", (path,), _TREES_CONTEXT)
 
     @classmethod
     def load(cls, path):
         """Not available for this estimator; raises ``NotImplementedError``. Use pickle."""
-        raise NotImplementedError('Legacy raw GBDT archives have no adapter vocabulary/parameters')
+        return _TREES(cls, "trees_public_gbdt_adapter_load", (path,), _TREES_CONTEXT)
 
 
 class GradientBoostingClassifier(_GBDTAdapter):
@@ -192,7 +192,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
         -------
         self
         """
-        return _TREES(self, "trees_gbdt_adapter_classifier_fit", (X, y, sample_weight, eval_set), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_adapter_classifier_fit", (X, y, sample_weight, eval_set), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """Return the raw float32 margin for each row.
@@ -200,18 +200,18 @@ class GradientBoostingClassifier(_GBDTAdapter):
         A positive margin favors the positive (larger) class; a zero margin
         predicts the negative class.
         """
-        return _TREES(self, "trees_gbdt_adapter_decision", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_adapter_decision", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Return float32 probabilities of shape ``(n_samples, 2)``.
 
         Columns are ``[negative, positive]`` in ``classes_`` order.
         """
-        return _TREES(self, "trees_gbdt_adapter_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_adapter_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Return the predicted class labels, using the original label values."""
-        return _TREES(self, "trees_gbdt_adapter_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_adapter_predict", (X,), _TREES_CONTEXT)
 
     # The accuracy is metrics.accuracy_score on the pinned-sum path.
     def score(self, X, y, sample_weight=None):
@@ -220,7 +220,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
         Follows scikit-learn's weighted accuracy. ``y`` must have the same label
         type as the training labels; otherwise ``TypeError``.
         """
-        return _TREES(self, "trees_gbdt_adapter_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_adapter_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 class GradientBoostingRegressor(_GBDTAdapter):
     """Gradient-boosted tree regressor with a scikit-learn interface.
@@ -296,7 +296,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         -------
         self
         """
-        return _TREES(self, "trees_gbdt_adapter_regressor_fit", (X, y, sample_weight, eval_set), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_adapter_regressor_fit", (X, y, sample_weight, eval_set), _TREES_CONTEXT)
 
     @staticmethod
     def _regression_target(target, name):
@@ -312,7 +312,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
 
     def predict(self, X):
         """Return float32 predictions of shape ``(n_samples,)``."""
-        return _TREES(self, "trees_gbdt_adapter_decision", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_adapter_regression_predict", (X,), _TREES_CONTEXT)
 
     # R2 is metrics.r2_score on the pinned-sum path.
     def score(self, X, y, sample_weight=None):
@@ -320,7 +320,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
 
         Follows scikit-learn's weighted ``r2_score``.
         """
-        return _TREES(self, "trees_gbdt_adapter_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_gbdt_adapter_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 # The adapters' native fit (bindings/trees_public_gbdt_fit.mojo) reads the
 # constructor protocol it checks (`get_params`) and builds the learner class.
