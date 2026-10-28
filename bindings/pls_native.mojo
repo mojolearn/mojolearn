@@ -77,7 +77,7 @@ def _pls_settings(model: PythonObject, state: PythonObject, operation: String,
     # Exact-dict copy captures references atomically while admission holds the
     # GIL. Keep model writes separate; no later numerical stage reads live
     # instance settings or invokes a scalar conversion protocol.
-    var fields = py_call(b.dict.copy, state)
+    var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
     py_setitem(fields, "_pls_name", PythonObject(_name(model)))
     py_setitem(fields, "_pls_regression", PythonObject(decomp_is_a(model, context["pls_regression_class"])))
     py_setitem(fields, "_pls_canonical", PythonObject(decomp_is_a(model, context["pls_canonical_class"])))
@@ -482,7 +482,7 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
         var depth = Int(py=depth_value)
         py_setitem(state, "_mojolearn_fitting", PythonObject(depth + 1))
         try:
-            result = pls_operation(model, operation, args, context, fields, state, x, y)
+            result = pls_operation(model, operation, args, context, fields, state, x.copy(), y)
         except error:
             # _sk_validate.reraise annotated failed one-row/one-feature fits.
             var message = String(error)
@@ -506,7 +506,7 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
         if operation == "fit":
             return result
     else:
-        result = pls_operation(model, operation, args, context, fields, state, x)
+        result = pls_operation(model, operation, args, context, fields, state, x.copy())
     return parallel_public_result(result, operation, PythonObject("regressor"), context)
 
 

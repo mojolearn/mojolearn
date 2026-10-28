@@ -121,3 +121,16 @@ Remaining migration debt (family not declared complete):
 - Random projection components_/__getstate__ retained bodies include Python
   work. Do not extend this review into a dedicated Apple fast/lazy campaign.
 - Existing source inventory native_boundary labels are not runtime evidence.
+
+Coordinator compile follow-up (2026-10-27):
+The focused frozen81 CPU compile failed PLS at pls_native.mojo:80,485,509:
+ambiguous PythonObject copy lookup and two forbidden implicit ArrayMetadata
+copies into Optional arguments. The source now selects exact dict's copy
+descriptor by dictionary lookup and passes explicit x.copy() at both calls.
+The captured x remains available for failure annotations and retains owners.
+Source assertions were updated but no tests/runtime verification were run,
+following the owner's latest stop-verification steering. Recompile is pending.
+Complete coordinator log:
+~/mojolearn-evidence/peer2-native-boundary-20261027/cpu-batch-3/remote/leg_out/scalers_pls.log
+(diagnostics at log lines 538,552,686). JL/RP passed that frozen compile before
+its typed-exception follow-up 76c9d5774562; that follow-up also needs compilation.
