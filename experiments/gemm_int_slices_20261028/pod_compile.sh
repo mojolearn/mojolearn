@@ -25,4 +25,14 @@ build linalg_sm89_on sm_89 MOJOLEARN_COLUMN_NVIDIA "--emit shared-lib" bindings/
 build linalg_gfx942_on gfx942 MOJOLEARN_COLUMN_AMD "--emit shared-lib" bindings/entry/entry__mojolearn_linalg.mojo "" $ON
 build linalg_sm89_off sm_89 MOJOLEARN_COLUMN_NVIDIA "--emit shared-lib" bindings/entry/entry__mojolearn_linalg.mojo "--optimization-level 0"
 build linalg_gfx942_off gfx942 MOJOLEARN_COLUMN_AMD "--emit shared-lib" bindings/entry/entry__mojolearn_linalg.mojo ""
+cpu() {
+  tag=$1; emit=$2; entry=$3; shift 3
+  s=$(date +%s); out="$LEG_OUT/$tag.bin"
+  pixi run mojo build --optimization-level 0 -j "$J" $emit --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU "$@" -I . -I bindings "$entry" -o "$out" > "$LEG_OUT/$tag.log" 2>&1
+  rc=$?; sha=none; [ -f "$out" ] && sha=$(sha256sum "$out" | cut -d' ' -f1)
+  echo "tag=$tag opt=-O0 arch=cpu entry=$entry defines=$* rc=$rc seconds=$(( $(date +%s) - s )) sha256=$sha" >> "$LEG_OUT/receipts.txt"
+}
+cpu check_cpu "" gemm/checks/gemm_int_slices_check.mojo
+cpu linalg_host_on "--emit shared-lib" bindings/entry/entry__mojolearn_linalg_host.mojo $ON
+cpu linalg_host_off "--emit shared-lib" bindings/entry/entry__mojolearn_linalg_host.mojo
 cat "$LEG_OUT/receipts.txt"
