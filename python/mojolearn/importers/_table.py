@@ -95,5 +95,4 @@ def session_shape(shape):
     """The shape a session holds for a model value: a session tensor has at
     least two axes, so a scalar is ``(1, 1)`` and a ``[n]`` vector ``(1, n)``
     (NumPy broadcasting pads on the left the same way)."""
-    shape = tuple(shape)
-    return shape if len(shape) >= 2 else (1,) * (2 - len(shape)) + shape
+    return _READER_NATIVE("session_shape", shape, None, _READER_CONTEXT)
