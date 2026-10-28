@@ -1,10 +1,10 @@
 {
  "exit_code": 0,
- "seconds": 81,
- "source_commit": "3d3ca4404e122b4a600584c658d4d77a7bc05fda",
+ "seconds": 16,
+ "source_commit": "75afa45d357104d9327d3dff44969d07376161af",
  "tracked_dirty": false,
  "entry": "checks/tree_auxiliary_public_compile.mojo",
- "command": "pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/purge-trees-20261028 -I /Users/andrewhendel/mojolearn-wt/purge-trees-20261028/bindings /Users/andrewhendel/mojolearn-wt/purge-trees-20261028/checks/tree_auxiliary_public_compile.mojo -o /Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt1/tree_auxiliary_public_compile.so",
+ "command": "pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/purge-trees-20261028 -I /Users/andrewhendel/mojolearn-wt/purge-trees-20261028/bindings /Users/andrewhendel/mojolearn-wt/purge-trees-20261028/checks/tree_auxiliary_public_compile.mojo -o /Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt3-final/tree_auxiliary_public_compile.so",
  "compiler_version": "Mojo 1.0.0 (ed45d567)",
  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
  "jobs": 10,
@@ -12,9 +12,17 @@
  "scope": "Complete tree public dispatcher (trees_public_operation) incl. new trees_dart_construct, trees_gbdt_ordered_init, trees_gbdt_feature_freq_init routes, merged iforest/boost/explainer/GBDT-adapter owners; CPU column, identical, O0, apple-m1",
  "not_covered": "GPU/NVIDIA/AMD/Apple-GPU builds, fast mode, full runtime binding roots (classical_native_call module, public_attributes_native root), Python import, runtime, identity, tests",
  "runtime_executed": false,
- "log": "/Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt1/compile.log",
- "source_archive": "/Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt1/source.tgz",
- "source_archive_sha256": "9a6e168d67d51e9e785fe476c195b5488b1bd075cd671012b7fbf5869d810443",
- "binary": "/Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt1/tree_auxiliary_public_compile.so",
- "binary_sha256": "332ed664dff8b0040361be895e2d2e10cb6f06d8234d76545c06bbb9a93b7aa1"
+ "log": "/Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt3-final/compile.log",
+ "source_archive": "/Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt3-final/source.tgz",
+ "source_archive_sha256": "4aa40fbdaba9497444c5a6ef5dd49aa9197487d8e223736e2aae7cd0de0bf8dc",
+ "binary": "/Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt3-final/tree_auxiliary_public_compile.so",
+ "binary_sha256": "38634b251961daab737bc686accdd4ffab727ed6b4910f86dea02a7a74f3fe25",
+ "note": "final compile after merging origin/main 1ec42c1502 (samba/docs only); fast because the compiler cache held the unchanged closure",
+ "earlier_attempt": {
+  "source_commit": "3d3ca4404e122b4a600584c658d4d77a7bc05fda",
+  "seconds": 81,
+  "exit_code": 0,
+  "log": "/Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt1/compile.log",
+  "binary_sha256": "332ed664dff8b0040361be895e2d2e10cb6f06d8234d76545c06bbb9a93b7aa1"
+ }
 }

@@ -12,6 +12,6 @@ Moved to native (one trees_* call per constructor):
 _coef_block: no caller left in _expansion_trees.py after the explainers merge; the definition in _expansion_linear.py (not this lane's file) is now unused.
 Inventory (tools/public_runtime_inventory.py --endpoints-json) prohibited_source groups:
   _expansion_trees.py 11 -> 0, ensemble.py 2 -> 0 (start 3d95fa9dfc -> head).
-Compiles: compile.json (full tree dispatcher checks/tree_auxiliary_public_compile.mojo, rc 0, 81 s, Mac -j10),
+Compiles: compile.json (full tree dispatcher checks/tree_auxiliary_public_compile.mojo, rc 0 at 3d3ca4404e 81 s and after main merge 75afa45d35 16 s, Mac -j10),
   attributes_compile.json (checks/peer1_attribute_owner_compile.mojo, rc 0, 14 s). CPU column, identical, O0 only.
 Not covered: GPU builds, fast mode, runtime, identity, Python tests. No box rented.
