@@ -157,7 +157,7 @@ def register(**tables):
         cls = tables.get("xcnn_tensor_class")
         if cls is not None:
             context["xcnn_tensor_slots"] = {
-                name: vars(cls)[name] for name in ("b", "shape", "h", "_host", "_base")
+                name: vars(cls)[name] for name in ("b", "shape", "h", "_host", "_base")  # glue: connect fixed native slot identities at import
             }  # glue: retain native slot identities during package connection
             from ._x_sequence_device import _SEQ_CONTEXT
             context["xcnn_array_context"] = dict(_SEQ_CONTEXT)
