@@ -1188,3 +1188,13 @@ _native_family_bridge.tables(
     cluster_public_array_parameters=("init", "seeds", "preference", "mean_prior", "covariance_prior", "metric_params"),
 )
 del _cluster_signature
+
+# Fixed fields replaced by the existing native fit owners, for callback-free release.
+_native_family_bridge.tables(cluster_public_replaced_fields={
+    MiniBatchKMeans: ('_partial_batch', '_partial_init', '_partial_state', 'cluster_centers_', 'counts_', 'inertia_', 'labels_', 'n_features_in_', 'n_iter_', 'n_steps_'),
+    BisectingKMeans: ('_tree_centers', '_tree_nodes', 'cluster_centers_', 'inertia_', 'labels_', 'n_features_in_'),
+    MeanShift: ('bandwidth_', 'cluster_centers_', 'labels_', 'n_features_in_', 'n_iter_'),
+    OPTICS: ('cluster_hierarchy_', 'core_distances_', 'labels_', 'n_features_in_', 'ordering_', 'predecessor_', 'reachability_'),
+    AffinityPropagation: ('_message_diag', 'affinity_matrix_', 'cluster_centers_', 'cluster_centers_indices_', 'labels_', 'n_features_in_', 'n_iter_'),
+    BayesianGaussianMixture: ('_full_pchol', '_log_consts', '_warm', 'converged_', 'covariance_prior_', 'covariances_', 'degrees_of_freedom_', 'degrees_of_freedom_prior_', 'lower_bound_', 'mean_precision_', 'mean_precision_prior_', 'mean_prior_', 'means_', 'n_features_in_', 'n_iter_', 'precisions_cholesky_', 'weight_concentration_', 'weight_concentration_prior_', 'weights_'),
+})
