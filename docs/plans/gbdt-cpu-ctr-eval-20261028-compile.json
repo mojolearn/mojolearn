@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "source_commit": "2d5c5081a83eab132a56a2ef0e199e23c9bf7ed6",
+  "status": "compile_pass_runtime_and_identity_pending",
+  "scope": "CPU GBDT host binding with CTR eval route; compile only",
+  "entry": "bindings/entry/entry__mojolearn_gbdt_host.mojo",
+  "compiler": {
+    "version": "Mojo 1.0.0 (ed45d567)",
+    "sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa"
+  },
+  "command": [
+    "pixi",
+    "run",
+    "--manifest-path",
+    "/root/gbdt-ctr/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/root/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "32",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "x86-64-v3",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/root/gbdt-ctr",
+    "-I",
+    "/root/gbdt-ctr/bindings",
+    "/root/gbdt-ctr/bindings/entry/entry__mojolearn_gbdt_host.mojo",
+    "-o",
+    "/root/leg_out/gbdt-ctr/gbdt_host.so"
+  ],
+  "dependencies": {
+    "pixi.toml": {
+      "source_sha256": "5bd97d6cdab34b8e5db666baf73e3092b42a81447d88acf825fc31f26bdbc4a9",
+      "shared_sha256": "5bd97d6cdab34b8e5db666baf73e3092b42a81447d88acf825fc31f26bdbc4a9"
+    },
+    "pixi.lock": {
+      "source_sha256": "f6c531ef5300670dd0d66b0cd55cacabe12a28047e2d8d26648f430a46587509",
+      "shared_sha256": "f6c531ef5300670dd0d66b0cd55cacabe12a28047e2d8d26648f430a46587509"
+    }
+  },
+  "resources": {
+    "affinity_count": 32,
+    "cgroup": {
+      "/sys/fs/cgroup/cpu.max": "max 100000"
+    },
+    "compiler_jobs": 32,
+    "saturation_measured": false
+  },
+  "result": {
+    "exit_code": 0,
+    "runtime_executed": false,
+    "identity_checked": false,
+    "binary_sha256": "5cc38580b1dc644a3164943b2bc374e75c6b7d113f8f0b25d504723d85bd4c30",
+    "binary_bytes": 18735176
+  },
+  "started_at_utc": "2026-10-28T04:06:54.017265+00:00",
+  "finished_at_utc": "2026-10-28T04:07:42.707875+00:00",
+  "source_archive_sha256": "1a77659e102d96a2156bc75ef48fefb22362d27b61246c69d185ba6bfeb10373",
+  "compiled_changed_files_sha256": {
+    "gbdt/host/gbdt_oracle_ctr.mojo": "d3659e437757c5ce058f180a9e72c567292c02b10c7ead857175a0ae6c536483",
+    "bindings/_mojolearn_gbdt_host.mojo": "507fa060898318b007f110a51b4a1526c9e2f3bfb723d30cd4e3c533e6b16311"
+  },
+  "retention": {
+    "mac_directory": "/Users/andrewhendel/mojolearn-evidence/peer2-native-boundary-20261027/cpu-batch-7/remote/leg_out/gbdt-ctr",
+    "mac_complete_archive": "/Users/andrewhendel/mojolearn-evidence/peer2-native-boundary-20261027/cpu-batch-7/results-complete.tgz",
+    "r2_complete_archive_key": "measurements/runpod-cpu/mojolearn-cpu-peer2-native-20261027-20261028-040353/results-complete.tgz",
+    "complete_archive_sha256": "db056a1bdf5c1b143be5cb00d33e13beba20b9e86cba2cf9a0586fc910cdfa9d",
+    "pod_id": "b8o973bpjz3685",
+    "termination": "verified by owner; teardown.txt records terminated_verified=1"
+  },
+  "followup": "Only comments and evidence changed after the compiled source commit; Mojo non-comment lines and Python fixture AST were compared unchanged. No new compile or runtime execution."
+}
