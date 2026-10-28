@@ -241,10 +241,16 @@ def connect_embedding(training, embedding_cls, archive_context):
     from types import BuiltinFunctionType, MethodType
     from . import _backend
     from .tokenizer import _binding
+    try:
+        from . import _x_sequence_device  # glue: connect the resident owner before public operations when its optional dependency exists
+    except ModuleNotFoundError as error:
+        if error.name != "numpy":
+            raise
     context = training._OPT_CONTEXT
     bindings = {}
-    names = ("embedding_forward", "embedding_numeric_mode", "embedding_table_release", "seq_tensor_alloc",
-             "embedding_forward_dev", "embedding_backward_dev")
+    names = ("embedding_forward", "embedding_backward", "embedding_numeric_mode", "embedding_table_release", "seq_tensor_alloc",
+             "embedding_forward_dev", "embedding_backward_dev", "seq_tensor_free", "seq_tensor_upload",
+             "seq_tensor_download", "seq_tensor_copy")
     for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
         try:
             module = _backend.binding("_mojolearn_embedding", mode)
@@ -257,12 +263,27 @@ def connect_embedding(training, embedding_cls, archive_context):
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context["embedding_bindings"] = bindings
-    # the host inference class's lookup binding is read from the loaded
-    # module table at call time (its own load loads it; GPU code never does)
+    context["embedding_class"] = embedding_cls
+    if "sequence_device_class" in context:
+        native_owners = tuple(entry for entry in bindings.values()  # glue: preserve the full resident embedding ABI, including copy
+                              if isinstance(entry, dict) and "seq_tensor_upload" in entry)
+        context["sequence_extra_bindings"] = tuple(
+            entry for entry in context.get("sequence_extra_bindings", ())  # glue: retain unrelated native device owners
+            if not any(entry["module"] is owner["module"] for owner in native_owners)
+        ) + native_owners
+    # The host inference class uses an import-connected native lookup owner;
+    # a public operation never invokes the Python binding loader.
     context["embedding_host_module"] = "mojolearn._host._mojolearn_embedding_infer_host"
-    # glue: a host model built by `host_model(path)` reaches the lookup before
-    # any own load ran; the binding loader connects it then
-    context["embedding_host_loader"] = (_backend.load_host_module, "_mojolearn_embedding_infer_host")
+    # glue: connect the optional host lookup ABI once, including host_model.
+    # Unavailable installs retain a refusal string instead of a runtime loader.
+    try:
+        host_module = _backend.load_host_module("_mojolearn_embedding_infer_host")
+        context["embedding_host_binding"] = {"module": host_module, **{
+            name: getattr(host_module, name) for name in names  # glue: fixed host ABI connection at import
+            if isinstance(getattr(host_module, name, None), BuiltinFunctionType)
+        }}
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
+        context["embedding_host_binding"] = type(error).__name__ + ": " + str(error)
     context["embedding_host_names"] = names
     context["embedding_archive_context"] = archive_context.get("host_archive_context", archive_context)
     module = _binding()._module
@@ -272,4 +293,7 @@ def connect_embedding(training, embedding_cls, archive_context):
         raise TypeError("Embedding requires its compiled lifetime entry")
     embedding_cls.__setattr__ = descriptor(MethodType(lifetime, context))
     embedding_cls.__del__ = descriptor(MethodType(lifetime, context))
+    names = ("__dict__", "__getattribute__", "__getattr__", "__setattr__", "__del__")
+    context["guards"] += tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: retain native Embedding metadata identities
+                                for cls in (embedding_cls,))
     return training._OPT_NATIVE, context
