@@ -9,6 +9,15 @@ def test_selected_frontdoors_delegate_binding_admission_after_native_entry():
                    'LinearSVR': {'fit','predict','score'}},
         '_svm_impl.py': {'SVC': {'fit','predict','predict_proba','predict_log_proba','decision_function','score'},
                         'SVR': {'fit','predict','score'}},
+        '_expansion_cluster.py': {
+            '_CentersMixin': {'predict', 'transform', 'fit_predict', 'fit_transform', 'score'},
+            'MiniBatchKMeans': {'fit', 'partial_fit'},
+            'BisectingKMeans': {'fit', 'predict'},
+            'MeanShift': {'fit', 'predict', 'fit_predict'},
+            'OPTICS': {'fit', 'fit_predict'},
+            'AffinityPropagation': {'fit', 'predict', 'fit_predict'},
+            'BayesianGaussianMixture': {'fit', 'fit_predict', 'predict', 'predict_proba', 'score_samples', 'score'},
+        },
         'cluster.py': {'KMeans': {'fit','predict','transform','fit_predict','fit_transform'}},
     }
     checked = set()
@@ -83,3 +92,13 @@ def test_native_admission_preserves_mode_check_and_live_host_replacement():
     assert 'if got != expected:' in source
     assert 'native host binding must be an exact extension module' in source
     assert '.load_host_module(' not in source and '._HostBinding' not in source
+
+
+def test_cluster_native_boundary_refuses_initializer_callbacks_before_array_conversion():
+    source = (ROOT / 'bindings/cluster_fit_a_native.mojo').read_text()
+    assert 'def _callable_init(' not in source
+    helper = source.split('def _init_array(', 1)[1].split('def _flag(', 1)[0]
+    assert helper.index('PyCallable_Check') < helper.index('_f32(init,')
+    assert 'pass explicit initial centers' in helper
+    seed = source.split('def _seed(', 1)[1].split('def _weights(', 1)[0]
+    assert 'py_type(random_state) is not b.int' in seed

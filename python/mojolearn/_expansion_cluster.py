@@ -30,7 +30,7 @@ from . import _native_family_bridge
 # partial_fit, fit_predict and fit_transform of MiniBatchKMeans,
 # BisectingKMeans, MeanShift, OPTICS and AffinityPropagation
 # (bindings/cluster_fit_a_native.mojo) are one native call each, handed the
-# binding `_bind` resolves.
+# binding selected by the shared native provider after admission.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 __all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation", "BayesianGaussianMixture"]
@@ -141,7 +141,7 @@ class _CentersMixin:
             If `X` is empty, has the wrong number of features, or contains
             NaN or infinity.
         """
-        return _NATIVE(self, "family_xc_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_predict", (None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Distance from each row of `X` to every cluster center.
@@ -161,7 +161,7 @@ class _CentersMixin:
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_transform", (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None, sample_weight=None):
         """Fit the model on `X` and return the training labels.
@@ -182,7 +182,7 @@ class _CentersMixin:
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        return _NATIVE(self, "family_cfa_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_fit_predict", (None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None, sample_weight=None):
         """Fit the model on `X` and return the distances to the centers.
@@ -202,7 +202,7 @@ class _CentersMixin:
         distances : Array of shape (n_samples, n_clusters), float32
             Euclidean distance from each training row to each center.
         """
-        return _NATIVE(self, "family_cfa_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_fit_transform", (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y=None, sample_weight=None):
         """Opposite of the inertia of `X` under the fitted centers.
@@ -227,7 +227,7 @@ class _CentersMixin:
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_score", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_score", (None, X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_kmeans.py` (MiniBatchKMeans),
@@ -364,7 +364,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
             string or an array of the wrong shape, `n_init` is below 1, or
             `X` contains NaN or infinity.
         """
-        return _NATIVE(self, "family_cfa_mbk_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_mbk_fit", (None, X, sample_weight), _NATIVE_CONTEXT)
 
 
     def partial_fit(self, X, y=None, sample_weight=None):
@@ -397,7 +397,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
             or on the first call if `n_clusters` exceeds the number of rows
             or `init` is invalid.
         """
-        return _NATIVE(self, "family_cfa_mbk_partial_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_mbk_partial_fit", (None, X, sample_weight), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_bisect_k_means.py`. The 2-means is this
@@ -504,7 +504,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
             is outside [1, n_samples], `n_init` is below 1, or `X` contains
             NaN or infinity.
         """
-        return _NATIVE(self, "family_cfa_bisect_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_bisect_fit", (None, X, sample_weight), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Assign each row of `X` to a leaf cluster.
@@ -528,7 +528,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_bisect_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_bisect_predict", (None, X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_mean_shift.py`. Every seed's shift loop is
@@ -625,7 +625,7 @@ class MeanShift(_XCluster):
             If `bandwidth` is not positive, `seeds` has a different number
             of features than `X`, or `X` contains NaN or infinity.
         """
-        return _NATIVE(self, "family_cfa_meanshift_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_meanshift_fit", (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Assign each row of `X` to its nearest cluster center.
@@ -647,7 +647,7 @@ class MeanShift(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_predict", (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the training labels.
@@ -664,7 +664,7 @@ class MeanShift(_XCluster):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        return _NATIVE(self, "family_cfa_meanshift_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_meanshift_fit_predict", (None, X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_optics.py`. The n x n distances and the
@@ -794,7 +794,7 @@ class OPTICS(_XCluster):
             `xi` or `p` is out of range, or a precomputed matrix is not
             square.
         """
-        return _NATIVE(self, "family_cfa_optics_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_optics_fit", (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the cluster labels.
@@ -812,7 +812,7 @@ class OPTICS(_XCluster):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`; -1 marks noise.
         """
-        return _NATIVE(self, "family_cfa_optics_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_optics_fit_predict", (None, X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_affinity_propagation.py`. The
@@ -916,7 +916,7 @@ class AffinityPropagation(_XCluster):
             If `affinity`, `damping`, `max_iter`, `convergence_iter` or
             `preference` is invalid, or a precomputed matrix is not square.
         """
-        return _NATIVE(self, "family_cfa_ap_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_ap_fit", (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Assign each row of `X` to its nearest exemplar.
@@ -939,7 +939,7 @@ class AffinityPropagation(_XCluster):
         ValueError
             If ``affinity='precomputed'``.
         """
-        return _NATIVE(self, "family_xc_ap_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_ap_predict", (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the training labels.
@@ -957,7 +957,7 @@ class AffinityPropagation(_XCluster):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        return _NATIVE(self, "family_cfa_ap_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_ap_fit_predict", (None, X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `mixture/_bayesian_mixture.py` with `_base.py`'s EM
@@ -1122,7 +1122,7 @@ class BayesianGaussianMixture(_XCluster):
             exceeds the number of samples, `n_init` or `max_iter` is below
             1, or a prior has the wrong shape.
         """
-        return _NATIVE(self, "family_mix_bgmm_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_fit", (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the mixture on `X` and return the component of each row.
@@ -1139,7 +1139,7 @@ class BayesianGaussianMixture(_XCluster):
         labels : Array of shape (n_samples,), int32
             Most likely component of each training row.
         """
-        return _NATIVE(self, "family_mix_bgmm_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_fit_predict", (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Most likely component of each row of `X`.
@@ -1161,7 +1161,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_mix_bgmm_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_predict", (None, X), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Responsibility of each component for each row of `X`.
@@ -1181,7 +1181,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_mix_bgmm_predict_proba", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_predict_proba", (None, X), _NATIVE_CONTEXT)
 
     def score_samples(self, X):
         """Log-likelihood of each row of `X` under the mixture.
@@ -1201,7 +1201,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_mix_bgmm_score_samples", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_score_samples", (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y=None):
         """Mean log-likelihood of the rows of `X`.
@@ -1223,7 +1223,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_mix_bgmm_score", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_score", (None, X), _NATIVE_CONTEXT)
 
 
 # The fixed tables the native fits read (bindings/cluster_fit_a_native.mojo):
@@ -1234,3 +1234,6 @@ _native_family_bridge.tables(
     family_cfa_optics_metrics={"euclidean": 0, "l2": 0, "manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2,
                                "infinity": 2, "cosine": 4, "precomputed": 5},
 )
+
+# Fixed binding connections belong to package setup, never a model operation.
+_native_family_bridge.connect_bindings("_mojolearn_x_cluster")

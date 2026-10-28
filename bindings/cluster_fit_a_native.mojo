@@ -23,7 +23,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance,
-    family_type_name, family_call, family_call_kw, family_entry, family_array, family_view, family_cast_view,
+    family_type_name, family_call, family_entry, family_array, family_view, family_cast_view,
     family_f32, family_as_f32, family_nonfinite, family_sample_weight, family_shape_repr,
 )
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
@@ -144,7 +144,7 @@ def _seed(random_state: PythonObject) raises -> Int:
     if random_state is None:
         return 0
     var b = Python.import_module("builtins")
-    if (family_isinstance(random_state, b.bool) or not family_isinstance(random_state, b.int)
+    if (py_type(random_state) is not b.int
             or Bool(py=py_call(Python.import_module("operator").lt, random_state, PythonObject(0)))):
         raise Error("mojolearn: random_state must be None or a non-negative int "
                     + "(the lane's seeded host stream; a RandomState object is not taken)")
@@ -190,41 +190,13 @@ def _aux(parts: PythonObject, context: PythonObject) raises -> PythonObject:
     return out
 
 
-def _callable_init(init: PythonObject, source: PythonObject, k: Int, random_state: PythonObject) raises -> PythonObject:
-    """scikit-learn's callable `init` (`init(X, n_clusters,
-    random_state=random_state)`), called once with every row of the input:
-    a NumPy array and a RandomState seeded by `random_state` when NumPy is
-    installed, the input and the int otherwise."""
-    var b = Python.import_module("builtins")
-    var data = source
-    var state = random_state
-    var numpy = PythonObject(None)
-    try:
-        numpy = Python.import_module("numpy")
-    except:
-        numpy = PythonObject(None)
-    if numpy is not None:
-        try:
-            data = family_call(numpy.asarray, source)
-            state = family_call(numpy.random.RandomState, random_state)
-        except error:
-            if not _pending_is(error, Python.tuple(b.ImportError, b.AttributeError)):
-                raise Error(String(error))
-            _drop_pending()
-    var keywords = Python.dict()
-    py_setitem(keywords, PythonObject("random_state"), state)
-    return family_call_kw(init, keywords, data, PythonObject(k))
-
-
 def _init_array(model: PythonObject, source: PythonObject, init: PythonObject, k: Int, d: Int,
                 context: PythonObject) raises -> PythonObject:
-    """MiniBatchKMeans' array or callable `init` as a checked (k, d) float32
-    array."""
-    var b = Python.import_module("builtins")
-    var given = init
-    if Bool(py=py_call(b.callable, init)):
-        given = _callable_init(init, source, k, _attr(model, "random_state"))
-    var arr = _f32(given, "init", context)
+    """Admit explicit initial centers; model execution never invokes init callbacks."""
+    ref cpy = Python().cpython()
+    if cpy.lib.get_function[Int32]("PyCallable_Check")(init._obj_ptr) != 0:
+        raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers or use 'k-means++' or 'random'")
+    var arr = _f32(init, "init", context)
     if Int(py=arr.shape[0]) != k or Int(py=arr.shape[1]) != d:
         raise Error("The shape of the initial centers " + family_shape_repr(arr) + " does not match "
                     + "the number of clusters " + String(k) + " and features " + String(d) + ".")
