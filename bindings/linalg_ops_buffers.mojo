@@ -474,7 +474,6 @@ struct LinAdmission(Movable):
         self.view.fmt = self.pin.value().format
         if self.view.fmt.startswith(">") or self.view.fmt.startswith("!"):
             raise Error("TypeError: mojolearn: big-endian buffers are not supported")
-        self.view.dtype = String("")
         self.view.c_contig = _contiguous(self.view.shape, self.view.strides, True, layout.itemsize)
         for axis in range(len(layout.suboffsets)):  # small-loop(buffer rank)
             if layout.suboffsets[axis] >= 0:
@@ -501,7 +500,9 @@ def lin_borrow_array(var input: LinAdmission, typestr: String, context: PythonOb
     # for its metadata again; the owned pin keeps storage valid for its lifetime.
     var v = input.view.copy()
     var array = native_storage_allocate(context["array_class"])
-    var pin = PythonObject(alloc=LinBufferPin(input.pin^))
+    var held_pin = Optional[AdmittedBorrowedBuffer]()
+    swap(held_pin, input.pin)
+    var pin = PythonObject(alloc=LinBufferPin(held_pin^))
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromMemory")(
         MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=v.addr), v.nbytes,
@@ -539,7 +540,9 @@ def lin_admitted_c(var input: LinAdmission, typestr: String, name: String,
     var target_kind = _lin_target(typestr, target_item)
     if not force_copy and kind == target_kind and item == target_item and input.view.c_contig:
         if input.view.is_array:
-            return LinBuf(input.keep, input.view.addr, input.view.shape.copy(), input.pin^, input.owner)
+            var held_pin = Optional[AdmittedBorrowedBuffer]()
+            swap(held_pin, input.pin)
+            return LinBuf(input.keep, input.view.addr, input.view.shape.copy(), held_pin^, input.owner)
         return lin_borrow_array(input^, typestr, context)
     var result = lin_new(input.view.shape, typestr, context)
     lin_convert(input.view, typestr, result.addr, name)
