@@ -178,11 +178,10 @@ class CausalLMState:
     and `positions`, how many tokens each row has consumed."""
 
     def __init__(self, batch_size, max_tokens, layers, *, owner=None):
-        return _NATIVE.causal_state_init(self, (batch_size, max_tokens, layers, owner))
+        return _NATIVE.causal_state_init(self, (batch_size, max_tokens, layers, owner), _NATIVE_CONTEXT)
 
     def __repr__(self):
-        return (f"CausalLMState(batch_size={self.batch_size}, max_tokens={self.max_tokens}, "
-                f"layers={len(self.layers)}, positions={self.positions})")
+        return _NATIVE.causal_state_repr(self)
 
 
 def _float_weight(a, name):
@@ -261,11 +260,11 @@ class CausalLM:
     # ------------------------------------------------------------ surface
     @property
     def blocks(self):
-        return self._runtime.causal_lm_blocks(self)
+        return _NATIVE.causal_lm_blocks(self)
 
     def parameters(self):
         """Return tensors by checkpoint name."""
-        return self._runtime.causal_lm_parameters(self)
+        return _NATIVE.causal_lm_parameters(self)
 
     def _ids(self, x, what, step=False):
         pb = probe(x)
@@ -298,7 +297,7 @@ class CausalLM:
                 f"{state.positions}; {l} more do not fit")
 
     def _run(self, ids, state, step, what):
-        return self._runtime.causal_lm_forward(self, ids, state, step)
+        return _NATIVE.causal_lm_forward(self, ids, state, step)
 
     def forward(self, ids, state=None):
         """Return `(B, L, vocabulary)` logits for integer token ids `(B, L)`.
@@ -307,21 +306,21 @@ class CausalLM:
         from fresh caches. In `identical` mode, mojolearn returns the same bits
         on Apple, NVIDIA and AMD GPUs.
         """
-        return self._runtime.causal_lm_forward(self, ids, state, False)
+        return _NATIVE.causal_lm_forward(self, ids, state, False)
 
     __call__ = forward
 
     def allocate_state(self, batch_size, max_tokens):
         """Allocate fresh caches for `batch_size` sequences and `max_tokens` positions."""
-        return self._runtime.causal_lm_allocate(self, batch_size, max_tokens)
+        return _NATIVE.causal_lm_allocate(self, batch_size, max_tokens)
 
     def reset_state(self, state):
         """Reset this model's state, preserving its batch size and capacity."""
-        return self._runtime.causal_lm_reset(self, state)
+        return _NATIVE.causal_lm_reset(self, state)
 
     def step(self, ids, state):
         """Return `(B, vocabulary)` logits and update state for one token per row."""
-        return self._runtime.causal_lm_forward(self, ids, state, True)
+        return _NATIVE.causal_lm_forward(self, ids, state, True)
 
     def generate(self, ids, max_new_tokens, *, greedy=True, seed=None,
                  temperature=1.0, top_k=0, top_p=1.0, eos_token_id=None,
@@ -335,7 +334,7 @@ class CausalLM:
         the token limit. With no EOS, the output has exactly `(B, L + max_new_tokens)`
         ids. A missing pad id uses the first EOS id, or zero.
         """
-        return self._runtime.causal_lm_generate(
+        return _NATIVE.causal_lm_generate(
             self, ids, max_new_tokens,
             (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
 
@@ -347,7 +346,7 @@ class CausalLM:
         Read size does not change sampled ids. `info()` reports completion and
         each row's generated length, including its EOS token.
         """
-        return self._runtime.causal_lm_stream(
+        return _NATIVE.causal_lm_stream(
             self, ids, max_new_tokens,
             (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
 
@@ -359,7 +358,7 @@ class CausalLM:
         Pass a `models.Tokenizer` loaded for this checkpoint. Sampling and
         stopping use the same options as `generate`.
         """
-        return self._runtime.causal_lm_generate_text(
+        return _NATIVE.causal_lm_generate_text(
             self, tokenizer, text, max_new_tokens,
             (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
 
@@ -371,21 +370,20 @@ class CausalLM:
         A read may return an empty string while a UTF-8 character is incomplete.
         Use `info()['done']` to detect completion.
         """
-        return self._runtime.causal_lm_text_stream(
+        return _NATIVE.causal_lm_text_stream(
             self, tokenizer, text, max_new_tokens,
             (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
 
     def resume_generation(self, checkpoint, *, tokenizer=None):
         """Resume a generation checkpoint on the same model weights and settings."""
-        return self._runtime.causal_lm_resume(self, checkpoint, tokenizer)
+        return _NATIVE.causal_lm_resume(self, checkpoint, tokenizer)
 
     def _generate_resident(self, ids, n_new, total, last_logits=None):
         # Retained diagnostic door; arithmetic and lifecycle are native.
-        return self._runtime.causal_lm_resident(self, ids, n_new, last_logits, None)
+        return _NATIVE.causal_lm_resident(self, ids, n_new, last_logits, None)
 
     def __repr__(self):
-        return (f"CausalLM(model_type={self.plan.model_type!r}, layers={self.n_layers}, d_model={self.d_model}, "
-                f"vocab={self.vocab_size}, weight_format={self.weight_format!r}, device={self.device!r})")
+        return _NATIVE.causal_lm_repr(self)
 
 
 class GenerationStream:
@@ -393,15 +391,15 @@ class GenerationStream:
 
     def read(self, max_tokens=1):
         """Return the next token array or text fragment; stop at EOS or the limit."""
-        return self._runtime.causal_lm_read(self, max_tokens)
+        return _NATIVE.causal_lm_read(self, max_tokens)
 
     def info(self):
         """Return completion, generated lengths and whether the stream remains usable."""
-        return self._runtime.causal_lm_info(self)
+        return _NATIVE.causal_lm_info(self)
 
     def state_dict(self):
         """Return independent state bytes, sampling options and model fingerprint."""
-        return self._runtime.causal_lm_snapshot(self)
+        return _NATIVE.causal_lm_snapshot(self)
 
 
 # Package-import connection work only. The native owner reads these plain

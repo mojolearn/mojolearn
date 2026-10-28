@@ -993,14 +993,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
     def classes_(self):
         """Sorted unique labels seen at `fit`, as a list of ints; a list of
         such lists for a 2-D `y`."""
-        if self._y_cols is None:
-            raise AttributeError("classes_ is set by fit")
-        names = getattr(self, "_label_names", None)
-        if names is not None:
-            return names
-        if self.outputs_2d_:
-            return self._classes_list
-        return self._classes_list[0]
+        return _NATIVE(self, "family_xn_knn_clf_classes", (), _NATIVE_CONTEXT)
 
     @_native_query_method
     def predict(self, X):

@@ -1,7 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-only provider connection for the process's native backend metadata."""
 
-_NATIVE = None
+from .tokenizer import _binding
+
+# The package imports this module after every provider loads, so the compiled
+# entry is bound here once; connect() supplies the context and installs the
+# public names (mojolearn.gpu_arch and friends) in __init__.py.
+_NATIVE = _binding()._module.backend_public_native_call
 _CONTEXT = None
 
 
@@ -28,11 +33,10 @@ def vendor():
 def connect(package):
     # glue: discovery/imports finish before public operations are installed;
     # native execution retains entries and never invokes the Python loader.
-    global _NATIVE, _CONTEXT
+    global _CONTEXT
     from types import BuiltinFunctionType
     from . import _backend
-    from .tokenizer import _binding
-    entry = _binding()._module.backend_public_native_call
+    entry = _NATIVE
     if type(entry) is not BuiltinFunctionType:
         raise TypeError("backend metadata requires its compiled native owner")
     _backend.default_mode()
@@ -80,7 +84,6 @@ def connect(package):
                     selected_mode=selected_mode, mode_codes=dict(_backend._CODE_MODE),
                     native_function_type=BuiltinFunctionType,
                     readback_skip_errors=(ImportError, AttributeError))
-    _NATIVE = entry
     for name in ("gpu_arch", "gpu_arch_how", "numeric_mode", "vendor", "set_default_mode"):  # glue: install one-call public metadata wrappers after provider setup
         fn = globals()[name]
         fn.__doc__ = getattr(_backend, name).__doc__

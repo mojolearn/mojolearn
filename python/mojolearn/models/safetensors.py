@@ -54,7 +54,7 @@ class TensorInfo:
         return _NATIVE.tensor_info_size(self, False)
 
     def __repr__(self):
-        return f"TensorInfo({self.name!r}, {self.dtype}, shape={self.shape})"
+        return _NATIVE.checkpoint_repr(self, 0)
 
 
 def widen_f16(bits):
@@ -67,14 +67,7 @@ def widen_f16(bits):
     `from_f16` (a device kernel on a GPU install, the linalg host binding
     on a CPU-only one); the per-element Python loop is gone
     (pyglue-text-io, Oct 3). Exact, so every column has the same bits."""
-    from .. import _linalg_impl
-    shape = tuple(bits.shape)
-    if bits.dtype != "<u2":
-        bits = frombytes(bits.tobytes(), "<u2", shape if shape else (1,))
-    if bits.size == 0:
-        return frombytes(b"", "<f4", shape)
-    out = _linalg_impl.from_f16(bits)
-    return out.reshape(shape) if shape != tuple(out.shape) else out
+    return _NATIVE.checkpoint_widen_f16(bits)
 
 
 def _parse_header(raw, path):
@@ -126,7 +119,7 @@ class SafetensorsFile:
 
 
     def __repr__(self):
-        return f"SafetensorsFile({self.path!r}, tensors={len(self._infos)})"
+        return _NATIVE.checkpoint_repr(self, 1)
 
 
 class Checkpoint:
@@ -169,7 +162,7 @@ class Checkpoint:
         return _NATIVE.checkpoint_close(self)
 
     def __repr__(self):
-        return f"Checkpoint({self.root!r}, shards={len(self._paths)})"
+        return _NATIVE.checkpoint_repr(self, 2)
 
 
 def write_safetensors(path, tensors, metadata=None):
@@ -197,8 +190,12 @@ def write_safetensors(path, tensors, metadata=None):
             fh.write(raw)
     return path
 
+from .. import _linalg_impl as _checkpoint_linalg
+
 # Native file/mmap owners release their resources with normal reference lifetime;
 # no Python __del__ callback is needed when native load owns temporary readers.
 _NATIVE_CONTEXT = {"array_class": Array, "bf16_class": _lowbit.BF16Weight,
                    "info_class": TensorInfo, "file_class": SafetensorsFile,
-                   "checkpoint_class": Checkpoint}
+                   "checkpoint_class": Checkpoint,
+                   "linalg_context": _checkpoint_linalg._NATIVE_CONTEXT}
+_NATIVE.checkpoint_connect(_NATIVE_CONTEXT)

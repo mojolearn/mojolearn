@@ -1,0 +1,47 @@
+{
+  "lane": "program-pooled-offload-20261028",
+  "branch": "lane/program-pooled-offload-20261028",
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "host": "local Mac (no box rented)",
+  "builds": [
+    {
+      "name": "host",
+      "source_commit": "20f4c89930",
+      "scope": "Tokenizer-host side: checks/parallel_byte_owner_compile.mojo -> bindings/parallel_byte_native.mojo (parallel_byte_c, ParallelByteOwner, class admission, descriptor execution), bindings/cross_vendor_native.mojo (cross_vendor_c), NeuralDescriptorProvider/NativeDescriptorResource; CPU identical column, apple-m1, O0",
+      "command": "exec pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/program-pooled-offload-20261028 -I /Users/andrewhendel/mojolearn-wt/program-pooled-offload-20261028/bindings /Users/andrewhendel/mojolearn-wt/program-pooled-offload-20261028/checks/parallel_byte_owner_compile.mojo -o /Users/andrewhendel/mojolearn-evidence/program-pooled-offload-20261028/build-host/parallel_byte_owner_compile.so",
+      "wrapper": "bash ~/mojolearn-evidence/compile_slot.sh",
+      "jobs": 10,
+      "exit_code": 0,
+      "elapsed_seconds": 25,
+      "log": "/Users/andrewhendel/mojolearn-evidence/program-pooled-offload-20261028/build-host.log",
+      "artifact": "/Users/andrewhendel/mojolearn-evidence/program-pooled-offload-20261028/build-host/parallel_byte_owner_compile.so",
+      "artifact_sha256": "2e8e9948a37fe5b8646352f86a797f382ffcea8222c4ca1ae9b79824af03b88a",
+      "artifact_bytes": 3732720
+    },
+    {
+      "name": "bytelm",
+      "source_commit": "33ea37c52d",
+      "scope": "Actual _mojolearn_byte_lm binding entry (bindings/entry/entry__mojolearn_byte_lm.mojo) including the new byte_lm_schedule descriptor table, factory and ByteScheduleSession over ByteParallelTrainer/ByteModelPool/ByteOffloadedReplay; identical, MOJOLEARN_COLUMN_APPLE, Metal default accelerator, apple-m1, O0",
+      "command": "exec pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_APPLE -I /Users/andrewhendel/mojolearn-wt/program-pooled-offload-20261028 -I /Users/andrewhendel/mojolearn-wt/program-pooled-offload-20261028/bindings /Users/andrewhendel/mojolearn-wt/program-pooled-offload-20261028/bindings/entry/entry__mojolearn_byte_lm.mojo -o /Users/andrewhendel/mojolearn-evidence/program-pooled-offload-20261028/build-bytelm/_mojolearn_byte_lm.so",
+      "wrapper": "bash ~/mojolearn-evidence/compile_slot.sh",
+      "jobs": 10,
+      "exit_code": 0,
+      "elapsed_seconds": 279,
+      "log": "/Users/andrewhendel/mojolearn-evidence/program-pooled-offload-20261028/build-bytelm.log",
+      "artifact": "/Users/andrewhendel/mojolearn-evidence/program-pooled-offload-20261028/build-bytelm/_mojolearn_byte_lm.so",
+      "artifact_sha256": "359ccaf3acdbdddb04990148dfb87b63cc34d6c29604ed75be33123aa29c375e",
+      "artifact_bytes": 36858760
+    }
+  ],
+  "failed_attempts": [
+    "/Users/andrewhendel/mojolearn-evidence/program-pooled-offload-20261028/build-bytelm-attempt1.log"
+  ],
+  "runtime_executed": false,
+  "identity_verified": false,
+  "not_covered": [
+    "linux/CUDA/HIP targets of _mojolearn_byte_lm",
+    "full _mojolearn_tokenizer_host merged root",
+    "any runtime, identity, GPU or installed-wheel execution"
+  ]
+}

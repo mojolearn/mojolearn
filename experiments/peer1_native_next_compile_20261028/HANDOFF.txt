@@ -1,0 +1,34 @@
+peer1-native-next-compile, 2026-10-28
+
+Branch lane/peer1-native-next-20261027. Merged origin/integration/provider-queue-20261028
+(3d95fa9dfc), then origin/main 1ec42c1502. The main delta touches only samba/neural .mojo
+files, which no compiled root imports.
+
+Head contents over aefc4545aa:
+- The 7 descriptor commits 312223206b..4ad607eff5: kernel metadata/refusal transport, PCS
+  draw through the XN descriptor at ID 82 (IDs 0..81 unchanged), checked XN admission,
+  and the hierarchy cluster typed descriptor.
+- d2b70e3047: the peer's 3 dirty files. Registers hierarchy_cluster_native_api_v1 in
+  bindings/_mojolearn_x_cluster{,_host}.mojo; estimator_binding_pyapi.mojo:83 routes
+  identical _mojolearn_x_neighbors through xn_admit_checked.
+- b9af661618: compile fix. Mojo 1.0 has no variadic List constructor, so
+  hierarchy/cluster_descriptor_impl.mojo:16 and bindings/cfb_agglo.mojo:250/254 now use
+  typed list literals.
+
+Compile: compile-provenance.json in this directory. One RunPod CPU pod, 32 affinity CPUs,
+-j 32. Mojo 1.0.0 (ed45d567). Identical mode, x86-64-v3.
+- Passing at 03f47d500c, under CPU column at -O0: radius-public, pcs-draw-host,
+  kernel-public and the x_neighbors host module.
+- Passing at b9af661618, under CPU column at -O0: cluster-host, hierarchy-public and the
+  x_cluster host module.
+- Device roots at b9af661618. cluster-device and the x_cluster module need an accelerator
+  target, because a CPU-only target fails with "Unknown GPU architecture".
+  - cluster-device passes for sm_89 under the CPU column, sm_89 under the NVIDIA column and
+    gfx942 under the AMD column, all at -O0.
+  - The x_cluster module passes for sm_89 (CPU and NVIDIA columns) at -O0.
+  - For gfx942 at -O0 the x_cluster module fails in the unchanged gemm_checks code (stack
+    frame over the limit). At the default optimization level it exits 0.
+- Not covered: Apple/metal, sm_90a/PTX, AMD x_cluster at -O0, and any runtime, identity
+  or vendor verification (none were run).
+Pod k9cftwtv1n544l was deleted and verified gone. Logs and binaries are on the Mac and in
+R2 (see the receipt).

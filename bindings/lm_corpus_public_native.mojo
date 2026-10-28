@@ -8,7 +8,7 @@ from bindings.native_error_class import error_without_class
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.lm_corpus_metadata import (corpus_context, corpus_connect, corpus_int, corpus_dict,
-    corpus_plain, corpus_fields, corpus_new, corpus_empty, corpus_mapped, corpus_ids_snapshot)
+    corpus_plain, corpus_fields, corpus_new, corpus_empty, corpus_mapped, corpus_ids_snapshot, corpus_batch_base)
 from bindings.lm_corpus_files import (corpus_path, corpus_path_object, corpus_read, corpus_write,
     corpus_hash_bytes, corpus_hash_file, corpus_read_json, corpus_write_json, corpus_exists,
     corpus_atomic_begin, corpus_atomic_commit, corpus_atomic_abort, corpus_seconds, corpus_file_size)
@@ -338,18 +338,13 @@ def _batch_ids(value: PythonObject, step_value: PythonObject, context: PythonObj
     var length = corpus_int(fields["length"], "length", True)
     var lo = corpus_int(fields["lo"], "lo", True)
     var modulus = corpus_int(fields["modulus"], "modulus", True)
-    var step = corpus_int(step_value, "step_index", True)
-    if batch < 0 or length < 1 or step < 0:
+    if batch < 0 or length < 1:
         raise Error("ValueError: tokens_gather_rows: bad dims")
-    if batch != 0 and length > 9223372036854775807 // batch:
-        raise Error("ValueError: token batch position exceeds native indexing")
-    var stride = batch * length
-    if stride != 0 and step > 9223372036854775807 // stride:
-        raise Error("ValueError: token batch position exceeds native indexing")
+    var base = corpus_batch_base(step_value, batch, length)
     var source = corpus_ids_snapshot(fields["ids_all"], context)
     var result = corpus_empty(Python.tuple(batch, length + 1), context)
     _ = tokenizer_gather_rows_native(Int(py=source._addr), Int(py=source.size), Int(py=result._addr), Int(py=result.size),
-        batch, length, lo, modulus, step * stride)
+        batch, length, lo, modulus, base)
     _ = source^
     return result
 
