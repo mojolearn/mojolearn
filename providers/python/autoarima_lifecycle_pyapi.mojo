@@ -36,11 +36,23 @@ def _fields(model: PythonObject, cls: PythonObject) raises -> PythonObject:
     raise Error("TypeError: AutoARIMA requires native instance storage")
 
 
+def _integer_object(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var cls = py_type(value)
+    var b = native_loaded_module("builtins")
+    if cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.str and cls is not b.bytes and not _one_of(cls, context["scalar_types"]):
+        raise Error("TypeError: AutoARIMA numeric settings require native scalar values")
+    return py_call(b.int, value)
+
+
 def _integer(value: PythonObject, context: PythonObject) raises -> Int:
+    return Int(py=_integer_object(value, context))
+
+
+def _number(value: PythonObject, context: PythonObject) raises -> Float64:
     var cls = py_type(value)
     if cls is not py_type(PythonObject(0)) and cls is not py_type(PythonObject(0.0)) and cls is not py_type(PythonObject(True)) and not _one_of(cls, context["scalar_types"]):
         raise Error("TypeError: AutoARIMA numeric settings require native scalar values")
-    return Int(py=py_call(native_loaded_module("builtins").int, value))
+    return Float64(py=py_call(native_loaded_module("builtins").float, value))
 
 
 def _buffer(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
@@ -93,13 +105,16 @@ def _packed(value: PythonObject, name: String, context: PythonObject, integer: B
     return result^
 
 
-def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonObject, prediction: Bool = False) raises -> PythonObject:
     var fields = _fields(model, context["autoarima_class"])
-    if args[1] is not None:
-        raise Error("NotImplementedError: AutoARIMA.forecast: prediction intervals (level) are not implemented")
-    var steps = _integer(args[0], context)
+    if (args[2] if prediction else args[1]) is not None:
+        raise Error("NotImplementedError: AutoARIMA: prediction intervals (level) are not implemented")
+    var observations = _integer(fields["n_obs"], context)
+    var start = _integer(args[0], context) if prediction else observations
+    var end = (observations if args[1] is None else _integer(args[1], context)) if prediction else observations + _integer(args[0], context)
+    var steps = end - start
     if steps < 1:
-        raise Error("ValueError: mojolearn ARIMA: steps must be >= 1")
+        raise Error("ValueError: AutoARIMA needs start < end and forecast steps >= 1")
     var fitted = py_get(fields, "_fitted")
     var ids_all = py_get(fields, "_ids")
     var list_type = py_type(Python.list())
@@ -130,7 +145,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         var y = _packed(state["_y"], "endog", context)
         var params = _packed(state["params_"], "params", context)
         var ids = _packed(ids_all[group], "group indices", context, True)
-        var words = Python.list(rows, n_obs, steps)
+        var words = Python.list(rows, n_obs, start, end) if prediction else Python.list(rows, n_obs, steps)
         var complexity = k + 1
         for axis in range(3):  # small-loop(ARIMA order tuple)
             var word = _integer(order[axis], context)
@@ -148,7 +163,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
             _ = py_call(words.append, word)
         if y.count != rows * n_obs or params.count != rows * complexity or ids.count != rows:
             raise Error("ValueError: AutoARIMA fitted buffer dimensions disagree")
-        _ = py_call(words.extend, Python.tuple(k, 0, 0))
+        _ = py_call(words.extend, Python.tuple(k, 0) if prediction else Python.tuple(k, 0, 0))
         var mode = py_get(state, "numeric_mode")
         if mode is None:
             mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -166,7 +181,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         var part = classical_typed(Python.tuple(rows, steps), "<f4", context)
         var part_address = Int(py=classical_address(part))
         # n_exog is zero: y supplies a live unused pointer for the two exog slots.
-        _ = py_call_typed(entries["arima_forecast"], y.source.addr, y.source.addr, y.source.addr,
+        _ = py_call_typed(entries["arima_predict" if prediction else "arima_forecast"], y.source.addr, y.source.addr, y.source.addr,
                           params.source.addr, part_address, words)
         # The connected base scatter owns bounds validation and finished-result
         # assembly on its compiled target; no Python indexing or data loops.
@@ -177,3 +192,7 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         _ = ids
         _ = part
     return out
+
+
+def autoarima_predict_native(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    return autoarima_forecast(model, args, context, True)

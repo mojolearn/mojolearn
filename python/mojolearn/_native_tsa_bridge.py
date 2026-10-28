@@ -56,7 +56,10 @@ def connect():
     # module table at call time (its own load loads it)
     context["hw_host_module"] = "mojolearn._host._mojolearn_forecast_host"
     arima = {}
-    arima_names = ("arima_fit", "arima_predict", "arima_forecast", "arima_ic_from_loglike", "arima_numeric_mode")
+    arima_names = ("arima_fit", "arima_predict", "arima_forecast", "arima_ic_from_loglike", "arima_numeric_mode",
+                   "arima_fast_search_mode", "arima_order_caps", "arima_ndiffs_kpss",
+                   "arima_order_batch_enabled", "arima_order_search_device", "arima_order_search",
+                   "arima_search_reuse_enabled", "arima_order_search_fit")
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
             module = _backend.binding("_mojolearn_arima", mode)
@@ -71,7 +74,8 @@ def connect():
     context["arima_bindings"] = arima
     context["arima_entry_names"] = arima_names
     from ._buffer import _native
-    for name in ("gather_rows_bytes", "scatter_rows_bytes"):  # glue: the base binding's byte row moves
+    for name in ("gather_rows_bytes", "scatter_rows_bytes", "cast_elements", "bincount_i64",  # glue: fixed compiled registration names
+                 "select_fold_i64", "ic_running_min_f32", "ic_running_min_f64"):  # glue: fixed compiled row moves, integer casts and IC/group helpers
         fn = _native(name)
         if not isinstance(fn, BuiltinFunctionType):
             raise TypeError(f"AutoARIMA requires the compiled {name} entry")
