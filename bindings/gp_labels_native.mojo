@@ -16,9 +16,13 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address, classical_is_array
 from bindings.family_common import (
-    family_repr, family_isinstance, family_call, family_entry, family_array, FAMILY_F64P, FAMILY_I64P,
+    family_call, family_is_str, family_array, FAMILY_F64P, FAMILY_I64P,
 )
 from bindings.archive_schema_native import _schema_label_store
+from bindings.classical_pandas import classical_admit_value
+from bindings.classical_labels import _flatten_labels
+from bindings.classifier_public_lifecycle import classifier_label_list
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
 
@@ -47,7 +51,7 @@ def _gp_prepare(address: Int, code: Int, n: Int, as_bool: Bool, base: PythonObje
     var wide = code == 0 or code == 1
     var classes = family_array(Python.tuple(n), String("<f8") if wide else String("<i8"), context)
     var codes = family_array(Python.tuple(n), "<i4", context)
-    var entry = family_entry(base, "prepare_targets", context)
+    var entry = neural_descriptor_entry(base, "prepare_targets")
     var k: Int
     try:
         k = Int(py=py_call(entry, PythonObject(address), PythonObject(code), PythonObject(n),
@@ -106,60 +110,10 @@ def _gp_buffer_labels(y: PythonObject, base: PythonObject, context: PythonObject
     return _gp_prepare(Int(py=classical_address(y)), code, size, typestr == "|b1", base, context)
 
 
-def _gp_is_nested(item: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
-    return family_isinstance(item, Python.tuple(b.list, b.tuple))
-
-
-def _gp_any_nested(items: PythonObject) raises -> Bool:
-    """`any(map(_is_nested, items))`."""
-    for i in range(len(items)):  # cpu-route: Python label objects, the explicit label input step
-        if _gp_is_nested(items[i]):
-            return True
-    return False
-
-
-def _gp_plain(labels: PythonObject) raises -> String:
-    """`_plain_labels`: "number", "str" or "" (the type set)."""
-    var b = Python.import_module("builtins")
-    if len(labels) == 0:
-        return ""
-    var kinds = py_call(b.set, py_call(b.map, b.type, labels))
-    if Bool(py=py_call(kinds.issubset, Python.tuple(b.int, b.float, b.bool))):
-        return "number"
-    if len(kinds) == 1 and py_contains(kinds, b.str):
-        return "str"
-    return ""
-
-
-def _gp_flatten(y: PythonObject) raises -> PythonObject:
-    """`_labels.flatten_labels(y)`: a flat Python list of label objects."""
-    var b = Python.import_module("builtins")
-    var items = y
-    if Bool(py=py_call(b.hasattr, y, "tolist")) and not _gp_is_nested(y):
-        items = family_call(py_call(b.getattr, y, PythonObject("tolist")))
-    if family_isinstance(items, Python.tuple(b.str, b.bytes)):
-        raise Error("mojolearn: y must be a sequence of labels")
-    var ty = py_type(items)
-    if (ty is b.list or ty is b.tuple) and _gp_plain(items) != "":
-        return py_call(b.list, items)
-    var level = Python.list(items)
-    while _gp_any_nested(level):  # driver-loop: over the label nesting levels (depth-sized)
-        var flat = Python.list()
-        for i in range(len(level)):  # cpu-route: Python label objects, the explicit label input step
-            var item = level[i]
-            if _gp_is_nested(item):
-                _ = py_call(flat.extend, item)
-            else:
-                _ = py_call(flat.append, item)
-        level = flat
-    return level
-
-
 def _gp_list_labels(flat: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_encode_label_list_native`: a flat list of exact ints (within int64)
     or exact floats through `prepare_targets`, else None."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if len(flat) == 0:
         return PythonObject(None)
     var kinds = py_call(b.set, py_call(b.map, b.type, flat))
@@ -183,57 +137,29 @@ def _gp_list_labels(flat: PythonObject, base: PythonObject, context: PythonObjec
     return result
 
 
-def _gp_no_nan(labels: PythonObject) raises:
-    """`any(map(operator.ne, labels, labels))` refused: a NaN label."""
-    var b = Python.import_module("builtins")
-    var ne = Python.import_module("operator").ne
-    if Bool(py=family_call(b.any, py_call(b.map, ne, labels, labels))):
-        raise Error(String(_NAN_LABEL))
-
-
-def _gp_check_kinds(labels: PythonObject) raises:
-    """`_check_label_kinds`: the first label that is neither a number nor a
-    str (or a NaN before it), then a mix of the two kinds."""
-    var b = Python.import_module("builtins")
-    var real = Python.import_module("numbers").Real
-    var types = py_call(b.list, py_call(b.set, py_call(b.map, b.type, labels)))
-    var refused = py_call(b.set)
-    var seen_str = False
-    var seen_number = False
-    for i in range(len(types)):  # driver-loop: over the distinct label types (types-sized)
-        var t = types[i]
-        if Bool(py=family_call(b.issubclass, t, b.str)):
-            seen_str = True
-        elif Bool(py=family_call(b.issubclass, t, real)) or String(t.__name__) == "bool_":
-            seen_number = True
-        else:
-            _ = py_call(refused.add, t)
-    var stop = -1
-    if len(refused) > 0:
-        try:
-            stop = Int(py=py_call(Python.import_module("operator").indexOf,
-                                  py_call(b.map, py_attr(refused, "__contains__"), py_call(b.map, b.type, labels)), PythonObject(True)))
-        except:
-            stop = -1
-    var head = labels if stop < 0 else py_call(py_attr(labels, "__getitem__"), py_call(b.slice, PythonObject(0), PythonObject(stop)))
-    _gp_no_nan(head)
-    if stop >= 0:
-        raise Error("mojolearn: label " + family_repr(labels[stop]) + " is neither a number nor a str")
-    if seen_str and seen_number:
-        raise Error("mojolearn: y mixes numeric and str labels; encode one kind before fitting")
-
-
 def _gp_sorted_classes(labels: PythonObject, context: PythonObject) raises -> PythonObject:
     """`sorted_classes(labels)` with codes as an int32 Array: the first of
     equal labels kept, the classes sorted by Python's own comparison."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if len(labels) == 0:
         raise Error("mojolearn: y is empty")
-    var kind = _gp_plain(labels)
-    if kind == "number":
-        _gp_no_nan(labels)
-    elif kind == "":
-        _gp_check_kinds(labels)
+    var seen_number = False
+    var seen_string = False
+    for i in range(len(labels)):  # driver-loop: admitted native scalar labels only
+        var value = labels[i]
+        var kind = _gp_number_kind(value, context)
+        # Input admission permits exact NumPy str_ as well as builtin str.
+        # Their native Unicode slots preserve the original label identities.
+        if family_is_str(value):
+            seen_string = True
+        elif kind < 3:
+            seen_number = True
+            if Bool(py=value != value):
+                raise Error(String(_NAN_LABEL))
+        else:
+            raise Error("mojolearn: labels must be native numbers or strings without Python protocols")
+    if seen_number and seen_string:
+        raise Error("mojolearn: y mixes numeric and str labels; encode one kind before fitting")
     var classes = family_call(b.sorted, py_call(b.dict.fromkeys, labels))
     var table = py_call(b.dict, py_call(b.zip, classes, py_call(b.range, PythonObject(len(classes)))))
     var codes = family_call(b.list, py_call(b.map, py_attr(table, "__getitem__"), labels))
@@ -242,30 +168,24 @@ def _gp_sorted_classes(labels: PythonObject, context: PythonObject) raises -> Py
 
 def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.encode_labels(y)`: (classes list, int32 codes Array)."""
+    classical_admit_value(y, context)
     var fast = _gp_buffer_labels(y, base, context)
     if fast is not None:
         return fast
-    var flat = _gp_flatten(y)
+    var flat = _flatten_labels(y, context)
+    classical_admit_value(flat, context)
     fast = _gp_list_labels(flat, base, context)
     if fast is not None:
         return fast
     return _gp_sorted_classes(flat, context)
 
 
-def _gp_is_bool(value: PythonObject) raises -> Bool:
-    var b = native_loaded_module("builtins")
-    return family_isinstance(value, b.bool) or String(py_type(value).__name__) == "bool_"
-
-
 def _gp_number_kind(value: PythonObject, context: PythonObject) raises -> Int:
-    """0 a bool (`_gp_is_bool`), 1 an integer, 2 another real number, 3
-    neither, for `_labels.label_kind`. Exact builtin and connected NumPy
-    scalar types are told natively; only another label type reaches the
-    numbers ABCs, read from the loaded registry (never imported here). The
-    labels a saved model restores are exact builtins and never reach them."""
+    """0 bool, 1 integer, 2 real, 3 refused: exact native scalar types only.
+    Unknown types never reach a Python numeric ABC or conversion hook."""
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
-    if cls is b.bool or String(cls.__name__) == "bool_":
+    if cls is b.bool:
         return 0
     if cls is b.int:
         return 1
@@ -278,20 +198,13 @@ def _gp_number_kind(value: PythonObject, context: PythonObject) raises -> Int:
         for i in range(len(scalars)):  # driver-loop: over the connected NumPy scalar types, by identity
             if cls is scalars[i]:
                 var kind = String(value.dtype.kind)
+                if kind == "b":
+                    return 0
                 if kind == "i" or kind == "u":
                     return 1
                 if kind == "f":
                     return 2
                 return 3
-    if _gp_is_bool(value):
-        return 0
-    var numbers = py_get(native_loaded_module("sys").modules, "numbers")
-    if numbers is None:
-        return 3  # no numbers ABC exists in this process, so none can be registered
-    if family_isinstance(value, numbers.Integral):
-        return 1
-    if family_isinstance(value, numbers.Real):
-        return 2
     return 3
 
 
@@ -310,12 +223,14 @@ def _gp_label_kind(classes: PythonObject, context: PythonObject) raises -> Strin
     return "object"
 
 
-def gp_decode_labels(classes: PythonObject, codes: PythonObject, base: PythonObject,
+def gp_decode_labels(var classes: PythonObject, codes: PythonObject, base: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """`_labels.decode_labels(classes, codes)` for int64 codes (an Array of
     shape (n,)): an int64 / float64 Array through the base binding's gather
     for int / float classes, else the list of label objects."""
     var b = native_loaded_module("builtins")
+    classes = classifier_label_list(classes, context)
+    classical_admit_value(classes, context)
     var kind = _gp_label_kind(classes, context)
     var k = len(classes)
     var n = Int(py=codes.size)
@@ -330,11 +245,18 @@ def gp_decode_labels(classes: PythonObject, codes: PythonObject, base: PythonObj
             table = PythonObject(None)  # a class outside int64: the label objects come back
         if table is not None:
             var out = family_array(Python.tuple(n), String("<i8") if kind == "int" else String("<f8"), context)
-            _ = family_call(family_entry(base, String("gather_i64") if kind == "int" else String("gather_f64"), context),
+            _ = family_call(neural_descriptor_entry(base, String("gather_i64") if kind == "int" else String("gather_f64")),
                             py_call(table.buffer_info)[0], PythonObject(k), classical_address(codes),
                             PythonObject(n), classical_address(out))
             _ = out  # keep the Python object alive through the native call above
             _ = table^
             return out
-    var rows = family_call(py_call(b.memoryview, codes._store).tolist)
-    return family_call(b.list, py_call(b.map, py_attr(classes, "__getitem__"), rows))
+    var rows = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(codes)))
+    var result = Python.list()
+    for i in range(n):  # driver-loop: native code-to-label gather retains output objects
+        var index = Int(rows[i])
+        if index < 0 or index >= k:
+            raise Error("IndexError: GP class code is outside its retained class table")
+        _ = py_call(result.append, classes[index])
+        _ = codes
+    return result

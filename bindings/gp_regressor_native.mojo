@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # GaussianProcessRegressor `fit`, `predict`, `sample_y`, `log_marginal_likelihood`
 # and `score`, one native call each (python/mojolearn/_gp_impl.py). The shell hands
-# over the `_mojolearn_gp` binding `_bind` resolved; this owner makes the Python
+# over raw arguments; the shared native provider resolves the binding. This owner makes the
 # methods' refusals in their wording and order, cross-checks the binary's
 # compile-time mode, runs normalize_y through StandardScaler's own native fit and
 # transform (bindings/scaler_native.mojo, bindings/scaler_lifecycle_native.mojo),
@@ -14,6 +14,8 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.metrics_native_support import metric_warn, metric_is_integral, metric_is_bool
+from bindings.host_inference_scalars import host_inference_scalar
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
@@ -43,7 +45,7 @@ def _gpr_ext(model: PythonObject, binding: PythonObject, context: PythonObject) 
 
 def _gpr_default_kernel(context: PythonObject) raises -> PythonObject:
     """`ConstantKernel(1.0, "fixed") * RBF(1.0, "fixed")`, built from fields."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var classes = context["family_gp_classes"]
     var const = family_call(b.object.__new__, classes["const"])
     var cf = py_fields(const)
@@ -62,16 +64,15 @@ def _gpr_default_kernel(context: PythonObject) raises -> PythonObject:
     return pair
 
 
-def _is_integral(value: PythonObject) raises -> Bool:
-    """`isinstance(value, numbers.Integral) and not isinstance(value, bool)`."""
-    var b = Python.import_module("builtins")
-    return (family_isinstance(value, Python.import_module("numbers").Integral)
-            and not family_isinstance(value, b.bool))
+def _is_integral(value: PythonObject, context: PythonObject) raises -> Bool:
+    """Native integral scalar admission; never call numbers.Integral hooks."""
+    var b = native_loaded_module("builtins")
+    return metric_is_integral(value, context) and not metric_is_bool(value, context)
 
 
 def _gpr_validate(model: PythonObject, context: PythonObject) raises:
     """`GaussianProcessRegressor._validate_params`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var kernel = family_field(fields, "kernel")
     var alpha = family_field(fields, "alpha")
@@ -99,7 +100,7 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
     elif not (family_is_str(optimizer) and String(optimizer) == "fmin_l_bfgs_b"):
         raise Error(String(_GPR) + ": optimizer=" + family_repr(optimizer) + " is "
                     + "not one of None and 'fmin_l_bfgs_b'")
-    if not _is_integral(n_restarts) or Int(py=family_call(b.int, n_restarts)) < 0:
+    if not _is_integral(n_restarts, context) or Int(py=family_call(b.int, n_restarts)) < 0:
         raise Error(String(_GPR) + ": n_restarts_optimizer must "
                     + "be a non-negative int, got " + family_repr(n_restarts))
     var restarts = Int(py=family_call(b.int, n_restarts))
@@ -119,7 +120,7 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
                     + "it shapes sample_y's draws from the unfitted prior, which is "
                     + "not implemented. y is single-target here")
     if random_state is not None:
-        var bad = not _is_integral(random_state)
+        var bad = not _is_integral(random_state, context)
         if not bad:
             var seed = family_call(b.int, random_state)
             bad = not (Bool(py=py_call(py_attr(b.int, "__ge__"), seed, PythonObject(0)))
@@ -148,7 +149,7 @@ def _gpr_normalize(model: PythonObject, binding: PythonObject, targets: PythonOb
     """sklearn `_gpr.py:275-280` through StandardScaler in this estimator's
     tier: `(targets, y_mean, y_std)`, the transformed targets a new (n,)
     float32 Array."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var scaler_cls = context["family_gp_scaler"][0]
     var scaler_context = context["family_gp_scaler"][1]
     classical_connect_numpy(scaler_context)
@@ -179,7 +180,7 @@ def _gpr_normalize(model: PythonObject, binding: PythonObject, targets: PythonOb
 def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObject, x: PythonObject,
                   targets: PythonObject, n_rows: Int, n_cols: Int, context: PythonObject) raises -> PythonObject:
     """`_lml_grad`: (info, lml, grad list) at `kernel` through `gpr_lml_grad`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var arrays = gp_kernel_arrays(kernel, context)
     var flags = Python.list()
     var values = Python.list()
@@ -242,7 +243,7 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
     # random_state may be None only with no restarts (checked in
     # _validate_params); the kernel then draws no restart point.
     var seed = PythonObject(0) if fields["_random_state"] is None else fields["_random_state"]
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var low = py_call(py_attr(b.int, "__and__"), seed, PythonObject(0xFFFFFFFF))
     var high = py_call(py_attr(b.int, "__and__"), py_call(py_attr(b.int, "__rshift__"), seed, PythonObject(32)), PythonObject(0xFFFFFFFF))
     var ext = _gpr_ext(model, binding, context)
@@ -292,7 +293,7 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
 def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`GaussianProcessRegressor.fit(X, y)`; args = (binding, X, y)."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     _gpr_validate(model, context)
     var fields = py_fields(model)
     var source = family_as_f32(args[1], 2, "X", context)
@@ -360,7 +361,7 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                        + "definite in float32 with alpha=" + String(py_call(b.format, PythonObject(alpha), "g"))
                        + "; refitting with alpha=" + String(py_call(b.format, PythonObject(raised), "g"))
                        + ". Pass a larger alpha to skip this step.")
-        _ = family_call(Python.import_module("warnings").warn, PythonObject(message), b.RuntimeWarning)
+        metric_warn(message, b.RuntimeWarning, context)
     var sp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
     _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "X_train_", x)
@@ -474,7 +475,7 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
 
 def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict(X, return_cov=True)`: (mean, cov) through `gpr_predict_cov`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     _gpr_fitted(fields, "call fit() first (the unfitted-prior arm of sklearn's predict is not implemented)")
     var q = _gpr_query(fields, args[1], context)
@@ -520,13 +521,13 @@ def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObj
 def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`sample_y(X, n_samples, random_state)`; args = (binding, X, n_samples, random_state)."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     _gpr_fitted(fields, "call fit() first (sampling the unfitted prior is not implemented)")
-    if not _is_integral(args[2]):
+    if not _is_integral(args[2], context):
         raise Error("TypeError: " + String(_GPR) + ": n_samples must be an int")
     var seed = args[3]
-    var bad = not _is_integral(seed)
+    var bad = not _is_integral(seed, context)
     if not bad:
         var value = family_call(b.int, seed)
         bad = not (Bool(py=py_call(py_attr(b.int, "__ge__"), value, PythonObject(0)))
@@ -578,13 +579,14 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
 
 def _gpr_theta(theta: PythonObject, context: PythonObject) raises -> PythonObject:
     """`[float(t) for t in _flatten(theta)] if _shape_of(theta) else [float(theta)]`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var out = Python.list()
-    if family_is_real(theta):
+    if py_type(theta) is b.int or py_type(theta) is b.float:
         _ = py_call(out.append, family_call(b.float, theta))
         return out
     var view = classical_view(theta, context, "theta")
     if Int(py=view.ndim) == 0:
+        host_inference_scalar(theta, context)
         _ = py_call(out.append, family_call(b.float, theta))
         return out
     var wide = family_cast_view_f64(view, "theta", context)
@@ -603,7 +605,7 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: PythonObject, contex
     """`log_marginal_likelihood(theta, eval_gradient, clone_kernel)`;
     args = (binding, theta, eval_gradient, clone_kernel)."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     _gpr_fitted(fields, "call fit() first")
     var eval_gradient = args[2]

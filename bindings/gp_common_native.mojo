@@ -8,6 +8,7 @@
 # `_replace` / `_with_free_values` built. No method of a kernel class runs.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.family_common import family_repr, family_is_str, family_call, family_as_f32
 from bindings.archive_schema_native import _schema_kernel_nodes, _schema_label_store
@@ -17,8 +18,10 @@ def gp_mode_wanted(model: PythonObject, context: PythonObject) raises -> PythonO
     """`getattr(self, "numeric_mode", None) or _backend.default_mode()`."""
     var b = native_loaded_module("builtins")
     var want = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
-    if want is None or not Bool(py=py_call(b.bool, want)):
+    if want is None:
         want = context["backend_fields"]["_DEFAULT_MODE"]
+    if py_type(want) is not b.str:
+        raise Error("TypeError: GP numeric mode requires an exact native string")
     return want
 
 
@@ -29,13 +32,13 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
     estimator's message head, `rebuild` the sentence after the mode code."""
     var b = native_loaded_module("builtins")
     var want = gp_mode_wanted(model, context)
-    var getter = py_call(b.getattr, binding, PythonObject("gp_numeric_mode"), PythonObject(None))
+    var getter = neural_descriptor_entry(binding, "gp_numeric_mode", False)
     if getter is not None:
         var got = Int(py=family_call(b.int, family_call(getter)))
         var wanted = py_get(context["family_gp_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
             raise Error("RuntimeError: " + prefix + ": numeric_mode=" + family_repr(want) + " was requested but "
-                        + String(py_call(b.getattr, binding, PythonObject("__name__"))) + " reports compile-time mode code "
+                        + String(py_fields(binding)["__name__"]) + " reports compile-time mode code "
                         + String(got) + "; " + rebuild)
     return binding
 
@@ -45,7 +48,7 @@ def gp_caps(binding: PythonObject) raises -> Int:
     binding and the `_OFF` builds): bit 1 is gpc_fit_all / gpc_predict_all,
     bit 2 gpr_fit_ptr / gpr_predict_ptr."""
     var b = native_loaded_module("builtins")
-    var fn_obj = py_call(b.getattr, binding, PythonObject("gp_idn_caps"), PythonObject(None))
+    var fn_obj = neural_descriptor_entry(binding, "gp_idn_caps", False)
     if fn_obj is None:
         return 0
     return Int(py=family_call(b.int, family_call(fn_obj)))
@@ -53,19 +56,19 @@ def gp_caps(binding: PythonObject) raises -> Int:
 
 def gp_entry(binding: PythonObject, name: String) raises -> PythonObject:
     """`ext.<name>`: an attribute lookup on the binding, refused as it was."""
-    return family_call(native_loaded_module("builtins").getattr, binding, PythonObject(name))
+    return neural_descriptor_entry(binding, name)
 
 
 def gp_numeric_mode_used(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """`NumericModeMixin.numeric_mode_used` on the resolved binding."""
     var b = native_loaded_module("builtins")
-    var full = String(py_call(b.getattr, binding, PythonObject("__name__")))
+    var full = String(py_fields(binding)["__name__"])
     var dotted = full.split(".")
     var name = String(dotted[len(dotted) - 1])
     var stem = String("mojolearn")
     if name != "_mojolearn":
         stem = String(name.removeprefix("_mojolearn_"))
-    var getter = py_call(b.getattr, binding, PythonObject(stem + "_numeric_mode"), PythonObject(None))
+    var getter = neural_descriptor_entry(binding, stem + "_numeric_mode", False)
     if getter is not None:
         var code = family_call(getter)
         var table = context["backend_fields"]["_CODE_MODE"]
@@ -81,7 +84,7 @@ def gp_model_kernel(fields: PythonObject) raises -> PythonObject:
     """`getattr(self, "kernel_", None) or self._kernel`."""
     var b = native_loaded_module("builtins")
     var fitted = py_get(fields, PythonObject("kernel_"), PythonObject(None))
-    if fitted is not None and Bool(py=py_call(b.bool, fitted)):
+    if fitted is not None:
         return fitted
     if not py_contains(fields, PythonObject("_kernel")):
         raise Error("AttributeError: object has no attribute '_kernel'")
