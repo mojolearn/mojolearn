@@ -216,6 +216,11 @@ class ElasticNet(ParamsMixin):
     #: classifier's default folds, as scikit-learn's does.
     _estimator_type = "regressor"
 
+    # fit, predict and score are each one x_linear_native call whose public
+    # lifecycle (`_xl_public_operation`: NotFittedError, fit bookkeeping,
+    # feature checks, NumPy/float64 results) replaces the `_mode` wrappers.
+    _mojolearn_native_public = True
+
     def __init__(self, alpha=1.0, *, l1_ratio=0.5, fit_intercept=True,
                  max_iter=1000, tol=1e-3, solver="auto", selection="cyclic",
                  precompute=False, copy_X=True, warm_start=False,

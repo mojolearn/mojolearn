@@ -647,42 +647,6 @@ class NearestNeighbors(NumericModeMixin):
                 "(neighbors/impl/ball_cover/knn.mojo)."
             )
 
-    def _resident_index_handle(self, binding, idx):
-        """The handle of the device-resident copy of `idx` (DEVIATION 2921),
-        prepared on the first call and reused while the index array keeps
-        its address and shape; None where the loaded binding has no
-        `knn_index_prepare` (the CPU host binding, a CPU-only install, a
-        host subclass), in which case `kneighbors` takes the per-call
-        upload. Never raises for a missing door: `_HostBinding` refuses an
-        absent name with ImportError and a plain module with
-        AttributeError, and both mean "no residency here"."""
-        try:
-            prepare = binding.knn_index_prepare
-        except (ImportError, AttributeError):
-            return None
-        key = (addr_ro(idx, name="idx"), tuple(idx.shape))
-        cached = getattr(self, "_resident", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        if cached is not None:
-            self._release_resident_index()
-        handle = int(prepare(key[0], [int(idx.shape[0]), int(idx.shape[1])]))
-        # The minting binding travels with the handle: the release (here, and
-        # the native finalizer when the instance is dropped) is its own
-        # `knn_index_release`.
-        self._resident = (key, handle, binding)
-        return handle
-
-    @staticmethod
-    def _resident_door(binding, name):
-        """The binding's entry `name`, or None where the loaded binding
-        has no such door (`_resident_index_handle`'s rule: an absent name
-        is ImportError on a host binding, AttributeError on a module)."""
-        try:
-            return getattr(binding, name)
-        except (ImportError, AttributeError):
-            return None
-
     def _release_resident_index(self):
         """Drop the device copy, if one is held. Quiet on a binding that
         cannot be reached any more (interpreter shutdown) and on a handle
@@ -703,43 +667,13 @@ class NearestNeighbors(NumericModeMixin):
     def __setstate__(self, state):
         return _NATIVE(self, "family_xn_knn_setstate", (state,), _NATIVE_CONTEXT)
 
-    # The device-resident index handle lives in a holder dict the fit
-    # creates, not in an attribute of its own: the first query changes the
-    # holder's contents, never `__dict__` (scikit-learn's
-    # check_dict_unchanged compares `__dict__` around predict).
-    @property
-    def _resident(self):
-        holder = self.__dict__.get("_resident_holder")
-        return holder.get("index") if holder else None
-
-    @_resident.setter
-    def _resident(self, value):
-        holder = self.__dict__.get("_resident_holder")
-        if holder is None:
-            holder = self.__dict__["_resident_holder"] = {}
-        holder["index"] = value
-
-    # The per-query reports live in the same holder: a query sets them
-    # without changing `__dict__`. Each reads as it did as an attribute
-    # (AttributeError before the first query that sets it).
-    def _query_report(name):
-        def get(self):
-            holder = self.__dict__.get("_resident_holder")
-            if not holder or name not in holder:
-                raise AttributeError(name)
-            return holder[name]
-
-        def put(self, value):
-            holder = self.__dict__.get("_resident_holder")
-            if holder is None:
-                holder = self.__dict__["_resident_holder"] = {}
-            holder[name] = value
-
-        return property(get, put)
-
-    used_query_tile_ = _query_report("used_query_tile_")
-    n_candidate_distances_ = _query_report("n_candidate_distances_")
-    del _query_report
+    # The device-resident index handle and the per-query reports
+    # (`used_query_tile_`, `n_candidate_distances_`) live in the holder dict
+    # `_resident_holder` the fit creates, so a query never changes `__dict__`
+    # (scikit-learn's check_dict_unchanged). The native owners write the
+    # holder (bindings/neighbors_knn_native.mojo `_report`) and the connected
+    # attribute slot reads it (bindings/neighbor_query_native.mojo: an
+    # AttributeError before the first query that sets a report).
 
     def _mojolearn_after_fit(self):
         """After every fit: release the last fit's device index and give
