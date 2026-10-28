@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_prepared_owner import prepared_namespace_admitted, prepared_namespace_admit
+from bindings.native_prepared_owner import prepared_namespace_admitted, prepared_namespace_admit, prepared_get, prepared_put
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 
