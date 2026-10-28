@@ -16,7 +16,7 @@ from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.sequential_arrays import sequential_array, sequential_address
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from core.classical_ridge_impl import classical_widen_f32_f64
-from core.host_inference_impl import host_inference_raw_finite
+from core.host_inference_impl import host_inference_nd_finite
 
 
 def xseq_public_labels(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -37,26 +37,13 @@ def _finite(view: PythonObject, name: String, model_name: String, context: Pytho
     var byte_strides = view.strides
     var shape = List[Int]()
     var strides = List[Int]()
-    var count = 1
     for axis in range(len(dimensions)):  # small-loop(admitted rank metadata)
         var size = Int(py=dimensions[axis])
         shape.append(size)
         strides.append(Int(py=byte_strides[axis]))
-        count *= size
     var address = Int(py=sequential_address(view))
-    var rank = len(shape)
-    var columns = 1 if rank == 0 else shape[rank - 1]
-    var stride = width if rank == 0 else strides[rank - 1]
-    var rows = 0 if columns == 0 else count // columns
     try:
-        for row in range(rows):
-            var remaining = row
-            var offset = 0
-            for reverse_axis in range(1, rank):
-                var axis = rank - reverse_axis - 1
-                offset += (remaining % shape[axis]) * strides[axis]
-                remaining //= shape[axis]
-            host_inference_raw_finite(address + offset, 0, stride, 1, columns, width, native)
+        host_inference_nd_finite(address, shape, strides, width, native)
     except:
         raise Error("Input " + name + " contains NaN or infinity (" + model_name + ").")
     _ = view
