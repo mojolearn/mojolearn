@@ -1,4 +1,6 @@
 """Small public scaler snapshot/copy-back controls for final integration."""
+import mmap
+
 import numpy as np
 import pytest
 
@@ -11,7 +13,7 @@ __mojolearn_user_boundary__ = True
 
 @pytest.mark.parametrize('name', ['StandardScaler', 'MinMaxScaler'])
 @pytest.mark.parametrize('direct', ['0', '1'])
-@pytest.mark.parametrize('layout', ['native', 'strided', 'bigendian', 'readonly', 'array_view'])
+@pytest.mark.parametrize('layout', ['native', 'strided', 'bigendian', 'readonly', 'array_view', 'mapped_array'])
 def test_fit_transform_reuses_preparation_and_preserves_copyback(name, direct, layout, monkeypatch):
     monkeypatch.setenv('MOJOLEARN_SCALER_DIRECT', direct)
     x = np.arange(27, dtype=np.float32).reshape(9, 3) / 8
@@ -33,6 +35,13 @@ def test_fit_transform_reuses_preparation_and_preserves_copyback(name, direct, l
     elif layout == 'array_view':
         backing = Array.from_list(x.tolist(), '<f4')
         source = backing[:]
+    elif layout == 'mapped_array':
+        backing = mmap.mmap(-1, x.nbytes)
+        storage = memoryview(backing).cast('f')
+        storage[:] = memoryview(x).cast('B').cast('f')
+        source = Array.from_buffer(storage.cast('B').cast('f', x.shape))
+        # The mapped arena's finished Array keeps this exact memoryview.
+        source._mv = storage
     else:
         source = x.copy()
     before = np.asarray(source).copy()
@@ -41,7 +50,7 @@ def test_fit_transform_reuses_preparation_and_preserves_copyback(name, direct, l
     np.testing.assert_array_equal(np.asarray(actual), np.asarray(expected))
     assert np.asarray(actual).shape == (9, 3)
     assert np.asarray(actual).dtype == np.float32
-    if layout in ('native', 'array_view'):
+    if layout in ('native', 'array_view', 'mapped_array'):
         np.testing.assert_array_equal(np.asarray(source), np.asarray(expected))
     else:
         np.testing.assert_array_equal(np.asarray(source), before)

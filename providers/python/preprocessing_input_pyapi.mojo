@@ -9,9 +9,8 @@ from bindings.native_buffer_owner import native_buffer_view, native_storage_allo
 from bindings.classical_arrays import classical_input, classical_is_array, classical_is_f32, classical_address, classical_typed
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.sequential_admission import _ordinary_torch
+from bindings.sequential_admission import _ordinary_torch, sequential_admit_value
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once, array_slot_once
-from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.scaler_fit_impl import scaler_cast
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -90,7 +89,9 @@ def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises ->
     var view = original_owners[3] if metadata.is_array else native_buffer_view(value)
     if py_type(view) is not b.memoryview:
         raise Error("TypeError: scaler input storage requires an exact native memoryview")
-    admit_native_buffer_exporter(view)
+    # Use the established classical exporter table, which includes mmap
+    # buffers used by preprocessing's mapped arenas as well as NumPy/ctypes.
+    sequential_admit_value(view, context)
     var write_view = PythonObject(None)
     if not pandas and not sequence:
         # Without NumPy, classical_input may have copied a memoryview to a
@@ -98,7 +99,7 @@ def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises ->
         var destination = view if classical_is_array(source, context) else native_buffer_view(prepared)
         if py_type(destination) is not b.memoryview:
             raise Error("TypeError: scaler copy-back requires an exact native memoryview")
-        admit_native_buffer_exporter(destination)
+        sequential_admit_value(destination, context)
         var format = String(destination.format)
         if (not Bool(py=destination.readonly) and Bool(py=destination.c_contiguous)
                 and Int(py=destination.itemsize) == 4
