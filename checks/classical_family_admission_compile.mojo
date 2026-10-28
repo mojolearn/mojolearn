@@ -1,9 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-# Focused compile root for the actual shared family admission implementation.
-# Compiling this is not public-runtime or whole-tokenizer qualification.
+# Compile-only forwarding entry to the actual native family admission helper.
 from std.python import PythonObject
+from std.python._cpython import PyObjectPtr
+from std.python.bindings import raise_python_exception
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 
 
-def main() raises:
-    _ = classical_family_admit(PythonObject(None))
+@export
+def classical_family_admission_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        return classical_family_admit(args[0]).steal_data()
+    except error:
+        return raise_python_exception(error)
