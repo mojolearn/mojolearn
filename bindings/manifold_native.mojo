@@ -14,13 +14,23 @@ from bindings.manifold_lifecycle_native import (
     manifold_check_width, manifold_finish,
 )
 from bindings.classifier_public_lifecycle import _feature_names
-from bindings.py_balanced import py_type
+from bindings.py_balanced import py_type, py_call, py_setitem, py_get
+from bindings.native_loaded_module import native_loaded_module
+from bindings.sequence_array_native import sequence_array_release
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.manifold_errors_native import manifold_error
 
 
 def manifold_operation(model: PythonObject, operation: String, args: PythonObject,
-         context: PythonObject) raises -> PythonObject:
+         shared_context: PythonObject) raises -> PythonObject:
+    # Scalar snapshots belong to this operation, never a mutable global cache.
+    # Retained connection tables remain shared; only this exact native mapping
+    # receives private scalar owners and operation-local helper cache entries.
+    var context = py_call(native_loaded_module("builtins").dict, shared_context)
+    py_setitem(context, "family_mani_scalar_cache", Python.dict())
+    py_setitem(context, "module_type", py_type(native_loaded_module("sys")))
+    var release = sequence_array_release(context) if py_get(context["modules"], "numpy") is not None else 0
+    py_setitem(context, "family_mani_numpy_release", PythonObject(release))
     var settings = ManifoldSettings(model, operation, context)
     if operation.startswith("family_mani_umap_"):
         return umap_operation(model, settings, operation, args, context)

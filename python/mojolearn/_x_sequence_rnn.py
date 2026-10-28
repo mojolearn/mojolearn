@@ -20,6 +20,7 @@ from ._mode import ClassifierScoreMixin, ParamsMixin, RegressorScoreMixin
 
 from collections import OrderedDict
 from . import _native_xseq_bridge
+from ._native_full_reset_params import _INIT_ENTRY as _FULL_RESET_INIT, _CONTEXT as _FULL_RESET_CONTEXT
 
 # Package-import connection: every public operation below is ONE call into
 # the compiled owner (bindings/xseq_neural_native.mojo), which admits the
@@ -54,19 +55,10 @@ class _RecurrentBase(ParamsMixin):
                  batch_size=32, max_epochs=10, shuffle=True, random_state=0,
                  optimizer_options=None, nonlinearity="tanh", numeric_mode=None,
                  predict_chunk=4096, lr_schedule=None):
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.optimizer = optimizer
-        self.learning_rate = learning_rate
-        self.batch_size = batch_size
-        self.max_epochs = max_epochs
-        self.shuffle = shuffle
-        self.random_state = random_state
-        self.optimizer_options = optimizer_options
-        self.nonlinearity = nonlinearity
-        self.numeric_mode = numeric_mode
-        self.predict_chunk = predict_chunk
-        self.lr_schedule = lr_schedule
+        # One native call: the full-reset owner replays this constructor's field
+        # writes (bindings/full_reset_constructor_native.mojo). connect_module
+        # installs the same entry as each concrete class's __init__.
+        return _FULL_RESET_INIT(self, (), {"hidden_size": hidden_size, "num_layers": num_layers, "optimizer": optimizer, "learning_rate": learning_rate, "batch_size": batch_size, "max_epochs": max_epochs, "shuffle": shuffle, "random_state": random_state, "optimizer_options": optimizer_options, "nonlinearity": nonlinearity, "numeric_mode": numeric_mode, "predict_chunk": predict_chunk, "lr_schedule": lr_schedule}, _FULL_RESET_CONTEXT, type(self))
 
     # ------------------------------------------------------------ shape
     def _cell(self):

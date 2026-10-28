@@ -341,7 +341,7 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
                         py_setitem(fields, "_session_binding", e["block_binding"])
                     if native is not None:
                         var session_owner = fields["_native_session"]
-                        var handle = Int(py=py_call(_native_function(e["block_binding"], "transformer_native_session_handle_v1"), session_owner))
+                        var handle = Int(py=py_call(e["transformer_native_session_handle_v1"], session_owner))
                         _ = neural_descriptor_reserved_execute(native, session_owner, handle, 0, 1, 2, addresses, params, [])
                     else:
                         _ = py_call(e["transformer_session_forward_fresh"], fields["_native_session"], py_ints(addresses), py_ints(params))

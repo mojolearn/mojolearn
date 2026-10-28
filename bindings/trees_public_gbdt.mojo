@@ -509,6 +509,36 @@ def _ordered_options(fields: PythonObject, model: PythonObject, context: PythonO
                         + ("positive" if positive else "non-negative"))
 
 
+def ordered_option_values(settings: PythonObject, context: PythonObject) raises:
+    """`OrderedRMSE._ordered_options(n_estimators, max_depth, border_count,
+    learning_rate, l2_leaf_reg)` over the constructor's arguments, in that
+    order: the same checks and wording as `_ordered_options` above.
+    DEVIATION 2336: `numbers.Real` is every Python and NumPy int and float;
+    the float32 bound is the literal `np.finfo(np.float32).max`; the float32
+    cast sends 1e-100 to 0.0, which is refused as non-positive."""
+    var b = trees_builtins()
+    var names: List[String] = ["n_estimators", "max_depth", "border_count"]
+    var upper: List[Int] = [2147483647, 8, 255]
+    for i in range(3):  # small-loop(names): the three integer settings
+        var value = settings[i]
+        var ok = not _is_bool(value) and _isinstance(value, context["trees_integral_type"])
+        if ok:
+            ok = Bool(py=value >= PythonObject(1)) and Bool(py=value <= PythonObject(upper[i]))
+        if not ok:
+            raise Error("mojolearn: " + names[i] + " must be an integer in 1.." + String(upper[i]))
+    var reals: List[String] = ["learning_rate", "l2_leaf_reg"]
+    for i in range(2):  # small-loop(reals): the two real settings
+        var value = settings[3 + i]
+        var positive = i == 0
+        var ok = not _is_bool(value) and _isinstance(value, context["trees_real_type"])
+        if ok:
+            var f = Float64(py=py_call_typed(b.float, value))
+            ok = isfinite(f) and abs(f) <= 3.4028234663852886e+38 and f >= 0 and not (positive and Float32(f) <= 0)
+        if not ok:
+            raise Error("mojolearn: " + reals[i] + " must be finite float32 and "
+                        + ("positive" if positive else "non-negative"))
+
+
 def _type_or_value(error: Error) -> Bool:
     """A refusal Python's `except (TypeError, ValueError)` catches."""
     var message = String(error)

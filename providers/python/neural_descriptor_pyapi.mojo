@@ -48,6 +48,37 @@ def neural_descriptor_capsule(mut name: String, entries: List[NativeDescriptorCa
     return PythonObject(from_owned=capsule)
 
 
+def _neural_descriptor_dictionary(fields: PythonObject) raises:
+    var bi = native_loaded_module("builtins")
+    if py_type(fields) is not bi.dict:
+        raise Error("TypeError: neural provider metadata requires an exact dictionary")
+    var keys = py_call(bi.list, fields.keys())
+    for i in range(len(keys)):  # small-loop(keys: entry names of one descriptor metadata dictionary): checks key types only, never data
+        if py_type(keys[i]) is not bi.str:
+            raise Error("TypeError: neural provider metadata keys require exact strings")
+
+
+def _neural_descriptor_entry_fields(entries: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    var cls = py_type(entries)
+    ref cpy = Python().cpython()
+    var fields = PythonObject(None)
+    if cls is py_type(bi):
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(entries._obj_ptr)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
+    elif cls is native_loaded_module("types").SimpleNamespace:
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
+        if not raw:
+            raise cpy.unsafe_get_error()
+        fields = PythonObject(from_owned=raw)
+    else:
+        raise Error("TypeError: neural provider entries require a native module or namespace")
+    _neural_descriptor_dictionary(fields)
+    return fields
+
+
 def neural_descriptor_entry(module: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
     # Read an exact module dictionary, never its optional Python __getattr__.
     # Metadata/ownership doors must be compiled entries too; provider execution
@@ -55,7 +86,7 @@ def neural_descriptor_entry(module: PythonObject, name: String, required: Bool =
     var bi = native_loaded_module("builtins")
     if py_type(module) is not py_type(bi):
         raise Error("TypeError: native provider requires an exact compiled module")
-    var entry = py_get(py_fields(module), name)
+    var entry = py_get(_neural_descriptor_entry_fields(module), name)
     if entry is None and not required:
         return entry
     if entry is None or py_type(entry) is not py_type(bi.len) or entry.__self__ is not module:
@@ -105,21 +136,25 @@ def neural_descriptor_cached(
     # Capture the explicit candidate switch once per owner. A later native
     # binding replacement reconnects rather than reusing a stale table/image.
     var bi = native_loaded_module("builtins")
-    var canonical = py_call(bi.getattr, entries, "canonical", entries)
+    _neural_descriptor_dictionary(fields)
+    var entry_fields = _neural_descriptor_entry_fields(entries)
+    var canonical = py_get(entry_fields, "canonical", entries)
     var binding_key = slot + "_binding"
     if py_contains(fields, slot) and py_get(fields, binding_key) is canonical:
         return fields[slot]
     var enabled_key = slot + "_enabled"
     if not py_contains(fields, enabled_key):
         py_setitem(fields, enabled_key, PythonObject(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1"))
+    if py_type(fields[enabled_key]) is not bi.bool:
+        raise Error("TypeError: neural provider enable flag requires an exact bool")
     var result = PythonObject(None)
     if eligible and Bool(py=fields[enabled_key]):
         var mode_name = "training_numeric_mode" if factory == "neural_primitives_api_v1" else "mamba_numeric_mode"
-        var mode_entry = py_call(bi.getattr, entries, mode_name)
+        var mode_entry = py_get(entry_fields, mode_name)
         if py_type(mode_entry) is not py_type(bi.len):
             raise Error("TypeError: neural native ABI mode entry must be compiled")
         if Int(py=py_call(mode_entry)) == 1:
-            result = neural_descriptor_connect(py_call(bi.getattr, entries, factory), name,
+            result = neural_descriptor_connect(py_get(entry_fields, factory), name,
                 29 if factory == "neural_primitives_api_v1" else 6)
     py_setitem(fields, slot, result)
     py_setitem(fields, binding_key, canonical)

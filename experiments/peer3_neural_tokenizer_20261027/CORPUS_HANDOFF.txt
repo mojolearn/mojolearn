@@ -58,3 +58,37 @@ Evidence
 /Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/corpus-source-tests-initial.log
 /Users/andrewhendel/mojolearn-evidence/peer3-mamba-20261027/corpus-source-tests-final.log
 Parent: corpus-public-compile-1.log (location in parent compile handoff).
+
+2026-10-27 compile and scalar-compatibility follow-up
+- e8b197a3f2 fixes the retained b53 compile failure: PythonObject(None) in a
+  default parameter attempted compile-time Python execution. Captured fields
+  are now required and every caller passes its single capture explicitly.
+  Original failure: parent evidence/freeze-b53d/compile_lm_corpus.log.
+- Added bindings/lm_corpus_scalars.mojo to preserve the original
+  int(step_index * batch * length) ordering for exact Python int/float/bool and
+  admitted native NumPy scalars. Constructor batch/length use the existing native
+  scalar admission context, retaining NumPy conversion without user hooks.
+- The native step route preserves legacy versus NEP50 weak promotion, float16
+  rounding after each multiplication, float32/float64 arithmetic, legacy uint64
+  promotion to float64, and signed/unsigned/bool scalar behavior. NumPy1.26–2.1
+  promotion state is read once through the exact native state getter; NumPy>=2.2
+  uses its fixed weak promotion. Integer/floating overflow is refused natively
+  before any NumPy seterrcall or warning callback; no NumPy ufunc is called.
+- Primary references retained inline and used for the implementation:
+  https://numpy.org/neps/nep-0050-scalar-promotion.html
+  https://numpy.org/doc/2.3/release/2.2.0-notes.html#nep-50-promotion-state-option-removed
+  https://raw.githubusercontent.com/numpy/numpy/v1.26.4/numpy/core/src/umath/scalarmath.c.src
+  NumPy1.26.4 scalar multiplication source confirms half math uses float32 then
+  rounds to half per operation. Full fetched sources are retained under
+  ~/mojolearn-evidence/peer3-mamba-20261027/numpy-source-review/ (not product runs).
+- Source suite now 11 tests PASS, exit0. Installed-runtime file contains 13 test
+  functions (26 parameterized cases before optional NumPy/legacy skips), AST
+  parsed only. It includes an independent original-expression oracle for six
+  NumPy scalar kinds under legacy/weak state, float/bool ordering, constructor
+  NumPy admission and native overflow refusal with an installed seterrcall.
+  ALL RUNTIME ORACLES ARE UNRUN; no runtime/identity qualification claimed.
+- Evidence: corpus-scalar-source-tests.log, corpus-scalar-ast.log and
+  corpus-scalar-diff-check.log in ~/mojolearn-evidence/peer3-mamba-20261027/.
+- This source change invalidates the affected full corpus compile root only;
+  parent coordinates its next focused compile. No lane compile or independent
+  push. Initial source freeze compilation and its failure logs are preserved.

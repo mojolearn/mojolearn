@@ -22,6 +22,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.manifold_settings_native import ManifoldSettings
 from bindings.manifold_storage_native import matrix_device, device_identifier
+from bindings.manifold_scalar_native import manifold_number
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.metrics_native_support import metric_warn
 from bindings.family_common import (
@@ -55,29 +56,33 @@ def _mani_finite(v: Float64) -> Bool:
     return v - v == 0.0
 
 
-def _mani_eq(value: PythonObject, text: String) raises -> Bool:
+def _mani_eq(value: PythonObject, text: String, context: PythonObject) raises -> Bool:
     """`value == text`, as a truth value."""
+    # Remaining migration: retain the original rich-comparison behavior until
+    # native record/temporal and version-specific array errors are covered.
     var b = native_loaded_module("builtins")
     return Bool(py=py_call(b.bool, py_call(native_loaded_module("operator").eq, value, PythonObject(text))))
 
 
-def _mani_in(value: PythonObject, choices: PythonObject) raises -> Bool:
+def _mani_in(value: PythonObject, choices: PythonObject, context: PythonObject) raises -> Bool:
     """`value in choices`."""
     return Bool(py=py_call(native_loaded_module("operator").contains, choices, value))
 
 
-def _mani_truth(value: PythonObject) raises -> Bool:
+def _mani_truth(value: PythonObject, context: PythonObject) raises -> Bool:
+    # Structured subarray nonzero behavior remains with the original slot;
+    # this numeric-conversion increment does not claim truth migration.
     return Bool(py=py_call(native_loaded_module("builtins").bool, value))
 
 
-def _mani_int(value: PythonObject) raises -> Int:
+def _mani_int(value: PythonObject, context: PythonObject) raises -> Int:
     """`int(value)`."""
-    return Int(py=family_call(native_loaded_module("builtins").int, value))
+    return Int(py=manifold_number(value, True, context))
 
 
-def _mani_float(value: PythonObject) raises -> Float64:
+def _mani_float(value: PythonObject, context: PythonObject) raises -> Float64:
     """`float(value)`."""
-    return Float64(py=family_call(native_loaded_module("builtins").float, value))
+    return Float64(py=manifold_number(value, False, context))
 
 
 def _mani_f32(v: Float64) -> Float64:
@@ -111,13 +116,13 @@ def _mani_seed(random_state: PythonObject) raises -> PythonObject:
     return random_state
 
 
-def _mani_eigen_solver(name: PythonObject, who: String) raises:
+def _mani_eigen_solver(name: PythonObject, who: String, context: PythonObject) raises:
     """`_exact_eigen_solver(name, who)`."""
-    if _mani_eq(name, "arpack"):
+    if _mani_eq(name, "arpack", context):
         raise Error("NotImplementedError: " + who + ": eigen_solver='arpack' is not implemented; the exact solve "
                     + "runs for 'auto' and 'dense', and running it under ARPACK's name "
                     + "would be a silent substitution (x_decomp/NOT_IMPLEMENTED.tsv)")
-    if not _mani_in(name, Python.tuple(PythonObject("auto"), PythonObject("dense"))):
+    if not _mani_in(name, Python.tuple(PythonObject("auto"), PythonObject("dense")), context):
         raise Error(who + ": eigen_solver must be 'auto', 'dense' or 'arpack', got " + family_repr(name))
 
 
@@ -126,17 +131,17 @@ def _mani_metric_spec(metric: PythonObject, p_in: PythonObject, metric_params: P
     """`_metric_spec(metric, p, metric_params, who)`: (kind, p)."""
     var b = native_loaded_module("builtins")
     var p = p_in
-    if _mani_truth(metric_params):
+    if _mani_truth(metric_params, context):
         var extra = py_call(native_loaded_module("operator").sub, py_call(b.set, metric_params),
                             py_call(b.set, Python.list(PythonObject("p"))))
-        if _mani_truth(extra):
+        if _mani_truth(extra, context):
             raise Error("NotImplementedError: " + who + ": metric_params " + family_repr(py_call(b.sorted, extra))
                         + " are not carried")
         p = py_call(metric_params.get, PythonObject("p"), p)
-    if _mani_in(metric, Python.tuple(PythonObject("euclidean"), PythonObject("l2"))):
+    if _mani_in(metric, Python.tuple(PythonObject("euclidean"), PythonObject("l2")), context):
         return (Int(0), Float64(2.0))
-    if _mani_eq(metric, "minkowski"):
-        var pw = _mani_float(p)
+    if _mani_eq(metric, "minkowski", context):
+        var pw = _mani_float(p, context)
         if not pw > 0:
             raise Error(who + ": minkowski p must be > 0")
         if pw == 2.0:
@@ -325,10 +330,10 @@ def _cmds_core(mut k: MKit, m: PythonObject, metric: PythonObject, metric_params
     embedding_m_, M)."""
     var d2: PythonObject
     var dissimilarity: PythonObject
-    if _mani_eq(metric, "precomputed"):
+    if _mani_eq(metric, "precomputed", context):
         d2 = k.ew1(OP_SQ, m, 0.0)
         dissimilarity = mk_out2(m, context)
-    elif _mani_eq(metric, "euclidean"):
+    elif _mani_eq(metric, "euclidean", context):
         d2 = k.sqdist(m, m)
         dissimilarity = mk_out2(k.ew1(OP_SQRT, d2, 0.0), context)
     else:
@@ -337,7 +342,7 @@ def _cmds_core(mut k: MKit, m: PythonObject, metric: PythonObject, metric_params
         d2 = k.ew1(OP_SQ, dm, 0.0)
         dissimilarity = mk_out2(dm, context)
     var centered = _mani_center(k, k.ew1(OP_SCALE, d2, -0.5))
-    var eig = _mani_top_eig(k, centered[0], _mani_int(nc_param), True)
+    var eig = _mani_top_eig(k, centered[0], _mani_int(nc_param, context), True)
     var w = eig[0]
     var v = eig[1]
     var values = mk_out(w, Python.tuple(mk_c(w)), context)
@@ -376,35 +381,35 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     var m = mk_from_snapshot(x, "X", context)
     var metric = family_field(fields, "metric")
     var dis: PythonObject
-    if _mani_eq(metric, "precomputed"):
+    if _mani_eq(metric, "precomputed", context):
         dis = m
-    elif _mani_eq(metric, "euclidean"):
+    elif _mani_eq(metric, "euclidean", context):
         dis = k.ew1(OP_SQRT, k.sqdist(m, m), 0.0)
     else:
         var spec = _mani_metric_spec(metric, PythonObject(2), family_field(fields, "metric_params"), "MDS", context)
         dis = _mani_dist(k, m, m, spec[0], spec[1], True)
     py_setitem(settings.fields, "dissimilarity_matrix_", mk_out2(dis, context))
-    var metric_mds = _mani_truth(family_field(fields, "metric_mds"))
+    var metric_mds = _mani_truth(family_field(fields, "metric_mds"), context)
     var normalized = family_field(fields, "normalized_stress")
-    var norm = (normalized is PythonObject(True)) or (_mani_eq(normalized, "auto") and not metric_mds)
+    var norm = (normalized is PythonObject(True)) or (_mani_eq(normalized, "auto", context) and not metric_mds)
     py_setitem(settings.fields, "_norm", PythonObject(norm))
     var n = mk_r(dis)
-    var nc = _mani_int(family_field(fields, "n_components"))
+    var nc = _mani_int(family_field(fields, "n_components"), context)
     var seed = _mani_seed(family_field(fields, "random_state"))
     var init_arg = args[3]
     var init = family_field(fields, "init")
     var starts = List[PythonObject]()
     if not (init_arg is None):
         starts.append(mk_from_input(init_arg, "init", context))
-    elif _mani_eq(init, "classical_mds"):
+    elif _mani_eq(init, "classical_mds", context):
         # ClassicalMDS(nc, metric="precomputed", numeric_mode=self.numeric_mode_).fit(Dis.out()).embedding_m_
         var inner = _mani_kit(mode, args[0], context)
         var got = _cmds_core(inner, mk_copy(dis, context), PythonObject("precomputed"), PythonObject(None),
                              PythonObject(nc), context)
         _ = mk_out2(got[2], context)  # the inner fit's embedding_ (it reads the start back to the host)
         starts.append(got[2])
-    elif _mani_eq(init, "random"):
-        var restarts = _mani_int(family_field(fields, "n_init"))
+    elif _mani_eq(init, "random", context):
+        var restarts = _mani_int(family_field(fields, "n_init"), context)
         for r in range(restarts):  # driver-loop: over random restarts (n_init)
             starts.append(k.rand(n, nc, seed, 70 + r, 0))
     else:
@@ -416,9 +421,9 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     var pd = mk_addr(dis, context)
     var ps = mk_addr(s, context)
     _ = s  # keep the Python object alive through the native call above
-    var params = mk_ints([n, nc, len(starts), _mani_int(family_field(fields, "max_iter")), 1 if metric_mds else 0,
+    var params = mk_ints([n, nc, len(starts), _mani_int(family_field(fields, "max_iter"), context), 1 if metric_mds else 0,
                           1 if norm else 0])
-    var tols = Python.list(PythonObject(_mani_float(family_field(fields, "eps"))))
+    var tols = Python.list(PythonObject(_mani_float(family_field(fields, "eps"), context)))
     var result = family_call(k.fn("x_decomp_mds_fit"), pd, ps, mk_addr(y, context), params, tols)
     _ = y  # keep the Python object alive through the native call above
     _ = s  # keep the Python object alive through the native call above
@@ -438,14 +443,15 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
 def _iso_graph(settings: ManifoldSettings, fields: PythonObject, mut k: MKit, m: PythonObject, n: Int, kind: Int,
                pw: Float64) raises -> Tuple[PythonObject, PythonObject]:
     """`Isomap._graph`: (the dense neighbor graph, n_neighbors or None)."""
+    var context = k.ctx
     var radius = family_field(fields, "radius")
     var wg: PythonObject
     var nn_out = PythonObject(None)
     if not (radius is None):
         var d = _mani_dist(k, m, m, kind, pw, True)
-        wg = k.graph_radius(d, _mani_f32(_mani_float(radius)))
+        wg = k.graph_radius(d, _mani_f32(_mani_float(radius, context)))
     else:
-        var nn = _mani_int(family_field(fields, "n_neighbors"))
+        var nn = _mani_int(family_field(fields, "n_neighbors"), context)
         if nn >= n:
             # scikit-learn's kneighbors refusal (the query point itself is
             # one of the n_neighbors + 1 it asks for)
@@ -483,13 +489,13 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
                     + ", n_neighbors=None) if intended to use radius-based neighbors")
     if neighbors is None and radius is None:
         raise Error("Isomap: one of n_neighbors and radius must be set")
-    if not (radius is None) and not (_mani_float(radius) >= 0):
+    if not (radius is None) and not (_mani_float(radius, context) >= 0):
         raise Error("Isomap: radius must be >= 0")
     if not _mani_in(family_field(fields, "path_method"), Python.tuple(PythonObject("auto"), PythonObject("FW"),
-                                                                       PythonObject("D"))):
+                                                                       PythonObject("D")), context):
         raise Error("path_method must be 'auto', 'FW' or 'D'")
     var solver = family_field(fields, "eigen_solver")
-    _mani_eigen_solver(solver, "Isomap")
+    _mani_eigen_solver(solver, "Isomap", context)
     var spec = _mani_metric_spec(family_field(fields, "metric"), family_field(fields, "p"),
                                  family_field(fields, "metric_params"), "Isomap", context)
     var kind = spec[0]
@@ -508,8 +514,8 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     var kc = centered[0]
     py_setitem(settings.fields, "_k_col", centered[1])
     py_setitem(settings.fields, "_k_all", centered[2])
-    var topk = _mani_in(solver, Python.tuple(PythonObject("auto"), PythonObject("arpack")))
-    var eig = _mani_top_eig(k, kc, _mani_int(family_field(fields, "n_components")), topk)
+    var topk = _mani_in(solver, Python.tuple(PythonObject("auto"), PythonObject("arpack")), context)
+    var eig = _mani_top_eig(k, kc, _mani_int(family_field(fields, "n_components"), context), topk)
     py_setitem(settings.fields, "eigenvalues_m_", eig[0])
     py_setitem(settings.fields, "eigenvectors_m_", eig[1])
     var em = k.ew2(OP_MUL, eig[1], k.ew1(OP_SQRT, eig[0], 0.0))
@@ -534,13 +540,13 @@ def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: Python
     var n = mk_r(fit_x)
     var d = family_field(fields, "dist_matrix_m_")
     var knn = family_field(fields, "_knn")
-    var kind = _mani_int(family_field(fields, "_kind"))
-    var pw = _mani_float(family_field(fields, "_pw"))
+    var kind = _mani_int(family_field(fields, "_kind"), context)
+    var pw = _mani_float(family_field(fields, "_pw"), context)
     var g = PythonObject(None)
     if knn is None:
         # `_radius_geodesic`
         var radius = family_field(fields, "radius")
-        var r = _mani_f32(_mani_float(radius))
+        var r = _mani_f32(_mani_float(radius, context))
         var dq = _mani_dist(k, q, fit_x, kind, pw, False)
         var within = k.ew2(OP_LE, dq, mk_of([r], 1, 1, context))
         var hits = k.ew1(OP_GTS, k.rowsum(within), 0.5)
@@ -559,7 +565,7 @@ def _iso_transform(model: PythonObject, settings: ManifoldSettings, args: Python
                         + family_str(radius))
         g = k.graph_radius_geo(dq, d, r)
     else:
-        var nn = _mani_int(knn)
+        var nn = _mani_int(knn, context)
         # the neighbour matrices as they come (indices as exact floats),
         # each neighbour's rows of D gathered on the device
         var got = _mani_knn(k, q, fit_x, nn, False, kind, pw)
@@ -733,23 +739,23 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     py_setitem(settings.fields, "numeric_mode_", mode)
     var method = family_field(fields, "method")
     if not _mani_in(method, Python.tuple(PythonObject("standard"), PythonObject("hessian"), PythonObject("modified"),
-                                         PythonObject("ltsa"))):
+                                         PythonObject("ltsa")), context):
         raise Error("LocallyLinearEmbedding: unrecognized method " + family_repr(method))
     var solver = family_field(fields, "eigen_solver")
-    _mani_eigen_solver(solver, "LocallyLinearEmbedding")
+    _mani_eigen_solver(solver, "LocallyLinearEmbedding", context)
     var k = _mani_kit(mode, args[0], context)
     var hk = _mani_host_kit(settings.default_mode, args[1], context)
     var m = mk_from_snapshot(x, "X", context)
     var n = mk_r(m)
-    var nn = _mani_int(family_field(fields, "n_neighbors"))
-    var nc = _mani_int(family_field(fields, "n_components"))
+    var nn = _mani_int(family_field(fields, "n_neighbors"), context)
+    var nc = _mani_int(family_field(fields, "n_components"), context)
     if nn >= n:
         raise Error("Expected n_neighbors < n_samples, but n_samples = " + String(n) + ", n_neighbors = " + String(nn))
-    var standard = _mani_eq(method, "standard")
-    if _mani_eq(method, "hessian") and nn <= nc + nc * (nc + 1) // 2:
+    var standard = _mani_eq(method, "standard", context)
+    if _mani_eq(method, "hessian", context) and nn <= nc + nc * (nc + 1) // 2:
         raise Error("for method='hessian', n_neighbors must be greater than "
                     + "[n_components * (n_components + 3) / 2]")
-    if _mani_eq(method, "modified") and nn < nc:
+    if _mani_eq(method, "modified", context) and nn < nc:
         raise Error("modified LLE requires n_neighbors >= n_components")
     var knn = _mani_knn(k, m, m, nn, True, 0, 2.0)
     var idm = knn[0]
@@ -757,18 +763,18 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     if standard:
         var wb = k.barycenter(m, m, idm, family_field(fields, "reg"))
         iw = k.graph_lle_iw(idm, wb, n)
-    elif _mani_eq(method, "ltsa"):
+    elif _mani_eq(method, "ltsa", context):
         iw = k.lle_local(m, idm, 0, nn, nc, 0.0)
-    elif _mani_eq(method, "hessian"):
-        iw = k.lle_local(m, idm, 1, nn, nc, _mani_float(family_field(fields, "hessian_tol")))
+    elif _mani_eq(method, "hessian", context):
+        iw = k.lle_local(m, idm, 1, nn, nc, _mani_float(family_field(fields, "hessian_tol"), context))
     else:
-        iw = k.lle_local(m, idm, 2, nn, nc, _mani_float(family_field(fields, "modified_tol")))
+        iw = k.lle_local(m, idm, 2, nn, nc, _mani_float(family_field(fields, "modified_tol"), context))
     var found = False
     var em = PythonObject(None)
     var sv = PythonObject(None)
-    if standard and _mani_eq(solver, "auto") and n > _LLE_ITER_MIN_N and nc + 1 < _LLE_ITER_MAX_K:
+    if standard and _mani_eq(solver, "auto", context) and n > _LLE_ITER_MIN_N and nc + 1 < _LLE_ITER_MAX_K:
         k.enable_lle_precision()
-        var got = _lle_smallest(k, iw, nc, _mani_int(family_field(fields, "max_iter")),
+        var got = _lle_smallest(k, iw, nc, _mani_int(family_field(fields, "max_iter"), context),
                                 _mani_seed(family_field(fields, "random_state")))
         found = got[0]
         em = got[1]
@@ -796,7 +802,7 @@ def _lle_transform(model: PythonObject, settings: ManifoldSettings, args: Python
     var k = _mani_kit(settings.mode, args[0], context)
     var q = mk_from_snapshot(x, "X", context)
     var fit_x = family_field(fields, "_fit_X")
-    var knn = _mani_knn(k, q, fit_x, _mani_int(family_field(fields, "_knn")), False, 0, 2.0)
+    var knn = _mani_knn(k, q, fit_x, _mani_int(family_field(fields, "_knn"), context), False, 0, 2.0)
     var idm = knn[0]
     var wb = k.barycenter(q, fit_x, idm, family_field(fields, "reg"))
     return mk_out2(k.lle_apply(wb, idm, family_field(fields, "embedding_m_")), context)
