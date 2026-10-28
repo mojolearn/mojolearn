@@ -42,6 +42,37 @@ from ._metrics_impl import _get_binding as _metrics_binding
 # are one native call each, handed the binding `_bind` resolves.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
+def _connect_pcs_rng():
+    # glue: fixed native RNG getter/lock identities, connected once at import.
+    # NumPy's documented BitGenerator capsule is used; no RandomState/private
+    # layout is read. See providers/python/pcs_rng_pyapi.mojo for pinned sources.
+    from types import GetSetDescriptorType, MethodDescriptorType
+    import _thread
+    try:
+        from numpy.random import mtrand, BitGenerator, MT19937, PCG64, PCG64DXSM, Philox, SFC64
+    except ImportError:
+        _native_family_bridge.tables(family_pcs_rng=None)
+        return
+    state_getter = vars(mtrand.RandomState)['_bit_generator']
+    capsule_getter = vars(BitGenerator)['capsule']
+    lock_getter = vars(BitGenerator)['lock']
+    lock_type = _thread.LockType
+    acquire, release = vars(lock_type)['acquire'], vars(lock_type)['release']
+    if any(type(value) is not GetSetDescriptorType for value in (state_getter, capsule_getter, lock_getter)):  # glue: fixed native descriptor admission
+        raise TypeError('PCS RNG requires native NumPy state/capsule/lock getters')
+    if any(type(value) is not MethodDescriptorType for value in (acquire, release)):  # glue: fixed native lock descriptor admission
+        raise TypeError('PCS RNG requires ordinary native lock methods')
+    _native_family_bridge.tables(family_pcs_rng=dict(
+        mtrand=mtrand, randomstate=mtrand.RandomState, bitgenerator=BitGenerator,
+        bitgenerators=(MT19937, PCG64, PCG64DXSM, Philox, SFC64),
+        state_getter=state_getter, state_get=state_getter.__get__,
+        capsule_getter=capsule_getter, capsule_get=capsule_getter.__get__,
+        lock_getter=lock_getter, lock_get=lock_getter.__get__, lock_type=lock_type,
+        acquire=acquire, release=release))
+
+
+_connect_pcs_rng()
+
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
            "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",
            "PageRank", "connected_components", "Louvain", "SVGP"]
