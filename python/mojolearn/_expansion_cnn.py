@@ -916,27 +916,7 @@ class CNNClassifier(_Layer):
     def __init__(self, input_shape, conv_channels=(8,), kernel_size=3, pool_size=2, learning_rate=0.01,
                  momentum=0.9, weight_decay=0.0, batch_size=32, max_iter=10, shuffle=True, random_state=0,
                  numeric_mode=None, optimizer="sgd", dampening=0.0, nesterov=False, betas=(0.9, 0.999), eps=1e-8):
-        if optimizer not in ("sgd", "adam", "adamw"):
-            raise ValueError(f"mojolearn: optimizer must be 'sgd', 'adam' or 'adamw', got {optimizer!r}")
-        if nesterov and (momentum <= 0 or dampening != 0):
-            raise ValueError("mojolearn: Nesterov momentum requires a momentum and zero dampening")
-        self.optimizer = optimizer
-        self.dampening = float(dampening)
-        self.nesterov = bool(nesterov)
-        self.betas = (float(betas[0]), float(betas[1]))
-        self.eps = float(eps)
-        self.input_shape = tuple(int(v) for v in input_shape)  # glue: converts the input_shape argument
-        self.conv_channels = tuple(int(c) for c in conv_channels)  # glue: converts the conv_channels argument
-        self.kernel_size = int(kernel_size)
-        self.pool_size = int(pool_size)
-        self.learning_rate = float(learning_rate)
-        self.momentum = float(momentum)
-        self.weight_decay = float(weight_decay)
-        self.batch_size = int(batch_size)
-        self.max_iter = int(max_iter)
-        self.shuffle = bool(shuffle)
-        self.random_state = random_state
-        self.numeric_mode = numeric_mode
+        return _XCNN(self, "cnnclf_init", (input_shape, conv_channels, kernel_size, pool_size, learning_rate, momentum, weight_decay, batch_size, max_iter, shuffle, random_state, numeric_mode, optimizer, dampening, nesterov, betas, eps), _XCNN_CONTEXT)
 
     def _images(self, X):
         X = _f32(X, "X")
@@ -1055,7 +1035,7 @@ class CNNClassifier(_Layer):
 
     def weights(self):
         """Every trained array, in layer order: [w0, b0, w1, b1, ...]."""
-        return [getattr(l, a) for l, a, _ in self._params()]  # glue: walks the layer parameter list
+        return _XCNN(self, "cnnclf_weights", (), _XCNN_CONTEXT)
 
 
 def np_reshape(X, shape):

@@ -14,8 +14,8 @@ from bindings.xcnn_tensor_native import xcnn_tensor_operation
 from bindings.xcnn_pool_native import xcnn_pool_layers
 from bindings.xcnn_bn_native import xcnn_bn_layers
 from bindings.xcnn_conv_native import xcnn_conv_layers
-from bindings.xcnn_graph_native import xcnn_gcn_forward, xcnn_sage_forward
-from bindings.xcnn_classifier_native import cnnclf_fit, cnnclf_predict, cnnclf_predict_proba
+from bindings.xcnn_graph_native import xcnn_graph_layers
+from bindings.xcnn_classifier_native import cnnclf_fit, cnnclf_predict, cnnclf_predict_proba, cnnclf_initialize, cnnclf_weights
 
 
 def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject) -> PythonObject:
@@ -53,16 +53,18 @@ def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return xcnn_tensor_operation(call[0], operation, call[2], context).steal_data()
         if operation.startswith("conv_") or operation.startswith("block_"):
             return xcnn_conv_layers(call[0], operation, call[2], context).steal_data()
+        if operation == "cnnclf_init":
+            return cnnclf_initialize(call[0], call[2], context).steal_data()
+        if operation == "cnnclf_weights":
+            return cnnclf_weights(call[0], context).steal_data()
         if operation == "cnnclf_fit":
             return cnnclf_fit(call[0], call[2], context).steal_data()
         if operation == "cnnclf_predict":
             return cnnclf_predict(call[0], call[2], context).steal_data()
         if operation == "cnnclf_predict_proba":
             return cnnclf_predict_proba(call[0], call[2], context).steal_data()
-        if operation == "gcn_forward":
-            return xcnn_gcn_forward(call[0], call[2], context).steal_data()
-        if operation == "sage_forward":
-            return xcnn_sage_forward(call[0], call[2], context).steal_data()
+        if operation.startswith("gcn_") or operation.startswith("sage_") or operation.startswith("linear_") or operation.startswith("relu_"):
+            return xcnn_graph_layers(call[0], operation, call[2], context).steal_data()
         if operation.startswith("bn_"):
             return xcnn_bn_layers(call[0], operation, call[2], context).steal_data()
         return xcnn_pool_layers(call[0], operation, call[2], context).steal_data()

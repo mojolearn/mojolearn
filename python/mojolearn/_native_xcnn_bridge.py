@@ -133,6 +133,9 @@ def connect():
         import numpy
         from ._native_classical_bridge import _state_context
         context = _state_context()
+        # Shared neural metadata admission expects its native scalar tables
+        # under admission_context; retain a separate setup snapshot, no cycle.
+        context["admission_context"] = dict(context)
     except (ImportError, AttributeError, TypeError) as error:
         _ENTRY, _CONTEXT = _unavailable(error), {"xcnn_unavailable": str(error)}
         return _ENTRY, _CONTEXT

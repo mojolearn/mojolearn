@@ -18,19 +18,23 @@ The same compiled entries with the same argument words, residency and
 launch order as the Python bodies, so the bits do not move.
 """
 from std.math import sqrt
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_f32, xcnn_addr
 from bindings.xseq_native_common import XseqStream
-from bindings.xseq_neural_native import xseq_labels
+from bindings.xcnn_classifier_labels import xcnn_encode_labels, xcnn_decode_labels
+from bindings.mode_metadata_native import _fields
+from bindings.neural_block_admission import neural_plain_value
+from bindings.sequential_admission import sequential_admit_value
+from bindings.sequential_inputs import sequential_input
+from bindings.sequential_arrays import sequential_array
+from bindings.xcnn_common import xcnn_shape, xcnn_tuple, xcnn_reshape
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.array_helpers_impl import nsum_f64
 
 comptime _PREDICT_ROWS = 2048
-
-
-def _np() raises -> PythonObject:
-    return Python.import_module("numpy")
 
 
 def _b() raises -> PythonObject:
@@ -59,22 +63,171 @@ def _prod(values: List[Int]) -> Int:
     return n
 
 
+def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
+    var dims = Python.tuple(shape) if py_type(shape) is _b().int else shape
+    return sequential_array(dims, context[PythonObject(dtype)], context)
+
+
+def _contiguous(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    sequential_admit_value(source, context)
+    var array = sequential_input(source, context)
+    admit_native_buffer_exporter(array)
+    var borrowed = AdmittedBorrowedBuffer(array)
+    var layout = borrowed.layout.value().copy()
+    if Int(py=array.dtype.num) != 5 and Int(py=array.dtype.num) != 11:
+        raise Error("TypeError: CNN resident transfers require float32 or int32")
+    if layout.contiguous():
+        return py_call(context["ndarray"], xcnn_tuple(layout.shape), dtype=array.dtype, buffer=array)
+    var out = sequential_array(xcnn_tuple(layout.shape), array.dtype, context)
+    layout.copy_to(Int(py=xcnn_addr(out)))
+    _ = array
+    return out
+
+
+def _float_words(values: PythonObject) raises -> PythonObject:
+    var count = Int(py=values.size)
+    var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(values)))
+    var result = Python.list()
+    for i in range(count):  # driver-loop: native loss/optimizer scalar result publication
+        _ = py_call(result.append, PythonObject(words[i]))
+    _ = values
+    return result
+
+
+def _minus_one(count: Int, context: PythonObject) raises -> PythonObject:
+    var array = _empty(Python.tuple(count), "int32", context)
+    var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(array)))
+    for i in range(count):  # driver-loop: native absent-target metadata for prediction
+        words[i] = -1
+    _ = array
+    return array
+
+
+def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool = False) raises -> PythonObject:
+    var fields = _fields(model)
+    for name in ["input_shape", "conv_channels", "kernel_size", "pool_size", "learning_rate",  # driver-loop: over passive classifier settings
+                 "momentum", "weight_decay", "batch_size", "max_iter", "shuffle", "random_state", "numeric_mode",
+                 "optimizer", "dampening", "nesterov", "betas", "eps", "_flat"]:
+        neural_plain_value(py_get(fields, PythonObject(name)), 0, context)
+    if fitted and (not py_contains(fields, "classes_") or not py_contains(fields, "layers_") or not py_contains(fields, "head_")):
+        raise Error("RuntimeError: call fit before classifier inference")
+    var classes = py_get(fields, "classes_")
+    if classes is not None and py_type(classes) is not context["ndarray"]:
+        raise Error("TypeError: CNN classes_ requires its native ndarray")
+    var layers = py_get(fields, "layers_")
+    if layers is not None:
+        if py_type(layers) is not _b().list:
+            raise Error("TypeError: CNN classifier layers require an exact native list")
+        var owners = py_call(_b().list, layers)
+        if py_contains(fields, "head_"):
+            _ = py_call(owners.append, fields["head_"])
+        for i in range(len(owners)):  # driver-loop: retained native classifier layer metadata
+            var layer = owners[i]
+            var cls = py_type(layer)
+            if (cls is not context["xcnn_conv2d_class"] and cls is not context["xcnn_relu_class"]
+                    and cls is not context["xcnn_maxpool_class"] and cls is not context["xcnn_linear_class"]):
+                raise Error("TypeError: CNN classifier requires its connected native layer classes")
+            var state = _fields(layer)
+            for key in ["in_channels", "out_channels", "kernel_size", "stride", "padding", "dilation", "groups",  # driver-loop: over compiled child options
+                        "bias", "_conv_pad", "_pads", "_explicit", "ceil_mode", "count_include_pad", "divisor_override",
+                        "in_features", "out_features"]:
+                neural_plain_value(py_get(state, PythonObject(key)), 0, context)
+            for key in ["weight_", "bias_"]:  # driver-loop: native learned buffers before shape/address reads
+                if py_contains(state, PythonObject(key)):
+                    var buffer = state[PythonObject(key)]
+                    sequential_admit_value(buffer, context)
+                    if py_type(buffer) is not context["ndarray"]:
+                        raise Error("TypeError: CNN learned buffers require native ndarray storage")
+    var blocks = py_get(fields, "_blocks")
+    if blocks is not None:
+        if py_type(blocks) is not _b().list:
+            raise Error("TypeError: CNN block plans require a native list")
+        for i in range(len(blocks)):  # driver-loop: exact native model block-pair metadata
+            if py_type(blocks[i]) is not _b().tuple or len(blocks[i]) != 2:
+                raise Error("TypeError: CNN block plans require native layer pairs")
+            if py_type(blocks[i][0]) is not context["xcnn_conv2d_class"]:
+                raise Error("TypeError: CNN blocks require their native convolution class")
+            if blocks[i][1] is not None and py_type(blocks[i][1]) is not context["xcnn_maxpool_class"]:
+                raise Error("TypeError: CNN blocks require their native pooling class")
+    return fields
+
+
+def cnnclf_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    neural_plain_value(args, 0, context)
+    var b = _b()
+    var fields = _fields(model)
+    if py_type(args[0]) is not b.tuple and py_type(args[0]) is not b.list:
+        raise Error("TypeError: input_shape requires a native tuple or list")
+    if len(args[0]) != 3:
+        raise Error("ValueError: input_shape must contain C, H and W")
+    if py_type(args[1]) is not b.tuple and py_type(args[1]) is not b.list:
+        raise Error("TypeError: conv_channels requires a native tuple or list")
+    var input_shape = Python.list()
+    var channels = Python.list()
+    for i in range(3):  # small-loop(the three declared image dimensions)
+        var value = Int(py=args[0][i])
+        if value < 1:
+            raise Error("ValueError: input_shape dimensions must be positive")
+        _ = py_call(input_shape.append, PythonObject(value))
+    for i in range(len(args[1])):  # driver-loop: declared convolution layer widths
+        var value = Int(py=args[1][i])
+        if value < 1:
+            raise Error("ValueError: convolution channels must be positive")
+        _ = py_call(channels.append, PythonObject(value))
+    py_setitem(fields, "input_shape", py_call(b.tuple, input_shape))
+    py_setitem(fields, "conv_channels", py_call(b.tuple, channels))
+    var integers = Python.tuple("kernel_size", "pool_size", "batch_size", "max_iter")
+    var positions: List[Int] = [2, 3, 7, 8]
+    for i in range(4):  # small-loop(integer classifier settings)
+        var value = Int(py=args[positions[i]])
+        if value < (0 if i == 3 else 1):
+            raise Error("ValueError: invalid classifier size or iteration setting")
+        py_setitem(fields, integers[i], PythonObject(value))
+    var floats = Python.tuple("learning_rate", "momentum", "weight_decay", "dampening", "eps")
+    var indices: List[Int] = [4, 5, 6, 13, 16]
+    for i in range(5):  # small-loop(floating classifier optimizer settings)
+        py_setitem(fields, floats[i], PythonObject(Float64(py=args[indices[i]])))
+    py_setitem(fields, "shuffle", PythonObject(Bool(py=args[9])))
+    py_setitem(fields, "random_state", args[10])
+    py_setitem(fields, "numeric_mode", args[11])
+    var optimizer = String(args[12])
+    if optimizer != "sgd" and optimizer != "adam" and optimizer != "adamw":
+        raise Error("ValueError: optimizer must be sgd, adam or adamw")
+    py_setitem(fields, "optimizer", PythonObject(optimizer))
+    var nesterov = Bool(py=args[14])
+    if nesterov and (Float64(py=args[5]) <= 0 or Float64(py=args[13]) != 0):
+        raise Error("ValueError: Nesterov momentum requires a momentum and zero dampening")
+    py_setitem(fields, "nesterov", PythonObject(nesterov))
+    if (py_type(args[15]) is not b.tuple and py_type(args[15]) is not b.list) or len(args[15]) != 2:
+        raise Error("ValueError: betas must contain two scalars")
+    py_setitem(fields, "betas", Python.tuple(Float64(py=args[15][0]), Float64(py=args[15][1])))
+    return PythonObject(None)
+
+
+def cnnclf_weights(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = _classifier_fields(model, context, True)
+    var params = _params(fields)
+    var out = Python.list()
+    for i in range(len(params)):  # driver-loop: publish each learned native array in layer order
+        _ = py_call(out.append, _fields(params[i][0])[params[i][1]])
+    return out
+
+
 # ---------------------------------------------------------------- the layers
 
 def _kaiming(mut stream: XseqStream, shape: PythonObject, fan_in: Int, context: PythonObject) raises -> PythonObject:
     """`_kaiming_uniform(rng, shape, fan_in)`: float32 U(-b, b) draws, b =
     1 / sqrt(fan_in) (correctly rounded), from the layer's stream."""
-    var np = _np()
-    var out = py_call(np.empty, shape, dtype=np.float32)
+    var out = _empty(shape, "float32", context)
     var bound = 1.0 / sqrt(Float64(fan_in))
-    stream.fill_uniform(context, out.ctypes.data, Int(py=out.size), -bound, bound)
+    stream.fill_uniform(context, xcnn_addr(out), Int(py=out.size), -bound, bound)
     return out
 
 
 def _conv_new(c: Int, oc: Int, k: Int, seed: Int, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Conv2d(c, oc, k, padding=k // 2, random_state=seed, numeric_mode=mode)`."""
     var conv = py_call(_b().object.__new__, context["xcnn_conv2d_class"])
-    var f = py_fields(conv)
+    var f = _fields(conv)
     var p = k // 2
     py_setitem(f, "in_channels", c)
     py_setitem(f, "out_channels", oc)
@@ -100,14 +253,14 @@ def _conv_new(c: Int, oc: Int, k: Int, seed: Int, mode: PythonObject, context: P
 
 def _relu_new(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var relu = py_call(_b().object.__new__, context["xcnn_relu_class"])
-    py_setitem(py_fields(relu), "numeric_mode", mode)
+    py_setitem(_fields(relu), "numeric_mode", mode)
     return relu
 
 
 def _maxpool_new(p: Int, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """`MaxPool2d(p, numeric_mode=mode)`."""
     var pool = py_call(_b().object.__new__, context["xcnn_maxpool_class"])
-    var f = py_fields(pool)
+    var f = _fields(pool)
     py_setitem(f, "ceil_mode", False)
     py_setitem(f, "divisor_override", PythonObject(None))
     py_setitem(f, "kernel_size", Python.tuple(p, p))
@@ -123,7 +276,7 @@ def _maxpool_new(p: Int, mode: PythonObject, context: PythonObject) raises -> Py
 def _linear_new(d_in: Int, d_out: Int, seed: Int, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_Linear(d_in, d_out, random_state=seed, numeric_mode=mode)`."""
     var lin = py_call(_b().object.__new__, context["xcnn_linear_class"])
-    var f = py_fields(lin)
+    var f = _fields(lin)
     py_setitem(f, "in_features", d_in)
     py_setitem(f, "out_features", d_out)
     py_setitem(f, "numeric_mode", mode)
@@ -175,7 +328,7 @@ def _params(fields: PythonObject) raises -> PythonObject:
     var layers = py_call(_b().list, fields["layers_"])
     _ = py_call(layers.append, fields["head_"])
     for i in range(len(layers)):  # driver-loop: over the layer list (model structure)
-        if py_contains(py_fields(layers[i]), "weight_"):
+        if py_contains(_fields(layers[i]), "weight_"):
             _ = py_call(out.append, Python.tuple(layers[i], "weight_", "grad_weight_"))
             _ = py_call(out.append, Python.tuple(layers[i], "bias_", "grad_bias_"))
     return out
@@ -185,7 +338,7 @@ def _params(fields: PythonObject) raises -> PythonObject:
 
 def _conv_params(conv: PythonObject, shape: List[Int]) raises -> List[Int]:
     """`Conv2d._params(shape)`."""
-    var f = py_fields(conv)
+    var f = _fields(conv)
     var g = Int(py=f["groups"])
     var ks = f["kernel_size"]
     var st = f["stride"]
@@ -198,7 +351,7 @@ def _conv_params(conv: PythonObject, shape: List[Int]) raises -> List[Int]:
 
 def _pool_params(pool: PythonObject, shape: List[Int]) raises -> List[Int]:
     """`_Pool2d._params(shape)`."""
-    var f = py_fields(pool)
+    var f = _fields(pool)
     var ks = f["kernel_size"]
     var st = f["stride"]
     var pd = f["padding"]
@@ -239,7 +392,7 @@ def _plan(fields: PythonObject, entries: PythonObject, n: Int) raises -> List[_B
         var pool = blocks[i][1]
         var prm = _conv_params(conv, shape)
         var hw = py_call(_e(entries, "x_cnn_conv_shape"), _ints(prm))
-        var cshape: List[Int] = [shape[0], Int(py=py_fields(conv)["out_channels"]), Int(py=hw[0]), Int(py=hw[1])]
+        var cshape: List[Int] = [shape[0], Int(py=_fields(conv)["out_channels"]), Int(py=hw[0]), Int(py=hw[1])]
         var pprm = List[Int]()
         var oshape = cshape.copy()
         if pool is not None:
@@ -247,8 +400,8 @@ def _plan(fields: PythonObject, entries: PythonObject, n: Int) raises -> List[_B
             var phw = py_call(_e(entries, "x_cnn_pool_shape"), _ints(pprm))
             oshape = [cshape[0], cshape[1], Int(py=phw[0]), Int(py=phw[1])]
         var ny = _prod(cshape)
-        var wsize = Int(py=py_fields(conv)["weight_"][0].size)
-        plans.append(_BlockPlan(prm^, pprm^, _prod(shape), _prod(oshape), ny // Int(py=py_fields(conv)["out_channels"]) * wsize, ny))
+        var wsize = Int(py=_fields(conv)["weight_"].size) // Int(py=_fields(conv)["out_channels"])
+        plans.append(_BlockPlan(prm^, pprm^, _prod(shape), _prod(oshape), ny // Int(py=_fields(conv)["out_channels"]) * wsize, ny))
         shape = oshape^
     return plans^
 
@@ -262,17 +415,16 @@ def _new(entries: PythonObject, handles: PythonObject, n: Int) raises -> PythonO
     return h
 
 
-def _put(entries: PythonObject, h: PythonObject, arr: PythonObject) raises:
+def _put(entries: PythonObject, h: PythonObject, arr: PythonObject, context: PythonObject) raises:
     """`_Res.put(h, arr)`: a float32 or int32 host array's words up."""
-    var a = py_call(_np().ascontiguousarray, arr)
+    var a = _contiguous(arr, context)
     _ = py_call(_e(entries, "x_cnn_res_upload"), h, xcnn_addr(a), a.size)
     _ = a  # keep the Python object alive through the native call above
 
 
-def _get(entries: PythonObject, h: PythonObject, shape: PythonObject) raises -> PythonObject:
+def _get(entries: PythonObject, h: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_Res.get(h, shape)`: float32 words down."""
-    var np = _np()
-    var out = py_call(np.empty, shape, np.float32)
+    var out = _empty(shape, "float32", context)
     _ = py_call(_e(entries, "x_cnn_res_download"), h, xcnn_addr(out), out.size)
     _ = out  # keep the Python object alive through the native call above
     return out
@@ -352,38 +504,40 @@ def _forward_r(fields: PythonObject, entries: PythonObject, rw: PythonObject, a:
 
 def _images(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_images(X)`."""
-    var b = _b()
     var x = xcnn_f32(source, "X", context)
-    var ishape = py_call(b.tuple, fields["input_shape"])
-    if Int(py=x.ndim) == 2:
-        var full = py_call(b.tuple, Python.list(x.shape[0]))
-        return py_call(py_call(_np().ascontiguousarray, x).reshape, full + ishape)
-    var tail = py_call(b.tuple, x.shape).__getitem__(py_call(b.slice, 1, PythonObject(None)))
-    if not Bool(py=tail == ishape):
-        raise Error("ValueError: mojolearn: images of shape " + String(py=py_call(b.str, tail)) + ", the model "
-                    + String(py=py_call(b.str, ishape)))
+    var shape = xcnn_shape(x)
+    var given = fields["input_shape"]
+    if len(shape) < 1:
+        raise Error("ValueError: classifier images require a row dimension")
+    var full: List[Int] = [shape[0], Int(py=given[0]), Int(py=given[1]), Int(py=given[2])]
+    if len(shape) == 2:
+        return xcnn_reshape(x, full)
+    if len(shape) != 4:
+        raise Error("ValueError: classifier images must have rank two or four")
+    for i in range(1, 4):  # small-loop(image channel/height/width metadata)
+        if shape[i] != full[i]:
+            raise Error("ValueError: images do not match the model input_shape")
     return x
 
 
 # ---------------------------------------------------------------- fit
 
 def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var np = _np()
     var b = _b()
-    var fields = py_fields(model)
+    var fields = _classifier_fields(model, context)
     var x = _images(fields, args[0], context)
     var entries = xcnn_entries(fields, context)
     # sorted classes and the inverse codes (the sequence owner's label sort,
     # `model_labels` of the x_sequence binding of the model's tier)
-    var key = py_call(py_call(fields["numeric_mode_"].strip).lower)
+    var key = fields["numeric_mode_"]
     var labels = context["xcnn_label_bindings"][key]
     if py_type(labels) is b.str:
         raise Error(String(py=labels))
-    if not py_contains(context, "np_asarray"):
-        py_setitem(context, "np_asarray", np.asarray)
-    var encoded = xseq_labels(args[1], labels, context)
+    var encoded = xcnn_encode_labels(args[1], labels, context)
     py_setitem(fields, "classes_", encoded[0])
-    var yi = py_call(np.ascontiguousarray, encoded[1], np.int32)
+    var yi = encoded[1]
+    if Int(py=yi.size) != Int(py=x.shape[0]):
+        raise Error("ValueError: X and y must contain the same number of rows")
     var k = len(encoded[0])
     _build(fields, k, context)
     var optimizer = String(py=fields["optimizer"])
@@ -407,10 +561,10 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         var hbuf = b.list()
         var sizes = b.list()
         for i in range(len(params)):  # driver-loop: over the layer parameter list
-            var arr = py_fields(params[i][0])[params[i][1]]
+            var arr = _fields(params[i][0])[params[i][1]]
             var size = Int(py=arr.size)
             var p = _new(entries, handles, size)
-            _put(entries, p, arr)
+            _put(entries, p, arr, context)
             _ = py_call(hp.append, p)
             _ = py_call(hg.append, _new(entries, handles, size))
             _ = py_call(hbuf.append, _new(entries, handles, per * size))
@@ -424,8 +578,8 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         var row = Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2])
         var xall = _new(entries, handles, Int(py=x.size))
         var yall = _new(entries, handles, n)
-        _put(entries, xall, x)
-        _put(entries, yall, yi)
+        _put(entries, xall, x, context)
+        _put(entries, yall, yi, context)
         var step = 0
         var epoch_entry = Bool(py=context["xcnn_epoch_entry"]) and _has(entries, "x_cnn_fit_epoch_r")
         var seed_lo = Int(seed64 & 0xFFFFFFFF)
@@ -466,7 +620,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         for ep in range(max_iter):  # driver-loop: over the device epochs
             var epoch = b.list()
             if epoch_entry:
-                var losses = py_call(np.empty, nsteps, dtype=np.float64)
+                var losses = _empty(Python.tuple(nsteps), "float64", context)
                 var fpar = Python.list()
                 if sgd:
                     fpar = Python.list(py_call(b.float, fields["learning_rate"]), py_call(b.float, fields["momentum"]),
@@ -481,16 +635,16 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
                             Python.list(n, batch, 0 if sgd else 1, step, ep, shuffle, seed_lo, seed_hi), fpar)
                 _ = losses  # keep the Python object alive through the native call above
                 step += nsteps
-                epoch = py_call(losses.tolist)
+                epoch = _float_words(losses)
             else:
-                var order_rows = py_call(np.empty, n, dtype=np.int32)
+                var order_rows = _empty(Python.tuple(n), "int32", context)
                 _ = py_call(_e(entries, "x_cnn_epoch_rows"), xcnn_addr(order_rows), Python.list(n, ep, shuffle, seed_lo, seed_hi))
                 _ = order_rows  # keep the Python object alive through the native call above
                 var s = 0
                 var k_out = k
                 while s < n:  # driver-loop: over the device minibatch steps
                     var m = min(batch, n - s)
-                    var rows = py_call(np.ascontiguousarray, order_rows.__getitem__(py_call(b.slice, s, s + m)), dtype=np.int32)
+                    var rows = py_call(context["ndarray"], Python.tuple(m), dtype=context["int32"], buffer=order_rows, offset=s * 4)
                     if not lists:
                         _ = py_call(_e(entries, "x_cnn_res_gather"), a["x"], xall, xcnn_addr(rows), Python.list(m, row))
                         _ = rows  # keep the Python object alive through the native call above
@@ -530,14 +684,14 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
                             for q in range(len(params)):  # driver-loop: one optimizer launch per parameter array
                                 _ = py_call(_e(entries, "x_cnn_sgd_r"), hp[q], hg[q], hbuf[q], Python.list(sizes[q]), hyper)
                     else:
-                        var block = py_call(np.empty, Python.tuple(1, 9), dtype=np.float64)
+                        var block = _empty(Python.tuple(1, 9), "float64", context)
                         var betas = fields["betas"]
                         _ = py_call(_e(entries, "x_cnn_adam_hyper_d"), xcnn_addr(block), Python.list(step, 1),
                                     Python.list(py_call(b.float, fields["learning_rate"]), py_call(b.float, betas[0]),
                                                 py_call(b.float, betas[1]), py_call(b.float, fields["eps"]),
                                                 py_call(b.float, fields["weight_decay"]), 1.0 if optimizer == "adamw" else 0.0))
                         _ = block  # keep the Python object alive through the native call above
-                        var hyper = py_call(py_call(block.reshape, -1).tolist)
+                        var hyper = _float_words(block)
                         if lists:
                             _ = py_call(_e(entries, "x_cnn_adam_r"), hp, hg, hbuf, sizes, hyper)
                         else:
@@ -554,13 +708,13 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
             _ = py_call(curve.append, PythonObject(total / Float64(len(epoch))))
         for i in range(len(params)):  # driver-loop: reads back each parameter array handle
             var layer = params[i][0]
-            var lf = py_fields(layer)
+            var lf = _fields(layer)
             var arr = lf[params[i][1]]
-            py_setitem(lf, params[i][1], _get(entries, hp[i], arr.shape))
-            py_setitem(lf, params[i][2], _get(entries, hg[i], arr.shape))
+            py_setitem(lf, params[i][1], _get(entries, hp[i], arr.shape, context))
+            py_setitem(lf, params[i][2], _get(entries, hg[i], arr.shape, context))
         var bufs = b.list()
         for i in range(len(params)):  # driver-loop: reads back each optimizer buffer handle
-            _ = py_call(bufs.append, _get(entries, hbuf[i], Python.tuple(per * Int(py=sizes[i]))))
+            _ = py_call(bufs.append, _get(entries, hbuf[i], Python.tuple(per * Int(py=sizes[i])), context))
         py_setitem(fields, "_bufs", bufs)
         py_setitem(fields, "_rw", b.dict())
     except error:
@@ -577,16 +731,15 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
 def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context: PythonObject) raises -> PythonObject:
     """`_run_predict(X, codes)`: probabilities (n, k) float32, or with
     `codes` each row's class index (int32), on the device."""
-    var np = _np()
     var b = _b()
-    var fields = py_fields(model)
+    var fields = _classifier_fields(model, context, True)
     var x = _images(fields, source, context)
     var n = Int(py=x.shape[0])
     var k = len(fields["classes_"])
     var entries = xcnn_entries(fields, context)
     var cap = max(1, min(n, _PREDICT_ROWS))
-    var proba = PythonObject(None) if codes else py_call(np.empty, Python.tuple(n, k), np.float32)
-    var lab = py_call(np.empty, n, np.int32) if codes else PythonObject(None)
+    var proba = PythonObject(None) if codes else _empty(Python.tuple(n, k), "float32", context)
+    var lab = _empty(Python.tuple(n), "int32", context) if codes else PythonObject(None)
     var handles = b.list()
     var rw = b.dict()
     py_setitem(fields, "_rw", rw)
@@ -597,14 +750,14 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
             _ = py_call(layers.append, blocks[i][0])
         _ = py_call(layers.append, fields["head_"])
         for i in range(len(layers)):  # driver-loop: the layer list for device copies
-            var lf = py_fields(layers[i])
+            var lf = _fields(layers[i])
             var hw = _new(entries, handles, Int(py=lf["weight_"].size))
             var hb = _new(entries, handles, Int(py=lf["bias_"].size))
-            _put(entries, hw, lf["weight_"])
-            _put(entries, hb, lf["bias_"])
+            _put(entries, hw, lf["weight_"], context)
+            _put(entries, hb, lf["bias_"], context)
             py_setitem(rw, py_call(b.id, layers[i]), Python.tuple(hw, hb))
         var a = _resident(fields, entries, handles, cap, False, False, context)
-        _put(entries, a["y"], py_call(np.full, cap, -1, np.int32))
+        _put(entries, a["y"], _minus_one(cap, context), context)
         var ishape = fields["input_shape"]
         var row = Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2])
         var base = Int(py=xcnn_addr(x))
@@ -636,11 +789,5 @@ def cnnclf_predict_proba(model: PythonObject, args: PythonObject, context: Pytho
 
 
 def cnnclf_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var np = _np()
     var codes = _run_predict(model, args[0], True, context)
-    var cls = py_fields(model)["classes_"]
-    var kind = String(py=cls.dtype.kind)
-    # classes_[codes]: ndarray's own C `take`, a copy of the class words (the
-    # widened-table gather it replaces wrote the same values)
-    _ = kind
-    return py_call(cls.take, codes)
+    return xcnn_decode_labels(_fields(model)["classes_"], codes, context)
