@@ -10,7 +10,8 @@ from bindings.mode_metadata_native import _fields, _class_fields, _plan, _config
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
-from bindings.classical_labels import _label_list, _flatten_labels
+from bindings.classical_labels import _flatten_labels
+from bindings.gp_label_snapshot_native import gp_label_list
 from bindings.classical_warnings import classical_warn_column
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_label_list
@@ -19,8 +20,6 @@ from bindings.family_common import family_cast_view_f64
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.native_buffer_owner import native_buffer_view
-from providers.python.array_metadata_pyapi import array_owner_once
 from bindings.gp_kernel_public_native import gp_admit_kernel
 from bindings.gp_regressor_native import gp_regressor_operation
 from bindings.gp_classifier_native import gp_classifier_operation
@@ -127,19 +126,12 @@ def _gp_classifier_target(source: PythonObject, rows: Int, name: String, context
     # A single native container snapshot retains label identities and integer
     # precision. All following shape/finite/integral checks use that snapshot;
     # the numerical owner sees the finished native list, never the user input.
-    var owners = PythonObject(None)
     var values = source
-    if kind is context["array_class"]:
-        owners = array_owner_once(source, context)
-        # Read the connected native slots, never Array.__getattribute__ or a
-        # replaceable _mv property. Hold backing owners through list creation.
-        values = py_call(native_buffer_view(owners[3]).tolist)
-    elif _ordinary_torch(kind, context):
-        values = _label_list(native_torch_numpy(source), context)
+    if _ordinary_torch(kind, context):
+        values = gp_label_list(native_torch_numpy(source), context)
     elif kind is not b.list and kind is not b.tuple:
-        values = _label_list(source, context)
+        values = gp_label_list(source, context)
     _gp_label_admit(values, name, context)
-    _ = owners
     if py_type(values) is not b.list and py_type(values) is not b.tuple:
         raise Error("mojolearn: y must be a sequence of labels")
     if len(values) != rows:
