@@ -19,6 +19,8 @@
 # all the metrics read, so the programs below see the same words.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
+from providers.python.metrics_vector_input_pyapi import metric_vector_exact
+from providers.python.metrics_matrix_input_pyapi import metric_score_matrix
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
@@ -659,6 +661,9 @@ def mx_shape_text(view: PythonObject, rows: Int, cols: Int, nd: Int) raises -> S
 def mx_scores(source: PythonObject, n: Int, caller: String, ndim: Int, name: String,
               context: PythonObject) raises -> MxMat:
     """`_scores(y_score, n, caller, ndim=ndim, name=name)`; ndim < 0 = any."""
+    if metric_vector_exact(source, context):
+        var captured = metric_score_matrix(source, n, caller, ndim, name, context)
+        return MxMat(captured[0], Int(py=captured[1]), Int(py=captured[2]), Int(py=captured[3]))
     var got = mx_f32_view(source, name, context)
     var view = got[0]
     if got[1] != "<f4":

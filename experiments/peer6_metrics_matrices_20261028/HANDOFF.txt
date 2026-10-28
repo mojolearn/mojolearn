@@ -1,0 +1,3 @@
+Exact ndarray/Array regression targets, expanded score matrices and sample weights now use one retained native metadata capture, validate shape/dtype/finite/count/weight rules natively, and prepare independent operation-owned output storage. Existing list/pandas materialization paths remain unchanged and under further review.
+Full classification/regression/expanded provider fixture compiled exit 0, Apple CPU identical O0 -j10. No runtime/identity execution. Remaining capture-once container review and pandas coverage remain explicit in compile.json.
+Full evidence: /Users/andrewhendel/mojolearn-evidence/peer6-metrics-matrices-20261028
