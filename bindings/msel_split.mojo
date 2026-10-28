@@ -98,6 +98,16 @@ def msel_field(model: PythonObject, name: String, context: PythonObject) raises 
             raise Error("TypeError: repeated model selection requires a native KFold or StratifiedKFold configuration")
     else:
         msel_admit(value, context)
+        var kind = py_type(value)
+        if name == "_pairs" and kind is not msel_b().list and kind is not msel_b().tuple:
+            raise Error("TypeError: stored fold pairs require a native list or tuple")
+        if name == "cvargs":
+            if kind is not msel_b().dict:
+                raise Error("TypeError: repeated splitter options require a native dictionary")
+            var keys = py_call(msel_b().list, value)
+            for i in range(len(keys)):  # driver-loop: option keys before native lookup or copying
+                if py_type(keys[i]) is not msel_b().str:
+                    raise Error("TypeError: repeated splitter option names require native strings")
         if name != "_folds" and name != "_pairs" and name != "cvargs" and name != "test_fold":
             var b = msel_b()
             if value is not None and py_type(value) is not b.str and not msel_is_real(value, context) and not msel_is_bool(value, context):
