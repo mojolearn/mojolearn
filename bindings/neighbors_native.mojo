@@ -19,6 +19,7 @@ from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from core.cast_in import CAST_KIND_SIGNED
+from providers.python.pcs_rng_pyapi import pcs_seed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_call, family_call_kw, family_array,
@@ -31,37 +32,6 @@ from bindings.neighbors_semi_native import neighbors_semi_operation
 from bindings.neighbors_graph_native import neighbors_graph_operation
 from bindings.neighbors_ann_native import neighbors_ann_operation
 from bindings.neighbors_kde_native import neighbors_kde_operation
-
-
-def _pcs_seed(seed: PythonObject) raises -> PythonObject:
-    """`_expansion_neighbors._seed_word`: an int as given; None (numpy's
-    global RandomState) or a caller's RandomState gives one draw in
-    [0, 2^31); anything else is refused."""
-    var b = Python.import_module("builtins")
-    if py_type(seed) is py_type(PythonObject(0)):
-        return seed
-    # Remaining provider work: NumPy RandomState/None must be admitted through
-    # a native RNG state API. This retained path still executes NumPy randint
-    # through CPython and is not a completed native migration.
-    var state = seed
-    if seed is None:
-        var numpy = PythonObject(None)
-        try:
-            numpy = Python.import_module("numpy")
-        except:
-            raise Error("ImportError: mojolearn: _expansion_neighbors requires optional NumPy support. "
-                        + "Install it with: python -m pip install \"mojolearn[numpy]\" "
-                        + "(\"mojolearn[verify]\" also includes NumPy).")
-        state = numpy.random.mtrand._rand
-    elif not (Bool(py=py_call(b.hasattr, seed, PythonObject("randint")))
-              and Bool(py=py_call(b.hasattr, seed, PythonObject("random_sample")))
-              and Bool(py=py_call(b.hasattr, seed, PythonObject("uniform")))):
-        raise Error(family_repr(seed) + " cannot be used to seed a numpy.random.RandomState instance")
-    var keywords = Python.dict()
-    py_setitem(keywords, "size", PythonObject(1))
-    var draw = family_call_kw(py_call(b.getattr, state, PythonObject("randint")), keywords,
-                              PythonObject(0), PythonObject(1 << 31))
-    return family_call(b.int, family_call(py_call(b.getattr, draw, PythonObject("__getitem__")), PythonObject(0)))
 
 
 def _pcs_int(value: PythonObject, name: String) raises -> Int:
@@ -93,7 +63,7 @@ def _pcs_fit(fields: PythonObject, binding: PythonObject, x: ArrayMetadata,
     """Fit hash tables from the operation's single admitted input snapshot."""
     var d = x.source.cols
     var nf = d + (1 if coef0 != 0.0 else 0)
-    var seed = _pcs_seed(family_field(fields, "random_state"))
+    var seed = pcs_seed(family_field(fields, "random_state"), context)
     if nf > 0:
         var draw = neural_descriptor_entry(xn_module(binding), "x_neighbors_kfeat_pcs_draw_idn", False)
         if draw is None:

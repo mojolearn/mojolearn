@@ -1,0 +1,65 @@
+PolynomialCountSketch single seed draw: public native NumPy ABI repair
+Date 2026-10-28; same Radius branch, separate RNG commit.
+
+Replaces neighbors_native._pcs_seed's hasattr/getattr/NumPy randint path with
+pcs_rng_pyapi.pcs_seed. Integer seeds preserve their original Python int owner;
+None reads the current global mtrand._rand through its native module namespace.
+Exact RandomState instances expose their BitGenerator through the pinned Cython
+native getset descriptor. Approved native classes are MT19937, PCG64, PCG64DXSM,
+Philox, SFC64. Duck RNGs, subclasses and custom BitGenerators are refused before
+any protocol method or user descriptor runs; use an integer or ordinary native
+RandomState as the alternative.
+
+The BitGenerator capsule and readonly lock getters are pinned during package
+import, with native _thread lock acquire/release descriptors. The native owner
+retains RandomState, BitGenerator, capsule and lock references through execution.
+After acquiring the ordinary native lock it calls the capsule's next_uint32
+function pointer once and applies mask 0x7fffffff; release is in finally. No
+RandomState.randint, random_sample, uniform, __getitem__ or Python fallback runs.
+
+Source basis (read-only audit; no RNG draws or product runtime tests)
+- https://numpy.org/doc/stable/reference/random/extending.html documents the
+  named BitGenerator capsule, five-pointer bitgen_t and lock ownership pattern.
+- Installed NumPy is 2.4.4. The installed public header is
+  numpy/_core/include/numpy/random/bitgen.h; bit_generator.pxd marks capsule and
+  lock readonly. Import metadata audit confirmed all three getters are exact
+  getset_descriptor and acquire/release are exact method_descriptor.
+- https://raw.githubusercontent.com/numpy/numpy/v2.4.4/numpy/random/mtrand.pyx
+  :174 public _bit_generator; :216-226 initializes copied bitgen and lock;
+  :779-801 chooses default int dtype, masked method, endpoint=False.
+- https://raw.githubusercontent.com/numpy/numpy/v2.4.4/numpy/random/_bounded_integers.pyx.in
+  low=0, high=2**31 gives inclusive range/mask 2**31-1.
+- https://raw.githubusercontent.com/numpy/numpy/v2.4.4/numpy/random/src/distributions/distributions.c
+  :1538-1570 takes uint32 even for default int64 output when range fits uint32;
+  :1159-1170 masks next_uint32 then rejects only values above range. This mask
+  equals range, so exactly one draw is consumed. int32 takes the same path.
+- This does not depend on MT19937 state layout; approved non-MT bit generators
+  keep their uint32 caching and other opaque state through their own callback.
+
+Unsupported internal mutation caveat
+RandomState._bit_generator is writable, while NumPy randint uses a private
+copied bitgen_t and private lock. Assigning that underscored field directly can
+make them disagree. This repair supports normally constructed RandomStates and
+NumPy's supported reseed/state/set_bit_generator APIs; it does not support direct
+private field reassignment. No private object offset or unsupported state-layout
+workaround was added. Arbitrary capsule pointers/custom generators remain refused.
+
+Remaining PCS paths
+- PCS lifecycle wrappers are a separate next commit; this RNG commit does not
+  remove fit/transform decorators or finish input/output validation by itself.
+- x_neighbors_kfeat_pcs_draw_idn remains a CPython-dispatched numerical extension
+  entry because drawing is absent from the XN descriptor table. It needs native
+  descriptor registration through its existing numerical owner.
+- _seed_word remains Python for other samplers. PCS no longer calls it; other
+  sampler ownership and operation repairs are separate.
+- XN packed execution is opt-in native descriptor dispatch; default route still
+  calls extension entries. No switch/default changed by this commit.
+
+Evidence and compile
+Full pinned sources and import-metadata audit:
+/Users/andrewhendel/mojolearn-evidence/peer1-radius-native-20261027/numpy-source/
+Source hashes retained in source-sha256.txt there. No RNG state was constructed,
+advanced or compared by the metadata audit; no product operation was called.
+Compile-only probe remains experiments/provider_radius_20261027/compile_radius.mojo
+(-emit shared-lib; instantiates neighbors_operation including pcs_seed).
+Parent compiles. No lane compilation or runtime/vendor verification performed.
