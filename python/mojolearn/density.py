@@ -548,7 +548,7 @@ class KernelDensity(NumericModeMixin):
         ValueError
             For a non-finite value or invalid ``sample_weight``.
         """
-        return _NATIVE(self, "family_xn_kde_fit", (self._bind("_mojolearn_estimators"), X, sample_weight),
+        return _NATIVE(self, "family_xn_kde_fit", (None, X, sample_weight),
                        _NATIVE_CONTEXT)
 
     def score_samples(self, X):
@@ -566,7 +566,7 @@ class KernelDensity(NumericModeMixin):
             Rows no training point reaches under a compact kernel get
             ``-3.4028235e+38``.
         """
-        return _NATIVE(self, "family_xn_kde_score_samples", (self._bind("_mojolearn_estimators"), X),
+        return _NATIVE(self, "family_xn_kde_score_samples", (None, X),
                        _NATIVE_CONTEXT)
 
     # The per-row float32 scores are summed in the binding's fixed order (`core/device_fold.mojo`: on the
@@ -586,7 +586,7 @@ class KernelDensity(NumericModeMixin):
         -------
         float
         """
-        return _NATIVE(self, "family_xn_kde_score", (self._bind("_mojolearn_estimators"), X),
+        return _NATIVE(self, "family_xn_kde_score", (None, X),
                        _NATIVE_CONTEXT)
 
     def sample(self, n_samples=1, random_state=None):
@@ -647,3 +647,6 @@ _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     ("when_set", "_w", (("array", "weights", "_w"),)),
 ))
 _native_archive_bridge.lifetime(KernelDensity, "kde_fit_release")
+
+# KernelDensity resolves the import-connected entry inside native execution.
+_native_family_bridge.connect_bindings("_mojolearn_estimators")

@@ -23,6 +23,7 @@
 # this prefix by the lane's skeleton) is not served here: its dispatch is the
 # Python `DevicePool` (python/mojolearn/_parallel_pool.py), whose workers run
 # Python handlers.
+from providers.python.estimator_binding_pyapi import estimator_arguments
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -320,8 +321,10 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
     return out
 
 
-def neighbors_kde_operation(model: PythonObject, operation: String, args: PythonObject,
+def neighbors_kde_operation(model: PythonObject, operation: String, var args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
+    if operation != "family_xn_kde_release":
+        args = estimator_arguments(model, "_mojolearn_estimators", args, context)
     if operation == "family_xn_kde_fit":
         _kde_fit(model, args, context)
         return model
