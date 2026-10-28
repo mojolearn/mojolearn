@@ -20,6 +20,8 @@ from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from core.cast_in import CAST_KIND_SIGNED
 from providers.python.pcs_rng_pyapi import pcs_seed
+from providers.python.pcs_public_lifecycle_pyapi import pcs_public_begin, pcs_feature_names
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_call, family_call_kw, family_array,
@@ -58,12 +60,12 @@ def _pcs_hash(source: PythonObject, degree: Int, name: String, context: PythonOb
     return result^
 
 
-def _pcs_fit(fields: PythonObject, binding: PythonObject, x: ArrayMetadata,
+def _pcs_fit(fields: PythonObject, settings: PythonObject, binding: PythonObject, x: ArrayMetadata,
              degree: Int, components: Int, coef0: Float64, context: PythonObject) raises:
     """Fit hash tables from the operation's single admitted input snapshot."""
     var d = x.source.cols
     var nf = d + (1 if coef0 != 0.0 else 0)
-    var seed = pcs_seed(family_field(fields, "random_state"), context)
+    var seed = pcs_seed(family_field(settings, "random_state"), context)
     if nf > 0:
         var draw = neural_descriptor_entry(xn_module(binding), "x_neighbors_kfeat_pcs_draw_idn", False)
         if draw is None:
@@ -91,16 +93,16 @@ def _pcs_fit(fields: PythonObject, binding: PythonObject, x: ArrayMetadata,
     py_setitem(fields, "n_features_in_", PythonObject(d))
 
 
-def _pcs_transform(fields: PythonObject, binding: PythonObject, x: ArrayMetadata,
+def _pcs_transform(settings: PythonObject, binding: PythonObject, x: ArrayMetadata,
                    degree: Int, components: Int, gamma: Float64, coef0: Float64,
                    context: PythonObject) raises -> PythonObject:
     """Transform with captured input/hash metadata and the admitted provider."""
     var n = x.source.rows
     var d = x.source.cols
-    if d != _pcs_int(family_field(fields, "n_features_in_"), "n_features_in_"):
+    if d != _pcs_int(family_field(settings, "n_features_in_"), "n_features_in_"):
         raise Error("Number of features of test samples does not match that of training samples.")
-    var index_hash = _pcs_hash(family_field(fields, "indexHash_"), degree, "indexHash_", context)
-    var bit_hash = _pcs_hash(family_field(fields, "bitHash_"), degree, "bitHash_", context)
+    var index_hash = _pcs_hash(family_field(settings, "indexHash_"), degree, "indexHash_", context)
+    var bit_hash = _pcs_hash(family_field(settings, "bitHash_"), degree, "bitHash_", context)
     var nf = index_hash.source.cols
     if bit_hash.source.cols != nf or nf != d + (1 if coef0 != 0.0 else 0):
         raise Error("ValueError: PolynomialCountSketch hash tables do not match the fitted features")
@@ -119,24 +121,33 @@ def _pcs_transform(fields: PythonObject, binding: PythonObject, x: ArrayMetadata
 
 def _pcs_operation(model: PythonObject, operation: String, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
-    classical_connect_numpy(context)
-    var admitted = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
-    var fields = py_fields(model)
-    var x = family_f32_snapshot(admitted[1], 2, "X", context, True)
-    var degree = _pcs_int(family_field(fields, "degree"), "degree")
-    var components = _pcs_int(family_field(fields, "n_components"), "n_components")
-    if degree < 1 or components < 1:
-        raise Error("degree and n_components must be >= 1")
-    var coef0 = _pcs_real(family_field(fields, "coef0"), "coef0")
-    if operation != "family_xn_pcs_transform":
-        _pcs_fit(fields, admitted[0], x, degree, components, coef0, context)
-    if operation == "family_xn_pcs_fit":
-        _ = x^
-        return model
-    var gamma = _pcs_real(family_field(fields, "gamma"), "gamma")
-    var result = _pcs_transform(fields, admitted[0], x, degree, components, gamma, coef0, context)
-    _ = x^
-    return result
+    var public = pcs_public_begin(model, operation, args, context)
+    var result = PythonObject(None)
+    try:
+        var admitted = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
+        var settings = public.settings
+        var fields = public.call.fields
+        var degree = _pcs_int(settings["degree"], "degree")
+        var components = _pcs_int(settings["n_components"], "n_components")
+        if degree < 1 or components < 1:
+            raise Error("degree and n_components must be >= 1")
+        var coef0 = _pcs_real(settings["coef0"], "coef0")
+        if public.call.fitting:
+            _pcs_fit(fields, settings, admitted[0], public.x, degree, components, coef0, context)
+            py_setitem(settings, "n_features_in_", fields["n_features_in_"])
+            py_setitem(settings, "indexHash_", fields["indexHash_"])
+            py_setitem(settings, "bitHash_", fields["bitHash_"])
+        if operation == "family_xn_pcs_fit":
+            result = model
+        else:
+            var gamma = _pcs_real(settings["gamma"], "gamma")
+            result = _pcs_transform(settings, admitted[0], public.x, degree, components, gamma, coef0, context)
+    except error:
+        var refused = neighbors_public_refusal(error, public.call, model)
+        raise refused^
+    finally:
+        neighbors_public_end(model, public.call)
+    return neighbors_public_finish(model, operation, result, public.call, context)
 
 
 def neighbors_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -149,6 +160,8 @@ def neighbors_operation(model: PythonObject, operation: String, args: PythonObje
         return PythonObject(None)
     if operation == "family_xn_radius_fit":
         return radius_fit(model, args, context)
+    if operation == "family_xn_pcs_feature_names":
+        return pcs_feature_names(model, context)
     if (operation == "family_xn_pcs_fit" or operation == "family_xn_pcs_transform"
             or operation == "family_xn_pcs_fit_transform"):
         return _pcs_operation(model, operation, args, context)

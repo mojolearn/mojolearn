@@ -15,6 +15,7 @@ from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.host_archive_native import host_archive_radius_refusals
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_scalar_decode import native_scalar_buffer
+from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch
 from bindings.family_common import family_f32_snapshot, family_owned_snapshot
@@ -73,22 +74,33 @@ def _target_length(shape: PythonObject, rows: Int) raises:
         raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(Int(py=shape[0])) + "]")
 
 
-def _list_finite(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+def _list_finite(value: PythonObject, context: PythonObject, name: String, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: native target containers exceed the supported nesting depth")
     var b = native_loaded_module("builtins")
     if py_type(value) is b.list or py_type(value) is b.tuple:
         for i in range(len(value)):  # driver-loop: ignored float targets still preserve their finite-value validation
-            _list_finite(value[i], context, depth + 1)
+            _list_finite(value[i], context, name, depth + 1)
         return
     host_inference_scalar(value, context)
     var number = host_inference_primitive_number(value, context)
     if not isfinite(Float64(py=py_call(b.float, number))):
-        raise Error("Input y contains NaN or infinity (RadiusNeighbors).")
+        raise Error("Input y contains NaN or infinity (" + name + ").")
+
+
+def _complex_scalar(value: PythonObject, context: PythonObject) raises -> Bool:
+    if py_get(context, "ndarray") is None:
+        return False
+    var dtype = native_numpy_dtype(context)
+    var names = Python.tuple("F", "D", "G")
+    for i in range(len(names)):  # small-loop(three exact NumPy complex scalar identities)
+        if py_type(value) is py_call(dtype, names[i]).type:
+            return True
+    return False
 
 
 def radius_target(source: PythonObject, rows: Int, context: PythonObject, transposed: Bool = False,
-                  columns: PythonObject = PythonObject(None)) raises -> PythonObject:
+                  columns: PythonObject = PythonObject(None), name: String = "RadiusNeighbors") raises -> PythonObject:
     # y is ignored numerically. Keep only the old public length, complex,
     # column-warning and float-finiteness semantics, without flatten/tolist or
     # a second read of exporter metadata. The returned owner survives fit.
@@ -114,14 +126,16 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
             depth += 1
             if depth > 64:
                 raise Error("TypeError: native target containers exceed the supported nesting depth")
-        if py_type(first) is b.complex:
-            raise Error("Complex data not supported: RadiusNeighbors got a complex y.")
+        if py_type(first) is b.complex or _complex_scalar(first, context):
+            raise Error("Complex data not supported: " + name + " got a complex y.")
         var number = host_inference_primitive_number(first, context)
         if py_type(number) is b.float:
-            _list_finite(source, context)
+            _list_finite(source, context, name)
         return source
-    if cls is b.str or cls is b.bytes or cls is b.int or cls is b.float or cls is b.bool:
+    if cls is b.str or cls is b.bytes or cls is b.int or cls is b.float or cls is b.bool or cls is b.complex:
         return source  # former describe(y) has no shape for these scalar values
+    if _complex_scalar(source, context):
+        raise Error("Complex data not supported: " + name + " got a complex y.")
     classical_admit_value(source, context)
     var storage = source
     var array = cls is context["array_class"]
@@ -148,7 +162,7 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
             if block_type is not _pd_class("pandas.core.internals.blocks", "NumpyBlock") and block_type is not _pd_class("pandas.core.internals.blocks", "NumericBlock") and block_type is not _pd_class("pandas.core.internals.blocks", "ObjectBlock") and block_type is not _pd_class("pandas.core.internals.blocks", "ExtensionBlock"):
                 raise Error("TypeError: pandas target requires ordinary native blocks")
             var pair = _pd_values(_pd_get("pandas._libs.internals", "Block", "values", block), series, context)
-            _ = py_call(owners.append, radius_target(pair[0], rows, context, not series, column_count))
+            _ = py_call(owners.append, radius_target(pair[0], rows, context, not series, column_count, name))
         if not series and Int(py=column_count[0]) == 1:
             classical_warn_column(context)
         return owners
@@ -178,7 +192,7 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
     elif code.startswith("<") or code.startswith("=") or code.startswith("@") or code.startswith("|"):
         code = String(code[byte=1:])
     if code.startswith("Z"):
-        raise Error("Complex data not supported: RadiusNeighbors got a complex y.")
+        raise Error("Complex data not supported: " + name + " got a complex y.")
     if columns is None and reshape and len(shape) == 2 and Int(py=shape[1]) == 1:
         classical_warn_column(context)
     if code != "e" and code != "f" and code != "d" and code != "g":
@@ -212,7 +226,7 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
                 offset += (remaining % dimensions[axis]) * steps[axis]
                 remaining //= dimensions[axis]
             if native_scalar_real(data, offset, code, width, little).special != 0:
-                raise Error("Input y contains NaN or infinity (RadiusNeighbors).")
+                raise Error("Input y contains NaN or infinity (" + name + ").")
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
     return Python.tuple(source, storage, owner, view)
