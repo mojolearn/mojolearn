@@ -45,6 +45,10 @@ from transformer.causal_lm_public_impl import (
 )
 
 
+from bindings.tokenizer_public_native import tokenizer_vocab_encode, tokenizer_vocab_decode, tokenizer_vocab_fingerprint
+from bindings.mode_metadata_native import _fields as _native_record_fields
+
+
 def _native_function(module: PythonObject, name: String) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var entry = py_call(g[].bi.getattr, module, name)
@@ -82,7 +86,8 @@ def causal_lm_admit_binding(
             raise Error("CausalLM: native packed arithmetic differs in vendor or numeric mode")
     py_setattr(model, "_native_vendor", PythonObject(vendor))
     py_setattr(model, "_native_numeric_mode", PythonObject(mode))
-    py_setitem(entries, "weight_names", py_call(g[].bi.object.__getattribute__, model._blocks[0], "_W_NAMES"))
+    var local_blocks = py_get(_native_record_fields(model), "_native_block_fields")
+    py_setitem(entries, "weight_names", local_blocks[0]["_neural_weight_names"] if local_blocks is not None else py_call(g[].bi.object.__getattribute__, model._blocks[0], "_W_NAMES"))
     for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:  # small-loop(primitive entry names)
         py_setitem(entries, name, _native_function(primitives, name))
     if kind == "transformer":
@@ -168,7 +173,7 @@ def _block(model: PythonObject, index: Int) raises -> PythonObject:
     # Access the object's plain dictionary with CPython's base implementation,
     # bypassing that overridden getter; every field below is stored metadata.
     # Standalone blocks provide one operation-local admission snapshot.
-    var local = py_get(py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.object.__getattribute__, model, "__dict__"), "_native_block_fields")
+    var local = py_get(_native_record_fields(model), "_native_block_fields")
     if local is not None:
         return local[index]
     var parallel = py_get(model._native_entries, "parallel_call")
@@ -1331,7 +1336,7 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
     var n = Int(py=ids.shape[1])
     var raw = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
     var values = py_ints(causal_lm_drop_eos(raw, n, s.eos))
-    _ = py_call(s.pending_bytes.extend, py_call(_native_function(s.tokenizer._m, "vocab_decode_public"), s.tokenizer, values, PythonObject(True), PythonObject("replace")))
+    _ = py_call(s.pending_bytes.extend, tokenizer_vocab_decode(s.tokenizer, values, PythonObject(True), PythonObject("replace")))
     var size = len(s.pending_bytes)
     # The CPython array constructor copies the pending bytes to native storage.
     var pending = py_call(g[].arrays, "B", s.pending_bytes)
@@ -1404,8 +1409,7 @@ def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum
 
 
 def causal_lm_text_stream_binding(model: PythonObject, tokenizer: PythonObject, text: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
-    var encode = _native_function(tokenizer._m, "vocab_encode_public")
-    var ids = py_call(encode, tokenizer, text, PythonObject(True), PythonObject(False), PythonObject(False))
+    var ids = tokenizer_vocab_encode(tokenizer, text, PythonObject(True), PythonObject(False), PythonObject(False))
     var prompt = generation_array([1, len(ids)], "i")
     var ptr = i32_ptr(Int(py=prompt._addr))
     _ = prompt  # keep the Python object alive through the native call above
@@ -1549,7 +1553,7 @@ def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
     py_setitem(result, "text", PythonObject(s[].tokenizer is not None))
     py_setitem(result, "tokenizer", PythonObject(None))
     if s[].tokenizer is not None:
-        py_setitem(result, "tokenizer", py_call(_native_function(s[].tokenizer._m, "vocab_fingerprint"), s[].tokenizer))
+        py_setitem(result, "tokenizer", tokenizer_vocab_fingerprint(s[].tokenizer))
     py_setitem(result, "pending_bytes", py_call(g[].bi.bytes, s[].pending_bytes))
     var options = g[].bi.list()
     _ = py_call(options.append, s[].greedy)
@@ -1598,7 +1602,7 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
     if Bool(py=checkpoint["text"]) and tokenizer is None:
         raise Error("generation: a text checkpoint requires its tokenizer")
     if Bool(py=checkpoint["text"]):
-        var fingerprint = py_call(_native_function(tokenizer._m, "vocab_fingerprint"), tokenizer)
+        var fingerprint = tokenizer_vocab_fingerprint(tokenizer)
         if not Bool(py=checkpoint["tokenizer"] == fingerprint):
             raise Error("generation: checkpoint tokenizer differs")
     var stream = causal_lm_stream_binding(model, checkpoint["prompt"], checkpoint["maximum"], checkpoint["options"])

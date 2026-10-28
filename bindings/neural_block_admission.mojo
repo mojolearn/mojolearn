@@ -296,22 +296,34 @@ def neural_block_snapshot(block: PythonObject, context: PythonObject) raises -> 
     return snapshot
 
 
-def neural_model_weights(values: PythonObject, context: PythonObject) raises:
+def neural_model_weights(values: PythonObject, context: PythonObject) raises -> PythonObject:
     neural_string_keys(values)
     var b = native_loaded_module("builtins")
     var keys = py_call(b.list, values.keys())
+    var result = Python.dict()
     for i in range(len(keys)):  # driver-loop: named constructor weights, before any unpacking/conversion
         var value = values[keys[i]]
-        if py_type(value) is context["array_class"]:
-            _ = neural_array_snapshot(value, context)
-        elif py_type(value) is context["bf16_class"] or py_type(value) is context["int8_class"]:
+        if py_type(value) is context["bf16_class"] or py_type(value) is context["int8_class"]:
             var fields = neural_record_fields(value, Python.tuple("shape", "bits", "codes", "exponents"))
             neural_plain_value(fields["shape"], 0, context)
-            for name in ["bits", "codes", "exponents"]:  # driver-loop: native admission metadata and retained owner registry
+            var captured = py_call(b.object.__new__, py_type(value))
+            var saved = _fields(captured)
+            py_setitem(saved, "shape", neural_metadata_snapshot(fields["shape"]))
+            for name in ["bits", "codes", "exponents"]:  # small-loop(packed weight storage fields)
                 if py_contains(fields, name):
-                    neural_admit_weights(Python.list(fields[name]), context)
+                    var storage = fields[name]
+                    if py_type(storage) is context["array_class"]:
+                        storage = neural_array_snapshot(storage, context)
+                    else:
+                        admit_native_buffer_exporter(storage)
+                        # A retained native memoryview captures foreign metadata
+                        # once for the existing packed-weight unpack operation.
+                        storage = py_call(b.memoryview, storage)
+                    py_setitem(saved, name, storage)
+            py_setitem(result, keys[i], captured)
         else:
-            admit_native_buffer_exporter(value)
+            py_setitem(result, keys[i], neural_block_f32(value, String(keys[i]), context))
+    return result
 
 
 def neural_block_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:

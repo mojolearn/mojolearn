@@ -85,7 +85,10 @@ from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
 from bindings.transformer_public_native import transformer_public_c, TransformerPublicTapeOwner
-from bindings.tokenizer_public_native import tokenizer_public_c
+from bindings.tokenizer_public_native import (
+    tokenizer_public_c, tokenizer_vocab_encode, tokenizer_vocab_decode,
+    tokenizer_vocab_pretokenize, tokenizer_vocab_fingerprint,
+)
 from providers.python.transformer_decode_pyapi import transformer_decode_native_c, TransformerDecodeHandle
 from bindings.mamba_public_native import mamba_native_c, MambaDecodeHandle
 from bindings.samba_config_native import samba_config_c
@@ -844,50 +847,11 @@ def vocab_encode_public_binding(
     tokenizer: PythonObject, input_text: PythonObject, add_special: PythonObject,
     allow_special: PythonObject, bytes_only: PythonObject,
 ) raises -> PythonObject:
-    var text = input_text
-    var bi = Python.import_module("builtins")
-    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
-    if not owner[].tok:
-        raise Error("tokenizer: vocabulary is not loaded")
-    var is_text = Bool(py=py_call(bi.isinstance, text, bi.str))
-    if is_text and Bool(py=bytes_only):
-        raise Error("tokenizer: encode_bytes takes bytes; use encode for str")
-    if is_text:
-        if tokenizer.normalizer is not None and String(tokenizer.normalizer) == "NFC":
-            # CPython's Unicode normalization is a compiled native extension.
-            # Keep its existing Unicode version and semantics; no Python
-            # tokenizer method or normalization loop is invoked.
-            var normalize = Python.import_module("unicodedata").normalize
-            if py_type(normalize) is not py_type(bi.len):
-                raise Error("tokenizer: NFC normalization requires the native Unicode entry")
-            text = py_call(normalize, "NFC", text)
-        text = py_call(text.encode, "utf-8")
-    else:
-        text = py_call(bi.memoryview, text).tobytes()
-    var bytes = _py_bytes_list(text)
-    var ids = vocab_encode_ids(owner[].tok.value(), bytes, Bool(py=allow_special))
-    var out = bi.list()
-    if Bool(py=add_special):
-        _ = py_call(out.extend, tokenizer.bos_ids)
-    _ = py_call(out.extend, _py_int_list(ids))
-    if Bool(py=add_special):
-        _ = py_call(out.extend, tokenizer.eos_ids)
-    return out
+    return tokenizer_vocab_encode(tokenizer, input_text, add_special, allow_special, bytes_only)
 
 
 def vocab_decode_public_binding(tokenizer: PythonObject, seq: PythonObject, bytes_only: PythonObject, errors: PythonObject) raises -> PythonObject:
-    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
-    if not owner[].tok:
-        raise Error("tokenizer: vocabulary is not loaded")
-    var bi = Python.import_module("builtins")
-    if Bool(py=py_call(bi.isinstance, seq, bi.str)) or Bool(py=py_call(bi.isinstance, seq, bi.bytes)) or Bool(py=py_call(bi.isinstance, seq, bi.bytearray)):
-        raise Error("tokenizer: ids must be an integer sequence")
-    var ids = _ids_from_seq(seq)
-    var out = vocab_decode_ids(owner[].tok.value(), ids)
-    var raw = _py_bytes(out)
-    if Bool(py=bytes_only):
-        return py_call(bi.bytes, raw)
-    return py_call(raw.decode, "utf-8", errors)
+    return tokenizer_vocab_decode(tokenizer, seq, bytes_only, errors)
 
 
 def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
@@ -896,25 +860,7 @@ def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
 
 
 def vocab_fingerprint_binding(tokenizer: PythonObject) raises -> PythonObject:
-    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
-    if not owner[].tok:
-        raise Error("tokenizer: vocabulary is not loaded")
-    ref tok = owner[].tok.value()
-    var bi = Python.import_module("builtins")
-    var tail = List[UInt8]()
-    # Pre-tokenization uses our compiled Unicode table, independent of the host
-    # Python. Hashing unicodedata.unidata_version here made identical tokens
-    # and generation checkpoints disagree across Python 3.11/3.12/3.13.
-    # NFC additionally uses the host's native normalizer, so retain its version
-    # only when that operation is enabled. See test_tokenizer_fingerprint.py.
-    var unicode_version = PythonObject(UNICODE_VERSION_PINNED)
-    if tokenizer.normalizer is not None:
-        unicode_version = PythonObject(String(UNICODE_VERSION_PINNED) + "/normalizer:" + String(tokenizer.unicode_version))
-    var settings = [tokenizer.pattern, tokenizer.normalizer, unicode_version, tokenizer.bos_ids, tokenizer.eos_ids]
-    for i in range(5):  # small-loop(the five settings words of the fingerprint)
-        tokenizer_append_bytes(tail, _py_bytes_list(py_call(py_call(bi.str, settings[i]).encode, "utf-8")))
-        tokenizer_append_bytes(tail, _py_bytes_list(py_call(PythonObject("\n").encode, "ascii")))
-    return PythonObject(vocab_fingerprint_hex(tok, tail))
+    return tokenizer_vocab_fingerprint(tokenizer)
 
 
 def _vocab_pattern(pattern: PythonObject) raises -> Int:
@@ -1241,19 +1187,7 @@ def vocab_pretokenize_pattern_binding(data: PythonObject, pattern: PythonObject)
 
 
 def vocab_pretokenize_public_binding(tokenizer: PythonObject, data: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
-    var raw = py_call(data.encode, "utf-8") if Bool(py=py_call(bi.isinstance, data, bi.str)) else py_call(bi.memoryview, data).tobytes()
-    var bytes = _py_bytes_list(raw)
-    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
-    if not owner[].tok:
-        raise Error("tokenizer: vocabulary is not loaded")
-    var offsets = owner[].tok.value().pretokenize(bytes)
-    # The pieces raw[offsets[i]:offsets[i + 1]], cut by CPython's own map
-    # and slice (no Python-level loop over the pieces).
-    var offs = _py_int_list(offsets)
-    var starts = offs[py_call(bi.slice, 0, -1)]
-    var stops = offs[py_call(bi.slice, 1, PythonObject(None))]
-    return py_call(bi.list, py_call(bi.map, py_call(bi.getattr, raw, PythonObject("__getitem__")), py_call(bi.map, bi.slice, starts, stops)))
+    return tokenizer_vocab_pretokenize(tokenizer, data)
 
 
 def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

@@ -9,7 +9,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from bindings.neural_block_admission import (
     neural_block_fields, neural_block_f32, neural_record_fields, neural_string_keys,
     neural_plain_value, neural_array_snapshot, neural_array_slots, neural_admit_weights,
-    neural_native_scalar, neural_model_weights, neural_block_snapshot, neural_block_weight_names,
+    neural_native_scalar, neural_model_weights, neural_block_snapshot, neural_block_weight_names, neural_metadata_snapshot,
 )
 from bindings.mode_metadata_native import _fields
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
@@ -64,8 +64,9 @@ def neural_block_owner(block: PythonObject, context: PythonObject) raises -> Pyt
 def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     _ = generation_initialize_binding(context["generation_classes"])
-    neural_model_weights(weights, context)
+    var admitted_weights = neural_model_weights(weights, context)
     neural_plain_value(options, 0, context)
+    var captured_options = neural_metadata_snapshot(options)
     if py_type(kind_value) is not bi.str:
         raise Error("TypeError: neural block kind requires an exact string")
     var fields = neural_block_fields(block, context, False)
@@ -80,25 +81,25 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
     var plan = py_call(bi.object.__new__, context["config_context"]["plan_class"])
     py_setattr(plan, "kind", kind_value)
     var norm_name = "input_layernorm.weight" if kind == "transformer" else ("norm.weight" if kind == "mamba1" else "block_norm.weight")
-    var norm = neural_block_f32(weights[norm_name], norm_name, context)
+    var norm = _model_f32(admitted_weights[norm_name], norm_name, context)
     if len(norm.shape) != 1 or Int(py=norm.shape[0]) < 1:
         raise Error("neural block: norm weight requires positive d_model")
     py_setattr(plan, "d_model", norm.shape[0])
-    var mode = options[1]
+    var mode = captured_options[1]
     py_setitem(fields, "numeric_mode", mode)
     py_setattr(plan, "block_options", bi.dict())
     py_setattr(plan, "block_kwargs", bi.dict())
     var profile = PythonObject("fp32_v1")
     if kind == "transformer":
-        profile = _model_profile(options[2], "transformer_block", context)
-        py_setattr(plan, "n_heads", options[3])
+        profile = _model_profile(captured_options[2], "transformer_block", context)
+        py_setattr(plan, "n_heads", captured_options[3])
         var names = context["block_option_names"]
         for i in range(len(names)):  # driver-loop: over transformer option keyword metadata
-            py_setitem(plan.block_options, names[i], options[i + 4])
+            py_setitem(plan.block_options, names[i], captured_options[i + 4])
     elif kind == "mamba2":
-        py_setitem(plan.block_kwargs, "dt_limit", options[2])
+        py_setitem(plan.block_kwargs, "dt_limit", captured_options[2])
     var bindings = _model_bindings(route, kind, context, mode)
-    var created = _model_block(weights, plan, profile, route, bindings, context)
+    var created = _model_block(admitted_weights, plan, profile, route, bindings, context)
     _ = py_call(fields.update, neural_block_fields(created, context))
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "_native_kind", kind_value)
