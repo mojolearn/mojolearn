@@ -1,0 +1,46 @@
+# set	tag	kind(lib|exe)	entry	defines
+cpu	transformer_host-attn_v2	lib	bindings/entry/entry__mojolearn_transformer_host.mojo	-D MOJOLEARN_IDN_ATTN_FOLD_V2=1
+cpu	byte_lm_host-attn_v2	lib	bindings/entry/entry__mojolearn_byte_lm_host.mojo	-D MOJOLEARN_IDN_ATTN_FOLD_V2=1
+cpu	byte_lm_host-fill_tiles	lib	bindings/entry/entry__mojolearn_byte_lm_host.mojo	-D MOJOLEARN_IDN_GEMM_FILL_TILES=1
+cpu	causal_public-off	lib	experiments/lm_resident_generate_20261028/compile_causal_public.mojo	
+cpu	causal_public-resident	lib	experiments/lm_resident_generate_20261028/compile_causal_public.mojo	-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1
+cpu	resident_session-off	lib	experiments/lm_resident_generate_20261028/compile_resident_session.mojo	
+cpu	resident_session-resident	lib	experiments/lm_resident_generate_20261028/compile_resident_session.mojo	-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1
+cpu	linalg_host-int_slices	lib	bindings/entry/entry__mojolearn_linalg_host.mojo	-D MOJOLEARN_IDN_GEMM_INT_SLICES=1
+cpu	int_slices_check-off	exe	gemm/checks/gemm_int_slices_check.mojo	
+cpu	int_slices_check-on	exe	gemm/checks/gemm_int_slices_check.mojo	-D MOJOLEARN_IDN_GEMM_INT_SLICES=1
+cpu	x_sequence_host-seq_tiled	lib	bindings/entry/entry__mojolearn_x_sequence_host.mojo	-D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1
+cpu	mamba_host-bwd_folds	lib	bindings/entry/entry__mojolearn_mamba_host.mojo	-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1
+cpu	training_host-bwd_folds	lib	bindings/entry/entry__mojolearn_training_host.mojo	-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1
+sm_89	transformer-off	lib	bindings/entry/entry__mojolearn_transformer.mojo	
+sm_89	transformer-attn_v2	lib	bindings/entry/entry__mojolearn_transformer.mojo	-D MOJOLEARN_IDN_ATTN_FOLD_V2=1
+sm_89	transformer-resident	lib	bindings/entry/entry__mojolearn_transformer.mojo	-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1
+sm_89	byte_lm-off	lib	bindings/entry/entry__mojolearn_byte_lm.mojo	
+sm_89	byte_lm-attn_v2	lib	bindings/entry/entry__mojolearn_byte_lm.mojo	-D MOJOLEARN_IDN_ATTN_FOLD_V2=1
+sm_89	byte_lm-fill_tiles	lib	bindings/entry/entry__mojolearn_byte_lm.mojo	-D MOJOLEARN_IDN_GEMM_FILL_TILES=1
+sm_89	linalg-off	lib	bindings/entry/entry__mojolearn_linalg.mojo	
+sm_89	linalg-int_slices	lib	bindings/entry/entry__mojolearn_linalg.mojo	-D MOJOLEARN_IDN_GEMM_INT_SLICES=1
+sm_89	int_slices_check-off	exe	gemm/checks/gemm_int_slices_check.mojo	
+sm_89	int_slices_check-on	exe	gemm/checks/gemm_int_slices_check.mojo	-D MOJOLEARN_IDN_GEMM_INT_SLICES=1
+sm_89	x_sequence-off	lib	bindings/entry/entry__mojolearn_x_sequence.mojo	
+sm_89	x_sequence-seq_tiled	lib	bindings/entry/entry__mojolearn_x_sequence.mojo	-D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1
+sm_89	mamba-off	lib	bindings/entry/entry__mojolearn_mamba.mojo	
+sm_89	mamba-bwd_folds	lib	bindings/entry/entry__mojolearn_mamba.mojo	-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1
+sm_89	training-off	lib	bindings/entry/entry__mojolearn_training.mojo	
+sm_89	training-bwd_folds	lib	bindings/entry/entry__mojolearn_training.mojo	-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1
+gfx942	transformer-off	lib	bindings/entry/entry__mojolearn_transformer.mojo	
+gfx942	transformer-attn_v2	lib	bindings/entry/entry__mojolearn_transformer.mojo	-D MOJOLEARN_IDN_ATTN_FOLD_V2=1
+gfx942	transformer-resident	lib	bindings/entry/entry__mojolearn_transformer.mojo	-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE=1
+gfx942	byte_lm-off	lib	bindings/entry/entry__mojolearn_byte_lm.mojo	
+gfx942	byte_lm-attn_v2	lib	bindings/entry/entry__mojolearn_byte_lm.mojo	-D MOJOLEARN_IDN_ATTN_FOLD_V2=1
+gfx942	byte_lm-fill_tiles	lib	bindings/entry/entry__mojolearn_byte_lm.mojo	-D MOJOLEARN_IDN_GEMM_FILL_TILES=1
+gfx942	linalg-off	lib	bindings/entry/entry__mojolearn_linalg.mojo	
+gfx942	linalg-int_slices	lib	bindings/entry/entry__mojolearn_linalg.mojo	-D MOJOLEARN_IDN_GEMM_INT_SLICES=1
+gfx942	int_slices_check-off	exe	gemm/checks/gemm_int_slices_check.mojo	
+gfx942	int_slices_check-on	exe	gemm/checks/gemm_int_slices_check.mojo	-D MOJOLEARN_IDN_GEMM_INT_SLICES=1
+gfx942	x_sequence-off	lib	bindings/entry/entry__mojolearn_x_sequence.mojo	
+gfx942	x_sequence-seq_tiled	lib	bindings/entry/entry__mojolearn_x_sequence.mojo	-D MOJOLEARN_IDN_SEQ_TILED_PREDICT=1
+gfx942	mamba-off	lib	bindings/entry/entry__mojolearn_mamba.mojo	
+gfx942	mamba-bwd_folds	lib	bindings/entry/entry__mojolearn_mamba.mojo	-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1
+gfx942	training-off	lib	bindings/entry/entry__mojolearn_training.mojo	
+gfx942	training-bwd_folds	lib	bindings/entry/entry__mojolearn_training.mojo	-D MOJOLEARN_IDN_MAMBA_BWD_FOLDS=1
