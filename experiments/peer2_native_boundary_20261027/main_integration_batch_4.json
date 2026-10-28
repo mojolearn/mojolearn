@@ -1,0 +1,44 @@
+{
+  "source_freeze": "5bfbe8118e62ffd5ad94415b4f2598bf1d4fead3",
+  "selected_commits": [
+    "40174ac9d5",
+    "a14522b540",
+    "2ffccbfe5b",
+    "9fc178f292",
+    "8d9e7fe2cd",
+    "0a229a9157",
+    "45a1b18403",
+    "c838739e31",
+    "995015eeb5",
+    "50d2b9899c",
+    "07dfedbe37",
+    "4b2c9caf66",
+    "6befb2cbe8",
+    "efa53cc686",
+    "707f79d6f4",
+    "31658c716b",
+    "b955a484d0",
+    "2699664908",
+    "2b7694482f",
+    "ba7a967df5",
+    "6b12393283",
+    "1380f6f1fc",
+    "5bfbe8118e"
+  ],
+  "excluded_uncompiled_scaler_commits": [
+    "c5e82e1e5d",
+    "71e740865e",
+    "01bdf4991f"
+  ],
+  "selected_product_paths_compared": 25,
+  "selected_product_paths_differing_from_compiled_freeze": [],
+  "compile_passes": [
+    "pls",
+    "manifold",
+    "umap_init",
+    "jl_rp"
+  ],
+  "runtime_executed": false,
+  "verification": "deferred per owner",
+  "integration_head_before_receipt": "5b1771bbaef8c78314db3be8a470f091e534e3a6"
+}

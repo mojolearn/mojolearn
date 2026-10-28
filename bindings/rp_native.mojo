@@ -44,7 +44,7 @@ def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: Pyt
     var kc: Int
     if auto:
         var eps = fields["eps"]
-        var bound = jl_min_dim(PythonObject(n), eps)
+        var bound = jl_min_dim(PythonObject(n), eps, context)
         if decomp_le(bound, PythonObject(0)):
             raise Error("eps=" + _str(eps) + " and n_samples=" + String(n) + " lead to a target dimension of "
                         + _str(bound) + " which is invalid")

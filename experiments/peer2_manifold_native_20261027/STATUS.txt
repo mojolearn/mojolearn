@@ -1,0 +1,161 @@
+Peer 2 manifold native boundary work — 2026-10-27
+
+Base: local main 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Worktree: /Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027
+Branch: lane/peer2-manifold-20261027
+
+Routing source change
+- Isomap/ClassicalMDS/MDS/LLE resolve both binding slots in the native owner.
+  Fit/fit_transform use numeric_mode; transform/reconstruction_error use the
+  fitted numeric_mode_; helper kit selection uses the current process default.
+- TSNE resolves x_ann and estimator bindings after its native public entry.
+- Import-time connection retains native provider modules. MKit rejects proxy
+  bindings and selects compiled cells from exact module dictionaries.
+- Fitted-state checks no longer call hasattr(model, name).
+- Explicit module arguments remain supported by legacy native forwarding.
+
+Integration dependencies (coordinate, never edit other owners' files)
+- Shared estimator_binding_pyapi must export:
+  estimator_binding_mode(requested: PythonObject, name: String,
+                         context: PythonObject, check_mode: Bool = True)
+  with existing provider selection semantics. Root owns this extraction.
+- Decomposition lane commit a1b998d91563183f4887bcd75a459d7991dace3b
+  changes the 11 decomp manifold shells to (None, None, X[, init]) and removes
+  _manifold_binding. It must accompany this source change.
+- Peer 1 changes TSNE fit/fit_transform to (None, None, X). Pending peer commit.
+
+Validation
+- tools/test_peer2_manifold_routes.py: 4 source-only tests pass, exit 0.
+- Full source-test log:
+  ~/mojolearn-evidence/peer2-manifold-20261027/routes-source-tests.log
+- Native compilation NOT RUN by this lane. Smallest root compile target:
+  bindings/entry/entry__mojolearn_runtime_manifold_host.mojo,
+  through bindings/build_runtime_manifold_host.sh (development split host).
+- Installed public runtime and Apple/NVIDIA/AMD identity remain PENDING.
+- No benchmarks, GPU campaigns, production build, publication or main merge.
+
+Remaining transitive work (this routing chunk is NOT runtime compliance)
+- py_fields and raw family attribute reads still depend on root's shared model,
+  descriptor, exact dictionary/key and overwrite-lifetime admission repair.
+- UMAP constructor remains Python assignments plus _parameters; root was asked
+  for shared constructor/lifecycle validation-hook support.
+- UMAP categorical target preparation still uses tolist/list and set/sorted;
+  scalar settings and configuration comparisons still reach Python protocols.
+- MKit owns Python _M/_DevBuf objects; _DevBuf.__del__ remains Python cleanup.
+  Dedicated typed owner/state lifetime replacement is still required.
+- Several MKit/UMAP/TSNE paths recapture metadata or read mutable ndarray/Array
+  attributes after preparation. Shared snapshot provenance/copy reporting and
+  retained original owners were requested from root.
+- SpectralEmbedding constructor is replaced at import by the shared full-reset
+  owner; spectral operations reach shared cluster/spectral native owners, which
+  are reserved to root and have not been runtime-qualified here.
+
+Input snapshot source increment
+- MKit dense/sparse admission now captures family_f32_snapshot once; copying
+  and finiteness checks use native rows/columns/address while retaining the
+  caller and captured storage owner through the copy.
+- TSNE captures X once and passes the same address to PCA initialization and
+  its optimizer, preserving the original finite-input error.
+- Six manifold source tests now pass. Log: snapshot-source-tests.log.
+- Shared snapshot original-owner retention and copied provenance remain root
+  dependencies; UMAP and TSNE user-supplied initialization still need review.
+- Initial push was refused by no_compute_in_shells for an incorrectly formatted
+  fixed-loop annotation. The annotation-only follow-up fixes it; retry passed.
+  Both routes-push.log and routes-push-retry.log retain the evidence.
+
+UMAP constructor/reset source increment
+- UMAP joins the existing native full-reset constructor and setter connection.
+  Public signatures/default object identities stay with the import-time plan.
+- A dedicated umap_parameters_native module implements integer/scalar bounds,
+  float32 rounding, metric/extras validation and objective refusals. Constructor
+  fields are written in their original order; validation precedes numeric_mode
+  injection. Failed set_params validation leaves original fitted state intact.
+- Native scalar, static Unicode and zero-dimensional numeric ndarray settings
+  are admitted before conversion; Python scalar/dict protocol objects are
+  refused without invoking their hooks. ndarray scalar bytes are read through
+  a single metadata snapshot, including non-native byte order.
+- Constructor validation hooks are pinned in the lifecycle schema; instance
+  _parameters/_extras redirections are refused. Fit/transform share the same
+  validator and no longer recompute extras twice.
+- Shared files explicitly owned for this increment after root coordination:
+  bindings/full_reset_constructor_native.mojo
+  bindings/full_reset_params_native.mojo
+  python/mojolearn/_native_full_reset_params.py
+  tools/native_full_reset_constructor_schemas.json
+  tools/test_native_full_reset_params_connection.py
+- Small compile targets now include BOTH tokenizer host (constructor/reset)
+  and runtime_manifold host (fit/transform validation). No lane compile run.
+
+Validation and retained failures for constructor increment
+- Initial full source suite: exit 1, 24 failed / 87 passed. Two new fixture
+  expectations (hook list/count) were corrected. The other 22 failures are
+  existing retained-source-proof debt: 21 non-UMAP row hashes/line references
+  and one recurrent ancestry declaration. Do not overwrite those proofs without
+  review. Source byte comparison confirms their paths unchanged from this
+  lane's base (constructor-baseline-proof-audit.log).
+- Subsequent connection/routing selection: exit 0, 33 passed, 79 deselected;
+  umap-constructor-connection-tests.log. The deselected stale proof cases are
+  explicit pending coverage, not passes.
+- Focused UMAP proof/connection tests: exit 0, 5 passed, 99 deselected;
+  umap-constructor-focused-source.log. Python syntax and diff checks pass.
+- New public runtime cases: python/mojolearn/tests/test_umap_native_constructor.py.
+  Syntax checked only; all runtime cases are UNRUN until integrated compilation.
+- Original failure log: umap-constructor-source-tests-1.log. Every log above is
+  under ~/mojolearn-evidence/peer2-manifold-20261027/.
+
+Still pending beyond constructor/reset: inherited fit/output decorators,
+whole-operation fitted/feature-name checks and public result completion;
+UMAP categorical labels; MKit _M/_DevBuf state and Python destructor cleanup;
+remaining mutable fitted-state/scalar reads in manifold numerical orchestration.
+The constructor source repair does not qualify those operations or any vendor.
+
+Constructor error-category review repair
+- Exact ndarray rank/dtype failures now translate to the constructor's original
+  integer/finite-float ValueError messages, before reading object elements or
+  invoking conversion hooks. Added wrong-rank, complex/object dtype, NaN/inf and
+  object-element protocol negative controls to the public runtime fixture.
+- Public runtime cases remain UNRUN. Focused source test/syntax evidence:
+  umap-constructor-array-errors-source.log (exit 0, 2 passed, 102 deselected).
+
+Operation settings/admission increment
+- The manifold native dispatch now admits connected class/storage identities
+  before accessing fields, then retains one shallow dictionary snapshot for
+  settings and fitted-state reads. Writes target the original dictionary.
+- Requested, fitted and process-default mode objects are captured once. The
+  decomp, TSNE and UMAP owners receive that same snapshot through native helper
+  calls; LLE/UMAP helper kits use the captured default mode. No owner rereads
+  instance fields or process-default mode after the snapshot.
+- Numeric/metric configuration containers and object-array elements are admitted
+  before existing native scalar marshaling/comparison operations can invoke
+  user protocols. MKit fitted matrix admission/cleanup remains separate debt.
+- Depends on root's shared classical_family_admit API (346cb95a21b2), and prior
+  estimator_binding_mode/original-owner helpers (0af79a009e7e/e688891b588e).
+  Only dedicated manifold files changed. Compile target: runtime_manifold host.
+- settings-source-tests.log: exit 0, 10 passed (routing, snapshot contracts and
+  connection fixtures). Source checks do not qualify public runtime behavior.
+
+Settings snapshot review follow-up
+- A shallow field dictionary retains mutable setting containers; it does not
+  make their contents immutable. The next increment owns copies of settings
+  lists/dicts, native ndarray scalar bytes, and admitted object references.
+  Scalar-array dtype/rank conversion semantics remain intact in private storage.
+  No caller copy/conversion protocol runs. Initialization arrays remain input
+  buffers pending dedicated typed capture before the algorithm executes.
+- settings-frozen-source-tests.log: exit 0, 10 passed. Compile and public
+  mutation/race controls remain pending; this does not freeze fitted buffers.
+
+Native matrix/device lifetime increment
+- MKit now owns typed ManifoldMatrix/ManifoldDevice values instead of Python
+  _M/_DevBuf slots. Matrix views share their native host/device owner; device
+  cleanup calls the retained compiled free cell and keeps its original module.
+- Native cleanup preserves pending CPython exceptions and silently handles
+  pool shutdown like the previous Python destructor. It does not resolve a
+  Python destructor, module attribute, or unraisable callback during cleanup.
+- Reviewed free-cell closure: providers/python/x_decomp_resident_pyapi.mojo
+  dev_free_py -> x_decomp/resident.mojo pool_free (native pool bookkeeping).
+- Private types are registered by _mojolearn_runtime_manifold_host; native
+  scratch caches use separate context keys from legacy Python _Kit caches.
+  Old private _M fitted internals require refitting; public embeddings/shapes
+  and training/query algorithms retain their existing buffers and operations.
+- No new verification run per latest owner steering. Focused compile target:
+  runtime_manifold host. Source compile and all runtime/vendor coverage pending.

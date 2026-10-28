@@ -8,12 +8,17 @@
 # argument lists it always took and stores the fitted attributes. The same
 # entries on the same operands: the bits do not move.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.classical_arrays import classical_address, classical_word
 from bindings.classical_attributes import classical_connect_numpy
+from providers.python.estimator_binding_pyapi import estimator_binding_mode
+from bindings.manifold_settings_native import ManifoldSettings
+from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
+from core.family_cast_impl import family_all_finite_f32
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call,
-    family_entry, family_array, family_f32, family_field, family_view, family_cast_view, family_shape_repr,
+    family_array, family_f32_snapshot, family_field, family_view, family_cast_view, family_shape_repr,
+    FAMILY_F32P,
 )
 
 comptime _TSNE_EXPLORATION_MAX_ITER = 250
@@ -26,7 +31,7 @@ def _tsne_int(name: String, value: PythonObject) raises -> PythonObject:
     return family_call(Python.import_module("builtins").int, value)
 
 
-def _tsne_pca_start(estimators: PythonObject, x: PythonObject, n: Int, d: Int, k: Int,
+def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k: Int,
                     context: PythonObject) raises -> PythonObject:
     """`PCA(n_components=k).fit_transform(x)` (svd_solver='auto', the
     covariance arm, no whitening) as the float32 start: `PCA._fit(x, True)`'s
@@ -34,7 +39,7 @@ def _tsne_pca_start(estimators: PythonObject, x: PythonObject, n: Int, d: Int, k
     if k < 1 or k > d:
         raise Error("mojolearn n_components must be in [1, " + String(d) + "], got " + String(k))
     var b = Python.import_module("builtins")
-    var fit_owned = py_call(b.getattr, estimators, PythonObject("pca_fit_owned"), PythonObject(None))
+    var fit_owned = spectral_umap_optional_entry(estimators, "pca_fit_owned", context)
     if fit_owned is None:
         raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not "
                     + "export pca_fit_owned; rebuild it with bindings/build_estimators.sh")
@@ -48,7 +53,7 @@ def _tsne_pca_start(estimators: PythonObject, x: PythonObject, n: Int, d: Int, k
     # singular, out; n, d, nc, dense 0, keep_mode 0, whiten 0, frac 0.0.
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(0),
                              PythonObject(0), PythonObject(0), PythonObject(Float64(0.0)))
-    _ = family_call(fit_owned, classical_address(x), classical_address(components), classical_address(mean),
+    _ = family_call(fit_owned, PythonObject(x_address), classical_address(components), classical_address(mean),
                     classical_address(variance), classical_address(ratio), classical_address(singular),
                     classical_address(z), params)
     _ = mean  # keep the Python object alive through the native call above
@@ -67,19 +72,23 @@ def _tsne_pca_start(estimators: PythonObject, x: PythonObject, n: Int, d: Int, k
     return z
 
 
-def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`TSNE.fit(X)`; returns the embedding."""
     classical_connect_numpy(context)
     var b = Python.import_module("builtins")
     var op = Python.import_module("operator")
-    var binding = args[0]
-    var estimators = args[1]
-    var fields = py_fields(model)
+    var binding = estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]
+    var estimators = estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]
+    var fields = settings.values
     # Reject nonfinite coordinates before PCA initialization reaches its
     # eigensolver; preserve TSNE's public input refusal for every init mode.
-    var x = family_f32(args[2], 2, "X", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
+    var snapshot = family_f32_snapshot(args[2], 2, "X", context)
+    var x = snapshot.keep
+    var x_address = snapshot.source.addr
+    var n = snapshot.source.rows
+    var d = snapshot.source.cols
+    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=x_address), snapshot.count):
+        raise Error("Input X contains NaN or infinity")
     if n < 2:
         # scikit-learn's TSNE validates X with ensure_min_samples=2
         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
@@ -131,7 +140,7 @@ def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
             y0 = family_array(Python.tuple(2), "<f4", context)
             mode = 1
         else:
-            y0 = _tsne_pca_start(estimators, x, n, d, k, context)
+            y0 = _tsne_pca_start(estimators, x_address, n, d, k, context)
             mode = 2
         var s64 = py_call(op.and_, seed, py_call(op.sub, py_call(op.lshift, PythonObject(1), PythonObject(64)),
                                                  PythonObject(1)))
@@ -153,7 +162,7 @@ def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, perplexity,
     # early_exaggeration, learning_rate, post_exaggeration_learning_rate_factor,
     # init mode, random_state low, high, n_components
-    _ = family_call(fit, Python.list(classical_address(x), classical_address(y0), classical_address(embedding),
+    _ = family_call(fit, Python.list(PythonObject(x_address), classical_address(y0), classical_address(embedding),
                                      classical_address(kl)),
                     Python.list(PythonObject(n), PythonObject(d), max_iter, PythonObject(exploration),
                                 PythonObject(perplexity), PythonObject(exag), PythonObject(lr),
@@ -161,13 +170,14 @@ def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     _ = embedding  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = kl  # keep the Python object alive through the native call above
+    _ = snapshot
     _ = x^
     _ = y0^
-    py_setitem(fields, "embedding_", embedding)
-    py_setitem(fields, "kl_divergence_", PythonObject(classical_word(kl)))
-    py_setitem(fields, "n_iter_", max_iter)
-    py_setitem(fields, "learning_rate_", PythonObject(lr))
-    py_setitem(fields, "n_features_in_", PythonObject(d))
+    py_setitem(settings.fields, "embedding_", embedding)
+    py_setitem(settings.fields, "kl_divergence_", PythonObject(classical_word(kl)))
+    py_setitem(settings.fields, "n_iter_", max_iter)
+    py_setitem(settings.fields, "learning_rate_", PythonObject(lr))
+    py_setitem(settings.fields, "n_features_in_", PythonObject(d))
     return embedding
 
 
@@ -176,12 +186,12 @@ def _tsne_is_bool(value: PythonObject) raises -> Bool:
                            Python.import_module("builtins").bool))
 
 
-def tsne_operation(model: PythonObject, operation: String, args: PythonObject,
+def tsne_operation(model: PythonObject, settings: ManifoldSettings, operation: String, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """TSNE: args = (x_ann binding, estimators binding, X)."""
     if operation == "family_mani_tsne_fit":
-        _ = _tsne_fit(model, args, context)
+        _ = _tsne_fit(model, settings, args, context)
         return model
     if operation == "family_mani_tsne_fit_transform":
-        return _tsne_fit(model, args, context)
+        return _tsne_fit(model, settings, args, context)
     raise Error("RuntimeError: unknown TSNE operation " + operation)

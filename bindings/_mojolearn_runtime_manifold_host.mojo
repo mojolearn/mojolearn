@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Logical host owner for manifold. Release builds merge this builder
 # with the other host builders; development builds give it an independent
-# source/cache boundary. No native exposed type is registered here.
+# source/cache boundary. Private matrix/device types own native lifetimes.
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -10,6 +10,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from bindings.runtime_manifold_entry import (
     runtime_manifold_c, RUNTIME_MANIFOLD_SABOTAGE,
 )
+from bindings.manifold_storage_native import ManifoldMatrix, ManifoldDevice
 
 
 def runtime_manifold_host_numeric_mode_binding() raises -> PythonObject:
@@ -37,6 +38,8 @@ def runtime_manifold_host_sabotage_binding() raises -> PythonObject:
 def build__mojolearn_runtime_manifold_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_manifold_host")
+        _ = module.add_type[ManifoldMatrix]("_ManifoldMatrix")
+        _ = module.add_type[ManifoldDevice]("_ManifoldDevice")
         module.def_py_c_function(runtime_manifold_c, "manifold_native_call")
         module.def_function[runtime_manifold_host_numeric_mode_binding]("runtime_manifold_host_numeric_mode")
         module.def_function[runtime_manifold_host_vendor_binding]("runtime_manifold_host_vendor")
