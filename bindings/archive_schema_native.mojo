@@ -218,11 +218,11 @@ def _schema_length(value: PythonObject, context: PythonObject) raises -> Int:
     var ancestry = _type_mro(py_type(value))
     for i in range(len(ancestry)):  # driver-loop: admit a native container base without arbitrary protocols
         if ancestry[i] is b.list:
-            return Int(py=py_call(b.list.__len__, value))
+            return Int(py=py_call(b.list.__dict__["__len__"], value))
         if ancestry[i] is b.tuple:
-            return Int(py=py_call(b.tuple.__len__, value))
+            return Int(py=py_call(b.tuple.__dict__["__len__"], value))
         if ancestry[i] is b.dict:
-            return Int(py=py_call(b.dict.__len__, value))
+            return Int(py=py_call(b.dict.__dict__["__len__"], value))
     if py_type(value) is b.str or py_type(value) is b.bytes or py_type(value) is b.bytearray or py_type(value) is b.memoryview or py_type(value) is context["array_type"]:
         return len(value)
     var shape = _schema_shape(value, context)
