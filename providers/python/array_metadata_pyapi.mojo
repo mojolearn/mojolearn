@@ -19,6 +19,8 @@ struct ArrayMetadata(Copyable, Movable):
     var native_byte_order: Bool
     var c_order: Bool
     var is_array: Bool
+    # Immutable original exporter/storage snapshot. `keep` owns the current
+    # buffer after a conversion; both must survive until this snapshot dies.
     var owner: PythonObject
     var copied: Bool
     var owned_writable: Bool
@@ -51,7 +53,8 @@ struct ArrayMetadata(Copyable, Movable):
         # A new packed buffer's metadata is known from the allocation. Never
         # fetch it back from Python to rediscover the shape/dtype we supplied.
         self.keep = keep
-        self.owner = keep
+        # Preserve the independently captured original Array slot owners,
+        # even if its mutable slots are later changed. `keep` owns this copy.
         self.copied = True
         self.owned_writable = True
         self.source = CastIn(address, CAST_KIND_FLOAT, 4, self.source.rows, self.source.cols,
@@ -64,7 +67,7 @@ struct ArrayMetadata(Copyable, Movable):
 
     def replace_f64(mut self, keep: PythonObject, address: Int):
         self.keep = keep
-        self.owner = keep
+        # Same ownership rule as replace_f32; no metadata/owner recapture.
         self.copied = True
         self.owned_writable = True
         self.source = CastIn(address, CAST_KIND_FLOAT, 8, self.source.rows, self.source.cols,

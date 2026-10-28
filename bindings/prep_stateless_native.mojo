@@ -21,6 +21,7 @@ from bindings.scaler_native import _stage, _ptr, _input
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.py_typed_call import py_call_typed
+from bindings.prep_support_native import prep_support
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 alias I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -80,6 +81,8 @@ def _kind(model: PythonObject, context: PythonObject) raises -> String:
     # The admitted class this model is (or subclasses), by its MRO.
     var b = Python.import_module("builtins")
     var cls = py_type(model)
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: native preprocessing refuses Python metaclass hooks")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var kinds = context["prep_stateless_kinds"]
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
@@ -853,7 +856,9 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
         classical_connect_numpy(context)
         var kind = _kind(model, context)
         var result = PythonObject(None)
-        if operation == "inverse_transform" and (kind == "quantile" or kind == "power"):
+        if operation == "get_support" and (kind == "variance_threshold" or kind == "selector"):
+            result = prep_support(model, args[0], context)
+        elif operation == "inverse_transform" and (kind == "quantile" or kind == "power"):
             var fields = py_fields(model)
             if not py_contains(fields, "n_features_in_"):
                 raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")

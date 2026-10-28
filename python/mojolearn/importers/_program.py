@@ -43,7 +43,7 @@ class ImportedProgram(Program):
         for a model with one output, else a tuple in the order of
         :attr:`outputs`.
         """
-        return self._run_native(self, arrays, named)
+        return _RUN_NATIVE(self, arrays, named)
 
     def run_torch(self, *tensors):
         """Run this imported artifact with PyTorch input and output tensors.
@@ -64,7 +64,7 @@ class ImportedProgram(Program):
         --------
         >>> result = program.run_torch(torch.ones(8, 3))  # doctest: +SKIP
         """
-        return self._run_torch_native(self, tensors, None, False)
+        return _TORCH_RUN_NATIVE(self, tensors, None, False)
 
 
 def import_model(source, *, shapes=None, numeric_mode=None):
@@ -111,3 +111,7 @@ def import_model(source, *, shapes=None, numeric_mode=None):
 from . import _native_import_bridge  # noqa: E402
 _IMPORT_NATIVE, _IMPORT_CONTEXT = _native_import_bridge.connect(
     Session, Program, ImportedProgram, GraphIR, UnsupportedModel)
+
+# Import-time connections; runtime dispatch is selected from the admitted native owner.
+_RUN_NATIVE = _IMPORT_CONTEXT["run_entry"]
+_TORCH_RUN_NATIVE = _IMPORT_CONTEXT["torch_entry"]

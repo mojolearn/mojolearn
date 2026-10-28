@@ -20,7 +20,8 @@ from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UN
 from autograd.rankn import ShapeN
 from autograd.program import PROGRAM_IN_IDS, same_shape
 from autograd.program_io import ProgramInput
-from autograd.program_entries import program_execute_prepare, program_execute_run
+from autograd.program_host_request import NativeProgramHostRun
+from providers.python.autograd_host_provider_pyapi import imported_host_provider_request
 from providers.python.autograd_program_pyapi import _imported_session_dims
 from providers.python.autograd_device_provider_pyapi import imported_device_provider_run
 from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
@@ -107,7 +108,7 @@ def _torch_route(snapshot: PythonObject, inputs: PythonObject) raises -> PythonO
     return _torch_route_with_devices(snapshot, _torch_devices(inputs))
 
 
-def _torch_run_host[E: Exec & Movable & Deinitable, KIND: Int](
+def _torch_run_host(
     snapshot: PythonObject, inputs: PythonObject, outputs: PythonObject,
 ) raises:
     var fields = snapshot[0]
@@ -115,7 +116,9 @@ def _torch_run_host[E: Exec & Movable & Deinitable, KIND: Int](
     if session["_id"] is None:
         raise Error("ValueError: this session is closed")
     var sid = Int(py=session["_id"])
-    var plan = program_execute_prepare[E, KIND](sid, Int(py=fields["_id"]), sid, False, False)
+    var request = NativeProgramHostRun()
+    imported_host_provider_request(snapshot, request, 0)
+    ref plan = request.plan
     var declared = snapshot[2]
     if len(inputs) != len(declared) or len(inputs) != plan.program.n_in:
         raise Error("ValueError: Torch program input count differs from the captured graph")
@@ -140,7 +143,9 @@ def _torch_run_host[E: Exec & Movable & Deinitable, KIND: Int](
         var src = CastIn(Int(py=info[0]), kind[0], kind[1], shape.rows(), shape.cols(), shape.cols() * kind[1], kind[1])
         src.check("Torch program input")
         owners.append(ProgramInput(src, shape, List[Float64](), List[Int64]()))
-    var result = program_execute_run[E, KIND](sid, plan, owners^, False)
+    request.inputs = owners^
+    imported_host_provider_request(snapshot, request, 1)
+    ref result = request.result
     if len(result.outputs) != len(outputs):
         raise Error("ValueError: Torch program output count differs from the captured graph")
     for k in range(len(outputs)):  # driver-loop: output buffer copies
@@ -191,7 +196,7 @@ def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
     return context
 
 
-def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
+def ops_torch_program_run_py(
     program: PythonObject, args: PythonObject, var context: PythonObject, route_only: Bool = False,
 ) raises -> PythonObject:
     var b = native_loaded_module("builtins")
@@ -257,7 +262,7 @@ def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
             py_call(_torch_entry(context, "set_device"), previous)
     else:
         ready = perf_counter_ns() if profile else 0
-        _torch_run_host[E, KIND](snapshot, prepared, outputs)
+        _torch_run_host(snapshot, prepared, outputs)
         ran = perf_counter_ns() if profile else 0
         var copied = Python.list()
         for k in range(len(outputs)):  # driver-loop: native framework device transfer

@@ -22,6 +22,7 @@ class PublicAttributeConnection(unittest.TestCase):
         mode.ParamsMixin = type('ParamsMixin', (mode.PublicOutputsMixin,), {'__module__': mode.__name__})
         mode.NumericModeMixin = type('NumericModeMixin', (), {'__module__': mode.__name__})
         bridge = ModuleType(package.__name__ + '._native_classical_bridge')
+        bridge._IMPORT_LAYOUTS = []  # Import-time layout registry used by the extracted helper.
         tree = ast.parse((ROOT / 'python/mojolearn/_native_classical_bridge.py').read_text())
         node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_layout')
         exec(compile(ast.Module(body=[node], type_ignores=[]), 'layout', 'exec'), vars(bridge))

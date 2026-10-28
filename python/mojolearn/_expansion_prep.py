@@ -3010,9 +3010,7 @@ class _SelectorMixin(_PrepBase):
         list
             Boolean mask over the input columns, or the selected column indices.
         """
-        self._check_fitted()
-        mask = list(self._mask)
-        return [j for j, m in enumerate(mask) if m] if indices else mask  # glue: support index list (mask-sized: feature support mask)
+        return _STATELESS_CALL(self, "get_support", (indices,), _STATELESS_CONTEXT)
 
     def transform(self, X):
         """Keep only the selected columns of ``X``.
