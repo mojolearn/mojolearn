@@ -229,7 +229,7 @@ def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, con
 comptime _CAUSAL_MODEL_SLOT = "causal_model_capture_v1"
 
 
-def _causal_model_names() -> PythonObject:
+def _causal_model_names() raises -> PythonObject:
     return Python.tuple("plan", "config", "kind", "d_model", "vocab_size", "n_layers", "norm_eps",
         "numeric_profile", "device", "weight_format", "max_positions", "_embed", "_norm", "_head", "_blocks",
         "_native_entries", "_native_vendor", "_native_numeric_mode", "_head_int15", "_runtime",
