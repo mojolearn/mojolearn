@@ -1,0 +1,33 @@
+Peer6 VAR/STL public lifecycle — 2026-10-28
+Branch lane/peer6-timeseries-20261027; follows f160cd1283 ARIMA execution.
+
+VAR construction/fit, VARResults construction/forecast, STL construction/
+config/fit and DecomposeResult construction are one native call each. Exact
+connected classes and passive instance dictionaries are used; result classes
+are checked for ordinary storage and absence of Python finalizers before
+allocation. Constructors and result publication stage all field updates and
+admit replaced owners before mutation, retaining identical references.
+
+Native snapshots capture source buffers, metadata, scalar settings and modes
+once before execution. VAR retains its compiled OLS/forecast kernels, Cholesky
+failure class, coefficient/intercept layout and native fitted-value assembly.
+STL retains its smoother defaults, degrees/jumps, robustness iteration settings
+and one-series result rank. Config and plain decomposition construction retain
+references without invoking input protocols. Result construction also accepts
+native numeric source buffers and retains the caller's original references;
+derived VAR arrays publish the documented float32 form in this version.
+
+Compile: actual xseq public C dispatcher, CPU identical O0, -j10 configured
+available Mac logical CPUs (other peer jobs may run). Exact receipt compile.json.
+No runtime, GPU compilation, identity or performance campaign; no rented box.
+First successful compile preceded final metadata capture fixes; second attempt
+failed because a PythonObject default expression was compile-time evaluated.
+Explicit argument passing repaired that source issue. Complete attempt logs,
+source bytes, manifest and binary:
+~/mojolearn-evidence/peer6-var-stl-20261028/
+
+Pending owned scope: transitive cached-state/public fit/predict admission for
+Croston/Theta/ETS/GARCH. Their previous constructor/convenience migrations are
+separate batches; do not infer full-family completion from those wrappers.
+Parent owns Prophet and cv_review owns legacy TSA/Holt-Winters. Archive and
+inherited parameter/mode providers keep their separate coverage.
