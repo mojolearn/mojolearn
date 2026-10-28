@@ -22,6 +22,7 @@ from core.xseq_marshal import xseq_cast_nd, tsa_flags_u8
 from bindings.tsa_hw_native import hw_fit, hw_predict, hw_score
 from bindings.tsa_arima_native import arima_fit, arima_predict
 from bindings.tsa_autoarima_native import autoarima_fit, autoarima_predict
+from providers.python.autoarima_lifecycle_pyapi import autoarima_initialize, autoarima_forecast
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -160,6 +161,10 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if operation == "arima_predict":
             return arima_predict(call[0], call[2], context).steal_data()
         # AutoARIMA (bindings/tsa_autoarima_native.mojo)
+        if operation == "autoarima_initialize":
+            return autoarima_initialize(call[0], call[2], context).steal_data()
+        if operation == "autoarima_forecast":
+            return autoarima_forecast(call[0], call[2], context).steal_data()
         if operation == "autoarima_fit":
             return autoarima_fit(call[0], call[2], context).steal_data()
         if operation == "autoarima_predict":

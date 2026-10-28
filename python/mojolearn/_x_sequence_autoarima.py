@@ -184,18 +184,7 @@ class AutoARIMA(ParamsMixin):
     _TSA_BINDING = "_mojolearn_tsa"
 
     def __init__(self, endog):
-        y = np.asarray(endog)
-        if y.dtype == np.float64:
-            raise TypeError("AutoARIMA: float64 is refused; pass float32 (no float64 on the device)")
-        y = np.ascontiguousarray(y, dtype=np.float32)
-        if y.ndim == 1:
-            y = y.reshape(1, -1)
-        if y.ndim != 2 or y.size == 0:
-            raise ValueError("AutoARIMA: endog must be (batch_size, n_obs)")
-        self.endog = endog  # verbatim, as get_params / clone report it
-        self._endog = y
-        self.batch_size, self.n_obs = int(y.shape[0]), int(y.shape[1])
-        self.models = []
+        _TSA(self, "autoarima_initialize", (endog,), _TSA_CONTEXT)
 
     def search(self, s=None, d=range(3), D=range(2), p=range(1, 4), q=range(1, 4), P=range(3), Q=range(3),
                fit_intercept="auto", ic="aicc", test="kpss", seasonal_test="seas", h=1e-8, maxiter=20,
@@ -538,6 +527,7 @@ class AutoARIMA(ParamsMixin):
         -------
         ndarray of shape (batch_size, nsteps), float32
         """
-        if level is not None:
-            raise NotImplementedError("AutoARIMA.forecast: prediction intervals (level) are not implemented")
-        return self._gather(lambda m: m.forecast(int(nsteps)), int(nsteps))
+        return _TSA(self, "autoarima_forecast", (nsteps, level), _TSA_CONTEXT)
+
+
+_TSA_CONTEXT["autoarima_class"] = AutoARIMA
