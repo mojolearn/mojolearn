@@ -2,6 +2,7 @@
 # Kernel public lifecycle formerly owned by _mode's Python decorators. The
 # numerical owner retains operation-local input descriptors through completion.
 from std.python import Python, PythonObject
+from std.math import isfinite
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native import _fields
@@ -14,6 +15,10 @@ from bindings.sequential_admission import _ordinary_torch
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from bindings.classical_arrays import classical_address
+from bindings.classical_labels import labels_shape_of, _flatten_labels
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
+from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.family_common import family_f32_snapshot, family_array
 from core.family_cast_impl import family_all_finite_f32, family_cast_rows_f64
@@ -79,15 +84,40 @@ def kernel_public_column_target(source: PythonObject, value: ArrayMetadata,
 
 
 def kernel_public_ignored_target(source: PythonObject, rows: Int, context: PythonObject) raises:
+    # Nystroem/RBFSampler ignore target values; categorical labels remain valid.
+    # The former public validation still checked length, complex/nonfinite
+    # numeric values and column-vector warnings, without coercing strings.
     if source is None:
         return
-    var value = family_f32_snapshot(source, -1, "y", context)
-    if len(value.shape) > 0 and value.source.rows != rows:
+    var b = native_loaded_module("builtins")
+    if host_sparse_format(source).byte_length() > 0:
+        var shape = _sparse_fields(source)["_shape"]
+        if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int:
+            raise Error("TypeError: sparse target shape requires native dimensions")
+        if Int(py=shape[0]) != rows:
+            raise Error("ValueError: Found input variables with inconsistent numbers of samples: ["
+                        + String(rows) + ", " + String(Int(py=shape[0])) + "]")
+        return
+    classical_admit_value(source, context)
+    if py_type(source) is py_get(context, "ndarray") and String(source.dtype.kind) == "c":
+        raise Error("ValueError: Complex data not supported: kernel method got a complex y.")
+    var shape = labels_shape_of(source, context)
+    if len(shape) > 0 and shape[0] != rows:
         raise Error("ValueError: Found input variables with inconsistent numbers of samples: ["
-                    + String(rows) + ", " + String(value.source.rows) + "]")
-    _ = kernel_public_column_target(source, value, context)
-    kernel_public_finite(value, "y")
-    _ = value^
+                    + String(rows) + ", " + String(shape[0]) + "]")
+    var flat = _flatten_labels(source, context)
+    classical_admit_value(flat, context)
+    for i in range(len(flat)):  # driver-loop: admitted label storage, never Python element protocols
+        if py_type(flat[i]) is b.complex:
+            raise Error("ValueError: Complex data not supported: kernel method got a complex y.")
+        host_inference_scalar(flat[i], context)
+        if metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
+            if not isfinite(metric_float(flat[i], context)):
+                raise Error("ValueError: Input y contains NaN or infinity")
+    var cls = py_type(source)
+    var reshape = cls is py_get(context, "ndarray") or cls is context["array_class"] or _ordinary_torch(cls, context)
+    if len(shape) == 2 and shape[1] == 1 and reshape:
+        classical_warn_column(context)
 
 
 def kernel_public_result(result: PythonObject, prediction: Bool, outside: Bool,
