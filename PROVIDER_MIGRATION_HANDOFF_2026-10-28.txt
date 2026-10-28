@@ -736,3 +736,20 @@ SELF-MERGE 2026-10-28 (lane overhead-module-lookup, Claude Opus 5.5): admit nati
   ~/mojolearn-evidence/overhead-module-lookup-20261028/.
 - RUN OWED: the same-bits/same-refusals fixture tools/tests/overhead_module_lookup_fixture.py, base 30928487f1 against head, CPU column. The
   orchestrator runs it with the end-of-round fixtures. No runtime, identity or GPU verification was run.
+
+SELF-MERGE RECEIPT lane/decode-resident-20261028 (MOJOLEARN_IDN_DECODE_RESIDENT_IO and MOJOLEARN_IDN_TRAIN_ONE_WAIT, both default OFF, IDENTICAL, same bits):
+- What it does: the transformer decode session step waits once (call refusals plus the fused attention regime scan and corner flag go into a
+  deferred window read back with y; the caches are snapshotted on the device, and any unclean check replays today's step); the Mamba-2 resident
+  session step copies y and h_last straight into the caller's arrays with one wait; the resident byte-LM train step takes the token range in one wait,
+  defers the layer refusals, drops the per-layer forward waits and checks loss, gradients and state in one status launch, rolling back and replaying
+  on any unclean check. With both defines off, behavior is unchanged.
+- Pod 8jy6vhu4bfpioh (32 vCPU, 60-min lease, --release-bincache) on lane head bd4738c9f9 = lane + main b94ea4e463; reaped, verified gone:
+  sm_89 roots 4/4 rc=0 (decode and train roots, define on and off); pod smoke smoke_after rc=0, tier_dir probe rc=0, all 46 host .so present
+  (byte_lm host built from source rc=0; 12 families refused "destination exists" because another family's cache restore had already written
+  their .so; no compile error); test_no_python_runtime rc=0; test_tombstones_preserved rc=0 (pod tree indexed with git init).
+- CPU column: the Mac receipt (both roots, both arms, rc=0). On a GPU-less Linux pod the device-binding roots stop in std's GPU info when
+  built for the CPU column, independent of this lane.
+- Main merged after that run: b94ea4e463 -> 1dd9c80c45, which touches no file these roots import; no recompile.
+- Receipts: experiments/decode_resident_20261028/compile.json; evidence ~/mojolearn-evidence/decode-resident-20261028/.
+- RUN OWED (ab-runner), one run per arm, A = define off, B = define on, NVIDIA and AMD: transformer-decode and mamba2-decode for
+  MOJOLEARN_IDN_DECODE_RESIDENT_IO, lm-train-step for MOJOLEARN_IDN_TRAIN_ONE_WAIT (lines in ~/mojolearn-evidence/decode-resident-20261028/HANDOFF.md).

@@ -102,5 +102,71 @@
       "artifact_sha256": "1b475a9d82bae40680cac37e6102f49c6a60a519f78c230d92a817c3d0cd29de",
       "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/sm89-final/compile_train_one_wait-on.log"
     }
-  ]
+  ],
+  "self_merge_pod": {
+    "pod": "8jy6vhu4bfpioh (RunPod CPU, 32 vCPU, 60-min lease, --release-bincache), reaped and verified gone",
+    "tree": "7dbe8dcfcbe9d37a7aa46a6dd67dac05555efeda",
+    "roots": [
+      {
+        "leg": "pod-8jy6vhu4bfpioh-sm89",
+        "target_flags": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA, -j 32",
+        "entry": "experiments/decode_resident_20261028/compile_decode_resident.mojo",
+        "arm": "off",
+        "define": null,
+        "exit": 0,
+        "seconds": 95,
+        "artifact_sha256": "053fec6e5e2e3d769206a8fd6b5126fce4550f578ba4640f8447b3d880b0d885",
+        "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/pod-selfmerge/remote/leg_out/sm89/compile_decode_resident-off.log"
+      },
+      {
+        "leg": "pod-8jy6vhu4bfpioh-sm89",
+        "target_flags": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA, -j 32",
+        "entry": "experiments/decode_resident_20261028/compile_decode_resident.mojo",
+        "arm": "on",
+        "define": "MOJOLEARN_IDN_DECODE_RESIDENT_IO=1",
+        "exit": 0,
+        "seconds": 98,
+        "artifact_sha256": "9cf9e39eb7d785c9e3145c91d1440ff3132244448ab35c39af16fc682b6c3dd3",
+        "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/pod-selfmerge/remote/leg_out/sm89/compile_decode_resident-on.log"
+      },
+      {
+        "leg": "pod-8jy6vhu4bfpioh-sm89",
+        "target_flags": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA, -j 32",
+        "entry": "experiments/decode_resident_20261028/compile_train_one_wait.mojo",
+        "arm": "off",
+        "define": null,
+        "exit": 0,
+        "seconds": 220,
+        "artifact_sha256": "0a1e443f959532c22fda23e57423fd77fc7452b165bc14e6e9e311f9e63f9fe9",
+        "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/pod-selfmerge/remote/leg_out/sm89/compile_train_one_wait-off.log"
+      },
+      {
+        "leg": "pod-8jy6vhu4bfpioh-sm89",
+        "target_flags": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA, -j 32",
+        "entry": "experiments/decode_resident_20261028/compile_train_one_wait.mojo",
+        "arm": "on",
+        "define": "MOJOLEARN_IDN_TRAIN_ONE_WAIT=1",
+        "exit": 0,
+        "seconds": 216,
+        "artifact_sha256": "b3a4589cf2898d2bf20b3156cdbd598f591b28c34a916cf7c2c149d93275ab31",
+        "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/pod-selfmerge/remote/leg_out/sm89/compile_train_one_wait-on.log"
+      }
+    ],
+    "host_families": "46 of 46 host .so present after the smoke; byte_lm host (the only host family importing a lane file) miss+built from source rc=0; 12 families report rc 1-2 \"output already exists\"/\"destination exists\": their .so was already written by another family's cache restore in the same run (no compile error)",
+    "smoke": [
+      "smoke_after rc=0",
+      "probe_tier_dir rc=0",
+      "INTEG_BUILD total=46 ok=34"
+    ],
+    "selfmerge": [
+      "cores_affinity=32 cgroup=",
+      "git_index_rc=0",
+      "compile_sm89 rc=0",
+      "gate_no_python_runtime rc=0",
+      "gate_tombstones rc=0",
+      "pod_smoke rc=1",
+      "classical_fit_predict rc=0"
+    ],
+    "cpu_column_note": "the device-binding roots cannot be built for the CPU column on a GPU-less Linux pod (std gpu/host/info: Unknown GPU architecture, at main's mamba2_block_forward launch); the CPU column of these roots is the Mac receipt above"
+  }
 }
