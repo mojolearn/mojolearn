@@ -32,3 +32,22 @@ def test_native_session_owner_preserves_cpu_copies_gpu_provider_and_cleanup():
     assert 'if load:\n        _transformer_decode_profile(fields, slots)' in source
     assert 'transformer_decode_native_c, "transformer_decode_native_call"' in (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
     assert '"transformer_session_class": TransformerDecodeSession' in (ROOT/'python/mojolearn/models/causal_lm.py').read_text()
+
+
+def test_resident_whole_model_uses_original_run_and_atomic_group_reservation():
+    from check_generation_native_boundary import audit
+    _, failures=audit(ROOT,('transformer.native_lm_resident_dispatch','core.native_session_group'))
+    assert not failures, failures
+    source=(ROOT/'transformer/native_lm_resident_dispatch.mojo').read_text()
+    reserve=source.split('def _lm_group_reserve(')[1].split('def _lm_group_release')[0]
+    assert reserve.index('_require_session_open(layer[])') < reserve.index('].busy = True')
+    assert '_lm_run(owner[], group.layers' in source
+    assert '_lm_forward_run(owner[], group.layers' in source
+    assert 'owner[].usable = False' in source
+    assert '].usable = False' in source
+    boundary=(ROOT/'providers/python/transformer_resident_pyapi.mojo').read_text()
+    assert 'List[NativeSessionGroup]()' in boundary
+    assert '30, 31, 32, [], [], []' in boundary
+    public=(ROOT/'bindings/causal_lm_public.mojo').read_text()
+    for name in ('transformer_resident_lm_run','transformer_resident_lm_open','transformer_resident_lm_close'):
+        assert name+'(provider,' in public
