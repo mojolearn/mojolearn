@@ -26,6 +26,7 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_is_int, family_is_str, family_isinstance, family_call,
     family_call_kw, family_entry, family_array, family_as_f32_dense, family_field, family_min,
 )
+from providers.python.estimator_binding_pyapi import estimator_arguments
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
 
 #: `_expansion_neighbors._U_LOG`, the unary op code of `log(a * x + b)`.
@@ -275,6 +276,25 @@ def _schi2_weights(fields: PythonObject, binding: PythonObject, context: PythonO
     if py_contains(fields, PythonObject("random_weights_")):
         return fields["random_weights_"]
     raise Error("AttributeError: 'SkewedChi2Sampler' object has no attribute 'random_weights_'")
+
+
+def schi2_public_weights(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The public `random_weights_` getter as one native call: the model's
+    x_neighbors binding is resolved only when a pending z must be expanded
+    (as `self._bind()` was called only then)."""
+    classical_connect_numpy(context)
+    var fields = py_fields(model)
+    var binding = PythonObject(None)
+    if py_get(fields, PythonObject("_schi2_z"), PythonObject(None)) is not None:
+        var reserved = Python.list(PythonObject(None))
+        binding = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", reserved, context),
+                                     context)[0]
+    return _schi2_weights(fields, binding, context)
+
+
+def schi2_public_set_weights(model: PythonObject, value: PythonObject) raises:
+    """The public `random_weights_` setter as one native call."""
+    _schi2_set_weights(py_fields(model), value)
 
 
 def _schi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
