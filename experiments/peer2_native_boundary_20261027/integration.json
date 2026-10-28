@@ -13,17 +13,21 @@
     "providers/python/array_metadata_pyapi.mojo": "preprocessing lane after original-owner root helper",
     "shared pre-dispatch/admission/attributes": "root coordinator",
     "family lifecycle": "respective Peer 2 lane",
-    "main integration": "root coordinator (serialized)"
+    "main integration": "root coordinator (serialized)",
+    "bindings/host_sparse_native.mojo": "decomposition lane: narrow original-owner/one-snapshot repair assigned by root",
+    "bindings/classical_exceptions.mojo and classical_error_boundary.mojo": "root coordinator: native exception constructor admission"
   },
   "source_review_status": "in_progress",
   "native_compile_status": {
     "selector": "compiled and merged by root, receipt ae523b60fb",
-    "pls": "PASS batch4 frozen5bfbe8118e; main merge requested",
-    "manifold": "PASS batch4 frozen5bfbe8118e including native type registration; complete lifecycle next batch",
-    "umap_init": "PASS batch4 frozen5bfbe8118e; main merge requested",
-    "jl_rp": "PASS batch4 frozen5bfbe8118e with typed exception correction; main merge requested",
+    "pls": "PASS batch4 frozen5bfbe8118e; merged main5d490ccbff",
+    "manifold": "PASS batch4 frozen5bfbe8118e including native type registration; merged main5d490ccbff; new lifecycle next batch",
+    "umap_init": "PASS batch4 frozen5bfbe8118e; merged main5d490ccbff",
+    "jl_rp": "PASS batch4 frozen5bfbe8118e; merged main5d490ccbff",
     "scalers": "PASS22.6s batch5 frozen d5a3291cce including snapshot type registration helper/module init; production builder two-line wiring source delta explicitly recorded",
-    "new_manifold_lifecycle": "FAIL batch5: 2 explicit metadata ownership and 2 String aliasing errors; repair underway"
+    "new_manifold_lifecycle": "Batch5 failed; explicit ownership/String aliasing repairs integrated for batch6",
+    "normalizer_transform": "Complete native envelope source reviewed; focused prep target compilation pending batch6",
+    "pca_query": "Transform/inverse_transform snapshots and entry admission source reviewed; focused pca_query compile pending batch6"
   },
   "public_runtime_status": "pending_final_integration",
   "vendor_identity_status": "pending_final_integration",
@@ -38,6 +42,7 @@
   },
   "main_merged": {
     "selector": "root receipt ae523b60fb",
-    "four_batch4_groups": "5d490ccbff"
+    "four_batch4_groups": "5d490ccbff",
+    "scaler_snapshots_and_minmax_settings": "caa72cfe1f"
   }
 }
