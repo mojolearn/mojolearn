@@ -22,6 +22,7 @@ from bindings.msel_search import (
     msel_grid_dicts, msel_grid_list, msel_grid_len, msel_sampler_check, msel_sampler_list, msel_sampler_len, msel_search_fit, msel_validation_curve,
     msel_learning_curve, msel_permutation_test_score,
 )
+from bindings.msel_public_metadata import msel_splitter_repr, msel_scorer_repr, msel_estimator_classes
 from bindings.msel_search_state import msel_search_fields, msel_search_plan, msel_search_initialize
 from bindings.msel_split import (
     msel_split, msel_n_splits, msel_loo_at, msel_lpo_at, msel_logo_at, msel_lpgo_at, msel_check_cv,
@@ -68,6 +69,12 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_sampler_init":
         _ = msel_sampler_check(args[0], context)
         return msel_search_initialize(model, args, context)
+    if operation == "family_msel_search_classes":
+        return msel_estimator_classes(_msel_best(model, context), context)
+    if operation == "family_msel_splitter_repr":
+        return msel_splitter_repr(model, context)
+    if operation == "family_msel_scorer_repr":
+        return msel_scorer_repr(model, context)
     if operation == "family_msel_search_get_params":
         var plan = msel_search_plan(model, context)
         var fields = msel_search_fields(model, context)
