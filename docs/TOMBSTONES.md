@@ -1,5 +1,7 @@
 # Tombstones: every deleted experiment
 
+> **PERMANENT RECORD (Andrew, 2026-10-28): entries, their patches under experiments/removed/ and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED here.**
+
 Every experiment define deleted from mojolearn, in one place. Each section says what the define tried, its verdict with the
 NVIDIA / AMD ratios and the quality change as the guard message, `grid_controls` entry and `docs/apple-fast/EXPERIMENTS.md` rows
 recorded them, the run ids, the sha where the code still exists, and a patch that restores it.
