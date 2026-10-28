@@ -651,3 +651,10 @@ Gates on merged tree: test_no_python_runtime OK — prohibited_source 235, unres
 Compile: experiments/integration_provider_queue_20261028/compile_tranche4.json — Mac: sequential_weights, expansion_linear,
 runtime_sequential_host, runtime_classical_host exit 0; pod 422ypcrzb2foqk (reaped): kernel_methods sm_89/gfx942/host and
 byte_lm_host CPU exit 0. Known failing test (not fixed): tools/test_native_full_reset_params_connection.py 84 failed.
+
+INTEGRATION 2026-10-28 (Claude integrator) — TRANCHE 5
+Merged: 728b7896ff (lifecycle-timeseries), 681f77fe48 (lifecycle-gbdt). GAPS.tsv: rows removed by either side dropped;
+prohibited_debt.tsv regenerated with --prune (no hand edits). Gates: test_no_python_runtime OK — prohibited_source 196,
+unresolved 229; test_tombstones_preserved OK. Compile: experiments/integration_provider_queue_20261028/compile_tranche5.json —
+7/7 affected roots exit 0 (x86 identical O0; xseq + TSA dispatchers, tree dispatchers, iforest, classical_host, tokenizer_host);
+no device entry closure changed. Pod 7lvey3bnj559l7 reaped. Pending 5b: lifecycle-prep-decomp, lifecycle-neighbors-cluster.
