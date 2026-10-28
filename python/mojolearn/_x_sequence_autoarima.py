@@ -78,6 +78,11 @@ class AutoARIMA(ParamsMixin):
     _ARIMA_BINDING = "_mojolearn_arima"
     _TSA_BINDING = "_mojolearn_tsa"
 
+    # Every public method is one native call whose owner does the whole
+    # lifecycle (fit bookkeeping and the NotFittedError of predict in
+    # bindings/tsa_public_native.mojo), so no `_mode` class-creation wrappers are installed.
+    _mojolearn_native_public = True
+
     def __init__(self, endog):
         _TSA(self, "autoarima_initialize", (endog,), _TSA_CONTEXT)
 

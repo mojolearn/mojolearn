@@ -48,7 +48,7 @@ def _config(p: List[Int]) raises -> ByteConfig:
         raise Error("byte LM: chunked head selector must be 0 or 1")
     var cfg = ByteConfig(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9] == 1)
     cfg.validate()
-    return cfg
+    return cfg^
 
 
 def _plan(shape: PythonObject, params: PythonObject) raises -> Tuple[List[Int], List[Float64]]:
@@ -81,7 +81,7 @@ def _execute(op: Int, session: PythonObject, addresses: PythonObject, params: Py
              shape: PythonObject, dims: PythonObject, named: PythonObject, release: Int = 0) raises -> PythonObject:
     var owner = session.downcast_value_ptr[ByteHostSession]()
     var plan = _plan(shape, params)
-    var words = plan[0]
+    var words = plan[0].copy()
     words[16] = release
     if dims is not None:
         var dimensions = _words(dims)
@@ -128,7 +128,7 @@ def host_compat_mode() -> PythonObject:
     return PythonObject(1)
 
 
-def host_compat_vendor() -> PythonObject:
+def host_compat_vendor() raises -> PythonObject:
     return PythonObject("cpu")
 
 
@@ -138,7 +138,7 @@ def host_compat_profile() raises -> PythonObject:
     return PythonObject(ByteConfig(chunked_lm_head_v2=False).profile())
 
 
-def host_compat_suffix() -> PythonObject:
+def host_compat_suffix() raises -> PythonObject:
     return PythonObject(byte_lm_arithmetic_suffix())
 
 
@@ -189,7 +189,7 @@ def host_compat_trainer_export(session: PythonObject, addresses: PythonObject, s
     var a: List[Int] = [Int(owner)]
     for i in range(len(values)):  # driver-loop: over state output descriptors
         a.append(values[i])
-    var words = plan[0]
+    var words = plan[0].copy()
     if py_type(release) is not native_loaded_module("builtins").bool:
         raise Error("byte LM: release must be a bool")
     words[16] = Int(Bool(py=release))
@@ -208,7 +208,7 @@ def host_compat_trainer_grad(session: PythonObject, addresses: PythonObject, sha
 
 def host_compat_logits(addresses: PythonObject, dims: PythonObject, shape: PythonObject) raises -> PythonObject:
     var plan = _defaults(shape, 0)
-    var words = plan[0]
+    var words = plan[0].copy()
     var dimensions = _words(dims)
     if len(dimensions) != 2:
         raise Error("byte LM logits: expected 2 dimensions")

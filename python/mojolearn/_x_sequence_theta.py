@@ -80,6 +80,11 @@ class AutoTheta(ParamsMixin):
     """
     _MODEL = None
 
+    # Every public method is one native call whose owner does the whole
+    # lifecycle (fit bookkeeping and the NotFittedError of predict in
+    # bindings/xseq_forecast_native.mojo), so no `_mode` class-creation wrappers are installed.
+    _mojolearn_native_public = True
+
     def __init__(self, season_length=1, decomposition_type="multiplicative", model=None,
                  initial_smoothed=None, alpha=None, theta=None, numeric_mode=None):
         _XSEQ(self, "theta_initialize", (season_length, decomposition_type, model, initial_smoothed, alpha, theta, numeric_mode), _XSEQ_CONTEXT)

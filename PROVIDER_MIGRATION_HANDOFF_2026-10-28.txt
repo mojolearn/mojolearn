@@ -642,3 +642,30 @@ d12bd2cab0 (board quality v8 tooling). Fix 2b0dfea245: transformer/native_decode
 Compile: experiments/integration_provider_queue_20261028/compile_tranche3.json — 65 affected roots + byte_lm sm_89/gfx942 +
 transformer sm_89/gfx942/host exit 0 (x86-64-v3 identical; pods 72c9ivaggbj3e2, tk6su34j7e3g9o, 69zjjal284f5d8 reaped).
 Known pre-existing failure NOT fixed: byte_lm_host (byte_lm_host_compat_pyapi.mojo, unchanged). No runtime/identity/GPU execution.
+
+INTEGRATION 2026-10-28 (Claude integrator) — TRANCHE 4
+Merged: a46aa9f011 (native public marks; contains audit gate 1dbfddd1c8), 3a6da76aa (tombstone guard). Debt prune commit
+(16 fixed rows). Fixes: byte_lm_host_compat_pyapi.mojo raises/explicit copies; kernel_methods/native_descriptor_dispatch.mojo:206
+list literal (both GPU-target errors on main 45b0630582).
+Gates on merged tree: test_no_python_runtime OK — prohibited_source 235, unresolved 229; test_tombstones_preserved OK.
+Compile: experiments/integration_provider_queue_20261028/compile_tranche4.json — Mac: sequential_weights, expansion_linear,
+runtime_sequential_host, runtime_classical_host exit 0; pod 422ypcrzb2foqk (reaped): kernel_methods sm_89/gfx942/host and
+byte_lm_host CPU exit 0. Known failing test (not fixed): tools/test_native_full_reset_params_connection.py 84 failed.
+
+INTEGRATION 2026-10-28 (Claude integrator) — TRANCHE 5
+Merged: 728b7896ff (lifecycle-timeseries), 681f77fe48 (lifecycle-gbdt). GAPS.tsv: rows removed by either side dropped;
+prohibited_debt.tsv regenerated with --prune (no hand edits). Gates: test_no_python_runtime OK — prohibited_source 196,
+unresolved 229; test_tombstones_preserved OK. Compile: experiments/integration_provider_queue_20261028/compile_tranche5.json —
+7/7 affected roots exit 0 (x86 identical O0; xseq + TSA dispatchers, tree dispatchers, iforest, classical_host, tokenizer_host);
+no device entry closure changed. Pod 7lvey3bnj559l7 reaped. Pending 5b: lifecycle-prep-decomp, lifecycle-neighbors-cluster.
+
+INTEGRATION 2026-10-28 (Claude integrator) — HOTFIX a69666b609 + TRANCHE 5b
+Hotfix on main a69666b609: _native_classical_bridge.py:329 None attribute_descriptor admission (import on Linux).
+5b merged: 5d099ca49b (native label protocol rebase; replaces held b395d0f541), cb205f5146 (full-reset tests,
+boost numeric_mode, declared constructors; contains 8c33ce5e06). Import fixes found by the CPU-only import smoke:
+graph record descriptor entry (autograd_graph_metadata_pyapi.mojo + _native_reader_bridge.py), reader bridge
+fast-tier ValueError on CPU-only, parallel_training byte LM ._host, _native_mode_metadata AgglomerativeClustering._bind.
+Receipt experiments/integration_provider_queue_20261028/compile_tranche5b.json: 51/51 builds (46 host families,
+x_sequence sm_89/gfx942, 3 roots); import smoke PASS (import mojolearn + 8 modules, missing_bindings 0) and
+tier_dir('identical') probe PASS on the x86 CPU-only host set. GPU-set import not exercised (no GPU box).
+Gates: test_no_python_runtime OK (196), test_tombstones_preserved OK, full-reset tests 110 passed.

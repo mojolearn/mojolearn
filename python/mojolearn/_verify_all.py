@@ -4382,11 +4382,11 @@ def _checkout_root():
 def _cmd_emit_reference(args):
     """Regenerate the table from committed records. Needs no binding."""
     root = _checkout_root()
+    if not root:
+        _emit("REFUSED: reference generation requires a MojoLearn checkout with committed identity records", sys.stderr)
+        return EXIT_USAGE
     records = list(getattr(args, "records", None) or [])
     if not records:
-        if not root:
-            _emit("USAGE: --emit-reference needs --records DIR outside a checkout", sys.stderr)
-            return EXIT_USAGE
         records = [os.path.join(root, "bench", "results", "identity_break")]
     paths = []
     for r in records:
@@ -4395,6 +4395,11 @@ def _cmd_emit_reference(args):
             continue
         for dirpath, _, names in os.walk(r):
             paths.extend(os.path.join(dirpath, n) for n in names if n.endswith(".json"))
+    try:
+        vref.require_committed_records(paths, root)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        _emit(f"REFUSED: {exc}", sys.stderr)
+        return EXIT_USAGE
     try:
         harness_file = os.path.join(root, "tools", "identity_break.py") if root else harness_path()[0]
         harness = load_harness(harness_file)

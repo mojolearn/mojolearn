@@ -3,8 +3,9 @@
 
 The prep (`_PrepBase`) and decomp (`_Base`) classes whose `set_params` is the
 shallow declared assignment (`_native_declared_params.py`), and a few plain
-classes (the shuffle and leave-P splitters, two resample results), have
-constructors that only store their parameters. Their public `__init__` is one call to the
+classes (the shuffle and leave-P splitters), have constructors that only
+store their parameters. The resample results are owned by the resample
+provider's native result initializer instead. Their public `__init__` is one call to the
 same native constructor as the full-reset owners
 (bindings/full_reset_constructor_native.mojo); re-initialization releases an
 overwritten value under the declared setter's own admission. The write events
@@ -16,7 +17,6 @@ from .tokenizer import _binding
 from . import _expansion_prep as _prep
 from . import _expansion_decomp as _decomp
 from . import model_selection as _msel
-from . import resample as _resample
 
 _ENTRY = _binding()._module.full_reset_constructor_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
@@ -51,7 +51,6 @@ _CLASSES = (
     _decomp.MinCovDet,
     _decomp.MiniBatchDictionaryLearning,
     _decomp.MiniBatchSparsePCA,
-    _resample.MonteCarloResult,
     _prep.MultiLabelBinarizer,
     _prep.MultinomialNB,
     _decomp.NMF,
@@ -60,7 +59,6 @@ _CLASSES = (
     _prep.OrdinalEncoder,
     _decomp.PLSCanonical,
     _decomp.PLSRegression,
-    _resample.PermutationTestResult,
     _prep.PolynomialFeatures,
     _prep.PowerTransformer,
     _prep.QuadraticDiscriminantAnalysis,
@@ -107,7 +105,6 @@ _EVENTS = {
     'MinCovDet': (('store_precision', 'parameter', 'store_precision', False), ('assume_centered', 'parameter', 'assume_centered', False), ('support_fraction', 'parameter', 'support_fraction', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'MiniBatchDictionaryLearning': (('n_components', 'parameter', 'n_components', False), ('alpha', 'parameter', 'alpha', False), ('max_iter', 'parameter', 'max_iter', False), ('fit_algorithm', 'parameter', 'fit_algorithm', False), ('n_jobs', 'parameter', 'n_jobs', False), ('batch_size', 'parameter', 'batch_size', False), ('shuffle', 'parameter', 'shuffle', False), ('dict_init', 'parameter', 'dict_init', False), ('transform_algorithm', 'parameter', 'transform_algorithm', False), ('transform_n_nonzero_coefs', 'parameter', 'transform_n_nonzero_coefs', False), ('transform_alpha', 'parameter', 'transform_alpha', False), ('verbose', 'parameter', 'verbose', False), ('split_sign', 'parameter', 'split_sign', False), ('random_state', 'parameter', 'random_state', False), ('positive_code', 'parameter', 'positive_code', False), ('positive_dict', 'parameter', 'positive_dict', False), ('transform_max_iter', 'parameter', 'transform_max_iter', False), ('callback', 'parameter', 'callback', False), ('tol', 'parameter', 'tol', False), ('max_no_improvement', 'parameter', 'max_no_improvement', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'MiniBatchSparsePCA': (('n_components', 'parameter', 'n_components', False), ('alpha', 'parameter', 'alpha', False), ('ridge_alpha', 'parameter', 'ridge_alpha', False), ('max_iter', 'parameter', 'max_iter', False), ('callback', 'parameter', 'callback', False), ('batch_size', 'parameter', 'batch_size', False), ('verbose', 'parameter', 'verbose', False), ('shuffle', 'parameter', 'shuffle', False), ('n_jobs', 'parameter', 'n_jobs', False), ('method', 'parameter', 'method', False), ('random_state', 'parameter', 'random_state', False), ('tol', 'parameter', 'tol', False), ('max_no_improvement', 'parameter', 'max_no_improvement', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
-    'MonteCarloResult': (('integral', 'parameter', 'integral', False), ('mean', 'parameter', 'mean', False), ('volume', 'parameter', 'volume', False), ('closed_form', 'parameter', 'closed_form', False)),
     'MultiLabelBinarizer': (('classes', 'parameter', 'classes', False), ('sparse_output', 'parameter', 'sparse_output', False)),
     'MultinomialNB': (('alpha', 'parameter', 'alpha', False), ('force_alpha', 'parameter', 'force_alpha', False), ('fit_prior', 'parameter', 'fit_prior', False), ('class_prior', 'parameter', 'class_prior', False)),
     'NMF': (('n_components', 'parameter', 'n_components', False), ('init', 'parameter', 'init', False), ('solver', 'parameter', 'solver', False), ('beta_loss', 'parameter', 'beta_loss', False), ('tol', 'parameter', 'tol', False), ('max_iter', 'parameter', 'max_iter', False), ('random_state', 'parameter', 'random_state', False), ('alpha_W', 'parameter', 'alpha_W', False), ('alpha_H', 'parameter', 'alpha_H', False), ('l1_ratio', 'parameter', 'l1_ratio', False), ('verbose', 'parameter', 'verbose', False), ('shuffle', 'parameter', 'shuffle', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
@@ -116,7 +113,6 @@ _EVENTS = {
     'OrdinalEncoder': (('categories', 'parameter', 'categories', False), ('dtype', 'parameter', 'dtype', False), ('handle_unknown', 'parameter', 'handle_unknown', False), ('unknown_value', 'parameter', 'unknown_value', False), ('encoded_missing_value', 'parameter', 'encoded_missing_value', False), ('min_frequency', 'parameter', 'min_frequency', False), ('max_categories', 'parameter', 'max_categories', False)),
     'PLSCanonical': (('algorithm', 'parameter', 'algorithm', False), ('n_components', 'parameter', 'n_components', False), ('scale', 'parameter', 'scale', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('copy', 'parameter', 'copy', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'PLSRegression': (('n_components', 'parameter', 'n_components', False), ('scale', 'parameter', 'scale', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('copy', 'parameter', 'copy', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
-    'PermutationTestResult': (('statistic', 'parameter', 'statistic', False), ('null_distribution', 'parameter', 'null_distribution', False), ('pvalue', 'parameter', 'pvalue', False), ('count_less', 'parameter', 'count_less', False), ('count_greater', 'parameter', 'count_greater', False)),
     'PolynomialFeatures': (('degree', 'parameter', 'degree', False), ('interaction_only', 'parameter', 'interaction_only', False), ('include_bias', 'parameter', 'include_bias', False), ('order', 'parameter', 'order', False)),
     'PowerTransformer': (('method', 'parameter', 'method', False), ('standardize', 'parameter', 'standardize', False), ('copy', 'parameter', 'copy', False)),
     'QuadraticDiscriminantAnalysis': (('solver', 'parameter', 'solver', False), ('shrinkage', 'parameter', 'shrinkage', False), ('priors', 'parameter', 'priors', False), ('reg_param', 'parameter', 'reg_param', False), ('store_covariance', 'parameter', 'store_covariance', False), ('tol', 'parameter', 'tol', False), ('covariance_estimator', 'parameter', 'covariance_estimator', False)),
