@@ -13,12 +13,13 @@ from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
+from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info, neural_descriptor_entry
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_fields
 from bindings.family_common import family_call, family_repr, family_str, family_type_name, family_isinstance
 from bindings.optimizer_public_door import TensorView, shape_text
 from bindings.linalg_ops_buffers import (
-    LinBuf, lin_truth, lin_view, lin_is_f32, lin_dtype_name, lin_new, lin_c_order, lin_typed, lin_tuple,
+    LinBuf, LinAdmission, lin_admitted_c, lin_admitted_output, lin_truth, lin_is_f32, lin_dtype_name, lin_new, lin_typed, lin_tuple,
 )
 
 comptime OP_NN = 0
@@ -32,7 +33,10 @@ def lin_state(context: PythonObject) raises -> PythonObject:
 
 
 def lin_text(context: PythonObject, name: String) raises -> String:
-    return String(py=lin_state(context)[name])
+    var value = lin_state(context)[name]
+    if py_type(value) is not py_type(PythonObject("")):
+        raise Error("TypeError: linalg profile metadata requires an exact string")
+    return String(value)
 
 
 def lin_attr(binding: PythonObject, name: String) raises -> PythonObject:
@@ -250,17 +254,15 @@ def lin_ints(*values: Int) raises -> PythonObject:
 def lin_operand(x: PythonObject, name: String, context: PythonObject) raises -> LinBuf:
     """`_operand(x, name)`: a float32 2-D buffer, refused by name otherwise,
     in C order (a layout copy at most, never a cast)."""
+    var input = LinAdmission(x, context)
+    return _lin_operand_admitted(input^, name, context)
+
+
+def _lin_operand_admitted(var input: LinAdmission, name: String, context: PythonObject) raises -> LinBuf:
     var profile = lin_text(context, "PROFILE")
-    var v = TensorView()
-    if not lin_view(x, context, v):
-        raise Error("TypeError: mojolearn.linalg: " + name + " is a " + family_type_name(x) + ", which does "
-                    + "not support the buffer protocol, and only a float32 buffer is "
-                    + "in this profile (" + profile + "; contract section 1 makes FP32 a "
-                    + "hard requirement). Pass a float32 array -- a NumPy array, an "
-                    + "array.array('f') or a mojolearn.Array; convert with "
-                    + "np.asarray(" + name + ", dtype=np.float32) if that is what you want.")
+    var v = input.view.copy()
     if not lin_is_f32(v):
-        raise Error("TypeError: mojolearn.linalg: " + name + " has dtype " + lin_dtype_name(x, v) + ", and "
+        raise Error("TypeError: mojolearn.linalg: " + name + " has dtype " + lin_dtype_name(input.keep, v) + ", and "
                     + "only float32 is in this profile (" + profile + "; contract section 1 "
                     + "makes FP32 a hard requirement, and section 0.5 excludes FP16, "
                     + "BF16, TF32 and float64). Refused rather than cast, because a "
@@ -278,16 +280,18 @@ def lin_operand(x: PythonObject, name: String, context: PythonObject) raises -> 
                     + "but no gate in this tree has run them through the Python "
                     + "surface, so they are refused here rather than answered "
                     + "unchecked.")
-    return lin_c_order(x, v, "<f4", name, context)
+    return lin_admitted_c(input^, "<f4", name, context)
 
 
 def lin_operand_bits(x: PythonObject, name: String, context: PythonObject) raises -> LinBuf:
     """`_operand_bits(x, name)`: a 2-D uint16 buffer of bf16 bits in C order."""
-    var v = TensorView()
-    if not lin_view(x, context, v):
-        raise Error("TypeError: mojolearn.linalg: " + name + " must be a uint16 buffer of bf16 bits "
-                    + "(profile " + lin_text(context, "PROFILE_BF16") + "); got " + family_type_name(x))
-    var dtype = lin_dtype_name(x, v)
+    var input = LinAdmission(x, context)
+    return _lin_bits_admitted(input^, name, context)
+
+
+def _lin_bits_admitted(var input: LinAdmission, name: String, context: PythonObject) raises -> LinBuf:
+    var v = input.view.copy()
+    var dtype = lin_dtype_name(input.keep, v)
     if dtype != "uint16":
         raise Error("TypeError: mojolearn.linalg: " + name + " has dtype " + dtype + "; the "
                     + "bf16 profile takes bf16 BITS in a uint16 buffer, which "
@@ -296,16 +300,15 @@ def lin_operand_bits(x: PythonObject, name: String, context: PythonObject) raise
         raise Error("mojolearn.linalg: " + name + " must be 2-D, got " + String(len(v.shape)) + "-D")
     if v.count() == 0:
         raise Error("mojolearn.linalg: " + name + " has no elements")
-    return lin_typed(x, "<u2", 2, name, context)
+    return lin_admitted_c(input^, "<u2", name, context)
 
 
 def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonObject) raises -> LinBuf:
     """`_out_or_new(out, m, n, who)`."""
     if out_buf is None:
         return lin_new([m, n], "<f4", context)
-    var v = TensorView()
-    if not lin_view(out_buf, context, v):
-        raise Error("TypeError: mojolearn: object does not support the buffer protocol")
+    var input = LinAdmission(out_buf, context)
+    var v = input.view.copy()
     if not lin_is_f32(v):
         raise Error("TypeError: mojolearn.linalg." + who + ": out must be float32")
     if len(v.shape) != 2 or v.shape[0] != m or v.shape[1] != n:
@@ -313,9 +316,7 @@ def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonO
                     + String(m) + ", " + String(n) + ")")
     if not v.c_contig or v.readonly:
         raise Error("mojolearn.linalg." + who + ": out must be C-contiguous and writable")
-    var _keep_ret_v = LinBuf(out_buf, v.addr, v.shape.copy())
-    _ = v  # keep the Python object alive through the native call above
-    return _keep_ret_v^
+    return lin_admitted_output(input^)
 
 
 # ---------------------------------------------------------------------------
@@ -359,11 +360,8 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
     if out_obj is None:
         out = lin_new([m, n], "<f4", context)
     else:
-        var v = TensorView()
-        if not lin_view(out_obj, context, v):
-            raise Error("TypeError: mojolearn.linalg.matmul: out must be a numpy array, a "
-                        + "mojolearn.Array or any other writable float32 buffer "
-                        + "(anything supporting the buffer protocol), got " + family_type_name(out_obj))
+        var output = LinAdmission(out_obj, context)
+        var v = output.view.copy()
         if not lin_is_f32(v):
             raise Error("TypeError: mojolearn.linalg.matmul: out has dtype " + lin_dtype_name(out_obj, v)
                         + ", and the profile's output is float32 (contract section 1). Refused rather than cast on "
@@ -382,7 +380,7 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
                         + "write to it; the device writes `out` directly (contract "
                         + "section 2) and a read-only buffer handed to it is memory "
                         + "corruption, not an exception.")
-        out = LinBuf(out_obj, v.addr, v.shape.copy())
+        out = lin_admitted_output(output^)
         _ = v  # keep the Python object alive through the native call above
     # ORDER MATCHES bindings/_mojolearn_linalg.mojo::gemm_binding: the output
     # address first, then a and b; params (m, n, k, op).
@@ -478,7 +476,7 @@ def _lin_int8_operand(binding: PythonObject, x: PythonObject, name: String, cont
     """`_int8_operand(x, name)`: a (codes, exponents) pair, or a float32
     matrix quantized by `quantize_int8`."""
     var b = native_loaded_module("builtins")
-    if family_isinstance(x, b.tuple) and len(x) == 2:
+    if py_type(x) is b.tuple and len(x) == 2:
         q = lin_typed(x[0], "<i1", 2, name + " codes", context)
         e = lin_typed(x[1], "<i4", 1, name + " exponents", context)
         if e.rank() != 1 or e.dim(0) != q.dim(0):
@@ -488,15 +486,8 @@ def _lin_int8_operand(binding: PythonObject, x: PythonObject, name: String, cont
     var a = lin_operand(x, name, context)
     var pair = lin_quantize_int8(binding, a, context)
     _ = a^
-    var codes = pair[0]
-    var exps = pair[1]
-    var v = TensorView()
-    _ = lin_view(codes, context, v)
-    q = LinBuf(codes, v.addr, v.shape.copy())
-    _ = v  # keep the Python object alive through the native call above
-    _ = lin_view(exps, context, v)
-    e = LinBuf(exps, v.addr, v.shape.copy())
-    _ = v  # keep the Python object alive through the native call above
+    q = lin_typed(pair[0], "<i1", 2, name + " codes", context)
+    e = lin_typed(pair[1], "<i4", 1, name + " exponents", context)
 
 
 def _lin_matmul_int8(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -567,11 +558,9 @@ def _lin_op_and_shape(a: LinBuf, bb: LinBuf, transpose_a: PythonObject, transpos
 
 def _lin_matmul_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var binding = args[0]
-    var a_bits = False
-    var pa = TensorView()
-    if lin_view(args[1], context, pa):
-        a_bits = lin_dtype_name(args[1], pa) == "uint16"
-    var a = lin_operand_bits(args[1], "a", context) if a_bits else lin_operand(args[1], "a", context)
+    var input = LinAdmission(args[1], context)
+    var a_bits = lin_dtype_name(input.keep, input.view) == "uint16"
+    var a = _lin_bits_admitted(input^, "a", context) if a_bits else _lin_operand_admitted(input^, "a", context)
     var bb = lin_operand_bits(args[2], "b", context)
     var op = 0
     var m = 0
@@ -658,25 +647,18 @@ def _lin_int15_operand(binding: PythonObject, x: PythonObject, name: String, con
                        mut hi: LinBuf, mut lo: LinBuf, mut e: LinBuf) raises:
     """`_int15_operand(x, name)`."""
     var b = native_loaded_module("builtins")
-    if family_isinstance(x, b.tuple) and len(x) == 3:
+    if py_type(x) is b.tuple and len(x) == 3:
         _lin_int15_planes(x, name, "matmul_int15", context, hi, lo, e)
         return
-    if family_isinstance(x, b.tuple):
+    if py_type(x) is b.tuple:
         raise Error("TypeError: mojolearn.linalg.matmul_int15: " + name + " is a tuple of " + String(len(x))
                     + "; a fifteen-bit operand is (hi, lo, exponents) from quantize_int15, or a float32 matrix")
     var a = lin_operand(x, name, context)
     var planes = lin_quantize_int15(binding, a, context)
     _ = a^
-    var v = TensorView()
-    _ = lin_view(planes[0], context, v)
-    hi = LinBuf(planes[0], v.addr, v.shape.copy())
-    _ = v  # keep the Python object alive through the native call above
-    _ = lin_view(planes[1], context, v)
-    lo = LinBuf(planes[1], v.addr, v.shape.copy())
-    _ = v  # keep the Python object alive through the native call above
-    _ = lin_view(planes[2], context, v)
-    e = LinBuf(planes[2], v.addr, v.shape.copy())
-    _ = v  # keep the Python object alive through the native call above
+    hi = lin_typed(planes[0], "<i1", 2, name + " hi", context)
+    lo = lin_typed(planes[1], "<i1", 2, name + " lo", context)
+    e = lin_typed(planes[2], "<i4", 1, name + " exponents", context)
 
 
 def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -696,7 +678,10 @@ def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> Pytho
     if k != kb:
         raise Error("mojolearn.linalg.matmul_int15: contracted extents differ, a "
                     + "gives k=" + String(k) + " and b gives k=" + String(kb))
-    var max_k = Int(py=lin_state(context)["INT15_MAX_K"])
+    var bound = lin_state(context)["INT15_MAX_K"]
+    if py_type(bound) is not py_type(PythonObject(0)):
+        raise Error("TypeError: linalg int15 extent metadata requires an exact integer")
+    var max_k = Int(py=bound)
     if k > max_k:
         raise Error("mojolearn.linalg.matmul_int15: k=" + String(k) + " is above " + String(max_k) + ", the "
                     + "largest contracted extent " + lin_text(context, "PROFILE_INT15") + " accepts (contract W-4)")
@@ -730,11 +715,23 @@ def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def lin_lowbit_operation(operation: String, var args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Scalar controls may be NumPy scalar owners; exact numeric admission
+    # precedes their native truth slots, including object-dtype rejection.
+    var controls = Python.dict()
+    if operation == "family_lin_matmul":
+        for i in [3, 4, 6]:  # small-loop(transpose and identity controls)
+            host_inference_scalar(args[i], context, True)
+            py_setitem(controls, PythonObject(i), PythonObject(lin_truth(args[i])))
+    elif operation == "family_lin_matmul_bf16":
+        for i in [3, 4]:  # small-loop(transpose controls)
+            host_inference_scalar(args[i], context, True)
+            py_setitem(controls, PythonObject(i), PythonObject(lin_truth(args[i])))
     var binding = lin_connected_binding(context)
     var admitted = Python.list(binding)
     for i in range(1, len(args)):  # small-loop(public arguments admitted before input protocols)
         classical_admit_value(args[i], context)
-        _ = py_call(admitted.append, args[i])
+        var value = py_get(controls, PythonObject(i), args[i])
+        _ = py_call(admitted.append, value)
     args = admitted
     if operation == "family_lin_numeric_mode":
         return PythonObject(lin_mode(binding, context))

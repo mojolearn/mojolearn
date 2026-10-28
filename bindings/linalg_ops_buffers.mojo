@@ -10,10 +10,12 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_setattr, py_type
+from bindings.native_loaded_module import native_loaded_module
+from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_arrays import classical_is_array
-from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.array_metadata_pyapi import array_owner_once
 from bindings.classical_arrays import classical_wrap_array, _store_code, classical_address
 from bindings.family_common import family_isinstance, family_view
@@ -71,7 +73,7 @@ struct LinBuf(Movable):
 
 def lin_truth(value: PythonObject) raises -> Bool:
     """`bool(value)`."""
-    return Bool(py=py_call(Python.import_module("builtins").bool, value))
+    return Bool(py=py_call(native_loaded_module("builtins").bool, value))
 
 
 def lin_view(obj: PythonObject, context: PythonObject, mut v: TensorView) raises -> Bool:
@@ -151,17 +153,12 @@ def lin_is_f32(v: TensorView) -> Bool:
 
 
 def lin_dtype_name(obj: PythonObject, v: TensorView) raises -> String:
-    """`_bufcheck.dtype_name(obj, pb)`: NumPy's `dtype.name` when the object
-    carries one, an Array typestr's name, else the struct code's."""
-    var b = Python.import_module("builtins")
-    var dt = py_call(b.getattr, obj, "dtype", PythonObject(None))
-    var name = py_call(b.getattr, dt, "name", PythonObject(None))
-    if family_isinstance(name, b.str):
-        return String(py=name)
-    if family_isinstance(dt, b.str):
-        var t = _typestr_name(String(py=dt))
-        if t != "":
-            return t
+    # The admitted layout already carries dtype information. Reading an
+    # arbitrary object's dtype/name properties would re-enter user metadata.
+    if v.is_array:
+        var name = _typestr_name(v.dtype)
+        if name != "":
+            return name
     return _format_name(base_format(v.fmt), v.itemsize, v.fmt)
 
 
@@ -182,7 +179,7 @@ def lin_tuple(shape: List[Int]) raises -> PythonObject:
     var dims = Python.list()
     for i in range(len(shape)):  # driver-loop: over shape words
         _ = py_call(dims.append, PythonObject(shape[i]))
-    return py_call(Python.import_module("builtins").tuple, dims)
+    return py_call(native_loaded_module("builtins").tuple, dims)
 
 
 def lin_array(shape: List[Int], typestr: String, context: PythonObject) raises -> PythonObject:
@@ -400,17 +397,32 @@ def lin_c_order(obj: PythonObject, v: TensorView, typestr: String, name: String,
 
 def lin_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
               context: PythonObject) raises -> LinBuf:
-    """`_buffer.as_*_c(source, ndim=ndim, name=name)` for `typestr` ("<f4",
-    "<u2", "<i1", "<i4"): the admitted input with `_as_typed`'s rank and
-    emptiness refusals (`ndim` < 0 accepts any rank), then the C-order
-    buffer of that dtype, borrowed when it already is one."""
-    var view = family_view(source, ndim, name, context)
-    var v = TensorView()
-    if not lin_view(view, context, v):
-        raise Error("TypeError: mojolearn: " + name + " does not support the buffer protocol")
-    var result = lin_c_order(view, v, typestr, name, context)
-    _ = view^
-    return result^
+    # Native exporters cross the metadata boundary directly. Existing native
+    # list/frame/Torch/scalar admission may first materialize supported values;
+    # no arbitrary Python conversion or buffer hook is a fallback here.
+    classical_admit_value(source, context)
+    var prepared = source
+    if not classical_is_array(source, context):
+        try:
+            admit_native_buffer_exporter(source)
+        except:
+            prepared = classical_view(source, context, name)
+    var input = LinAdmission(prepared, context)
+    var nd = len(input.view.shape)
+    if ndim >= 0 and nd != ndim:
+        var hint = String("")
+        if ndim == 2 and nd < 2:
+            hint = ". " + String(RESHAPE_HINT)
+        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
+                    + "-D shape " + shape_text(input.view.shape) + hint)
+    if input.view.count() == 0:
+        var what = String("sample(s)")
+        if nd == 2 and input.view.shape[0] != 0:
+            what = "feature(s)"
+        var shape = shape_text(input.view.shape)
+        raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
+                    + " (shape=" + shape + ") while a minimum of 1 is required.")
+    return lin_admitted_c(input^, typestr, name, context)
 
 
 struct LinAdmission(Movable):
@@ -463,6 +475,7 @@ struct LinAdmission(Movable):
             view.c_contig = _contiguous(view.shape, view.strides, True, view.itemsize)
             self.view = view^
             return
+        admit_native_buffer_exporter(value)
         self.pin = AdmittedBorrowedBuffer(value)
         ref layout = self.pin.value().layout.value()
         view.addr = layout.address
@@ -551,3 +564,11 @@ def lin_admitted_c(var input: LinAdmission, typestr: String, name: String,
     lin_convert(input.view, typestr, result.addr, name)
     _ = input^
     return result^
+
+
+def lin_admitted_output(var input: LinAdmission) -> LinBuf:
+    # Preserve the supplied output object's identity while its native buffer
+    # export and Array storage owners stay pinned through the complete call.
+    var pin = Optional[AdmittedBorrowedBuffer]()
+    swap(pin, input.pin)
+    return LinBuf(input.keep, input.view.addr, input.view.shape.copy(), pin^, input.owner)
