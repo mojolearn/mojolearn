@@ -1,0 +1,35 @@
+{
+  "source_base": "be098a2ec4",
+  "source_tests": {
+    "passed": 6,
+    "exit_code": 0
+  },
+  "public_cases": {
+    "count": 10,
+    "runtime": "NOT_RUN",
+    "syntax": "PASS"
+  },
+  "compile": "PENDING_ROOT",
+  "artifacts": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/classical-frontdoor-admission-20261027/source-tests.log",
+      "sha256": "efb4cc1ce219481f3402d2af55e9136236d8c64373d15989442ebcea41df9cb3",
+      "bytes": 98
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/classical-frontdoor-admission-20261027/syntax.log",
+      "sha256": "704704226cbf50c1841fc01b281232f21ea69454e9c9cbf9fcc257e621724526",
+      "bytes": 92
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/classical-frontdoor-admission-20261027/diff-check.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/classical-frontdoor-admission-20261027/callsite-owners.json",
+      "sha256": "7222c6057035d92f09e6fd43d02ba758861c1085fdae193dfb31ecca14ba078b",
+      "bytes": 52397
+    }
+  ]
+}

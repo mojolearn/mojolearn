@@ -1,0 +1,60 @@
+Shared classical family admission — source handoff, 2026-10-27
+
+Base: main be098a2ec4.
+Branch: lane/classical-frontdoor-admission-20261027.
+
+The classical C door used to dispatch family_* before its Ridge/LinearRegression
+layout check. Legacy family owners could therefore read __dict__ via generic
+object attribute access before proving the model's storage/descriptor identity.
+
+The shared door now calls classical_family_admit before family_operation. The
+new provider uses import-connected class layouts, validates the connected MRO
+tail and storage hooks, rejects replaced/new descriptor hooks, then obtains the
+instance dictionary through its pinned native getter. Dictionary keys must be
+exact strings before any owner lookup. Operation strings/context dictionaries
+are admitted before String coercion in the C door.
+
+Functional model=None calls stay valid. Passive application subclasses retain
+the connected base, plain class defaults, native slots, application constructors
+and unrelated methods; the guard never invokes or rebinds those functions.
+Overridden product descriptors/storage hooks are refused before invocation.
+
+Python performs only import-time connection in _native_family_layouts.py.
+Initial connection follows the constructor/attribute installers and precedes
+default estimator construction. Lazy sequence imports add new class connections
+without replacing previously captured identities. No Python fallback is added.
+
+Scope limits
+------------
+- This repairs the shared family door, not all transitive family computation.
+  Existing owner scalar/buffer validation and documented migration debt remain.
+- PLS/decomposition have dedicated C entries and bypass classical_c. Their owner
+  lanes must call classical_family_admit(model) before their first field read.
+  The helper takes just model, so copied/dedicated admission contexts work too.
+  This lane does not edit those peer-owned files. Direct manifold entry calls
+  likewise require the helper at their dedicated door; the shared family_mani
+  route is protected here.
+- Existing Python wrappers before the native entry are separately tracked debt.
+- No runtime/identity or performance claims follow from the source tests.
+
+Validation and compiler handoff
+-------------------------------
+Six source/connection tests passed: tools/test_classical_family_admission.py.
+Ten public controls in test_classical_family_frontdoor.py are syntax checked
+only, NOT RUN. They cover changed storage/descriptors, non-string state keys,
+passive subclass state and the functional None-owner route. They use public
+state/metadata operations without adding algorithm identity lanes.
+
+Minimal compile root: checks/classical_family_admission_compile.mojo.
+Compile it with the active Mojo toolchain and repository include root (-I .).
+It instantiates the actual provider helper; it is not full classical_c/tokenizer
+compilation or public-runtime qualification. Root owns the required focused
+local compilation and any broader affected-entry compile before integration.
+This source lane did NOT compile and must not be merged on a claimed compile
+pass until the owner records that result.
+
+Full source-test, syntax, diff, commit and push logs:
+  /Users/andrewhendel/mojolearn-evidence/classical-frontdoor-admission-20261027/
+Callsite inventory retained there: callsite-owners.json (372 literal family
+calls; 122 use None; actual dispatch calls are distinguished from metadata tuples
+in that source-only list). It is not runtime coverage.

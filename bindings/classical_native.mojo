@@ -34,6 +34,8 @@ from bindings.classical_validate import classical_refuse_sparse, classical_estim
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.native_caller_frame import native_caller_globals
+from bindings.native_loaded_module import native_loaded_module
+from providers.python.classical_family_admission_pyapi import classical_family_admit
 
 
 def classical_caller_outside(context: PythonObject) raises -> Bool:
@@ -84,11 +86,15 @@ def classical_entries(model: PythonObject, context: PythonObject) raises -> Pyth
 def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
+        if len(call) != 4:
+            raise Error("TypeError: classical_native_call requires model, operation, arguments and context")
+        var b = native_loaded_module("builtins")
+        if py_type(call[1]) is not b.str or py_type(call[3]) is not b.dict:
+            raise Error("TypeError: native classical operations require an exact operation string and context dictionary")
         var model = call[0]
         var operation = String(call[1])
         var args = call[2]
         var context = call[3]
-        var b = Python.import_module("builtins")
         if operation == "restore_not_fitted":
             var error = classical_error_restore(args, context)
             return error.steal_data()
@@ -146,6 +152,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var restored = host_archive_build(args[0], archive_context, model if operation == "host_archive_load" else PythonObject(None), operation == "host_archive_classical_model")
             return restored.steal_data()
         if operation.startswith("family_"):
+            _ = classical_family_admit(model)
             var family = family_operation(model, operation, args, context)
             return family.steal_data()
         if operation == "linear_regressor_score":

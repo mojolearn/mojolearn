@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: Apache-2.0
+# Shared estimator storage admission before any family owner can read fields.
+# This admits connected class/storage identities, not the arithmetic or every
+# legacy transitive call. Existing owner-specific scalar/buffer checks remain.
+from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
+from bindings.classical_attributes import _type_mro
+from bindings.mode_metadata_native import _class_fields
+
+
+def _family_descriptor(value: PythonObject) raises -> Bool:
+    var ancestry = _type_mro(py_type(value))
+    for i in range(len(ancestry)):  # driver-loop: descriptor slots through admitted native class namespaces
+        if py_contains(_class_fields(ancestry[i]), "__get__"):
+            return True
+    return False
+
+
+def _family_native_member(value: PythonObject, owner: PythonObject) raises -> Bool:
+    var types = native_loaded_module("types")
+    var kind = py_type(value)
+    return (kind is types.GetSetDescriptorType or kind is types.MemberDescriptorType) and value.__objclass__ is owner
+
+
+def classical_family_admit(model: PythonObject) raises -> PythonObject:
+    # Functions such as metrics/resampling have no estimator storage.
+    if model is None:
+        return PythonObject(None)
+    var b = native_loaded_module("builtins")
+    var cls = py_type(model)
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: native family operations refuse Python metaclass hooks")
+    var module = native_loaded_module("mojolearn._native_family_layouts")
+    var layouts = py_fields(module)["LAYOUTS"]
+    if py_type(layouts) is not b.dict:
+        raise Error("TypeError: native family layouts require their connected dictionary")
+    var ancestry = _type_mro(cls)
+    var plan = PythonObject(None)
+    var start = -1
+    for i in range(len(ancestry)):  # driver-loop: locate a connected owner without invoking subclass protocols
+        if py_type(ancestry[i]) is not b.type:
+            raise Error("TypeError: native family operations refuse Python metaclass hooks")
+        if plan is None:
+            plan = py_get(layouts, ancestry[i])
+            if plan is not None:
+                start = i
+    if plan is None:
+        raise Error("TypeError: native family operation requires a connected estimator class")
+    var connected = plan["mro"]
+    if len(ancestry) - start != len(connected):
+        raise Error("TypeError: native family estimator ancestry changed after connection")
+    for i in range(len(connected)):  # driver-loop: preserve the exact connected ancestry tail
+        if ancestry[start + i] is not connected[i]:
+            raise Error("TypeError: native family estimator ancestry changed after connection")
+    var names = plan["names"]
+    var missing = PythonObject(None)
+    for hook in ["__getattribute__", "__getattr__", "__setattr__", "__delattr__", "__del__", "__class__", "__dict__"]:  # small-loop(fixed storage/lookup hooks)
+        var current = missing
+        var found = False
+        for i in range(len(ancestry)):  # driver-loop: resolve hook identities from native class namespaces
+            var row = _class_fields(ancestry[i])
+            if not found and py_contains(row, hook):
+                current = row[hook]
+                found = True
+        if current is not py_get(names, hook):
+            raise Error("TypeError: native family operation refuses changed Python storage hooks")
+    var function_type = native_loaded_module("types").FunctionType
+    var snapshots = plan["descriptors"]
+    for i in range(len(ancestry)):  # driver-loop: reject descriptor replacement before any instance field read
+        var owner = ancestry[i]
+        var row = _class_fields(owner)
+        if i >= start:
+            var saved = snapshots[i - start][1]
+            var saved_keys = py_call(b.list, saved)
+            for k in range(len(saved_keys)):  # driver-loop: pinned connected descriptor identities
+                if py_get(row, saved_keys[k]) is not saved[saved_keys[k]]:
+                    raise Error("TypeError: native family estimator descriptor changed after connection")
+        var keys = py_call(b.list, row)
+        for k in range(len(keys)):  # driver-loop: detect new properties before legacy owners use ordinary attribute reads
+            var name = keys[k]
+            var member = row[name]
+            if not _family_descriptor(member):
+                continue
+            if i >= start:
+                if not py_contains(snapshots[i - start][1], name):
+                    raise Error("TypeError: native family operation refuses new Python descriptors")
+            elif _family_native_member(member, owner):
+                # Native slot/dict descriptors on a passive subclass remain
+                # storage, not Python callbacks. The connected getter below
+                # reads the inherited dictionary without resolving __dict__.
+                continue
+            elif py_type(member) is function_type and (String(name) == "__init__" or not py_contains(names, name)):
+                # Application constructors and unrelated methods may exist;
+                # no such Python function is invoked or rebound by this guard.
+                continue
+            elif py_get(names, name) is not member:
+                raise Error("TypeError: native family operation refuses overridden Python descriptors")
+    var fields = py_call(plan["fields_get"], model, cls)
+    if py_type(fields) is not b.dict:
+        raise Error("TypeError: native family estimator requires an ordinary instance dictionary")
+    var keys = py_call(b.list, fields)
+    for k in range(len(keys)):  # driver-loop: exact keys before any owner dictionary lookup
+        if py_type(keys[k]) is not b.str:
+            raise Error("TypeError: native family estimator state requires exact string keys")
+    return fields
