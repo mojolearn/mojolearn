@@ -10,6 +10,7 @@ from bindings.classical_warnings import classical_warning, _warning_class_fields
 from bindings.optimizer_public_words import stash_python_error
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.native_caller_frame import native_frame_globals
+from providers.python.metric_input_snapshot_pyapi import metric_input_snapshot
 
 
 def metric_is_bool(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -57,9 +58,10 @@ def metric_integer(value: PythonObject, context: PythonObject) raises -> PythonO
 
 def metric_arguments(args: PythonObject, first: Int, context: PythonObject) raises -> PythonObject:
     # Scalar options become ordinary native primitives before comparisons.
-    # Containers/buffers keep their dtype and storage; changing their leaf
-    # types here would alter the existing input-dtype inference contract.
+    # Snapshot input storage/metadata once; preserve nested scalar dtypes
+    # and original aliases so existing native dtype inference stays intact.
     var out = Python.list()
+    var snapshots = Python.dict()
     for index in range(len(args)):  # driver-loop: fixed public metric arguments
         var value = args[index]
         if index >= first and _one_of(py_type(value), context["scalar_types"]):
@@ -68,6 +70,8 @@ def metric_arguments(args: PythonObject, first: Int, context: PythonObject) rais
                 value = PythonObject(scalar.truth())
             else:
                 value = scalar.to_python_number(metric_is_integral(value, context))
+        elif index >= first:
+            value = metric_input_snapshot(value, snapshots, context)
         py_call(out.append, value)
     return py_call(py_type(Python.tuple()), out)
 

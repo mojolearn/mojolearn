@@ -1663,3 +1663,6 @@ from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_mcls_labels=_label_entries())
 _native_family_bridge.connect_bindings("_mojolearn_metrics")
+
+from ._native_owner_lifetime import connect_owner_context as _connect_metric_owners
+_connect_metric_owners(_NATIVE_CONTEXT)
