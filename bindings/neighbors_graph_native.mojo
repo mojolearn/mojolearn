@@ -34,6 +34,7 @@ from bindings.neighbors_ann_native import ann_keep_array
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from core.neighbors_graph_impl import xn_graph_even_rows
+from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
 
 #: `_expansion_neighbors._KERNELS["rbf"]` and `_U_IDENTITY`.
 comptime _XN_KERNEL_RBF = 2
@@ -579,6 +580,26 @@ def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
 def _svgp_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`SVGP.predict(X)`: the mean of `predict_f(X)` (its variance is computed
     as `predict_f` computed it)."""
+    return _svgp_predict_f(model, args, context)[0]
+
+
+def _svgp_predict_y(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`SVGP.predict_y(X)`: `predict_f`'s mean, and its variance plus
+    `noise_variance` (`_unary(var, _U_IDENTITY, 1.0, f32(noise_variance))`)."""
+    var latent = _svgp_predict_f(model, args, context)
+    var var_ = latent[1]
+    var size = Int(py=var_.size)
+    var out = family_array(Python.tuple(size), "<f4", context)
+    _op(args[0], "unary", Python.list(_addr(var_), _addr(out)),
+        Python.list(PythonObject(size), PythonObject(_XN_U_IDENTITY)),
+        Python.list(PythonObject(1.0), _f32_scalar(_attr(model, "noise_variance"))))
+    _ = var_  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    return Python.tuple(latent[0], out)
+
+
+def _svgp_predict_f(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`SVGP.predict_f(X)`: (mean, var) of the latent function."""
     classical_connect_numpy(context)
     var binding = args[0]
     var q = family_as_f32_dense(args[1], 2, "X", context)
@@ -605,7 +626,7 @@ def _svgp_predict(model: PythonObject, args: PythonObject, context: PythonObject
         _ = c  # keep the Python object alive through the native call above
         _ = var_  # keep the Python object alive through the native call above
         _ = mean  # keep the Python object alive through the native call above
-        return mean
+        return Python.tuple(mean, var_)
     # `_k(Q, Z_)`: the rbf kernel, then the kernel variance scale.
     var g = _svgp_gamma(model)
     var k = family_array(Python.tuple(nq, m), "<f4", context)
@@ -634,25 +655,37 @@ def _svgp_predict(model: PythonObject, args: PythonObject, context: PythonObject
     _ = ksu  # keep the Python object alive through the native call above
     _ = c  # keep the Python object alive through the native call above
     _ = var_  # keep the Python object alive through the native call above
-    return mean
+    return Python.tuple(mean, var_)
 
 
 def _svgp_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`RegressorScoreMixin.score(X, y, sample_weight)` as SVGP inherited
     it: y as float32 (`as_f32_c(y, ndim=None, name="y")`), the prediction,
     then `metrics.r2_score(y, pred, sample_weight=..., numeric_mode=...)`
-    through the metrics owner; args = (binding, X, y, sample_weight, the
-    metrics binding `_get_binding` resolved)."""
+    through the metrics owner; args = (binding, X, y, sample_weight[, the
+    metrics binding]). Without a metrics binding the model's numeric_mode
+    selects the import-connected one here, as `_get_binding` selected it."""
     classical_connect_numpy(context)
     var truth = family_as_f32(args[2], -1, "y", context)
     var prediction = _svgp_predict(model, args, context)
     var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
-    return mcls_cluster_operation("family_mcls_r2", Python.tuple(args[4], truth, prediction, args[3],
+    var metrics = args[4] if len(args) > 4 and args[4] is not None else estimator_binding(
+        model, "_mojolearn_metrics", context)
+    return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
                                   PythonObject("uniform_average"), PythonObject(True), mode), context)
 
 
 def neighbors_graph_operation(model: PythonObject, operation: String, var args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
+    if (operation == "family_xn_graph_connected_components" and len(args) > 0
+            and py_type(args[0]) is _b().str):
+        # connected_components(..., numeric_mode=<str>): the shell hands over
+        # the requested mode in the binding slot (None was resolved to the
+        # default-mode binding by the family door); select its binding here.
+        var selected = Python.list(estimator_binding_mode(args[0], "_mojolearn_x_neighbors", context))
+        for i in range(1, len(args)):  # driver-loop: over fixed public function arguments
+            _ = py_call(selected.append, args[i])
+        args = selected
     args = xn_admit_arguments(args, context)
     if operation == "family_xn_graph_pagerank_fit":
         _pagerank_fit(model, args, context)
@@ -670,6 +703,10 @@ def neighbors_graph_operation(model: PythonObject, operation: String, var args: 
         return model
     if operation == "family_xn_graph_svgp_predict":
         return _svgp_predict(model, args, context)
+    if operation == "family_xn_graph_svgp_predict_f":
+        return _svgp_predict_f(model, args, context)
+    if operation == "family_xn_graph_svgp_predict_y":
+        return _svgp_predict_y(model, args, context)
     if operation == "family_xn_graph_svgp_score":
         return _svgp_score(model, args, context)
     raise Error("RuntimeError: unknown neighbors operation " + operation)

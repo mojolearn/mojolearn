@@ -38,12 +38,32 @@ class QualityParity(unittest.TestCase):
         for q in ({"n_iter": 42}, {"finite": True}, {"output_shape": [100, 10]}, {}):
             self.assertEqual(pair(q, q)["verdict"], "INSUFFICIENT")
 
-    def test_all_metrics_must_pass_and_rule_is_symmetric(self):
+    def test_all_metrics_must_pass_and_held_out_scores_are_one_sided(self):
+        # v8: a held-out score fails only when ours is worse than the opponent by more than the margin
         a, b = dict(r2=.8, rmse=1.0), dict(r2=.8, rmse=1.2)
-        self.assertEqual(pair(a, b)["verdict"], "FAIL")
+        self.assertEqual(pair(a, b)["verdict"], "PASS")
         self.assertEqual(pair(b, a)["verdict"], "FAIL")
+        self.assertEqual(pair(dict(r2=.7, rmse=1.0), dict(r2=.8, rmse=1.2))["verdict"], "FAIL")
         self.assertEqual(pair(dict(rmse=0), dict(rmse=0))["verdict"], "PASS")
-        self.assertEqual(pair(dict(rmse=0), dict(rmse=.01))["verdict"], "FAIL")
+        self.assertEqual(pair(dict(rmse=0), dict(rmse=.01))["verdict"], "PASS")
+        self.assertEqual(pair(dict(rmse=.01), dict(rmse=0))["verdict"], "FAIL")
+
+    def test_neural_gru_fit_board_20261027_ours_higher_auc_passes(self):
+        # NVIDIA board neural.gru-fit.higgs (0.8.62) against torch-eager-bf16: v7 marked it FAIL (|0.0134| > 0.01)
+        ours, torch = dict(auc=0.682364954474371, rmse=0.4736463531548095), \
+            dict(auc=0.6689663639024599, rmse=0.47633430770380775)
+        result = pair(ours, torch)
+        self.assertEqual(result["verdict"], "PASS")
+        auc = next(c for c in result["checks"] if c["metric"] == "auc")
+        self.assertEqual(auc["comparison"], "one-sided-absolute")
+        self.assertEqual(auc["observed"], 0.0)
+        self.assertAlmostEqual(auc["difference"], 0.0133986, places=6)
+        self.assertEqual(pair(torch, ours)["verdict"], "FAIL")
+
+    def test_metrics_without_a_better_side_stay_symmetric(self):
+        for metric, a, b in (("silhouette", .5, .52), ("pvalue", .18, .2)):
+            self.assertEqual(pair({metric: a}, {metric: b})["verdict"], "FAIL")
+            self.assertEqual(pair({metric: b}, {metric: a})["verdict"], "FAIL")
 
     def test_missing_or_nonfinite_metric_cannot_pass(self):
         for value in (None, float("nan"), float("inf"), True):
@@ -53,6 +73,7 @@ class QualityParity(unittest.TestCase):
     def test_log_density_uses_absolute_nats(self):
         self.assertEqual(pair(dict(mean_log_likelihood=200.79), dict(mean_log_likelihood=200.77))["verdict"], "PASS")
         self.assertEqual(pair(dict(mean_log_likelihood=200), dict(mean_log_likelihood=201))["verdict"], "FAIL")
+        self.assertEqual(pair(dict(mean_log_likelihood=201), dict(mean_log_likelihood=200))["verdict"], "PASS")
 
     def test_fast_precision_compares_to_reference_bound(self):
         a, b = dict(max_rel_err_vs_fp64=2.4e-7), dict(max_rel_err_vs_fp64=.00376)

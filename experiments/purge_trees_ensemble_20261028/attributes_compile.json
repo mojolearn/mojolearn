@@ -1,0 +1,14 @@
+{
+ "exit_code": 0,
+ "seconds": 14,
+ "source_commit": "3d3ca4404e122b4a600584c658d4d77a7bc05fda",
+ "entry": "checks/peer1_attribute_owner_compile.mojo",
+ "command": "pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/purge-trees-20261028 -I /Users/andrewhendel/mojolearn-wt/purge-trees-20261028/bindings /Users/andrewhendel/mojolearn-wt/purge-trees-20261028/checks/peer1_attribute_owner_compile.mojo -o /Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt2-attributes/peer1_attribute_owner_compile.so",
+ "jobs": 10,
+ "compiler_version": "Mojo 1.0.0 (ed45d567)",
+ "scope": "public_attribute_c root: bindings/public_attributes_native.mojo with the merged SVM coef + bagging_estimators property kinds (conflict resolution); CPU, identical, O0",
+ "runtime_executed": false,
+ "log": "/Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt2-attributes/compile.log",
+ "binary": "/Users/andrewhendel/mojolearn-evidence/purge-trees-20261028/attempt2-attributes/peer1_attribute_owner_compile.so",
+ "binary_sha256": "b0bbd81849a1e6562f77af87149dd91cb4ef564915ecc79a1b2c0eeecb08e225"
+}

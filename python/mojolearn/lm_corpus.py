@@ -381,4 +381,5 @@ from ._native_loaded_modules import connect_module as _corpus_connect_module
 _corpus_connect_module("mmap", _corpus_mmap, ("mmap",))
 _NATIVE = _tokenizer._TOKENIZER_NATIVE
 _NATIVE.lm_corpus_public_call("connect", (
-    TokenizedCorpus, TokenBatches, _TokenBatchIterator, _CorpusArray, _corpus_mmap.mmap))
+    TokenizedCorpus, TokenBatches, _TokenBatchIterator, _CorpusArray, _corpus_mmap.mmap,
+    _tokenizer._TOKENIZER_CONTEXT[7]))
