@@ -149,13 +149,13 @@ def kernel_public_refusal(error: Error, fitting: Bool, nested: Bool, rows: Int,
         return Error(text)
     if pending:
         text = _pending_text(error)
-    for fault in ["device_context", "CUDA", "HIP", "hipError", "Metal", "MTL"]:  # small-loop: prior device-error spellings
+    for fault in ["device_context", "CUDA", "HIP", "hipError", "Metal", "MTL"]:  # small-loop(fixed prior device-error spellings)
         if text.find(fault) >= 0:
             return Error(String(error))
     var message = String("")
     var name = String(py_type(model).__name__)
     if not nested and pending and kind is b.Exception:
-        for spelling in ["NaN", "infinity", "Infinity", "infinite", "Infinite", "nonfinite", "non-finite", "not finite", "requires finite", "must be finite"]:  # small-loop: prior nonfinite spellings
+        for spelling in ["NaN", "infinity", "Infinity", "infinite", "Infinite", "nonfinite", "non-finite", "not finite", "requires finite", "must be finite"]:  # small-loop(fixed prior nonfinite spellings)
             if text.find(spelling) >= 0:
                 message = (String("Input") if fitting else String("Input X")) + " contains NaN or infinity (" + name + ": " + text + ")"
                 break
