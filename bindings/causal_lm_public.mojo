@@ -1431,12 +1431,7 @@ def _read_engine(mut s: GenerationHandle, capacity: Int) raises -> PythonObject:
     return out
 
 
-def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
-    var admission: Optional[NativeArrayAdmission] = None
-    return _read_admitted(s, count, admission)
-
-
-def _read_admitted(mut s: GenerationHandle, count: Int, mut admission: Optional[NativeArrayAdmission]) raises -> PythonObject:
+def _read(mut s: GenerationHandle, count: Int, mut admission: Optional[NativeArrayAdmission]) raises -> PythonObject:
     # `admission` is set by the first decode step: ONE full Array guard per
     # call. Each forward may release the GIL, so each is followed by exactly
     # one post-release re-check against the admitted snapshot.
@@ -1496,6 +1491,11 @@ def _read_admitted(mut s: GenerationHandle, count: Int, mut admission: Optional[
         raise error
 
 
+def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
+    var admission: Optional[NativeArrayAdmission] = None
+    return _read(s, count, admission)
+
+
 def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonObject:
     _causal_array_guard()
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
@@ -1551,7 +1551,7 @@ def _generate_complete(model: PythonObject, value: PythonObject, maximum: Python
         if resident is not None:
             return resident
     var admission: Optional[NativeArrayAdmission] = None
-    var continuation = _read_admitted(s, max(1, s.max_new), admission)
+    var continuation = _read(s, max(1, s.max_new), admission)
     # Per call, before the continuation is joined: the decode loop's admitted
     # snapshot makes this a cheap re-check; the engine route and an empty loop
     # leave no admission and keep the full guard.

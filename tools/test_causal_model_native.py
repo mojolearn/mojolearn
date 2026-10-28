@@ -160,8 +160,10 @@ def test_streams_and_checkpoints_capture_before_execution_and_guard_output_metad
     assert 'generation_array_snapshot(args[3])' in door
     read = PUBLIC.split("def _read(mut", 1)[1].split("def _decode_chunk", 1)[0]
     run = read.index('_run_prepared(')
-    guard = read.index('_causal_array_guard()', run)
+    # One post-release re-check per forward, against the call's admitted snapshot.
+    guard = read.index('admission.value().recheck(generation_array_context())', run)
     assert guard < read.index('logits._addr', run)
+    assert read.index('admission = NativeArrayAdmission(generation_array_context())') < run
     checkpoint = owner.split('def causal_checkpoint_capture', 1)[1]
     assert checkpoint.index('neural_string_keys(checkpoint)') < checkpoint.index('checkpoint.keys()')
     assert 'generation_array_snapshot(item)' in checkpoint
