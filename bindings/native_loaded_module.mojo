@@ -25,7 +25,7 @@ def native_namespace_string_keys(fields: PyObjectPtr, string_type: PythonObject)
     var key = PyObjectPtr()
     var value = PyObjectPtr()
     var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
-    while next_item(fields, Pointer(to=position), Pointer(to=key), Pointer(to=value)) != 0:  # driver-loop: admitted namespace keys
+    while next_item(fields, Pointer(to=position), Pointer(to=key), Pointer(to=value)) != 0:  # driver-loop: over admitted namespace keys
         var cls = cpy.PyObject_Type(key)
         var same = cls == string_type._obj_ptr
         cpy.Py_DecRef(cls)
@@ -136,7 +136,7 @@ struct _AdmittedModule(Copyable, Movable):
         var key = PyObjectPtr()
         var value = PyObjectPtr()
         var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
-        while next_item(fields._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=value)) != 0:  # driver-loop: capture admitted namespace keys
+        while next_item(fields._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=value)) != 0:  # driver-loop: over admitted namespace keys captured once
             self.namespace_keys.append(PythonObject(from_owned=cpy.Py_NewRef(key)))
         # Raw pointers of the retained lists' items (kept alive by them).
         self.key_ptrs = List[PyObjectPtr]()
@@ -192,7 +192,7 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     var value = PyObjectPtr()
     var index = 0
     var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
-    while next_item(fields, Pointer(to=position), Pointer(to=key), Pointer(to=value)) != 0:  # driver-loop: native namespace identity check
+    while next_item(fields, Pointer(to=position), Pointer(to=key), Pointer(to=value)) != 0:  # driver-loop: over live namespace key identities
         if index >= len(entry.namespace_keys) or key != entry.namespace_keys[index]._obj_ptr:
             return False
         index += 1
