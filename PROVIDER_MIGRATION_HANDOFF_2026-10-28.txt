@@ -608,3 +608,18 @@ Late-message scratch notes also live at:
 ~/mojolearn-evidence/provider-migration-resume-20261027/ROOT_HANDOFF_LATE_UPDATES_20261028.txt
 The source/checkpoint/queue above is intentionally frozen at handoff time.
 Read current peer briefs and ownership status on resume for subsequent updates.
+
+INTEGRATION 2026-10-28 (Claude integrator) — TRANCHE 1
+Main 4771b55daa -> 26e64df4af (fast-forward of integration/provider-queue-20261028), pushed rc=0.
+Merged: aefc4545aa (incl 33a63; not 4ad607), 0456ee3e6a, 0f0b336d87 (68f5+5e7c), a3a8150111, 7cacec39ba,
+654531acce, 8e67e1bce1 (+fcee/ff81), 77ed135648. Cherry-picked -x: 32276a868c cca559b8a0 6be526212e 74c1e58ebe
+(merge conflicted only on lane-base duplicates already in main); f160cd1283 e456212ca7 4b9999bee4 (pair together;
+one import-union in tsa_public_native.mojo); c7694b3277 9a0f043190 36a66a6885 2f3e60c2ca (e8a10/808a23/9608 excluded).
+Fixes: 3d95fa9dfc parallel_shard _rbf_transform x_meta (already broken on main); 94a99919ef + 91a9417741
+PythonObject(None) default args evaluated at compile time in neural_prefill/samba_inference (tokenizer_host).
+Compile: experiments/integration_provider_queue_20261028/compile.json. RunPod CPU x86-64-v3 identical O0, 32 cores:
+28/31 roots exit 0 (all receipt roots + umap_init + classical_host + manifold + sm_89 x_sequence/solver);
+gfx942 x_sequence/solver fail only at O0 (stack frame limit, unchanged kernels) and pass at default opt;
+tokenizer_host green on Mac apple-m1 O0 after fixes. Pods mzqcgz41frej3m, d2djgp821mpybd reaped (verified).
+NOT compiled: full host binding set; x86 tokenizer_host after fixes. No runtime/identity/GPU execution.
+Evidence: ~/mojolearn-evidence/integration-provider-queue-20261028/.
