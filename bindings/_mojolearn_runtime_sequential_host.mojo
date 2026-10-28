@@ -10,6 +10,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.sequential_native import sequential_c
 from bindings.native_identity_key import NativeIdentityKey
+from bindings.sequential_admission import SequentialAdmissions
 
 comptime RUNTIME_SEQUENTIAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -40,6 +41,7 @@ def build__mojolearn_runtime_sequential_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_sequential_host")
         _ = module.add_type[NativeIdentityKey]("_NativeIdentityKey")
+        _ = module.add_type[SequentialAdmissions]("_SequentialAdmissions")
         module.def_py_c_function(sequential_c, "sequential_native_call")
         module.def_function[runtime_sequential_host_numeric_mode_binding]("runtime_sequential_host_numeric_mode")
         module.def_function[runtime_sequential_host_vendor_binding]("runtime_sequential_host_vendor")

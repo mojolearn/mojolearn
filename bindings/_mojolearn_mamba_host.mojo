@@ -40,6 +40,7 @@ from std.os import abort
 from mamba.host.native_block_dispatch import NATIVE_MAMBA_HOST_BLOCK_API, NATIVE_MAMBA_HOST_STATE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.python import Python, PythonObject
+from bindings.native_identity_key import NativeIdentityKey
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -364,6 +365,7 @@ def mamba_native_session_handle_binding(session: PythonObject) raises -> PythonO
 def build__mojolearn_mamba_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba_host")
+        _ = m.add_type[NativeIdentityKey]("_NativeIdentityKey")
         m.def_function[mamba_block_api_binding]("mamba_block_api_v1")
         m.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         m.def_function[mamba_native_session_handle_binding]("mamba_prefill_native_handle_v1")

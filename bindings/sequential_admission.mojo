@@ -4,6 +4,7 @@
 # walking containers, so subclass properties/iterators cannot run first.
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.ffi import _Global
+from std.collections import Dict
 from std.python import Python, PythonObject
 from bindings.native_torch_admission import native_torch_exact, native_torch_admit
 from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_get, py_setitem
@@ -175,7 +176,20 @@ def _read_fields_full(operation: String) raises -> PythonObject:
     return PythonObject(None)
 
 
-comptime _SEQUENTIAL_ADMIT_SLOT = "sequential_admit_v2"
+struct SequentialAdmissions(Movable, Writable):
+    var operations: Dict[String, PythonObject]
+
+    def __init__(out self):
+        self.operations = Dict[String, PythonObject]()
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("SequentialAdmissions(native)")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+comptime _SEQUENTIAL_ADMIT_SLOT = "sequential_admit_v3"
 
 
 def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises:
@@ -197,7 +211,11 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
         # depth, changed identity (fit, set_params, load). Arguments are
         # admitted on every call.
         var cache = prepared_get(mods, _SEQUENTIAL_ADMIT_SLOT, model)
-        var seen = PythonObject(None) if cache is None else py_get(cache, PythonObject(operation))
+        var seen = PythonObject(None)
+        if cache is not None:
+            var admitted = cache.downcast_value_ptr[SequentialAdmissions]()
+            if operation in admitted[].operations:
+                seen = admitted[].operations[operation]
         var hit = False
         if seen is not None:
             try:
@@ -238,7 +256,8 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
                     break
             if stable and not key.retains(model):
                 if cache is None:
-                    cache = b.dict()
-                py_setitem(cache, PythonObject(operation), PythonObject(alloc=key^))
+                    cache = PythonObject(alloc=SequentialAdmissions())
+                var admitted = cache.downcast_value_ptr[SequentialAdmissions]()
+                admitted[].operations[operation] = PythonObject(alloc=key^)
                 prepared_put(mods, _SEQUENTIAL_ADMIT_SLOT, model, cache)
     sequential_admit_value(mods, args, context)
