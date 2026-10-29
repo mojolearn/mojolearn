@@ -1,0 +1,9 @@
+{
+  "r2_key": "measurements/clustering-module-connection-20261029/remaining-phases-evidence.tgz",
+  "local": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/remaining-phases-evidence.tgz",
+  "sha256": "01f40515964c43310d0ac37ae23f305ec7b8f3b6b3cc4ee0e83a305ddbee2bb2",
+  "bytes": 1961,
+  "put_status": 200,
+  "readback_status": 200,
+  "readback_matches": true
+}

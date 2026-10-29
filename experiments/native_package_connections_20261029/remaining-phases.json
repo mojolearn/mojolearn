@@ -1,0 +1,21 @@
+[
+  {
+    "phase": "transformer",
+    "command": [
+      "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/venv/bin/python",
+      "/Users/andrewhendel/mojolearn-wt/clustering-module-connection-20261029/python/mojolearn/tests/test_transformer_surface.py"
+    ],
+    "exit_code": 1,
+    "log": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/remaining-transformer.log"
+  },
+  {
+    "phase": "ordered",
+    "command": [
+      "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/venv/bin/python",
+      "-c",
+      "import importlib.util; from pathlib import Path; import mojolearn as ml; root=Path('/Users/andrewhendel/mojolearn-wt/clustering-module-connection-20261029'); spec=importlib.util.spec_from_file_location('ordered',root/'packaging/macos/ordered_smoke.py'); gate=importlib.util.module_from_spec(spec); spec.loader.exec_module(gate); assert ml.vendor()=='metal'; assert ml.numeric_mode()=='identical'; gate.run_installed_ordered(root,ml,'identical','metal')"
+    ],
+    "exit_code": 1,
+    "log": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/remaining-ordered.log"
+  }
+]

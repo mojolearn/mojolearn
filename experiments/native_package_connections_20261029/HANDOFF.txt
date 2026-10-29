@@ -48,3 +48,15 @@ Complete outputs/source diff/overlay hashes/source report:
 Archive in R2 verified by SHA256 readback; see retention.json. Source and runtime
 coverage/limitations are recorded in validation.json. Root serializes integration;
 combine with compiled peer Array metadata repair before assembling next wheel.
+
+Follow-up at root request: ran only the two previously unreached canonical
+phases as unchanged standalone drivers, not another full smoke. Both exit1:
+- Transformer surface: odd head_dim=5 fixture constructs outside its refusal
+  assertion. Native constructor now refuses with an 'even' rope_dim diagnostic
+  before the test's expected forward-time refusal. Remaining checks not reached.
+- OrderedRMSE installed gate: driver unconditionally switches process default to
+  fast to test restored-mode precedence. This identical-only wheel has no fast
+  tier, so ImportError stops before restored-model comparisons. No fast build
+  requested and no alternate-mode qualification claimed.
+Exact commands and separate R2 readback retention in remaining-phases.json and
+remaining-retention.json. Both logs retained in the same external evidence dir.
