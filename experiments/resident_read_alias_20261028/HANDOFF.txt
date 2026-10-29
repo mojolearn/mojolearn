@@ -48,3 +48,8 @@ or sampling KV ownership contract is introduced.
 
 Evidence: /Users/andrewhendel/mojolearn-evidence/resident-read-alias-20261028/
 Full logs/exits, binary/source bytes and hashes, compile scope and source guards.
+
+Final status: actual public5+10 compile exit0; no_host_routes,
+no_python_in_kernels and no_compute_in_shells each exit0 on product
+f780389e83f8c27e2e4f6cf655aff7c3219e1f32. Independent neural peer and root source
+reviews found no blocker. Only receipt changes follow the compiled product.
