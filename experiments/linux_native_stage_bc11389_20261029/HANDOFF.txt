@@ -1,0 +1,25 @@
+Linux current-source compilation and static install assembly
+
+Branch lane/linux-build-receipts-20261029; evidence-only batch.
+Final public package bc11389e6896f918b95a404b8cf2bb97ad2ace09: 46 host + 33 sm89 images.
+Selected image inventory is 19 retained originals + 51 unchanged 5ab images + 9 corrected-source images.
+All selected raw hashes checked. Actual workers: 73 images at32,6 at16. All semantic build flags{} (standard optimization); no O0 override.
+
+The last nine selected owners compiled0 in617.764s on be2dbd0397 (source closures equalbc):
+x_sequence host; x_sequence,x_trees,x_linear,preprocessing,resample,x_metrics,tsa,arima sm89.
+Support math also compiled0. Producer3 represents incomplete full-set cache activation by this nine-group selection; controller completeness9/9 and exit0, no missing owners.
+Earlier5ab CPU leg compiled34host and19sm89; seven GPU groups intentionally unfinished at40min budget were completed here. Preserve its interrupted x_linear and cancelled queue; do not call those compiler failures.
+
+Static canonical packaging/linux/stage_libs.py passed; final package has1099 hashed files, exactbc Python/payload/COMMIT, full native ELF dependency closure. Package archive85,482,344 bytes, SHA772026f68616fdabd70ff2f0fd3a0dad252554a8c5e0fcac4d06c632064154de.
+R2 measurements/linux-install-bc11389-20261029/linux-bc11389-installed-stage.tgz.
+Mac ~/mojolearn-evidence/linux-install-bc11389-20261029/final-stage/.
+Original 70 image closures matchbc; two oldx_sequence images replaced. Nine new image closures independently matchbc. The generated Unicode table is pinned to its original exact retained bytes, not regenerated/waived.
+
+Failures preserved: initial48GiB reservation correctly refused actual59.6GiB80% budget; serial supported default then used32workers. First follow-up stage failed missingLIEF before any native compile. Next createHTTP500 had no provider pod on two subsequent listings. Third owned pod SSH upload stalled~8KiB/s; its partial source preserved. Exact original source transported via signedR2 with SHA verification; no compiler/source changes, no extended lease. Per-run final controller finishes canonical full stage before retaining outputs; no watchers installed.
+
+Owned podjvy2n0ghb8d6vp: armed14:28:28UTC/deadline15:28:28; deletion verified14:48:26UTC after full463,185,968-byte archive PUT/GET/hash and Mac retention. Cost$0.3376. Original name-only guard cancelled only after absence proof. No active owned CPU leases.
+Complete archive R2 measurements/runpod-cpu/mojolearn-cpu-releasebe2-stage3-20261029-142712/results-complete.tgz, SHAca2640e76208f5a76e9bda05964d0acbc2bb31c205bcd98f5401f6c33c8c2280.
+Logs/receipts/source roots/raw native bytes: ~/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/.
+Original scripts/transport receipts: adjacent attempt3/; first-wave evidence ~/mojolearn-evidence/linux-final-builds-5ab-20261029/.
+
+No runtime, identity, cross-vendor or performance execution by this lane. Canonical static staging is not runtime qualification. Linux Torch/MAX native adapter payload is still absent and its build/install gate remains separate. Parent owns GPU installed runtime and release identity orchestration. Never add duplicate adapter arithmetic lanes.
