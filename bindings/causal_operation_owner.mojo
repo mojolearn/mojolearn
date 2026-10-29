@@ -157,9 +157,16 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
         if original is not None and (not py_contains(original, names[i]) or item is not original[names[i]]):
             raise Error("TypeError: CausalLM native execution entry changed after admission")
         if (name == "native_primitives" or name == "native_block_operations" or name == "native_mamba"
-                or name == "block_binding" or name == "native_session_provider"):
+                or name == "block_binding" or name == "native_session_provider"
+                or name == "mamba2_workspace_provider"):
             # Typed provider/lifetime admission occurs at its native boundary;
             # these values are retained, never called or traversed as Python.
+            py_setitem(result, names[i], item)
+        elif name == "resident_read_v1":
+            # Native capability metadata, not an executable registry callback.
+            # The constructed-owner identity check above still forbids edits.
+            if py_type(item) is not bi.bool:
+                raise Error("TypeError: CausalLM resident_read_v1 capability must be bool")
             py_setitem(result, names[i], item)
         elif (name == "cpu" or name == "weight_names" or name == "resident_vendor"
                 or name == "mamba1_profile" or name == "native_enabled"):

@@ -277,7 +277,8 @@ def causal_lm_admit_binding(mut mods: NativeModules,
                          String("causal_lm_session_open"), String("causal_lm_session_run"), String("causal_lm_session_close")]:
                 py_setitem(entries, name, _native_function(mods, block_binding, name))
             for name in [String("transformer_decode_session_load_state"), String("transformer_decode_session_export_state"),  # small-loop(optional resident entry names)
-                         String("causal_lm_session_forward")]:
+                         String("causal_lm_session_forward"), String("transformer_arithmetic_profile"),
+                         String("transformer_arithmetic_profile_changed")]:
                 if _native_has_entry(mods, block_binding, name):
                     py_setitem(entries, name, _native_function(mods, block_binding, name))
             if _native_has_entry(mods, block_binding, "causal_lm_resident_read_v1"):
@@ -1086,11 +1087,55 @@ def _causal_model_head_prepared(head: GenerationHeadSnapshot, x: PythonObject, b
     return out
 
 
+def _resident_profiles_ok(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
+    # Profile tags are ordinary checkpoint metadata, including for the default
+    # compiled arithmetic. Compare with the selected resident module, rather
+    # than declining every tagged model or silently discarding a mismatch.
+    var e = model._native_entries
+    var selected = PythonObject(None)
+    var changed = False
+    if py_contains(e, "transformer_arithmetic_profile"):
+        selected = e["transformer_arithmetic_profile"]()
+        mods.released()
+        if not py_contains(e, "transformer_arithmetic_profile_changed"):
+            return False
+        changed = Bool(py=e["transformer_arithmetic_profile_changed"]())
+        mods.released()
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    for i in range(len(model._blocks)):  # driver-loop: captured profile admission once per public operation
+        var blk = _block(mods, model, i)
+        var profile = py_get(blk, "_arithmetic_profile", PythonObject(None))
+        var st = state.layers[i]
+        if py_type(st) is mods.module("types").SimpleNamespace and py_get(causal_snapshot_fields(mods, st), "_causal_admission_failure") is not None:
+            return False
+        if py_call(g[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
+            return False
+        var old = py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None))
+        if selected is None:
+            if profile is not None or old is not None:
+                return False
+        elif profile is None or not Bool(py=profile == selected):
+            return False
+        if old is not None and profile is not None and not Bool(py=old == profile):
+            return False
+        if old is None and Int(py=st.cached_tokens) != 0 and (changed or
+                _generation_bool(py_get(blk, "_arithmetic_profile_changed", PythonObject(False)))):
+            # The ordinary layer path supplies its existing, ordered diagnostic.
+            return False
+    return True
+
+
+def _resident_publish_profile(blk: PythonObject, state: PythonObject) raises:
+    var profile = py_get(blk, "_arithmetic_profile", PythonObject(None))
+    if profile is not None:
+        py_setattr(state, "arithmetic_profile", profile)
+
+
 def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
     """Whether `forward` runs as the one resident program
     (`causal_lm_session_forward`): a transformer stack with a norm, the
-    resident entries, a head the resident session takes, no arithmetic
-    profile metadata to carry and no layer state held by a decode session."""
+    resident entries, a head the resident session takes, matching arithmetic
+    profile metadata and no layer state held by a decode session."""
     var e = model._native_entries
     if String(model.kind) != "transformer" or not _resident_norm_ok(model):
         return False
@@ -1102,19 +1147,7 @@ def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: Py
         return False
     if model._head_int15 is not None and String(e["resident_vendor"]) != "cuda":
         return False
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    for i in range(len(model._blocks)):  # driver-loop: over model layers
-        var blk = _block(mods, model, i)
-        if py_get(blk, "_arithmetic_profile", PythonObject(None)) is not None:
-            return False
-        var st = state.layers[i]
-        if py_type(st) is mods.module("types").SimpleNamespace and py_get(causal_snapshot_fields(mods, st), "_causal_admission_failure") is not None:
-            return False
-        if py_call(g[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
-            return False
-        if py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None)) is not None:
-            return False
-    return True
+    return _resident_profiles_ok(mods, model, state)
 
 
 def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
@@ -1296,6 +1329,7 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             else:
                 _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
                 mods.released()
+            _resident_publish_profile(blk, st)
             py_setattr(st, "cached_tokens", cached)
             _ = out  # keep the Python object alive through the native call above
         _writeback(copies)
@@ -1731,11 +1765,12 @@ def _resident_open_all(mut mods: NativeModules,
 
 def _resident_key(mut mods: NativeModules, model: PythonObject, state: PythonObject, b: Int, int15: Bool) raises -> PythonObject:
     """What a kept resident session set must match: the rows, every layer's
-    cache capacity, the head format and the entries it was opened with."""
+    cache capacity/profile, the head format and the entries it was opened with."""
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var caps = g[].bi.list()
     for i in range(len(state.layers)):  # driver-loop: over model layers
-        _ = py_call(caps.append, state.layers[i].max_tokens)
+        var profile = py_get(_block(mods, model, i), "_arithmetic_profile", PythonObject(None))
+        _ = py_call(caps.append, Python.tuple(state.layers[i].max_tokens, profile))
     var identity = py_get(_standalone_record_fields(mods, model), "_causal_entries_identity", model._native_entries)
     return Python.tuple(b, py_call(g[].bi.tuple, caps), int15, py_call(g[].bi.id, identity))
 
@@ -1777,6 +1812,8 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
     elif n > 1 and not _resident_read_disjoint_state(mods, model, state):
         # Same optional-resident eligibility sentinel used above. Complete
         # generation then enters _read and keeps legacy alias coupling.
+        return PythonObject(None)
+    if not _resident_profiles_ok(mods, model, state):
         return PythonObject(None)
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var keep = List[PythonObject]()
@@ -2116,6 +2153,7 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
             _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
             mods.released()
             admission.recheck(generation_array_context())
+            _resident_publish_profile(blk, st)
             py_setattr(st, "cached_tokens", PythonObject(cached))
         _writeback(copies)
         if persist:
