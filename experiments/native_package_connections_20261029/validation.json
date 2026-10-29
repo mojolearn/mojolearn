@@ -1,0 +1,86 @@
+{
+  "product_commits": [
+    "680c69e414",
+    "81f40c5e56"
+  ],
+  "installed_python": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/venv/bin/python",
+  "wheel_sha256": "154586f2302535698fff728401c76e26bf30504c8ae87fa89eee552cbbdf474c",
+  "native_runtime_members": 87,
+  "native_runtime_mismatches": [],
+  "changed_installed_files": [
+    "_native_public_attributes.py",
+    "_array.py",
+    "_expansion_trees.py",
+    "_mode.py",
+    "_native_family_bridge.py",
+    "importers/_program.py"
+  ],
+  "public_tests": {
+    "exit_code": 0,
+    "passed": 4,
+    "log": "consolidated-public-tests.log"
+  },
+  "source_guard_tests": {
+    "exit_code": 0,
+    "passed": 8,
+    "log": "source-guard-tests-final.log"
+  },
+  "source_guard": {
+    "owners": 10,
+    "literal_calls": 17,
+    "errors": 0,
+    "scope": "Declarations and reviewed export names only; no proof of import ordering, dynamic names, or optional third-party module setup"
+  },
+  "canonical_macos_smoke": {
+    "exit_code": 1,
+    "log": "consolidated-macos-smoke.log",
+    "status": "Advanced past repaired hierarchy and GP operations; Mamba surface 99/102 passed, 3 dtype-name diagnostic failures. Later surface gates not reached."
+  },
+  "native_compilation": "No native source or bytes changed; no rebuild",
+  "runtime_scope": "Private installed current wheel on Apple, Python3.13, identical; no final-wheel all-Python qualification or whole identity run",
+  "guards": [
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_host_routes.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/guard-0.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_python_in_kernels.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/guard-1.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_compute_in_shells.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/guard-2.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/rebuild_fence.py",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/guard-3.log"
+    }
+  ]
+}

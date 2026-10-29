@@ -1,0 +1,50 @@
+Branch lane/clustering-module-connection-20261029
+Product commits 680c69e414 then 81f40c5e56; base 06e52d25b91b.
+
+Actual installed-wheel failure: all five canonical Python versions reached
+AgglomerativeClustering.fit and lacked the native package connection for the
+public attribute metadata owner. The first repair exposed the same missing
+connection in GaussianProcessRegressor's mode metadata owner.
+
+Repair: register the initialized metadata owner once at existing setup boundaries
+for _native_public_attributes, _mode, _array, _expansion_trees,
+_native_family_bridge and importers._program. Existing dictionaries retain their
+identity and are extended in place; the native loaded-module helper still checks
+export identity on use. Family unavailable setup is also connected consistently.
+Optional importer loading stays lazy. No eager framework imports, native compute
+changes, callback fallback, or relaxation of native admission.
+
+Bounded source pass: 17 literal native_loaded_module package consumers request
+10 package owners. The new check validates their source connection declarations
+and reviewed required exports, including import aliases and __name__. It runs
+against the pushed Git tree in pre-push. Eight tests cover missing owners,
+missing/nonliteral exports, duplicate declarations, new owner review, aliases,
+comments and the current repository. This static check cannot establish actual
+import order, dynamic module-name coverage, or optional third-party connections.
+
+Installed validation: private Python3.13 environment installed from corrected095
+wheel SHA154586f2302535698fff728401c76e26bf30504c8ae87fa89eee552cbbdf474c,
+with only six repaired setup modules overlaid. Four tests passed: hierarchy
+fit/fields; replaced owner export refusal and recovery; all five additional
+owner/export identities without loading Torch/ONNX/TensorFlow; GP fit/predict.
+All 87 native/runtime files remain byte-identical. No native rebuild required.
+Four existing source guards exit0; new committed-tree source guard exit0.
+
+Canonical macOS smoke exit1, retained honestly: repaired hierarchy and GP paths
+advance successfully; Mamba surface reports 99/102 passing checks. Three existing
+dtype-name tests fail because rejection says only 'neural x requires float32
+input', omitting float64/bfloat16. Root owns coordination of that separate native
+diagnostic repair. Later surface gates were not reached. This is not a complete
+wheel smoke or identity qualification. No final five-Python matrix rerun yet.
+
+Original failures retained, including initial test fixture mistake (unsupported
+numeric_mode constructor keyword), corrected missing-owner failure, intermediate
+GP missing-owner failure, and consolidated Mamba failure. No failure was removed
+or relabeled as passing. The original five-version wheel failure remains in
+~/mojolearn-evidence/python-wheel-matrix-20261029/corrected095/.
+
+Complete outputs/source diff/overlay hashes/source report:
+~/mojolearn-evidence/clustering-module-connection-20261029/
+Archive in R2 verified by SHA256 readback; see retention.json. Source and runtime
+coverage/limitations are recorded in validation.json. Root serializes integration;
+combine with compiled peer Array metadata repair before assembling next wheel.

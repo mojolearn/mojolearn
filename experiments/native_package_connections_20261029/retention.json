@@ -1,0 +1,9 @@
+{
+  "r2_key": "measurements/clustering-module-connection-20261029/retained-evidence.tgz",
+  "local": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/retained-evidence.tgz",
+  "sha256": "9e27d4727c8e394adb4a5728c0605beeb0d10def68f45f62a66af06380512d3d",
+  "bytes": 77106,
+  "put_status": 200,
+  "readback_status": 200,
+  "readback_matches": true
+}
