@@ -1,0 +1,24 @@
+Tools-only compile-only GHA timeout guard, 2026-10-29.
+
+Existing release-linux-build.yml shard jobs allowed360minutes. Explicit
+compile_groups jobs now have a60minute job deadline and50minute build-step
+limit, leaving collection/upload steps available after a compile-step timeout.
+Full release shard/assembly360minute and host240minute limits remain unchanged.
+No compiler recipe, flags, worker setting, source, binary or runtime changed.
+
+Focused checks:37 tests +2 subtests passed, exit0,6.02seconds. Coverage includes
+release-GHA planning and exact selected-group filtering plus source assertions
+for compile-only deadlines and unchanged unrelated deadlines. No dispatch in
+this tooling batch. Evidence: ~/mojolearn-evidence/github-amd-sequence-20261029/
+timeout-tests.log and timeout-tests.exit. Required source guards follow.
+
+Next authorized dispatch is ONLY:
+  product5abdda9d8dc9cdad007c581137623414e2168f8b
+  gfx942, identical, jobs1
+  compile_groups=identical:merged_build.sh:_mojolearn_native_sequence
+The existing supported AMD recipe selects8 compiler workers on the runner's
+actual allocation (normally4vCPU; retain actual facts), not the retired2worker
+CPU/CUDA cap. Do not assert eight allocated physical CPUs or full utilization.
+Planner gives one13GiB peak group and1GiB swap. Preserve three unchanged prior
+AMD merged groups from40855235569; do not rebuild the complete AMD set.
+Wait root integration plus optimized Apple sampler diagnosis before dispatch.

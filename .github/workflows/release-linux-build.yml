@@ -167,8 +167,9 @@ jobs:
     needs: plan
     if: needs.plan.outputs.has_devices == 'true' && inputs.reuse_shards_run == ''
     runs-on: ubuntu-24.04
-    # 6 h, GitHub's limit: a merged compile past the runner's RAM pages to swap
-    timeout-minutes: 360
+    # Compile-only migration jobs use the bounded one-hour lease. The full
+    # release route retains its existing six-hour limit for merged compiles.
+    timeout-minutes: ${{ inputs.compile_groups != '' && 60 || 360 }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -220,6 +221,8 @@ jobs:
         run: for i in 1 2 3; do docker pull "$IMAGE" && break; sleep 20; done
       - name: Build this shard
         id: build
+        # Leave time for collection/upload after a compile-only timeout.
+        timeout-minutes: ${{ inputs.compile_groups != '' && 50 || 360 }}
         env:
           COMMIT: ${{ inputs.commit }}
           ARCH: ${{ matrix.arch }}
