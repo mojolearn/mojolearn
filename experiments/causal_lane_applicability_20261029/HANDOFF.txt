@@ -1,0 +1,37 @@
+Causal model lane applicability — 2026-10-29
+Source:8c1a089c9cc25448b004fe428879aee6a3d31d0d
+
+Before any release identity run, observed that the scanner discarded GPU
+CausalLM lanes as CPU Array arithmetic. It only recognized direct ml.<name>
+references, missing M=ml.models; M.CausalLM and nested models.causal_lm.CausalLM.
+The lane source explicitly loads device=auto and consumes actual logits.
+
+Resolve unambiguous direct/chained namespace aliases and nested package members;
+reassigned or shadowed alias names stay unresolved. Inspect nested implementation
+class declarations for native device doors. A host Array buffer constructor
+beside such a device door does not establish CPU-only arithmetic. Keep real host
+inference doors and explicit host-only contracts intact. No lane-name allowlist.
+
+Whole572-lane eligibility diff changes exactly5 lanes:
+- hf-causal-lm, hf-causal-lm-stream, hf-causal-lm-text, hf-model-surface gain GPU
+  applicability; last also executes two CausalLM.forward calls and hashes logits.
+- par-causal-lm gains NVIDIA/AMD2-physical-device eligibility only; single GPU
+  and CPU remain excluded by its physical-device claim.
+Tokenizer, LanguageModelInference, saved host model inference and GBDT host
+inference applicability unchanged. Multi-GPU evidence remains pending separately.
+
+Existing retained b2d dependency snapshot already includes transformer/Mamba,
+training primitives and linalg native bindings for the original3model lanes;
+conservative source closures1751–1884files include dynamic native providers.
+The defect was applicability, not absence of their native dependency context.
+No scanner result proves runtime correctness or completed coverage.
+
+Validation:6focused source tests passed; existing applicability selfcheck0;
+no_host_routes/no_python_in_kernels/no_compute_in_shells all0. First test
+attempt used wrong column labels (KeyError), second exposed missing nested-module
+resolution; failures retained and fixed. No product execution or native rebuild.
+
+Evidence:~/mojolearn-evidence/causal-lane-applicability-20261029/
+Complete before/after572lane snapshots, exact5lane difference, test/selfcheck/
+guard logs+exit statuses. Prior omitted GPU cells had NOT run; regenerated
+execution chunks must include them, followed by final frozen-source ledger sync.

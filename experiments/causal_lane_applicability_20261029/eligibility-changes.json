@@ -1,0 +1,195 @@
+{
+  "hf-causal-lm": {
+    "before": {
+      "kind": "cpu-host-route-only",
+      "attrs": [
+        "Array",
+        "models"
+      ],
+      "host_only": [
+        "Array"
+      ],
+      "applicable": {
+        "apple-metal": false,
+        "nvidia-1gpu": false,
+        "nvidia-2gpu": false,
+        "amd-1gpu": false,
+        "amd-2gpu": false,
+        "cpu-host": true
+      }
+    },
+    "after": {
+      "kind": "estimator-both-routes",
+      "attrs": [
+        "Array",
+        "CausalLM",
+        "models"
+      ],
+      "host_only": [],
+      "applicable": {
+        "apple-metal": true,
+        "nvidia-1gpu": true,
+        "nvidia-2gpu": true,
+        "amd-1gpu": true,
+        "amd-2gpu": true,
+        "cpu-host": true
+      }
+    }
+  },
+  "par-causal-lm": {
+    "before": {
+      "kind": "multi-device-driver",
+      "attrs": [
+        "Array",
+        "models"
+      ],
+      "host_only": [
+        "Array"
+      ],
+      "applicable": {
+        "apple-metal": false,
+        "nvidia-1gpu": false,
+        "nvidia-2gpu": false,
+        "amd-1gpu": false,
+        "amd-2gpu": false,
+        "cpu-host": false
+      }
+    },
+    "after": {
+      "kind": "multi-device-driver",
+      "attrs": [
+        "Array",
+        "CausalLM",
+        "ParallelCausalLM",
+        "models"
+      ],
+      "host_only": [],
+      "applicable": {
+        "apple-metal": false,
+        "nvidia-1gpu": false,
+        "nvidia-2gpu": true,
+        "amd-1gpu": false,
+        "amd-2gpu": true,
+        "cpu-host": false
+      }
+    }
+  },
+  "hf-causal-lm-stream": {
+    "before": {
+      "kind": "cpu-host-route-only",
+      "attrs": [
+        "Array",
+        "models"
+      ],
+      "host_only": [
+        "Array"
+      ],
+      "applicable": {
+        "apple-metal": false,
+        "nvidia-1gpu": false,
+        "nvidia-2gpu": false,
+        "amd-1gpu": false,
+        "amd-2gpu": false,
+        "cpu-host": true
+      }
+    },
+    "after": {
+      "kind": "vendor-independent-arithmetic",
+      "attrs": [
+        "Array",
+        "CausalLM",
+        "GenerationStream",
+        "models"
+      ],
+      "host_only": [],
+      "applicable": {
+        "apple-metal": true,
+        "nvidia-1gpu": true,
+        "nvidia-2gpu": true,
+        "amd-1gpu": true,
+        "amd-2gpu": true,
+        "cpu-host": true
+      }
+    }
+  },
+  "hf-causal-lm-text": {
+    "before": {
+      "kind": "cpu-host-route-only",
+      "attrs": [
+        "Array",
+        "models"
+      ],
+      "host_only": [
+        "Array"
+      ],
+      "applicable": {
+        "apple-metal": false,
+        "nvidia-1gpu": false,
+        "nvidia-2gpu": false,
+        "amd-1gpu": false,
+        "amd-2gpu": false,
+        "cpu-host": true
+      }
+    },
+    "after": {
+      "kind": "vendor-independent-arithmetic",
+      "attrs": [
+        "Array",
+        "CausalLM",
+        "models"
+      ],
+      "host_only": [],
+      "applicable": {
+        "apple-metal": true,
+        "nvidia-1gpu": true,
+        "nvidia-2gpu": true,
+        "amd-1gpu": true,
+        "amd-2gpu": true,
+        "cpu-host": true
+      }
+    }
+  },
+  "hf-model-surface": {
+    "before": {
+      "kind": "cpu-host-route-only",
+      "attrs": [
+        "Array",
+        "models"
+      ],
+      "host_only": [
+        "Array"
+      ],
+      "applicable": {
+        "apple-metal": false,
+        "nvidia-1gpu": false,
+        "nvidia-2gpu": false,
+        "amd-1gpu": false,
+        "amd-2gpu": false,
+        "cpu-host": true
+      }
+    },
+    "after": {
+      "kind": "vendor-independent-arithmetic",
+      "attrs": [
+        "Array",
+        "CausalLM",
+        "Checkpoint",
+        "HFConfig",
+        "ModelPlan",
+        "SafetensorsFile",
+        "TensorInfo",
+        "models",
+        "plan_for"
+      ],
+      "host_only": [],
+      "applicable": {
+        "apple-metal": true,
+        "nvidia-1gpu": true,
+        "nvidia-2gpu": true,
+        "amd-1gpu": true,
+        "amd-2gpu": true,
+        "cpu-host": true
+      }
+    }
+  }
+}

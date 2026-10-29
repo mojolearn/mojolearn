@@ -1,0 +1,24 @@
+{
+  "commit": "8c1a089c9cc25448b004fe428879aee6a3d31d0d",
+  "tests": {
+    "count": 6,
+    "exit": 0,
+    "log_sha256": "8a30da83260a5abdc635135d6a98789606b06fd7c8be28b7d87d509c130aa181"
+  },
+  "selfcheck_exit": 0,
+  "source_guards": {
+    "no_host_routes": 0,
+    "no_python_in_kernels": 0,
+    "no_compute_in_shells": 0
+  },
+  "registered_lanes": 572,
+  "eligibility_changed": [
+    "hf-causal-lm",
+    "par-causal-lm",
+    "hf-causal-lm-stream",
+    "hf-causal-lm-text",
+    "hf-model-surface"
+  ],
+  "product_runtime_executions": 0,
+  "native_compilation_required": false
+}
