@@ -25,7 +25,7 @@ from bindings.msel_search_state import msel_parameter_values
 from bindings.family_common import (
     FAMILY_I64P, FAMILY_I32P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
 )
-from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base, _arena_int
+from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
 from bindings.msel_common import (
     MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
@@ -239,9 +239,10 @@ def _fold_rows_run(mut prog: _Prog, n: Int, k: Int, code: Int, order: Int, conte
     prog.stage("fold_rows", 1, [n, k, code, order, out, sz])
     var arena = _reg_run(prog, PythonObject(None), context)
     var base = _arena_base(arena)
+    var counts = FAMILY_I32P(unsafe_from_address=base + 4 * sz)
     var res = Python.list()
     for f in range(k):  # driver-loop: over folds
-        var c = _arena_int(arena, sz + f)
+        var c = Int(counts[f])
         var at = out + 2 * n * f
         var test = msel_new(c, "<i8", context)
         var train = msel_new(n - c, "<i8", context)
@@ -252,6 +253,7 @@ def _fold_rows_run(mut prog: _Prog, n: Int, k: Int, code: Int, order: Int, conte
             memcpy(dest=msel_p64(train), src=FAMILY_I64P(unsafe_from_address=base + 4 * (at + 2 * c)), count=n - c)
             _ = train  # keep the Python object alive through the native call above
         _ = py_call(res.append, Python.tuple(train, test))
+    _ = arena  # count words and copied row addresses remain owned through the final fold
     return res
 
 
@@ -334,14 +336,24 @@ def _select_folds(fold_store: PythonObject, fold_counts: PythonObject, n: Int, k
     var select = msel_entry("select_fold_i64", context)
     var out = Python.list()
     var counts = msel_p64(fold_counts)
+    var store_address = PythonObject(msel_addr(fold_store))
+    var row_count = PythonObject(n)
+    # Ordinary folds have both outputs and need no throwaway storage. The
+    # exceptional empty side shares one private scratch allocation across
+    # folds; selection never consumes its previous contents.
+    var scratch = PythonObject(None)
+    var scratch_address = 0
     for fold in range(k):  # driver-loop: over folds
         var size = Int(counts[fold])
         var test = msel_new(size, "<i8", context)
         var train = msel_new(n - size, "<i8", context)
-        var scratch = msel_new(n, "<i8", context)
-        var got = msel_int(family_call(select, PythonObject(msel_addr(fold_store)), PythonObject(n), PythonObject(fold),
-                                       PythonObject(msel_addr(test) if size else msel_addr(scratch)),
-                                       PythonObject(msel_addr(train) if n - size else msel_addr(scratch))))
+        if size == 0 or n - size == 0:
+            if scratch is None:
+                scratch = msel_new(n, "<i8", context)
+                scratch_address = msel_addr(scratch)
+        var got = msel_int(family_call(select, store_address, row_count, PythonObject(fold),
+                                       PythonObject(msel_addr(test) if size else scratch_address),
+                                       PythonObject(msel_addr(train) if n - size else scratch_address)))
         _ = test  # keep the Python object alive through the native call above
         _ = scratch  # keep the Python object alive through the native call above
         _ = train  # keep the Python object alive through the native call above
@@ -351,6 +363,9 @@ def _select_folds(fold_store: PythonObject, fold_counts: PythonObject, n: Int, k
         _ = train  # keep the Python object alive through the native calls above
         _ = test  # keep the Python object alive through the native calls above
         _ = py_call(out.append, Python.tuple(train, test))
+    _ = scratch
+    _ = fold_store
+    _ = fold_counts
     return out
 
 
@@ -958,10 +973,15 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
     if n_test < k:
         raise Error("The test_size = " + String(n_test) + " should be greater or equal to the number of classes = " + String(k))
     var rows = Python.list()
+    var row_addresses = List[Int]()
     for c in range(k):  # driver-loop: over classes (one row selection each)
         var words = gc.codes
         var size = gc.counts[c]
-        _ = py_call(rows.append, gc.only(words, c, size, context))
+        var selected = gc.only(words, c, size, context)
+        row_addresses.append(msel_addr(selected))
+        _ = py_call(rows.append, selected)
+    # These class-row buffers are private and unchanged across splits. Keep
+    # their owners in rows and reuse native addresses in the split/class loop.
     var gather = msel_entry("gather_i64", context)
     var rng = MselRng(random_state, context)
     var out = Python.list()
@@ -974,17 +994,19 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
             te_len += modes[k + c]
         var train = msel_new(tr_len, "<i8", context)
         var test = msel_new(te_len, "<i8", context)
+        var train_address = msel_addr(train)
+        var test_address = msel_addr(test)
         var at_tr = 0
         var at_te = 0
         var perms = rng.permutation_rows(gc.counts, context)
         for c in range(k):  # driver-loop: over classes (two device gathers each)
             var p0 = msel_addr(perms[c])
-            var tab = msel_addr(rows[c])
+            var tab = row_addresses[c]
             _ = family_call(gather, PythonObject(tab), PythonObject(gc.counts[c]), PythonObject(p0), PythonObject(modes[c]),
-                            PythonObject(msel_addr(train) + 8 * at_tr))
+                            PythonObject(train_address + 8 * at_tr))
             _ = train  # keep the Python object alive through the native call above
             _ = family_call(gather, PythonObject(tab), PythonObject(gc.counts[c]), PythonObject(p0 + 8 * modes[c]),
-                            PythonObject(modes[k + c]), PythonObject(msel_addr(test) + 8 * at_te))
+                            PythonObject(modes[k + c]), PythonObject(test_address + 8 * at_te))
             _ = test  # keep the Python object alive through the native call above
             at_tr += modes[c]
             at_te += modes[k + c]
@@ -994,16 +1016,17 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
         var last = rng.permutation_rows([tr_len, te_len], context)
         var out_tr = msel_new(tr_len, "<i8", context)
         var out_te = msel_new(te_len, "<i8", context)
-        _ = family_call(gather, PythonObject(msel_addr(train)), PythonObject(tr_len), PythonObject(msel_addr(last[0])),
+        _ = family_call(gather, PythonObject(train_address), PythonObject(tr_len), PythonObject(msel_addr(last[0])),
                         PythonObject(tr_len), PythonObject(msel_addr(out_tr)))
         _ = train  # keep the Python object alive through the native call above
         _ = out_tr  # keep the Python object alive through the native call above
-        _ = family_call(gather, PythonObject(msel_addr(test)), PythonObject(te_len), PythonObject(msel_addr(last[1])),
+        _ = family_call(gather, PythonObject(test_address), PythonObject(te_len), PythonObject(msel_addr(last[1])),
                         PythonObject(te_len), PythonObject(msel_addr(out_te)))
         _ = test  # keep the Python object alive through the native call above
         _ = out_te  # keep the Python object alive through the native call above
         _ = last
         _ = py_call(out.append, Python.tuple(out_tr, out_te))
+    _ = rows
     return out
 
 

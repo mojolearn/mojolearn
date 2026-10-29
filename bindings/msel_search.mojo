@@ -26,7 +26,7 @@ from bindings.family_common import (
     FAMILY_I64P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
     family_type_name, family_as_f32,
 )
-from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base, _arena_int
+from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
 from bindings.msel_common import (
     msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool, msel_is_integral, msel_is_real,
     msel_int, msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr,
@@ -708,9 +708,10 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
     prog.stage("rows64", n, [inv, w_inv])
     var arena = _reg_run(prog, PythonObject(None), context)
     var base = _arena_base(arena)
+    var offsets = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=base + 4 * off)
     var sizes = Python.list()
     for g in range(m):  # driver-loop: over groups
-        _ = py_call(sizes.append, PythonObject(_arena_int(arena, off + g + 1) - _arena_int(arena, off + g)))
+        _ = py_call(sizes.append, PythonObject(Int(offsets[g + 1]) - Int(offsets[g])))
     var rows_sorted = msel_new(n, "<i8", context)
     var inverse = msel_new(n, "<i8", context)
     memcpy(dest=msel_p64(rows_sorted), src=FAMILY_I64P(unsafe_from_address=base + 4 * w_ord), count=n)

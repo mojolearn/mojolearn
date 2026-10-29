@@ -14,7 +14,7 @@ from bindings.family_common import (
     FAMILY_I64P, FAMILY_I32P, FAMILY_F64P, family_array, family_call, family_call_kw, family_isinstance,
     family_is_str, family_repr, family_str, family_type_name,
 )
-from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base, _arena_int
+from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.msel_inputs import msel_admit, msel_input, msel_input_count
 from bindings.sequential_admission import _one_of
@@ -446,13 +446,20 @@ struct MselGroups(Movable):
     var n: Int
     var counts: List[Int]
     var scratch: PythonObject
+    # This group plan belongs to one native public operation. Keep the
+    # constructor's admitted entries and private storage addresses through
+    # all group/fold calls; a later operation constructs a fresh plan.
+    var select_entry: PythonObject
+    var gather_entry: PythonObject
+    var codes_address: Int
+    var scratch_address: Int
 
     def __init__(out self, values: PythonObject, n: Int, name: String, context: PythonObject) raises:
         if values is None:
             _ = msel_labels_list(values, name, context)
         _ = msel_entry("fold_ids", context)
-        _ = msel_entry("select_fold_i64", context)
-        _ = msel_entry("gather_i32", context)
+        var select_entry = msel_entry("select_fold_i64", context)
+        var gather_entry = msel_entry("gather_i32", context)
         var got = msel_encode(values, context)
         var classes = got[0]
         var codes = got[1]
@@ -486,6 +493,10 @@ struct MselGroups(Movable):
         self.m = m
         self.n = n
         self.scratch = PythonObject(None)
+        self.select_entry = select_entry
+        self.gather_entry = gather_entry
+        self.codes_address = msel_addr(codes)
+        self.scratch_address = 0
 
     def mapped(self, table: List[Int], context: PythonObject) raises -> PythonObject:
         """Each row's `table[code]` as int32 words."""
@@ -498,17 +509,26 @@ struct MselGroups(Movable):
 
     def mapped_words(self, tbl: PythonObject, context: PythonObject) raises -> PythonObject:
         var dst = msel_new(self.n, "<i4", context)
-        _ = family_call(msel_entry("gather_i32", context), PythonObject(msel_addr(tbl)), tbl.size,
-                        PythonObject(msel_addr(self.codes)), PythonObject(self.n), PythonObject(msel_addr(dst)))
+        _ = family_call(self.gather_entry, PythonObject(msel_addr(tbl)), tbl.size,
+                        PythonObject(self.codes_address), PythonObject(self.n), PythonObject(msel_addr(dst)))
+        _ = self.codes  # keep the captured private code storage through the gather
+        _ = tbl
         _ = dst  # keep the Python object alive through the native call above
         return dst
 
     def rows(self, words: PythonObject, want: Int, size: Int, context: PythonObject) raises -> PythonObject:
         """(train, test): the ascending rows whose word is `want` (test) and
         every other row (train)."""
+        var address = self.codes_address if words is self.codes else msel_addr(words)
+        var result = self._rows_at(address, want, size, context)
+        _ = words
+        return result
+
+    def _rows_at(self, words_address: Int, want: Int, size: Int, context: PythonObject) raises -> PythonObject:
+        # Caller retains the words owner through the complete selection.
         var test = msel_new(size, "<i8", context)
         var train = msel_new(self.n - size, "<i8", context)
-        var got = msel_int(family_call(msel_entry("select_fold_i64", context), PythonObject(msel_addr(words)),
+        var got = msel_int(family_call(self.select_entry, PythonObject(words_address),
                                        PythonObject(self.n), PythonObject(want), PythonObject(msel_addr(test)),
                                        PythonObject(msel_addr(train))))
         _ = test  # keep the Python object alive through the native call above
@@ -522,11 +542,18 @@ struct MselGroups(Movable):
     def only(mut self, words: PythonObject, want: Int, size: Int, context: PythonObject) raises -> PythonObject:
         """The ascending rows whose word is `want` (the rest discarded)."""
         if self.scratch is None:
-            self.scratch = msel_new(self.n, "<i8", context)
+            var scratch = msel_new(self.n, "<i8", context)
+            var address = msel_addr(scratch)
+            # Publish the owner/address pair only after capture succeeds.
+            self.scratch = scratch
+            self.scratch_address = address
         var out = msel_new(size, "<i8", context)
-        var got = msel_int(family_call(msel_entry("select_fold_i64", context), PythonObject(msel_addr(words)),
+        var address = self.codes_address if words is self.codes else msel_addr(words)
+        var got = msel_int(family_call(self.select_entry, PythonObject(address),
                                        PythonObject(self.n), PythonObject(want), PythonObject(msel_addr(out)),
-                                       PythonObject(msel_addr(self.scratch))))
+                                       PythonObject(self.scratch_address)))
+        _ = words
+        _ = self.scratch
         _ = out  # keep the Python object alive through the native call above
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
@@ -540,8 +567,11 @@ struct MselGroups(Movable):
         var words = self.mapped_words(to_fold, context)
         var out = Python.list()
         var sz = msel_p64(sizes)
+        var words_address = msel_addr(words)
         for f in range(k):  # driver-loop: over folds
-            _ = py_call(out.append, self.rows(words, f, Int(sz[f]), context))
+            _ = py_call(out.append, self._rows_at(words_address, f, Int(sz[f]), context))
+        _ = words
+        _ = sizes
         return out
 
 
@@ -661,10 +691,13 @@ struct MselRng(Movable):
         prog.stage("approx_mode", k, [k, c, MSEL_NONE, n_train, out, MSEL_NONE, used, w0, w1, w2, w3])
         prog.stage("approx_mode", k, [k, c, out, n_test, out + k, used, used + 1, w0, w1, w2, w3])
         var arena = _reg_run(prog, PythonObject(None), context)
-        self.draws += UInt64(_arena_int(arena, used) + _arena_int(arena, used + 1))
+        # Completed arena metadata is invariant across the class-count loop.
+        var words = FAMILY_I32P(unsafe_from_address=_arena_base(arena))
+        self.draws += UInt64(Int(words[used]) + Int(words[used + 1]))
         var both = List[Int]()
         for i in range(2 * k):  # driver-loop: over classes (train and test counts)
-            both.append(_arena_int(arena, out + i))
+            both.append(Int(words[out + i]))
+        _ = arena
         _ = prog^
         return both^
 

@@ -1,0 +1,63 @@
+Model-selection operation-local loop setup, 2026-10-28
+
+Branch: lane/classical-loop-setup2-20261028; base e3f3c1572c.
+
+Repeated work removed:
+- MselGroups retains the exact native gather/select entries it already admitted
+  at construction. Group/fold calls no longer resolve and validate them again.
+  The private encoded-class and scratch addresses stay with their owners; direct
+  selections of that code array reuse its captured address.
+- split_by_fold captures its immutable mapped-word address once for all folds.
+- _select_folds no longer allocates an n-row throwaway scratch buffer for every
+  fold. Nonempty train/test pairs allocate none; an empty side allocates at most
+  one scratch buffer reused by later folds. Input address and row-count ABI word
+  are captured once. Scratch is output-only; its previous contents are unused.
+- Completed fold/approximate-mode/group-order arenas expose one captured native
+  word pointer, replacing repeated buffer_info/address calls per fold/class/group.
+- StratifiedShuffleSplit retains native per-class row addresses across splits,
+  avoiding Python-list indexing/address scans in its nested split/class loop.
+  Each split captures train/test output addresses once before class gathers.
+
+Setup/reuse and invalidation:
+All new records belong to one native operation. MselGroups is not exposed as a
+Python object; each later public operation constructs/admit its current plan.
+No persistent cache or user mutation hook is introduced. Existing lazy iterator
+state keeps its existing boundary behavior; this batch does not retain a group
+plan across lazy calls. Current internal call sites never replace plan.codes or
+plan.scratch once set. Scratch owner/address publication is staged, so a failed
+address capture cannot leave a half-initialized reusable record.
+
+Raw-pointer lifetime review:
+- MselGroups owns codes/scratch; calls explicitly retain their owners afterward.
+- rows() retains words through _rows_at; split_by_fold retains mapped words and
+  sizes through its last iteration.
+- _select_folds retains scratch, fold_store and fold_counts through all selections.
+- _fold_rows_run and approximate_modes retain their private arena after final
+  pointer reads/copies. _group_order retains its arena through final copies.
+- Stratified shuffle retains the class-row owner list across all splits, each
+  permutation list through its gathers, and train/test owners through final use.
+No new arithmetic, algorithm, random draw ordering, dispatch threshold or
+performance default is introduced.
+
+Compilation:
+Final affected-source fixture compiled successfully, Apple CPU identical O0,
+ten workers under tools/compile_slot.sh. compile.mojo instantiates all changed
+helper bodies and the actual msel_strat_shuffle_split loop. This is a focused
+implementation compilation, not a full dispatcher or installed-wheel build.
+No runtime, identity, GPU or performance campaign. No measured speed claim and
+no rented boxes. Complete receipt in compile.json.
+Two earlier narrower revisions also compiled; their complete outputs/source
+archives remain as before-stratified-loop-* and before-staged-scratch-*.
+They are not substituted for final-source compilation evidence.
+
+Remaining limits:
+Public input admission, scalar/result boxing and the compiled-helper ABI still
+use Python objects. Resident-row frontdoors and lazy split steps retain existing
+metadata scans. Other splitter paths retain their existing allocation strategy;
+this is not whole-model-selection migration completion.
+
+Evidence: ~/mojolearn-evidence/model-selection-loop-setup-20261028/
+Final binary: _model_selection_loop_setup.so. Full source bytes/manifest,
+compiler/binary hashes and log are referenced by compile.json. Branch source
+checks run after committing; their complete logs/receipt are retained alongside
+these compile artifacts. Root owns the serialized main push guards.
