@@ -1,0 +1,115 @@
+Structural reuse continuation III, 2026-10-28
+Base: 249031017b. Prior index: ../structural_reuse_next_20261028/HANDOFF.txt.
+Identical focus. Small affected CPU compilations and source/push guards only.
+No runtime, performance, identity, concurrency or cross-vendor campaign.
+No measured speedup. No rented boxes, no watchers. Integration serialized.
+
+Delivered batches (individual HANDOFF.txt and compile receipts give commands,
+source bytes/hashes, compiler, binary, full log paths and exact limitations):
+
+1. 7a3ea25699 neural_descriptor_reuse_20261028
+Removed per-call output and reserve/release vector allocation. Provider lifetime
+owns reusable native workspace; atomic claim isolates overlap with transient
+scratch. Launch words refresh, output resets, owners pinned finally. CausalLM
+CPU forward/generate compile. Limits: Python admission and overlap allocation.
+
+2. f3330f17fe neural_descriptor_reuse_20261028 (admission follow-up)
+Removed dict.keys/list materialization, duplicate module/builtins validation and
+throwaway owner construction. Live keys still checked every admission by native
+iteration. CausalLM CPU compile. Mutable metadata scans remain.
+
+3. 2a933d179c + 9e3697cb26 + 25f041f9d5 training_replay_metadata_20261028
+Per-node scalar vectors prepared once per fit; handle/value capacity retained.
+Separate body/predicate/otherwise owners; dropout keys recomputed from original
+captured key. HostExec ordinary/conditional training and one-shot wrapper compile.
+One-shot callers outside changed loops and output/parameter work remain.
+
+4. 4431d3a96d inference_replay_metadata_20261028
+Registered graphs lazily prepare/reuse scalar vectors and handle/value capacity.
+Free/close discard plans; live parameters checked each call. Plans move into local
+ownership and return finally. HostExec replay/constructor/add/free/close compile.
+First borrow-alias compile failed, retained; supported move ownership repair passed.
+Retains duplicate scalar metadata/max capacity; no tensor/address cache.
+
+5. ed678da77d neural_descriptor_function_owner_20261028
+Exact native function ownership reads use PyCFunction_GetSelf instead of __self__
+attribute dispatch/temporary wrappers. Identity checks remain; cold connect owns
+module reference. CausalLM CPU compile. CPython boundary/admission still exists.
+
+6. 27dcb1c6a4 + ad29929a4d cv_phase_prediction_reuse_20261028
+Named scorers share responses within fitted model/fold and separate train/test
+phases; never across fits/candidates/calls. CV compile initially passed; later
+learning_curve compile exposed omitted PythonObject default argument compilation.
+Explicit overload repair compiled with split/CV/learning_curve closure and pushed.
+Failure retained in msel-native-list-gather evidence. Retained predictions increase
+phase-local live storage; scorer recipe/object admission remains.
+
+7. 87c45e75c0 operation_operand_reuse_20261028
+Shared _op_run retains List[Tensor] capacity, moving it into each call and clearing/
+returning finally. Every handle resolves again; close releases capacity. HostExec
+eager dispatcher and session lifecycle compile. Specialized scratch remains.
+
+8. 21ed6ce475 + 20660abd87 control_replay_metadata_20261028
+Ordinary/VJP control loops reuse metadata and argument capacity. Lazy, separate
+component owners preserve zero-iteration/unselected branch timing. Current parameter
+checks remain. HostExec control prepare/run and VJP lifecycle compile. State/data
+copies and parameter checks remain; no runtime control-flow qualification.
+
+9. 45da63abb8 msel_native_list_gather_20261028
+Native int64 indexing and sized list publication replace per-row map/__getitem__
+callbacks and index boxes. Current metadata and actual buffer export pinned each
+gather; existing exact list/tuple admission, negative indices, bounds and label
+reference identity retained. Actual split/CV/learning_curve CPU roots compiled.
+Private resident-row frontdoors remain a separate next batch.
+
+10. f4c2b3e807 tokenizer_result_lists_20261028
+Known-size result lists replace per-token/row append dispatch. Private partially
+filled lists own all initialized references; publish only completed results.
+BPE count checks and Vocab BOS/ids/EOS order retained. tokenizer_public_c CPU
+closure compiled after standard missing Unicode generation; initial failure kept.
+Input conversion/protocol paths and scalar boxing remain.
+
+11. 3b480dee90 + 441265bd9b native_import_setup_20261028
+Five lexical loop import sites hoisted/replaced; class-weight type classification
+reused per encountered type, numeric decode reused, pointers hoisted with owners.
+Mixed inputs still checked individually. Five actual public CPU roots compiled.
+Source review caught GIL release in SVC coefficient kernel: per-row mutable mode
+checks restored, immutable string/import setup retained; repaired attribute root
+compiled. No cross-GIL mutable metadata cache. Remaining tags/scans documented.
+
+12. 225161cb26 + f5dbf94cbf callback_admission_review_20261028
+Samba schemas prepared once per used layer kind per GIL-held call; prefix/row/shape
+setup reused and sixth loop import hoisted. Fresh public call rebuilds config;
+immutable tuple sharing, distinct mutable output lists. Three actual registry/
+schema helper bodies compiled. Other Samba/public roots not thereby qualified.
+
+13. cfc8572ab5 native_typed_list_results_20261028
+Seven native typed-list publishers remove NumPy import/allocation, metadata lookup,
+copy and tolist roundtrip. Sized lists with signed/unsigned scalar APIs and f32
+promotion; partial failures owned. All seven helper instantiations compiled.
+Python scalar objects still necessary; importing roots/GPU not rebuilt.
+
+14. c175d92735 shared_attribute_admission_20261028
+Generic PublicOutputsMixin getter now installed natively once at import (eligible
+classes already had specialized native slots). Shared field/class key lists removed;
+plan/storage share admitted builtins. Explicit exact generic descriptor eligibility
+preserves specialized installation. Old 3arg C entry retained. Mutable keys/classes
+still checked each operation; no unchecked cross-call class cache. Actual attribute
+entries, factory/mode metadata closure compiled; four Python files syntax-compiled
+without import. Installed-wheel/runtime behavior remains unqualified.
+
+15. forest_export_results_20261028 (commit in main log)
+Two duplicate forest typed converters delegate to shared native list publication.
+No NumPy array/copy/tolist roundtrip. Native export graph/schema untouched. Both
+wrappers/helper instantiations compiled; whole exporter/GPU not rebuilt.
+
+Current six-area evaluation: SIX_AREA_REVIEW.txt. Further work remains; this is
+not a repository-complete migration. Active next batches own labels, private
+resident rows, additional native-result conversions and per-lookup attribute rows.
+
+All required push guards apply without relaxed baselines. One push lost a remote
+ref race to 8c3f4ef77b (another session's UNRESOLVED.tsv line-drift documentation).
+Root fetched/rebased its unpushed operand commit, preserved both histories and
+failed push log, then pushed successfully. No other worktree modified. Push/merge
+logs: ~/mojolearn-evidence/structural-reuse-third-20261028/. Audit tables owned by
+that other session remain untouched; new reviews live in their own experiment dirs.

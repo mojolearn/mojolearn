@@ -1,0 +1,49 @@
+Review of requested six areas, source-based, 2026-10-28
+No measured ordering/cost ranking. Findings led directly to compiled repairs.
+
+1. Attribute reads: not every estimator used the Python generic wrapper; eligible
+classes already got native slots at import. Remaining generic wrapper is now a
+native descriptor too. Instance/class key-list construction and repeated builtins
+admission reduced. Class/instance mutation, descriptor precedence and caller output
+rules remain checked; further operation-local class-row reuse is underway.
+See shared_attribute_admission_20261028/HANDOFF.txt.
+
+2. Tagged conversion loops: tags identify work, not proof it is unnecessary.
+An exact outer list does not establish its mixed elements' types or shape. Keep
+per-element admission; share schema/type classification and eliminate duplicate
+conversion. Native label gathers, tokenizer publication and class-weight scalar
+classification/decode now reduced. Deeper label type caching is underway.
+See native_import_setup_20261028/EVALUATION.txt and msel_native_list_gather_20261028.
+
+3. Alleged hard callbacks: tracked CALLBACKS.tsv actually has 31 historically
+flagged rows. The heuristic only considered same-function checks. Current source
+provenance found caller admission at both named examples (codec-created worker
+request; admitted HDBSCAN query/raw fit buffers). Other rows include native values
+and replaced code. No new arbitrary callback defect was established by this
+review; that is not runtime verification or a blanket callback-free claim.
+See callback_admission_review_20261028/ report and HANDOFF.txt.
+
+4. Long tail: tracked file has 5,407 additional review entries, not 4,300 at this
+snapshot. Their caller/helper contracts remain unqualified by the 31-site review.
+Do not classify all as safe, prohibited, or hot solely from scanner labels.
+Prioritize repeated shared boundaries; no broad runtime campaign ran.
+
+5. Imports: reconciled as 577 source lines / 578 calls (one line has two), 447
+builtins, six lexical loop sites in the audited scope. Five classical/device-plan
+sites plus Samba sixth repaired. Preserve live checks across GIL release; don't
+blindly replace mutable module handling with an unchecked global cache. Imports
+outside loops include setup/cold/product cases requiring separate boundaries.
+See native_import_setup_20261028/EVALUATION.txt.
+
+6. tolist/results: frozen scope found 50 attribute-based sites in 24 Mojo files
+plus five string-selected sites. py_lists had seven executable calls (eight textual
+mentions including docstring), all replaced with direct typed native publication;
+two forest duplicates now use that helper. Tokenizer/result callbacks also removed.
+Foreign-array and caller-dependent paths remain distinct pending work; necessary
+final Python objects are not claimed removed.
+See native_typed_list_results_20261028/AUDIT.txt and machine-readable site reports.
+
+Next emphasis: private model-selection resident ownership/direct calls; repeated
+label scalar-class setup; per-lookup attribute namespace reuse; remaining redundant
+native-buffer conversion chains. Each candidate must retain supported ownership,
+mutation/error behavior and compile the actual affected path before integration.
