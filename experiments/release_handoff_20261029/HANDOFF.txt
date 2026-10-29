@@ -1,0 +1,231 @@
+RELEASE HANDOFF — 2026-10-29 11:20 UTC
+
+USER INTENT / AUTHORISATION
+Continue to a green current-source 0.8.63 release on Apple and Linux, update the
+complete numerical reference table through the normal admission tools, run the
+library verifier and required installed-artifact checks, then publish to PyPI.
+Performance measurements are deferred until after release. Runtime/identity
+verification is explicitly authorised by the latest user, overriding the older
+compile-only instruction. Do not compare new results to old-release bits as a
+correctness requirement. Do not publish before the required current-release
+vendors agree. User requested this handoff before compacting, not cancellation.
+
+Rent NVIDIA RunPod, AMD DigitalOcean and CPU RunPod as appropriate. Root stated
+that the explicit standing AGENTS 60-minute deadman governs new rentals; the
+earlier ambiguity around "1 man deadman" is no longer being treated as a rental
+permission blocker. NO new rental has actually been created in this turn.
+Retain complete outputs/binaries on Mac and R2 before teardown. No watchers.
+Never use/delete/extend another session's box. Use actual affinity/cgroup CPU
+allocation. Apple identical only; no new Apple fast builds or tuning.
+
+SOURCE / INTEGRATION
+Pushed product freeze: 2d775c63859991f415f2548e043a889650d0bb5a.
+All product repairs and required source/push guards passed at that freeze.
+Main and origin/main were both exactly that hash before this handoff commit.
+Subsequent evidence-only commits must not trigger numerical recompilation.
+Root integration tree:
+ /Users/andrewhendel/mojolearn-wt/premerge-structural-20261028
+ branch integration/structural-reuse-fourth-20261028
+Pending evidence-only commits there:
+ 71322aa65b — complete successful AMD build/readback receipt
+ edfdf9f9d7 — final Apple installed clone/source match receipt
+These may be integrated with this handoff, preserving product freeze2d775c.
+
+Do not touch these user-untracked main files:
+ ADDITIONAL_NEURAL_PERFORMANCE_PRIORITIES.txt
+ NEURAL_PERFORMANCE_PRIORITIES.txt
+ NEURAL_PROGRESS_AND_REMAINING_WORK.txt
+
+CURRENT ACTIVE WORK / OWNERS
+1. /root/classical_loops owns final Apple wheel matrix and adapter smokes.
+   Controller PID37757, parent37738; tool session80292.
+   Script ~/mojolearn-evidence/apple-candidate-wheel-20261029/run-installed-checks-final.py
+   Matrix ~/mojolearn-evidence/python-wheel-matrix-20261029/final-repairs/matrix.log
+   Final runtime-result.json is not yet written at handoff.
+   R2 wheel retention completed: PUT/GET200/exact SHA readback, receipt
+   apple-candidate-wheel-20261029/final-wheel-retention.json; key
+   measurements/apple-candidate-wheel-20261029/final-2d775c/mojolearn-0.8.63-py3-none-macosx_26_0_arm64.whl.
+   Latest issue: Python3.10/3.11 passed NumPy-free smoke, all46host loads,
+   verifier payload and LM smoke, then canonical Mamba tests could not find
+   source/mamba/corpus/base_b2_l4_d8/norm.weight.f32 in the git-archived assembly
+   tree. This is a missing test-input fixture, not a product failure or a pass.
+   Cause confirmed: .gitattributes export-ignores tracked corpus operands.
+   Existing release-provenance.yml:518 restores the three CORPUS_CASES via
+   git show at the frozen SHA. Agent will apply that supported fixture-staging
+   step with tests, preserve failures and rerun affected
+   checks without rebuilding/repacking unchanged wheel bytes. Matrix continues;
+   adapters are automatically held if matrix fails. Coordinate GPU ownership.
+
+2. /root/generation_loops owns central ledger writes and verifier orchestration.
+   Ledger sync to2d775c completed0; no active ledger process/lock.
+   Twelve CPU neural-inference units are PREPARED, NOT BEGUN/EXECUTED.
+   Must finish exact2d config/pre-begins and hand execution to neural agent.
+   Has UNCOMMITTED isolated GHA development-build wrapper draft;114tests pass.
+   Tree /Users/andrewhendel/mojolearn-wt/github-development-build-20261029
+   New manual workflow + gha_development_group.py + narrow gha_release_box mode.
+   No dispatch/rental/cloud build owned. Future reserved scope is33sm80 PTX
+   groups only; root reserves host33 and sm89missing24 to avoid duplicates.
+
+3. /root/neural_loops owns immutable final installed clone and can execute CPU
+   verifier after generation's handoff. No active runtime/cloud job; waiting.
+   Completed Linux missing-image/physical-GPU audit; exact selectors below.
+
+APPLE COMPILE / FOCUSED RUNTIME
+All46CPUhost +33AppleGPU identical images compile and match current source.
+All79 source/raw hash checks pass:2699unique source paths,0mismatches.
+Only tokenizer changed in final native repair; other78 images reused.
+Final tokenizer combined source637e5fff61,655captured files unchanged:
+ compile0/404.46s, O0,10workers under compile_slot; sourceguards0/47.53s.
+ raw SHA07a31fd680cc94c0adf09189f220e3e7332bc818cb4174dd07e8d05b1701165b
+ staged SHAd4c4c410077a487ebd311d3b7c3fe47556d7e0f2f82aa5d25cf46de8559f3334
+Actual private installed regression:10dtype +4state +102Mamba +116Transformer,
+all passed,0skips. These are focused checks, not full cross-vendor identity.
+Evidence ~/mojolearn-evidence/neural-dtype-diagnostics-20261029/
+Repo experiments/neural_dtype_diagnostics_20261029/
+Archive measurements/neural-dtype-diagnostics-20261029/neural-diagnostics-combined-637e5ff-apple.tgz
+ SHA806de2a1d86c533d21c4557e25e3ffaae4b23291a8b433016053da74bc83d15d
+ PUT/GET200, all65members verified.
+
+Final product repairs now merged include:
+- Native training copy Array shape metadata uses exact tuples, fixing3.10/3.11
+  buffer consumers without relaxing Array admission.
+- Six missing native package metadata owner registrations, with17literal
+  consumers/10owners checked by new source guard.
+- Shared neural dtype diagnostics name admitted float64/float16/bfloat16-bit
+  inputs while preserving early native Array admission and TypeError policy.
+- Transformer state errors identify first invalid field; no state mutation or
+  changed arithmetic; original short-circuit order preserved.
+- Odd-head negative fixture includes constructor refusal; expected contract.
+- OrderedRMSE exact save/load/repeat checks pass in selected identical tier.
+  Uninstalled/unselected alternate fast contrast is explicitly NOT_EXERCISED,
+  never represented as passed; no fast build is authorised.
+Earlier ByteLM metadata-context and Samba native temporary-owner lifetime fixes
+are merged; original failures retained. Full affected verifier reruns pending.
+
+IMMUTABLE INSTALLED CANDIDATE — DO NOT MODIFY
+~/mojolearn-evidence/manifold-installed-integration-20261029/final-neural-diagnostics-venv
+Python3.13; source2d775c;973current tracked Python files,79extensions+5runtime,
+143exact verifier payload members/COMMIT2d775c. Only tokenizer changed versus
+the previous095clone;83other native/runtime bytes unchanged.
+Receipt sibling final-neural-diagnostics-clean-install/receipt.json
+ SHA47e39ebc9305e2a10976055914cff0439c0d0dc75c64480d69f0ab7829323cd9
+Sibling all79-source-match.json, configuration-cpu-contracts.json,
+host-producers.json. Assembly receipt original6c59e70f49, integratededfdf9f9d7.
+R2 measurements/current-main-verification-20261029/apple2d775c-final-install-inputs.tgz
+ SHA17402a97ede199186df31a6c6c6b991f523bc4728fc8e17d2b545a445b422c22
+ PUT/GET200/all157membersmatch. Composes with retained base and new tokenizer
+archives; source checks and byte ownership are explicit in receipts.
+
+APPLE WHEEL — PACKAGED, NOT YET RUNTIME-QUALIFIED
+~/mojolearn-evidence/apple-candidate-wheel-20261029/assembly-final-repairs/source/python/dist/mojolearn-0.8.63-py3-none-macosx_26_0_arm64.whl
+103662787bytes, SHA06216ef5b1c794337a1716e24a730e08672162b285eabc8d8de438efd51afab4.
+All9strict final assembly phases passed. Byte-preserving standard DEFLATE
+recompression keeps under100MiB; uncompressed members/RECORD remain exact.
+Adapters reuse previously compiled exact source/toolchain inputs; actual
+installed Torch/MAX smoke follows successful five-Python matrix. Versions
+3.10.21/3.11.16/3.12.11/3.13.11/3.14.6. MOJOLEARN_RELEASE_MODES=identical.
+Do not confuse old095wheel results with this corrected wheel.
+
+AMD FREE CI — COMPLETE COMPILE, NO GPU RUNTIME
+Workflow40855235569:
+ https://github.com/mojolearn/mojolearn/actions/runs/40855235569
+All4merged groups/33logical device bindings compiled gfx942/identical at095ab.
+Existing free GitHub-hosted CPU builders; no rental. FourvisibleCPU/15GiB per
+runner,8configured compiler workers/one selected compile. No utilisation claim.
+Complete artifacts ~/mojolearn-evidence/github-amd-current-20261029/run/
+Root retention completed:
+ measurements/github-amd-current-20261029/amd-gfx942-40855235569-complete.tgz
+ 320223552bytes SHA248afe9ed265f5746fb5c0070aa64ead12bcf23b6c4aeec8e6cd112c94d35ca8
+ GET200/all38829membersmatch. Complete source, binaries, logs and dependency
+bytes retained, identical contents represented by hardlinks without omission.
+Cache build_log_sha256 covers compiler subprocess output: whole retained logs
+also contain controller start line and final BINCACHE/end lines. Removing those
+exact3framing lines reconstructs all4manifest hashes; full logs separately
+hashed. Initial whole-log assertions failed and are documented, not waived.
+Source2d775c reuse and formal ledger admission pending. Existing complete-leg
+adapters may need a narrow compile-subset provenance adapter. Do not rebuild
+these successful groups merely to fit a different artifact layout.
+
+LINUX IS NOT RELEASE-READY
+Current original development receipts:25images,0rawhashfail. Against2d775c,
+13host+9sm89 are unchanged-source reuse candidates. Three stale originals:
+mamba_host, runtime_sequential_host, tokenizer_host. Remaining inventory:
+33host missing/stale (=30never built+3changed),24sm89 missing,33sm80PTX missing.
+AMD33device modules compiled as above; runtime/adapters/installed Linux wheel
+and actual NVIDIA/AMD/PTX/multi-GPU evidence remain pending.
+Exact selectors:
+ ~/mojolearn-evidence/linux-capacity-audit-20261029/host-missing-groups.txt
+ ~/mojolearn-evidence/linux-capacity-audit-20261029/identical-missing-groups.txt
+ inventory.json and HANDOFF.txt alongside.
+
+ROOT PREPARED CPU BUILD SCRIPTS — NOT LAUNCHED / REVIEW BEFORE RENT
+~/mojolearn-evidence/linux-final-builds-20261029/build-host.sh (33selectors)
+.../build-identical.sh (24sm89selectors), build-selected-template.sh.
+Frozen source2d775c, existing tools/development_build.py. Shell syntax passed;
+no dry-run rent/source-plan or actual compilation yet. Resource policy derives
+affinity/cgroup cores and memory, bounded1..4compilers,48GiB reservation, workers
+cores/jobs;2400s execution budget leaves retention margin in60minlease.
+Before launch, verify reservation against actual retained peaks, selected count,
+source completeness, runtime-library retention and current provider stock.
+Use existing tools/runpod_cpu_leg.sh,32vCPU,memory-flavouredCPU,60minutelease,
+pinned ROCmUbuntu22.04 image used by earlier successful Linux producers.
+Ensure all completed outputs remain retained even after bounded partial failure.
+Root owns host/sm89 reservations; generation owns future GHA PTX only. No
+duplicate same-source builds. Reuse13host/9sm89 and successfulAMD source closures.
+No new CPU or GPU box was rented before handoff; pods-before.txt was empty.
+
+VERIFIER / REFERENCE / PUBLICATION
+Central files B=~/mojolearn-evidence/current-main-verification-20261029:
+ ledger-0.8.63.json (generation sole writer)
+ configuration-2d775c6385.json; sync-2d775c6385.log/.exit (exit0)
+ run_frozen_chunks.py +controller_preflight.py draft (7tests0,095preview0)
+ STATUS.json; this handoff is newer than older RELEASE_HANDOFF.txt content.
+Frozen verifier worktree:
+ /Users/andrewhendel/mojolearn-wt/verification-final-2d775c-20261029
+Next: generation begins12CPU neural-inference units and hands exact config to
+neuralagent; classical owns AppleGPU until installed matrix/adapters finish.
+Then full built-in verifier neural-first→remaining lanes on correct frozen
+install; preserve fixture inputs/model-state bytes and all failures.
+
+Earlier3fa5run had51completed but unadmitted observations plus4actual failures.
+All55superseded units were invalidated by actual changed inputs; no numerical
+waiver. Old CPU↔Apple9neural lanes agreed99numerical+630declaredN/A slots, but
+that is NOT final release admission. Current full reference table unchanged.
+Compile evidence admitted at095:46MacCPUimages/92requirements,33MacGPU/33;
+only affected tokenizer/source inputs need fresh reconciliation at2d775c.
+
+PTX limitation: built-in verifier currently classifies CUDA as nvidia, not PTX.
+Do not relabel a native result. Existing identity recorder proves actual PTX
+baseline_selection_receipt/sm80 route. Use one genuine PTX recorder execution
+plus separate installed loader smoke, or repair classification with real route
+proof; do not duplicate all fits or fabricate a PTX column. Physical59multiGPU
+claims plus installed CV gate require actual2NVIDIA/2AMD devices; these remain
+pending, not silently narrowed away. Adapter smokes cover loading/dispatch,
+not duplicate arithmetic identity lanes.
+
+Reference admission must require agreeing current Apple/NVIDIA/AMD/CPU results,
+PTX/negative controls and required coverage. Use normal tools (including
+admit_identity_columns.sh), retain source closures/compiler/flags/binary hashes,
+hardware and raw records. Model bundles/loaded-model checks remain separate
+where earlier observations used --no-models. Final reference-data repack can
+reuse unchanged native evidence and test affected data/loader boundary.
+Candidate0.8.63 is NOT published. When all gates are green use the existing
+tools/release.py VERSION --publish pypi / Trusted Publisher workflow. User
+already authorised publication; do not ask again just for permission.
+
+OTHER BOX / DISK / LOG CAUTIONS
+Foreign AMD droplet613036415,162.243.78.145 was protected by another session;
+last observed deadline11:39:38UTC, backup11:49:39. Ownership handoff unresolved.
+Do not mutate/delete/extend it. Previous owned five RunPods were deleted and
+retention confirmed; unknown earlier create attempts absent later inventory.
+Recheck provider inventory and ownership before any new cloud action.
+Only~6–8GiB disk free during final wheel assembly. Root deduplicated four owned
+CI libtorch_cpu copies via exact-SHA hardlinks, preserving every path; no other
+owner's files removed. Large final build artifacts may require deliberate
+archive-backed cleanup before download. Do not discard unique model/binary bytes.
+
+Keep logs out of context: save complete output to files, use targeted rg/grep
+with bounded surrounding lines and short tails, and summarize exit status,
+coverage, failures and evidence paths. Expand only relevant diagnostic blocks;
+never infer whole-run success from filtered output. Include this reminder in
+all delegated/resumed briefs. Main integration remains serialized by root.
