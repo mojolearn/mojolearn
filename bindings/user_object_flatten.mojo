@@ -1,13 +1,44 @@
 # SPDX-License-Identifier: Apache-2.0
 # Operation-local flatten admission: no user getattr/tolist/iteration hooks.
 from std.collections import Dict
-from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.native_array_snapshot import native_array_snapshot
 from bindings.mode_metadata_native import _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
+
+
+def _array_flat_values[scalar: DType, linear: Bool](address: Int, count: Int, width: Int,
+        shape: List[Int], strides: List[Int], output: PythonObject) raises:
+    ref cpy = Python().cpython()
+    var append = cpy.lib.get_function[Int32]("PyList_Append")
+    for index in range(count):  # cpu-route: publish captured native Array scalars in logical C order
+        var offset = index * width
+        comptime if not linear:
+            var remaining = index
+            offset = 0
+            for reverse_axis in range(len(shape)):  # small-loop(native rank/stride words for non-C layout)
+                var axis = len(shape) - reverse_axis - 1
+                offset += (remaining % shape[axis]) * strides[axis]
+                remaining //= shape[axis]
+        var value = MutPointer[SIMD[scalar, 1], MutUntrackedOrigin](unsafe_from_address=address + offset)[0]
+        var item: PythonObject
+        comptime if scalar == DType.float16 or scalar == DType.float32 or scalar == DType.float64:
+            item = PythonObject(Float64(value))
+        else:
+            item = PythonObject(Int64(value))
+        if append(output._obj_ptr, item._obj_ptr) != 0:
+            raise cpy.unsafe_get_error()
+
+
+def _array_flat_typed[scalar: DType](address: Int, count: Int, width: Int,
+        shape: List[Int], strides: List[Int], linear: Bool, output: PythonObject) raises:
+    # Layout dispatch occurs once. No per-element dtype or layout branch.
+    if linear:
+        _array_flat_values[scalar, True](address, count, width, shape, strides, output)
+    else:
+        _array_flat_values[scalar, False](address, count, width, shape, strides, output)
 
 
 struct UserObjectFlatten(Movable):
@@ -126,40 +157,38 @@ struct UserObjectFlatten(Movable):
         var count = Int(py=captured.size)
         var dtype = String(captured.dtype)
         var address = Int(py=captured._addr)
-        ref cpy = Python().cpython()
-        var append = cpy.lib.get_function[Int32]("PyList_Append")
-        for index in range(count):  # cpu-route: publish completed captured native Array scalars in logical C order
-            var remaining = index
-            var offset = 0
-            for reverse_axis in range(len(shape)):  # small-loop(native rank/stride words)
-                var axis = len(shape) - reverse_axis - 1
-                offset += (remaining % shape[axis]) * strides[axis]
-                remaining //= shape[axis]
-            var at = address + offset
-            var item: PythonObject
-            if dtype == "<f4":
-                item = PythonObject(Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=at)[0]))
-            elif dtype == "<f8":
-                item = PythonObject(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=at)[0])
-            elif dtype == "<f2":
-                item = PythonObject(Float64(bitcast[DType.float16](MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=at)[0])))
-            else:
-                var integer = Int64(0)
-                if dtype == "<i8":
-                    integer = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=at)[0]
-                elif dtype == "<i4":
-                    integer = Int64(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=at)[0])
-                elif dtype == "<u4":
-                    integer = Int64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)[0])
-                elif dtype == "<u2":
-                    integer = Int64(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=at)[0])
-                elif dtype == "<i1":
-                    integer = Int64(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=at)[0])
-                else:
-                    integer = Int64(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=at)[0])
-                item = PythonObject(integer)
-            if append(output._obj_ptr, item._obj_ptr) != 0:
-                raise cpy.unsafe_get_error()
+        var width = Int(py=captured.itemsize)
+        # Decide logical C contiguity once from actual strides. Singleton
+        # axes do not affect element order, including F-labelled vectors.
+        var linear = True
+        var step = width
+        for reverse_axis in range(len(shape)):  # small-loop(native rank once to select linear storage walk)
+            var axis = len(shape) - reverse_axis - 1
+            if shape[axis] > 1 and strides[axis] != step:
+                linear = False
+            step *= shape[axis]
+        # Scalar type dispatch is outside the publication loop. Each path
+        # keeps the same signed/unsigned widening and float conversion.
+        if dtype == "<f4":
+            _array_flat_typed[DType.float32](address, count, width, shape, strides, linear, output)
+        elif dtype == "<f8":
+            _array_flat_typed[DType.float64](address, count, width, shape, strides, linear, output)
+        elif dtype == "<f2":
+            _array_flat_typed[DType.float16](address, count, width, shape, strides, linear, output)
+        elif dtype == "<i8":
+            _array_flat_typed[DType.int64](address, count, width, shape, strides, linear, output)
+        elif dtype == "<i4":
+            _array_flat_typed[DType.int32](address, count, width, shape, strides, linear, output)
+        elif dtype == "<u4":
+            _array_flat_typed[DType.uint32](address, count, width, shape, strides, linear, output)
+        elif dtype == "<u2":
+            _array_flat_typed[DType.uint16](address, count, width, shape, strides, linear, output)
+        elif dtype == "<i1":
+            _array_flat_typed[DType.int8](address, count, width, shape, strides, linear, output)
+        elif dtype == "<u1":
+            _array_flat_typed[DType.uint8](address, count, width, shape, strides, linear, output)
+        else:
+            raise Error("TypeError: user-object Array flatten has an unsupported captured dtype")
         _ = captured
 
     def into(mut self, value: PythonObject, output: PythonObject, converted: Bool = False) raises:

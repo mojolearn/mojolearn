@@ -1,0 +1,23 @@
+{
+  "base_commit": "f8f1577ea13bed18f5d2bb3adda4ec5ec53dfb0a",
+  "compile_exit": 0,
+  "scope": "UserObjectFlatten.array_into CPU source closure, including all nine scalar types times linear/mixed-radix logical layout; excludes unchanged recursive flatten and other user-object dispatch branches",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "command": "bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/user-object-inputs-20261028 -I /Users/andrewhendel/mojolearn-wt/user-object-inputs-20261028/bindings /Users/andrewhendel/mojolearn-wt/user-object-inputs-20261028/experiments/user_object_array_walk_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/user-object-array-walk-20261028/compile_array_walk",
+  "compile_slots": "wrapper default2; no override",
+  "compiler_workers": "default; no saturation measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/user-object-array-walk-20261028/compile_array_walk",
+  "binary_sha256": "6f0326ff1b4fb61a9b5aa789d9693e0062d8ffb0db8c979f2e17ee83b2a1e515",
+  "log": "/Users/andrewhendel/mojolearn-evidence/user-object-array-walk-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/user-object-array-walk-20261028/source-sha256.json",
+  "source_manifest_scope": "Tracked Mojo present in sparse checkout plus new compile root/Pixi manifest/lock; conservative superset, not all compiled",
+  "relevant_source_sha256": {
+    "bindings/user_object_flatten.mojo": "8bef06891502721f8eac3f3c68269cac027208223fa2d2f30b34f8fb1e0ab1d8",
+    "experiments/user_object_array_walk_20261028/compile.mojo": "f7ecc131940897151bb01b6e465a4571a1de69ace0fe4bf70485e627bcc8916a"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}

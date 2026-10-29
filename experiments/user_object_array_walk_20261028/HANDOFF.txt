@@ -1,0 +1,36 @@
+User-object Array walk specialization (2026-10-28)
+
+Branch lane/user-object-inputs-20261028; dependency f8f1577ea13bed18f5d2bb3adda4ec5ec53dfb0a.
+Product scope bindings/user_object_flatten.mojo array_into/publication only.
+
+Removed repeated work: dtype string comparisons and scalar/layout dispatch
+move before the result loop. Nine scalar types compile into typed walks.
+Actual shape/strides select logical C contiguity once; linear storage uses
+index*itemsize directly, without per-element rank iteration/mod/div. F-order
+arrays requiring logical reordering keep the same mixed-radix offset walk.
+Singleton axes do not affect contiguity, so native C-contiguous vectors with
+F-labelled metadata use the linear walk too. This is stride reasoning for
+all shapes, not dimension targeting.
+
+Unchanged boundaries: every Array still captures and validates its own live
+native metadata/storage before dispatch. No persistent state or invalidation
+change. Captured owner/export stays live through all loads/publication.
+Float conversion and signed/unsigned integer widening retain their output
+types; logical element ordering is unchanged. Zero count does no loads and
+rank-zero has one element at offset0. No reduction or numerical kernel change.
+
+Validation: changed array_into CPU source closure compiled exit0, O0,
+identical, Mojo1.0.0, compile_slot.sh default2. All 18 type/layout combinations
+are selected by the compiled runtime dispatch. This compile root is not run.
+Unchanged recursive flatten/opaque-leaf admission and other user-object
+operations were not rebuilt for this batch. No runtime/identity/performance
+campaign or speed claim. Required source guards run after commit.
+
+Limits: genuinely non-C logical layouts still need index decomposition;
+Python scalar boxing and final list append remain required publication.
+Native extension tolist and remaining legacy user-object operations retain
+prior scope/limitations described in the preceding handoff.
+
+Evidence /Users/andrewhendel/mojolearn-evidence/user-object-array-walk-20261028/
+Complete compile.log/.exit, binary, source-sha256.json and source-guard logs/
+exit files. compile.json records exact command, source/binary hashes/scope.
