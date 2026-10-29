@@ -148,7 +148,7 @@ def connect(context, host, bindings):
     # of the installation's selected GPU mode. Runtime never calls _HostBound._bind.
     from ._native_family_bridge import shared_context
     host_routes = []
-    for name, family, module, reader in (
+    for name, family, module, reader in (  # glue: three fixed CPU owner connections at import
             ('HostDBSCAN', '_mojolearn_estimators', bindings['_mojolearn_estimators_host'], 'estimators_numeric_mode'),
             ('HostAgglomerativeClustering', '_mojolearn_estimators', bindings['_mojolearn_estimators_host'], 'estimators_numeric_mode'),
             ('HostSpectralClustering', '_mojolearn_metrics', bindings['spectral'], 'metrics_numeric_mode')):

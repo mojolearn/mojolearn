@@ -150,13 +150,13 @@ def _inherited_host_availability(package, declared, missing):
     if type(module) is not ModuleType:
         return {}
     result = {}
-    for classes in vars(module).get('_FORMATS', {}).values():
-        for cls in classes.values():
+    for classes in vars(module).get('_FORMATS', {}).values():  # glue: registered archive classes at package import
+        for cls in classes.values():  # glue: fixed Host class setup inventory
             if type(cls) is not type or vars(cls).get('__module__') != module.__name__:
                 continue
             methods = {}
-            for base in cls.__mro__[1:]:
-                for name, rule in declared.get(base, {}).items():
+            for base in cls.__mro__[1:]:  # glue: inherited descriptor identities captured at setup
+                for name, rule in declared.get(base, {}).items():  # glue: fixed availability schema declarations
                     if (name not in methods
                             and _resolved(cls, name, missing) is _resolved(base, name, missing)):
                         methods[name] = rule
