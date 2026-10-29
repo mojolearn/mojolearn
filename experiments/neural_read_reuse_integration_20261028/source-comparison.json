@@ -1,0 +1,14 @@
+{
+  "native": {
+    "manifest_files": 3916,
+    "differences": [
+      "bindings/causal_lm_public.mojo"
+    ],
+    "absent_in_integrated_tree": []
+  },
+  "boundary": {
+    "manifest_files": 3916,
+    "differences": [],
+    "absent_in_integrated_tree": []
+  }
+}

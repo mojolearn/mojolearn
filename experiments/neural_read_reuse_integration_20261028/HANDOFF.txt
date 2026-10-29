@@ -1,0 +1,59 @@
+Neural read reuse integration, 2026-10-28
+
+Serial integration after public Mamba2 workspace main49875eb068.
+Three nonoverlapping agents; root reviewed source and retained compilation
+manifests, reused accepted scoped builds, and pushed coherent batches normally.
+No rented CPU needed for these small Mac compilations.
+
+Delivered batches:
+1. c6b55a1bea fixes three legacy callers omitting the new Mamba workspace argument.
+   Explicit runtime None avoids compile-time CPython global construction.
+   Broader actual public forward/read/generate compile passed after the fix;
+   original failure log/source retained. Earlier Mamba block compile did not
+   cover the omitted form. All seven workspace-function callers now explicit.
+2. 977b7cdea5 (helper e047ad839d, evidence0c52be4f85) retains five resident
+   x/sumsq/hn/logits/GEMM buffers per read and compatible prefill input storage
+   across layers. Exact shape changes replace storage after prior completion.
+   Finite scans reuse private partial/mirror buffers and combine x/hn waits;
+   x error remains first, before consumed or selection progress. No-norm keeps
+   one check; zero-step paths do not create scan scratch. Mutable data remains
+   refreshed. Exceptional drains pin scratch and preserve the first error.
+   Actual resident GPU dispatch compiled Apple identical O0 on CPU host;
+   separate public forward/read/generate CPU boundary compiled. No dynamic
+   loading, execution, NVIDIA/AMD target or identity qualification claimed.
+3. 4931503f60 (evidence1eb1b49899) captures local legacy-read route/state metadata
+   and resident key once, retains same-shape zeroed logits and two alternating
+   next-token buffers. Captured passive local model/state only; uncaptured and
+   parallel routes retain checks. Position limits and post-GIL descriptor checks
+   remain per step. New reads recapture; scratch never becomes public logits.
+   Actual public stream-read C entry compiled Apple CPU identical O0.
+
+Manifest checks:
+Resident native archive contains3916 repository Mojo files; only provider
+causal_lm_public differs from its old snapshot, outside the compiled native
+closure. Its separate corrected public-boundary manifest initially matched all
+3916 files. Subsequent legacy-read public compilation's125-file retained closure
+matches integrated source exactly. Native numerical source remains unchanged.
+No duplicate compilation merely for integration.
+
+Remaining:
+Sampling still uploads/exports KV per token and downloads logits. Separate
+legacy_read_plan_20261028/RESIDENT_SAMPLING_OWNERSHIP.txt records required byte-range
+alias admission and failure-publication ownership before changing these transfers.
+An additional bounded review checks the already-landed greedy/EOS alias admission.
+Per-read public outputs/status, prefill stages and other kernel scratch remain.
+Public Mamba workspace still refreshes live mutable bytes on every call.
+Cross-call pointer identity does not establish immutable contents.
+
+No runtime, identity or performance campaign ran; speed and runtime behavior are
+unmeasured. Direct CPython remains allowed where useful. No arithmetic changes,
+experimental performance-default promotion or broad Python import cleanup.
+
+Evidence:
+~/mojolearn-evidence/neural-read-reuse-integration-20261028/
+  repair-push.log, resident-push.log, read-plan-push.log,
+  source-comparison.json, read-plan-source-comparison.json
+Per-batch compile/source/guard receipts and full-log locations are in
+experiments/lm_read_workspaces_20261028/HANDOFF.txt,
+experiments/resident_finite_pair_20261028/HANDOFF.txt,
+experiments/legacy_read_plan_20261028/HANDOFF.txt.
