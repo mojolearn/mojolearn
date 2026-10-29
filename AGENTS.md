@@ -1,5 +1,25 @@
 # Agent working rules
 
+## Direct CPython is allowed during execution (Andrew, 2026-10-28)
+
+- Direct CPython C-API calls are allowed throughout native product execution,
+  including execution loops, not only at entry and exit. This supersedes earlier
+  boundary-only or blanket CPython/import prohibitions. A Mojo import providing
+  native CPython access is not, by itself, Python code execution.
+- Python computation and callbacks into Python/user-object hooks remain
+  prohibited, subject to the explicitly documented exceptions below. A C-API
+  call can invoke such hooks; audit the operation and admitted types rather than
+  assuming a native entry point cannot call Python. Preserve exact-type checks,
+  reference lifetimes, error propagation and required GIL/thread safety.
+- Optimize repeated work: hoist invariant admission and metadata, reuse plans
+  and buffers, and remove redundant lookups, conversions and allocations.
+  Removing a useful CPython call or import solely to satisfy a purity count is
+  not a goal. Do not add complexity or weaken correctness to avoid CPython.
+- Providers/adapters serve ecosystem integration (including Python and MAX).
+  Do not relocate algorithm work into provider directories to evade checks or
+  claim Python removal. Assess the actual transitive execution path; a file
+  move alone is not a performance improvement.
+
 ## Compile and merge; no verification campaign (Andrew, 2026-10-27)
 
 - Continue the migration with small affected compilations, then merge and push
