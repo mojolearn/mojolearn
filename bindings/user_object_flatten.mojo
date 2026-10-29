@@ -28,8 +28,8 @@ struct UserObjectFlatten(Movable):
         self.list_type = self.b.list
         self.tuple_type = self.b.tuple
         self.leaf_types = List[PythonObject]()
-        for cls in [self.b.str, self.b.bytes, self.b.bytearray, self.b.int,
-                    self.b.float, self.b.bool, self.b.complex, py_type(PythonObject(None))]:  # small-loop(fixed primitive leaf types)
+        for cls in [self.b.str, self.b.bytes, self.b.bytearray, self.b.int,  # small-loop(fixed primitive leaf types)
+                    self.b.float, self.b.bool, self.b.complex, py_type(PythonObject(None))]:
             self.leaf_types.append(cls)
         self.methods = Dict[Int, PythonObject]()
         self.owners = List[PythonObject]()

@@ -72,3 +72,8 @@ Full current evidence:
 compile.log/.exit, parse-failed-compile.log/.exit, initial-attempt.txt, binary,
 source-sha256.json, and source-guard logs/exit files. compile.json records the
 exact command, source/binary hashes and sparse-checkout compilation scope.
+
+Guard repair: no_compute_in_shells initially flagged the first line of a
+multiline eight-type setup loop because its small-loop tag was on the second
+line. The existing tag moved to the first line; comments only. No repeated
+compilation for this annotation-only edit. Initial guard failure retained.
