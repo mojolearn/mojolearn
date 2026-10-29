@@ -31,7 +31,7 @@ from transformer.native_generation_engine import NativeGenerationProgress, nativ
 from providers.python.generation_metadata_pyapi import (
     GenerationWeightSnapshot, GenerationLayerSnapshot, GenerationHeadSnapshot, GenerationOperationSnapshot, GenerationEngineAdmission, _generation_bool,
 )
-from std.memory import memcpy
+from std.memory import memcpy, memset_zero
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy, generation_mutable,
     generation_ids, generation_initialize_binding, generation_array_context, generation_array_snapshot, generation_buffer_view, py_ints,
@@ -1018,10 +1018,22 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
     var d = Int(py=model.d_model)
     var v = Int(py=model.vocab_size)
     var head = GenerationHeadSnapshot(model, model._native_entries, d, v, normalize, packed)
-    return _causal_model_head_prepared(head, x, b, l, flat)
+    return _causal_model_head_prepared(head, x, b, l, flat, PythonObject(None))
 
 
-def _causal_model_head_prepared(head: GenerationHeadSnapshot, x: PythonObject, b: Int, l: Int, flat: Bool) raises -> PythonObject:
+def _causal_logits_output(b: Int, l: Int, v: Int, output: PythonObject) raises -> PythonObject:
+    if output is None:
+        return generation_array([b, l, v])
+    # Private read-owned scratch has this admitted shape. Preserve the fresh
+    # Array's zero seed even for optional legacy/packed binding routes; reuse
+    # removes allocation and Array metadata construction, not initialization.
+    var keep = List[PythonObject]()
+    memset_zero(f32_ptr(_addr(output, keep)), b * l * v)
+    _ = keep
+    return output
+
+
+def _causal_model_head_prepared(head: GenerationHeadSnapshot, x: PythonObject, b: Int, l: Int, flat: Bool, output: PythonObject) raises -> PythonObject:
     var e = head.entries
     var d = head.width
     var v = head.vocab
@@ -1039,7 +1051,7 @@ def _causal_model_head_prepared(head: GenerationHeadSnapshot, x: PythonObject, b
             _ = py_call(np.append, PythonObject(head.norm_eps))
             _ = py_call(e["rms_norm_forward"], py_ints(a), np)
         _ = hn  # keep the Python object alive through the native call above
-    var out = generation_array([b, l, v])
+    var out = _causal_logits_output(b, l, v, output)
     if not head.packed:
         var a: List[Int] = [_addr(out, keep), _addr(hn, keep), weights_at[1]]
         if native is not None:
@@ -1105,7 +1117,7 @@ def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: Py
     return True
 
 
-def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, output: PythonObject, prepared_key: PythonObject) raises -> PythonObject:
     """`(B, L, V)` logits of `forward` in one resident program: the kept (or
     newly opened) sessions take the state's caches, run the stack, and the
     advanced caches come back into the state."""
@@ -1120,11 +1132,11 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
     var fields = _standalone_record_fields(mods, model)
     var persist = (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
-    var key = _resident_key(mods, model, state, b, int15)
+    var key = _resident_key(mods, model, state, b, int15) if prepared_key is None else prepared_key
     var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
     var lm = PythonObject(None)
     var sessions = PythonObject(None)
-    var out = generation_array([b, l, v])
+    var out = _causal_logits_output(b, l, v, output)
     if persist:
         causal_model_cache_set(mods, model, fields, "_resident_busy", True)
     try:
@@ -1267,15 +1279,60 @@ def _run_engine(mut mods: NativeModules, model: PythonObject, ids: PythonObject,
     return result
 
 
+struct LegacyGenerationReadPlan(Movable):
+    # One captured public read only. Public entry recaptures model/state on the
+    # next call. Native execution changes positions/cache contents, not these
+    # passive shape/route words. Parallel and uncaptured callers do not use it.
+    var resident: Bool
+    var batch: Int
+    var limited: Bool
+    var max_positions: Int
+    var capacity: Int
+    var resident_key: PythonObject
+    var logits: PythonObject
+    var logits_length: Int
+
+    def __init__(out self, model: PythonObject, state: PythonObject, batch: Int, resident: Bool) raises:
+        self.resident = resident
+        self.batch = batch
+        self.limited = model.max_positions is not None
+        self.max_positions = Int(py=model.max_positions) if self.limited else 0
+        self.capacity = Int(py=state.max_tokens)
+        self.resident_key = PythonObject(None)
+        self.logits = PythonObject(None)
+        self.logits_length = -1
+
+    def positions(self, state: PythonObject, batch: Int, length: Int) raises:
+        # Position/capacity checks retain their per-step execution point, before
+        # the forward try block (a refusal does not poison otherwise valid state).
+        if batch != self.batch:
+            raise Error("CausalLM: state batch/layer counts disagree with model and input")
+        var have = Int(py=state.positions)
+        if length < 0 or have < 0:
+            raise Error("CausalLM: negative sequence position")
+        if self.limited and have + length > self.max_positions:
+            raise Error("CausalLM: max_tokens or sequence exceeds max_positions")
+        if have + length > self.capacity:
+            raise Error("CausalLM: sequence exceeds allocated state capacity")
+
+
+def _legacy_read_captured(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
+    var namespace = mods.module("types").SimpleNamespace
+    return (py_type(model) is namespace and py_type(state) is namespace
+            and py_contains(causal_snapshot_fields(mods, model), "_causal_original")
+            and py_contains(causal_snapshot_fields(mods, state), "_causal_original"))
+
+
 def _run(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
     if _use_native_generation_engine(mods, model, state):
         return _run_engine(mods, model, ids, state)
     var snapshot: Optional[GenerationOperationSnapshot] = None
-    return _run_prepared(mods, model, ids, state, snapshot, remote_step)
+    var read_plan: Optional[LegacyGenerationReadPlan] = None
+    return _run_prepared(mods, model, ids, state, snapshot, read_plan, remote_step)
 
 
 def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject,
-                  mut snapshot: Optional[GenerationOperationSnapshot], remote_step: Bool = False,
+                  mut snapshot: Optional[GenerationOperationSnapshot], mut read_plan: Optional[LegacyGenerationReadPlan], remote_step: Bool = False,
                   admitted: Bool = False) raises -> PythonObject:
     # `admitted`: the caller (the generation loop) already guarded the Array
     # class for this GIL-release window; do not repeat the full guard.
@@ -1284,7 +1341,10 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
     var shape = ids.shape
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
-    _state(mods, model, state, b, l)
+    if read_plan:
+        read_plan.value().positions(state, b, l)
+    else:
+        _state(mods, model, state, b, l)
     var entries = model._native_entries
     var parallel = py_get(entries, "parallel_call")
     try:
@@ -1292,8 +1352,26 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
             var windowed_result4 = py_call(parallel, "run", Python.list(causal_model_origin(mods, model), ids, causal_state_origin(mods, state), remote_step, model, state))
             mods.released()
             return windowed_result4^
-        if _resident_forward_ok(mods, model, state):
-            var logits = _resident_forward(mods, model, ids, state)
+        var resident = read_plan.value().resident if read_plan else _resident_forward_ok(mods, model, state)
+        if not read_plan and admitted and _legacy_read_captured(mods, model, state):
+            read_plan = LegacyGenerationReadPlan(model, state, b, resident)
+        var output = PythonObject(None)
+        var resident_key = PythonObject(None)
+        if read_plan:
+            ref plan = read_plan.value()
+            # Private scratch never escapes as public forward logits. Prompt
+            # and one-token extents each allocate only when their shape changes.
+            if plan.logits_length == l:
+                output = plan.logits
+            if resident:
+                if plan.resident_key is None:
+                    plan.resident_key = _resident_key(mods, model, state, b, model._head_int15 is not None)
+                resident_key = plan.resident_key
+        if resident:
+            var logits = _resident_forward(mods, model, ids, state, output, resident_key)
+            if read_plan:
+                read_plan.value().logits = logits
+                read_plan.value().logits_length = l
             py_setattr(state, "positions", PythonObject(Int(py=state.positions) + l))
             return logits
         if not snapshot:
@@ -1304,7 +1382,10 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
                 blocks.append(_block(mods, model, i))
             snapshot = GenerationOperationSnapshot(model, entries, blocks)
             mods.released()
-        var out = _run_snapshot(mods, snapshot.value(), ids, state, b, l)
+        var out = _run_snapshot(mods, snapshot.value(), ids, state, b, l, output)
+        if read_plan:
+            read_plan.value().logits = out
+            read_plan.value().logits_length = l
         py_setattr(state, "positions", PythonObject(Int(py=state.positions) + l))
         return out
     except error:
@@ -1314,14 +1395,14 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
 
 
 def _run_snapshot(mut mods: NativeModules, snapshot: GenerationOperationSnapshot, ids: PythonObject, state: PythonObject,
-                  b: Int, l: Int) raises -> PythonObject:
+                  b: Int, l: Int, output: PythonObject) raises -> PythonObject:
     var x = _causal_model_embedding_prepared(snapshot.entries, snapshot.native, snapshot.width, snapshot.vocab,
                                             b, l, False, snapshot.embedding, ids)
     mods.released()
     for i in range(len(snapshot.layers)):  # driver-loop: over retained native layer descriptions
         x = _causal_layer_run_prepared(mods, snapshot.entries, snapshot.kind, snapshot.width, b, l,
             snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, state.layers[i], False, PythonObject(None))
-    var out = _causal_model_head_prepared(snapshot.head, x, b, l, False)
+    var out = _causal_model_head_prepared(snapshot.head, x, b, l, False, output)
     mods.released()
     _ = snapshot  # pins model and all captured weight owners until computation finishes
     return out
@@ -1913,6 +1994,9 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         var tokens = List[Int32](capacity=b * capacity)
         var wrote = 0
         var snapshot: Optional[GenerationOperationSnapshot] = None
+        var read_plan: Optional[LegacyGenerationReadPlan] = None
+        var token_a = PythonObject(None)
+        var token_b = PythonObject(None)
         # Only this host-selection fallback needs scratch. Retain it across
         # tokens of this read; the sampler overwrites all used words and greedy
         # never sizes it. Resident/native routes have already returned above.
@@ -1921,12 +2005,26 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
             if not admission:
                 admission = NativeArrayAdmission(generation_array_context())
             var l = Int(py=s.current.shape[1])
-            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, s.produced > 0, True)
+            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, read_plan, s.produced > 0, True)
             # Post-release re-check for this forward's GIL-release window (not redundant).
             admission.value().recheck(generation_array_context())
             var raw = f32_ptr(Int(py=logits._addr))
             _ = logits  # keep the Python object alive through the native call above
-            var next = generation_array([b, 1], "i")
+            var next = PythonObject(None)
+            if read_plan:
+                # Alternate private destinations: a failed pick never overwrites
+                # the stream's last committed current token. Prompt stays owned
+                # separately, and public checkpoint/output paths copy the bytes.
+                if wrote % 2 == 0:
+                    if token_a is None:
+                        token_a = generation_array([b, 1], "i")
+                    next = token_a
+                else:
+                    if token_b is None:
+                        token_b = generation_array([b, 1], "i")
+                    next = token_b
+            else:
+                next = generation_array([b, 1], "i")
             var dst = i32_ptr(Int(py=next._addr))
             _ = next  # keep the Python object alive through the native call above
             causal_lm_pick_step(raw, dst, b, l, v, s.finished, s.lengths, s.eos, s.pad, s.greedy,

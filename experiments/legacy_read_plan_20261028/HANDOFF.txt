@@ -1,0 +1,63 @@
+Legacy public read plan / scratch reuse (2026-10-28)
+
+Branch lane/legacy-read-plan-20261028, base49875eb068.
+Prerequisite1538de848f: three explicit absent-Mamba-workspace arguments; separate
+repair commit requested by root/classical after broader callers exposed omitted
+PythonObject(None) default evaluation. Whole tracked-tree audit found three
+workspace-function definitions and seven call sites, all now explicit. Existing
+workspace defaults remain declared but omitted form is unsupported on this
+compiler; future callers must pass an ordinary explicit runtime argument. No
+new read-plan function introduces a PythonObject(None) default.
+
+Repeated work removed:
+For the existing local legacy token loop, one captured-public-read plan retains
+resident eligibility (including its layer scan), validated outer state ownership/
+usability/batch/layer counts, position limits and resident session key. Only
+private captured model/state namespaces qualify; parallel execution returns
+before plan creation and uncaptured callers retain prior dynamic admission.
+Read entry already captures fresh passive metadata and publishes afterwards.
+
+One successful forward retains its private logits Array for the next identical
+shape. Prompt and single-token shapes allocate independently when shape changes;
+zero initialization is preserved with native memset_zero, and each output is
+allocated at its prior execution point. Public standalone forward still supplies
+None and produces its own fresh result. Two lazily allocated private next-token
+Arrays alternate through a read: sampling failure cannot overwrite the stream's
+last committed current token. The selector overwrites all successful rows, as
+confirmed in causal_lm_pick_step; checkpoint/public result paths copy token bytes.
+
+Preserved checks/lifetimes/failures:
+Initial _state runs at its original point. Position/capacity checks remain before
+each forward's try block, so a bounds refusal keeps the original state usability
+behavior. Post-GIL Array descriptor admission remains after EVERY forward.
+Provider/session checks, layer state checks and every existing transfer remain.
+Native sample arithmetic, RNG order, per-row failure updates and publication are
+unchanged. Scratch cannot escape as public logits and no workspace crosses read
+boundaries. Captured state owner and all scratch storage stay alive through use.
+Model/session cache persistence policy remains unchanged in _resident_forward.
+
+Compilation and review:
+Final actual causal_public_c[5] public-read C entry compile exit0: Mac arm64 CPU,
+Mojo1.0.0(ed45d567), identical O0, default2 compile slots. Includes capture,
+legacy/native/resident orchestration, selection/publication and failure paths;
+not the dynamically linked GPU numerical implementation. Neural peer independently
+source-reviewed the diff and found no blocker. No runtime/identity/performance
+campaign ran. Required source guard results recorded after product commit.
+
+Failures retained:
+Initial sparse checkout missed tokenizer. New optional PythonObject(None)
+arguments and prior omitted Mamba workspace arguments then exposed compile-time
+CPython global evaluation; ordinary explicit runtime arguments repaired them.
+An intermediate direct-read wrapper reproduced the failure. Final successful
+compile uses the original actual public C entry, not a reduced route.
+
+Limits/next option:
+KV caches still load/export each token on the resident-forward host-selection
+path, and host logits still download. RESIDENT_SAMPLING_OWNERSHIP.txt records a
+separate possible within-read ownership change and its alias/failure-publication
+requirements. Unsupported Apple GPU FP64 selection is not changed. No measured
+speedup claimed; no broad Python cleanup or new arithmetic in this batch.
+
+Evidence: /Users/andrewhendel/mojolearn-evidence/legacy-read-plan-20261028/
+Full compile logs/exits (including failures), binary, source archive/hash manifest,
+workspace-call-sites.log, command/scope receipt and guard logs are retained.

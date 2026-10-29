@@ -1,0 +1,52 @@
+Separate next option: within-read resident ownership for the EXISTING host sampler
+
+This batch does not implement this transfer change. GPU Float64 selection remains
+unsupported on Apple; no GPU sampler, host fallback or arithmetic change is
+introduced. Existing host selection can consume native resident-forward logits
+without requiring selection to move to the GPU.
+
+Current cost and feasible success path:
+_read calls _resident_forward once per selected token. _resident_forward loads
+all retained layer caches, runs one native resident forward, then exports every
+layer cache before selection. An operation-owned session set could be opened or
+borrowed once, load once, repeatedly invoke the existing native forward and host
+selector, and export once at read completion. Logits would still download and
+selected tokens upload each iteration. Private owned groups would avoid repeated
+weight/session creation on _parameters_exposed routes; exposed weights must be
+refreshed at each new public read. This is independent of GPU FP64 support.
+
+Required ownership/behavior work before implementation:
+1. Capture model/state per read, pin every session/provider and host buffer, and
+   hold the model's resident lease through the entire read. Existing group
+   reserve/release is per forward. Do not mark all layer sessions permanently
+   busy then invoke the existing reserving API (it would refuse/deadlock).
+   Either an admitted outer operation lease or private unexposed session set
+   must coexist with current per-forward native reservation and GIL rules.
+2. Prove nonoverlapping layer KV storage or retain the current route for aliases.
+   Exact Python object identity is insufficient: different Arrays can share
+   storage. Current per-token export followed by load couples aliased layers
+   through the host caches; skipping it can change their next-step inputs.
+   Captured state identity deduplication alone does not preserve that coupling.
+3. Preserve last-success state publication on failure. Today every successful
+   forward exports caches before selection; a later native-forward failure
+   leaves prior successful host bytes visible, marks state unusable, and keeps
+   prior positions/token progress. Native grouped execute marks ALL sessions
+   unusable on error, and the ordinary export admission then refuses. Simply
+   exporting once in finally cannot reproduce the existing bytes. A supported
+   native checkpoint/rollback or committed-cache readback contract is needed;
+   do not expose partially updated failed-layer buffers as the last good state.
+4. Selection errors occur after a completed forward. Preserve that forward's
+   positions/cache progress, earlier-row length/EOS updates and the previously
+   committed current token. Cache publication failure and descriptor changes
+   also need explicit first-error precedence. Check positions/capacity each
+   actual step rather than rejecting unused requested capacity before EOS.
+5. Keep post-GIL descriptor checks before each subsequent buffer access and
+   publication. Refresh live metadata/binding checks on the next public call;
+   no cross-call host/device ownership or pointer-identity immutability claim.
+
+Source basis (main49875 + this batch): _resident_forward/_resident_load_states,
+causal_state_capture (private namespace + shared buffer snapshots),
+transformer_resident_lm_run/_transformer_resident_lm_execute (group lifecycle),
+transformer/native_lm_resident_dispatch::_lm_group_execute (all owners unusable
+on failure), transformer/native_decode_dispatch (export requires admitted usable
+session), and _read_resident failure publication. No runtime experiment run.
