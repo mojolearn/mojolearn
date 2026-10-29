@@ -42,6 +42,7 @@ from bindings.samba_inference_native import _m3_shapes, _m3_names, _m3_state_cal
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.native_descriptor_abi import MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from mamba.impl.mamba_session_impl import mamba_copy_f32, mamba_host_copy
+from mamba.impl.mamba_decode_plan import MambaDecodePlan
 
 
 # ---------------------------------------------------------------- Mamba3Block
@@ -57,7 +58,7 @@ def _mamba_record_fields(mut mods: NativeModules, value: PythonObject, expected:
         raise Error("TypeError: Mamba state/session requires its exact connected native class")
     var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, expected)
     for i in range(len(ancestry)):  # driver-loop: record layouts before any attribute read/write
-        var namespace = _class_fields(ancestry[i])
+        var namespace = _class_fields(mods, ancestry[i])
         if py_contains(namespace, "__getattr__"):
             raise Error("TypeError: Mamba native records cannot invoke Python attribute hooks")
         for hook in [String("__getattribute__"), String("__setattr__")]:  # small-loop(two native record access hooks)
@@ -66,7 +67,7 @@ def _mamba_record_fields(mut mods: NativeModules, value: PythonObject, expected:
         for name in names:  # driver-loop: fixed state/session fields cannot be replaced by descriptors
             if py_contains(namespace, name):
                 raise Error("TypeError: Mamba native record has a replaced field descriptor: " + name)
-    return _fields(value)
+    return _fields(mods, value)
 
 
 def _mamba_scalar(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises:
@@ -157,10 +158,10 @@ def _mamba_session_fields(mut mods: NativeModules, session: PythonObject, contex
     if initialized:
         var hobj = fields["_handle"]
         var handle = hobj.downcast_value_ptr[MambaDecodeHandle]()
-        if cls is not classes[_kind_name(handle[].kind)]:
+        if cls is not classes[_kind_name(handle[].plan.kind)]:
             raise Error("TypeError: Mamba session kind differs from its native handle")
         _ = neural_block_fields(mods, fields["_block"], context)
-        _ = _mamba_state_fields(mods, fields["_state"], _kind_name(handle[].kind), context, False)
+        _ = _mamba_state_fields(mods, fields["_state"], _kind_name(handle[].plan.kind), context, False)
     return fields
 
 
@@ -608,52 +609,28 @@ def mamba3_set_input_states(mut mods: NativeModules,
 
 
 struct MambaDecodeHandle(Movable, Writable):
-    """The native owner of one open Mamba decode session.
+    """Provider ownership around a dependency-free native decode plan.
 
-    Device arm: the compiled `<kind>_session_*` handle keeps the weights and the
-    state resident. Host arm: typed copies of the weights and the state, stepped
-    through `<kind>_decode_step` in the per-call address order."""
-    var kind: Int
+    Python module/session handles stay at this admission/publication boundary.
+    Typed state, dimensions, weights and launch preparation belong to the plan.
+    """
     var binding: PythonObject
     var device: PythonObject
     var provider: PythonObject
     var device_address: Int
-    var open: Bool
-    var b: Int
-    var d_model: Int
-    var q: Int
-    var pending: Bool
-    var position: Int
-    var profile: Int
     var dt_limit: PythonObject
-    var names: List[String]
-    var dims: List[List[Int]]
-    var report_dims: List[List[Int]]
-    var weights: List[List[Float32]]
-    var parts: List[List[Float32]]
+    var plan: MambaDecodePlan
 
     def __init__(out self, kind: Int, binding: PythonObject):
-        self.kind = kind
         self.binding = binding
         self.device = PythonObject(None)
         self.provider = PythonObject(None)
         self.device_address = 0
-        self.open = False
-        self.b = 0
-        self.d_model = 0
-        self.q = 0
-        self.pending = False
-        self.position = 0
-        self.profile = 1
         self.dt_limit = PythonObject(None)
-        self.names = List[String]()
-        self.dims = List[List[Int]]()
-        self.report_dims = List[List[Int]]()
-        self.weights = List[List[Float32]]()
-        self.parts = List[List[Float32]]()
+        self.plan = MambaDecodePlan(kind)
 
     def write_to(self, mut writer: Some[Writer]):
-        writer.write("MambaDecodeHandle(kind=", self.kind, ", open=", self.open, ", rows=", self.b, ")")
+        writer.write("MambaDecodeHandle(kind=", self.plan.kind, ", open=", self.plan.open, ", rows=", self.plan.b, ")")
 
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
@@ -691,7 +668,7 @@ def _m1_check(slots: PythonObject, profile: Int, what: String) raises:
         raise Error(what + ": invalid absolute checkpoint position")
 
 
-def _session_layout(mut handle: MambaDecodeHandle, fields: PythonObject) raises:
+def _session_layout(mut handle: MambaDecodePlan, fields: PythonObject) raises:
     var b = handle.b
     if handle.kind == 1:
         var di = Int(py=fields["d_inner"])
@@ -748,27 +725,27 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
     if len(hshape) != (3 if kind == 1 else 4) or Int(py=hshape[0]) < 1:
         raise Error(what + ": state.h has an invalid shape " + String(hshape))
     var handle = MambaDecodeHandle(kind, binding)
-    handle.b = Int(py=hshape[0])
-    handle.d_model = Int(py=fields["d_model"])
+    handle.plan.b = Int(py=hshape[0])
+    handle.plan.d_model = Int(py=fields["d_model"])
     if kind == 1:
         if _native_has_entry(mods, binding, "mamba1_profile"):
-            handle.profile = Int(py=_native_function(mods, binding, "mamba1_profile")())
+            handle.plan.profile = Int(py=_native_function(mods, binding, "mamba1_profile")())
             mods.released()
-        _m1_check(slots, handle.profile, what)
-        handle.position = Int(py=py_get(slots, "absolute_position", PythonObject(0)))
+        _m1_check(slots, handle.plan.profile, what)
+        handle.plan.position = Int(py=py_get(slots, "absolute_position", PythonObject(0)))
     elif kind == 2:
-        handle.q = Int(py=slots["buffered_tokens"])
+        handle.plan.q = Int(py=slots["buffered_tokens"])
         handle.dt_limit = fields["dt_limit"]
     else:
-        handle.q = Int(py=slots["buffered_tokens"])
-        handle.pending = Bool(py=slots["pending"])
-    _session_layout(handle, fields)
+        handle.plan.q = Int(py=slots["buffered_tokens"])
+        handle.plan.pending = Bool(py=slots["pending"])
+    _session_layout(handle.plan, fields)
     mods.released()
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var pieces = List[Int]()
-    for i in range(len(handle.names)):  # driver-loop: over the state's named pieces
-        pieces.append(_mutable(slots[handle.names[i]], handle.dims[i], keep, copies, handle.names[i]))
+    for i in range(len(handle.plan.names)):  # driver-loop: over the state's named pieces
+        pieces.append(_mutable(slots[handle.plan.names[i]], handle.plan.dims[i], keep, copies, handle.plan.names[i]))
     var weights = fields["_w"]
     if device_arm:
         # The weights, then the state pieces, as the retired session opened them.
@@ -777,16 +754,16 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
             _ = py_call(addresses.append, generation_address(weights[i], keep))
         for i in range(len(pieces)):  # driver-loop: over the state's named pieces
             _ = py_call(addresses.append, pieces[i])
-        var params = py_ints([handle.b, handle.d_model])
+        var params = py_ints([handle.plan.b, handle.plan.d_model])
         if kind == 1:
-            if handle.profile == 2:
-                _ = py_call(params.append, handle.position)
+            if handle.plan.profile == 2:
+                _ = py_call(params.append, handle.plan.position)
         elif kind == 2:
-            _ = py_call(params.append, handle.q)
+            _ = py_call(params.append, handle.plan.q)
             _ = py_call(params.extend, handle.dt_limit)
         else:
-            _ = py_call(params.append, handle.q)
-            _ = py_call(params.append, 1 if handle.pending else 0)
+            _ = py_call(params.append, handle.plan.q)
+            _ = py_call(params.append, 1 if handle.plan.pending else 0)
         handle.device = _native_function(mods, binding, kind_name + "_session_create")()
         mods.released()
         if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1" and String(fields["numeric_mode"]) == "identical":
@@ -796,17 +773,17 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
             handle.device_address = neural_descriptor_handle(handle.provider,
                 _native_function(mods, binding, kind_name + "_decode_native_handle_v1"), handle.device)
             mods.released()
-            var p: List[Int] = [handle.b, handle.d_model]
+            var p: List[Int] = [handle.plan.b, handle.plan.d_model]
             var f = List[Float64]()
-            if kind == 1 and handle.profile != 1:
+            if kind == 1 and handle.plan.profile != 1:
                 raise Error("Mamba1 resident decode requires the binding's supported profile")
             if kind == 2:
-                p.append(handle.q)
+                p.append(handle.plan.q)
                 f.append(Float64(py=handle.dt_limit[0]))
                 f.append(Float64(py=handle.dt_limit[1]))
             elif kind == 3:
-                p.append(handle.q)
-                p.append(Int(handle.pending))
+                p.append(handle.plan.q)
+                p.append(Int(handle.plan.pending))
             var base = 20 + 8 * (kind - 1)
             _ = neural_descriptor_reserved_execute(handle.provider, handle.device, handle.device_address,
                 base, base + 2, base + 3, _neural_int_words(addresses), p, f)
@@ -821,10 +798,10 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
             mods.released()
         # The host arm owns typed copies, the device arm's upload on the host.
         for i in range(len(weights)):  # driver-loop: over block weight slots
-            handle.weights.append(mamba_host_copy(generation_address(weights[i], keep), Int(py=weights[i].size)))
+            handle.plan.weights.append(mamba_host_copy(generation_address(weights[i], keep), Int(py=weights[i].size)))
         for i in range(len(pieces)):  # driver-loop: over the state's named pieces
-            handle.parts.append(mamba_host_copy(pieces[i], _count(handle.dims[i])))
-    handle.open = True
+            handle.plan.parts.append(mamba_host_copy(pieces[i], _count(handle.plan.dims[i])))
+    handle.plan.open = True
     _ = keep^
     var session_fields = _fields(session)
     py_setitem(session_fields, "_handle", PythonObject(alloc=handle^))
@@ -846,90 +823,70 @@ def mamba_session_open(mut mods: NativeModules, block: PythonObject, state: Pyth
 
 
 def _session_require_open(handle: PythonObject, what: String) raises:
-    if not handle.downcast_value_ptr[MambaDecodeHandle]()[].open:
+    if not handle.downcast_value_ptr[MambaDecodeHandle]()[].plan.open:
         raise Error(what + ": the session is closed")
 
 
 def mamba_session_step(mut mods: NativeModules, session: PythonObject, input: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = mods.module("builtins")
     var hobj = session._handle
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
-    var kind = h[].kind
+    var kind = h[].plan.kind
     var name = _kind_name(kind)
     var what = _session_name(kind) + ".step"
     _session_require_open(hobj, what)
-    var x = _neural_input(mods, input, h[].d_model, True, context)
-    var b = h[].b
+    var x = _neural_input(mods, input, h[].plan.d_model, True, context)
+    var b = h[].plan.b
     if Int(py=x.shape[0]) != b:
         raise Error(what + ": the session holds " + String(b) + " rows, x has B = " + String(x.shape[0]))
     var keep = List[PythonObject]()
-    var y = generation_array([b, 1, h[].d_model])
-    var reports = bi.list()
-    for i in range(len(h[].report_dims)):  # driver-loop: over the fixed report buffers
-        _ = py_call(reports.append, generation_array(h[].report_dims[i]))
+    var y = generation_array([b, 1, h[].plan.d_model])
+    # Reports escape in the returned tuple/public h_last_ fields, so each
+    # call still owns fresh arrays. Their temporary collection is native.
+    var reports = List[PythonObject](capacity=len(h[].plan.report_dims))
+    for i in range(len(h[].plan.report_dims)):  # driver-loop: over the fixed report buffers
+        reports.append(generation_array(h[].plan.report_dims[i]))
+    var input_address = generation_address(x, keep)
+    var output_address = generation_address(y, keep)
+    var report_addresses = List[Int](capacity=len(reports))
+    for i in range(len(reports)):  # driver-loop: capture newly allocated report buffers at the provider boundary
+        report_addresses.append(generation_address(reports[i], keep))
+    var addresses = h[].plan.step_addresses(h[].device is not None, input_address, output_address, report_addresses)
     if h[].device is not None:
-        var addresses = py_ints([generation_address(x, keep), generation_address(y, keep)])
-        for i in range(len(reports)):  # driver-loop: over the fixed report buffers
-            _ = py_call(addresses.append, generation_address(reports[i], keep))
         if h[].provider is not None:
             var base = 20 + 8 * (kind - 1)
             var updated = neural_descriptor_reserved_execute(h[].provider, h[].device, h[].device_address,
-                base + 1, base + 2, base + 4, _neural_int_words(addresses), [], [])
+                base + 1, base + 2, base + 4, addresses, [], [])
             mods.released()
             if kind != 1:
-                h[].q = updated
+                h[].plan.q = updated
         else:
-            var updated = py_call(_native_function(mods, h[].binding, name + "_session_step"), h[].device, addresses)
+            var updated = py_call(_native_function(mods, h[].binding, name + "_session_step"), h[].device, py_ints(addresses))
             mods.released()
             if kind != 1:
-                h[].q = Int(py=updated)
+                h[].plan.q = Int(py=updated)
     else:
-        # The per-call `<kind>_decode_step` address order with the session's
-        # own copies standing where the caller's buffers would: x, weights,
-        # state pieces, y, then (Mamba-1) the affine pieces or (Mamba-2/3) the reports.
-        var addresses = py_ints([generation_address(x, keep)])
-        for i in range(len(h[].weights)):  # driver-loop: over block weight slots
-            _ = py_call(addresses.append, Int(h[].weights[i].unsafe_ptr()))
-        var lead = 2 if kind == 1 else len(h[].parts)
-        for i in range(lead):  # driver-loop: over the state's named pieces
-            _ = py_call(addresses.append, Int(h[].parts[i].unsafe_ptr()))
-        _ = py_call(addresses.append, generation_address(y, keep))
-        for i in range(lead, len(h[].parts)):  # driver-loop: over the Mamba-1 affine pieces
-            _ = py_call(addresses.append, Int(h[].parts[i].unsafe_ptr()))
-        for i in range(len(reports)):  # driver-loop: over the fixed report buffers
-            _ = py_call(addresses.append, generation_address(reports[i], keep))
-        var params = py_ints([b, h[].d_model])
-        if kind == 1:
-            if h[].profile == 2:
-                _ = py_call(params.append, h[].position)
-        elif kind == 2:
-            _ = py_call(params.append, h[].q)
-            _ = py_call(params.extend, h[].dt_limit)
-        else:
-            _ = py_call(params.append, h[].q)
-            _ = py_call(params.append, 1 if h[].pending else 0)
+        # Typed launch preparation has no Python/provider dependency.
         if h[].provider is not None:
-            var p: List[Int] = [b, h[].d_model]
+            var p = h[].plan.step_parameters()
             var f = List[Float64]()
-            if kind != 1:
-                p.append(h[].q)
             if kind == 2:
-                f.append(Float64(py=h[].dt_limit[0])); f.append(Float64(py=h[].dt_limit[1]))
-            elif kind == 3:
-                p.append(Int(h[].pending))
-            var updated = neural_descriptor_execute(h[].provider, 2 * kind - 1, _neural_int_words(addresses), p, f)
+                f = h[].plan.step_floats(Float64(py=h[].dt_limit[0]), Float64(py=h[].dt_limit[1]))
+            var updated = neural_descriptor_execute(h[].provider, 2 * kind - 1, addresses, p, f)
             mods.released()
             if kind != 1:
-                h[].q = updated
+                h[].plan.q = updated
         else:
-            var updated = py_call(_native_function(mods, h[].binding, name + "_decode_step"), addresses, params)
+            var params = py_ints(h[].plan.step_parameters(False))
+            if kind == 2:
+                _ = py_call(params.extend, h[].dt_limit)
+            var updated = py_call(_native_function(mods, h[].binding, name + "_decode_step"), py_ints(addresses), params)
             mods.released()
             if kind != 1:
-                h[].q = Int(py=updated)
+                h[].plan.q = Int(py=updated)
         if kind == 3:
-            h[].pending = False
-    if kind == 1 and h[].profile == 2:
-        h[].position += 1
+            h[].plan.pending = False
+    if kind == 1 and h[].plan.profile == 2:
+        h[].plan.position += 1
     _ = keep^
     if kind == 1:
         return y
@@ -942,18 +899,18 @@ def _session_pieces(
     hobj: PythonObject, slots: PythonObject, what: String, mut keep: List[PythonObject], mut copies: List[PythonObject],
 ) raises -> List[Int]:
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
-    if h[].kind == 1:
-        _m1_check(slots, h[].profile, what)
+    if h[].plan.kind == 1:
+        _m1_check(slots, h[].plan.profile, what)
     var pieces = List[Int]()
-    for i in range(len(h[].names)):  # driver-loop: over the state's named pieces
-        pieces.append(_mutable(slots[h[].names[i]], h[].dims[i], keep, copies, h[].names[i]))
+    for i in range(len(h[].plan.names)):  # driver-loop: over the state's named pieces
+        pieces.append(_mutable(slots[h[].plan.names[i]], h[].plan.dims[i], keep, copies, h[].plan.names[i]))
     return pieces^
 
 
 def mamba_session_sync(mut mods: NativeModules, session: PythonObject, context: PythonObject) raises -> PythonObject:
     var hobj = session._handle
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
-    var kind = h[].kind
+    var kind = h[].plan.kind
     var what = _session_name(kind) + ".sync_state"
     _session_require_open(hobj, what)
     var state = session._state
@@ -969,40 +926,40 @@ def mamba_session_sync(mut mods: NativeModules, session: PythonObject, context: 
                 base + 1, base + 2, base + 5, pieces, [], [])
             mods.released()
             if kind == 2:
-                h[].q = result
+                h[].plan.q = result
             elif kind == 3:
-                h[].q = result // 2
-                h[].pending = (result & 1) != 0
+                h[].plan.q = result // 2
+                h[].plan.pending = (result & 1) != 0
         else:
             var exported = py_call(_native_function(mods, h[].binding, _kind_name(kind) + "_session_export_state"), h[].device, addresses)
             mods.released()
             if kind == 1:
-                if h[].profile == 2:
-                    h[].position = Int(py=exported)
+                if h[].plan.profile == 2:
+                    h[].plan.position = Int(py=exported)
             elif kind == 2:
-                h[].q = Int(py=exported)
+                h[].plan.q = Int(py=exported)
             else:
-                h[].q = Int(py=exported[0])
-                h[].pending = Bool(py=exported[1])
+                h[].plan.q = Int(py=exported[0])
+                h[].plan.pending = Bool(py=exported[1])
     else:
         for i in range(len(pieces)):  # driver-loop: over the state's named pieces
-            mamba_copy_f32(pieces[i], Int(h[].parts[i].unsafe_ptr()), _count(h[].dims[i]))
+            mamba_copy_f32(pieces[i], Int(h[].plan.parts[i].unsafe_ptr()), _count(h[].plan.dims[i]))
     _writeback(copies)
     _ = keep^
     if kind == 1:
-        if h[].profile == 2:
-            py_setitem(_fields(state), "absolute_position", h[].position)
+        if h[].plan.profile == 2:
+            py_setitem(_fields(state), "absolute_position", h[].plan.position)
     else:
-        py_setitem(_fields(state), "buffered_tokens", h[].q)
+        py_setitem(_fields(state), "buffered_tokens", h[].plan.q)
         if kind == 3:
-            py_setitem(_fields(state), "pending", PythonObject(h[].pending))
+            py_setitem(_fields(state), "pending", PythonObject(h[].plan.pending))
     return state
 
 
 def mamba_session_load(mut mods: NativeModules, session: PythonObject, context: PythonObject) raises -> PythonObject:
     var hobj = session._handle
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
-    var kind = h[].kind
+    var kind = h[].plan.kind
     var what = _session_name(kind) + ".load_state"
     _session_require_open(hobj, what)
     var state = session._state
@@ -1012,9 +969,9 @@ def mamba_session_load(mut mods: NativeModules, session: PythonObject, context: 
     var pieces = _session_pieces(hobj, slots, what, keep, copies)
     var q = 0
     var pending = False
-    var position = h[].position
+    var position = h[].plan.position
     if kind == 1:
-        if h[].profile == 2:
+        if h[].plan.profile == 2:
             position = Int(py=slots["absolute_position"])
     else:
         q = Int(py=slots["buffered_tokens"])
@@ -1035,7 +992,7 @@ def mamba_session_load(mut mods: NativeModules, session: PythonObject, context: 
             mods.released()
         else:
             if kind == 1:
-                if h[].profile == 2:
+                if h[].plan.profile == 2:
                     _ = py_call(addresses.append, position)
                 _ = py_call(_native_function(mods, h[].binding, name), h[].device, addresses)
                 mods.released()
@@ -1047,19 +1004,19 @@ def mamba_session_load(mut mods: NativeModules, session: PythonObject, context: 
                 mods.released()
     else:
         for i in range(len(pieces)):  # driver-loop: over the state's named pieces
-            mamba_copy_f32(Int(h[].parts[i].unsafe_ptr()), pieces[i], _count(h[].dims[i]))
+            mamba_copy_f32(Int(h[].plan.parts[i].unsafe_ptr()), pieces[i], _count(h[].plan.dims[i]))
     _ = keep^
-    h[].q = q
-    h[].pending = pending
-    h[].position = position
+    h[].plan.q = q
+    h[].plan.pending = pending
+    h[].plan.position = position
     return state
 
 
 def _session_release(mut mods: NativeModules, hobj: PythonObject, state: PythonObject) raises:
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
-    if not h[].open:
+    if not h[].plan.open:
         return
-    h[].open = False
+    h[].plan.open = False
     try:
         if state is not None:
             py_setitem(_fields(state), "_resident_session", PythonObject(None))
@@ -1071,20 +1028,20 @@ def _session_release(mut mods: NativeModules, hobj: PythonObject, state: PythonO
         try:
             if h[].device is not None:
                 if h[].provider is not None:
-                    _ = neural_descriptor_execute(h[].provider, 27 + 8 * (h[].kind - 1), [], [h[].device_address], [], False)
+                    _ = neural_descriptor_execute(h[].provider, 27 + 8 * (h[].plan.kind - 1), [], [h[].device_address], [], False)
                     mods.released()
                 else:
-                    _ = py_call(_native_function(mods, h[].binding, _kind_name(h[].kind) + "_session_close"), h[].device)
+                    _ = py_call(_native_function(mods, h[].binding, _kind_name(h[].plan.kind) + "_session_close"), h[].device)
                     mods.released()
         finally:
             mods.released()
-            h[].weights.clear()
-            h[].parts.clear()
+            h[].plan.weights.clear()
+            h[].plan.parts.clear()
 
 
 def mamba_session_close(mut mods: NativeModules, session: PythonObject, context: PythonObject) raises -> PythonObject:
     var hobj = session._handle
-    if not hobj.downcast_value_ptr[MambaDecodeHandle]()[].open:
+    if not hobj.downcast_value_ptr[MambaDecodeHandle]()[].plan.open:
         return PythonObject(None)
     try:
         _ = mamba_session_sync(mods, session, context)
@@ -1105,7 +1062,7 @@ def mamba_session_drop(mut mods: NativeModules, session: PythonObject) raises ->
 
 
 def mamba_session_is_open(session: PythonObject) raises -> PythonObject:
-    return PythonObject(session._handle.downcast_value_ptr[MambaDecodeHandle]()[].open)
+    return PythonObject(session._handle.downcast_value_ptr[MambaDecodeHandle]()[].plan.open)
 
 
 def mamba_session_device(session: PythonObject) raises -> PythonObject:
@@ -1115,8 +1072,8 @@ def mamba_session_device(session: PythonObject) raises -> PythonObject:
 def mamba_session_repr(session: PythonObject) raises -> PythonObject:
     var hobj = session._handle
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
-    var flag = String("True") if h[].open else String("False")
-    return PythonObject(_session_name(h[].kind) + "(open=" + flag + ", rows=" + String(h[].b) + ")")
+    var flag = String("True") if h[].plan.open else String("False")
+    return PythonObject(_session_name(h[].plan.kind) + "(open=" + flag + ", rows=" + String(h[].plan.b) + ")")
 
 
 # ---------------------------------------------------------------- the C boundary
@@ -1158,11 +1115,11 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
             var result = mamba_session_step(mods, values[0], values[1], context)
             var hobj = fields["_handle"]
             var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
-            if h[].kind == 1:
+            if h[].plan.kind == 1:
                 return result
             var block_fields = _fields(fields["_block"])
             py_setitem(block_fields, "h_last_", result[1])
-            if h[].kind == 3:
+            if h[].plan.kind == 3:
                 py_setitem(block_fields, "k_last_", result[2])
                 py_setitem(block_fields, "v_last_", result[3])
                 py_setitem(block_fields, "theta_last_", result[4])

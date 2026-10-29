@@ -1,0 +1,48 @@
+Mamba native decode plan extraction (2026-10-28)
+
+Branch lane/mamba-step-words-20261028. Base 7965f31955e7a19a5cdd49149753837752f70e23.
+
+Removed repeated work: the step path no longer boxes address/parameter lists
+into Python only for descriptor transport to unbox them. Report ownership is
+kept in a native List[PythonObject]; addresses/words use native typed vectors.
+Session metadata, weights, state pieces and launch-vector construction now
+belong to mamba/impl/mamba_decode_plan.mojo, which has no Python dependencies.
+The provider retains only provider/binding/device/dt_limit owners and admits
+current Python metadata before invoking typed launch preparation. Legacy calls
+construct their Python transport only in their own branch. Record field reads
+reuse admitted operation modules through _class_fields/_fields.
+
+Lifetime/mutation: native buffers move with the plan while inner allocations
+remain stable; vectors remain private per call for reentrancy. Current mutable
+dt_limit is still admitted every step. Fresh public output/report Arrays remain
+required because their storage escapes through result tuples/h_last_. No
+numerical reorder. Profile/position words retain the prior native/legacy ABI.
+Classical lane separately implements generation-only two-buffer Mamba2 report
+reuse; this batch neither edits nor recompiles that shared generation file.
+
+Focused compilation: public mamba_native_c full dispatcher shared library and
+standalone native MambaDecodePlan root both exit0, identical CPU O0, Mojo1.0.0,
+Mac compile_slot default2. The native root has no unresolved Python symbols.
+A first extraction compile failed on two stale kind field accesses; corrected,
+full failure log retained. The earlier step-only successful build is retained
+as initial-success, not used to qualify the later extraction. Nothing executed;
+no runtime/identity/performance campaign and no measured speed claim.
+
+Supplemental guard tools/hooks/native_neural_dependencies.py follows repository
+imports plus explicit dynamic ABI targets from nominated pure execution roots.
+Exact builtin CPython admission/publication is permitted ABOVE those roots.
+Mamba closure183files/1521edges passes; six static controls pass. std/max/layout/
+linalg package internals are external and not scanned. --scope all currently
+FAILS269findings: core/native_execution points at native_execution_pyapi, whose
+per-call GIL lifecycle is still inside generation loops. The guard honestly
+records that dynamic edge; it is not wired as an all-green global requirement.
+Shared endpoint native ownership extraction remains outstanding; plain session
+busy flags and diagnostic counters cannot safely lose their GIL serialization
+without an actual native synchronization/lifetime design. No whole-model
+Python-free claim is made by this native-plan extraction.
+
+Evidence /Users/andrewhendel/mojolearn-evidence/mamba-step-words-20261028/
+contains full build/guard logs and exits, both binaries, retained source tar,
+source hashes, dependency JSON (including all broader failures), and nm output.
+compile.json records coverage, binary/source hashes and known limits. Required
+source guards run on committed source and their status is delivered separately.
