@@ -1,0 +1,11 @@
+Attempt1: requested16vCPU unavailable, RunPod POST500 capacity message. CPU pod
+listing returned empty afterward; name-keyed deadman retained by runner.
+Attempt2: pod h86tevwlz0yt8t, actual affinity8/cgroup cpu.max unlimited, compiler
+workers8 serial compiles. All5 roots failed at parsing (unable to locate std)
+because compile_cpu.py invoked mojo directly outside Pixi activation. Unicode
+generation passed. No product compile succeeded; no product was executed.
+Corrected command uses locked Pixi environment activation, matching normal builders.
+Complete failure source/logs/status retained on Mac:
+~/mojolearn-evidence/structural-reuse-fourth-20261028/runpod-8/
+and R2 measurements/runpod-cpu/mojolearn-cpu-structural-fourth8-20261029-012858/results-complete.tgz.
+Runner confirmed archive and deletion, cost$0.0136. Do not overwrite this attempt.

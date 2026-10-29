@@ -72,7 +72,9 @@ roots = {
 results = []
 for name, fixture in roots.items():
     binary = out / (name + '.so')
-    command = [str(compiler), 'build', '-j', str(workers), '--emit', 'shared-lib',
+    command = ['pixi', 'run', '--manifest-path', str(root / 'pixi.toml'),
+               '--environment', 'default', '--locked', '--no-install', '--executable',
+               str(compiler), 'build', '-j', str(workers), '--emit', 'shared-lib',
                '--optimization-level', '0', '--target-cpu', 'x86-64-v3',
                '-D', 'MOJOLEARN_NUMERIC_IDENTICAL=1', '-D', 'MOJOLEARN_COLUMN_CPU',
                '-I', '.', '-I', 'bindings', fixture, '-o', str(binary)]
