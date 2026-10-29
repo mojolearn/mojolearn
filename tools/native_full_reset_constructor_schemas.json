@@ -6064,21 +6064,21 @@
           "value": {
             "parameter": "weights"
           },
-          "source": "python/mojolearn/neighbors.py:832"
+          "source": "python/mojolearn/neighbors.py:833"
         },
         {
           "field": "_y_cols",
           "value": {
             "literal": null
           },
-          "source": "python/mojolearn/neighbors.py:832"
+          "source": "python/mojolearn/neighbors.py:833"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "NumericModeMixin after python/mojolearn/neighbors.py:832"
+          "source": "NumericModeMixin after python/mojolearn/neighbors.py:833"
         }
       ],
       "trace": [
@@ -6151,7 +6151,7 @@
         {
           "path": "python/mojolearn/neighbors.py",
           "name": "__init__",
-          "line": 832,
+          "line": 833,
           "ast_sha256": "1b549761da421aaa878e8c98155324d1406c994ca510c5356c2dbfea7de8b84e"
         },
         {
@@ -6282,21 +6282,21 @@
           "value": {
             "parameter": "weights"
           },
-          "source": "python/mojolearn/neighbors.py:1058"
+          "source": "python/mojolearn/neighbors.py:1060"
         },
         {
           "field": "_y_cols",
           "value": {
             "literal": null
           },
-          "source": "python/mojolearn/neighbors.py:1058"
+          "source": "python/mojolearn/neighbors.py:1060"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "NumericModeMixin after python/mojolearn/neighbors.py:1058"
+          "source": "NumericModeMixin after python/mojolearn/neighbors.py:1060"
         }
       ],
       "trace": [
@@ -6369,7 +6369,7 @@
         {
           "path": "python/mojolearn/neighbors.py",
           "name": "__init__",
-          "line": 1058,
+          "line": 1060,
           "ast_sha256": "1b549761da421aaa878e8c98155324d1406c994ca510c5356c2dbfea7de8b84e"
         },
         {
@@ -13004,56 +13004,56 @@
           "value": {
             "parameter": "radius"
           },
-          "source": "python/mojolearn/neighbors.py:1259"
+          "source": "python/mojolearn/neighbors.py:1262"
         },
         {
           "field": "metric",
           "value": {
             "parameter": "metric"
           },
-          "source": "python/mojolearn/neighbors.py:1259"
+          "source": "python/mojolearn/neighbors.py:1262"
         },
         {
           "field": "algorithm",
           "value": {
             "parameter": "algorithm"
           },
-          "source": "python/mojolearn/neighbors.py:1259"
+          "source": "python/mojolearn/neighbors.py:1262"
         },
         {
           "field": "p",
           "value": {
             "parameter": "p"
           },
-          "source": "python/mojolearn/neighbors.py:1259"
+          "source": "python/mojolearn/neighbors.py:1262"
         },
         {
           "field": "_index",
           "value": {
             "literal": null
           },
-          "source": "python/mojolearn/neighbors.py:1259"
+          "source": "python/mojolearn/neighbors.py:1262"
         },
         {
           "field": "_metric_value",
           "value": {
             "literal": null
           },
-          "source": "python/mojolearn/neighbors.py:1259"
+          "source": "python/mojolearn/neighbors.py:1262"
         },
         {
           "field": "_metric_arg",
           "value": {
             "literal": null
           },
-          "source": "python/mojolearn/neighbors.py:1259"
+          "source": "python/mojolearn/neighbors.py:1262"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "NumericModeMixin after python/mojolearn/neighbors.py:1259"
+          "source": "NumericModeMixin after python/mojolearn/neighbors.py:1262"
         }
       ],
       "trace": [
@@ -13117,7 +13117,7 @@
         {
           "path": "python/mojolearn/neighbors.py",
           "name": "__init__",
-          "line": 1259,
+          "line": 1262,
           "ast_sha256": "c7d346304a0e572b678f1cbade0ebc335d869072b826cb1110d72dba89b10054"
         }
       ],

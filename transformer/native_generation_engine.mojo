@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Operation-local nonresident fp32 Transformer execution. Numerical operations
-# use the existing sibling ABI entries in their original order. No provider,
-# Python state, Python allocator, or callback is reachable from this module.
+# use the existing sibling ABI entries in their original order. Static imports
+# and engine state are native-only. Supplied endpoint function pointers still
+# require separate transitive admission: the current provider endpoint manages
+# the CPython GIL per call. Its migration is not established by this module's
+# import closure or a native-only fixture's unresolved-symbol inventory.
 from std.memory import memset_zero
 from core.generation_policy_impl import GenerationSamplingScratch
 from core.native_execution import NativeExecutionEndpoint

@@ -62,17 +62,27 @@ def fixture():
     # The connector and the inherited-setter reconstruction recipes are real
     # fixture modules: install/connect import them relative to the package.
     connector = ModuleType('full_reset_fixture._native_full_reset_params')
+    archive = ModuleType('full_reset_fixture._native_archive_bridge')
+    archive_context = {}
+    archive.connect = lambda: (None, {'host_archive_context': archive_context})
     reconstruction = ModuleType('full_reset_fixture._native_mode_reconstruction')
     reconstruction.__package__ = package.__name__
     exec(compile(RECONSTRUCTION.read_text(), str(RECONSTRUCTION), 'exec'), vars(reconstruction))
     ns = vars(connector)
+    inventories = {}
+    for name in ('_NATIVE_PUBLIC_CLASSES', '_NATIVE_PUBLIC_LOADERS'):
+        declared = next(n.value for n in source.body
+                        if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == name)
+        names = {node.attr for node in declared.elts}
+        inventories[name] = tuple(cls for cls in classes if cls.__name__ in names)
     ns.update({'__package__': package.__name__, '_CLASSES': tuple(classes), '_EVENTS': events,
           '_DEFERRED_MODULES': deferred,
           'BuiltinFunctionType': BuiltinFunctionType, '_ENTRY': lambda *args: calls.append(args),
           '_INIT_ENTRY': lambda *args: calls.append(('init',) + args), '_CONSTRUCTOR_HOOKS': hooks,
           '_CONTEXT': dict(plans={}, missing=object(), ready=False, originals={})})
+    ns.update(inventories)
     exec(compile(ast.Module(body=body, type_ignores=[]), str(CONNECTOR), 'exec'), ns)
-    modules = {module.__name__: module for module in (mode, attributes, package, host, connector, reconstruction)}
+    modules = {module.__name__: module for module in (mode, attributes, package, host, connector, reconstruction, archive)}
     return ns, modules, calls
 
 
