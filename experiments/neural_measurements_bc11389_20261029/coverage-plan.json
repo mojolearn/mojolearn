@@ -1,0 +1,693 @@
+{
+  "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "artifact_sha256": "772026f68616fdabd70ff2f0fd3a0dad252554a8c5e0fcac4d06c632064154de",
+  "vendor": "nvidia",
+  "numeric_mode": "identical",
+  "baseline": "current compiled defaults only",
+  "rounds": 1,
+  "excluded_warmups": 1,
+  "comparison": "own-only timings, no opponent ratios or speedup claims",
+  "priority": [
+    "adagrad",
+    "adam",
+    "transformer-decode",
+    "mamba2-forward",
+    "mlp-train-step",
+    "gemm"
+  ],
+  "rows": [
+    {
+      "lane": "adam",
+      "family": "algos",
+      "dataset": "synthetic",
+      "parameters": 16777216,
+      "steps": 10,
+      "settings": {
+        "lr": 0.001,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "weight_decay": 0.0,
+        "maximize": false
+      },
+      "status": "pending"
+    },
+    {
+      "lane": "adagrad",
+      "family": "algos",
+      "dataset": "synthetic",
+      "parameters": 16777216,
+      "steps": 10,
+      "settings": {
+        "lr": 0.001,
+        "lr_decay": 0.0,
+        "weight_decay": 0.0,
+        "initial_accumulator_value": 0.0,
+        "eps": 1e-10
+      },
+      "status": "pending"
+    },
+    {
+      "lane": "lm-train-step",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "n_heads": 6,
+        "n_kv": 6,
+        "head_dim": 64,
+        "intermediate": 1024,
+        "n_layers": 8,
+        "vocab_size": 8192,
+        "name": "full",
+        "label": "B1 L2048 DM384 H6 KV6 HD64 FF1024 layers8 V8192"
+      },
+      "device": "gpu",
+      "dataset": "bytes",
+      "status": "pending"
+    },
+    {
+      "lane": "lm-forward",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "n_heads": 6,
+        "n_kv": 6,
+        "head_dim": 64,
+        "intermediate": 1024,
+        "n_layers": 8,
+        "vocab_size": 8192,
+        "name": "full",
+        "label": "B1 L2048 DM384 H6 KV6 HD64 FF1024 layers8 V8192"
+      },
+      "device": "gpu",
+      "dataset": "bytes",
+      "status": "pending"
+    },
+    {
+      "lane": "gemm",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "m": 4096,
+        "n": 4096,
+        "k": 4096,
+        "name": "full",
+        "label": "4096x4096x4096"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "transformer-forward",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "n_heads": 6,
+        "n_kv": 6,
+        "head_dim": 64,
+        "intermediate": 1024,
+        "name": "full",
+        "label": "B1 L2048 DM384 H6 KV6 HD64 FF1024"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "transformer-infer",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 512,
+        "d_model": 384,
+        "n_heads": 6,
+        "n_kv": 6,
+        "head_dim": 64,
+        "intermediate": 1024,
+        "name": "full",
+        "label": "B1 L512 DM384 H6 KV6 HD64 FF1024"
+      },
+      "device": "cpu",
+      "dataset": "gaussian",
+      "status": "excluded-host-only"
+    },
+    {
+      "lane": "mamba1-forward",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "name": "full",
+        "label": "B1 L2048 DM384"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "mamba1-infer",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 512,
+        "d_model": 384,
+        "name": "full",
+        "label": "B1 L512 DM384"
+      },
+      "device": "cpu",
+      "dataset": "gaussian",
+      "status": "excluded-host-only"
+    },
+    {
+      "lane": "mamba2-forward",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "name": "full",
+        "label": "B1 L2048 DM384"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "mamba2-infer",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 512,
+        "d_model": 384,
+        "name": "full",
+        "label": "B1 L512 DM384"
+      },
+      "device": "cpu",
+      "dataset": "gaussian",
+      "status": "excluded-host-only"
+    },
+    {
+      "lane": "mamba3-forward",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "name": "full",
+        "label": "B1 L2048 DM384"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "mamba3-infer",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 512,
+        "d_model": 384,
+        "name": "full",
+        "label": "B1 L512 DM384"
+      },
+      "device": "cpu",
+      "dataset": "gaussian",
+      "status": "excluded-host-only"
+    },
+    {
+      "lane": "samba-train-step",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 2,
+        "length": 512,
+        "vocab": 256,
+        "d_model": 384,
+        "layers": [
+          "mamba3",
+          "attention",
+          "mamba3",
+          "attention"
+        ],
+        "n_heads": 6,
+        "intermediate": 1024,
+        "name": "full",
+        "label": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention"
+      },
+      "device": "gpu",
+      "dataset": "bytes",
+      "status": "pending"
+    },
+    {
+      "lane": "samba-forward",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 2,
+        "length": 512,
+        "vocab": 256,
+        "d_model": 384,
+        "layers": [
+          "mamba3",
+          "attention",
+          "mamba3",
+          "attention"
+        ],
+        "n_heads": 6,
+        "intermediate": 1024,
+        "name": "full",
+        "label": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention"
+      },
+      "device": "gpu",
+      "dataset": "bytes",
+      "status": "pending"
+    },
+    {
+      "lane": "samba-infer",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 2,
+        "length": 512,
+        "vocab": 256,
+        "d_model": 384,
+        "layers": [
+          "mamba3",
+          "attention",
+          "mamba3",
+          "attention"
+        ],
+        "n_heads": 6,
+        "intermediate": 1024,
+        "name": "full",
+        "label": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention"
+      },
+      "device": "cpu",
+      "dataset": "bytes",
+      "status": "excluded-host-only"
+    },
+    {
+      "lane": "mlp-train-step",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 256,
+        "name": "full",
+        "label": "rows256 8-16-3"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "mlp-infer",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 256,
+        "name": "full",
+        "label": "rows256 8-16-3"
+      },
+      "device": "cpu",
+      "dataset": "gaussian",
+      "status": "excluded-host-only"
+    },
+    {
+      "lane": "transformer-decode",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "n_heads": 6,
+        "n_kv": 6,
+        "head_dim": 64,
+        "intermediate": 1024,
+        "name": "full",
+        "label": "B1 L2048 DM384 H6 KV6 HD64 FF1024"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "mamba1-decode",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "name": "full",
+        "label": "B1 L2048 DM384"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "mamba2-decode",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "name": "full",
+        "label": "B1 L2048 DM384"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "mamba3-decode",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 2048,
+        "d_model": 384,
+        "name": "full",
+        "label": "B1 L2048 DM384"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "samba-decode",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 2,
+        "length": 512,
+        "vocab": 256,
+        "d_model": 384,
+        "layers": [
+          "mamba3",
+          "attention",
+          "mamba3",
+          "attention"
+        ],
+        "n_heads": 6,
+        "intermediate": 1024,
+        "name": "full",
+        "label": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention"
+      },
+      "device": "gpu",
+      "dataset": "bytes",
+      "status": "pending"
+    },
+    {
+      "lane": "mlp-predict",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 256,
+        "name": "full",
+        "label": "rows256 8-16-3"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "lm-infer",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 512,
+        "d_model": 384,
+        "n_heads": 6,
+        "n_kv": 6,
+        "head_dim": 64,
+        "intermediate": 1024,
+        "n_layers": 8,
+        "vocab_size": 8192,
+        "name": "full",
+        "label": "B1 L512 DM384 H6 KV6 HD64 FF1024 layers8 V8192"
+      },
+      "device": "cpu",
+      "dataset": "bytes",
+      "status": "excluded-host-only"
+    },
+    {
+      "lane": "lm-host-train-step",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "length": 512,
+        "d_model": 384,
+        "n_heads": 6,
+        "n_kv": 6,
+        "head_dim": 64,
+        "intermediate": 1024,
+        "n_layers": 8,
+        "vocab_size": 8192,
+        "name": "full",
+        "label": "B1 L512 DM384 H6 KV6 HD64 FF1024 layers8 V8192"
+      },
+      "device": "cpu",
+      "dataset": "bytes",
+      "status": "excluded-host-only"
+    },
+    {
+      "lane": "gemm-bf16",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "m": 4096,
+        "n": 4096,
+        "k": 4096,
+        "name": "full",
+        "label": "4096x4096x4096"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "gemm-int8",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "m": 4096,
+        "n": 4096,
+        "k": 4096,
+        "name": "full",
+        "label": "4096x4096x4096"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "mlp-fit",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "train": 1000000,
+        "test": 100000,
+        "batch": 512,
+        "epochs": 1,
+        "name": "full",
+        "label": "HIGGS train 1000000 test 100000 28-256-1 b512 1 epoch adam"
+      },
+      "device": "gpu",
+      "dataset": "higgs",
+      "status": "pending"
+    },
+    {
+      "lane": "lstm-fit",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "train": 1000000,
+        "test": 100000,
+        "batch": 512,
+        "epochs": 1,
+        "length": 16,
+        "hidden": 64,
+        "name": "full",
+        "label": "HIGGS train 1000000 test 100000 lstm h64 T16 b512 1 epoch adam"
+      },
+      "device": "gpu",
+      "dataset": "higgs",
+      "status": "pending"
+    },
+    {
+      "lane": "gru-fit",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "train": 1000000,
+        "test": 100000,
+        "batch": 512,
+        "epochs": 1,
+        "length": 16,
+        "hidden": 64,
+        "name": "full",
+        "label": "HIGGS train 1000000 test 100000 gru h64 T16 b512 1 epoch adam"
+      },
+      "device": "gpu",
+      "dataset": "higgs",
+      "status": "pending"
+    },
+    {
+      "lane": "rnn-fit",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "train": 1000000,
+        "test": 100000,
+        "batch": 512,
+        "epochs": 1,
+        "length": 16,
+        "hidden": 64,
+        "name": "full",
+        "label": "HIGGS train 1000000 test 100000 rnn h64 T16 b512 1 epoch adam"
+      },
+      "device": "gpu",
+      "dataset": "higgs",
+      "status": "pending"
+    },
+    {
+      "lane": "tape-user-model",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "train": 1000000,
+        "test": 100000,
+        "batch": 512,
+        "epochs": 1,
+        "name": "full",
+        "label": "HIGGS train 1000000 test 100000 28-64-64-1 b512 1 epoch adam"
+      },
+      "device": "gpu",
+      "dataset": "higgs",
+      "status": "pending"
+    },
+    {
+      "lane": "sequential-fit",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "train": 1000000,
+        "test": 100000,
+        "batch": 512,
+        "epochs": 1,
+        "features": 32,
+        "name": "full",
+        "label": "synthetic train 1000000 test 100000 32-128-64-1 b512 1 epoch adam + predict_proba"
+      },
+      "device": "gpu",
+      "dataset": "synthetic",
+      "status": "pending"
+    },
+    {
+      "lane": "sequential-predict",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "train": 1000000,
+        "test": 100000,
+        "batch": 512,
+        "epochs": 1,
+        "features": 32,
+        "name": "full",
+        "label": "synthetic train 1000000 test 100000 32-128-64-1 b512 1 epoch adam, predict_proba 100000 rows timed"
+      },
+      "device": "gpu",
+      "dataset": "synthetic",
+      "status": "pending"
+    },
+    {
+      "lane": "ops-session-step",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 4096,
+        "d_in": 256,
+        "hidden": 512,
+        "classes": 16,
+        "name": "full",
+        "label": "B4096 256-512-16 linear relu linear CE sgd"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "program-run",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 4096,
+        "d_in": 256,
+        "hidden": 512,
+        "classes": 16,
+        "name": "full",
+        "label": "B4096 256-512-16 linear relu linear softmax, one Program.run"
+      },
+      "device": "gpu",
+      "dataset": "gaussian",
+      "status": "pending"
+    },
+    {
+      "lane": "causal-lm-generate",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "prompt": 128,
+        "new_tokens": 128,
+        "checkpoint": "mojolearn-162m",
+        "name": "full",
+        "label": "mojolearn-162m B1 prompt 128 + 128 greedy tokens"
+      },
+      "device": "gpu",
+      "dataset": "mojolearn-162m",
+      "status": "pending"
+    },
+    {
+      "lane": "causal-lm-generate-smollm2",
+      "family": "neural",
+      "shape": "full",
+      "shape_record": {
+        "batch": 1,
+        "prompt": 128,
+        "new_tokens": 128,
+        "checkpoint": "smollm2-135m",
+        "name": "full",
+        "label": "smollm2-135m B1 prompt 128 + 128 greedy tokens"
+      },
+      "device": "gpu",
+      "dataset": "smollm2-135m",
+      "status": "pending"
+    }
+  ]
+}

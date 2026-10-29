@@ -1,0 +1,51 @@
+NVIDIA neural measurement checkpoint, 2026-10-29
+
+Numerical freeze bc11389e6896f918b95a404b8cf2bb97ad2ace09 stays unchanged.
+Exclusive L40S pod 9fjva638f5j3tu, owner /root/neural_measurements,
+state ~/mojolearn-evidence/devpods/neural-meas-bc11389/.
+One explicit final45-minute renewal; on-box deletion deadline17:42:18 UTC,
+Mac failsafe about17:52:18 UTC. No automatic renewals or new rentals.
+Finite controller stops new phases17:22, all work17:27, leaving retention reserve.
+Early delete only after final R2 GET hash verification and no truncated archive.
+
+Priority six full recipes completed: Adagrad377.300ms, Adam32.067ms,
+Transformer decode1891.307ms, Mamba2 forward6.863ms, MLPstep0.873ms,
+GEMM4096cube61.177ms. One excluded warmup and one score; own-only.
+Optimizer clocks preupload gradients and export parameters outside clock;
+read their recorded spans. No invented whole-host-to-host latency or ratios.
+Original optimizer CPU quality reference aliases reset input; 0796b859ddbe
+fixes only the harness. Original regression fails; repaired regression passes
+both Adagrad and Adam. Only untimed reference needs recomputation because
+GPU workers are separate processes, closed before reference construction.
+
+Sampler uses new FP32 policy flag0/1, same binary, actual saved full162M and
+SmolLM2-135M checkpoints, batch1/prompt128/generated128, chunks1/128.
+Do not require cross-policy seeded outputs equal. Native resident route is
+inferred from source gates; there is no observed native-operation counter.
+Initial8 sampler attempts failed before timing on optional metadata access;
+exact dictionary metadata repair preserves failures and avoids known native
+missingattribute bug. Three full cells landed before user requested smokes:
+162M chunk128 baseline6917.97ms/candidate6371.34ms, chunk1 baseline8067.47ms.
+These are single samples, not vendor/quality qualification or default promotion.
+
+User requested explicit measurement smokes before further full scoring.
+The durable finite continuation runs31 family/optimizer small recipes and8
+sampler small recipes separately; tiny smoke times are NEVER performance cells.
+Only successful sampler smokes permit remaining full sampler cells; completed
+unchanged cells are reused. Remaining full29-lane coverage stays pending.
+Failures, unsupported cells, timeout and missing coverage remain explicit.
+
+Durable next-run retention:
+measurements/box-jobs/2026-10-29/neural-final-bc11389-20261029/final.tgz
+Fetch after reconnect:
+python3 tools/box_persist.py fetch --tag neural-final-bc11389-20261029 --extract
+On box: /root/measure-final-neural-bc11389/continuation.json and
+family-smoke/summary.json, sampler-smoke/summary.json, sampler-full/summary.json.
+Root run log /root/finite-neural-driver.log; controller launches finite_driver.sh.
+
+Prior raw evidence and full input checkpoint/model/output bytes already on
+Mac and R2: see prior-retention.json. Mac evidence:
+~/mojolearn-evidence/neural-measure-bc11389-20261029/.
+Rented-box execution has13.6 cgroup CPU quota, affinity128; policy13 workers,
+not128. All GPU arms serial; no verifier sharing. No product arithmetic edits,
+no new default, no release-green/cross-device-identity claim.

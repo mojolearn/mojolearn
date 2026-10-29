@@ -1,0 +1,29 @@
+{
+  "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "checkpoint_bytes_retained": true,
+  "no_product_binary_changes": true,
+  "on_box_hard_deadline": "2026-10-29T17:42:18Z",
+  "mac_failsafe_deadline_approx": "2026-10-29T17:52:18Z",
+  "prior_r2_artifacts": [
+    {
+      "key": "measurements/box-jobs/2026-10-29/dp-neural-meas-bc11389-20261029T163914Z-e46105/final.tgz",
+      "sha256": "6d22e6af367721c7267f77e1ee3b2552acf496279e8cb9d0887b0c7ef074d48c",
+      "bytes": 580627213,
+      "scope": "priority six complete raw model/input/output bytes",
+      "retained_mac": true
+    },
+    {
+      "key": "measurements/box-jobs/2026-10-29/dp-neural-meas-bc11389-20261029T164941Z-a69512/final.tgz",
+      "sha256": "a2aa4355063d4ad55bbf3f9e52ea60bf2044f870fc0d6e5d7a9d9e06f8f1f4ee",
+      "bytes": 815409787,
+      "scope": "both full checkpoint input model bytes plus initial sampler pretimefailures",
+      "retained_mac": true
+    },
+    {
+      "key": "measurements/records/v1/57d8af712b81297613607de25878284c8b5291cb69b9bd452f97e4797f480f1e.tar.gz",
+      "sha256": "57d8af712b81297613607de25878284c8b5291cb69b9bd452f97e4797f480f1e",
+      "scope": "frozen tracked numerical source bytes",
+      "retained_mac": true
+    }
+  ]
+}
