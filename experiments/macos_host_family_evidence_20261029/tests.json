@@ -1,0 +1,16 @@
+{
+  "source_commit": "099b4cc84d55f7ec41e8854b5219faef1a75ded2",
+  "command": [
+    "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/tensor-test-venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tools/test_release_macos_host_family_evidence.py"
+  ],
+  "exit_code": 0,
+  "passed": 21,
+  "failed": 0,
+  "log": "/Users/andrewhendel/mojolearn-evidence/macos-host-family-evidence-20261029/tests-final.log",
+  "log_sha256": "30396a6fab8509ff5223aa6efc82faa6f7a1e1a2ba40b66cb1f1a646a7b8b6ef",
+  "scope": "Synthetic producer evidence-tool tests only; no compiler or product runtime"
+}

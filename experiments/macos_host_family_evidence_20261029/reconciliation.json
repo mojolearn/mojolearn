@@ -1,0 +1,512 @@
+{
+  "records": [
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_byte_lm_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/byte_lm/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 95,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_forest_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/forest/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 50,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_tokenizer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/resident-profile-admission-20261029/engine/compile-receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "eb86802a38623dad0f0548caf4d2586981c36eb5",
+      "source_count": 654,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_neural_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/neural/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 87,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_core_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/core/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "source_count": 79,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_linalg_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/linalg/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 106,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_estimators_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/default-optimization/estimators/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "source_count": 197,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_metrics_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/metrics/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 112,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_preprocessing_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/preprocessing/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 21,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_tsa_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/tsa/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 63,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_solver_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/solver/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 91,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_svm_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/svm/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 134,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_trees_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/trees/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 116,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_rf_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/rf/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 75,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_gp_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/gp/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 56,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_kernel_methods_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/kernel_methods/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 89,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_mixture_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/mixture/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 53,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_mixture_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/mixture_infer/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 53,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_hdbscan_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/hdbscan/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 101,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_gp_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/gp_infer/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 42,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_hdbscan_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/hdbscan_infer/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 101,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_gbdt_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/gbdt/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 89,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_training_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/training/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 100,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_resample_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/resample/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 33,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_mamba_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-build/mamba/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "4053a083f1958b8829b408e0935fded7955c07b1",
+      "source_count": 93,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_arima_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/arima/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 28,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_embedding_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/embedding/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 21,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_embedding_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/embedding_infer/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 20,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_ivf_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/ivf/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 45,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_ivf_search_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/ivf_search/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 45,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_forecast_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/forecast/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 59,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_transformer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/transformer/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 68,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_runtime_classical_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/repair-o0/runtime_classical/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "a44b6b7e19c98400687be8056cd2852a74cdc6dc",
+      "source_count": 3637,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_runtime_sequential_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-build/runtime_sequential/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "4053a083f1958b8829b408e0935fded7955c07b1",
+      "source_count": 213,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_runtime_manifold_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/runtime_manifold/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "748c43207eccf20880fec95d4652d3a6a6c80852",
+      "source_count": 145,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_runtime_model_selection_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/runtime_model_selection/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 152,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_linear_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_linear/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 74,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_cluster_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_cluster/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 80,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_neighbors_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_neighbors/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 70,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_decomp_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/default-optimization/x_decomp/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "source_count": 138,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_prep_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_prep/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 70,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_sequence_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_sequence/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 288,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_trees_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_trees/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 54,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_cnn_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_cnn/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 40,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_ann_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/x_ann/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "source_count": 69,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_metrics_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_metrics/receipt.json",
+      "retained_facts_valid": true,
+      "source_revision": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "source_count": 45,
+      "limitations": [
+        "Original Apple auxiliary-toolchain witness was not captured"
+      ],
+      "formal_ledger_admitted": false
+    }
+  ],
+  "elapsed_seconds": 1.2668792080366984,
+  "scope": "Retained producer validation only; no compiler or product run and no formal ledger admission"
+}

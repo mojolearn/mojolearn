@@ -1,0 +1,44 @@
+Retained Mac individual host-family compile adapter, 2026-10-29
+
+Product commit099b4cc84d55f7ec41e8854b5219faef1a75ded2 on
+lane/macos-host-family-evidence-20261029. New module/test only;
+classical lane owns shared registry/docs entry for mac-host-family-build.
+
+The adapter reads one original build_host_family receipt: exact compile-slot
+argv, original revision, captured worker count and optimization environment,
+compiler hash, source archive/manifest, raw output bytes and full compiler log.
+It validates every archived source against the original commit (generated inputs
+use the existing generator verifier), then checks the binding's required closure
+at formal admission. It never runs a compiler or modifies producer artifacts.
+Both controller receipt shapes are supported, including the latest tokenizer.
+Selected build flags/jobs use root's per-binding configuration mechanism.
+
+Original Apple auxiliary-toolchain capture is required for formal qualification.
+Missing capture cannot be manufactured from a current machine snapshot, another
+job or mere SDK equality. Original source/binary evidence is still reconciled
+and retained, but missing toolchain provenance remains unqualified. No assumption
+that worker counts or O0/default flags are equivalent is made.
+
+Actual retained reconciliation:46/46 custom Mac host producers have matching
+raw binary, source manifest/archive and original revision bytes;0 integrity
+failures. All46 lack the original full Apple auxiliary-toolchain witness,
+so0 formal ledger units are admitted by this reconciliation. The latest
+engine tokenizer eb86802a38623dad0f0548caf4d2586981c36eb5 is selected.
+runtime_classical's original captured source is a full sparse tree; successful
+facts validation does not waive a missing required file at binding closure check.
+
+Tests:21 focused synthetic producer cases pass, including original-witness
+qualification and refusals for missing witness, changed source, archive/binary
+hash, changed flags/worker count, unsupported environment and failed compile.
+First launch used systemPython without pytest and failed before collection;
+retained tests.log. Supported isolated dependency environment passed final21.
+Required committed-ref source/push guards exit0/32.20s. No push by this lane.
+
+Full logs and retained reconciliation:
+~/mojolearn-evidence/macos-host-family-evidence-20261029/
+  tests.log, tests-supported-env.log, tests-final.log, reconciliation.log/json,
+  guards.log/json. Complete original producer paths are in reconciliation.json.
+
+No runtime, numerical identity, packaging or performance claims. Existing actual
+build evidence is retained; missing original auxiliary witness is a provenance
+limitation, not an automatic request to repeat unchanged compilation.
