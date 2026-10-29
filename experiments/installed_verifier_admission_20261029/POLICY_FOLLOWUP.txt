@@ -1,0 +1,11 @@
+The installed verifier controller now calls the existing
+release_identity_run.policy_environment before inspecting or executing the
+package. This reuses the recorder's established refusal of narrowed fixture
+size/selection, repeated fits, partial/sharded overrides and sabotage flags;
+it replaces the controller's narrower duplicate sabotage-only check.
+
+27 focused launch/receipt tests pass (exit0), including environment rejection
+before any producer call. No product runtime or numerical work executed.
+Logs: ~/mojolearn-evidence/current-main-verification-20261029/
+launch-policy-tests-final.log/.exit. Earlier24-test pass retained too.
+This tool-only follow-up does not invalidate compiled product binaries.

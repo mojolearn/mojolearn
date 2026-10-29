@@ -156,3 +156,11 @@ def test_optional_absence_cannot_use_unwitnessed_legacy_column(tmp_path,monkeypa
     record['verifier_observation'].pop('launch')
     with pytest.raises(ValueError,match='retained verifier filename'):
         C.validate_optional_install_files(record,path,{'optional':dict(present=False,predicate=dict(basename='optional.so'))})
+
+
+@pytest.mark.parametrize('key,value', [('MOJOLEARN_IDENTITY_N','16'), ('FIXTURES','base'), ('REPEATS','2'), ('MOJOLEARN_TEST_SABOTAGE','1')])
+def test_launch_reuses_existing_full_fixture_environment_policy(tmp_path,monkeypatch,key,value):
+    monkeypatch.setenv(key,value)
+    with pytest.raises(ValueError):
+        L.execute(tmp_path,'/env/python',tmp_path/'refused',['lane'],'routine',8,
+                  runner=lambda *a,**k: pytest.fail('narrowed fixtures must never execute'))

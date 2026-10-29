@@ -71,9 +71,8 @@ def execute(root, python, out, lanes, profile, cpu_threads, *, runner=subprocess
     # The release columns cover defaults. The sampling experiment needs its own
     # focused runtime/A-B evidence, never implicit promotion through this run.
     env.update(MOJOLEARN_NUMERIC_MODE='identical', MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE='0')
-    for key, value in env.items():
-        if key.startswith('MOJOLEARN_') and 'SABOTAGE' in key:
-            require(value in ('', '0'), 'sabotage environment is not reference evidence')
+    from release_identity_run import policy_environment
+    policy_environment(env)  # Same full-fixture/no-sabotage policy as the existing recorder.
     source = source_state(root)
     require(not source['dirty_tracked'], 'source checkout has tracked changes')
     package = locate(python, out, env)
