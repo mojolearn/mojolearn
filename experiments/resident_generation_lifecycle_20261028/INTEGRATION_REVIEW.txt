@@ -47,3 +47,25 @@ replace required runtime/correctness/cross-vendor identity evidence.
 Integration evidence: ~/mojolearn-evidence/resident-generation-integration-20261028/.
 Per-batch complete build/source/binary evidence remains in the HANDOFF directory.
 Normal source/push gates still required; no override or baseline allowance added.
+
+Pre-merge review repair (originalbe9a67ed3a..e668fa2c88): independent author/root
+review found diagnostic progress was deferred until full-read success. Repaired
+before main: device selection now computes candidate IDs/errors, then the same
+second launch commits only rows before the first failure, preserving source-order
+partial progress. Completed selections and consumed-forward positions are tracked
+separately; failure-only synchronized readback publishes lengths/finished when
+available. Success retains two launches/two control words and one final sync.
+Root also caught superseded cached owners missing from failure cleanup locals;
+old owners are now retained until every normal close succeeds. Cleanup attempts
+all owners while the original error remains primary. If device recovery fails,
+row diagnostics stay at prior public snapshot; failed KV/current are not resumable.
+See experiments/resident_failure_progress_20261028/HANDOFF.txt and receipt.json:
+final native compile2 and changed public compile3 passed, unchanged native source
+was not rebuilt for the public cleanup fix. No binary was executed.
+
+Integrated fallback scratch661d8053c7: legacy sampling keeps one native sort/merge/
+weight workspace per read after native/resident early routes, eliminating per-token
+scratch construction without changing routing or output ownership. Actual combined
+read/generate public closure compiled before the failure-progress follow-up; that
+follow-up compiled final changed native/public closures atop the combined source.
+Details: experiments/fallback_sampling_scratch_20261028/HANDOFF.txt.
