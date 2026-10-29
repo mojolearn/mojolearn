@@ -1,0 +1,679 @@
+{
+  "source": "3fa5fac6d0bef136a42066134926bea90275e268",
+  "status": "stopped-real-failure-switching-source",
+  "identity_admission": "pending",
+  "counts": {
+    "DIVERGENT": 0,
+    "IDENTICAL": 1242,
+    "N/A": 1503,
+    "OWED": 0,
+    "REFUSED": 90
+  },
+  "rows": [
+    {
+      "lane": "byte-lm",
+      "local_observations_complete": false,
+      "producer_exit": 4,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 54,
+        "N/A": 18,
+        "OWED": 0,
+        "REFUSED": 9
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/byte-lm.tar.gz",
+        "bytes": 2104013,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/byte-lm/3f72e708214fa96d4f22bceb2766d2cd5ee4e5d27a3b5a0f49899c462968a2f7.tar.gz",
+        "readback_verified": true,
+        "sha256": "3f72e708214fa96d4f22bceb2766d2cd5ee4e5d27a3b5a0f49899c462968a2f7"
+      }
+    },
+    {
+      "lane": "cross-entropy-arms",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/cross-entropy-arms.tar.gz",
+        "bytes": 2102386,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/cross-entropy-arms/23b6386ed0da066accc2c8b724228d67b3e94ad5fb82b5cc4d9137a3f20cba11.tar.gz",
+        "readback_verified": true,
+        "sha256": "23b6386ed0da066accc2c8b724228d67b3e94ad5fb82b5cc4d9137a3f20cba11"
+      }
+    },
+    {
+      "lane": "embedding",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/embedding.tar.gz",
+        "bytes": 2102533,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/embedding/984321d18a3a1f7eec0110b0127446a50a1a1c14a795969508c7a6018fb020a2.tar.gz",
+        "readback_verified": true,
+        "sha256": "984321d18a3a1f7eec0110b0127446a50a1a1c14a795969508c7a6018fb020a2"
+      }
+    },
+    {
+      "lane": "embedding-sort",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/embedding-sort.tar.gz",
+        "bytes": 2103399,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/embedding-sort/9f21de5189ab77ad57b1661696029284e4e1991997e54d3f7cd475dc1793216c.tar.gz",
+        "readback_verified": true,
+        "sha256": "9f21de5189ab77ad57b1661696029284e4e1991997e54d3f7cd475dc1793216c"
+      }
+    },
+    {
+      "lane": "grad-accumulation",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/grad-accumulation.tar.gz",
+        "bytes": 2102723,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/grad-accumulation/8744ddd577ce1a3ca6c8cff082aa6489839404a988291174bc1fe64f63f5142e.tar.gz",
+        "readback_verified": true,
+        "sha256": "8744ddd577ce1a3ca6c8cff082aa6489839404a988291174bc1fe64f63f5142e"
+      }
+    },
+    {
+      "lane": "mamba1",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 72,
+        "N/A": 9,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba1.tar.gz",
+        "bytes": 2104111,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba1/0db926ad9a9d413f4b2255b695be7e3d6e833c0663307b56f4618cc193070779.tar.gz",
+        "readback_verified": true,
+        "sha256": "0db926ad9a9d413f4b2255b695be7e3d6e833c0663307b56f4618cc193070779"
+      }
+    },
+    {
+      "lane": "mamba1-bf16w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 72,
+        "N/A": 9,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba1-bf16w.tar.gz",
+        "bytes": 2104382,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba1-bf16w/fb22e0cd9643caf4d8aa3bfbd62b0bf2bbd5367f64e204329a92094ef80d1338.tar.gz",
+        "readback_verified": true,
+        "sha256": "fb22e0cd9643caf4d8aa3bfbd62b0bf2bbd5367f64e204329a92094ef80d1338"
+      }
+    },
+    {
+      "lane": "mamba1-decode-session",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba1-decode-session.tar.gz",
+        "bytes": 2103076,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba1-decode-session/5a8b0b84e02efc3ad54d0193d47f53af97d942e6af71f60e361fec0a91260e70.tar.gz",
+        "readback_verified": true,
+        "sha256": "5a8b0b84e02efc3ad54d0193d47f53af97d942e6af71f60e361fec0a91260e70"
+      }
+    },
+    {
+      "lane": "mamba1-int8w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 72,
+        "N/A": 9,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba1-int8w.tar.gz",
+        "bytes": 2104372,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba1-int8w/661659b1ec80be86b7057533edd787288302448413e939c0e9660fcfce32e620.tar.gz",
+        "readback_verified": true,
+        "sha256": "661659b1ec80be86b7057533edd787288302448413e939c0e9660fcfce32e620"
+      }
+    },
+    {
+      "lane": "mamba2",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 72,
+        "N/A": 9,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba2.tar.gz",
+        "bytes": 2104339,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba2/4ff3b75493176d1513330666a14c6916187a9c5db2ceb644a9e2d935e0c35c4d.tar.gz",
+        "readback_verified": true,
+        "sha256": "4ff3b75493176d1513330666a14c6916187a9c5db2ceb644a9e2d935e0c35c4d"
+      }
+    },
+    {
+      "lane": "mamba2-bf16w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 63,
+        "N/A": 18,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba2-bf16w.tar.gz",
+        "bytes": 2105824,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba2-bf16w/4f8f3b051eabe0fe3feec268e03e2da8aafde5ff7d1228361e8f37fb06de56bd.tar.gz",
+        "readback_verified": true,
+        "sha256": "4f8f3b051eabe0fe3feec268e03e2da8aafde5ff7d1228361e8f37fb06de56bd"
+      }
+    },
+    {
+      "lane": "mamba2-dtlimit",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 72,
+        "N/A": 9,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba2-dtlimit.tar.gz",
+        "bytes": 2104410,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba2-dtlimit/59ad707a54284ecc808ba464131033b14b8efa40e857f219202a90bab5f3b6ae.tar.gz",
+        "readback_verified": true,
+        "sha256": "59ad707a54284ecc808ba464131033b14b8efa40e857f219202a90bab5f3b6ae"
+      }
+    },
+    {
+      "lane": "mamba2-int8w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 63,
+        "N/A": 18,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba2-int8w.tar.gz",
+        "bytes": 2104290,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba2-int8w/10a974876a3cf17ad6d23713f00db90bd72a532f23b35fd5efc17be40c94c8ff.tar.gz",
+        "readback_verified": true,
+        "sha256": "10a974876a3cf17ad6d23713f00db90bd72a532f23b35fd5efc17be40c94c8ff"
+      }
+    },
+    {
+      "lane": "mamba3",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 72,
+        "N/A": 9,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba3.tar.gz",
+        "bytes": 2104165,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba3/a3e52e9b8bb82c37c78556bd579ebe2562a6cbcfb6479be1c6bfcb8996ccd3c9.tar.gz",
+        "readback_verified": true,
+        "sha256": "a3e52e9b8bb82c37c78556bd579ebe2562a6cbcfb6479be1c6bfcb8996ccd3c9"
+      }
+    },
+    {
+      "lane": "mamba3-bf16w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 63,
+        "N/A": 18,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba3-bf16w.tar.gz",
+        "bytes": 2104239,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba3-bf16w/98e02d8e64e49d9488cd14769184c74fba1a4e46ee5d401ff94abfc87e1d4e7b.tar.gz",
+        "readback_verified": true,
+        "sha256": "98e02d8e64e49d9488cd14769184c74fba1a4e46ee5d401ff94abfc87e1d4e7b"
+      }
+    },
+    {
+      "lane": "mamba3-int8w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 63,
+        "N/A": 18,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mamba3-int8w.tar.gz",
+        "bytes": 2103661,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mamba3-int8w/8a53e1191446aa0c09fefd50ceb3b11b8031d955a67e034d1ab54a5354085755.tar.gz",
+        "readback_verified": true,
+        "sha256": "8a53e1191446aa0c09fefd50ceb3b11b8031d955a67e034d1ab54a5354085755"
+      }
+    },
+    {
+      "lane": "mlp",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mlp.tar.gz",
+        "bytes": 2102149,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mlp/8b3f2ce977c57237d55d3b162e1b47389d3e9447498c4e0c679dc35c1c9c6029.tar.gz",
+        "readback_verified": true,
+        "sha256": "8b3f2ce977c57237d55d3b162e1b47389d3e9447498c4e0c679dc35c1c9c6029"
+      }
+    },
+    {
+      "lane": "mlp-bf16w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mlp-bf16w.tar.gz",
+        "bytes": 2102111,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mlp-bf16w/87bf0e0377cda07ea346bc579c39b62c9e755beb61c308bb1c3f994eb517eacd.tar.gz",
+        "readback_verified": true,
+        "sha256": "87bf0e0377cda07ea346bc579c39b62c9e755beb61c308bb1c3f994eb517eacd"
+      }
+    },
+    {
+      "lane": "mlp-int8w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/mlp-int8w.tar.gz",
+        "bytes": 2101997,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/mlp-int8w/144500951cc691981441b336a766c106cdc563b9f5b22065a282fe5d65a5b643.tar.gz",
+        "readback_verified": true,
+        "sha256": "144500951cc691981441b336a766c106cdc563b9f5b22065a282fe5d65a5b643"
+      }
+    },
+    {
+      "lane": "neural-trainer-unfused",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/neural-trainer-unfused.tar.gz",
+        "bytes": 2102486,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/neural-trainer-unfused/3fe94440f51b7c42babb869156799e7a6bfc23a08ecb083acd1864f5bf8deb33.tar.gz",
+        "readback_verified": true,
+        "sha256": "3fe94440f51b7c42babb869156799e7a6bfc23a08ecb083acd1864f5bf8deb33"
+      }
+    },
+    {
+      "lane": "optim-adam-clip",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 18,
+        "N/A": 63,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/optim-adam-clip.tar.gz",
+        "bytes": 2102687,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/optim-adam-clip/bdbf4ac120688358c0d80155814913f15ec5e47871da0b087f7ac3d091ee54f6.tar.gz",
+        "readback_verified": true,
+        "sha256": "bdbf4ac120688358c0d80155814913f15ec5e47871da0b087f7ac3d091ee54f6"
+      }
+    },
+    {
+      "lane": "optim-io-capability",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/optim-io-capability.tar.gz",
+        "bytes": 2102042,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/optim-io-capability/61def4c116591cc2ca414ec3e48fc93328dce6133882d21bfe446cb57cc23318.tar.gz",
+        "readback_verified": true,
+        "sha256": "61def4c116591cc2ca414ec3e48fc93328dce6133882d21bfe446cb57cc23318"
+      }
+    },
+    {
+      "lane": "optim-maximize",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 18,
+        "N/A": 63,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/optim-maximize.tar.gz",
+        "bytes": 2102454,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/optim-maximize/ddc0c851e7990cd9f945139b3b38c9b14cf78364ec06f0a6e961e7e8b01057eb.tar.gz",
+        "readback_verified": true,
+        "sha256": "ddc0c851e7990cd9f945139b3b38c9b14cf78364ec06f0a6e961e7e8b01057eb"
+      }
+    },
+    {
+      "lane": "optim-owner-lifecycle",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/optim-owner-lifecycle.tar.gz",
+        "bytes": 2102419,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/optim-owner-lifecycle/b3932b97e91a91705c866c04d10a31c1113a99598f1dcc59261437580e47b7f4.tar.gz",
+        "readback_verified": true,
+        "sha256": "b3932b97e91a91705c866c04d10a31c1113a99598f1dcc59261437580e47b7f4"
+      }
+    },
+    {
+      "lane": "optim-sgd",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 18,
+        "N/A": 63,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/optim-sgd.tar.gz",
+        "bytes": 2102795,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/optim-sgd/35e3f58c94597545d1d17998473461fe66d5c446f7fcd0479098ecff287caddd.tar.gz",
+        "readback_verified": true,
+        "sha256": "35e3f58c94597545d1d17998473461fe66d5c446f7fcd0479098ecff287caddd"
+      }
+    },
+    {
+      "lane": "ordered-gradient-sum",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/ordered-gradient-sum.tar.gz",
+        "bytes": 2102880,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/ordered-gradient-sum/c2ee691f50c4590ae62392bd47673bcf2695d38f589298c12af868d7c043ec5b.tar.gz",
+        "readback_verified": true,
+        "sha256": "c2ee691f50c4590ae62392bd47673bcf2695d38f589298c12af868d7c043ec5b"
+      }
+    },
+    {
+      "lane": "public-cnn-classifier-predict",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 18,
+        "N/A": 63,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/public-cnn-classifier-predict.tar.gz",
+        "bytes": 2101901,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/public-cnn-classifier-predict/c1fd393f9a5d4c3c0f68ad6878c7799d66c901cf590825cdc4afa8ce3c9825cd.tar.gz",
+        "readback_verified": true,
+        "sha256": "c1fd393f9a5d4c3c0f68ad6878c7799d66c901cf590825cdc4afa8ce3c9825cd"
+      }
+    },
+    {
+      "lane": "public-cnn-layer-fit",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/public-cnn-layer-fit.tar.gz",
+        "bytes": 2102388,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/public-cnn-layer-fit/900156c592a0a15a97b10e40ee79294b25bb2a18e5c490e17518726690b15c81.tar.gz",
+        "readback_verified": true,
+        "sha256": "900156c592a0a15a97b10e40ee79294b25bb2a18e5c490e17518726690b15c81"
+      }
+    },
+    {
+      "lane": "public-numeric-metadata",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/public-numeric-metadata.tar.gz",
+        "bytes": 2102597,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/public-numeric-metadata/9a455a9a57362615853fdf19f1d32e9fab1f1883eb0dc2a1995f9edaecf82178.tar.gz",
+        "readback_verified": true,
+        "sha256": "9a455a9a57362615853fdf19f1d32e9fab1f1883eb0dc2a1995f9edaecf82178"
+      }
+    },
+    {
+      "lane": "public-residual-dropout",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/public-residual-dropout.tar.gz",
+        "bytes": 2102416,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/public-residual-dropout/6221e69f70cb794778415387b32ce11e3fbd1d6cad4d850e86c9f2ed9df2a885.tar.gz",
+        "readback_verified": true,
+        "sha256": "6221e69f70cb794778415387b32ce11e3fbd1d6cad4d850e86c9f2ed9df2a885"
+      }
+    },
+    {
+      "lane": "public-theta-variants",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/public-theta-variants.tar.gz",
+        "bytes": 2102363,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/public-theta-variants/40f103883abca4cd4c3950989a78be8903f4e0652de90ad548ea597f28198962.tar.gz",
+        "readback_verified": true,
+        "sha256": "40f103883abca4cd4c3950989a78be8903f4e0652de90ad548ea597f28198962"
+      }
+    },
+    {
+      "lane": "samba",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 81,
+        "N/A": 0,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/samba.tar.gz",
+        "bytes": 2104818,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/samba/4cfe5deb336d57ddb8d430b26b858147de73a092fc262864a486b5be37d6a383.tar.gz",
+        "readback_verified": true,
+        "sha256": "4cfe5deb336d57ddb8d430b26b858147de73a092fc262864a486b5be37d6a383"
+      }
+    },
+    {
+      "lane": "samba-bf16w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/samba-bf16w.tar.gz",
+        "bytes": 2102046,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/samba-bf16w/4748e6c5c56968a524904a86c40ea1a3aa1063cf3e1dc6170edf01e625dd3af8.tar.gz",
+        "readback_verified": true,
+        "sha256": "4748e6c5c56968a524904a86c40ea1a3aa1063cf3e1dc6170edf01e625dd3af8"
+      }
+    },
+    {
+      "lane": "samba-int8w",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/samba-int8w.tar.gz",
+        "bytes": 2101989,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/samba-int8w/f5abaaf17aa38589fc1c88f374fa82335cd478747b974b0dbb28a2f4764eb08d.tar.gz",
+        "readback_verified": true,
+        "sha256": "f5abaaf17aa38589fc1c88f374fa82335cd478747b974b0dbb28a2f4764eb08d"
+      }
+    },
+    {
+      "lane": "samba-optimizer-state",
+      "local_observations_complete": false,
+      "producer_exit": 4,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 0,
+        "N/A": 0,
+        "OWED": 0,
+        "REFUSED": 81
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-training/samba-optimizer-state.tar.gz",
+        "bytes": 2104567,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-training/samba-optimizer-state/3baaa8fd1e2cd5899b6937e2ee2ee5ab6b50447cc12fd4ab2286559fe5c99313.tar.gz",
+        "readback_verified": true,
+        "sha256": "3baaa8fd1e2cd5899b6937e2ee2ee5ab6b50447cc12fd4ab2286559fe5c99313"
+      }
+    }
+  ]
+}
