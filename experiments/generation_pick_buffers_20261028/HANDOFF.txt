@@ -1,0 +1,70 @@
+Generation row selection and private operation buffers (2026-10-28)
+Base: main 7965f31955; branch lane/generation-pick-buffers-20261028.
+
+Removed repeated work:
+- causal_lm_pick_step no longer allocates/copies a vocabulary row for each active
+  batch row/token. generation_pick_row reads the admitted native logits directly.
+- NativeGenerationProgress owns reusable sort indices, merge storage, and weights;
+  greedy never sizes this workspace. Existing caller-compatible overload allocates
+  scratch once per pick_step (reuses it across rows), not once per row.
+- Native generation retains logits and two next-token buffers across its token loop.
+  Fresh public forward ownership remains via forward -> private forward_into.
+- Mamba2 layers retain two private report buffers: one last-success report and one
+  zeroed workspace. Successful calls swap them; failed calls preserve last success.
+  Other layer kinds no longer construct an empty report list on every visit.
+
+Reuse and invalidation:
+All storage belongs to one admitted native generation operation; none is global or
+shared across public calls. Prompt/decode logits extent changes replace storage;
+matching extent is zeroed as before. Sampler lists resize for vocabulary/top-k and
+all consumed elements are overwritten. Native calls synchronously finish consuming
+host pointers before reuse. Owners survive final pointer reads; no borrowed pointer
+is retained in sampling scratch. A failed pick leaves current tokens intact and keeps
+existing partial row lengths/finished/tokens updates. Swap current/next only after
+successful selection. Mamba2 report swap only after successful numerical endpoint;
+public report publication already copies into fresh output storage.
+
+Selection semantics retained by source review:
+Empty vocabulary, temperature, top-k/top-p and first nonfinite-logit errors remain in
+original order. Greedy still scans all logits and refuses NaN/Inf; strict > retains
+lowest token index on ties, including signed-zero ties. Sampling keeps stable sort,
+portable FP32 exponential, sequential FP64 sums, top-k then nucleus threshold, and
+same seed/row/position RNG counter. This is not runtime or identity qualification.
+
+Compilation:
+- Independent native-only shared library: rc0, 1.68s. Compiles List compatibility
+  picker and native_generation_read including pointer picker, forward_into and reports.
+- Actual causal_public_c[3],[5],[7] (forward, stream read, generate): rc0, 16.86s.
+- Apple CPU identical, O0, 10 compiler workers (sysctl allocation), compile_slot.
+- First public attempt rc1 in fixture def_function registration before product
+  semantic checking; removed invalid fixture registration and covered compatibility
+  picker in independent native-only exported fixture. Failure retained below.
+- All four normal branch guards rc0 (no_host_routes, no_python_in_kernels,
+  no_compute_in_shells, rebuild_fence); no override. Receipt in source-guards.json.
+- Peer generation_loops source-reviewed Mamba2 report swap/failure publication and
+  approved; no separate build. No runtime/identity/performance run.
+
+Python dependency boundary:
+Native execution imports recursively reach 11 repository modules; source scan found
+no Python imports/PythonObject/CPython calls; standalone native artifact has no
+undefined Python symbols. Standard-library implementation and dynamic endpoint
+provider targets are outside that static closure. Public admission/metadata/result
+publication remains in providers/bindings and the public-entry compile uses Python.
+This batch removes native allocations/copies, not any existing public Python boundary.
+
+Remaining:
+Resident GPU generation/sampling is a separate neural lane: this batch changes no
+routing, adds no host fallback, and does not qualify a GPU build. GPU existing greedy
+selector NaN semantics differ from host policy; neural lane was notified. The ordinary
+binding fallback still allocates per-call output Arrays and only reuses sampling
+scratch across rows of one step. Native operation boundaries still refresh mutable
+metadata and preserve existing copies at their original ordering points.
+
+Evidence retained:
+~/mojolearn-evidence/generation-pick-buffers-20261028/
+  compile.log, compile.json, source-manifest.json, source-bytes.tgz,
+  _generation_pick_buffers.so; native-compile.log/json, native-source-manifest.json,
+  native-source-bytes.tgz, _generation_pick_buffers_native.so;
+  native-closure.json, native-undefined-symbols.txt; guard logs/receipt;
+  attempt-1-fixture-registration/ (complete failed compile and source snapshot).
+Committed fixtures/receipts are in experiments/generation_pick_buffers_20261028/.

@@ -3,6 +3,7 @@
 # use the existing sibling ABI entries in their original order. No provider,
 # Python state, Python allocator, or callback is reachable from this module.
 from std.memory import memset_zero
+from core.generation_policy_impl import GenerationSamplingScratch
 from core.native_execution import NativeExecutionEndpoint
 from core.borrowed_buffer import BorrowedBufferLayout
 from transformer.causal_lm_public_impl import causal_lm_pick_step, causal_lm_rows_done
@@ -40,6 +41,7 @@ struct NativeGenerationLayer(Movable):
     var floats: List[Float64]
     var report_size: Int
     var report: List[Float32]
+    var report_workspace: List[Float32]
     var completed: Bool
 
     def __init__(out self, endpoint: NativeExecutionEndpoint, operation: Int,
@@ -63,6 +65,7 @@ struct NativeGenerationLayer(Movable):
         self.floats = List[Float64]()
         self.report_size = 0
         self.report = List[Float32]()
+        self.report_workspace = List[Float32]()
         self.completed = False
 
 
@@ -127,6 +130,13 @@ struct NativeGenerationModel(Movable):
         _ = self.primitive.call(op, a, p, f)
 
     def forward(mut self, ids: Int, length: Int) raises -> List[Float32]:
+        # Public forward retains fresh result ownership. Only private generation
+        # progress supplies reusable output storage to forward_into.
+        var logits = List[Float32]()
+        self.forward_into(ids, length, logits)
+        return logits^
+
+    def forward_into(mut self, ids: Int, length: Int, mut logits: List[Float32]) raises:
         # These checks precede execution/failure invalidation, matching _state.
         if length < 0 or self.position < 0:
             raise Error("CausalLM: negative sequence position")
@@ -173,14 +183,14 @@ struct NativeGenerationModel(Movable):
                 # Local _run_snapshot always uses forward(step=False), including
                 # one-token continuations. remote_step selects only distributed
                 # execution; changing to decode here would change the algorithm.
-                var report = List[Float32](length=layer.report_size, fill=0)
                 if kind == 2:
-                    layer.addresses[15] = Int(report.unsafe_ptr())
+                    # Preserve the last successful report until this call succeeds.
+                    layer.addresses[15] = _generation_zero_workspace(layer.report_workspace, layer.report_size)
                 layer.attempted = True
                 var result = layer.endpoint.call(operation, layer.addresses, layer.parameters, layer.floats)
                 layer.cached = layer.cached + length if kind == 1 else result
                 if kind == 2:
-                    layer.report = report^
+                    swap(layer.report, layer.report_workspace)
                 layer.completed = True
                 for j in range(len(layer.writeback_layouts)):  # driver-loop: successful layer publication before the next alias reads
                     layer.writeback_layouts[j].copy_from(layer.writeback_addresses[j])
@@ -197,12 +207,11 @@ struct NativeGenerationModel(Movable):
                 self.primitive_call(2, [normalized, hidden, self.norm],
                                     [rows, self.width], [self.norm_eps])
                 hidden = normalized
-            var logits = List[Float32](length=rows * self.vocab, fill=0)
-            self.primitive_call(4, [Int(logits.unsafe_ptr()), hidden, self.head],
+            var output = _generation_zero_workspace(logits, rows * self.vocab)
+            self.primitive_call(4, [output, hidden, self.head],
                                 [rows, self.vocab, self.width], [])
             self.position += length
             self.forwards += 1
-            return logits^
         except problem:
             self.failed = True
             raise problem
@@ -210,6 +219,9 @@ struct NativeGenerationModel(Movable):
 
 struct NativeGenerationProgress(Movable):
     var current: List[Int32]
+    var next: List[Int32]
+    var logits: List[Float32]
+    var sampling: GenerationSamplingScratch
     var length: Int
     var produced: Int
     var wrote: Int
@@ -217,6 +229,9 @@ struct NativeGenerationProgress(Movable):
 
     def __init__(out self, address: Int, batch: Int, length: Int, produced: Int, capacity: Int):
         self.current = List[Int32]()
+        self.next = List[Int32]()
+        self.logits = List[Float32]()
+        self.sampling = GenerationSamplingScratch()
         var input = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
         for i in range(batch * length):  # driver-loop: copy admitted current-token storage once
             self.current.append(input[i])
@@ -234,15 +249,16 @@ def native_generation_read(
     # The entire token/layer loop owns native state. Sampling is the exact
     # existing native policy; partial counters remain in progress on failure.
     while progress.wrote < count and progress.produced < maximum and not causal_lm_rows_done(finished):  # driver-loop: native autoregressive tokens
-        var logits = model.forward(Int(progress.current.unsafe_ptr()), progress.length)
-        var next = List[Int32](length=model.batch, fill=0)
+        model.forward_into(Int(progress.current.unsafe_ptr()), progress.length, progress.logits)
+        progress.next.resize(model.batch, 0)
         causal_lm_pick_step(
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(logits.unsafe_ptr())),
-            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(next.unsafe_ptr())),
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(progress.logits.unsafe_ptr())),
+            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(progress.next.unsafe_ptr())),
             model.batch, progress.length, model.vocab, finished, lengths, eos, pad, greedy,
-            temperature, top_k, top_p, seed, progress.produced, progress.tokens)
-        _ = logits
-        progress.current = next^
+            temperature, top_k, top_p, seed, progress.produced, progress.tokens, progress.sampling)
+        # Failed selection leaves current intact for partial-progress publication.
+        # Both owners survive every pointer use; next is private until success.
+        swap(progress.current, progress.next)
         progress.length = 1
         progress.produced += 1
         progress.wrote += 1

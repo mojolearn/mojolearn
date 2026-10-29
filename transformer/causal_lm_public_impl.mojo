@@ -5,7 +5,7 @@ Every loop over batch rows, tokens or bytes lives here, over native pointers
 and lists. The shell only unpacks Python objects and calls these functions.
 """
 from std.memory import memcpy
-from core.generation_policy_impl import generation_pick
+from core.generation_policy_impl import generation_pick_row, GenerationSamplingScratch
 
 
 def causal_lm_rows_done(finished: List[Bool]) -> Bool:
@@ -38,21 +38,30 @@ def causal_lm_pick_step(
     raw: MutPointer[Float32, MutUntrackedOrigin], dst: MutPointer[Int32, MutUntrackedOrigin],
     b: Int, l: Int, v: Int, mut finished: List[Bool], mut lengths: List[Int], eos: List[Int],
     pad: Int, greedy: Bool, temperature: Float32, top_k: Int, top_p: Float64, seed: UInt64,
-    produced: Int, mut tokens: List[Int32],
+    produced: Int, mut tokens: List[Int32], mut workspace: GenerationSamplingScratch,
 ) raises:
     for r in range(b):
         var pick = pad
         if not finished[r]:
-            var row = List[Float32](capacity=v)
-            for j in range(v):
-                row.append(raw[(r * l + l - 1) * v + j])
-            pick = generation_pick(row, greedy, temperature, top_k, top_p, seed, r, produced)
+            pick = generation_pick_row(raw + (r * l + l - 1) * v, v, greedy,
+                                       temperature, top_k, top_p, seed, r, produced, workspace)
             lengths[r] += 1
             for i in range(len(eos)):
                 if pick == eos[i]:
                     finished[r] = True
         dst[r] = Int32(pick)
         tokens.append(Int32(pick))
+
+
+def causal_lm_pick_step(
+    raw: MutPointer[Float32, MutUntrackedOrigin], dst: MutPointer[Int32, MutUntrackedOrigin],
+    b: Int, l: Int, v: Int, mut finished: List[Bool], mut lengths: List[Int], eos: List[Int],
+    pad: Int, greedy: Bool, temperature: Float32, top_k: Int, top_p: Float64, seed: UInt64,
+    produced: Int, mut tokens: List[Int32],
+) raises:
+    var workspace = GenerationSamplingScratch()
+    causal_lm_pick_step(raw, dst, b, l, v, finished, lengths, eos, pad, greedy,
+                       temperature, top_k, top_p, seed, produced, tokens, workspace)
 
 
 def causal_lm_tokens_row_major(

@@ -18,15 +18,29 @@ def generation_random(seed: UInt64, row: Int, position: Int) -> UInt64:
     return x ^ (x >> 31)
 
 
-def _before(logits: List[Float32], a: Int, b: Int) -> Bool:
+struct GenerationSamplingScratch(Movable):
+    # Private to one operation; no logits or caller buffers escape into scratch.
+    # Greedy never sizes these lists. Sampling overwrites every retained element.
+    var order: List[Int]
+    var merge: List[Int]
+    var weights: List[Float64]
+
+    def __init__(out self):
+        self.order = List[Int]()
+        self.merge = List[Int]()
+        self.weights = List[Float64]()
+
+
+def _before(logits: MutPointer[Float32, MutUntrackedOrigin], a: Int, b: Int) -> Bool:
     return logits[a] > logits[b] or (logits[a] == logits[b] and a < b)
 
 
-def generation_pick(
-    logits: List[Float32], greedy: Bool, temperature: Float32,
+def generation_pick_row(
+    logits: MutPointer[Float32, MutUntrackedOrigin], n: Int, greedy: Bool, temperature: Float32,
     top_k: Int, top_p: Float64, seed: UInt64, row: Int, position: Int,
+    mut workspace: GenerationSamplingScratch,
 ) raises -> Int:
-    var n = len(logits)
+    # Caller retains the row owner until this synchronous native scan returns.
     if n == 0:
         raise Error("generation: empty vocabulary")
     if temperature <= 0 or not isfinite(temperature):
@@ -43,10 +57,12 @@ def generation_pick(
         return best
     # Stable bottom-up mergesort: O(V log V), independent of vocabulary or
     # benchmark dimensions. The explicit token tie break is part of the policy.
-    var order = List[Int](capacity=n)
+    workspace.order.resize(n, 0)
+    workspace.merge.resize(n, 0)
+    ref order = workspace.order
+    ref scratch = workspace.merge
     for i in range(n):
-        order.append(i)
-    var scratch = List[Int](length=n, fill=0)
+        order[i] = i
     var width = 1
     while width < n:
         var start = 0
@@ -67,12 +83,13 @@ def generation_pick(
             order[i] = scratch[i]
         width *= 2
     var keep = n if top_k == 0 else top_k
-    var weights = List[Float64](capacity=keep)
+    workspace.weights.resize(keep, 0)
+    ref weights = workspace.weights
     var total = Float64(0)
     var maximum = logits[order[0]]
     for i in range(keep):
         var weight = Float64(portable_expf((logits[order[i]] - maximum) / temperature))
-        weights.append(weight)
+        weights[i] = weight
         total += weight
     # Nucleus truncation includes the first token that reaches the requested
     # mass. Top-k is applied first; top-p is relative to that distribution.
@@ -93,3 +110,15 @@ def generation_pick(
         if target < prefix:
             return order[i]
     return order[count - 1]
+
+
+def generation_pick(
+    logits: List[Float32], greedy: Bool, temperature: Float32,
+    top_k: Int, top_p: Float64, seed: UInt64, row: Int, position: Int,
+) raises -> Int:
+    var workspace = GenerationSamplingScratch()
+    var result = generation_pick_row(
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(logits.unsafe_ptr())),
+        len(logits), greedy, temperature, top_k, top_p, seed, row, position, workspace)
+    _ = logits  # Retain the borrowed row owner through its final pointer read.
+    return result

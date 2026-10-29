@@ -1,0 +1,32 @@
+{
+  "roots": [
+    "core/generation_policy_impl.mojo",
+    "transformer/causal_lm_public_impl.mojo",
+    "transformer/native_generation_engine.mojo"
+  ],
+  "repository_closure": {
+    "transformer/native_generation_engine.mojo": "351d030503bc9c7e5368c7eacbdb4bc780fd5539cfebf4f4096abf814e56cccc",
+    "transformer/causal_lm_public_impl.mojo": "50a23b3c4f8f5d3b198c493218a6c1d9e51f516ca18dd030126efeb47b86346a",
+    "core/generation_policy_impl.mojo": "d5d30ac09764f19406fe848a2086dafd9714e9d8f1b8fabce530947eaeab6ac8",
+    "checks/numerics.mojo": "8cee8aeb5172945a6577228210b542abd3ac35f1f6fa0ef24c23aa0c1c20dd22",
+    "core/package_profile.mojo": "62de1fa0475ec969be5725e47c53bee9ba30a478b53699301a3975a0de010aac",
+    "core/six_lane_experiment_guards.mojo": "d48fe80a5fa8fe89d0c40dd60878ae20ecca2a73aeb10175bab26022a65b635f",
+    "core/borrowed_buffer.mojo": "c1474ba497c15d30375efc735a9f75ff1b92b6f4b2952e2f04fcf1e633a95b5d",
+    "core/native_execution.mojo": "713616813fe0c968e3db15ae16cfa94e16184f949c738b7c8388da86f0f5734f",
+    "core/native_call_output.mojo": "55bf4027ae39da718c946a2ac982fa4d2ae3b02ad146bee978dab63925d4d82f",
+    "core/native_descriptor_call.mojo": "b3763efd7de2673bfa890bf27bff61750a958d012c565fe1b3b62665309cc6e3",
+    "core/native_descriptor_abi.mojo": "c57022d312ff05f264552f0e696b2b56437458754ae2b98e5770a48838920535"
+  },
+  "external_imports": [
+    "std.atomic",
+    "std.math",
+    "std.memory",
+    "std.sys",
+    "std.sys._assembly",
+    "std.sys.compile",
+    "std.sys.info"
+  ],
+  "failures": [],
+  "undefined_python_symbols": [],
+  "scope": "Repository imports transitively inspected; stdlib implementation not audited. Native-only compiler root and Mach-O undefined symbols are supplemental source/build evidence, not runtime behavior."
+}
