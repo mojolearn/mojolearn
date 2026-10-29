@@ -1,0 +1,76 @@
+Native metric stage/layout plans (2026-10-28)
+Base main 1cd11dd607b5f6967be363d7f3b53f6bebe56fac.
+Branch lane/native-metric-plans-20261028.
+
+Repeated work removed:
+McProg and MxProg previously built every 16-word stage as a Python list (16
+append calls plus one append to the stage list), then _metrics_run_fields read
+and unboxed all 16 words again. Their input offsets, skip spans and output quads
+also traveled through Python tuple/list records and a synthetic fields dict.
+Both builders now share core/metrics_program_plan.mojo: native List[Int32] stages,
+native offsets/spans, counted-output declarations and download-range preparation.
+The internal runner consumes these words directly. Pure layout/record algorithms
+moved from boundary object manipulation to the native core; no numerical algorithm
+was relocated to a provider to disguise Python dependencies.
+
+Setup/reuse boundary:
+Each private metric program captures its opcode dictionary once, checks every
+key/value as exact str/int, and keeps a private dictionary copy. Native integer
+codes are decoded lazily only for names used; repeated stages hit Dict[String,Int].
+This avoids eager decoding/native-string construction of every unused opcode in
+small programs. Stage parameter bounds/refusal wording stay in the two wrappers;
+word packing, offsets, skip complement and output-range merging are native.
+A zero-stage plan keeps the original valid dummy pointer with stage count zero.
+
+Ownership/invalidation:
+Plans and code snapshots are operation-local, rebuilt for each program/chunk;
+there is no global metadata cache. The snapshot owns immutable exact str/int
+entries and cannot observe later public connection changes. Public input owners
+remain in List[PythonObject] at the boundary, preserving identity and lifetime.
+Input sizes/row owners/residency are still checked/prepared in their original
+runner positions, including after previous device-input calls. Native stage and
+range lists remain alive through the synchronous numerical entry; raw addresses
+never outlive their owners. Existing temporary device slot release and combined
+operation/cleanup errors are retained.
+
+Public compatibility:
+The public _metrics_run_fields/_Prog route still admits exact dictionary keys,
+reads each Python stage record and checks its 16-word length in the same order,
+then uses the same execution body. Its arena publication and return identity are
+preserved. Internal programs bypass only those self-created Python records.
+Output range arithmetic/order, kernels, mode/backend choice and runner switches
+are unchanged. Corrupt internal opcode connections now explicitly refuse non-exact
+string/integer metadata; public user metric argument admission remains in place.
+
+Compilation/source guards:
+- Pure native plan root rc0, 1.78s: stage packing, input/scratch offsets,
+  declared/uncounted/counted outputs and skip-complement preparation.
+- Final affected public provider roots metrics_exp_operation,
+  metrics_cls_operation plus public _metrics_run_fields: rc0, 23.60s.
+- CPU identical O0, Mac compile_slot, 10 compiler workers (sysctl allocation).
+- Original eager-opcode public source also compiled rc0, 21.38s; preserved before
+  the lazy selected-opcode improvement. Pure core source did not change, so its
+  accepted independent compilation was reused without a duplicate build.
+- First no_compute_in_shells guard rc1: opcode-schema admission loop lacked its
+  boundary/model-structure classification comment. Added that accurate comment;
+  no executable source changed after the successful compile, which is reused.
+  Initial guard output retained in guards-before-loop-classification/.
+- Final four normal branch source guards rc0, no override; receipt in
+  source-guards.json. No runtime, GPU, identity or
+  performance campaign; source/build success is not execution qualification.
+
+Remaining limits:
+The provider still admits/prepares Python inputs and residency and makes one
+compiled numerical C entry call per program. Public result construction remains
+at the boundary. This is an actual repeated-record/setup removal, not a claim
+that every metric path is Python-free. Label encoding and result publication
+have independent remaining work. Direct CPython interoperability is allowed;
+removing its spelling/count was not the objective.
+
+Evidence:
+~/mojolearn-evidence/native-metric-plans-20261028/
+compile.log/json, source-manifest.json, source-bytes.tgz, _native_metric_plans.so;
+native-compile.log/json, native-source-manifest.json, native-source-bytes.tgz,
+_native_metric_plans_pure.so; attempt-1-eager-opcode-decode/ retains original
+public compile/source/binary. Guard logs/receipt are beside these files.
+Committed fixtures/receipts: experiments/native_metric_plans_20261028/.

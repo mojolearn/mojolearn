@@ -19,6 +19,8 @@
 #   `_metrics_run`, the one native call `_run` made); the result words read
 #   back from the arena as `prog.ints` / `prog.words` read them.
 from std.memory import memcpy, bitcast
+from core.metrics_program_plan import MetricProgramPlan
+from bindings.metrics_plan_admission import MetricPlanOpcodes
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
 from bindings.metrics_native_inputs import metric_shape, metric_flatten
@@ -31,7 +33,7 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
-from bindings.arena_prog_native import _metrics_run_fields
+from bindings.arena_prog_native import _metrics_run_plan
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
     family_call, family_call_kw, family_array, family_cast_view, family_as_f32,
@@ -639,73 +641,43 @@ def mc_weights(source: PythonObject, n: Int, caller: String, context: PythonObje
 
 
 struct McProg(Movable):
-    """`_expansion_metrics._Prog`: an arena layout, the inputs copied into
-    it, the stage records, the input and scratch ranges and the declared
-    outputs (None until `want`), as the Python lists the runner reads."""
-    var size: Int
-    var inputs: PythonObject
-    var stages: PythonObject
-    var skip: PythonObject
-    var outs: PythonObject
-    var ops: PythonObject
+    # Pure native stage/layout words; only boundary input owners live here.
+    var plan: MetricProgramPlan
+    var inputs: List[PythonObject]
+    var ops: MetricPlanOpcodes
 
     def __init__(out self, context: PythonObject) raises:
-        self.size = 0
-        self.inputs = Python.list()
-        self.stages = Python.list()
-        self.skip = Python.list()
-        self.outs = PythonObject(None)
-        self.ops = context["family_metrics_ops"]
+        self.plan = MetricProgramPlan()
+        self.inputs = List[PythonObject]()
+        self.ops = MetricPlanOpcodes(context["family_metrics_ops"])
 
     def alloc(mut self, n: Int) raises -> Int:
-        var off = self.size
-        self.size += max(n, 0)
-        if self.size > MC_INT32_MAX:
-            raise Error("mojolearn metrics: the problem exceeds the Int32 arena bound")
-        return off
+        return self.plan.alloc(n)
 
     def put(mut self, array: PythonObject) raises -> Int:
         """A float32 (or int32, stored as its bits) C-ordered array -> its offset."""
-        var count = Int(py=array.size)
-        var off = self.alloc(count)
-        _ = py_call(self.inputs.append, Python.tuple(PythonObject(off), array))
-        _ = py_call(self.skip.append, Python.tuple(PythonObject(off), PythonObject(off + count)))
+        var off = self.plan.input(Int(py=array.size))
+        self.inputs.append(array)
         return off
 
     def scratch(mut self, n: Int) raises -> Int:
-        var off = self.alloc(n)
-        if n > 0:
-            _ = py_call(self.skip.append, Python.tuple(PythonObject(off), PythonObject(off + n)))
-        return off
+        return self.plan.scratch(n)
 
     def stage(mut self, op: String, total: Int, params: List[Int]) raises:
         if len(params) > MC_PARAMS:
             raise Error("x_metrics: too many stage parameters")
-        var record = Python.list()
-        _ = py_call(record.append, self.ops[PythonObject(op)])
-        _ = py_call(record.append, PythonObject(total))
-        for i in range(len(params)):  # small-loop(stage words: at most 14 parameters)
-            _ = py_call(record.append, PythonObject(params[i]))
-        for _ in range(MC_PARAMS - len(params)):  # small-loop(stage words: the zero padding of one record)
-            _ = py_call(record.append, PythonObject(0))
-        _ = py_call(self.stages.append, record)
+        var opcode = self.ops.get(op)
+        self.plan.stage(opcode, total, params)
 
     def want(mut self, off: Int, n: Int, count: Int = MC_NONE, mult: Int = 1) raises -> Int:
-        if self.outs is None:
-            self.outs = Python.list()
-        if n > 0:
-            _ = py_call(self.outs.append, Python.tuple(PythonObject(off), PythonObject(off + n),
-                                                       PythonObject(count), PythonObject(mult)))
-        return off
+        return self.plan.want(off, n, count, mult)
 
 
 def mc_run(prog: McProg, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_run(prog, numeric_mode)`: the program handed to the shared runner
     (the one call the Python `_run` made); returns the arena store."""
     var prog_context = context["family_metrics_prog_context"]
-    var fields = Python.dict(size=PythonObject(prog.size), _inputs=prog.inputs, _stages=prog.stages,
-        arena=PythonObject(None), _outs=prog.outs, _skip=prog.skip, rows=PythonObject(None))
-    return _metrics_run_fields(fields, mode, prog_context)
+    return _metrics_run_plan(prog.plan, prog.inputs, mode, prog_context)
 
 
 def mc_arena_base(arena: PythonObject) raises -> Int:

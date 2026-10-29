@@ -18,6 +18,8 @@
 # Both give the sorted distinct classes and the codes into them, which is
 # all the metrics read, so the programs below see the same words.
 from std.memory import memcpy, bitcast
+from core.metrics_program_plan import MetricProgramPlan
+from bindings.metrics_plan_admission import MetricPlanOpcodes
 from std.python import Python, PythonObject
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact
 from providers.python.metrics_matrix_input_pyapi import metric_score_matrix
@@ -30,7 +32,7 @@ from bindings.classical_arrays import (
 )
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
-from bindings.arena_prog_native import _metrics_run_fields
+from bindings.arena_prog_native import _metrics_run_plan
 from bindings.optimizer_public_words import stash_python_error
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
@@ -182,68 +184,40 @@ def mx_str_list(values: PythonObject) raises -> PythonObject:
 
 
 struct MxProg(Movable):
-    """`_expansion_metrics._Prog`: an arena layout, the inputs copied into
-    it, the stage records and the declared outputs, as the Python lists the
-    shared runner reads."""
-    var size: Int
-    var inputs: PythonObject
-    var stages: PythonObject
-    var skip: PythonObject
-    var outs: PythonObject
-    var ops: PythonObject
+    # Pure native stage/layout words; only boundary input owners live here.
+    var plan: MetricProgramPlan
+    var inputs: List[PythonObject]
+    var ops: MetricPlanOpcodes
 
     def __init__(out self, context: PythonObject) raises:
-        self.size = 0
-        self.inputs = Python.list()
-        self.stages = Python.list()
-        self.skip = Python.list()
-        self.outs = PythonObject(None)
-        self.ops = context["family_metrics_ops"]
+        self.plan = MetricProgramPlan()
+        self.inputs = List[PythonObject]()
+        self.ops = MetricPlanOpcodes(context["family_metrics_ops"])
 
     def alloc(mut self, n: Int) raises -> Int:
-        var off = self.size
-        self.size += max(n, 0)
-        if self.size > 2147483647:
-            raise Error("mojolearn metrics: the problem exceeds the Int32 arena bound")
-        return off
+        return self.plan.alloc(n)
 
     def put(mut self, array: PythonObject) raises -> Int:
         """A float32 (or int32, stored as its bits) C-ordered array -> its offset."""
-        var count = Int(py=array.size)
-        var off = self.alloc(count)
-        _ = py_call(self.inputs.append, Python.tuple(PythonObject(off), array))
-        _ = py_call(self.skip.append, Python.tuple(PythonObject(off), PythonObject(off + count)))
+        var off = self.plan.input(Int(py=array.size))
+        self.inputs.append(array)
         return off
 
     def put_i32(mut self, array: PythonObject) raises -> Int:
         return self.put(array)
 
     def scratch(mut self, n: Int) raises -> Int:
-        var off = self.alloc(n)
-        if n > 0:
-            _ = py_call(self.skip.append, Python.tuple(PythonObject(off), PythonObject(off + n)))
-        return off
+        return self.plan.scratch(n)
 
     def stage(mut self, op: String, total: Int, params: List[Int]) raises:
         if len(params) > MX_PARAMS:
             raise Error("ValueError: x_metrics: too many stage parameters")
-        var record = Python.list()
-        _ = py_call(record.append, self.ops[PythonObject(op)])
-        _ = py_call(record.append, PythonObject(total))
-        for i in range(len(params)):  # small-loop(stage words: at most 14 parameters)
-            _ = py_call(record.append, PythonObject(params[i]))
-        for _ in range(MX_PARAMS - len(params)):  # small-loop(stage words: the zero padding of one record)
-            _ = py_call(record.append, PythonObject(0))
-        _ = py_call(self.stages.append, record)
+        var opcode = self.ops.get(op)
+        self.plan.stage(opcode, total, params)
 
     def want_count(mut self, off: Int, n: Int, count: Int, mult: Int) raises -> Int:
         """`_Prog.want(off, n, count, mult)`: declare an output range."""
-        if self.outs is None:
-            self.outs = Python.list()
-        if n > 0:
-            _ = py_call(self.outs.append, Python.tuple(PythonObject(off), PythonObject(off + n),
-                                                       PythonObject(count), PythonObject(mult)))
-        return off
+        return self.plan.want(off, n, count, mult)
 
     def want(mut self, off: Int, n: Int) raises -> Int:
         return self.want_count(off, n, -1, 1)
@@ -319,9 +293,7 @@ struct MxArena(Copyable, Movable):
 def mx_run(prog: MxProg, mode: PythonObject, context: PythonObject) raises -> MxArena:
     """`_run(prog, numeric_mode)`: one program handed to the shared runner."""
     var prog_context = context["family_metrics_prog_context"]
-    var fields = Python.dict(size=PythonObject(prog.size), _inputs=prog.inputs, _stages=prog.stages,
-        arena=PythonObject(None), _outs=prog.outs, _skip=prog.skip, rows=PythonObject(None))
-    return MxArena(_metrics_run_fields(fields, mode, prog_context))
+    return MxArena(_metrics_run_plan(prog.plan, prog.inputs, mode, prog_context))
 
 
 def mx_f64_scores(values: List[Float64], context: PythonObject) raises -> PythonObject:

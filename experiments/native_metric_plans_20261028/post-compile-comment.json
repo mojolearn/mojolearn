@@ -1,0 +1,6 @@
+{
+  "path": "bindings/metrics_plan_admission.mojo",
+  "compiled_sha256": "5c086eb5e7540c8aa8544e1230c05f31abbedb736375398ab10d3c36eff507cd",
+  "final_sha256": "36636835759f8715e9aa17bf70854847d87095ffe258ad89169d3a20b5682985",
+  "change": "Added only driver-loop classification comment for existing boundary opcode type-admission loop; executable code unchanged"
+}

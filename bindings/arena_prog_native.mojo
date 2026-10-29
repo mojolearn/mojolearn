@@ -15,6 +15,7 @@
 # step: the same entries are called with the same words, so no bit moves.
 from bindings.native_array_storage import native_array_zeros
 from std.memory import memcpy
+from core.metrics_program_plan import MetricProgramPlan
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
@@ -496,15 +497,48 @@ def _metrics_run_fields(fields: PythonObject, mode: PythonObject,
         stages.append(0)
     var known = True
     var merged = _metrics_download(fields, size, context, known)
+    return _metrics_execute[False](fields, List[PythonObject](), List[Int](), stages,
+                                   nst, size, arena, base, entries, known, merged, context)
+
+
+def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
+    # Private native builders supply words directly. The separately callable
+    # public _Prog path above retains its dictionary/record admission and order.
+    classical_connect_numpy(context)
+    var entries = _family_entries(mode, "x_metrics", context)
+    var arena = _store(plan.size, "f", False, context)
+    var base = Int(py=arena[1])
+    var known = True
+    var merged = plan.download(known)
+    return _metrics_execute[True](PythonObject(None), inputs, plan.input_offsets, plan.stages,
+                                  len(plan.stages) // STAGE_WORDS, plan.size, arena, base,
+                                  entries, known, merged, context)
+
+
+def _metrics_execute[native_plan: Bool](
+    fields: PythonObject, native_inputs: List[PythonObject], native_offsets: List[Int],
+    stages: List[Int32], nst: Int, size: Int, arena: PythonObject, base: Int,
+    entries: PythonObject, known: Bool, merged: List[Int32], context: PythonObject,
+) raises -> PythonObject:
     var ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_metrics_run_ranges") is not None
-    var inputs = fields["_inputs"]
+    var inputs = PythonObject(None)
+    comptime if not native_plan:
+        inputs = fields["_inputs"]
+    var input_count = len(native_inputs) if native_plan else len(inputs)
     var ins = List[Int32]()
-    var owned = List[Int](capacity=2 * len(inputs))
+    var owned = List[Int](capacity=2 * input_count)
     try:
-        for k in range(len(inputs)):  # driver-loop: over the program's input buffers
-            var record = inputs[k]
-            var off = _int(record[0], context)
-            var value = record[1]
+        for k in range(input_count):  # driver-loop: over the program's input buffers
+            var off = 0
+            var value = PythonObject(None)
+            comptime if native_plan:
+                off = native_offsets[k]
+                value = native_inputs[k]
+            else:
+                var record = inputs[k]
+                off = _int(record[0], context)
+                value = record[1]
             var size_k = Int(py=value.size)
             if size_k == 0:
                 continue
@@ -556,8 +590,9 @@ def _metrics_run_fields(fields: PythonObject, mode: PythonObject,
     var cleanup = _release(owned, entries, "x_metrics")
     if cleanup.byte_length() > 0:
         raise Error("RuntimeError: x_metrics slot cleanup failed: " + cleanup)
-    py_setitem(fields, "arena", arena[0])
-    _ = stages^
+    comptime if not native_plan:
+        py_setitem(fields, "arena", arena[0])
+    _ = stages  # The packed native record owner survives the synchronous run.
     return arena[0]
 
 
