@@ -1,0 +1,18 @@
+Cleanup reuse integration (2026-10-29)
+
+Metrics product: original e352037b71, integrated 5cd44f1176.
+Private completed arena owner/address now serves scalar reads and output copies;
+removes repeated buffer_info tuple decoding. Fresh owner per program; no global
+cache, caller metadata cache or cross-call buffer reuse. Owner pins every read.
+Public result arrays remain fresh; public fields entry ABI unchanged.
+
+Reused successful actual metrics_exp_operation, metrics_cls_operation and
+_metrics_run_fields Apple CPU identical O0 compilation (21.99 seconds).
+113-file conservative import closure plus manifests exactly matches retained
+compiled source. Compiler, artifact and source archive hashes also match.
+No duplicate compilation; GPU compilation and all runtime/identity/performance
+behavior remain unmeasured. Original evidence/command: native_metric_results_20261028.
+Normal main push guards run at delivery; full logs under
+~/mojolearn-evidence/cleanup-reuse-integration-20261029/.
+
+Execution/GIL draft 430208ae62 remains parked: no implementation integrated.
