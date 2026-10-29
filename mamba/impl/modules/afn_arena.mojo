@@ -76,16 +76,17 @@ struct MambaArena(Movable):
             # in-order context).
             self.base.enqueue_fill(Float32(0.0))
 
-    def reset(mut self, used: Int) raises:
-        """Reuse after the previous call synchronized and dropped every view.
+    def reset(mut self, used: Int, retained: Int = 0, retained_views: Int = 0) raises:
+        """Reuse after the previous call synchronized and dropped transient views.
+        Fixed prefix descriptors may remain live; no prior queue use may remain.
         Fill only this call's logical layout, preserving poison/zero policy.
         Retain the fill view until the next reset so its queued fill owns a live
         view without adding a preparation wait.
         """
-        if used < 0 or used > self.cap:
+        if used < 0 or used > self.cap or retained < 0 or retained > used or retained_views < 0:
             raise Error("MambaArena.reset: logical layout exceeds capacity")
-        self.off = 0
-        self.views = 0
+        self.off = retained
+        self.views = retained_views
         self.reset_view = self.base.create_sub_buffer[DType.float32](0, max(1, used))
         comptime if _AFN_POISON:
             self.reset_view.value().enqueue_fill(bitcast[DType.float32](UInt32(0x7FC00000)))

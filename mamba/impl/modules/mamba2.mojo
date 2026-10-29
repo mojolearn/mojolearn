@@ -313,9 +313,13 @@ def mamba2_arena_floats(b: Int, l: Int, q0: Int, dims: Mamba2Dims) -> Int:
     the input x (lane afn-mamba, MOJOLEARN_AFN_MAMBA_ARENA)."""
     var t = MambaArena.total(_m2_weight_sizes(dims), MAMBA_GUARD)
     t += MambaArena.total(_m2_state_sizes(b, dims), MAMBA_GUARD)
-    t += MambaArena.total(_m2_stage_sizes(b, l, q0, dims), MAMBA_GUARD)
-    t += MambaArena.slot(b * l * dims.d_model, MAMBA_GUARD)
-    return t
+    return t + mamba2_arena_work_floats(b, l, q0, dims)
+
+
+def mamba2_arena_work_floats(b: Int, l: Int, q0: Int, dims: Mamba2Dims) -> Int:
+    """Transient stage/input suffix; fixed weight/state views precede it."""
+    return (MambaArena.total(_m2_stage_sizes(b, l, q0, dims), MAMBA_GUARD)
+            + MambaArena.slot(b * l * dims.d_model, MAMBA_GUARD))
 
 
 struct Mamba2DeviceState(Movable):

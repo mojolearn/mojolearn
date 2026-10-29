@@ -35,6 +35,7 @@ from mamba.checks.mamba_fixture import (
 from mamba.impl.modeling.modeling_mamba import (
     BLOCK_ANY_SABOTAGE,
     MAMBA_GUARD,
+    MAMBA_POISON,
     mamba_block_forward,
     mamba_copy_in,
     mamba_device_alloc,
@@ -54,7 +55,7 @@ from mamba.impl.modules.afn_defines import IDN_MAMBA3_REPORTS_ON_REQUEST
 from mamba.impl.modules.afn_defines import IDN_M3_SESSION_STAGE_REUSE
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modeling.modeling_mamba import mamba1_arena_floats
-from mamba.impl.modules.mamba2 import mamba2_arena_floats
+from mamba.impl.modules.mamba2 import mamba2_arena_floats, mamba2_arena_work_floats
 from mamba.impl.modules.mamba3 import mamba3_arena_floats
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
@@ -603,6 +604,8 @@ struct Mamba2PublicWorkspace(Movable):
     """
     var ctx: Optional[DeviceContext]
     var arena: Optional[MambaArena]
+    var arena_prefix: Int
+    var arena_prefix_views: Int
     var weights: Optional[Mamba2DeviceWeights]
     var state: Optional[Mamba2DeviceState]
     var dx: Optional[DeviceBuffer[DType.float32]]
@@ -613,6 +616,8 @@ struct Mamba2PublicWorkspace(Movable):
     def __init__(out self):
         self.ctx = None
         self.arena = None
+        self.arena_prefix = 0
+        self.arena_prefix_views = 0
         self.weights = None
         self.state = None
         self.dx = None
@@ -631,6 +636,8 @@ struct Mamba2PublicWorkspace(Movable):
             self.state = None
             self.weights = None
             self.arena = None
+            self.arena_prefix = 0
+            self.arena_prefix_views = 0
             try:
                 # Device frees may enqueue work too. Preserve the context
                 # until their completion, as the existing session release does.
@@ -677,10 +684,26 @@ def _mamba2_workspace_step(
             workspace.b = b
             workspace.dm = dm
             workspace.device = device
+        comptime if MAMBA_POISON:
+            # Preserve diagnostic body-zero fills performed by every take;
+            # poison builds intentionally retain their per-call descriptors.
+            if workspace.arena.value().off != 0:
+                workspace.arena.value().reset(mamba2_arena_floats(b, 1, q0, dims))
+            return _mamba2_arena_execute(workspace.ctx.value(), workspace.arena.value(),
+                                        a, b, 1, dm, q0, dt_lo, dt_hi, dims)
         else:
-            workspace.arena.value().reset(mamba2_arena_floats(b, 1, q0, dims))
-        return _mamba2_arena_execute(workspace.ctx.value(), workspace.arena.value(),
-                                    a, b, 1, dm, q0, dt_lo, dt_hi, dims)
+            if not workspace.weights:
+                # Only layout descriptors persist. The full live weight/state
+                # bytes are uploaded below on every call, including this one.
+                workspace.weights = Mamba2DeviceWeights(workspace.ctx.value(), dims, workspace.arena.value())
+                workspace.state = Mamba2DeviceState(workspace.ctx.value(), b, dims, workspace.arena.value())
+                workspace.arena_prefix = workspace.arena.value().off
+                workspace.arena_prefix_views = workspace.arena.value().views
+            else:
+                var used = workspace.arena_prefix + mamba2_arena_work_floats(b, 1, q0, dims)
+                workspace.arena.value().reset(used, workspace.arena_prefix, workspace.arena_prefix_views)
+            return _mamba2_arena_execute_prepared(workspace.ctx.value(), workspace.arena.value(),
+                a, b, 1, dm, q0, dt_lo, dt_hi, dims, workspace.weights, workspace.state)
     if not workspace.ctx or workspace.b != b or workspace.dm != dm or workspace.device != device:
         workspace.clear()
         workspace.ctx = neural_ctx[_NEURAL_CTX]()
@@ -778,6 +801,21 @@ def _mamba2_arena_execute(
     ctx: DeviceContext, mut arena: MambaArena, a: List[Int], b: Int, l: Int,
     dm: Int, q0: Int, dt_lo: Float32, dt_hi: Float32, dims: Mamba2Dims,
 ) raises -> Int:
+    var weights_owner = Optional[Mamba2DeviceWeights]()
+    var state_owner = Optional[Mamba2DeviceState]()
+    try:
+        return _mamba2_arena_execute_prepared(ctx, arena, a, b, l, dm, q0,
+            dt_lo, dt_hi, dims, weights_owner, state_owner)
+    finally:
+        _ = weights_owner
+        _ = state_owner
+
+
+def _mamba2_arena_execute_prepared(
+    ctx: DeviceContext, mut arena: MambaArena, a: List[Int], b: Int, l: Int,
+    dm: Int, q0: Int, dt_lo: Float32, dt_hi: Float32, dims: Mamba2Dims,
+    mut weights_owner: Optional[Mamba2DeviceWeights], mut state_owner: Optional[Mamba2DeviceState],
+) raises -> Int:
     # Shared one-shot/retained storage orchestration. Same logical view order,
     # full mutable byte uploads, arithmetic entry and downloads on both routes.
     var di = dims.d_inner
@@ -785,13 +823,13 @@ def _mamba2_arena_execute(
     var dip = dims.d_in_proj()
     var nh = dims.nheads
     var h_n = b * nh * M2_HEADDIM * M2_D_STATE
-    var weights_owner = Optional[Mamba2DeviceWeights]()
-    var state_owner = Optional[Mamba2DeviceState]()
     var stages_owner = Optional[Mamba2DeviceStages]()
     var input_owner = Optional[DeviceBuffer[DType.float32]]()
     try:
-        weights_owner = Mamba2DeviceWeights(ctx, dims, arena)
+        if not weights_owner:
+            weights_owner = Mamba2DeviceWeights(ctx, dims, arena)
         ref dw = weights_owner.value()
+        dw.weights_checked = False
         mamba_copy_in(ctx, dw.norm_w, _f32_ptr(a[1]), dm)
         mamba_copy_in(ctx, dw.w_in, _f32_ptr(a[2]), dip * dm)
         mamba_copy_in(ctx, dw.conv_w, _f32_ptr(a[3]), cd * M2_D_CONV)
@@ -801,7 +839,8 @@ def _mamba2_arena_execute(
         mamba_copy_in(ctx, dw.d_skip, _f32_ptr(a[7]), nh)
         mamba_copy_in(ctx, dw.gnorm_w, _f32_ptr(a[8]), di)
         mamba_copy_in(ctx, dw.w_out, _f32_ptr(a[9]), dm * di)
-        state_owner = Mamba2DeviceState(ctx, b, dims, arena)
+        if not state_owner:
+            state_owner = Mamba2DeviceState(ctx, b, dims, arena)
         ref dstate = state_owner.value()
         mamba_copy_in(ctx, dstate.conv_win, _f32_ptr(a[10]), b * cd * M2_D_CONV)
         mamba_copy_in(ctx, dstate.h, _f32_ptr(a[11]), h_n)
