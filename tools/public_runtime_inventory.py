@@ -1964,6 +1964,51 @@ class ClassHookWrappers:
         self.numeric_names = frozenset(("fit", "partial_fit", "fit_predict", "fit_transform",
                                         "_fit_with_tree_start", "__init__"))
         self.names, self.outputs, self.tags, self.ready = names, outputs[1], tags[1], True
+        # This opt-in is consumed by the defining class's numeric hook, never
+        # inherited as a native-public flag. Recognize it only when the indexed
+        # hook forwards it to the helper's early-return branch.
+        self.native_constructor_supported = False
+        helper = index.resolve_name(mode.name, "_install_numeric_mode")
+        if self.numeric is not None and helper and helper[0] == "func":
+            hook = next((node for node in self.numeric.node.body
+                         if isinstance(node, ast.FunctionDef) and node.name == "__init_subclass__"), None)
+            if hook is not None and any(arg.arg == "_native_constructor" for arg in hook.args.kwonlyargs):
+                forwarded = any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                                and node.func.id == "_install_numeric_mode"
+                                and any(keyword.arg == "native_constructor" and isinstance(keyword.value, ast.Name)
+                                        and keyword.value.id == "_native_constructor" for keyword in node.keywords)
+                                for node in ast.walk(hook))
+                early_return = any(isinstance(node, ast.If) and isinstance(node.test, ast.Name)
+                                   and node.test.id == "native_constructor"
+                                   and any(isinstance(child, ast.Return) for statement in node.body
+                                           for child in ast.walk(statement))
+                                   for node in helper[1].node.body)
+                self.native_constructor_supported = forwarded and early_return
+
+    def _native_constructor(self, klass, func):
+        if not self.native_constructor_supported:
+            return False
+        explicit_mode = any(arg.arg == "numeric_mode" for arg in
+                            (*func.node.args.posonlyargs, *func.node.args.args, *func.node.args.kwonlyargs))
+        return explicit_mode and any(keyword.arg == "_native_constructor"
+                                     and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
+                                     for keyword in klass.node.keywords)
+
+    def known_class_keywords(self, klass):
+        """Only the implemented, literal numeric-constructor keyword is consumed."""
+        if (not self.ready or not self.native_constructor_supported or self.numeric is None
+                or self.numeric not in self.index.mro(klass)
+                or not self._reaches_hooks(klass, (self.numeric,))):
+            return False
+        for keyword in klass.node.keywords:
+            if (keyword.arg != "_native_constructor" or not isinstance(keyword.value, ast.Constant)
+                    or type(keyword.value.value) is not bool):
+                return False
+            if keyword.value.value:
+                own = self.index.lookup(klass, "__init__")
+                if not own or own[0] != "func" or own[1].cls is not klass or not self._native_constructor(klass, own[1]):
+                    return False
+        return True
 
     def _flagged(self, cls):
         for klass in self.index.mro(cls):
@@ -2004,7 +2049,8 @@ class ClassHookWrappers:
             if (self.numeric is not None and klass is not self.numeric and self.numeric in chain
                     and name in self.numeric_names and func.cls is klass and not self._flagged(klass)
                     and self._reaches_hooks(klass, (self.numeric,))):
-                return klass
+                if name != "__init__" or not self._native_constructor(klass, func):
+                    return klass
             if klass in (self.outputs, self.tags) or self.outputs not in chain:
                 continue
             if self._flagged(klass) or not self._reaches_hooks(klass):
@@ -2223,7 +2269,7 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                 resolved = index.resolve_expr(base, cls.mod.name, None)
                 if not resolved or resolved[0] != "class":
                     add(group, "<base:" + ast.unparse(base) + ">", "unresolved_base")
-            if cls.node.keywords:
+            if cls.node.keywords and not wrappers.known_class_keywords(cls):
                 add(group, "<class-construction>", "unresolved_metaclass")
     if set(witnessed) != matched_slots:
         raise ValueError("installed-slot classes do not resolve to current public getters: "

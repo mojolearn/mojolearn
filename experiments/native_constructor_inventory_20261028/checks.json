@@ -1,0 +1,17 @@
+{
+  "base": "3696b223e19a384c9b27b2d74c94961791081df0",
+  "inventory_regressions": 26,
+  "inventory_tests_exit": 0,
+  "runtime_source_gate_exit": 0,
+  "runtime_source_gate_checks": 2,
+  "prohibited_source": 0,
+  "unresolved_pin": 229,
+  "pin_and_baselines_changed": false,
+  "python_compile_exit": 0,
+  "runtime": "source AST only; no product import/execution or benchmark",
+  "source_sha256": {
+    "tools/public_runtime_inventory.py": "c7a9d970662489b42b7b08456bcbf0caa54a826e691f8037763cb653f5dcf04d",
+    "tools/tests/test_public_runtime_inventory.py": "66986db6fcb355f8880ec745c7658be3c33e93bf2e4e2d5d24747ffd23321716"
+  },
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/native-constructor-inventory-20261028"
+}

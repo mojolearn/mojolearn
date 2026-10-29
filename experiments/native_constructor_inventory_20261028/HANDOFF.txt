@@ -1,0 +1,32 @@
+Native constructor inventory correction (2026-10-28)
+
+Branch lane/native-constructor-inventory-20261028; base3696b223e19a384c9b27b2d74c94961791081df0.
+Tools-only: public_runtime_inventory.py and its source regression fixture.
+
+Push guard falsely marked eight original/Inference Mamba/Transformer constructors
+as class-created wrappers after3d252e, and added eight unresolved class-construction
+rows because it treated the new class keyword as an unknown metaclass.
+
+Recognition is narrow: the indexed NumericModeMixin hook must declare/forward
+_native_constructor to the indexed helper's native_constructor early-return
+branch; the defining class must supply literalTrue and explicitly accept
+numeric_mode. Constructor ownership is checked at its defining class, so passive
+Inference subclasses retain that result while their own new constructors still
+get ordinary injection. Fit methods are never exempted by this constructor-only
+keyword. Known literalFalse is consumed but leaves constructor wrapping intact.
+Unknown keywords/metaclasses, missing-mode constructors and unsupported hook
+implementations retain conservative findings. No list of class-name exemptions.
+
+Validation: complete inventory regression script exit0 (count in checks.json),
+required no-Python-runtime SOURCE gate exit0 (two checks, prohibited0, unchanged
+unresolved pin229 satisfied), Python syntax compilation exit0. First partial
+fix removed the constructor findings but left the keyword-as-metaclass findings;
+that failed gate log is retained as constructor-only-runtime-source-gate.*.
+Fixture scripts intentionally exercise failing audit cases; overall exit0 proves
+their expected outcomes. No product runtime/identity/performance campaign; no
+Mojo source changed or native rebuild. All exception/debt files and pins unchanged.
+
+Evidence /Users/andrewhendel/mojolearn-evidence/native-constructor-inventory-20261028/
+full logs/exits, source archive, initial selected endpoint report. That initial
+report predates the final class-keyword fix and is not final gate coverage.
+Required standard source guards follow commit. Parent serializes integration.
