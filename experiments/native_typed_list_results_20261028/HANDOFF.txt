@@ -1,0 +1,52 @@
+Native typed result list publication, 2026-10-28
+Branch: lane/native-typed-list-results-20261028
+Base: ad29929a4db88829b5d1120b4c82f134ba985653
+
+Removed work:
+All seven bindings/py_lists.mojo helpers now build their Python result lists
+from completed native scalar Lists. Removed per-call Python NumPy import, empty
+array creation/dtype keyword processing, array-interface dictionary indexing,
+full buffer memcpy and ndarray.tolist dispatch/materialization. One exact-sized
+result list and required final scalar boxes replace the intermediate array.
+
+Setup/reuse/ownership:
+Native list/boxing/setter C API entries resolve outside the element loop. Every
+result is operation-local; no cache or invalidation is added. The uninitialized
+list is immediately RAII-owned and remains private until filled. PyList_SetItem
+consumes each new scalar reference on success OR failure. A failed allocation or
+setter leaves cleanup to the list owner; uninitialized slots are safely skipped.
+
+Typed semantics:
+Float32 is promoted to Float64 for PyFloat_FromDouble; Float64 uses the same
+Python float API. Signed Int32/Int64/Int use PyLong_FromLongLong; UInt32/UInt64
+use PyLong_FromUnsignedLongLong, preserving the unsigned 64-bit domain. Native
+input values/order are read once. No arithmetic kernel, fold or mode changes.
+No Python input-object protocols or third-party allocation routines execute.
+
+Compilation:
+All seven helpers instantiated by the dedicated compile.mojo passed Mac CPU
+compilation rc0, identical define, O0. This covers changed helper code, not all
+importing product bindings, GPU images or installed loading. Initial compile-only
+root used unsupported List(value) syntax; corrected to length/fill and recompiled.
+Both complete logs retained. Exact command, source/root/binary hashes in
+compile.json. No runtime/identity/performance/failure-injection campaign.
+Root owns final source/push guards; lane results retained and reported separately.
+
+Audit:
+AUDIT.txt, tolist_assessment.tsv and tolist_sites.json classify the frozen Mojo
+inventory: 50 .tolist attribute sites plus five string-selected calls. py_lists
+has seven executable sites (eight textual including its old docstring). This
+patch removes those seven; tokenizer 81ed5abddf's six append sites count separately.
+Product result/admission, cold product setup/archive, exact native container and
+generic callback candidates are distinguished. Pending upstream admission proof
+is explicit. Other lanes' files were not modified; no repo-wide completion claim.
+
+Evidence: ~/mojolearn-evidence/native-typed-list-results-20261028/
+Full logs, binary, source hashes and source enumeration script retained on Mac.
+No rented box or watcher services.
+
+Remaining:
+Required Python list/scalar allocation still happens once per final result item.
+Other native-buffer tolist chains, generic callback candidates and tuple/dict
+construction remain. Direct scalar boxing is structural work reduction, not a
+measured speedup or qualified runtime/bitwise result.

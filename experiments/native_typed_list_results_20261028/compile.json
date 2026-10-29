@@ -1,0 +1,28 @@
+{
+  "base_commit": "ad29929a4db88829b5d1120b4c82f134ba985653",
+  "compile_exit": 0,
+  "scope": "All seven changed py_lists native result helpers, directly instantiated by dedicated compile-only CPU root; importing product bindings not rebuilt",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "compile_slots": 4,
+  "compiler_workers": "default; no saturation measured",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/native-typed-list-results-20261028 -I /Users/andrewhendel/mojolearn-wt/native-typed-list-results-20261028/bindings /Users/andrewhendel/mojolearn-wt/native-typed-list-results-20261028/experiments/native_typed_list_results_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/native-typed-list-results-20261028/compile_lists",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/native-typed-list-results-20261028/compile_lists",
+  "binary_sha256": "62dac12bab00bd4eb6bb9bad97affd185908c576e62dda8b6fee9a865df87542",
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-typed-list-results-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/native-typed-list-results-20261028/source-sha256.json",
+  "source_manifest_scope": "All tracked Mojo files, Pixi manifest/lock and dedicated compile root; conservative superset, not all files compiled",
+  "modified_source_sha256": {
+    "bindings/py_lists.mojo": "8fb4244758c0630dcd8fbe2cb2957f644d2551f590fca733f0bacf480209436e",
+    "experiments/native_typed_list_results_20261028/compile.mojo": "87f7204e558a33f2d1abbce78297258f08abfc42278a6ed230916162e6712ff8"
+  },
+  "earlier_failure": {
+    "exit": 1,
+    "reason": "Compile-only root initially used unsupported List(value) initializer; fixed to existing supported length/fill form, no product workaround",
+    "log": "/Users/andrewhendel/mojolearn-evidence/native-typed-list-results-20261028/compile-root-constructor-error.log"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}

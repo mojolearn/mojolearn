@@ -1,0 +1,523 @@
+{
+  "base_commit": "ad29929a4db88829b5d1120b4c82f134ba985653",
+  "scope": "Tracked bindings/*.mojo and providers/python/*.mojo; lexical .tolist attribute sites, excluding comments and string/docstring literals; all definitions counted without runtime reachability assumptions",
+  "textual_matches": 73,
+  "code_attribute_sites": 50,
+  "files": 24,
+  "by_file": {
+    "bindings/_mojolearn_tokenizer_host.mojo": 1,
+    "bindings/array_native.mojo": 3,
+    "bindings/classical_labels.mojo": 3,
+    "bindings/forest_export_binding.mojo": 2,
+    "bindings/host_archive_native.mojo": 8,
+    "bindings/mcls_common.mojo": 1,
+    "bindings/metrics_exp_common.mojo": 1,
+    "bindings/metrics_exp_curve.mojo": 2,
+    "bindings/metrics_native_inputs.mojo": 2,
+    "bindings/msel_cv.mojo": 2,
+    "bindings/neighbors_knn_native.mojo": 1,
+    "bindings/optimizer_schedule_native.mojo": 1,
+    "bindings/prep_classify_common.mojo": 1,
+    "bindings/prep_encode_native.mojo": 2,
+    "bindings/prep_iterimp_native.mojo": 1,
+    "bindings/prep_labels_native.mojo": 1,
+    "bindings/py_lists.mojo": 7,
+    "bindings/svc_ocsvm_native.mojo": 1,
+    "bindings/trees_public_gbdt_fit.mojo": 2,
+    "bindings/trees_public_inputs.mojo": 4,
+    "bindings/user_objects_native.mojo": 1,
+    "bindings/x_linear_native.mojo": 1,
+    "providers/python/autoarima_search_pyapi.mojo": 1,
+    "providers/python/prophet_buffers_pyapi.mojo": 1
+  },
+  "sites": [
+    {
+      "path": "bindings/_mojolearn_tokenizer_host.mojo",
+      "line": 852,
+      "function": "_py_int_list",
+      "source": "return arr.tolist()",
+      "boundary": "product tokenizer result",
+      "assessment": "Native List[Int] -> array.array(q) -> tolist in legacy pretokenize-pattern binding; separate from tokenizer_public_native patch. Root owns this file registration edits.",
+      "status": "native input; retained roundtrip"
+    },
+    {
+      "path": "bindings/array_native.mojo",
+      "line": 265,
+      "function": "_values",
+      "source": "return _call(view.tolist)",
+      "boundary": "product Array.tolist/output conversion",
+      "assessment": "Exact owned Array/memoryview storage, f16 handling and nested/zero-shape preservation; direct replacement needs shape/format coverage.",
+      "status": "native buffer; retained"
+    },
+    {
+      "path": "bindings/array_native.mojo",
+      "line": 398,
+      "function": "_tolist",
+      "source": "return _call(_call(_call(native_buffer_view(flat).cast, PythonObject(\"B\")).cast, PythonObject(\"d\"), c.shape).tolist)",
+      "boundary": "product Array.tolist/output conversion",
+      "assessment": "Exact owned Array/memoryview storage, f16 handling and nested/zero-shape preservation; direct replacement needs shape/format coverage.",
+      "status": "native buffer; retained"
+    },
+    {
+      "path": "bindings/array_native.mojo",
+      "line": 399,
+      "function": "_tolist",
+      "source": "return _call(_call(_call(c._mv.cast, PythonObject(\"B\")).cast, _code(dtype, context), c.shape).tolist)",
+      "boundary": "product Array.tolist/output conversion",
+      "assessment": "Exact owned Array/memoryview storage, f16 handling and nested/zero-shape preservation; direct replacement needs shape/format coverage.",
+      "status": "native buffer; retained"
+    },
+    {
+      "path": "bindings/classical_labels.mojo",
+      "line": 686,
+      "function": "_label_list",
+      "source": "return py_call(ndarray.tolist, y)",
+      "boundary": "product label admission",
+      "assessment": "Exact connected ndarray/array.array/native exporter paths; arbitrary objects excluded locally; preserves mixed label identities. Classical owner.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/classical_labels.mojo",
+      "line": 688,
+      "function": "_label_list",
+      "source": "return py_call(context[\"array_type\"].tolist, y)",
+      "boundary": "product label admission",
+      "assessment": "Exact connected ndarray/array.array/native exporter paths; arbitrary objects excluded locally; preserves mixed label identities. Classical owner.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/classical_labels.mojo",
+      "line": 699,
+      "function": "_label_list",
+      "source": "return py_call(native_buffer_view(y).tolist)",
+      "boundary": "product label admission",
+      "assessment": "Exact connected ndarray/array.array/native exporter paths; arbitrary objects excluded locally; preserves mixed label identities. Classical owner.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/forest_export_binding.mojo",
+      "line": 84,
+      "function": "forest_export_py_list_i64",
+      "source": "return arr.tolist()",
+      "boundary": "product fitted-model export",
+      "assessment": "Already-native typed List[Int64]/List[Float64] copied to NumPy then tolist; candidate to delegate to repaired py_lists. Separate tree ownership.",
+      "status": "native input; next candidate"
+    },
+    {
+      "path": "bindings/forest_export_binding.mojo",
+      "line": 97,
+      "function": "forest_export_py_list_f64",
+      "source": "return arr.tolist()",
+      "boundary": "product fitted-model export",
+      "assessment": "Already-native typed List[Int64]/List[Float64] copied to NumPy then tolist; candidate to delegate to repaired py_lists. Separate tree ownership.",
+      "status": "native input; next candidate"
+    },
+    {
+      "path": "bindings/host_archive_native.mojo",
+      "line": 1758,
+      "function": "host_archive_gpr",
+      "source": "var kind_list = py_call(kinds._mv.tolist)",
+      "boundary": "product model archive load/setup",
+      "assessment": "Eight typed Array memoryview metadata materializations in GPR/GPC archive reconstruction; cold product operation, not packaging.",
+      "status": "admitted native buffers; retained"
+    },
+    {
+      "path": "bindings/host_archive_native.mojo",
+      "line": 1759,
+      "function": "host_archive_gpr",
+      "source": "var param_list = py_call(params._mv.tolist)",
+      "boundary": "product model archive load/setup",
+      "assessment": "Eight typed Array memoryview metadata materializations in GPR/GPC archive reconstruction; cold product operation, not packaging.",
+      "status": "admitted native buffers; retained"
+    },
+    {
+      "path": "bindings/host_archive_native.mojo",
+      "line": 1760,
+      "function": "host_archive_gpr",
+      "source": "var length_list = py_call(lengths._mv.tolist)",
+      "boundary": "product model archive load/setup",
+      "assessment": "Eight typed Array memoryview metadata materializations in GPR/GPC archive reconstruction; cold product operation, not packaging.",
+      "status": "admitted native buffers; retained"
+    },
+    {
+      "path": "bindings/host_archive_native.mojo",
+      "line": 1761,
+      "function": "host_archive_gpr",
+      "source": "var table = py_call(scales._mv.tolist)",
+      "boundary": "product model archive load/setup",
+      "assessment": "Eight typed Array memoryview metadata materializations in GPR/GPC archive reconstruction; cold product operation, not packaging.",
+      "status": "admitted native buffers; retained"
+    },
+    {
+      "path": "bindings/host_archive_native.mojo",
+      "line": 1836,
+      "function": "host_archive_gpc",
+      "source": "var kind_list = py_call(_archive_exact(arrays, \"kinds\", \"<i4\", context)._mv.tolist)",
+      "boundary": "product model archive load/setup",
+      "assessment": "Eight typed Array memoryview metadata materializations in GPR/GPC archive reconstruction; cold product operation, not packaging.",
+      "status": "admitted native buffers; retained"
+    },
+    {
+      "path": "bindings/host_archive_native.mojo",
+      "line": 1837,
+      "function": "host_archive_gpc",
+      "source": "var param_list = py_call(_archive_exact(arrays, \"kparams\", \"<f4\", context)._mv.tolist)",
+      "boundary": "product model archive load/setup",
+      "assessment": "Eight typed Array memoryview metadata materializations in GPR/GPC archive reconstruction; cold product operation, not packaging.",
+      "status": "admitted native buffers; retained"
+    },
+    {
+      "path": "bindings/host_archive_native.mojo",
+      "line": 1838,
+      "function": "host_archive_gpc",
+      "source": "var length_list = py_call(_archive_exact(arrays, \"ls_len\", \"<i4\", context)._mv.tolist)",
+      "boundary": "product model archive load/setup",
+      "assessment": "Eight typed Array memoryview metadata materializations in GPR/GPC archive reconstruction; cold product operation, not packaging.",
+      "status": "admitted native buffers; retained"
+    },
+    {
+      "path": "bindings/host_archive_native.mojo",
+      "line": 1839,
+      "function": "host_archive_gpc",
+      "source": "var table = py_call(_archive_exact(arrays, \"ls\", \"<f4\", context)._mv.tolist)",
+      "boundary": "product model archive load/setup",
+      "assessment": "Eight typed Array memoryview metadata materializations in GPR/GPC archive reconstruction; cold product operation, not packaging.",
+      "status": "admitted native buffers; retained"
+    },
+    {
+      "path": "bindings/mcls_common.mojo",
+      "line": 386,
+      "function": "mc_encode_store",
+      "source": "return Python.tuple(family_call(head.tolist), codes)",
+      "boundary": "product multi-class label conversion",
+      "assessment": "Native class-head storage converted to Python class list; inspect completed scalar-buffer route before replacing.",
+      "status": "native result buffer; retained"
+    },
+    {
+      "path": "bindings/metrics_exp_common.mojo",
+      "line": 465,
+      "function": "_mx_buffer_labels",
+      "source": "var classes = mx_list(py_call(raw.tolist)[py_call(b.slice, PythonObject(0), PythonObject(k))])",
+      "boundary": "product metric label preparation",
+      "assessment": "Typed raw class buffer tolist then Python slice/list construction; native counted boxing candidate.",
+      "status": "native buffer result; retained"
+    },
+    {
+      "path": "bindings/metrics_exp_curve.mojo",
+      "line": 146,
+      "function": "_auc_values",
+      "source": "values = py_call(values.tolist)",
+      "boundary": "product metric admission/error formatting",
+      "assessment": "_auc_values has generic hasattr/tolist fallback without local exact-type proof; _auc error text materializes store values. Upstream admission needs review.",
+      "status": "mixed: dynamic callback candidate / exact-store error formatting"
+    },
+    {
+      "path": "bindings/metrics_exp_curve.mojo",
+      "line": 194,
+      "function": "_auc",
+      "source": "raise Error(\"x is neither increasing nor decreasing : \" + family_str(py_call(store.tolist)) + \".\")",
+      "boundary": "product metric admission/error formatting",
+      "assessment": "_auc_values has generic hasattr/tolist fallback without local exact-type proof; _auc error text materializes store values. Upstream admission needs review.",
+      "status": "mixed: dynamic callback candidate / exact-store error formatting"
+    },
+    {
+      "path": "bindings/metrics_native_inputs.mojo",
+      "line": 82,
+      "function": "metric_flatten",
+      "source": "item = py_call(ndarray.tolist, item)",
+      "boundary": "product metric input flattening",
+      "assessment": "Exact ndarray/native buffer storage boxing; recursive object leaves admitted after conversion. Preserve object leaves/rank.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/metrics_native_inputs.mojo",
+      "line": 85,
+      "function": "metric_flatten",
+      "source": "item = py_call(native_buffer_view(item).tolist)",
+      "boundary": "product metric input flattening",
+      "assessment": "Exact ndarray/native buffer storage boxing; recursive object leaves admitted after conversion. Preserve object leaves/rank.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/msel_cv.mojo",
+      "line": 686,
+      "function": "_prediction_list",
+      "source": "values = py_call(packed._mv.tolist)",
+      "boundary": "product CV prediction conversion",
+      "assessment": "Known Array buffer path and exact ndarray path; result-rank/shape conversion. Classical owner.",
+      "status": "native containers; retained"
+    },
+    {
+      "path": "bindings/msel_cv.mojo",
+      "line": 702,
+      "function": "_prediction_list",
+      "source": "values = py_call(pred.tolist)",
+      "boundary": "product CV prediction conversion",
+      "assessment": "Known Array buffer path and exact ndarray path; result-rank/shape conversion. Classical owner.",
+      "status": "native containers; retained"
+    },
+    {
+      "path": "bindings/neighbors_knn_native.mojo",
+      "line": 738,
+      "function": "_classify",
+      "source": "var flat = py_call(native_buffer_view(uniq._mv).tolist)",
+      "boundary": "product KNN result conversion",
+      "assessment": "Native unique-class memoryview converted to list; class-sized output preparation.",
+      "status": "native buffer result; retained"
+    },
+    {
+      "path": "bindings/optimizer_schedule_native.mojo",
+      "line": 155,
+      "function": "schedule_operation",
+      "source": "return py_call(result.tolist) if operation == \"schedule_list\" else result",
+      "boundary": "product schedule list output",
+      "assessment": "Owned native float array filled by lr_spec_fill then tolist; candidate direct native result list preserving f32 rounding.",
+      "status": "native result buffer; retained"
+    },
+    {
+      "path": "bindings/prep_classify_common.mojo",
+      "line": 301,
+      "function": "float_list",
+      "source": "items = py_call(store.tolist)",
+      "boundary": "product parameter admission",
+      "assessment": "Admitted buffer copied into exact array.array store, then list and native Float64 values; redundant intermediate candidate. Classical owner.",
+      "status": "admitted native buffer; retained"
+    },
+    {
+      "path": "bindings/prep_encode_native.mojo",
+      "line": 1122,
+      "function": "_user_values",
+      "source": "return py_call(b.list, py_call(value.tolist))",
+      "boundary": "product preprocessing admission",
+      "assessment": "_user_values/_score_words generic hasattr/tolist branches need upstream exact-type proof; do not conflate with native Array path. Classical owner.",
+      "status": "dynamic callback candidate"
+    },
+    {
+      "path": "bindings/prep_encode_native.mojo",
+      "line": 2793,
+      "function": "_score_words",
+      "source": "var vals = py_call(b.list, py_call(scores.tolist)) if Bool(py=py_call(b.hasattr, scores, \"tolist\")) else py_call(b.list, scores)",
+      "boundary": "product preprocessing admission",
+      "assessment": "_user_values/_score_words generic hasattr/tolist branches need upstream exact-type proof; do not conflate with native Array path. Classical owner.",
+      "status": "dynamic callback candidate"
+    },
+    {
+      "path": "bindings/prep_iterimp_native.mojo",
+      "line": 175,
+      "function": "_pred_f64",
+      "source": "var listed = py_call(v.tolist) if Bool(py=py_call(b.hasattr, v, \"tolist\")) else v",
+      "boundary": "product estimator-prediction admission",
+      "assessment": "_pred_f64 has native-buffer routes plus generic tolist fallback; user estimator context must be distinguished from input protocol. Classical owner.",
+      "status": "dynamic callback candidate"
+    },
+    {
+      "path": "bindings/prep_labels_native.mojo",
+      "line": 1107,
+      "function": "_mlb_inverse",
+      "source": "var rows = py_call(yt.tolist) if Bool(py=py_call(b.hasattr, yt, \"tolist\")) else py_call(b.list, yt)",
+      "boundary": "product fitted-label inverse output preparation",
+      "assessment": "_mlb_inverse dynamic hasattr/tolist; upstream prepared-input admission needs proof before classification. Classical owner.",
+      "status": "dynamic callback candidate"
+    },
+    {
+      "path": "bindings/py_lists.mojo",
+      "line": 28,
+      "function": "py_list_f64",
+      "source": "return array.tolist()",
+      "boundary": "product shared typed result publication",
+      "assessment": "Seven native List types. This batch removes NumPy allocation/import, array-interface lookup, memcpy and tolist, directly boxing exact scalar values.",
+      "status": "removed this batch"
+    },
+    {
+      "path": "bindings/py_lists.mojo",
+      "line": 40,
+      "function": "py_list_f32",
+      "source": "return array.tolist()",
+      "boundary": "product shared typed result publication",
+      "assessment": "Seven native List types. This batch removes NumPy allocation/import, array-interface lookup, memcpy and tolist, directly boxing exact scalar values.",
+      "status": "removed this batch"
+    },
+    {
+      "path": "bindings/py_lists.mojo",
+      "line": 52,
+      "function": "py_list_i32",
+      "source": "return array.tolist()",
+      "boundary": "product shared typed result publication",
+      "assessment": "Seven native List types. This batch removes NumPy allocation/import, array-interface lookup, memcpy and tolist, directly boxing exact scalar values.",
+      "status": "removed this batch"
+    },
+    {
+      "path": "bindings/py_lists.mojo",
+      "line": 64,
+      "function": "py_list_i64",
+      "source": "return array.tolist()",
+      "boundary": "product shared typed result publication",
+      "assessment": "Seven native List types. This batch removes NumPy allocation/import, array-interface lookup, memcpy and tolist, directly boxing exact scalar values.",
+      "status": "removed this batch"
+    },
+    {
+      "path": "bindings/py_lists.mojo",
+      "line": 76,
+      "function": "py_list_u32",
+      "source": "return array.tolist()",
+      "boundary": "product shared typed result publication",
+      "assessment": "Seven native List types. This batch removes NumPy allocation/import, array-interface lookup, memcpy and tolist, directly boxing exact scalar values.",
+      "status": "removed this batch"
+    },
+    {
+      "path": "bindings/py_lists.mojo",
+      "line": 88,
+      "function": "py_list_u64",
+      "source": "return array.tolist()",
+      "boundary": "product shared typed result publication",
+      "assessment": "Seven native List types. This batch removes NumPy allocation/import, array-interface lookup, memcpy and tolist, directly boxing exact scalar values.",
+      "status": "removed this batch"
+    },
+    {
+      "path": "bindings/py_lists.mojo",
+      "line": 101,
+      "function": "py_list_int",
+      "source": "return array.tolist()",
+      "boundary": "product shared typed result publication",
+      "assessment": "Seven native List types. This batch removes NumPy allocation/import, array-interface lookup, memcpy and tolist, directly boxing exact scalar values.",
+      "status": "removed this batch"
+    },
+    {
+      "path": "bindings/svc_ocsvm_native.mojo",
+      "line": 89,
+      "function": "_i32_of",
+      "source": "var store = family_call(context[\"array_type\"], PythonObject(\"i\"), family_call(b.map, b.int, family_call(value.tolist)))",
+      "boundary": "product model/index conversion",
+      "assessment": "_i32_of performs tolist -> map(int) -> array.array; inspect source admission before replacing. Classical owner.",
+      "status": "conversion chain; upstream proof pending"
+    },
+    {
+      "path": "bindings/trees_public_gbdt_fit.mojo",
+      "line": 406,
+      "function": "_listed",
+      "source": "return py_call(ndarray.tolist, value)",
+      "boundary": "product tree fit admission",
+      "assessment": "Exact connected ndarray/array.array C methods; native scalar/object semantics must be retained. Classical owner.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/trees_public_gbdt_fit.mojo",
+      "line": 408,
+      "function": "_listed",
+      "source": "return py_call(context[\"array_type\"].tolist, value)",
+      "boundary": "product tree fit admission",
+      "assessment": "Exact connected ndarray/array.array C methods; native scalar/object semantics must be retained. Classical owner.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/trees_public_inputs.mojo",
+      "line": 647,
+      "function": "_label_list",
+      "source": "return py_call(ndarray.tolist, y)",
+      "boundary": "product tree label admission",
+      "assessment": "Exact ndarray/array.array and native buffer methods, including Array._mv; preserves label/object behavior. Classical owner.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/trees_public_inputs.mojo",
+      "line": 649,
+      "function": "_label_list",
+      "source": "return py_call(context[\"array_type\"].tolist, y)",
+      "boundary": "product tree label admission",
+      "assessment": "Exact ndarray/array.array and native buffer methods, including Array._mv; preserves label/object behavior. Classical owner.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/trees_public_inputs.mojo",
+      "line": 653,
+      "function": "_label_list",
+      "source": "return py_call(native_buffer_view(y._mv).tolist)",
+      "boundary": "product tree label admission",
+      "assessment": "Exact ndarray/array.array and native buffer methods, including Array._mv; preserves label/object behavior. Classical owner.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/trees_public_inputs.mojo",
+      "line": 654,
+      "function": "_label_list",
+      "source": "return py_call(native_buffer_view(y).tolist)",
+      "boundary": "product tree label admission",
+      "assessment": "Exact ndarray/array.array and native buffer methods, including Array._mv; preserves label/object behavior. Classical owner.",
+      "status": "admitted native containers; retained"
+    },
+    {
+      "path": "bindings/user_objects_native.mojo",
+      "line": 311,
+      "function": "_flatten_into",
+      "source": "o = py_call(o.tolist)",
+      "boundary": "product object flattening",
+      "assessment": "_flatten_into uses hasattr then arbitrary o.tolist absent local exact-type proof; separate from recursively admitted native leaf conversion. Classical/root coordination required.",
+      "status": "dynamic callback candidate"
+    },
+    {
+      "path": "bindings/x_linear_native.mojo",
+      "line": 907,
+      "function": "xl_fit_huber",
+      "source": "py_setitem(fields, \"outliers_\", py_call(b.list, py_call(b.map, b.bool, py_call(flags._store.tolist))))",
+      "boundary": "product fitted-result publication",
+      "assessment": "Huber outlier flag buffer tolist -> map(bool) -> list; native counted bool boxing candidate. Classical owner.",
+      "status": "native result buffer; retained"
+    },
+    {
+      "path": "providers/python/autoarima_search_pyapi.mojo",
+      "line": 106,
+      "function": "_options",
+      "source": "options = py_call(admitted.keep.tolist)",
+      "boundary": "product per-search option setup",
+      "assessment": "Admitted order-option buffer keep.tolist before native integer filtering; not per-candidate arithmetic, still product setup. Classical owner.",
+      "status": "admitted native buffer; retained"
+    },
+    {
+      "path": "providers/python/prophet_buffers_pyapi.mojo",
+      "line": 180,
+      "function": "prophet_contiguous",
+      "source": "_numbers(py_call(source.tolist), values, context)",
+      "boundary": "product object/string input conversion",
+      "assessment": "Exact ndarray object/unicode/byte payloads boxed, then admitted before numeric conversion; temporal/numeric paths differ.",
+      "status": "admitted ndarray; preserve payload semantics"
+    }
+  ],
+  "string_selected_calls": [
+    {
+      "path": "providers/python/neighbors_feature_names_pyapi.mojo",
+      "line": 71,
+      "function": "_names_in",
+      "assessment": "exact ndarray class-dictionary tolist before feature-name scalar checks; native metadata admission"
+    },
+    {
+      "path": "bindings/parallel_shard_native.mojo",
+      "line": 457,
+      "function": "_forest_y",
+      "assessment": "generic py_attr(y, tolist) after native Array/list/tuple branches; upstream admission proof pending"
+    },
+    {
+      "path": "bindings/xseq_forecast_native.mojo",
+      "line": 202,
+      "function": "xseq forecast dispatch",
+      "assessment": "native code column -> tolist -> Python map name selection; native counted lookup candidate"
+    },
+    {
+      "path": "bindings/mani_umap_native.mojo",
+      "line": 203,
+      "function": "categorical UMAP target admission",
+      "assessment": "hasattr/getattr tolist fallback; upstream admission proof pending; classical owner"
+    },
+    {
+      "path": "bindings/prep_select_native.mojo",
+      "line": 341,
+      "function": "discrete feature mask admission",
+      "assessment": "hasattr/_attr tolist fallback; upstream admission proof pending; classical owner"
+    }
+  ],
+  "summary_after_this_patch_only": {
+    "direct_attribute_sites_removed": 7,
+    "remaining_direct_attribute_sites_from_baseline": 43,
+    "string_selected_calls_retained": 5,
+    "no_runtime_reachability_or_hotness_claim": true
+  }
+}

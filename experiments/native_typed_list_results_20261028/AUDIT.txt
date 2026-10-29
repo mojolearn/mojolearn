@@ -1,0 +1,53 @@
+Static tolist and result-construction assessment, 2026-10-28
+Frozen baseline: ad29929a4db88829b5d1120b4c82f134ba985653
+
+Scope and counts:
+Tracked Mojo under bindings/ and providers/python/, excluding comment/string/
+docstring tokens when counting .tolist attributes: 50 code attribute sites in
+24 files, versus 73 raw textual matches. Five additional string-selected calls
+are recorded separately (neighbors feature names, forest shard labels, forecast
+model names, categorical UMAP labels and preprocessing discrete masks). This is
+55 visible source call sites in this scope, not a claim all are runtime-hot.
+The supplied 25-site figure is not reproducible as this full frozen inventory.
+py_lists has seven executable helpers; its eighth textual match is its docstring.
+Python package definitions, tests/verification and dynamic variable-name dispatch
+are outside these counts; nothing here establishes complete repo-wide removal.
+
+Per-file classifications and all source locations are in tolist_assessment.tsv
+and tolist_sites.json. Every site is distinguished as typed native output,
+exact/admitted container conversion, generic callback candidate or colder product
+setup/archive work. Product model-load/setup is not packaging-only. The audit is
+static; generic fallbacks need upstream admission review before declaring a
+reachable prohibited callback. Exact ndarray/array/memoryview C methods are not
+user-defined Python callbacks, but their call envelopes/materialization remain
+product overhead. Metadata conversion is still runtime work.
+
+Repair selected:
+Seven shared py_lists helpers already receive typed native Lists and need no
+input protocol or buffer admission. Direct sized list/scalar construction removes
+all seven NumPy import/empty -> array-interface -> memcpy -> tolist roundtrips.
+No numerical algorithm or arithmetic order changes. On this frozen inventory,
+this patch alone leaves 43 direct-attribute plus five string-selected sites.
+Other parallel work may remove additional sites; do not sum overlapping counts.
+
+Tokenizer prior batch:
+81ed5abddf replaces six Python append call sites in tokenizer_public_native:
+one shared native-int loop, BPE inner rows and outer document list, and three
+BOS/id/EOS loops. These were append calls, not .tolist sites; count them separately.
+It does not remove the legacy _mojolearn_tokenizer_host pretokenize-pattern helper's
+array.array.tolist route, decode-row appends, trained vocabulary/merges or all
+Python object conversion tags. Root is editing tokenizer-host registration;
+this audit does not mutate that file.
+
+Broader result construction:
+Sized native list population still performs required Python scalar/list allocation
+at the public API. Tuple/dict output construction is not automatically removable:
+public return schemas and object identities must remain. High-value next native
+buffer cases include forest_export typed helper duplicates, schedule_list,
+Huber outlier flags, class-count metadata, GP archive scalar vectors and forecast
+model-name lookup. Avoid replacing an exact-object label gather with numeric
+boxing; those paths must preserve label identity and nesting. Classical lane
+owns user_objects/prep/trees/msel changes; this batch edits only py_lists.
+
+No code is executed by this audit, no measurement/runtime/identity campaign ran,
+and source classifications do not establish installed reachability or performance.
