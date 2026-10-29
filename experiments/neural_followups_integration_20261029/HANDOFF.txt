@@ -35,3 +35,18 @@ landed; source reconfirmed. Sampling draft held uncompiled pending clarification
 of requested NVIDIA attribution versus measurement deferral. Handoff-onlyb6f074648f
 and exact patch remain outside main. New source lanes trace training/optimizer
 transfers and Sequential operation preparation; no timing claim.
+
+Sequential preparation: original5c0f99f21f+c4cf773a79+2017bf03a2; integrated
+97cc38ea20+d79e561b2c+1cf1a8c8ff. Hoists Linear residual-reader scans out of
+training/validation minibatch and prediction chunk loops to one private topology
+lookup per operation. ShapeN batch prefix uses fixed native storage without
+intermediate List, preserving rank/positive checks and view count validation.
+No cross-call cache/invalidation: standalone forwards prepare fresh; unfused
+legacy builds skip unused lookup work. ModelSpec and dynamic parameters/options
+remain unchanged. Provider model parsing already runs once per full operation,
+so no new provider resource lifecycle was added. CPU identical actual model
+request fit/stateful-fit/validation/predict and standalone forward compiled exit0
+(26.61s,8configured workers).110-file source closure and retained hashes match.
+Runtime/GPU execution/performance unmeasured. Full details in
+experiments/sequential_preparation_reuse_20261029/HANDOFF.txt.
+Prior resident-layer normal main push exit0 at f0565f1e23.
