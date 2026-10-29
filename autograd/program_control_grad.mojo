@@ -8,6 +8,7 @@ from sequence.ops import FP
 from autograd.ops_api import OpsSession, ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape
 from autograd.program_control import _signature
+from autograd.control_replay_metadata import ControlReplay
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.tape import Tape
 from autograd.import_api import ImportRules
@@ -33,33 +34,37 @@ def _parameter_leaf[E: Exec & Movable & Deinitable](
 
 
 def _replay_handles[E: Exec & Movable & Deinitable](
-    mut s: OpsSession[E], p: OpsProgram, inputs: List[Int], mut leaves: Dict[Int, Int],
+    mut s: OpsSession[E], p: OpsProgram, mut replay: ControlReplay,
+    inputs: List[Int], mut leaves: Dict[Int, Int],
     mut temps: List[Int], recording: Bool,
 ) raises -> List[Int]:
     if len(inputs) != p.n_in:
         raise Error("ValueError: control-flow state has the wrong number of tensors")
     s.tape.record()
-    var params = List[Int]()
+    replay.parameters.clear()
     for j in range(len(p.params)):  # driver-loop: over parameter references
         var slot = s._slot(p.params[j])
         if not same_shape(s.shapes[slot], p.param_shapes[j]):
             raise Error("ValueError: control-flow parameter changed shape")
-        params.append(_parameter_leaf(s, p.params[j], leaves, temps))
+        replay.parameters.append(_parameter_leaf(s, p.params[j], leaves, temps))
     if not recording:
         s.tape.no_grad()
-    var values = inputs.copy()
+    replay.prepare(p)
+    ref params = replay.parameters
+    ref values = replay.graph.values
+    values.clear()
+    for h in inputs:  # driver-loop: over current loop-state handles, not tensor data
+        values.append(h)
+    ref args = replay.graph.handles
     for k in range(p.n_nodes()):  # driver-loop: over the executed graph nodes
-        var args = List[Int]()
+        args.clear()
         for j in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over node references
             var value_ref = p.args[j]
             args.append(params[-value_ref - 1] if value_ref < 0 else values[value_ref])
-        var ints = List[Int]()
-        for j in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over integer node options
-            ints.append(p.ints[j])
-        var floats = List[Float32]()
-        for j in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: over scalar node options
-            floats.append(p.fs[j])
-        var h = s._program_op(k, p.code[k], args, ints, floats)
+        ref node = replay.graph.nodes[k]
+        # VJP control replay uses the captured dropout key unchanged, exactly as
+        # before; this operation-local inventory never receives training offsets.
+        var h = s._program_op(k, p.code[k], args, node.ints, node.fs)
         temps.append(h)
         values.append(h)
     var outputs = List[Int]()
@@ -71,10 +76,10 @@ def _replay_handles[E: Exec & Movable & Deinitable](
 
 
 def _decision[E: Exec & Movable & Deinitable](
-    mut s: OpsSession[E], condition: OpsProgram, state: List[Int],
+    mut s: OpsSession[E], condition: OpsProgram, mut replay: ControlReplay, state: List[Int],
     mut leaves: Dict[Int, Int], mut temps: List[Int],
 ) raises -> Bool:
-    var outs = _replay_handles(s, condition, state, leaves, temps, False)
+    var outs = _replay_handles(s, condition, replay, state, leaves, temps, False)
     if len(outs) != 1 or s.shape_nd(outs[0]).count() != 1:
         raise Error("ValueError: control-flow condition must return one scalar")
     var value = s.scalar(outs[0])
@@ -234,6 +239,9 @@ def control_vjp_forward[E: Exec & Movable & Deinitable, KIND: Int](
     swap(held, s[].prog_tape)
     swap(held, s[].tape)
     var st = ControlVjpState(held^, parameters^, explicit_parameters)
+    var body_replay = ControlReplay()
+    var condition_replay = ControlReplay()
+    var other_replay = ControlReplay()
     try:
         s[].tape.reset()
         s[].tape.record()
@@ -257,22 +265,22 @@ def control_vjp_forward[E: Exec & Movable & Deinitable, KIND: Int](
         var outputs = st.initial.copy()
         if plan.is_loop:
             while True:  # driver-loop: over graph iterations bounded by max_iterations
-                if not _decision(s[], plan.condition, outputs, st.leaves, st.temps):
+                if not _decision(s[], plan.condition, condition_replay, outputs, st.leaves, st.temps):
                     st.stopped = True
                     break
                 if st.iterations == plan.maximum:
                     break
-                outputs = _replay_handles(s[], body, outputs, st.leaves, st.temps, True)
+                outputs = _replay_handles(s[], body, body_replay, outputs, st.leaves, st.temps, True)
                 for k in range(len(outputs)):  # driver-loop: over loop state output kinds
                     if s[].shape_nd(outputs[k]).ndim != body.in_shapes[k].ndim:
                         raise Error("ValueError: while_loop body must preserve each state tensor's rank")
                     if s[].int_words[s[]._slot(outputs[k])]:
                         raise Error("ValueError: while_loop state outputs must hold floating-point values")
                 st.iterations += 1
-        elif _decision(s[], plan.condition, st.initial, st.leaves, st.temps):
-            outputs = _replay_handles(s[], body, st.initial, st.leaves, st.temps, True)
+        elif _decision(s[], plan.condition, condition_replay, st.initial, st.leaves, st.temps):
+            outputs = _replay_handles(s[], body, body_replay, st.initial, st.leaves, st.temps, True)
         else:
-            outputs = _replay_handles(s[], plan.other, st.initial, st.leaves, st.temps, True)
+            outputs = _replay_handles(s[], plan.other, other_replay, st.initial, st.leaves, st.temps, True)
         st.outputs = outputs^
     except error:
         _control_vjp_release(s[], st)

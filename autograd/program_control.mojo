@@ -9,7 +9,8 @@ from sequence.ops import FP, Args, OP_COPY
 from autograd.ops_api import OpsSession, ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
 from autograd.program_optimize import program_optimize
-from autograd.program_runtime import parameter_buffers, replay_values
+from autograd.program_runtime import parameter_buffers, replay_values_prepared
+from autograd.control_replay_metadata import ControlReplay
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.rankn import ShapeN
 from autograd.tape import Tape
@@ -25,21 +26,26 @@ def _signature(base: OpsProgram, other: OpsProgram) raises:
 
 
 def _execute[E: Exec & Movable & Deinitable](
-    mut s: OpsSession[E], p: OpsProgram, buffers: List[FP], shapes: List[ShapeN], mut temps: List[Int],
+    mut s: OpsSession[E], p: OpsProgram, mut replay: ControlReplay,
+    buffers: List[FP], shapes: List[ShapeN], mut temps: List[Int],
 ) raises -> List[Int]:
     s._drop_temps(temps)
     temps.clear()
     s.tape.reset()
     var params = parameter_buffers(s, p)
-    var flags = List[Bool](length=len(params), fill=False)
-    var phs = List[Int]()
-    return replay_values(s, p, buffers, shapes, params, flags, temps, phs)
+    if not replay.ready:
+        replay.no_grad = List[Bool](length=len(params), fill=False)
+        replay.prepare(p)
+    replay.parameters.clear()
+    return replay_values_prepared(s, p, replay.graph, buffers, shapes, params,
+                                  replay.no_grad, temps, replay.parameters)
 
 
 def _predicate[E: Exec & Movable & Deinitable](
-    mut s: OpsSession[E], p: OpsProgram, buffers: List[FP], shapes: List[ShapeN], mut temps: List[Int],
+    mut s: OpsSession[E], p: OpsProgram, mut replay: ControlReplay,
+    buffers: List[FP], shapes: List[ShapeN], mut temps: List[Int],
 ) raises -> Bool:
-    var outputs = _execute(s, p, buffers, shapes, temps)
+    var outputs = _execute(s, p, replay, buffers, shapes, temps)
     if len(outputs) != 1 or s.shapes[s._slot(outputs[0])].count() != 1:
         raise Error("control-flow condition must return one scalar")
     var value = s.scalar(outputs[0])
@@ -185,6 +191,11 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
     swap(held, s[].prog_tape)
     swap(held, s[].tape)
     var temps = List[Int]()
+    # Owners are local to this admitted control operation. Preparation remains
+    # lazy until a component executes; only its native node metadata is reused.
+    var body_replay = ControlReplay()
+    var condition_replay = ControlReplay()
+    var other_replay = ControlReplay()
     var result = ControlResult()
     var iterations = 0
     var stopped = False
@@ -192,12 +203,12 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
         s[].tape.no_grad()
         if is_loop:
             while True:  # driver-loop: over control-flow iterations, bounded by the explicit iteration limit
-                if not _predicate(s[], condition, buffers, shapes, temps):
+                if not _predicate(s[], condition, condition_replay, buffers, shapes, temps):
                     stopped = True
                     break
                 if iterations == maximum:
                     break
-                var outputs = _execute(s[], body, buffers, shapes, temps)
+                var outputs = _execute(s[], body, body_replay, buffers, shapes, temps)
                 var next_state = _copy_state(s[], body, outputs)
                 for k in range(len(buffers)):  # driver-loop: over previous state owners
                     s[].ex.free(buffers[k])
@@ -209,9 +220,9 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                 s[].ex.download(FP(unsafe_from_address=Int(a.data.unsafe_ptr())), buffers[k], shapes[k].count())
                 result.outputs.append(a^)
         else:
-            var take_body = _predicate(s[], condition, buffers, shapes, temps)
-            var chosen = body.copy() if take_body else other.copy()
-            var outputs = _execute(s[], chosen, buffers, shapes, temps)
+            var take_body = _predicate(s[], condition, condition_replay, buffers, shapes, temps)
+            var outputs = _execute(s[], body, body_replay, buffers, shapes, temps) if take_body else _execute(
+                s[], other, other_replay, buffers, shapes, temps)
             for k in range(len(outputs)):  # driver-loop: over selected branch outputs
                 var a = HostArray(s[].shapes[s[]._slot(outputs[k])])
                 s[].download(outputs[k], FP(unsafe_from_address=Int(a.data.unsafe_ptr())))
