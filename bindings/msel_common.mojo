@@ -895,7 +895,7 @@ def msel_lazy(model: PythonObject, op: String, items: PythonObject, context: Pyt
 
 # ---------------------------------------------------------------- scorers
 from bindings.msel_estimator_native import msel_estimator_call
-from bindings.msel_scorer_native import msel_scorer_fields, msel_scorer_call
+from bindings.msel_scorer_native import msel_scorer_fields, msel_scorer_call, msel_scorer_value, MselMetricPrepared
 from bindings.metrics_native_support import metric_float
 
 
@@ -928,12 +928,18 @@ def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer
                context: PythonObject, memo: PythonObject) raises -> PythonObject:
     """`model_selection._score(estimator, X, y, scorer)`: the estimator's own
     `score` without a scorer; a real scalar, as a float."""
-    var b = native_loaded_module("builtins")
-    var value: PythonObject
-    if scorer is None:
-        value = msel_estimator_call(estimator, "score", Python.tuple(x, y), context)
-    else:
-        value = msel_scorer_call(scorer, estimator, x, y, PythonObject(None), memo, context)
+    var prepared = MselMetricPrepared()
+    return PythonObject(msel_score_value(estimator, x, y, scorer, context, memo, prepared))
+
+
+def msel_score_value(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer: PythonObject,
+                     context: PythonObject, memo: PythonObject,
+                     mut prepared: MselMetricPrepared) raises -> Float64:
+    # Internal consumers already own native Float64 score tables. Preserve
+    # public wrappers while avoiding float boxing and real-type rechecks here.
+    if scorer is not None:
+        return msel_scorer_value(scorer, estimator, x, y, PythonObject(None), memo, context, prepared)
+    var value = msel_estimator_call(estimator, "score", Python.tuple(x, y), context)
     if not msel_is_real(value, context):
         raise Error("TypeError: scoring must return a real scalar")
-    return PythonObject(metric_float(value, context))
+    return metric_float(value, context)

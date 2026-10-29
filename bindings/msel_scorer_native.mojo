@@ -3,6 +3,7 @@
 # Python function objects identify import-time plans; they are never invoked.
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.family_common import family_call, family_array
 from bindings.classical_arrays import classical_address
@@ -19,7 +20,13 @@ def msel_metric_plan(function: PythonObject, context: PythonObject) raises -> Py
     var plan = py_get(context["family_msel_metric_plans"], function)
     if plan is None:
         raise Error("TypeError: Python metric callbacks are not accepted; use a connected native mojolearn metric")
-    if function.__code__ is not plan["code"]:
+    # Native function metadata avoids function.__code__'s audit callback while
+    # preserving its connected-code identity check at every scoring boundary.
+    ref cpy = Python().cpython()
+    var code = cpy.lib.get_function[PyObjectPtr]("PyFunction_GetCode")(function._obj_ptr)
+    if not code:
+        raise cpy.unsafe_get_error()
+    if code != plan["code"]._obj_ptr:
         raise Error("TypeError: the connected metric function was modified")
     return plan
 
@@ -72,51 +79,236 @@ def msel_scorer_fields(scorer: PythonObject, context: PythonObject) raises -> Py
     return fields
 
 
+struct _MetricItems(Movable):
+    # Exact-dict identity snapshot. Native iteration neither hashes foreign
+    # keys nor builds a Python key list; retained keys/values pin identities.
+    var kind: PythonObject
+    var keys: List[PythonObject]
+    var values: List[PythonObject]
+
+    def __init__(out self):
+        self.kind = PythonObject(None)
+        self.keys = List[PythonObject]()
+        self.values = List[PythonObject]()
+
+    def capture(mut self, value: PythonObject, dict_type: PythonObject, str_type: PythonObject) raises -> Bool:
+        self.kind = py_type(value)
+        self.keys = List[PythonObject]()
+        self.values = List[PythonObject]()
+        if self.kind is not dict_type:
+            return False
+        ref cpy = Python().cpython()
+        var position = 0
+        var key = PyObjectPtr()
+        var item = PyObjectPtr()
+        var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+        for i in range(len(value)):  # driver-loop: capture admitted option references once after preparation
+            if next_item(value._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=item)) == 0:
+                return False
+            var owner = PythonObject(from_owned=cpy.Py_NewRef(key))
+            if py_type(owner) is not str_type:
+                return False
+            self.keys.append(owner)
+            self.values.append(PythonObject(from_owned=cpy.Py_NewRef(item)))
+        _ = value  # dictionary owns borrowed slots through the last NewRef
+        return True
+
+    def same(self, value: PythonObject) raises -> Bool:
+        if py_type(value) is not self.kind or len(value) != len(self.keys):
+            return False
+        ref cpy = Python().cpython()
+        var position = 0
+        var key = PyObjectPtr()
+        var item = PyObjectPtr()
+        var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+        for i in range(len(self.keys)):  # driver-loop: check mutable options after every prediction/GIL boundary
+            if next_item(value._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=item)) == 0:
+                return False
+            if key != self.keys[i]._obj_ptr or item != self.values[i]._obj_ptr:
+                return False
+        return True
+
+
+def _metric_recipe_stable(recipe: PythonObject, inputs: PythonObject, allowed: PythonObject,
+                          operation: PythonObject, b: PythonObject) raises -> Bool:
+    # Import-connected recipes are tuples of two-word tuples and immutable
+    # scalar names/constants. Noncanonical mutable schemas still execute via
+    # ordinary preparation on every call; they never enter the reuse path.
+    if py_type(recipe) is not b.tuple or py_type(inputs) is not b.tuple or py_type(allowed) is not b.tuple or py_type(operation) is not b.str:
+        return False
+    for i in range(len(inputs)):  # driver-loop: immutable input-name schema
+        if py_type(inputs[i]) is not b.str:
+            return False
+    for i in range(len(allowed)):  # driver-loop: immutable allowed-key schema
+        if py_type(allowed[i]) is not b.str:
+            return False
+    for i in range(len(recipe)):  # driver-loop: immutable native ABI recipe schema
+        var item = recipe[i]
+        if py_type(item) is not b.tuple or len(item) != 2 or py_type(item[0]) is not b.str:
+            return False
+        var kind = py_type(item[1])
+        if item[1] is not None and kind is not b.str and kind is not b.bool and kind is not b.int and kind is not b.float:
+            return False
+    return True
+
+
+struct MselMetricPrepared(Movable):
+    # One scorer's metadata-only template within a CV operation. Public scorer
+    # admission still runs each score; options/schema/module identities are
+    # checked after prediction, since native execution may have released GIL.
+    # No estimator, fit state, y, prediction or result is retained here.
+    var reusable: Bool
+    var ready: Bool
+    var function: PythonObject
+    var plan: PythonObject
+    var recipe: PythonObject
+    var inputs: PythonObject
+    var allowed: PythonObject
+    var entry: PythonObject
+    var operation: PythonObject
+    var metric_context: PythonObject
+    var defaults: _MetricItems
+    var keywords: _MetricItems
+    var arguments: List[PythonObject]
+    var sources: List[Int]
+    var binding_keys: List[PythonObject]
+    var binding_values: List[PythonObject]
+    var uses_default_mode: Bool
+    var default_mode: PythonObject
+
+    def __init__(out self, reusable: Bool = False):
+        self.reusable = reusable
+        self.ready = False
+        self.function = PythonObject(None)
+        self.plan = PythonObject(None)
+        self.recipe = PythonObject(None)
+        self.inputs = PythonObject(None)
+        self.allowed = PythonObject(None)
+        self.entry = PythonObject(None)
+        self.operation = PythonObject(None)
+        self.metric_context = PythonObject(None)
+        self.defaults = _MetricItems()
+        self.keywords = _MetricItems()
+        self.arguments = List[PythonObject]()
+        self.sources = List[Int]()
+        self.binding_keys = List[PythonObject]()
+        self.binding_values = List[PythonObject]()
+        self.uses_default_mode = False
+        self.default_mode = PythonObject(None)
+
+    def same(self, function: PythonObject, plan: PythonObject, keywords: PythonObject,
+             context: PythonObject) raises -> Bool:
+        if not self.ready or function is not self.function or plan is not self.plan:
+            return False
+        if (plan["recipe"] is not self.recipe or plan["inputs"] is not self.inputs
+                or plan["allowed"] is not self.allowed or plan["entry"] is not self.entry
+                or plan["operation"] is not self.operation or plan["context"] is not self.metric_context):
+            return False
+        if not self.defaults.same(plan["defaults"]) or not self.keywords.same(keywords):
+            return False
+        if self.uses_default_mode and context["family_msel_backend_fields"]["_DEFAULT_MODE"] is not self.default_mode:
+            return False
+        for i in range(len(self.binding_keys)):  # driver-loop: selected native binding owners remain current
+            if context["family_msel_metric_bindings"][self.binding_keys[i]] is not self.binding_values[i]:
+                return False
+        return True
+
+    def prepare(mut self, function: PythonObject, plan: PythonObject, y: PythonObject,
+                predicted: PythonObject, keywords: PythonObject, context: PythonObject,
+                b: PythonObject) raises:
+        self.ready = False
+        self.function = function
+        self.plan = plan
+        self.recipe = plan["recipe"]
+        self.inputs = plan["inputs"]
+        self.allowed = plan["allowed"]
+        self.entry = plan["entry"]
+        self.operation = plan["operation"]
+        self.metric_context = plan["context"]
+        self.arguments = List[PythonObject]()
+        self.sources = List[Int]()
+        self.binding_keys = List[PythonObject]()
+        self.binding_values = List[PythonObject]()
+        self.uses_default_mode = False
+        var values = py_call(b.dict, plan["defaults"])
+        py_setitem(values, self.inputs[0], y)
+        py_setitem(values, self.inputs[1], predicted)
+        var keys = py_call(b.list, keywords.keys())
+        for k in range(len(keys)):  # driver-loop: preserve ordered metric keyword refusals on preparation
+            var name = keys[k]
+            if py_type(name) is not b.str or not py_contains(self.allowed, name):
+                raise Error("TypeError: native metric received an unexpected keyword argument")
+            if name is self.inputs[0] or name is self.inputs[1] or Bool(py=name == self.inputs[0]) or Bool(py=name == self.inputs[1]):
+                raise Error("TypeError: native metric received multiple values for a positional input")
+            py_setitem(values, name, keywords[name])
+        for k in range(len(self.recipe)):  # driver-loop: compile fixed ABI tags/options once per unchanged schema
+            var item = self.recipe[k]
+            var tag = String(item[0])
+            var source = 0
+            var value: PythonObject
+            if tag == "parameter":
+                value = values[item[1]]
+                if Bool(py=item[1] == self.inputs[1]):
+                    source = 2
+                elif Bool(py=item[1] == self.inputs[0]):
+                    source = 1
+            elif tag == "binding":
+                var mode = PythonObject(None) if item[1] is None else values[item[1]]
+                if mode is None:
+                    mode = context["family_msel_backend_fields"]["_DEFAULT_MODE"]
+                    self.uses_default_mode = True
+                    self.default_mode = mode
+                if py_type(mode) is not b.str:
+                    raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
+                var clean = py_call(py_call(mode.strip).lower)
+                if String(clean) != "identical" and String(clean) != "fast":
+                    raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
+                value = context["family_msel_metric_bindings"][clean]
+                if py_type(value) is b.str:
+                    raise Error(String(value))
+                self.binding_keys.append(clean)
+                self.binding_values.append(value)
+            else:
+                value = item[1]
+            self.sources.append(source)
+            self.arguments.append(PythonObject(None) if source != 0 else value)
+        # Single-call public wrappers do not capture a cache they cannot reuse.
+        self.ready = (self.reusable and _metric_recipe_stable(self.recipe, self.inputs, self.allowed, self.operation, b)
+            and self.defaults.capture(plan["defaults"], b.dict, b.str)
+            and self.keywords.capture(keywords, b.dict, b.str))
+
+    def call(mut self, function: PythonObject, y: PythonObject, predicted: PythonObject,
+             keywords: PythonObject, context: PythonObject) raises -> PythonObject:
+        var b = native_loaded_module("builtins")
+        var plan = msel_metric_plan(function, context)
+        var entry = plan["entry"]
+        if entry is None or py_type(entry) is not py_type(b.len):
+            raise Error("ImportError: native scorer metric binding is unavailable")
+        if py_type(keywords) is not b.dict:
+            raise Error("TypeError: native metric keywords must be an exact dict")
+        msel_admit(keywords, context)
+        if not self.same(function, plan, keywords, context):
+            self.prepare(function, plan, y, predicted, keywords, context, b)
+        # Fresh immutable call arguments: no tuple retained by an entry can be
+        # mutated by a later phase, and dynamic y/predicted never enter template.
+        ref cpy = Python().cpython()
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyTuple_New")(len(self.arguments))
+        if not raw:
+            raise cpy.unsafe_get_error()
+        var envelope = PythonObject(from_owned=raw)
+        var put = cpy.lib.get_function[Int32]("PyTuple_SetItem")
+        for i in range(len(self.arguments)):  # driver-loop: native ABI slots and owned references only
+            var value = y if self.sources[i] == 1 else predicted if self.sources[i] == 2 else self.arguments[i]
+            # SetItem steals the new reference, including on failure.
+            if put(envelope._obj_ptr, i, cpy.Py_NewRef(value._obj_ptr)) != 0:
+                raise cpy.unsafe_get_error()
+        return family_call(entry, PythonObject(None), self.operation, envelope, self.metric_context)
+
+
 def msel_metric_call(function: PythonObject, y: PythonObject, predicted: PythonObject,
                      keywords: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    var plan = msel_metric_plan(function, context)
-    var entry = plan["entry"]
-    if entry is None or py_type(entry) is not py_type(b.len):
-        raise Error("ImportError: native scorer metric binding is unavailable")
-    if py_type(keywords) is not b.dict:
-        raise Error("TypeError: native metric keywords must be an exact dict")
-    msel_admit(keywords, context)
-    var values = py_call(b.dict, plan["defaults"])
-    py_setitem(values, plan["inputs"][0], y)
-    py_setitem(values, plan["inputs"][1], predicted)
-    var keys = py_call(b.list, keywords.keys())
-    for k in range(len(keys)):  # driver-loop: admitted metric keyword metadata
-        var name = keys[k]
-        if py_type(name) is not b.str or not py_contains(plan["allowed"], name):
-            raise Error("TypeError: native metric received an unexpected keyword argument")
-        if name is plan["inputs"][0] or name is plan["inputs"][1] or Bool(py=name == plan["inputs"][0]) or Bool(py=name == plan["inputs"][1]):
-            raise Error("TypeError: native metric received multiple values for a positional input")
-        py_setitem(values, name, keywords[name])
-    var envelope = Python.list()
-    var recipe = plan["recipe"]
-    for k in range(len(recipe)):  # driver-loop: fixed native metric ABI arguments
-        var item = recipe[k]
-        var tag = String(item[0])
-        var value: PythonObject
-        if tag == "parameter":
-            value = values[item[1]]
-        elif tag == "binding":
-            var mode = PythonObject(None) if item[1] is None else values[item[1]]
-            if mode is None:
-                mode = context["family_msel_backend_fields"]["_DEFAULT_MODE"]
-            if py_type(mode) is not b.str:
-                raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
-            var clean = py_call(py_call(mode.strip).lower)
-            if String(clean) != "identical" and String(clean) != "fast":
-                raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
-            value = context["family_msel_metric_bindings"][clean]
-            if py_type(value) is b.str:
-                raise Error(String(value))
-        else:
-            value = item[1]
-        _ = py_call(envelope.append, value)
-    return family_call(entry, PythonObject(None), plan["operation"], py_call(b.tuple, envelope), plan["context"])
+    var prepared = MselMetricPrepared()
+    return prepared.call(function, y, predicted, keywords, context)
 
 
 def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -138,6 +330,13 @@ def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> Pyt
 
 def msel_scorer_call(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
                      sample_weight: PythonObject, memo: PythonObject, context: PythonObject) raises -> PythonObject:
+    var prepared = MselMetricPrepared()
+    return PythonObject(msel_scorer_value(scorer, estimator, x, y, sample_weight, memo, context, prepared))
+
+
+def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
+                     sample_weight: PythonObject, memo: PythonObject, context: PythonObject,
+                      mut prepared: MselMetricPrepared) raises -> Float64:
     var b = native_loaded_module("builtins")
     var fields = msel_scorer_fields(scorer, context)
     var model = msel_estimator_plan(estimator, context)
@@ -180,14 +379,14 @@ def msel_scorer_call(scorer: PythonObject, estimator: PythonObject, x: PythonObj
     if py_type(keywords) is not b.dict:
         raise Error("TypeError: native scorer keyword options must be an exact dict")
     msel_admit(keywords, context)
-    keywords = py_call(b.dict, keywords)
     if sample_weight is not None:
+        keywords = py_call(b.dict, keywords)
         py_setitem(keywords, "sample_weight", sample_weight)
-    var result = msel_metric_call(fields["_score_func"], y, predicted, keywords, context)
+    var result = prepared.call(fields["_score_func"], y, predicted, keywords, context)
     classical_connect_numpy(context)
     if not metric_is_real(result, context):
         raise Error("TypeError: scoring must return a real scalar")
     var sign = fields["_sign"]
     if py_type(sign) is not b.int or (Int(py=sign) != 1 and Int(py=sign) != -1):
         raise Error("TypeError: native scorer sign must be 1 or -1")
-    return PythonObject(Float64(Int(py=sign)) * metric_float(result, context))
+    return Float64(Int(py=sign)) * metric_float(result, context)

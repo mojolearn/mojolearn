@@ -1,0 +1,88 @@
+Reusable native scorer metric recipes and scalar return path, 2026-10-28
+Branch lane/scorer-recipe-reuse-20261028; base current main 7965f31955.
+Scope: msel_scorer_native, shared msel_score interface, CV scoring consumer.
+No parameter-grid/search source, public class installation or mode-connection edit.
+
+Repeated work removed:
+For each CV scoring slot, MselMetricPrepared retains a metadata-only metric ABI
+template. After initial preparation, unchanged scores no longer copy defaults,
+merge the same kwargs, reinterpret every recipe tag/name, normalize the same
+numeric-mode string, or reconstruct the Python list used only to make an ABI
+tuple. Native source tags select y/predicted slots; constant option references
+populate other slots. The call builds one fresh sized tuple with CPython-owned
+reference transfers. Public scalar wrappers retain their Python float result;
+CV uses msel_score_value/msel_scorer_value Float64 directly, removing repeated
+float reboxing/unboxing and real-type rechecking of the already-native result.
+No arithmetic ordering or numerical kernels change.
+
+Scorer/function admission and ordering:
+Every score still checks the mutable public scorer class/hooks, exact scorer
+class/field keys, metric function identity/code, estimator/response selection,
+prediction memo, scorer name, kwargs admission, metric result type and sign.
+Options are examined after prediction, and sign after metric execution, matching
+the original mutation boundaries. Function code identity now uses the documented
+PyFunction_GetCode API instead of the __code__ descriptor, avoiding an audit
+callback while keeping the changed-code refusal. A sample-weight override still
+copies kwargs before adding it; ordinary no-override scoring no longer makes an
+otherwise unused kwargs copy. Keyword admission is retained even on cache hits.
+
+Setup/reuse and invalidation:
+- One template owner per CV scoring slot, created within that CV invocation.
+  It contains no estimator, fitted state, prediction memo, score result or
+  dynamic y/predicted input. Existing train/test prediction memos remain separate
+  and die at each fold; no prediction/data reuse is widened by this batch.
+- After every prediction boundary (which may release GIL), compare function and
+  plan identity; recipe/inputs/allowed/entry/operation/context root identities;
+  exact default and keyword dictionary key/value identities; the actual default
+  mode if used; and selected native binding identities. A difference rebuilds
+  the template before calling the metric. Fits/candidates may change any of
+  those inputs: the next score performs the same fresh admission and checks.
+- Only immutable exact tuple schemas with immutable scalar names/constants can
+  enable reuse. Noncanonical mutable schemas retain ordinary preparation on
+  every call rather than being cached by outer-object identity.
+- Native dictionary snapshots use PyDict_Next and retained key/value owners.
+  They neither allocate Python key lists nor hash a newly introduced foreign
+  key. Length/order/key/value changes conservatively invalidate. Nested mutable
+  option owners are referenced, not normalized/copied: their current contents
+  still reach the existing metric input admission on every metric execution.
+- Single-use public metric/scorer wrappers disable snapshot capture entirely;
+  only the reusable CV slot owners pay for snapshots. No unvalidated global
+  cache and no template survives the owning CV operation/search candidate.
+
+Ownership and ABI:
+Each call gets a fresh immutable argument tuple; a native metric retaining it
+cannot observe a later phase mutating its slots. Dynamic input source slots in
+the template hold None, never the current y/predicted objects. Explicit scorer
+options can themselves reference data, and remain owned until invalidation or
+operation end, as ordinary retained option metadata. PyTuple_SetItem steals one
+Py_NewRef on success and failure; PythonObject cleans partial tuples on errors.
+Dictionary snapshot borrowed items are increfed before storage, with an explicit
+source-dictionary keepalive through the final acquisition. All metadata/scalar
+owners remain alive through their last use. No new raw numeric-buffer pointer.
+The external scorer/metric interfaces keep PythonObject results; Float64 is an
+internal consumer interface only.
+
+Compilation and checks:
+Final affected compile exit 0, 28.04 seconds: actual msel_cross_validate and
+msel_learning_curve operations plus direct msel_scorer_call public entry wrapper.
+Apple CPU identical O0, ten workers under compile_slot. Source/archive/compiler/
+flags/allocation and binary hashes retained in compile.json. First compile also
+passed; source review then disabled unnecessary snapshot capture for one-shot
+wrappers, so final changed source was compiled again. The first successful
+source/binary/logs remain under attempt-1-before-single-call-bypass/.
+No runtime, identity, benchmark or GPU campaign. No measured speedup claim.
+Source guards retained beside build evidence; root owns serialized integration.
+
+Remaining work/limits:
+Per-score scorer/class/estimator admission, option-content admission, metadata
+identity checks and metric input/output validation still run. Each distinct
+prediction response still invokes the existing compiled estimator; no model
+recipe is cached here. Direct one-shot calls do not gain cross-call reuse.
+Keyword dictionaries reordered or replaced with equal but differently owned
+values conservatively reprepare. The fixed metric compiled-call ABI still uses
+Python objects and a fresh tuple; this is a structural reduction, not complete
+native-only argument/result transport.
+
+Evidence: ~/mojolearn-evidence/scorer-recipe-reuse-20261028/
+compile.log/json, source-manifest.json, source-bytes.tgz,
+_scorer_recipe_reuse.so, source-guards.json and individual guard logs.

@@ -30,7 +30,7 @@ from bindings.msel_common import (
     msel_take_labels, msel_b, msel_n_samples, msel_admit, msel_entry, msel_try, msel_missed, msel_catch, msel_is_bool, msel_is_integral, msel_is_real, msel_int,
     msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr, msel_p64, msel_pf64,
     msel_new, msel_f64_list, msel_index_i64, msel_resident_new, msel_resident_op, msel_resident_take,
-    msel_resident_release, msel_resident_close, msel_get_scorer, msel_score, msel_lazy,
+    msel_resident_release, msel_resident_close, msel_get_scorer, msel_score, msel_score_value, MselMetricPrepared, msel_lazy,
 )
 from bindings.msel_split import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_flag_truth, msel_cls, msel_sabotage
 
@@ -429,6 +429,12 @@ def msel_cross_validate_run(estimator: PythonObject, y: PythonObject, mut rows: 
         single = msel_get_scorer(scoring, context)
         _ = py_call(keys.append, PythonObject("score"))
     var out = MselScores(keys)
+    # Only metric ABI/options live across folds. Every score still admits its
+    # current public scorer and rechecks template identities after prediction;
+    # fits/phases share no model metadata, dynamic inputs or prediction cache.
+    var metric_plans = List[MselMetricPrepared]()
+    for k in range(len(keys)):  # driver-loop: metadata-only template owner per scoring slot
+        metric_plans.append(MselMetricPrepared(True))
     var raise_errors = family_is_str(error_score)
     var folds = rows.folds
     for i in range(len(folds)):  # driver-loop: over folds
@@ -463,9 +469,9 @@ def msel_cross_validate_run(estimator: PythonObject, y: PythonObject, mut rows: 
                 train_memo = Python.dict()
         for k in range(len(keys)):  # driver-loop: over scorer names
             var sc = multi[keys[k]] if multi is not None else single
-            out.test[k].append(Float64(py=msel_score(est, xte, yte, sc, context, test_memo)) if ok else msel_error_value(error_score))
+            out.test[k].append(msel_score_value(est, xte, yte, sc, context, test_memo, metric_plans[k]) if ok else msel_error_value(error_score))
             if return_train:
-                out.train[k].append(Float64(py=msel_score(est, xtr, ytr, sc, context, train_memo)) if ok else msel_error_value(error_score))
+                out.train[k].append(msel_score_value(est, xtr, ytr, sc, context, train_memo, metric_plans[k]) if ok else msel_error_value(error_score))
         # End both owner lifetimes before the next clone/fit. No response can
         # survive into another fold, candidate or public operation.
         _ = test_memo^
