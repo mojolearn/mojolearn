@@ -1,0 +1,51 @@
+{
+  "status": "prepared-pending-fixed-source-and-install",
+  "registry_basis": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "partitions": {
+    "gpu-a": {
+      "lanes_file": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/next-fixed-freeze-two-gpu/gpu-a.lanes",
+      "lanes_sha256": "49ac2c363217b4ddd265c4f43fba027d4077240ef35fc1cb4d0a55c140843205",
+      "count": 250,
+      "phase_counts": {
+        "routine-all": 208,
+        "training-all": 42
+      },
+      "output_root": "/root/results-next-verifier/gpu-a",
+      "records_root": "/root/verification-records-gpu-a",
+      "configuration": "/root/verifier-controller/controller-gpu-a.json",
+      "cpu_threads_per_unit": 10,
+      "cuda_visible_devices": "PENDING_ACTUAL_SINGLE_GPU_UUID",
+      "execution_authorized": false
+    },
+    "gpu-b": {
+      "lanes_file": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/next-fixed-freeze-two-gpu/gpu-b.lanes",
+      "lanes_sha256": "b986f945d8120260b5bb61f05998f3445deaa4423865ce462c3dc025c6b885cc",
+      "count": 250,
+      "phase_counts": {
+        "routine-all": 208,
+        "training-all": 42
+      },
+      "output_root": "/root/results-next-verifier/gpu-b",
+      "records_root": "/root/verification-records-gpu-b",
+      "configuration": "/root/verifier-controller/controller-gpu-b.json",
+      "cpu_threads_per_unit": 10,
+      "cuda_visible_devices": "PENDING_ACTUAL_SINGLE_GPU_UUID",
+      "execution_authorized": false
+    }
+  },
+  "full_scope": {
+    "registry": 572,
+    "single_device_per_gpu_vendor": 500,
+    "cpu_reference": 510,
+    "physical_parallel": 59
+  },
+  "contract": [
+    "Generate configs only after new frozen source/install/binding context and sole-writer500-unit begin. Keep original bc launch immutable.",
+    "Both configs reference the same new immutable500-unit launch packet and readonly ledger snapshot; each has its own250-only chunkfile, output root and records worktree. No remote ledger writes.",
+    "Before starting either process, owner renews a protected60minute lease and records exact deadline. Use v5 processgroup timeout + retention reserve and finite max-units. SSH ServerAliveInterval15/ServerAliveCountMax2.",
+    "Set CUDA_VISIBLE_DEVICES to a distinct observed GPU UUID for each complete controller process. Retain original nvidia-smi physical UUID list plus per-process native selected logicaldevice0 proof and visible count1 before fits. No proof exists yet.",
+    "Retain actual affinity/cgroup allocation. Each unit declares10CPUthreads; two controllers declare20combined within root-observed35allocation. This is correctness verification, not a timing/utilization claim.",
+    "Run routine-all then training-all per partition, stop on genuine failure. Both partitions finish/stop and release GPUs before exclusive59parallel one-vs-two-device qualification.",
+    "CPU510reference and PTXselected-route checks remain separately pending. Adapter smokes qualify integration, never duplicate arithmetic identity rows."
+  ]
+}

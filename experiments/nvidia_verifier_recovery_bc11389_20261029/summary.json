@@ -1,0 +1,25 @@
+{
+  "source_revision": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "run_id": "d8d737b13c2f1448c514db077d1b07d23d7f16b6f94f6cf7fb3dc3ccc6ce373a",
+  "original_launch": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/full-bc11389/launches/nvidia-all/identity-launch-nvidia-2026-10-29T151959.900553+0000.json",
+  "original_launch_sha256": "29eadae46617e758cddd8eee902fad06fde2c0338edbad3096bdf43e7ec31bc4",
+  "failed_lanes": [
+    "agglomerative"
+  ],
+  "retained_main_gpu_fixture_observations": 9,
+  "retained_main_gpu_counts": {
+    "DIVERGENT": 0,
+    "IDENTICAL": 36,
+    "N/A": 45,
+    "OWED": 0,
+    "REFUSED": 0
+  },
+  "failed_crosscheck_workers": 9,
+  "missing_crosscheck_parts": 18,
+  "numerical_divergence_asserted": false,
+  "other_launched_units_pending": 499,
+  "later_runtime_evidence_found": false,
+  "lost_incomplete_lane_identified": null,
+  "scope": "Exact R2 prefix had one completed lane packet; executor stops immediately after retained local_complete=false. No later lane is inferred executed. Pod-level final exit/status not recovered; lane CLIexit4 is retained.",
+  "ledger_new_attempt": true
+}
