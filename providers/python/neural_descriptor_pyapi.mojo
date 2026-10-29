@@ -7,8 +7,7 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
-from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_prepared_owner import prepared_namespace_admitted, prepared_namespace_admit
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call_spans
 from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLease
@@ -57,42 +56,46 @@ def neural_descriptor_capsule(mut name: String, entries: List[NativeDescriptorCa
     return PythonObject(from_owned=capsule)
 
 
-def _neural_descriptor_dictionary(fields: PythonObject) raises:
-    var bi = native_loaded_module("builtins")
+def _neural_descriptor_keys(fields: PythonObject, string_type: PythonObject) raises:
+    # Admit ALL live keys before any keyed read. The shared native iterator
+    # neither constructs dict.keys()/list objects nor hashes caller keys.
+    if not native_namespace_string_keys(fields._obj_ptr, string_type):
+        raise Error("TypeError: neural provider metadata keys require exact strings")
+
+
+def _neural_descriptor_dictionary(fields: PythonObject, bi: PythonObject) raises:
     if py_type(fields) is not bi.dict:
         raise Error("TypeError: neural provider metadata requires an exact dictionary")
-    var keys = py_call(bi.list, fields.keys())
-    for i in range(len(keys)):  # small-loop(keys: entry names of one descriptor metadata dictionary): checks key types only, never data
-        if py_type(keys[i]) is not bi.str:
-            raise Error("TypeError: neural provider metadata keys require exact strings")
+    _neural_descriptor_keys(fields, bi.str)
 
 
-def _neural_descriptor_entry_fields(entries: PythonObject) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
-    var cls = py_type(entries)
+def _neural_descriptor_module_fields(module: PythonObject, bi: PythonObject) raises -> PythonObject:
+    # The caller has already admitted an exact module, so these are its native
+    # dictionary fields. Reuse its current builtins connection through this
+    # GIL-held, callback-free admission rather than reconnecting per helper.
     ref cpy = Python().cpython()
-    var fields = PythonObject(None)
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
+    _neural_descriptor_keys(fields, bi.str)
+    return fields
+
+
+def _neural_descriptor_entry_fields(entries: PythonObject, bi: PythonObject) raises -> PythonObject:
+    var cls = py_type(entries)
     if cls is py_type(bi):
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(entries._obj_ptr)
-        if not raw:
-            raise cpy.unsafe_get_error()
-        fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
-        # Check live keys by native iteration, without a Python key list.
-        var mods = NativeModules()
-        if prepared_namespace_admitted(mods, entries, fields):
-            return fields
-        _neural_descriptor_dictionary(fields)
-        prepared_namespace_admit(mods, entries, fields)
-        return fields
+        return _neural_descriptor_module_fields(entries, bi)
     elif cls is native_loaded_module("types").SimpleNamespace:
+        ref cpy = Python().cpython()
         var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
         if not raw:
             raise cpy.unsafe_get_error()
-        fields = PythonObject(from_owned=raw)
+        var fields = PythonObject(from_owned=raw)
+        _neural_descriptor_keys(fields, bi.str)
+        return fields
     else:
         raise Error("TypeError: neural provider entries require a native module or namespace")
-    _neural_descriptor_dictionary(fields)
-    return fields
 
 
 def neural_descriptor_entry(module: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
@@ -102,7 +105,7 @@ def neural_descriptor_entry(module: PythonObject, name: String, required: Bool =
     var bi = native_loaded_module("builtins")
     if py_type(module) is not py_type(bi):
         raise Error("TypeError: native provider requires an exact compiled module")
-    var entry = py_get(_neural_descriptor_entry_fields(module), name)
+    var entry = py_get(_neural_descriptor_module_fields(module, bi), name)
     if entry is None and not required:
         return entry
     if entry is None or py_type(entry) is not py_type(bi.len) or entry.__self__ is not module:
@@ -159,8 +162,8 @@ def neural_descriptor_cached(
     # Capture the explicit candidate switch once per owner. A later native
     # binding replacement reconnects rather than reusing a stale table/image.
     var bi = native_loaded_module("builtins")
-    _neural_descriptor_dictionary(fields)
-    var entry_fields = _neural_descriptor_entry_fields(entries)
+    _neural_descriptor_dictionary(fields, bi)
+    var entry_fields = _neural_descriptor_entry_fields(entries, bi)
     var canonical = py_get(entry_fields, "canonical", entries)
     var binding_key = slot + "_binding"
     if py_contains(fields, slot) and py_get(fields, binding_key) is canonical:

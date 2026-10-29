@@ -1,0 +1,37 @@
+Neural descriptor native dictionary admission, 2026-10-28
+Branch: lane/neural-descriptor-reuse-20261028
+Base: 00f6dcffd6a721a03008b4f9b3ad6d1dced7950a
+
+Removed work:
+Descriptor admission no longer calls dict.keys(), builds a Python list, indexes
+that list as Python objects or revalidates the builtins module in nested helper
+calls. It uses the existing shared native live dictionary-key iterator. Exact
+module entry lookup no longer repeats its module-type check in a second helper.
+The empty NativeModules object and now-no-op prepared admission call disappear.
+
+Reuse/setup/invalidation:
+Each descriptor entry/cache admission captures its existing validated builtins
+connection once and passes it through its GIL-held, callback-free dictionary
+helpers. Current native module or exact SimpleNamespace dictionaries are still
+retrieved each operation. EVERY live key is checked for exact str before any
+keyed lookup. Same-size delete/insert edits and non-string keys remain visible;
+no persistent dictionary stamp/cache or weaker validity assumption is added.
+Exact dictionary/module/namespace type restrictions and refusal texts remain.
+Shared native key iteration avoids key hashing/equality callbacks during checks.
+
+Compilation:
+Focused public CausalLM forward/generate Mac CPU compilation passed, rc0,
+identical, O0. The new module/namespace admission helpers are in this source
+closure. Exact command, binary/source hashes in compile.json. No runtime,
+identity or performance campaign. Root owns final main/push guards; lane guards
+are recorded in the evidence directory and reported with the commit.
+
+Evidence: ~/mojolearn-evidence/neural-descriptor-admission-20261028/
+Complete build output, binary, exit receipt and conservative full tracked-Mojo
+source hash manifest retained on Mac. No rented box or watcher service.
+
+Remaining:
+Live key scans still call supported CPython dictionary iteration/type APIs.
+Entry values, provider construction, binding metadata and module validation still
+use Python objects at admission. Execution downcasts and GIL transitions remain.
+No performance measurement or full Python-free claim.
