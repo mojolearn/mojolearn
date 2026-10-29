@@ -1,0 +1,9 @@
+{
+  "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/coordination-archives/095ab-compile-admission-and-transitions.tar.gz",
+  "key": "verification/0.8.63/095ab32829/coordination/compile-admission/12729d38b6a5046bfa23c82628b6ae72e6349cdc099ec1723c79911d6d9ea615.tar.gz",
+  "sha256": "12729d38b6a5046bfa23c82628b6ae72e6349cdc099ec1723c79911d6d9ea615",
+  "bytes": 33964703,
+  "readback_verified": true,
+  "snapshot_at": "2026-10-29T10:40:08.253311+00:00",
+  "scope": "Retrospective compile evidence and explicit superseded observation qualifications at095; not final identity or publication qualification. NewArraytokenizer pending nextfreeze."
+}

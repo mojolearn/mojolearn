@@ -44,5 +44,14 @@
       "compile-cpu/linux-64/host/-/host/_mojolearn_tokenizer_host"
     ]
   },
-  "scope": "Retrospective compile admission against095ab only, no runtime/identity. New Array tokenizer supersedes095 tokenizer; its two Mac requirements need new receipt at next freeze. LinuxCPU originals are absent because release CPUreference isosx; NV/AMDhost obligations remain."
+  "scope": "Retrospective compile admission against095ab only, no runtime/identity. New Array tokenizer supersedes095 tokenizer; its two Mac requirements need new receipt at next freeze. LinuxCPU originals are absent because release CPUreference isosx; NV/AMDhost obligations remain.",
+  "mac-gpu-admitted": {
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/mac-development-workers-20261029/admit.json",
+    "sha256": "208a9331dc02a3e1c069dd05113f7f8680bffd5cf84a291e8fc4c000b3426927",
+    "requirements": 33,
+    "actions": {
+      "reuse": 33
+    },
+    "scope": "All33 actual mergedGPU groups; preparation and admission0. No new native builds."
+  }
 }
