@@ -422,11 +422,26 @@ def msel_cross_validate_run(estimator: PythonObject, y: PythonObject, mut rows: 
                     raise error^
                 ok = False
         var t1 = msel_seconds()
+        # Several named metrics often consume the same response of this fitted
+        # clone. The native scorer already retains predictions by response
+        # method (and the binary probability column); share that work only
+        # within this fold and data phase. Separate train/test owners preserve
+        # the existing interleaved scorer order without mixing their inputs.
+        var test_memo = PythonObject(None)
+        var train_memo = PythonObject(None)
+        if ok and multi is not None and len(keys) > 1:
+            test_memo = Python.dict()
+            if return_train:
+                train_memo = Python.dict()
         for k in range(len(keys)):  # driver-loop: over scorer names
             var sc = multi[keys[k]] if multi is not None else single
-            out.test[k].append(Float64(py=msel_score(est, xte, yte, sc, context)) if ok else msel_error_value(error_score))
+            out.test[k].append(Float64(py=msel_score(est, xte, yte, sc, context, test_memo)) if ok else msel_error_value(error_score))
             if return_train:
-                out.train[k].append(Float64(py=msel_score(est, xtr, ytr, sc, context)) if ok else msel_error_value(error_score))
+                out.train[k].append(Float64(py=msel_score(est, xtr, ytr, sc, context, train_memo)) if ok else msel_error_value(error_score))
+        # End both owner lifetimes before the next clone/fit. No response can
+        # survive into another fold, candidate or public operation.
+        _ = test_memo^
+        _ = train_memo^
         out.fit_time.append(t1 - t0)
         out.score_time.append(msel_seconds() - t1)
         if return_estimator:

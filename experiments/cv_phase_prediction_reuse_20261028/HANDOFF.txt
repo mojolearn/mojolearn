@@ -1,0 +1,56 @@
+Cross-validation prediction reuse between named scorers, 2026-10-28
+
+Branch: lane/classical-direct-rows-20261028. Scout report precedes this batch in
+commit d973e05524; product source base 249031017b.
+
+Repeated work removed:
+msel_cross_validate_run previously called msel_score independently for every
+named metric. msel_score always disabled the native scorer's existing memo, so
+metrics using the same response repeatedly invoked estimator prediction, native
+estimator admission/dispatch and probability-column materialization.
+The scoring loop now passes a private memo through msel_score. Existing native
+scorer logic reuses predictions by selected response method and, where needed,
+the binary probability column. Numerical metric execution still occurs for
+every requested scorer. No new arithmetic or performance switches.
+
+Setup/reuse and invalidation:
+- One fresh test memo per successfully fitted fold with multiple named scorers.
+- A separate train memo only when train scoring is requested.
+- Both are explicitly consumed after that fold's interleaved scorer loop, before
+  the next clone/fit. Search candidates call the same loop with fresh locals.
+- No sharing across train/test inputs, folds, estimator clones, fits, candidates
+  or public operations. Single scorers and failed fits allocate no memo dicts.
+- scorer=None still uses estimator.score directly and ignores the memo.
+- Existing scorer order, response preference selection, native-only scorer/class
+  admission, metric keyword checks and fit-error handling stay in place.
+
+Ownership/source review:
+The memo retains its prediction and probability-column objects until the final
+scorer use. No raw pointer is introduced or newly hoisted. Native metric entry
+owners use metric_arguments/metric_input_snapshot, which copy admitted Array,
+ndarray and container inputs into private metric state; they do not overwrite
+these retained prediction outputs. Scorer class/function identity and memo
+admission remain in msel_scorer_call. This is source review, not runtime proof.
+
+Compilation:
+One focused compile of the final changed source passed: actual msel_cross_validate
+operation, msel_cross_validate_run loop, msel_score and native scorer memo path;
+Apple CPU identical O0, ten workers under tools/compile_slot.sh. See compile.json.
+The fixture was not executed. No runtime, identity, performance or GPU campaign.
+No rented box and no measured speedup claim.
+
+Remaining limits:
+Scorer/estimator recipe scans, Python-object memo admission, metric snapshots and
+the existing compiled-helper ABI still run. One response per distinct method can
+remain live in each memo until the phase ends, increasing live output storage;
+there is no reuse between phases/folds. GridSearchCV/RandomizedSearchCV use the
+same changed helper, but this receipt does not claim a full search-root build.
+Direct resident-row frontdoors and native private entry metadata remain next
+opportunities, documented in experiments/native_overhead_opportunities_20261028/
+OPPORTUNITIES.txt. Public ABI and compiled predictor/metric arithmetic unchanged.
+
+Complete evidence: ~/mojolearn-evidence/cv-phase-prediction-reuse-20261028/
+Final artifact: _cv_phase_prediction_reuse.so. Source bytes/manifest, compiler
+and binary hashes and complete build log are referenced by compile.json.
+Branch source checks run after commit and retain logs/source-guards.json here;
+root owns serialized main integration/push guards.

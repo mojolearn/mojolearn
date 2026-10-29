@@ -860,7 +860,7 @@ def msel_get_scorer(var scoring: PythonObject, context: PythonObject) raises -> 
 
 
 def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer: PythonObject,
-               context: PythonObject) raises -> PythonObject:
+               context: PythonObject, memo: PythonObject = PythonObject(None)) raises -> PythonObject:
     """`model_selection._score(estimator, X, y, scorer)`: the estimator's own
     `score` without a scorer; a real scalar, as a float."""
     var b = native_loaded_module("builtins")
@@ -868,7 +868,7 @@ def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer
     if scorer is None:
         value = msel_estimator_call(estimator, "score", Python.tuple(x, y), context)
     else:
-        value = msel_scorer_call(scorer, estimator, x, y, PythonObject(None), PythonObject(None), context)
+        value = msel_scorer_call(scorer, estimator, x, y, PythonObject(None), memo, context)
     if not msel_is_real(value, context):
         raise Error("TypeError: scoring must return a real scalar")
     return PythonObject(metric_float(value, context))
