@@ -2060,6 +2060,9 @@ def _read_engine(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int
     var keep = List[PythonObject]()
     var address = _addr(s.current, keep)
     var progress = NativeGenerationProgress(address, batch, length, s.produced, capacity)
+    # The native engine already owns the same selector workspace. Carry the
+    # stream policy into it; changing policy does not require a fallback route.
+    progress.sampling.use_f32_policy = s.sampling_policy == 1
     try:
         native_generation_read(owner.native, progress, capacity, s.max_new, s.finished, s.lengths,
             s.eos, s.pad, s.greedy, s.temperature, s.top_k, s.top_p, s.seed)
@@ -2457,7 +2460,7 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
                 if capacity == 1 or _resident_read_disjoint_state(mods, s.model, s.state):
                     return _read_sampling_resident(mods, s, capacity, admission.value())
                 legacy_resident = True
-        if capacity > 0 and not s.done() and not legacy_resident and s.sampling_policy == 0 and _use_native_generation_engine(mods, s.model, s.state):
+        if capacity > 0 and not s.done() and not legacy_resident and _use_native_generation_engine(mods, s.model, s.state):
             var result = _read_engine(mods, s, capacity)
             return result
         # Only the legacy fallback needs host token staging. Resident/native

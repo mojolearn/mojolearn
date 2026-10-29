@@ -119,3 +119,16 @@ def test_candidate_eos_and_padding_match_host_policy(tmp_path, monkeypatch):
     assert device.info() == info
     assert device.info()["lengths"][0] == 1
     assert np.all(expected[0, 1:] == 9)
+
+
+def test_candidate_native_engine_uses_same_policy(tmp_path, monkeypatch):
+    model = load_fixture(tmp_path, "llama", uniform=False)
+    prompt = np.array([[1, 3], [2, 4]], dtype="i4")
+    options = dict(greedy=False, seed=123, top_k=17, top_p=0.83, temperature=0.7)
+    monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "0")
+    monkeypatch.setenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0")
+    expected = np.asarray(model.stream(prompt, 5, **options).read(5)).copy()
+    monkeypatch.setenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "1")
+    stream = model.stream(prompt, 5, **options)
+    np.testing.assert_array_equal(np.asarray(stream.read(5)), expected)
+    assert stream.state_dict()["sampling_policy"] == "mojolearn.sampling.fp32-compensated.v1"

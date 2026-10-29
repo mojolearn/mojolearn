@@ -68,3 +68,16 @@ Full guard argv/status/durations in guards.json beside complete individual logs.
 Parent still serializes integration with peer native group3/capability source.
 Reference-table refresh must use the final selected shipped default policy;
 policy1 experiment qualification must remain separate while policy0 ships.
+
+Engine-policy review follow-up: use the existing native generation engine's
+GenerationSamplingScratch.use_f32_policy field instead of bypassing that engine.
+Native Mamba/nonresident generation therefore keeps its native token loop under
+policy1. No transformer engine API or implementation changes were necessary.
+An eighth prepared public case compares forced native-engine policy1 against its
+host-selector route; syntax only, not executed. Six test functions total.
+
+Changed-source focused CPU compilation repeated once: exit 0, 27.44 seconds,
+same actual entry scope, source hashes unchanged during build. New binary SHA:
+9ddec0fcfd8cabfc08cd277ae1f8537d042b07fa43c7d4fdf59c1be0cd5012df
+Full new evidence is in full-sampling-boundary-20261029/engine-policy/.
+Original compile logs, source and binary remain untouched at the parent path.
