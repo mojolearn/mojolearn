@@ -45,6 +45,10 @@ def training_words32_owned(source: PythonObject, dims: List[Int], name: String,
         count *= dims[i]
         native_strides.append(Int(py=strides[i]))
         _ = py_call(output_shape.append, dims[i])
+    # Publish the same immutable rank metadata as public Array constructors.
+    # A list here escapes through state_dict and violates both native Array
+    # admission and NumPy's __array_interface__ shape contract on Python <3.12.
+    output_shape = py_call(bi.tuple, output_shape)
     var source_addr = Int(py=classical_address(value))
     var output = tsa_array("i" if integer else "f", dtype, output_shape, count, 4, context)
     if integer:
@@ -77,6 +81,7 @@ def training_f32_cast_owned(source: PythonObject, dims: List[Int], name: String,
         count *= dims[axis]
         native_strides.append(Int(py=strides[axis]))
         _ = py_call(output_shape.append, dims[axis])
+    output_shape = py_call(native_loaded_module("builtins").tuple, output_shape)
     var result = tsa_array("f", "<f4", output_shape, count, 4, context)
     var address = Int(py=classical_address(result))
     var pointer = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
