@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
-from std.ffi import _Global
+from std.ffi import _Global, c_int
 from std.memory import memcpy
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_instance_item import native_instance_item
@@ -255,10 +255,31 @@ def _py_bytes(values: List[UInt8]) raises -> PythonObject:
     return PythonObject(from_owned=raw)
 
 
+def _tokenizer_result_list(size: Int) raises -> PythonObject:
+    # Private, initially NULL-filled result storage; never publish or use a
+    # Python protocol until every slot is set. PythonObject owns the list
+    # immediately, so failure decrefs its initialized items and safely skips
+    # unset slots through CPython's supported list destructor.
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(size)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=raw)
+
+
 def _py_int_list(values: List[Int]) raises -> PythonObject:
-    var out = Python.list()
+    var out = _tokenizer_result_list(len(values))
+    ref cpy = Python().cpython()
+    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
     for i in range(len(values)):  # cpu-route: publish completed native token ids as Python integers
-        _ = py_call(out.append, values[i])
+        var item = box_int(Int64(values[i]))
+        if not item:
+            raise cpy.unsafe_get_error()
+        # SetItem steals this new reference on both success and failure.
+        if set_item(out._obj_ptr, i, item) != 0:
+            raise cpy.unsafe_get_error()
+    _ = values
     return out
 
 
@@ -476,17 +497,27 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
             total = bpe_encode_batch_into(owner[], Int(text.unsafe_ptr()), Int(lengths.unsafe_ptr()), Int(ids.unsafe_ptr()), Int(counts.unsafe_ptr()), len(lengths), len(text), len(text), allow)
     if total < 0 or total > len(text):
         raise Error("RuntimeError: tokenizer returned an invalid encoded count")
-    var result = Python.list()
+    var result = _tokenizer_result_list(len(lengths))
+    ref cpy = Python().cpython()
+    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
     var at = 0
     for i in range(len(lengths)):  # cpu-route: prepare native document buffers and publish completed token lists
         var count = Int(counts[i])
         if count < 0 or at + count > total:
             raise Error("RuntimeError: tokenizer returned an invalid document count")
-        var row = Python.list()
+        var row = _tokenizer_result_list(count)
         for j in range(count):  # cpu-route: prepare native document buffers and publish completed token lists
-            _ = py_call(row.append, Int(ids[at + j]))
+            var item = box_int(Int64(ids[at + j]))
+            if not item:
+                raise cpy.unsafe_get_error()
+            if set_item(row._obj_ptr, j, item) != 0:
+                raise cpy.unsafe_get_error()
         at += count
-        _ = py_call(result.append, row)
+        # Transfer the completed row's owned reference exactly once. SetItem
+        # consumes it even on failure; unfilled outer slots remain private.
+        if set_item(result._obj_ptr, i, row.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
     if at != total:
         raise Error("RuntimeError: tokenizer counts differ from its total")
     _ = text
@@ -925,13 +956,32 @@ def _vocab_encode(tokenizer: PythonObject, data: PythonObject, add_special: Pyth
         bos = _ids(native_instance_item(fields, PythonObject("bos_ids")))
         eos = _ids(native_instance_item(fields, PythonObject("eos_ids")))
     var ids = vocab_encode_ids(owner[].tok.value(), bytes, allow)
-    var result = Python.list()
+    var result = _tokenizer_result_list(len(bos) + len(ids) + len(eos))
+    ref cpy = Python().cpython()
+    var box_int = cpy.lib.get_function[PyObjectPtr]("PyLong_FromLongLong")
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var at = 0
     for i in range(len(bos)):  # cpu-route: publish completed native token ids with admitted BOS and EOS metadata
-        _ = py_call(result.append, bos[i])
+        var item = box_int(Int64(bos[i]))
+        if not item:
+            raise cpy.unsafe_get_error()
+        if set_item(result._obj_ptr, at, item) != 0:
+            raise cpy.unsafe_get_error()
+        at += 1
     for i in range(len(ids)):  # cpu-route: publish completed native token ids with admitted BOS and EOS metadata
-        _ = py_call(result.append, ids[i])
+        var item = box_int(Int64(ids[i]))
+        if not item:
+            raise cpy.unsafe_get_error()
+        if set_item(result._obj_ptr, at, item) != 0:
+            raise cpy.unsafe_get_error()
+        at += 1
     for i in range(len(eos)):  # cpu-route: publish completed native token ids with admitted BOS and EOS metadata
-        _ = py_call(result.append, eos[i])
+        var item = box_int(Int64(eos[i]))
+        if not item:
+            raise cpy.unsafe_get_error()
+        if set_item(result._obj_ptr, at, item) != 0:
+            raise cpy.unsafe_get_error()
+        at += 1
     _ = handle
     _ = data
     _ = text

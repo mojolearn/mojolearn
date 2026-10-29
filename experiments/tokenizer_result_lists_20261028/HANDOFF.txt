@@ -1,0 +1,50 @@
+Tokenizer sized result-list publication, 2026-10-28
+Branch: lane/tokenizer-result-lists-20261028
+Base: e444d97d3c2a0b6e1a7c88fe6549c774bee4b9fc
+
+Removed work:
+- _py_int_list no longer looks up/calls Python append for each native integer.
+- BPE encode/batch allocates its known-length outer list and each validated
+  document row once, then populates native CPython slots without append calls.
+- Vocab encode allocates one list for BOS, encoded ids and EOS, preserving their
+  order and replacing every per-token Python append invocation.
+This removes bound-method creation/call dispatch/argument envelopes and list
+capacity growth. CPython integer boxing and final list allocation still exist.
+
+Setup/reuse/lifetime:
+PyLong_FromLongLong and PyList_SetItem entries are resolved once per publication
+operation, outside token loops. Output lengths come from completed native arrays
+and existing validated BPE counts. There is no persistent cache or invalidation.
+The fresh NULL-filled list is immediately owned by PythonObject and stays private
+until completely populated. On error its destructor releases populated slots
+and safely ignores uninitialized slots. PyList_SetItem steals each newly boxed
+integer on both success and failure; completed BPE rows transfer ownership once
+via steal_data. No compensating decref or duplicate owned reference is added.
+These ownership rules follow the public CPython listobject.h contract.
+
+Behavior boundaries:
+Existing encoded-total/document-count/final-count checks retain their positions
+relative to row filling. Empty, single-document and batch return shapes and the
+BOS/id/EOS sequence are unchanged. Python objects are never consulted for list
+methods, and partially constructed lists are not exposed to Python protocols.
+Input/model/codec admission, tokenization arithmetic and decoding are unchanged.
+
+Compile:
+Focused exported tokenizer_public_c Mac CPU public dispatcher compiled, rc0,
+identical define, O0. Scope includes changed publication paths; not a runtime or
+identity qualification. Initial compile rc1 lacked the gitignored Unicode table.
+The repository's standard pinned generator ran rc0, then compilation passed.
+Both full compile logs and the generated table bytes/hashes are retained.
+No runtime, failure-injection, identity or performance campaign. Exact command,
+binary and source/generated-input hashes are in compile.json. Root owns final
+main/push guards; lane source guard receipts are retained and reported separately.
+
+Evidence: ~/mojolearn-evidence/tokenizer-result-lists-20261028/
+Complete logs, dylib, Unicode table bytes and source hashes on Mac.
+No rented box or watcher service.
+
+Remaining:
+Token ints and output lists still require CPython allocation. Other tokenizer
+output paths (decode rows, trained vocabulary/merges, pretokenized bytes) and
+input/state metadata still use Python objects/calls. No measured speedup or
+full Python-free execution claim.

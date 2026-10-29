@@ -1,0 +1,34 @@
+{
+  "base_commit": "e444d97d3c2a0b6e1a7c88fe6549c774bee4b9fc",
+  "compile_exit": 0,
+  "scope": "Exported tokenizer_public_c public dispatcher Mac CPU source closure, including BPE encode/batch result rows, Vocab encode BOS/ids/EOS, native integer-list publication and partial-list ownership source; compile only",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "compile_slots": 4,
+  "compiler_workers": "default; no saturation measured",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/tokenizer-result-lists-20261028 -I /Users/andrewhendel/mojolearn-wt/tokenizer-result-lists-20261028/bindings /Users/andrewhendel/mojolearn-wt/tokenizer-result-lists-20261028/experiments/peer3_neural_tokenizer_20261027/compile_tokenizer.mojo -o /Users/andrewhendel/mojolearn-evidence/tokenizer-result-lists-20261028/tokenizer_compile.dylib",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/tokenizer-result-lists-20261028/tokenizer_compile.dylib",
+  "binary_sha256": "496ad0d967e3f7dfffea245d27ecd2af4775baaa5a34db1b91cb35990f12377e",
+  "log": "/Users/andrewhendel/mojolearn-evidence/tokenizer-result-lists-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/tokenizer-result-lists-20261028/source-sha256.json",
+  "source_manifest_scope": "All tracked Mojo files plus Pixi manifest/lock, generated Unicode table and its generator inputs; conservative superset, not all files compiled",
+  "modified_source_sha256": {
+    "bindings/tokenizer_public_native.mojo": "87bc4c3cabf743d65eb035f6639f95d7f235ef3e7d1cbed390f743bec96ce052"
+  },
+  "generated_input": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/tokenizer-result-lists-20261028/unicode_table_generated.mojo",
+    "sha256": "60aa4174d12b40b5dd48f9687d377f3fb10669d9c07f574f9c7e2ea8c70644ee",
+    "generation_command": "bash tokenizer/tools/gen_unicode_table.sh",
+    "generation_exit": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/tokenizer-result-lists-20261028/unicode-generation.log"
+  },
+  "earlier_failure": {
+    "exit": 1,
+    "reason": "New worktree lacked gitignored generated Unicode table; standard pinned generator restored build input, no product workaround",
+    "log": "/Users/andrewhendel/mojolearn-evidence/tokenizer-result-lists-20261028/compile-missing-unicode.log"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}
