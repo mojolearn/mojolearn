@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/tensor-test-venv/bin/python",
+    "-I",
+    "-m",
+    "pytest",
+    "--import-mode=importlib",
+    "-q",
+    "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/small-mlp-clean-dependencies/test_small_mlp_tensor_errors.py",
+    "--junitxml=/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/small-mlp-clean-dependencies/results.xml"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 10.413152665947564,
+  "test_sha256": "14c555d1680363ed311f0e6be466a1fb8e12e95ddecb322ab025976498d4df0a",
+  "scope": "Three actual SmallMLP public exception regressions; real isolated pip NumPy2.5.4/Torch2.15.0, cloned identical79-native install; no stubs or skipped missing bindings"
+}

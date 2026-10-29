@@ -46,3 +46,15 @@ partial install lacks x_sequence host required by ops.py import-time Session
 connection. Its subsequent optional-fast refusal masks the first missing-owner
 error. x_sequence current-source build is next; manifold return contracts and
 SmallMLP repaired-tokenizer runtime cases remain pending, not skipped passes.
+
+Runtime follow-up (2026-10-29): all three dedicated public tensor exception
+regressions passed, zero skips, using current-source native binaries in a clean
+standalone NumPy2.5.4/Torch2.15.0 installed environment. See installed-runtime.json
+and evidence small-mlp-clean-dependencies/{run.log,results.xml,receipt.json}.
+The initial mixed pixi NumPy/pip Torch environment aborted during torch import
+before mojolearn; the independent torch-only reproduction remains retained in
+torch-dependency-probe/. Clean dependencies resolved that environment failure;
+no product fallback, duplicate OpenMP suppression or toolchain patch was used.
+The original missing-owner import diagnostic is repaired separately by the
+optional_numpy_package_20261029 Python setup batch. No whole-verifier or
+cross-vendor qualification is inferred from these bounded public checks.

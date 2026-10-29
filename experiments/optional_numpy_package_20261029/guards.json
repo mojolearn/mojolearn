@@ -1,0 +1,14 @@
+{
+  "command": [
+    "sh",
+    "tools/hooks/pre-push",
+    "origin",
+    "source-only-review"
+  ],
+  "source_commit": "f068df89d090851a1c1648da80419f1dc6aaf1da",
+  "ref": "refs/heads/lane/optional-numpy-package-20261029",
+  "base": "b2d802861c4b4a47befbd4ee0934f7bfbba67785",
+  "exit_code": 0,
+  "seconds": 75.71551083296072,
+  "scope": "Committed-ref required source/push guards; no push"
+}

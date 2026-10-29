@@ -61,3 +61,9 @@ Two private COW installed clones use retained current-source native binaries;
 only models/__init__.py and ops.py changed in those clones. Subsequent tokenizer
 profile fixes affect unrelated generation routes. No full verifier, GPU identity,
 release-wheel or performance qualification is claimed by these bounded checks.
+
+Committed product f068df89d090851a1c1648da80419f1dc6aaf1da passed all
+required source/push guards (exit0,75.72s); no push was performed by this lane.
+See guards.json and external guards.log. Source unchanged after that check;
+this receipt follow-up also retains already-completed registration and SmallMLP
+runtime results without rerunning them.

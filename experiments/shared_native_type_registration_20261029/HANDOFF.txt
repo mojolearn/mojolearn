@@ -58,3 +58,10 @@ Unrelated CPU queue resumed automatically; all39 remaining host families
 passed0, yielding all46 current CPU families together with the original7
 (with these3 corrected owner binaries replacing their earlier outputs).
 Installed six-order and API regressions are the next step, still pending.
+
+Runtime follow-up (2026-10-29): all six distinct real native-owner import
+orders passed, including canonical class identity and actual installed package
+import in each fresh subprocess; zero failures. See runtime-import-orders.json
+for the exact three staged binary hashes and six logs under evidence root
+identity-registration-import-orders/. This resolves the setup runtime pending
+item above; it does not claim arithmetic or cross-vendor identity coverage.

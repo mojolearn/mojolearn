@@ -1,0 +1,67 @@
+{
+  "scope": "six real native owner import orders + actual installed package import",
+  "python": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-venv/bin/python",
+  "package": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-venv/lib/python3.13/site-packages/mojolearn",
+  "cases": [
+    {
+      "order": [
+        "tokenizer",
+        "mamba",
+        "runtime_sequential"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-import-orders/tokenizer-mamba-runtime_sequential.log"
+    },
+    {
+      "order": [
+        "tokenizer",
+        "runtime_sequential",
+        "mamba"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-import-orders/tokenizer-runtime_sequential-mamba.log"
+    },
+    {
+      "order": [
+        "mamba",
+        "tokenizer",
+        "runtime_sequential"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-import-orders/mamba-tokenizer-runtime_sequential.log"
+    },
+    {
+      "order": [
+        "mamba",
+        "runtime_sequential",
+        "tokenizer"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-import-orders/mamba-runtime_sequential-tokenizer.log"
+    },
+    {
+      "order": [
+        "runtime_sequential",
+        "tokenizer",
+        "mamba"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-import-orders/runtime_sequential-tokenizer-mamba.log"
+    },
+    {
+      "order": [
+        "runtime_sequential",
+        "mamba",
+        "tokenizer"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-import-orders/runtime_sequential-mamba-tokenizer.log"
+    }
+  ],
+  "binary_sha256": {
+    "tokenizer": "a489e9d1322d0cb528e26445db5fb4ebe815e7e21a53a6d28cb2b8320e674c4a",
+    "mamba": "8a14ea594e64ceed747f913eabc213aa36457c957486b04b33c1893b3a694260",
+    "runtime_sequential": "9f84ceda122e91cad349c866beeea622e65f8b74281ba4fc0d3256826d165b1d"
+  },
+  "failed": 0
+}
