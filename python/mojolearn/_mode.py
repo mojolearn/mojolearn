@@ -587,7 +587,7 @@ def _connect_application_params(cls):
         connect_subclass(context, cls)
 
 
-def _install_numeric_mode(cls):
+def _install_numeric_mode(cls, *, native_constructor=False):
     # glue: NumericModeMixin.__init_subclass__'s class-definition wrapper
     if getattr(cls, "_mojolearn_native_public", False):
         return  # the constructor takes numeric_mode itself
@@ -607,6 +607,13 @@ def _install_numeric_mode(cls):
             setattr(cls, method_name, _guard_cpu_training(method))
     orig = cls.__dict__.get("__init__")
     if orig is None:
+        return
+    if native_constructor:
+        # A class-creation request, not an inherited native-public marker.
+        # These constructors already hand the explicit mode to their native
+        # owner; preserve the original function instead of wrapping/unwrapping.
+        if "numeric_mode" not in inspect.signature(orig).parameters:
+            raise TypeError("native constructor must explicitly accept numeric_mode")
         return
 
     @functools.wraps(orig)
@@ -637,7 +644,7 @@ class NumericModeMixin(ParamsMixin):
     way a caller would expect it to.
     """
 
-    def __init_subclass__(cls, **kw):
+    def __init_subclass__(cls, *, _native_constructor=False, **kw):
         """Give every estimator a `numeric_mode=` keyword without editing
         eleven constructor signatures.
 
@@ -655,8 +662,10 @@ class NumericModeMixin(ParamsMixin):
         wrapped. The base runs first and would otherwise write its own
         `None` over the subclass's real answer.
         """
+        # This keyword is consumed only for this class definition. A user's
+        # subclass with its own constructor still gets ordinary mode injection.
         super().__init_subclass__(**kw)
-        _install_numeric_mode(cls)
+        _install_numeric_mode(cls, native_constructor=_native_constructor)
         _connect_application_params(cls)
 
     #: The binding this estimator family talks to. Subclasses that use more

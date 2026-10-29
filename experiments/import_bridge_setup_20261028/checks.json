@@ -1,0 +1,25 @@
+{
+  "base": "37bb28369526225f7ebc64b6c6a6158d4dae847e",
+  "python": "3.14.6",
+  "setup_tests": {
+    "command": "python3 tools/test_neural_import_setup.py",
+    "tests": 7,
+    "exit": 0,
+    "scope": "AST-extracted real class/setup declarations with inert validation/connection metadata; no package/native binding import or numerical execution"
+  },
+  "compilation": {
+    "command": "python3 -m py_compile python/mojolearn/_mode.py python/mojolearn/_mamba_impl.py python/mojolearn/_transformer_impl.py tools/test_neural_import_setup.py",
+    "exit": 0,
+    "scope": "changed Python setup source syntax/bytecode; no Mojo source changed, no duplicate native build"
+  },
+  "earlier_failure": "two fixture errors: missing inert _sk_validate namespace; source unchanged, corrected fixture, original full log retained",
+  "source_sha256": {
+    "python/mojolearn/_mode.py": "86e663cd75ce62dda4ee7e9d0d5e44acca0717096f9e89747a98f43b9fb43cff",
+    "python/mojolearn/_mamba_impl.py": "b3f983d0ba5b79e474a83de5c82decfac3bb6f41728189ea1a1755573df340c4",
+    "python/mojolearn/_transformer_impl.py": "fa003e978112476e9bd352de08a315c44b89513938861b78d5f882a27bdc3d8e",
+    "tools/test_neural_import_setup.py": "17de9a6bd69f32016bf110fa162ad81f8fecefabad3c6273b7e0688d027308c8"
+  },
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/import-bridge-setup-20261028",
+  "runtime_campaign": "not run",
+  "measurement": "not run; no hot-loop speed claim"
+}

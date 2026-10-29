@@ -1,0 +1,39 @@
+Import-time neural class finalization (2026-10-28)
+
+Branch lane/import-bridge-setup-20261028; base37bb28369526225f7ebc64b6c6a6158d4dae847e.
+Scope _mode.py, _mamba_impl.py, _transformer_impl.py, standalone source/setup tests.
+
+Removed work: four NumericModeMixin constructor wrappers were created only to
+be stripped via __wrapped__ at module tail. A class-definition-only private
+keyword now preserves those explicit native constructors directly. Four final
+object.__getattribute__ slots are declared in their class bodies rather than
+replaced after definition. This is import-time simplification, not a hot-loop
+speed claim; no algorithm moved to a provider or Mojo.
+
+The keyword is consumed by NumericModeMixin.__init_subclass__, not stored as an
+inherited class flag. It skips only constructor wrapping: existing fit/output/
+CPU guards still install. Every opted-in constructor must explicitly declare
+numeric_mode. Four public signatures/defaults and original function identities
+remain as before after the old unwrapping. Passive subclasses inherit those
+functions; an application subclass defining __init__ still gets normal numeric
+mode injection. Its fit/predict overrides retain fitted tracking/checks, and
+its custom __getattribute__ remains intact. No _mojolearn_native_public marker
+is added or moved; no specialized attribute descriptor outside these four
+existing object-slot classes is changed. No persistent cache/invalidation rule.
+
+Checks: Python3.14.6 syntax/bytecode compilation exit0 for all changed Python
+sources; seven narrow setup tests exit0. Tests evaluate actual AST-extracted
+_mode class/function declarations and the four neural class definitions with
+inert connection/validation metadata. They do not import the package or native
+bindings and do not execute product numerical operations. First test attempt
+had two missing-fixture-_sk_validate errors, corrected in the fixture only;
+full failure log retained. No Mojo source changed or numerical binary rebuilt.
+No runtime/identity/performance campaign. Required source guards follow commit.
+
+Remaining scope: broader bridge/installer cycles and manifold/tree lifecycle
+unwraps remain; supplied repo-wide counts are leads, not reproduced conclusions.
+The four constructor/slot tail repairs removed here are the exact counted scope.
+
+Evidence /Users/andrewhendel/mojolearn-evidence/import-bridge-setup-20261028/
+retains full test/compile/source-guard outputs and exit files, source archive.
+checks.json retains Python version, commands, source hashes, coverage and limits.

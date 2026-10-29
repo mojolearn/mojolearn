@@ -589,7 +589,7 @@ class TransformerForwardTape:
 # every call (llama_refuse_bad_call). decode == prefill is section 7.2's construction; the
 # lane's clause (d) verifies it bitwise under IDENTICAL and FAST fails it by design.
 # backward: autograd/kernels/transformer.mojo chains, default options only.
-class TransformerBlock(NumericModeMixin):
+class TransformerBlock(NumericModeMixin, _native_constructor=True):
     """One Llama-shaped transformer decoder block, float32.
 
     Computes Hugging Face's `LlamaDecoderLayer.forward`: input RMSNorm, causal
@@ -698,6 +698,9 @@ class TransformerBlock(NumericModeMixin):
     """
 
     _BINDING = "_mojolearn_transformer"
+
+    # Final slot from class creation; native public operations own field admission.
+    __getattribute__ = object.__getattribute__
 
     _W_NAMES = (
         "input_layernorm.weight", "post_attention_layernorm.weight",
@@ -1357,8 +1360,6 @@ class TransformerDecodeSession:
 # Compiled public constructors and forward/state operations need no Python
 # mode wrapper. Numeric mode is an explicit native-admitted argument.
 from . import _native_neural_bridge
-TransformerBlock.__init__ = TransformerBlock.__init__.__wrapped__
-TransformerBlock.__getattribute__ = object.__getattribute__
 from .models import causal_lm as _causal_native_connection
 
 

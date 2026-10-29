@@ -389,7 +389,7 @@ class _MambaBase(NumericModeMixin):
 # decode_session: DEVIATION 2941 (lane/infer-speed-neural); the host route uses
 # mamba1_decode_step (bindings/_mojolearn_mamba_host.mojo) per token as an ownership wrapper only,
 # no speed claim.
-class Mamba1Block(_MambaBase):
+class Mamba1Block(_MambaBase, _native_constructor=True):
     """One Mamba-1 block: RMSNorm, selective-scan mixer and residual.
 
     Matches Hugging Face's `MambaBlock.forward`. Takes (B, L, d_model) float32 and
@@ -446,6 +446,9 @@ class Mamba1Block(_MambaBase):
     >>> y = block.forward(x, state)
     >>> y_next = block.step(x[:, -1], state)
     """
+
+    # Final slot from class creation; native public operations own field admission.
+    __getattribute__ = object.__getattribute__
 
     _W_NAMES = (
         "norm.weight", "in_proj.weight", "conv1d.weight", "conv1d.bias",
@@ -737,7 +740,7 @@ class Mamba1DecodeSession:
 # prefill resumption (DEVIATION 786); the reference per-token recurrence rounds differently and is
 # the lane's required-RED sabotage arm. use_mem_eff_path refused (DEVIATION 732 principle).
 # h_last_ is the S17 report state (contract section 5, gate D2).
-class Mamba2Block(_MambaBase):
+class Mamba2Block(_MambaBase, _native_constructor=True):
     """One Mamba-2 (SSD) block: RMSNorm, mixer and residual.
 
     Matches Hugging Face's `Mamba2Block.forward` (the non-memory-efficient mixer).
@@ -794,6 +797,9 @@ class Mamba2Block(_MambaBase):
     >>> state = block.allocate_state(batch_size=x.shape[0])
     >>> y0 = block.step(x[:, :1], state)
     """
+
+    # Final slot from class creation; native public operations own field admission.
+    __getattribute__ = object.__getattribute__
 
     _W_NAMES = (
         "block_norm.weight", "in_proj.weight", "conv1d.weight",
@@ -1116,7 +1122,7 @@ class Mamba3State:
 # arithmetic (DEVIATIONS 827/783). Decode is prefill resumption (DEVIATION 831); the reference
 # per-token recurrence is the required-RED STEP_UPSTREAM_RECURRENCE arm. Report stages vs sealed
 # boundary: DEVIATION 832. Owned weights are the NN40 IDENTICAL arm.
-class Mamba3Block(_MambaBase):
+class Mamba3Block(_MambaBase, _native_constructor=True):
     """One Mamba-3 (SISO) block: RMSNorm, mixer and residual.
 
     Matches mamba_ssm's `Mamba3.forward` (SISO) inside the non-fused block. Takes
@@ -1179,6 +1185,9 @@ class Mamba3Block(_MambaBase):
     >>> y = block.forward(x, state)
     >>> y_next = block.step(x[:, -1], state)
     """
+
+    # Final slot from class creation; native public operations own field admission.
+    __getattribute__ = object.__getattribute__
 
     _W_NAMES = (
         "block_norm.weight", "in_proj.weight", "dt_bias",
@@ -1539,10 +1548,4 @@ class _Mamba3DecodeSession:
 
 
 from . import _native_neural_bridge
-Mamba1Block.__init__ = Mamba1Block.__init__.__wrapped__
-Mamba2Block.__init__ = Mamba2Block.__init__.__wrapped__
-Mamba3Block.__init__ = Mamba3Block.__init__.__wrapped__
-Mamba1Block.__getattribute__ = object.__getattribute__
-Mamba2Block.__getattribute__ = object.__getattribute__
-Mamba3Block.__getattribute__ = object.__getattribute__
 from .models import causal_lm as _causal_native_connection
