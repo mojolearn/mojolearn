@@ -16,6 +16,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
@@ -2965,23 +2966,51 @@ def _fit_weights(model: PythonObject, args: PythonObject, operation: String) rai
     if operation == "fit":
         return args[2] if len(args) > 2 else PythonObject(None)
     var params = args[2]
-    var b = Python.import_module("builtins")
-    var keys = py_call(b.list, params)
+    var b = native_loaded_module("builtins")
+    if py_type(params) is not b.dict:
+        raise Error("TypeError: native fit keywords require an exact dictionary")
+    var string_type = b.str
     var weights = PythonObject(None)
-    for i in range(len(keys)):  # driver-loop: over the caller's fit keywords
-        var key = keys[i]
-        if _is_str(key) and String(key) == "sample_weight":
-            weights = params[key]
+    ref cpy = Python().cpython()
+    var position = 0
+    var raw_key = PyObjectPtr()
+    var raw_value = PyObjectPtr()
+    var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+    for i in range(len(params)):  # driver-loop: native keyword insertion order, without iterator/list dispatch
+        if next_item(params._obj_ptr, Pointer(to=position), Pointer(to=raw_key), Pointer(to=raw_value)) == 0:
+            break
+        var key = PythonObject(from_owned=cpy.Py_NewRef(raw_key))
+        # Check before String/repr: a supplied name subclass must not invoke
+        # its conversion hooks merely to report an unexpected fit keyword.
+        if py_type(key) is not string_type:
+            raise Error("TypeError: native fit keyword names must be exact strings")
+        if String(key) == "sample_weight":
+            weights = PythonObject(from_owned=cpy.Py_NewRef(raw_value))
         else:
             raise Error("TypeError: " + _name(model) + ".fit() got an unexpected keyword argument " + _repr(key))
+    _ = params  # owns borrowed values through their final NewRef
     return weights
 
 
 def _no_fit_params(model: PythonObject, args: PythonObject) raises:
     # fit(X, y=None) takes no keywords: fit_transform's refuse them as fit would.
-    var keys = py_call(Python.import_module("builtins").list, args[2])
-    if len(keys) > 0:
-        raise Error("TypeError: " + _name(model) + ".fit() got an unexpected keyword argument " + _repr(keys[0]))
+    var params = args[2]
+    var b = native_loaded_module("builtins")
+    if py_type(params) is not b.dict:
+        raise Error("TypeError: native fit keywords require an exact dictionary")
+    ref cpy = Python().cpython()
+    var position = 0
+    var raw_key = PyObjectPtr()
+    var raw_value = PyObjectPtr()
+    # Only the first keyword can be consumed: any keyword refuses. Native
+    # iteration reads no value and invokes no mapping/key protocol hooks.
+    if cpy.lib.get_function[Int32]("PyDict_Next")(
+            params._obj_ptr, Pointer(to=position), Pointer(to=raw_key), Pointer(to=raw_value)) != 0:
+        var key = PythonObject(from_owned=cpy.Py_NewRef(raw_key))
+        _ = params
+        if py_type(key) is not b.str:
+            raise Error("TypeError: native fit keyword names must be exact strings")
+        raise Error("TypeError: " + _name(model) + ".fit() got an unexpected keyword argument " + _repr(key))
 
 
 def _precheck(model: PythonObject, kind: String, context: PythonObject) raises:

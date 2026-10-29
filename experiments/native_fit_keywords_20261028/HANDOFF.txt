@@ -1,0 +1,61 @@
+Native preprocessing fit-keyword checks, 2026-10-28
+Branch lane/native-fit-keywords-20261028; base premerge 38e069d364.
+Product scope: only _fit_weights and _no_fit_params in prep_encode_native.mojo,
+plus the native_loaded_module import they use. No wrapper/connection changes.
+
+Provenance and claim scope:
+The newer external callbacks.tsv is missing after disk cleanup. This follow-up
+uses only the historical checked-in callback_admission_review_20261028 row for
+_no_fit_params and its adjacent helper; it does not call the older 31-row review
+the current 28-row inventory. The heuristic flagged len on a builtin list
+result and did not prove reachable arbitrary public callbacks. This repair is
+concrete source reduction/admission, not a claimed runtime reproduction or
+closure of the callback inventory. No external TSV was edited.
+
+Repeated work removed:
+Both helpers formerly imported builtins, dispatched list(params), copied every
+keyword key and then inspected that list. _no_fit_params only needs the first
+key before raising, so it now performs one PyDict_Next probe. _fit_weights uses
+native ordered dictionary iteration and owns only the observed key and selected
+sample_weight reference, avoiding the intermediate key list, generic iterator
+and repeated _is_str/isinstance builtin lookup. Exact string type metadata and
+native iterator entry are captured once outside its loop.
+
+Admission/behavior:
+Exact native dictionaries are required before C dictionary access. Every key
+actually consumed is checked as an exact native str before String/repr or
+comparison; non-exact mapping/key subclasses are refused before their hooks.
+This explicitly tightens the old isinstance(str) key path: ordinary exact-string
+kwargs retain insertion order, first-unexpected-key messages and sample_weight
+identity, while key subclasses no longer execute conversion/repr overrides.
+No-fit-params refuses its first key and need not inspect later entries. The
+sample-weight helper does not prematurely validate values; its positional fit
+path and later numerical input checks remain unchanged.
+
+Ownership/invalidation:
+Every call reads the current dictionary afresh; no cache or cross-call metadata.
+PyDict_Next borrows key/value references while the GIL is held. Immediate
+Py_NewRef creates owned keys and selected weight, with explicit params keepalive
+through the final acquisition. No key hash/equality protocol, arbitrary mapping
+iterator or numeric-buffer pointer is introduced. Empty mappings return without
+allocating a key list; returned sample_weight is the same object as before.
+
+Compilation/checks:
+One final compile passed, exit 0, 17.80 seconds: actual prep_encode_c public
+operation entry including both helpers and full owner call sites. Apple CPU
+identical O0 with ten workers under compile_slot. Source bytes/archive, full
+compiler output, compiler/flags/allocation and binary hash are in compile.json.
+No runtime, identity, benchmark or GPU campaign; no measured speedup claim.
+Source guard results retained with evidence; root owns premerge integration and
+required push guards. This batch does not qualify other flagged callback rows.
+
+Remaining work:
+Other preprocessing model/parameter admission, imports, scalar conversions and
+numerical argument transport remain. Public behavior with arbitrary private C
+entry misuse or Python-defined protocols is not a compatibility claim.
+
+Evidence: ~/mojolearn-evidence/native-fit-keywords-20261028/
+compile.log/json, controller.log, source-manifest.json, source-bytes.tgz,
+_native_fit_keywords.so, source-guards.json and individual guard logs.
+These are newly retained files, separate from the deleted earlier batch evidence
+recorded in scorer_recipe_reuse_20261028/EVIDENCE_AVAILABILITY.json.
