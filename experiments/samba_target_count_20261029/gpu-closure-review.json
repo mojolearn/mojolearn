@@ -1,0 +1,7 @@
+{
+  "source": "core/samba_count_impl.mojo",
+  "plan": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/apple-remaining-gpu-build/plan.json",
+  "groups_checked": 33,
+  "affected": [],
+  "scope": "Retained complete33GPU closure lists, no runtime claims"
+}

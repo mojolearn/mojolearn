@@ -65,9 +65,10 @@ def test_public_optimizer_snapshot_resume_then_dropout_maximize():
                               intermediate=64, dropout=0.1),
                    generator=training.Generator(1), lr=0.001)
     c.optimizer.maximize = True
+    initial_counter = c.generator.counter  # Weight initialization also draws streams.
     for step in range(2):
         result = c.train_step(*windows[step])
         assert result["step"] == step + 1
         assert np.isfinite(result["loss"])
-    assert c.generator.counter == 2
+    assert c.generator.counter == initial_counter + 2
     assert np.isfinite(np.asarray(c.flat)).all()

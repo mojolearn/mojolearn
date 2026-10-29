@@ -10,3 +10,29 @@ Focused compilation:AppleCPU O0,10workers through tools/compile_slot.sh. Repaire
 
 Pending before integration:full affected tokenizer-host compilation, actual installed public Samba regression, required source/pushguards. NativeGPU kernels unchanged; confirm all retained closures before deciding rebuild scope. Linux rebuilt tokenizer and vendor verification remain pending. No performance measured.
 Evidence:~/mojolearn-evidence/samba-target-count-20261029/ and focused-checks.json. Active frozen verifier installs unmodified.
+
+Follow-up full compile + installed regression (neural lane):
+Owned tree samba-target-count-build-20261029, source20dbed0. Actual standard
+tokenizer host O0 build through compile_slot, 10 configured workers: exit0,
+580.84s. Complete654 source files archived before invocation, no source changes.
+Compiler/SDK/original CPU linker metadata, argv, raw binary and logs retained.
+Only tokenizer among46host source closures is affected; none of33GPU closures
+contains the changed helper. No other native build repeated.
+
+Private cloned42f install uses standard macOS runtime staging; other78 native
+extensions and5runtime libraries remain byte-identical. Shared active installs
+were never mutated. Raw tokenizer SHA5ba1b0005c00980b9fb860c17ecfc0779d6ba36d2371474fc6f1cd096aebaa6a;
+staged SHA cfe40d31de2cfd4067fba4e30ebedeb7386367e4a1c2aba1f2e77c22d93d4d60.
+
+Before: actual public loss with one valid target/dropout raises negativecount
+-223. After:3 target-count cases pass (lengths1/7/32, some ignored), including
+automatic versus explicit loss/gradient normalization and maximize train.
+Fourth actual Mamba3+attention snapshot/resume/dropout case initially failed
+only its new absolute RNG-counter assertion: constructor consumes streams.
+Corrected relative+2 check, reran only that fourth case: pass. Thus4unique
+public cases pass, zero skips, actual Metal/identical readback. All original
+failures retained. No timing or cross-vendor identity claim. Full9fixture
+verifier and Linux affected tokenizer build remain with their owners.
+
+Evidence: ~/mojolearn-evidence/samba-target-count-build-20261029/
+Public regression source and summaries are tracked beside this handoff.

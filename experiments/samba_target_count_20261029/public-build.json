@@ -1,0 +1,133 @@
+{
+  "family": "tokenizer",
+  "source_commit": "20dbed0c388d3e756a5fb6b54461eefb282b2b2a",
+  "cwd": "/Users/andrewhendel/mojolearn-wt/samba-target-count-build-20261029",
+  "argv": [
+    "bash",
+    "tools/compile_slot.sh",
+    "sh",
+    "bindings/build_host_family.sh",
+    "tokenizer"
+  ],
+  "environment": {
+    "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/raw",
+    "MOJOLEARN_COMPILE_JOBS": "10",
+    "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+    "MOJOLEARN_NUMERIC_MODE": "identical",
+    "MOJOLEARN_TARGET_COLUMN": "cpu"
+  },
+  "compiler": "/Users/andrewhendel/mojolearn-wt/samba-target-count-build-20261029/.pixi/envs/default/bin/mojo",
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "dependency_scope": {
+    "scope": "closure",
+    "digest": "d2af9e67a84e3c567efeeb11cb01b0a3bccedd4358a92fd6cac688336774eafe",
+    "files": 652
+  },
+  "source_count": 654,
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/source-manifest.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/source.tar.gz",
+  "source_archive_sha256": "879a81591712b0eeedf9f4bad3688e27e106f613dcf371c22dd0a6b09cddf34e",
+  "target": "CPU identical macOS arm64 apple-m1; O0; standard complete source closure and build_host_family.sh SDK/deployment floor",
+  "sdk": "26.5",
+  "apple_toolchain": {
+    "product": "26.5.2",
+    "build": "25F84",
+    "xcode": "Xcode 26.6",
+    "developer_dir": "/Applications/Xcode.app/Contents/Developer",
+    "metal": "Apple metal version 32023.883 (metalfe-32023.883)",
+    "sdk": "26.5"
+  },
+  "binary": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/raw/_mojolearn_tokenizer_host.so",
+  "log": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/compile.log",
+  "status": "compiled",
+  "runtime_executed": false,
+  "reason": "Samba target-count lifetime repair changes only tokenizer among46host and33GPU captured closures; other78compiled images unchanged",
+  "exit_code": 0,
+  "elapsed_seconds": 580.8376272500027,
+  "sources_changed_during_build": [],
+  "binary_sha256": "5ba1b0005c00980b9fb860c17ecfc0779d6ba36d2371474fc6f1cd096aebaa6a",
+  "binary_bytes": 43588576,
+  "cpu_toolchain": {
+    "schema": "mojolearn.macos-cpu-compile.v1",
+    "target": "osx-arm64",
+    "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+    "pixi_lock_sha256": "f6c531ef5300670dd0d66b0cd55cacabe12a28047e2d8d26648f430a46587509",
+    "image": {
+      "cpu": 16777228,
+      "subtype": 0,
+      "filetype": 6,
+      "build": {
+        "platform": 1,
+        "minimum_os": [
+          11,
+          0,
+          0
+        ],
+        "sdk": [
+          26,
+          5,
+          0
+        ],
+        "tools": [
+          {
+            "tool": 3,
+            "version": [
+              1267,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "dependencies": [
+        {
+          "command": 12,
+          "name": "@rpath/libKGENCompilerRTShared.dylib",
+          "current": [
+            0,
+            0,
+            0
+          ],
+          "compatibility": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "command": 12,
+          "name": "@rpath/libAsyncRTMojoBindings.dylib",
+          "current": [
+            0,
+            0,
+            0
+          ],
+          "compatibility": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "command": 12,
+          "name": "/usr/lib/libSystem.B.dylib",
+          "current": [
+            1356,
+            0,
+            0
+          ],
+          "compatibility": [
+            1,
+            0,
+            0
+          ]
+        }
+      ],
+      "rpaths": [
+        "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/lib"
+      ]
+    }
+  },
+  "cpu_contract_tool_sha256": "02523d7ff155fdb29672378790efad06a6e4650271b20672b0c4eaeeffe03409"
+}

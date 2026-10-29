@@ -1,0 +1,89 @@
+{
+  "source_commit": "20dbed0c388d3e756a5fb6b54461eefb282b2b2a",
+  "regression_source": "python/mojolearn/tests/test_samba_target_count_contract.py",
+  "regression_sha256": "7d8492656ba7ca816bd24d4e30e3b07ba9bfb0ef10286e535cde89e74dfdab01",
+  "before": {
+    "exit_code": 1,
+    "result": "First case reproduced old automatic negative target count -223; stopped at first failure",
+    "log": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/before.log"
+  },
+  "after_initial": {
+    "exit_code": 1,
+    "passed": 3,
+    "failed": 1,
+    "failure": "New fixture assumed absolute RNGcounter2; constructor already consumed11 streams. All operation/state assertions passed before final counter assertion.",
+    "log": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/after.log"
+  },
+  "after_corrected": {
+    "exit_code": 0,
+    "passed": 1,
+    "failed": 0,
+    "correction": "Assert two additional streams relative to post-constructor counter; reran only affected fourth case",
+    "log": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/after-corrected.log"
+  },
+  "total_unique_cases_passed": 4,
+  "skips": 0,
+  "actual_training_vendor": "metal",
+  "actual_training_numeric_mode": 1,
+  "install": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/venv",
+  "native_runtime_files_unchanged_during_runs": true,
+  "scope": "Focused installed public target normalization, dropout, maximize and optimizer snapshot/resume. Not full identity/vendor coverage or performance evidence. Original active42f/3fa5 installs unchanged.",
+  "artifacts": {
+    "source-manifest.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/source-manifest.json",
+      "sha256": "7deca8915e87258589746f3240127597e384f556e67fa652682c98cddc01c125"
+    },
+    "source.tar.gz": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/source.tar.gz",
+      "sha256": "879a81591712b0eeedf9f4bad3688e27e106f613dcf371c22dd0a6b09cddf34e"
+    },
+    "compile.log": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/compile.log",
+      "sha256": "3ad07c072ae46194dbe460e58cdb6a9c6f973fb04d1a4887339bbcc889cbb8bc"
+    },
+    "receipt.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/receipt.json",
+      "sha256": "c99db09ba0f3bfbbb498d8622bce5674d0bc80845b5eb46c593e21f3f00ed0ce"
+    },
+    "stage/receipt.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/stage/receipt.json",
+      "sha256": "73ba14858f5786312f0db2dd5ac09485f1f8b229e57e03f514ea33dcd55f3fa9"
+    },
+    "stage/previous-staged-tokenizer.so": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/stage/previous-staged-tokenizer.so",
+      "sha256": "a30a5ecee9c7a0e24af677eca10abfdedc764376bfc096d3485d842d5a65905b"
+    },
+    "before.log": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/before.log",
+      "sha256": "7b6ef9ef9d9f239862872362114a50728dcce1af9e8770ada35ae8c921c1a8a4"
+    },
+    "before.xml": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/before.xml",
+      "sha256": "25f3cca71c898e09129804079077665a842122a5b1c430ac659f0afca96067ce"
+    },
+    "after.log": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/after.log",
+      "sha256": "db17d19a463a40bb15d4288323ca8c03b327c5d9cd32c931ff794f814fa55618"
+    },
+    "after.xml": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/after.xml",
+      "sha256": "e09d6d8b4cfc4aee2780910c402beff55fde83f831b23af04a074cafaa29dd20"
+    },
+    "after-corrected.log": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/after-corrected.log",
+      "sha256": "c7617de34b80a8f6364c2b72e9daf94c6043370ffc8a492c8606c0a61d2f7fe0"
+    },
+    "after-corrected.xml": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/after-corrected.xml",
+      "sha256": "9508dbad31d90b29dfafa00328dc63c9793cb02863926240036a453dd7f0cade"
+    },
+    "after-receipt.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/after-receipt.json",
+      "sha256": "730884b88aa8a19e28b8e3d066aad2b376bd626ae7fba16f1071471737efe6b6"
+    },
+    "after-corrected-receipt.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/after-corrected-receipt.json",
+      "sha256": "f8aa035653cb51ffcff32135e9d57a4623ece72c287a67f53d2bcd7c5057b382"
+    }
+  }
+}
