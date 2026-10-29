@@ -114,19 +114,26 @@ def small_mlp_items(value: PythonObject, limit: Int, refusal: String,
     if cls is array_cls:
         return _array_items(value, limit, refusal, array_cls, array_type, bi)
     if native_torch_exact(cls):
-        var rows = PythonObject(None)
-        try:
-            native_torch_admit(value)
-            var base_fields = _torch_type_fields(NATIVE_TORCH.get_or_create_ptr()[].base)
-            var unbind = py_get(base_fields, "unbind")
-            if unbind is None or py_type(unbind) is not py_type(bi.list.append):
-                raise Error("TypeError: SmallMLP Tensor iteration requires native unbind")
-            # Tensor.__iter__ returns iter(self.unbind(0)). Call the admitted
-            # native base method directly, preserving tensor view/dtype/device
-            # and eager unbind-before-limit behavior without its Python wrapper.
-            rows = py_call(unbind, value, 0)
-        except:
-            raise Error("TypeError: " + refusal)
+        # Type/mode refusal belongs to admission; do not relabel failures from
+        # an already admitted tensor operation as a non-iterable input.
+        native_torch_admit(value)
+        var base_fields = _torch_type_fields(NATIVE_TORCH.get_or_create_ptr()[].base)
+        var unbind = py_get(base_fields, "unbind")
+        if unbind is None or py_type(unbind) is not py_type(bi.list.append):
+            raise Error("TypeError: SmallMLP Tensor iteration requires native unbind")
+        # Tensor.__iter__ returns iter(self.unbind(0)). Keep eager unbind before
+        # limit, tensor views/dtype/device, and the native exception class and
+        # traceback. py_call consumes the indicator into a Mojo Error, so this
+        # call hands an untouched error to small_mlp_c's existing pending path.
+        var arguments = Python.tuple(value, 0)
+        ref cpy = Python().cpython()
+        var raw_rows = cpy.PyObject_Call(unbind._obj_ptr, arguments._obj_ptr, PyObjectPtr())
+        _ = arguments
+        _ = unbind
+        _ = value
+        if not raw_rows:
+            raise Error(SMALL_MLP_ITEMS_PENDING)
+        var rows = PythonObject(from_owned=raw_rows)
         if py_type(rows) is not bi.tuple:
             raise Error("TypeError: native Tensor unbind must return a tuple")
         return _plain_items(rows, limit, True)

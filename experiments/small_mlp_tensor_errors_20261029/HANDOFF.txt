@@ -1,0 +1,39 @@
+SmallMLP tensor exception preservation and installed manifold risk tests
+Base: 7b419bb38d; branch lane/small-mlp-tensor-errors-20261029.
+
+Product change: exact Torch Tensor/Parameter admission is no longer inside a
+catch-all non-iterable refusal. Native unbind(0) uses documented PyObject_Call;
+on failure its untouched exception indicator goes through the existing
+SMALL_MLP_ITEMS_PENDING path. The trainer lock-finally already captures/restores
+that indicator while releasing its lock. Native exception class, value and
+traceback survive; no new Python hook, fallback or computation is introduced.
+Eager unbind-before-limit and returned tensor view ownership remain unchanged.
+
+Dedicated test files:
+- test_small_mlp_tensor_errors.py: unsupported type refusal; actual scalar Tensor
+  unbind error class/message and unchanged step; TorchFunctionMode refusal with
+  no callback. Missing Torch/native owner fails (not skipped).
+- test_manifold_installed_contract.py: real five-class import/constructors,
+  native fit->self, fit_transform/transform->NumPy, untouched reconstruction
+  error->float, inherited get/set_params, passive subclass operation, application
+  override tracking/output conversion, isolated real NumPy-free Array results.
+  Inputs use the existing 8x4 seed17 fixture and bounded settings. No benchmark.
+
+Compilation and actual runtime statuses are recorded separately in receipts.
+Required source/push checks must use a real ref envelope: an initial no-input
+hook invocation returned0 without checking a ref and is nonqualifying evidence.
+Focused public small_mlp_c CPU compilation is pending at handoff creation.
+Installed regression execution is pending current-source assembly; no runtime
+success is inferred from syntax, compilation or source review.
+
+Actual source_digest dependency review: among tokenizer, neural,
+runtime_sequential, training, mamba, transformer, embedding, x_sequence, x_cnn,
+byte_lm and the six current manifold-support families, only tokenizer imports
+small_mlp_items.mojo. The ongoing7b tokenizer build is retained as prior-source
+evidence; actual public regression requires a repaired tokenizer build/install.
+Unchanged other families can reuse their source-matched binaries.
+
+Full logs/binary/source archive:
+~/mojolearn-evidence/small-mlp-tensor-errors-20261029/
+Current installed smoke and binary mapping:
+~/mojolearn-evidence/manifold-installed-integration-20261029/
