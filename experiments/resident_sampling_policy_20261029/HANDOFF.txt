@@ -60,3 +60,11 @@ checkpoint/resume copy buffers. Class-only post-GIL checks do not claim mutable
 public-instance identity admission. This conclusion does not extend to public
 forward APIs accepting user-supplied state. Final session-cache publication
 checks live exposure/cache identity and never republishes a superseded tuple.
+
+Boundary commit: 1a85140c0b721df23277dea3b4d17a5f513a3e75.
+Five source guards PASSED (all exit 0, total 22.97 seconds): host-route,
+Python-execution, shell-compute, generation-boundary, native package-connection.
+Full guard argv/status/durations in guards.json beside complete individual logs.
+Parent still serializes integration with peer native group3/capability source.
+Reference-table refresh must use the final selected shipped default policy;
+policy1 experiment qualification must remain separate while policy0 ships.
