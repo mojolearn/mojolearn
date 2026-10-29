@@ -4,6 +4,11 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- **Native execution.** Retain operation plans, metadata and private workspaces across supported neural, model-selection and metrics operations, reducing repeated setup, allocation and copying. Performance measurements remain pending.
+- **Language-model generation.** Keep greedy/EOS KV state resident within reads, preserve failure progress and existing behavior when caches alias. Sampling KV upload reuse is available as a default-off experiment.
+- **Public API behavior.** Simplify manifold class setup and preserve native tensor iteration errors in SmallMLP instead of replacing them with a generic input refusal.
+- **Regression and verification evidence.** Separate API contract regressions from numerical identity checks, and retain installed verifier observations and their provenance for reference-table admission without repeating completed computations.
+
 ## 0.8.62 (published 2026-10-27)
 
 - **Decision trees.** `DecisionTreeClassifier` and `DecisionTreeRegressor` accept and forward the documented `numeric_mode` constructor parameter. Compiled kernels are unchanged.
