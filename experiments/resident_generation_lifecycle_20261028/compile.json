@@ -1,0 +1,115 @@
+{
+  "commit": "6fa8bd7d123e1739acd74e9c211889f7e1387ef8",
+  "source_files": 4584,
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "workers": 8,
+  "scope": "Conservative superset all present tracked Mojo/Python package sources, manifests and compile script. Sparse worktree includes checks and conditionally imported apple_fast source; no fast compile.",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "flags": [
+    "-j",
+    "8",
+    "--emit",
+    "shared-lib",
+    "--optimization-level",
+    "0",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "slot": "tools/compile_slot.sh default machine-wide policy",
+  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/resident-generation-lifecycle-20261028",
+  "compiles": [
+    {
+      "fixture": "compile_native",
+      "attempt": 1,
+      "source": "9820ce67dd",
+      "exit": 1,
+      "scope": "Pure native resident dispatch; failed Int GPU argument ABI.",
+      "log_sha256": "132e66bcc92526f7998215ee9cdb32a11517b5e94668e080abbba8093a2e3a98"
+    },
+    {
+      "fixture": "compile_native",
+      "attempt": 2,
+      "source": "94c0367821",
+      "exit": 0,
+      "scope": "Pure native resident dispatch, typed kernel ABI and per-step capacity.",
+      "log_sha256": "c3dc9a94c46484d96be7abb32391cd65068fb50d2c069d56b4b81b7e82afabcb",
+      "binary": {
+        "name": "compile_native-2.dylib",
+        "bytes": 8781064,
+        "sha256": "789c6275018eafba6c06c307637a787512018ce2996412548fa73aeb1765480a"
+      }
+    },
+    {
+      "fixture": "compile_boundary",
+      "attempt": 1,
+      "source": "25977b23bd",
+      "exit": 0,
+      "scope": "Public generate/read, provider, version capability; boundary source unchanged since.",
+      "log_sha256": "dc61a4cb6484fba63eb39698ff49277cabdc3ef72c26432572d22ddb39be14ab",
+      "binary": {
+        "name": "compile_boundary-1.dylib",
+        "bytes": 4766104,
+        "sha256": "86e06b0455fc90400be23dc73ab59b5491d53e24a6ce02df949f1b7378380f35"
+      }
+    },
+    {
+      "fixture": "compile_native",
+      "attempt": 3,
+      "source": "8aebe4636c",
+      "exit": 0,
+      "scope": "Native resource pins and bulk metadata copies; later status reduction changed.",
+      "log_sha256": "20664730a20c6b514f1cfc7ca815f00aa50f012313fcc723fe09ba235840b30d",
+      "binary": {
+        "name": "compile_native-3.dylib",
+        "bytes": 8764552,
+        "sha256": "9be5117b832fa3f66abf7666a4d83411d7f9c5d5c05228ec48bfad7d5be0a759"
+      }
+    },
+    {
+      "fixture": "compile_native",
+      "attempt": 4,
+      "source": "6fa8bd7d12",
+      "exit": 0,
+      "scope": "Final pure native resident dispatch and GPU status reduction.",
+      "log_sha256": "504eb4243aa7ad0b599c7193c0454f74ac184d3e8d295ea280806ef10219a813",
+      "binary": {
+        "name": "compile_native-4.dylib",
+        "bytes": 8817640,
+        "sha256": "45ffa099ddd02d4b8db6bcb3a909699667d27bd7e1e593d305bfed7712a8be20"
+      }
+    }
+  ],
+  "guards": [
+    {
+      "attempt": 1,
+      "exit": 1,
+      "log_sha256": "99ec5622cc2e8d1bdc7c3e9604247bb2dcf663986ddd92e64f3298fec57412c9"
+    },
+    {
+      "attempt": 2,
+      "exit": 1,
+      "log_sha256": "53fb6b45bb3f39941a111a4708538fe61743e25240345a17498fde015b55262c"
+    },
+    {
+      "attempt": 3,
+      "exit": 0,
+      "log_sha256": "f87f1d62e35863206d1640fdd093677b9e2664a3cb1181a2130507765716e5c2"
+    }
+  ],
+  "native_closure": {
+    "exit": 0,
+    "summary": "generation native closure: 268 modules, 0 violations",
+    "initial_sparse_failure": "FAIL unresolved local dependency: transformer.native_lm_resident_dispatch -> transformer.transformer_binding_impl -> training.neural_attention_owner -> autograd.rules_transformer -> autograd.kernels.transformer -> transformer.impl.llama.modeling_llama -> transformer.impl.llama.fused_attention -> gemm.checks.gemm_identical -> experiments.apple_fast.gemm.scoped_dispatch\ngeneration native closure: 267 modules, 1 violations"
+  },
+  "source_archive": {
+    "file": "source-5.tar.gz",
+    "sha256": "181a790bc79fbbbee0da0be199c5f3d4f082ce08a590264f4396a036a5cfb802",
+    "manifest": "source-5.sha256.json"
+  },
+  "runtime_run": false,
+  "identity_run": false,
+  "performance_measured": false,
+  "accelerator_execution_run": false
+}

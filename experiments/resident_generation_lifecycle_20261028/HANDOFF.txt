@@ -1,0 +1,93 @@
+Resident greedy generation read lifecycle, 2026-10-28
+Branch: lane/resident-generation-lifecycle-20261028
+Base: 7965f31955e7a19a5cdd49149753837752f70e23
+Final product source: 6fa8bd7d12 (native); public/provider source unchanged since
+25977b23bd. This branch does not depend on the separate neighbor batch.
+
+Actual shared mechanism and repeated work removed
+- The existing CausalLMSession and TransformerDecodeSession already own device
+  weights/KV and a native group reserve/execute/release protocol. The old generic
+  _read loop selected resident forward again and uploaded/exported every layer's
+  complete KV each token, then downloaded logits for host selection. The existing
+  complete greedy/no-EOS special route already avoided those transfers.
+- New native group operation 2 runs an entire greedy read (including EOS) using
+  that same resident session. Provider admission/route/state setup occur once;
+  KV loads once at read entry, remains on GPU through all steps, and exports once
+  per layer at read exit. No whole-logit download or host token selection.
+- GPU argmax preserves lowest-index ties, skips finished rows, publishes pad/EOS
+  and length changes, and refuses the first nonfinite token of the first invalid
+  active row. A GPU reduction returns only two stop/error control words each step.
+  The host loop handles those scalar control results, not predictions or row scans.
+- Final generated rows and lengths/finished flags transfer once. Unwritten trailing
+  capacity after EOS is never copied from the GPU. Native result packing constructs
+  the finished public shape/current token once. Fallback token staging allocation
+  moved after native route selection, so resident/native engines do not allocate it.
+
+Native boundary and lifetime
+- compile_native imports only transformer.native_lm_resident_dispatch. Its local
+  transitive closure is 268 modules with no Python/provider/CPython dependency.
+  The token loop receives native typed owners, address/scalar lists and an owned
+  ResidentGreedyRead. Safe direct boundary CAPI remains in the separate provider.
+- Stable List-backed NativeSessionGroup and ResidentGreedyRead descriptors avoid
+  the documented inline-address ABI issue. Provider finally pins typed session
+  objects, layers and group through native reserve, released-GIL execution and
+  release. Boundary finally pins admitted Array/storage snapshots and progress.
+- All device policy/status buffers and sub-buffer transfer views remain live
+  through final synchronization. Original sessions are reserved together under
+  the GIL only after all owners pass admission. Execution is native with the GIL
+  released; flags are released under the GIL. This does not add a new lock order.
+- Native execution failure marks the entire group unusable; boundary drops cached
+  sessions, closes the private owners and marks state/stream unusable. Failed/busy
+  streams remain uncheckpointable. Cleanup errors retain the original failure text.
+  No failed native run retries through the legacy path.
+
+Reuse/invalidation and semantics
+- Model/state/route metadata is captured per read. The existing model session key
+  and _parameters_exposed opt-out remain: exposed mutable weights use fresh
+  sessions each operation, not silently cached weights. Concurrent use gets a
+  private session group. Every later read reloads current admitted host state;
+  no borrowed host address survives the operation.
+- Native per-step position/cache limits preserve early-EOS behavior: a request
+  can stop before an otherwise oversized count reaches the limit. Captured model
+  maximum, state capacity and minimum layer cache remaining replace repeated
+  Python metadata lookup. Output state advances by prompt_length + wrote - 1,
+  leaving the final selected token as the next read's current token, as before.
+- New capability causal_lm_resident_read_v1 is connected from the compiled module
+  at setup. Older images, distributed models and unsupported resident layouts
+  keep their existing routes. Norm-less experimental defaults and packed-head
+  vendor restrictions are unchanged. The existing complete greedy/no-EOS route
+  remains unchanged; this batch addresses generic read/EOS/text-read paths.
+
+Compile/source evidence (no runtime qualification)
+- native attempt 1 rc1: GPU arguments used Int rather than DevicePassable Int32.
+  Retained full diagnostic. Repaired fixed-width kernel ABI.
+- native attempt 2 rc0, boundary attempt 1 rc0, native attempts 3 and final 4 rc0.
+  Final native artifact compiles the actual pure execution closure. Boundary
+  artifact compiles generate/read/provider/capability bodies separately; later
+  changes were in native execution only, with unchanged provider ABI/source.
+- Source guard attempts 1/2 refused new host loops. Replaced metadata element
+  copies with memcpy, retained only output transfer-span traversal, and physically
+  moved per-row stop/error reduction onto GPU. Final source/push guards rc0.
+- Closure audit initially missed conditionally imported experiments/apple_fast
+  source because of sparse checkout; restored source, final audit rc0. This is
+  shared dependency coverage, not a fast compile or fast investment.
+- CPU column, identical mode, optimization 0, 8 compiler workers via compile_slot.
+  This does not establish accelerator execution, loader/extension import behavior,
+  runtime correctness, vendor identity, performance or all-core saturation.
+- Full logs, all failures, binaries and five frozen source envelopes are retained
+  at ~/mojolearn-evidence/resident-generation-lifecycle-20261028/. Tracked compile.json
+  and compile scripts record exact coverage and hashes. No rented box used here.
+
+Remaining limits / next genuine work
+- Sampling remains on its existing route. generation_policy computes probability
+  totals/top-p/RNG thresholds in Float64; checks/numerics.mojo documents no Apple
+  GPU Float64 support. No unsupported software/toolchain workaround, arithmetic
+  change, feature removal or new host fallback was introduced. A native NVIDIA/AMD
+  device sampler is separate work; Apple support needs a supported arithmetic path.
+- A read count of one still imports/exports KV once per public read; the public
+  mutable-state boundary is preserved. Across-read private cache ownership needs
+  its own explicit mutation/admission contract before bypassing that transfer.
+- Existing per-step GPU x/norm/logit/GEMM workspace allocation and finite-check
+  synchronization remain. This batch fixes residency and selection ownership;
+  it makes no speed claim or claim of complete generation migration.
+- Parent reviews/integrates serially; this worktree never merges/pushes main.
