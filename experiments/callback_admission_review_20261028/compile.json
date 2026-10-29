@@ -1,0 +1,35 @@
+{
+  "scope": "Focused Samba registry, per-kind block schemas, flat registry shape/offset validation and output conversion; functions compiled, never executed",
+  "source_commit": "42c0cbdaae497ec4bd58e80d5ef8900bb642fa1a",
+  "source_base": "27dcb1c6a4d2d52eba792ca6a0527b7fe698b6d9",
+  "target": "Mac arm64 CPU, identical",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "command": "bash tools/compile_slot.sh pixi run mojo build -j 8 --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/callback_admission_review_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/callback-admission-review-20261028/samba-registry.dylib",
+  "compiler_workers": 8,
+  "cpu_saturation_claimed": false,
+  "exit_code": 0,
+  "binary": "/Users/andrewhendel/mojolearn-evidence/callback-admission-review-20261028/samba-registry.dylib",
+  "binary_sha256": "967f05d6f7369a183c0b20758e38f6de189c0955c4c32717118d0cbfcd63b0da",
+  "log": "/Users/andrewhendel/mojolearn-evidence/callback-admission-review-20261028/compile.log",
+  "log_sha256": "92ddc69ceec67ec799c540d15fec0e64b97fd785f0e5feb13944f5f2b32e14a7",
+  "warnings": "Compiler emitted unused-initial-value warning for entries = None; retained in complete log. No compiler errors.",
+  "environment": "/Users/andrewhendel/mojolearn-evidence/callback-admission-review-20261028/environment.json",
+  "source_retention": {
+    "archive": "/Users/andrewhendel/mojolearn-evidence/callback-admission-review-20261028/source-envelope.tar.gz",
+    "archive_sha256": "82c87a9fe481ec9823f55df6824ebca80be5e201cc4ea374f4635813dc3ca5b5",
+    "source_commit": "42c0cbdaae497ec4bd58e80d5ef8900bb642fa1a",
+    "scope": "Conservative superset: tracked Mojo files, binding shell scripts, compile_slot and pixi manifests",
+    "file_count": 3943,
+    "manifest": "/Users/andrewhendel/mojolearn-evidence/callback-admission-review-20261028/source-envelope.json"
+  },
+  "source_push_guards": {
+    "source_commit": "42c0cbdaae497ec4bd58e80d5ef8900bb642fa1a",
+    "exit_code": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/callback-admission-review-20261028/source-push-guards.log",
+    "log_sha256": "20d8932ed7c74bafd8b8b61e58a047b556affb519e429cdc93ee2d556f98ccd8"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_executed": false,
+  "rented_boxes": []
+}

@@ -78,3 +78,12 @@ Remaining work: repeated registry construction across public calls and other
 PythonObject/native boundary metadata remain. A retained cache would need an
 explicit immutable admission/version owner. This batch deliberately keeps
 operation-local invalidation. Full callback inventory closure remains pending.
+
+Delivery evidence
+-----------------
+Implementation/source commit: 42c0cbdaae497ec4bd58e80d5ef8900bb642fa1a
+Focused compiler exit 0; required source/push guards exit 0. The compiler
+retains an unused initial entries=None warning, with no errors.
+Complete log/artifact directory: /Users/andrewhendel/mojolearn-evidence/callback-admission-review-20261028
+Binary SHA256: 967f05d6f7369a183c0b20758e38f6de189c0955c4c32717118d0cbfcd63b0da
+See compile.json for exact source, flags, scope and artifact hashes.
