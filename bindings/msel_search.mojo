@@ -23,6 +23,7 @@ from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.arena_materialize_native import _cast
 from bindings.arena_resident_plan import ArenaResidentPlan
+from bindings.msel_parameter_grid import parameter_grid_dicts, PreparedParameterGrid
 from bindings.family_common import (
     FAMILY_I64P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
     family_type_name, family_as_f32,
@@ -102,66 +103,23 @@ def _search_seed(value: PythonObject, context: PythonObject) raises -> PythonObj
 
 
 def msel_grid_dicts(param_grid_in: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = msel_b()
-    var param_grid = param_grid_in
-    if py_type(param_grid) is b.dict:
-        param_grid = py_call(b.list, Python.tuple(param_grid))
-    if py_type(param_grid) is not b.list and py_type(param_grid) is not b.tuple:
-        raise Error("TypeError: Parameter grid requires a native dict or list of dicts; Python iterator hooks are not supported")
-    var out = Python.list()
-    for i in range(len(param_grid)):  # driver-loop: admitted candidate dictionaries
-        var g = param_grid[i]
-        if py_type(g) is not b.dict:
-            raise Error("TypeError: Parameter grid requires native dictionaries")
-        var keys = py_call(b.list, g.keys())
-        var stored = Python.dict()
-        for j in range(len(keys)):  # driver-loop: parameter names and native value containers
-            var key = keys[j]
-            if py_type(key) is not b.str:
-                raise Error("TypeError: parameter names must be exact strings")
-            var values = msel_parameter_values(g[key], context)
-            if len(values) == 0:
-                raise Error("Parameter grid for parameter " + String(py_call(b.repr, key)) + " need to be a non-empty sequence.")
-            py_setitem(stored, key, g[key])
-        _ = py_call(out.append, stored)
-    return out
+    # Public construction keeps the original mutable value containers.
+    return parameter_grid_dicts(param_grid_in, context)
 
 
 def msel_grid_list(param_grid: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`list(ParameterGrid)` from its stored dicts: every combination of
-    each dict's values, keys sorted, dicts in list order."""
-    var b = msel_b()
-    var itertools = native_loaded_module("itertools")
-    var out = Python.list()
-    for i in range(len(param_grid)):  # driver-loop: over the candidate dicts
-        var g = param_grid[i]
-        var keys = family_call(b.sorted, g)
-        if len(keys) == 0:
-            _ = py_call(out.append, Python.dict())
-            continue
-        var values = Python.list()
-        for j in range(len(keys)):  # driver-loop: over a grid's parameters
-            _ = py_call(values.append, msel_parameter_values(g[keys[j]], context))
-        var combos = family_call(b.list, msel_apply(itertools.product, py_call(b.tuple, values)))
-        for c in range(len(combos)):  # driver-loop: over candidates
-            _ = py_call(out.append, family_call(b.dict, py_call(b.zip, keys, combos[c])))
-    return out
+    """Admit/capture each value sequence once and emit the final candidates."""
+    var prepared = PreparedParameterGrid(param_grid, context)
+    return prepared.expand()
 
 
 def msel_grid_len(param_grid: PythonObject, context: PythonObject) raises -> Int:
-    """`len(ParameterGrid)`."""
-    var b = msel_b()
-    var total = 0
-    for i in range(len(param_grid)):  # driver-loop: over the candidate dicts
-        var size = 1
-        var values = py_call(b.list, family_call(param_grid[i].values))
-        for j in range(len(values)):  # driver-loop: over a grid's parameters
-            size *= len(msel_parameter_values(values[j], context))
-        total += size
-    return total
+    var prepared = PreparedParameterGrid(param_grid, context, False, False)
+    return prepared.count()
 
 
-def msel_sampler_check(param_distributions_in: PythonObject, context: PythonObject) raises -> PythonObject:
+def msel_sampler_check(param_distributions_in: PythonObject, context: PythonObject,
+                       capture_values: Bool = False) raises -> PythonObject:
     # The public contract already excludes scipy.stats distributions. Refuse
     # custom iterators/distributions without reading an rvs/__iter__ property.
     var b = msel_b()
@@ -181,16 +139,17 @@ def msel_sampler_check(param_distributions_in: PythonObject, context: PythonObje
                 var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[a])
                 if py_contains(fields, "rvs"):
                     raise Error("NotImplementedError: mojolearn ParameterSampler samples native parameter lists; scipy.stats and Python distribution callbacks are not supported")
-    return msel_grid_dicts(param_distributions_in, context)
+    return parameter_grid_dicts(param_distributions_in, context, capture_values)
 
 
 def msel_sampler_list(dists: PythonObject, n_iter_in: PythonObject, random_state: PythonObject,
-                      context: PythonObject) raises -> PythonObject:
+                      context: PythonObject, captured: Bool = False) raises -> PythonObject:
     """`list(ParameterSampler)`: a random permutation of the full grid,
     its first n_iter combinations."""
     var n_iter = _search_index(n_iter_in, "n_iter", context)
     var seed = _search_seed(random_state, context)
-    var grid = msel_grid_list(msel_grid_dicts(dists, context), context)
+    var prepared = PreparedParameterGrid(dists, context, captured)
+    var grid = prepared.expand()
     if msel_cmp("lt", PythonObject(len(grid)), n_iter):
         msel_warn("The total space of parameters " + String(len(grid)) + " is smaller than n_iter="
                   + family_str(n_iter) + ". Running " + String(len(grid)) + " iterations. For exhaustive "
@@ -209,7 +168,7 @@ def msel_sampler_list(dists: PythonObject, n_iter_in: PythonObject, random_state
 def msel_sampler_len(dists: PythonObject, n_iter: PythonObject, context: PythonObject) raises -> PythonObject:
     """`len(ParameterSampler)`."""
     var count = _search_index(n_iter, "n_iter", context)
-    return family_call(msel_b().min, count, PythonObject(msel_grid_len(msel_grid_dicts(dists, context), context)))
+    return family_call(msel_b().min, count, PythonObject(msel_grid_len(dists, context)))
 
 
 # ---------------------------------------------------------------- score tables
@@ -311,10 +270,10 @@ def msel_candidates(model: PythonObject, context: PythonObject) raises -> Python
     var fields = msel_search_fields(model, context)
     var kind = py_type(model)
     if kind is msel_cls("GridSearchCV", context):
-        return msel_grid_list(msel_grid_dicts(fields["param_grid"], context), context)
+        return msel_grid_list(fields["param_grid"], context)
     if kind is msel_cls("RandomizedSearchCV", context):
-        var dists = msel_sampler_check(fields["param_distributions"], context)
-        return msel_sampler_list(dists, fields["n_iter"], fields["random_state"], context)
+        var dists = msel_sampler_check(fields["param_distributions"], context, True)
+        return msel_sampler_list(dists, fields["n_iter"], fields["random_state"], context, True)
     raise Error("TypeError: Python candidate callbacks are not supported; use GridSearchCV or RandomizedSearchCV")
 
 

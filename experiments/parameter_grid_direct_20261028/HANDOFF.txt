@@ -1,0 +1,70 @@
+Direct native parameter-grid enumeration, 2026-10-28
+Branch: lane/parameter-grid-direct-20261028
+Base: 7105ca64c8b3762eb4e9473ff235b5bb5da0792a
+
+Scope and repeated work removed
+-------------------------------
+New bindings/msel_parameter_grid.mojo owns shared admission and an operation-
+local PreparedParameterGrid. Value containers are admitted/materialized once,
+then native rows retain exact key/choice owners and native sequence lengths.
+Expansion enumerates final dictionaries directly with mixed-radix counters.
+It removes list(itertools.product(...)), every intermediate combination tuple,
+and each candidate's zip/dict calls. Native PyList_GetItem/PyDict_SetItem/
+PyList_Append entry addresses are resolved once before enumeration. Exact,
+private prepared lists/strings/dictionaries make those supported CPython APIs
+safe without application protocols. No kernel or numeric-mode change.
+
+msel_search delegates grid admission/list/length to this helper. GridSearchCV
+uses the prepared grid directly. RandomizedSearchCV reuses the sequence lists
+already materialized during its native distribution refusal/admission stage;
+ParameterSampler retains its n_iter/seed/warning/permutation behavior. The
+three public grid dispatch branches no longer wrap expansion/length in an
+additional grid_dicts admission, which had repeated all value preparation.
+
+Ordering, errors and ownership
+------------------------------
+Admission visits outer grids in list order, parameters in original dictionary
+insertion order, and preserves exact-type/name/nonempty refusals and wording.
+All grid admission finishes before sorting/expansion. Final dictionaries insert
+keys in sorted native-string order; the last parameter changes fastest. An
+empty dictionary emits one empty candidate, an empty outer grid emits none.
+Enumeration needs no total-cardinality product, avoiding an overflowing loop
+bound. Count uses the existing native multiplication/addition behavior.
+
+Constructor grid_dicts retains original value containers in copied dictionaries,
+as before. A later operation re-admits and captures current lists/arrays. No
+persistent cache is added. During an operation, prepared choices are private
+fresh lists, so later caller sequence replacement cannot reinterpret the
+captured enumeration. Choice objects themselves retain their original identity;
+mutable choice objects are not deep-copied. Array-derived choices retain the
+existing materializer's admitted storage/row-view ownership. Native row Lists
+retain keys/choices through every borrowed PyList_GetItem/PyDict_SetItem call;
+PyDict_SetItem takes its own reference and PyList_Append retains each finished
+candidate. Partial dictionaries/lists unwind through ordinary owning
+PythonObjects on failure. No borrowed raw element pointer outlives its immediate
+insertion, and no GIL release is added to enumeration.
+
+Sampler sequence capture now occurs at its first existing grid admission,
+including the earlier candidate-admission stage for randomized search; it is
+not repeated after scalar n_iter/seed preparation. Distinct later public calls
+observe new mutations. This follows the operation-local stable-input boundary.
+
+Remaining limits
+----------------
+The final candidate list still exists, including for indexing and sampling;
+this batch removes its redundant Cartesian-product intermediate graph. Public
+indexing still expands then applies the existing list indexing behavior.
+Native list/dict CPython containers remain at the boundary, as do supported
+value materialization and scorer/search runtime work owned by other lanes.
+No Python-free, measured-speed, runtime or identity claim is made.
+
+Compilation scope
+-----------------
+Focused Mac arm64 CPU identical compile exports grid admission/expansion/count,
+sampler admission/expansion/count, and GridSearchCV/RandomizedSearchCV candidate
+selection. model_selection_native dispatch edits are parsed/source-reviewed;
+the complete model-selection family dispatcher is not an exported compile root.
+No runtime/performance/identity campaign and no rented machines. See compile.json
+for final status, exact flags, source bytes, binaries and complete retained logs.
+
+Evidence: /Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/

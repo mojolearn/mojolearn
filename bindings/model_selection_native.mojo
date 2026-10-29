@@ -162,13 +162,13 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_split_descriptor":
         return msel_split_descriptor(args, context)
     if operation == "family_msel_grid" or operation == "family_msel_grid_iter":
-        var result = msel_grid_list(msel_grid_dicts(_msel_attr(model, "param_grid", context), context), context)
+        var result = msel_grid_list(_msel_attr(model, "param_grid", context), context)
         return py_call(b.iter, result) if operation.endswith("_iter") else result
     if operation == "family_msel_grid_len":
-        return PythonObject(msel_grid_len(msel_grid_dicts(_msel_attr(model, "param_grid", context), context), context))
+        return PythonObject(msel_grid_len(_msel_attr(model, "param_grid", context), context))
     if operation == "family_msel_grid_item":
         var index = _search_index(args[0], "ParameterGrid index", context)
-        var grid = msel_grid_list(msel_grid_dicts(_msel_attr(model, "param_grid", context), context), context)
+        var grid = msel_grid_list(_msel_attr(model, "param_grid", context), context)
         return family_call(py_attr(grid, "__getitem__"), index)
     if operation == "family_msel_sampler" or operation == "family_msel_sampler_iter":
         var result = msel_sampler_list(_msel_attr(model, "param_distributions", context), _msel_attr(model, "n_iter", context),
