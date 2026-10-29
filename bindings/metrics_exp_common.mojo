@@ -19,7 +19,7 @@
 # all the metrics read, so the programs below see the same words.
 from std.memory import memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.metrics_plan_admission import MetricPlanOpcodes
+from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
 from std.python import Python, PythonObject
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact
 from providers.python.metrics_matrix_input_pyapi import metric_score_matrix
@@ -259,24 +259,32 @@ struct MxArena(Copyable, Movable):
     var store: PythonObject
     var base: Int
 
-    def __init__(out self, store: PythonObject) raises:
-        self.store = store
-        self.base = Int(py=py_call(store.buffer_info)[0])
+    def __init__(out self, arena: MetricArenaOwner):
+        self.store = arena.store
+        self.base = arena.base
 
     def i32(self, off: Int) -> Int:
-        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)[0])
+        var result = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)[0])
+        _ = self.store
+        return result
 
     def i64(self, off: Int) -> Int:
-        return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)[0])
+        var result = Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)[0])
+        _ = self.store
+        return result
 
     def f64(self, off: Int) -> Float64:
         """The binary64 value of arena[off], arena[off + 1], low first (`words(off, 2, "d")`)."""
         var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)
-        return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
+        var result = bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
+        _ = self.store
+        return result
 
     def f32(self, off: Int) -> Float64:
         """`floats(off, 1)[0]`: the Float32 word, widened."""
-        return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)[0])
+        var result = Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off)[0])
+        _ = self.store
+        return result
 
     def words(self, off: Int, words: Int, shape: PythonObject, typestr: String,
               context: PythonObject) raises -> PythonObject:
@@ -286,7 +294,8 @@ struct MxArena(Copyable, Movable):
         if words > 0:
             memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
                    src=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off), count=words)
-            _ = result  # keep the Python object alive through the native call above
+            _ = result  # keep both owners alive through the native copy above
+            _ = self.store
         return result
 
 

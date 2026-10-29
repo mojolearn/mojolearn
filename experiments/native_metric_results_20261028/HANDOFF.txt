@@ -1,0 +1,49 @@
+Retain private metric result owner/address (2026-10-28)
+Branch lane/native-metric-results-20261028.
+Parent required first: 781455851e82df6360b7f9ff0f5a4a88d55e4e83 (native metric plans).
+
+Removed repeated work:
+Mc classification/ranking result readers called arena.buffer_info and decoded its
+Python tuple for every Int32/Float32/Float64/Int64 read, including per-class flags,
+OVO pair output loops and the ten reads of a curve-fold result. The internal runner
+already obtained the address when creating its private arena. MetricArenaOwner now
+carries that exact address and owning store out of the completed run; scalar reads
+and result copies use the retained native address. MxArena also avoids its one extra
+buffer_info call when wrapping the same completed store.
+
+Reuse/lifetime/invalidation:
+A fresh private owner is returned for every completed metric program; no cross-call
+or global cache. _store creates private native array storage, the numerical entry
+finishes using it synchronously, and no path resizes or publishes the arena itself.
+Only internal typed consumers receive MetricArenaOwner. Every scalar read and output
+memcpy explicitly retains the source store through its final pointer use. A copied
+owner holds the same strong Python reference. Result array constructors still allocate
+separate public storage and copy words; public output aliases and lifetimes do not
+change. The public _metrics_run_fields route still returns/publishes its existing
+Python arena; its ABI is unchanged. No mutable caller buffer metadata is cached here.
+
+Changed files:
+bindings/metrics_plan_admission.mojo (private owner), arena_prog_native.mojo (internal
+completed result), mcls_common.mojo (scalar/copy helpers), mcls_classify.mojo and
+mcls_ranking.mojo (typed arguments), metrics_exp_common.mojo (MxArena constructor and
+explicit owner pins). Native numerical/layout sources are unchanged.
+
+Validation:
+Actual metrics_exp_operation and metrics_cls_operation plus public _metrics_run_fields
+CPU identical O0 compile rc0, 21.99s. Includes typed result readers, copy publishers and
+both internal/public runner paths. Mac compile_slot, 10 compiler workers from sysctl.
+No failed compile. Reused previous independent core plan compilation because its source
+is unchanged. All four normal branch guards rc0, no override; receipt in
+source-guards.json. No runtime, identity, GPU or timing
+campaign; compilation is not execution or bitwise qualification.
+
+Remaining:
+Boundary admission/residency and the one compiled numerical entry call per program
+remain. This is concrete repeated result-metadata removal, not a whole-library
+Python-free claim. Direct CPython interoperability remains allowed.
+
+Evidence:
+~/mojolearn-evidence/native-metric-results-20261028/
+compile.log/json, source-manifest.json, source-bytes.tgz, _native_metric_results.so,
+controller.log, source guard logs/receipt and retained-files.json.
+Committed fixture/receipt: experiments/native_metric_results_20261028/.

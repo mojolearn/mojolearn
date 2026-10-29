@@ -17,6 +17,7 @@
 # `pinned_mul_f64`: Python never fuses). Same kernels: the bits do not move.
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from bindings.metrics_plan_admission import MetricArenaOwner
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.classical_arrays import classical_address, classical_dtype_str
 from bindings.family_common import (
@@ -136,7 +137,7 @@ def mc_fold_stages(mut prog: McProg, s: Int, stride: Int, pos: Int, w: Int, n: I
     return out
 
 
-def mc_fold_auc(arena: PythonObject, off: Int, partial: Bool, max_fpr: Float64, context: PythonObject) raises -> PythonObject:
+def mc_fold_auc(arena: MetricArenaOwner, off: Int, partial: Bool, max_fpr: Float64, context: PythonObject) raises -> PythonObject:
     """`_FoldCurve.auc(max_fpr)` from the fold's words."""
     var s = mc_arena_float(arena, off) + mc_arena_float(arena, off + 1)
     var f_tot = mc_arena_float(arena, off + 2)

@@ -46,3 +46,15 @@ struct MetricPlanOpcodes(Movable):
             # Avoid constructing native strings/decoding unused opcodes at setup.
             self.codes[name] = Int(py=self.values[PythonObject(name)])
         return self.codes[name]
+
+
+struct MetricArenaOwner(Copyable, Movable):
+    # Private completed program storage. The runner already admitted/allocated
+    # this owner and captured its base. No caller can resize it before reads;
+    # public outputs copy their result spans into separately owned arrays.
+    var store: PythonObject
+    var base: Int
+
+    def __init__(out self, store: PythonObject, base: Int):
+        self.store = store
+        self.base = base

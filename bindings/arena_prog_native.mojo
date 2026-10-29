@@ -16,6 +16,7 @@
 from bindings.native_array_storage import native_array_zeros
 from std.memory import memcpy
 from core.metrics_program_plan import MetricProgramPlan
+from bindings.metrics_plan_admission import MetricArenaOwner
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
@@ -502,7 +503,7 @@ def _metrics_run_fields(fields: PythonObject, mode: PythonObject,
 
 
 def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode: PythonObject,
-                      context: PythonObject) raises -> PythonObject:
+                      context: PythonObject) raises -> MetricArenaOwner:
     # Private native builders supply words directly. The separately callable
     # public _Prog path above retains its dictionary/record admission and order.
     classical_connect_numpy(context)
@@ -511,9 +512,10 @@ def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode:
     var base = Int(py=arena[1])
     var known = True
     var merged = plan.download(known)
-    return _metrics_execute[True](PythonObject(None), inputs, plan.input_offsets, plan.stages,
+    var completed = _metrics_execute[True](PythonObject(None), inputs, plan.input_offsets, plan.stages,
                                   len(plan.stages) // STAGE_WORDS, plan.size, arena, base,
                                   entries, known, merged, context)
+    return MetricArenaOwner(completed, base)
 
 
 def _metrics_execute[native_plan: Bool](

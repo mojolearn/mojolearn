@@ -20,7 +20,7 @@
 #   back from the arena as `prog.ints` / `prog.words` read them.
 from std.memory import memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.metrics_plan_admission import MetricPlanOpcodes
+from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
 from bindings.metrics_native_inputs import metric_shape, metric_flatten
@@ -673,58 +673,68 @@ struct McProg(Movable):
         return self.plan.want(off, n, count, mult)
 
 
-def mc_run(prog: McProg, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+def mc_run(prog: McProg, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
     """`_run(prog, numeric_mode)`: the program handed to the shared runner
     (the one call the Python `_run` made); returns the arena store."""
     var prog_context = context["family_metrics_prog_context"]
     return _metrics_run_plan(prog.plan, prog.inputs, mode, prog_context)
 
 
-def mc_arena_base(arena: PythonObject) raises -> Int:
-    return Int(py=py_call(arena.buffer_info)[0])
+def mc_arena_base(arena: MetricArenaOwner) raises -> Int:
+    return arena.base
 
 
-def mc_arena_int(arena: PythonObject, off: Int) raises -> Int:
+def mc_arena_int(arena: MetricArenaOwner, off: Int) raises -> Int:
     """`prog.ints(off, 1)[0]`."""
-    return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=mc_arena_base(arena) + 4 * off)[0])
+    var result = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=arena.base + 4 * off)[0])
+    _ = arena.store
+    return result
 
 
-def mc_arena_float(arena: PythonObject, off: Int) raises -> Float64:
+def mc_arena_float(arena: MetricArenaOwner, off: Int) raises -> Float64:
     """`prog.floats(off, 1)[0]`: the exact image of a Float32 word."""
-    return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=mc_arena_base(arena) + 4 * off)[0])
+    var result = Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=arena.base + 4 * off)[0])
+    _ = arena.store
+    return result
 
 
-def mc_arena_double(arena: PythonObject, off: Int) raises -> Float64:
+def mc_arena_double(arena: MetricArenaOwner, off: Int) raises -> Float64:
     """`prog.words(off, 2, "d")[0]`: the binary64 at arena[off], arena[off + 1], low first."""
-    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=mc_arena_base(arena) + 4 * off)
-    return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
+    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base + 4 * off)
+    var result = bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
+    _ = arena.store
+    return result
 
 
-def mc_arena_i64(arena: PythonObject, off: Int) raises -> Int:
+def mc_arena_i64(arena: MetricArenaOwner, off: Int) raises -> Int:
     """`prog.words(off, 2, "q")[0]`."""
-    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=mc_arena_base(arena) + 4 * off)
-    return Int(bitcast[DType.int64](UInt64(words[0]) | (UInt64(words[1]) << 32)))
+    var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base + 4 * off)
+    var result = Int(bitcast[DType.int64](UInt64(words[0]) | (UInt64(words[1]) << 32)))
+    _ = arena.store
+    return result
 
 
-def mc_arena_f64_array(arena: PythonObject, off: Int, count: Int, shape: PythonObject,
+def mc_arena_f64_array(arena: MetricArenaOwner, off: Int, count: Int, shape: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     """`Array._owned(prog.words(off, 2 * count, "d"), shape, "<f8")`."""
     var out = family_array(shape, "<f8", context)
     if count > 0:
         memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out))),
-               src=FAMILY_F64P(unsafe_from_address=mc_arena_base(arena) + 4 * off), count=count)
-        _ = out  # keep the Python object alive through the native call above
+               src=FAMILY_F64P(unsafe_from_address=arena.base + 4 * off), count=count)
+        _ = out  # keep both owners alive through the native copy above
+        _ = arena.store
     return out
 
 
-def mc_arena_i64_array(arena: PythonObject, off: Int, count: Int, shape: PythonObject,
+def mc_arena_i64_array(arena: MetricArenaOwner, off: Int, count: Int, shape: PythonObject,
                        context: PythonObject) raises -> PythonObject:
     """`Array._owned(prog.words(off, 2 * count, "q"), shape, "<i8")`."""
     var out = family_array(shape, "<i8", context)
     if count > 0:
         memcpy(dest=FAMILY_I64P(unsafe_from_address=Int(py=classical_address(out))),
-               src=FAMILY_I64P(unsafe_from_address=mc_arena_base(arena) + 4 * off), count=count)
-        _ = out  # keep the Python object alive through the native call above
+               src=FAMILY_I64P(unsafe_from_address=arena.base + 4 * off), count=count)
+        _ = out  # keep both owners alive through the native copy above
+        _ = arena.store
     return out
 
 

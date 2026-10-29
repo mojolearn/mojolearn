@@ -15,6 +15,7 @@
 # shared runner. Same kernels, same programs: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.metrics_plan_admission import MetricArenaOwner
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.classical_arrays import classical_address, classical_dtype_str
 from bindings.family_common import (
@@ -523,7 +524,7 @@ def mc_put_proba(mut prog: McProg, a: PythonObject, n: Int, k: Int, binary: Bool
     return (s, flags)
 
 
-def mc_proba_code(arena: PythonObject, flags: Int) raises -> Int:
+def mc_proba_code(arena: MetricArenaOwner, flags: Int) raises -> Int:
     """`_proba_code`: 0, or the first failed check."""
     if mc_arena_int(arena, flags) != 0:
         return 1
