@@ -110,3 +110,56 @@ def test_unbound_or_missing_generated_inputs_refused(input_bytes,change):
     if change=='outside-source':row['fields']['source']['files']={'../outside':'invalid'}
     with pytest.raises((ValueError,FileNotFoundError)):
         wrapper.retain_inputs(root,cache,row,out)
+
+
+def test_failed_group_keeps_completed_support_and_entry_bytes_on_output_mount(tmp_path, monkeypatch):
+    import argparse
+    import subprocess
+    import sys
+    import types
+
+    root=tmp_path/'source';out=tmp_path/'mounted-output'
+    (root/'tools').mkdir(parents=True)
+    (root/'tools/development_build.py').write_text('frozen producer')
+    helper=root/'python/mojolearn/.libs/libMojolearnMath.so'
+    helper.parent.mkdir(parents=True);helper.write_bytes(b'bootstrap runtime')
+    commit='c'*40
+    monkeypatch.setitem(sys.modules,'build_sizing',types.SimpleNamespace(box_resources=lambda:(4,16<<30)))
+    monkeypatch.setitem(sys.modules,'development_build',types.SimpleNamespace(selected_group=lambda *args:True))
+    monkeypatch.setitem(sys.modules,'merged_bindings',types.SimpleNamespace(
+        development_members=lambda *args:{'_mojolearn_dev_example':['example']}))
+    monkeypatch.setattr(wrapper.os,'sched_getaffinity',lambda pid:{0,1,2,3},raising=False)
+    monkeypatch.setattr(wrapper.subprocess,'check_output',lambda cmd,**kw:commit+'\n' if 'rev-parse' in cmd else '')
+
+    def build(cmd, **kw):
+        if 'archive' in cmd:
+            kw['stdout'].write(b'actual frozen source archive')
+            return subprocess.CompletedProcess(cmd,0)
+        cache=Path(cmd[cmd.index('--cache')+1])
+        assert cache==out/'cache'
+        support=cache/'artifacts'/'completed-support';support.mkdir(parents=True)
+        (support/'libMojolearnMath.so').write_bytes(b'completed support binary')
+        entry=cache/'work'/'failed-selected'/'roots';entry.mkdir(parents=True)
+        (entry/'selected.mojo').write_text('actual failed compiler entry')
+        assert (out/'bootstrap-runtime/libMojolearnMath.so').read_bytes()==b'bootstrap runtime'
+        return subprocess.CompletedProcess(cmd,1)
+
+    monkeypatch.setattr(wrapper.subprocess,'run',build)
+    assert wrapper.run(argparse.Namespace(root=root,out=out,commit=commit,
+                                        group='identical:example',arch='sm_80'))==1
+    receipt=json.loads((out/'request.json').read_text())
+    assert receipt['status']=='failed' and receipt['exit_code']==1
+    assert (out/'cache/artifacts/completed-support/libMojolearnMath.so').read_bytes()==b'completed support binary'
+    assert (out/'cache/work/failed-selected/roots/selected.mojo').read_text()=='actual failed compiler entry'
+    assert 'retained_key' not in receipt
+
+
+def test_timeout_collection_retains_generated_checkout_input():
+    root=Path(__file__).resolve().parents[1]
+    text=(root/'.github/workflows/development-group-build.yml').read_text()
+    start=text.index('      - name: Retain generated source')
+    stop=text.index('      - uses: actions/upload-artifact',start)
+    step=text[start:stop]
+    assert 'if: always()' in step
+    assert 'source/tokenizer/impl/unicode_table_generated.mojo' in step
+    assert 'development-out/generated-source' in step

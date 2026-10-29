@@ -56,6 +56,20 @@ def selected_result(result, group, cache):
     return directory, row
 
 
+def retain_bootstrap(root, out):
+    helper = root/'python/mojolearn/.libs/libMojolearnMath.so'
+    require(helper.is_file(), 'bootstrap portable-math binary is missing')
+    target = out/'bootstrap-runtime'/helper.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    expected = hashlib.sha256(helper.read_bytes()).hexdigest()
+    if target.exists():
+        require(hashlib.sha256(target.read_bytes()).hexdigest() == expected,
+                'bootstrap portable-math input changed during build')
+    else:
+        shutil.copy2(helper, target)
+    return {str(target.relative_to(out)):expected}
+
+
 def retain_inputs(root, cache, row, out):
     """Retain consumed bytes, including generated source absent from git archive."""
     retained = {}
@@ -77,14 +91,7 @@ def retain_inputs(root, cache, row, out):
     for target in sorted((out/'generated-roots').rglob('*')):
         if target.is_file():
             retained[str(target.relative_to(out))] = hashlib.sha256(target.read_bytes()).hexdigest()
-    # The common bootstrap builds this actual linker/runtime input before the
-    # group compiler. Preserve its bytes, not only the portable-math source.
-    helper = root/'python/mojolearn/.libs/libMojolearnMath.so'
-    require(helper.is_file(), 'bootstrap portable-math binary is missing')
-    target = out/'bootstrap-runtime'/helper.name
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(helper, target)
-    retained[str(target.relative_to(out))] = hashlib.sha256(target.read_bytes()).hexdigest()
+    retained.update(retain_bootstrap(root, out))
     (out/'retained-inputs.json').write_text(json.dumps(retained,indent=2,sort_keys=True)+'\n')
     return retained
 
@@ -109,7 +116,11 @@ def run(args):
     cores,memory=build_sizing.box_resources()
     env=workers_environment(os.environ,args.arch,cores)
     out.mkdir(parents=True)
-    cache=Path('/root/.cache/mojolearn-development')
+    # This is the small development artifact/work cache, NOT the compiler or
+    # pixi cache. It lives on the bind-mounted output so timeout/failure cannot
+    # discard successful support images or generated roots with docker --rm.
+    cache=out/'cache'
+    bootstrap_inputs=retain_bootstrap(root,out)
     command=[sys.executable,str(root/'tools/development_build.py'),'build',
              '--sets','host' if args.arch=='host' else 'identical','--group',args.group,
              '--jobs','1','--cache',str(cache),'--evidence',str(out/'evidence'),
@@ -121,7 +132,7 @@ def run(args):
                 affinity=sorted(os.sched_getaffinity(0)),allocated_memory_bytes=memory,
                 cgroup_cpu_max=Path('/sys/fs/cgroup/cpu.max').read_text() if Path('/sys/fs/cgroup/cpu.max').exists() else None,
                 environment={k:env[k] for k in sorted(env) if k.startswith('MOJOLEARN_') and not any(x in k for x in ('KEY','TOKEN','SECRET'))},
-                status='running')
+                bootstrap_inputs=bootstrap_inputs,status='running')
     with (out/'source.tar.gz').open('wb') as stream:
         subprocess.run(['git','-C',str(root),'archive','--format=tar.gz',head],stdout=stream,check=True)
     record['source_archive_sha256']=hashlib.sha256((out/'source.tar.gz').read_bytes()).hexdigest()
