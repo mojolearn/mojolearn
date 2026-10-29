@@ -19,9 +19,13 @@ LOGS / CONTEXT (Andrew, mandatory; propagate to any nested subagent):
 COMPILES (allowed for this migration; supersedes "lanes never compile"):
 - A small affected compile of the paths you changed is REQUIRED before anything is called green. Model your
   compile on an existing receipt (e.g. ~/mojolearn-evidence/peer1-ivf-radius-pcs-20261028/compile-command.sh:
-  `pixi run mojo build --optimization-level 0 -j <jobs> --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1
+  `pixi run mojo build -j <jobs> --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1
   -D MOJOLEARN_COLUMN_CPU -I . -I bindings <entry.mojo> -o out.so`), and on the experiments/*/compile.json
-  receipts of your own scope. Save a receipt (source commit, entry, command, compiler version, jobs, exit, log path,
+  receipts of your own scope. Use standard optimized compilation, including for small development
+  libraries. Correction (2026-10-29): the former O0 example produced an incorrect zero in a
+  reported image despite explicit buffer lifetime protection; normal optimization returned
+  the correct result. The compiler internal cause remains unconfirmed. Preserve earlier O0
+  records as compile evidence, not proof of correct execution. Save a receipt (source commit, entry, command, compiler version, jobs, exit, log path,
   binary sha256) under experiments/<scope>/ and the full log under ~/mojolearn-evidence/<lane>/.
 - On the Mac: wrap every compile in `bash ~/mojolearn-evidence/compile_slot.sh <cmd>` (4 machine-wide slots,
   nice 19) and use -j 10 at most. Check `df -h /` before compiling; stop if under 8 GiB free.

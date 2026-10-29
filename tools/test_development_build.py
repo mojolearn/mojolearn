@@ -928,3 +928,17 @@ def test_main_refuses_a_too_small_machine_before_starting_a_compiler(repo, tmp_p
                      "--evidence", str(evidence)]) == 1
     error = json.loads((evidence / "result.json").read_text())["error"]
     assert "cannot fit" in error and "--memory-per-job-gib" in error
+
+
+@pytest.mark.parametrize("flag", ["-O0", "-O 0", "-O=0", "--optimization-level 0",
+                                  "--optimization-level=0", "-D KEEP=1 -O0 -O3"])
+@pytest.mark.parametrize("variable", ["MOJOLEARN_MOJO_BUILD_FLAGS", "MOJOLEARN_BUILD_EXTRA_DEFINES"])
+def test_unoptimized_development_images_rejected_before_cache(repo, tmp_path, flag, variable):
+    with pytest.raises(dev.BuildError, match="incorrect zero"):
+        plan(repo, tmp_path, dict(ENV, **{variable: flag}))
+
+
+def test_standard_development_optimization_flags_preserved():
+    assert dev.build_environment("identical", dict(ENV, MOJOLEARN_MOJO_BUILD_FLAGS=""), "linux")["MOJOLEARN_MOJO_BUILD_FLAGS"] == ""
+    assert "MOJOLEARN_MOJO_BUILD_FLAGS" not in dev.build_environment("identical", ENV, "linux")
+    assert dev.build_environment("identical", dict(ENV, MOJOLEARN_MOJO_BUILD_FLAGS="-O2"), "linux")["MOJOLEARN_MOJO_BUILD_FLAGS"] == "-O2"

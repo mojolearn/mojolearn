@@ -1,0 +1,33 @@
+{
+  "scope": "Development controller rejects O0 before cache selection; standard optimization and historical evidence preserved.",
+  "reported_failure": "Owner reported incorrect zero with O0 despite protected buffer lifetimes; normal optimized source returned correct result. Internal compiler cause unconfirmed. Not reproduced in this compile-only task.",
+  "tests": {
+    "passed": 90,
+    "log": "/Users/andrewhendel/mojolearn-evidence/development-optimization-20261029/tests-final.log",
+    "earlier_failed_attempts": "/Users/andrewhendel/mojolearn-evidence/development-optimization-20261029/tests.log"
+  },
+  "build_state": "incomplete",
+  "controller_exit": 3,
+  "coverage": "Apple CPU identical metrics development group and portable math support compiled; other 45 host groups unbuilt, no activation, runtime or cross-vendor identity qualification.",
+  "builds": [
+    {
+      "stem": "_mojolearn_dev_metrics_host",
+      "state": "built",
+      "exit_code": 0,
+      "seconds": 26.848427165998146,
+      "sha256": "c7d0614914baf6cabe953025c0cd4e917ddd102e74c946e69ce62869e72ce5de",
+      "key": "af9b7a1ff15b1e6518805bc2032fd37d91dde7a36404c1a221761fc9c5dafb5c",
+      "log": "/Users/andrewhendel/mojolearn-evidence/development-optimization-20261029/build/host-_mojolearn_dev_metrics_host.log"
+    },
+    {
+      "stem": "libMojolearnMath",
+      "state": "built",
+      "exit_code": 0,
+      "seconds": 1.045065957820043,
+      "sha256": "dd2de3c7d480f888ee7d633284349995ec8826bb71e1c6a1d5d2c93d856647d8",
+      "key": "fca3c0eb91a4fe936f26231484216394ea9c190c31e04bca73aea2073ad515d6",
+      "log": "/Users/andrewhendel/mojolearn-evidence/development-optimization-20261029/build/support-portable_math.log"
+    }
+  ],
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/development-optimization-20261029/build"
+}

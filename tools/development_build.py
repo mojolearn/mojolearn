@@ -13,6 +13,12 @@ supported. Each physical development group has a content-addressed artifact
 and receipt. Unchanged groups reuse their exact bytes. An unresolved local
 import widens the key to every project Mojo source and records that fallback.
 
+Development builds use the standard optimized compiler defaults. Do not pass
+-O0 or --optimization-level 0: an unoptimized image returned zero where the
+same source built normally returned the correct result, even with explicit
+buffer lifetime protection. The compiler internal cause is unconfirmed. Smaller
+groups reduce compilation scope; they do not require reduced optimization.
+
 Builds write complete logs and receipts under --evidence. All groups required
 by a selected set must be current before its loader index is replaced. A
 --group selection can populate the cache without activating an incomplete set
@@ -48,6 +54,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -312,6 +319,22 @@ def compile_recipe(scripts, mode, stem, flags_class):
 def build_environment(mode, env, plat=None):
     env = dict(env)
     plat = plat or merged.default_platform()
+    # Reject before key lookup/activation: old O0 artifacts remain evidence,
+    # but must not be selected as usable development images. Keep the normal
+    # recipe and its cache keys unchanged; do not silently rewrite user flags.
+    for variable in ("MOJOLEARN_MOJO_BUILD_FLAGS", "MOJOLEARN_BUILD_EXTRA_DEFINES"):
+        try:
+            flags = shlex.split(env.get(variable, ""))
+        except ValueError as exc:
+            raise BuildError(f"invalid {variable}: {exc}") from exc
+        for index, flag in enumerate(flags):
+            if (flag in ("-O0", "-O=0", "--optimization-level=0") or
+                    flag in ("-O", "--optimization-level") and
+                    flags[index + 1:index + 2] == ["0"]):
+                raise BuildError(
+                    f"{variable}: unoptimized (-O0) development images are unsupported; "
+                    "remove the optimization override to use the standard optimized build. "
+                    "An O0 image returned an incorrect zero; the compiler cause is unconfirmed.")
     if env.get("MOJOLEARN_NUMERIC_MODE", "identical") != "identical":
         raise BuildError("development builds support identical only; unset the other numeric mode")
     env["MOJOLEARN_NUMERIC_MODE"] = "identical"
