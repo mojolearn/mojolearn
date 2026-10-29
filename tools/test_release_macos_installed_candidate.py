@@ -76,6 +76,12 @@ class RetainedCandidateTests(unittest.TestCase):
         with patch.object(candidate.common, 'git', return_value='packaging/portable_math/wheel.py\n'):
             candidate.validate_refresh(self.root, 'original', 'packaged')
 
+    def test_selected_source_must_be_the_checked_physical_checkout(self):
+        with patch.object(candidate.common, 'revision', return_value='current'):
+            candidate.validate_source_root(self.root, 'current')
+            with self.assertRaisesRegex(ValueError, 'physical source checkout'):
+                candidate.validate_source_root(self.root, 'different-archive')
+
     def test_runtime_refresh_requires_new_native_evidence(self):
         for name in ('autograd/ops_api.mojo', 'python/mojolearn/_backend.py', 'tools/merged_bindings.py', 'pixi.lock'):
             with self.subTest(name=name), patch.object(candidate.common, 'git', return_value=name):

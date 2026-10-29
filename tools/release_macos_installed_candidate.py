@@ -35,6 +35,10 @@ def validate_refresh(root, original, current):
                    "source refresh exceeds packaging-only inputs: " + ", ".join(sorted(changed - PACKAGING_REFRESH_FILES)))
 
 
+def validate_source_root(root, commit):
+    common.require(common.revision(root) == commit, "physical source checkout must match selected frozen source")
+
+
 def member_path(base, relative):
     rel = PurePosixPath(relative)
     common.require(not rel.is_absolute() and ".." not in rel.parts and str(rel) == relative,
@@ -114,6 +118,7 @@ def assemble(args):
     root, package, output, raw = (Path(p).resolve() for p in
                                  (args.source_root, args.package, args.output, args.adapters))
     commit = common.git(root, "rev-parse", args.source_ref)
+    validate_source_root(root, commit)
     common.require(not output.exists() and not output.is_relative_to(root)
                    and not output.is_relative_to(package), "output must be new and outside source/install")
     receipt = json.loads(Path(args.receipt).read_text())
