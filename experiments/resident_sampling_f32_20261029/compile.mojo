@@ -5,9 +5,9 @@ from core.generation_policy_impl import GenerationSamplingScratch, generation_pi
 
 def probe(logits: MutPointer[Float32, MutAnyOrigin], order: MutPointer[Int32, MutAnyOrigin],
           merge: MutPointer[Int32, MutAnyOrigin], weights: MutPointer[Float32, MutAnyOrigin],
-          output: MutPointer[Int32, MutAnyOrigin]):
+          output: MutPointer[Int32, MutAnyOrigin], seed: UInt64, position: Int64):
     var result = sampling_pick_f32(logits, order, merge, weights,
-        4, Float32(1), 0, Float32(0.9), UInt64(7), 0, 3)
+        4, Float32(1), 0, Float32(0.9), seed, 0, Int(position))
     output[0] = Int32(result[0])
     output[1] = Int32(result[1])
 
@@ -26,5 +26,5 @@ def main() raises:
     var weights = ctx.enqueue_create_buffer[DType.float32](4)
     var output = ctx.enqueue_create_buffer[DType.int32](2)
     ctx.enqueue_function[probe](scores.unsafe_ptr(), order.unsafe_ptr(), merge.unsafe_ptr(),
-        weights.unsafe_ptr(), output.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
+        weights.unsafe_ptr(), output.unsafe_ptr(), UInt64(7), Int64(3), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
     ctx.synchronize()
