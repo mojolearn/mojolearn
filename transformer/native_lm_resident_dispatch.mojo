@@ -3,6 +3,7 @@
 # Transformer session owners. Group admission/release is GIL-held; numerical
 # execution is GIL-released by the common provider, as in the public binding.
 from core.native_session_group import NativeSessionGroup
+from core.resident_generation_read import ResidentGreedyRead
 from transformer.transformer_binding_impl import (
     CausalLMSession, TransformerDecodeSession, _require_session_open,
     _lm_open_run, _lm_open_run_int15, _lm_run, _lm_forward_run, LM_RESIDENT_GENERATE,
@@ -15,8 +16,9 @@ def _lm_group_reserve(group: NativeSessionGroup) raises:
     var owner = MutPointer[CausalLMSession, MutUntrackedOrigin](unsafe_from_address=group.owner)
     if owner[].busy or not owner[].is_open() or not owner[].usable:
         raise Error("causal lm session: busy, not open or lost after a failed call")
-    var run = group.operation == 1
-    if (not run and group.operation != 0) or len(group.addresses) != (3 if run else 2) or len(group.parameters) != (3 if run else 1):
+    var read = group.operation == 2
+    var run = group.operation == 1 or read
+    if (not run and group.operation != 0) or len(group.addresses) != (4 if read else (3 if run else 2)) or len(group.parameters) != (3 if run else 1):
         raise Error("causal lm resident: invalid native group descriptor")
     if group.addresses[0] == 0 or group.addresses[1] == 0:
         raise Error("causal lm resident: null input or output")
@@ -24,6 +26,17 @@ def _lm_group_reserve(group: NativeSessionGroup) raises:
     var steps = group.parameters[1] if run else 1
     if length < 1 or steps < 1:
         raise Error("causal lm resident: positive length and step count required")
+    if read:
+        if group.addresses[3] == 0:
+            raise Error("causal lm resident: missing read progress")
+        var progress = MutPointer[ResidentGreedyRead, MutUntrackedOrigin](unsafe_from_address=group.addresses[3])
+        if len(progress[].finished) != owner[].b or len(progress[].lengths) != owner[].b:
+            raise Error("causal lm resident: read row counts differ from the model")
+        if progress[].pad < 0 or progress[].pad >= owner[].v:
+            raise Error("causal lm resident: pad token is outside the vocabulary")
+        for token in progress[].eos:  # driver-loop: admitted generation policy token ids
+            if token < 0 or Int(token) >= owner[].v:
+                raise Error("causal lm resident: EOS token is outside the vocabulary")
     var held = -1
     for i in range(len(group.layers)):  # driver-loop: validate every original layer before setting any busy flag
         if group.layers[i] == 0:
@@ -57,9 +70,9 @@ def _lm_group_execute(group: NativeSessionGroup) raises -> Int:
     if not owner[].busy:
         raise Error("causal lm resident: execution requires a reserved group")
     try:
-        if group.operation == 1:
+        if group.operation == 1 or group.operation == 2:
             _lm_run(owner[], group.layers, group.addresses[0], group.addresses[1], group.addresses[2],
-                group.parameters[0], group.parameters[1])
+                group.parameters[0], group.parameters[1], group.addresses[3] if group.operation == 2 else 0)
         else:
             _lm_forward_run(owner[], group.layers, group.addresses[0], group.addresses[1], group.parameters[0])
     except problem:

@@ -39,6 +39,16 @@ def transformer_resident_lm_close(provider: PythonObject, session: PythonObject)
 
 def transformer_resident_lm_run(provider: PythonObject, session: PythonObject, layers: PythonObject,
                                 run: Bool, var addresses: List[Int], var parameters: List[Int]) raises -> Int:
+    return _transformer_resident_lm_execute(provider, session, layers, Int(run), addresses^, parameters^)
+
+
+def transformer_resident_lm_read(provider: PythonObject, session: PythonObject, layers: PythonObject,
+                                 var addresses: List[Int], var parameters: List[Int]) raises -> Int:
+    return _transformer_resident_lm_execute(provider, session, layers, 2, addresses^, parameters^)
+
+
+def _transformer_resident_lm_execute(provider: PythonObject, session: PythonObject, layers: PythonObject,
+                                    operation: Int, var addresses: List[Int], var parameters: List[Int]) raises -> Int:
     var module = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module
     var handle = neural_descriptor_handle(provider, neural_descriptor_entry(module, "causal_lm_native_handle_v1"), session)
     var admission = neural_descriptor_entry(module, "transformer_decode_native_handle_v1")
@@ -46,10 +56,15 @@ def transformer_resident_lm_run(provider: PythonObject, session: PythonObject, l
     for i in range(len(layers)):  # driver-loop: one exact typed owner admission per retained decoder
         layer_handles.append(neural_descriptor_handle(provider, admission, layers[i]))
     var groups = List[NativeSessionGroup]()
-    groups.append(NativeSessionGroup(handle, Int(run), layer_handles^, addresses^, parameters^))
+    groups.append(NativeSessionGroup(handle, operation, layer_handles^, addresses^, parameters^))
     # Stable list-backed operation context stays alive until native release;
     # owner references stay in this frame. No model metadata is read in the run.
-    var result = neural_descriptor_reserved_execute(provider, session, Int(groups.unsafe_ptr()),
-        30, 31, 32, [], [], [])
-    _ = layers
-    return result
+    try:
+        return neural_descriptor_reserved_execute(provider, session, Int(groups.unsafe_ptr()),
+            30, 31, 32, [], [], [])
+    finally:
+        # Stable descriptor and typed owner references survive execution and
+        # native release on success and exception (including GIL release).
+        _ = groups
+        _ = layers
+        _ = session

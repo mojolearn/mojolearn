@@ -33,6 +33,7 @@ from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
 from core.identity_trace import IdentityTrace
+from core.resident_generation_read import ResidentGreedyRead
 from core.device_scan import device_first_nonfinite
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
@@ -1977,6 +1978,72 @@ def _lm_last_argmax_kernel(
 
 
 
+
+def _lm_read_argmax_kernel(
+    logits: MutPointer[Float32, MutAnyOrigin], next_ids: MutPointer[Int32, MutAnyOrigin],
+    out_ids: MutPointer[Int32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
+    lengths: MutPointer[Int64, MutAnyOrigin], eos: MutPointer[Int32, MutAnyOrigin],
+    batch: Int, cur_l: Int, vocab: Int, capacity: Int, step: Int, n_eos: Int, pad: Int32,
+):
+    # One block per row: stable lowest-index maximum, first nonfinite refusal,
+    # EOS/length publication and next input all stay on the device. The host
+    # sees only the small stop/error status, never logits or prediction work.
+    var r = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    if status[r] != 0:
+        if tid == 0:
+            next_ids[r] = pad
+            out_ids[r * capacity + step] = pad
+            status[batch + r] = -1
+        return
+    var keys = stack_allocation[_LM_ARGMAX_TPB, UInt32, address_space=AddressSpace.SHARED]()
+    var indices = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
+    var bad = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
+    var best_key = UInt32(0)
+    var best_index = _LM_ARGMAX_NONE
+    var first_bad = _LM_ARGMAX_NONE
+    var base = (r * cur_l + cur_l - 1) * vocab
+    var c = tid
+    while c < vocab:
+        var value = logits[base + c]
+        if (bitcast[DType.uint32](value) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            first_bad = min(first_bad, Int32(c))
+        var key = _lm_order_key(value)
+        if best_index == _LM_ARGMAX_NONE or key > best_key:
+            best_key = key
+            best_index = Int32(c)
+        c += _LM_ARGMAX_TPB
+    keys[tid] = best_key
+    indices[tid] = best_index
+    bad[tid] = first_bad
+    barrier()
+    var active = _LM_ARGMAX_TPB // 2
+    while active > 0:
+        if tid < active:
+            var oi = indices[tid + active]
+            var ok = keys[tid + active]
+            var mi = indices[tid]
+            var mk = keys[tid]
+            if oi != _LM_ARGMAX_NONE and (mi == _LM_ARGMAX_NONE or ok > mk or (ok == mk and oi < mi)):
+                keys[tid] = ok
+                indices[tid] = oi
+            bad[tid] = min(bad[tid], bad[tid + active])
+        barrier()
+        active //= 2
+    if tid == 0:
+        status[batch + r] = -1 if bad[0] == _LM_ARGMAX_NONE else bad[0]
+        if bad[0] != _LM_ARGMAX_NONE:
+            return
+        var pick = indices[0]
+        next_ids[r] = pick
+        out_ids[r * capacity + step] = pick
+        lengths[r] += 1
+        for i in range(n_eos):
+            if pick == eos[i]:
+                status[r] = 1
+
+
+
 def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: Int, d: Int, eps: Float32) raises:
     if b < 1 or v < 1 or d < 1:
         raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
@@ -2083,7 +2150,7 @@ def _lm_layers_run(
 
 def _lm_run(
     mut s: CausalLMSession, layers: List[Int], p_ids: Int, p_out: Int, p_logits: Int,
-    l: Int, n_steps: Int,
+    l: Int, n_steps: Int, read_address: Int = 0,
 ) raises:
     ref ctx = s.ctx.value()
     var b = s.b
@@ -2100,6 +2167,22 @@ def _lm_run(
     ctx.enqueue_copy(dst_buf=ids0, src_ptr=ids_i32)
     var next_ids = ctx.enqueue_create_buffer[DType.int32](b)
     var out_dev = ctx.enqueue_create_buffer[DType.int32](b * n_steps)
+    var read = MutPointer[ResidentGreedyRead, MutUntrackedOrigin](unsafe_from_address=read_address)
+    var status = List[Int32]()
+    var status_device = Optional[DeviceBuffer[DType.int32]]()
+    var lengths_device = Optional[DeviceBuffer[DType.int64]]()
+    var eos_device = Optional[DeviceBuffer[DType.int32]]()
+    if read_address != 0:
+        status = List[Int32](length=2 * b, fill=0)
+        for r in range(b):
+            status[r] = read[].finished[r]
+        status_device = ctx.enqueue_create_buffer[DType.int32](2 * b)
+        lengths_device = ctx.enqueue_create_buffer[DType.int64](b)
+        eos_device = ctx.enqueue_create_buffer[DType.int32](max(1, len(read[].eos)))
+        ctx.enqueue_copy(dst_buf=status_device.value(), src_ptr=status.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=lengths_device.value(), src_ptr=read[].lengths.unsafe_ptr())
+        if len(read[].eos) > 0:
+            ctx.enqueue_copy(dst_buf=eos_device.value(), src_ptr=read[].eos.unsafe_ptr())
     var cur_l = l
     for step in range(n_steps):
         var m = b * cur_l
@@ -2140,11 +2223,20 @@ def _lm_run(
         var bad_hn = device_first_nonfinite(ctx, hn, m * d)
         if bad_hn >= 0:
             raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))
-        ctx.enqueue_function[_lm_last_argmax_kernel](
-            logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
-            Int32(cur_l), Int32(v), Int32(n_steps), Int32(step),
-            grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
-        )
+        if read_address == 0:
+            ctx.enqueue_function[_lm_last_argmax_kernel](
+                logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
+                Int32(cur_l), Int32(v), Int32(n_steps), Int32(step),
+                grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[_lm_read_argmax_kernel](
+                logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
+                status_device.value().unsafe_ptr(), lengths_device.value().unsafe_ptr(), eos_device.value().unsafe_ptr(),
+                b, cur_l, v, n_steps, step, len(read[].eos), Int32(read[].pad),
+                grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(), src_buf=status_device.value())
         var rows = List[DeviceBuffer[DType.float32]]()
         if p_logits != 0 and step == n_steps - 1:
             var lp = _f32_ptr(p_logits)
@@ -2159,11 +2251,33 @@ def _lm_run(
         _ = logits^
         _ = ws^
         cur_l = 1
-    ctx.enqueue_copy(dst_ptr=out_i32, src_buf=out_dev)
+        if read_address != 0:
+            var complete = True
+            for r in range(b):
+                if status[b + r] >= 0:
+                    raise Error("generation: non-finite logit at token " + String(status[b + r]))
+                complete = complete and status[r] != 0
+            read[].wrote = step + 1
+            if complete:
+                break
+    var output_rows = List[DeviceBuffer[DType.int32]]()
+    if read_address == 0:
+        ctx.enqueue_copy(dst_ptr=out_i32, src_buf=out_dev)
+    else:
+        # A stopped read has unwritten trailing capacity. Copy only published
+        # tokens, retaining row views until the final device synchronization.
+        for r in range(b):
+            output_rows.append(out_dev.create_sub_buffer[DType.int32](r * n_steps, read[].wrote))
+            ctx.enqueue_copy(dst_ptr=out_i32 + r * n_steps, src_buf=output_rows[r])
+    if read_address != 0:
+        ctx.enqueue_copy(dst_ptr=read[].lengths.unsafe_ptr(), src_buf=lengths_device.value())
+        for r in range(b):
+            read[].finished[r] = status[r]
     ctx.synchronize()
     _ = ids0^
     _ = next_ids^
     _ = out_dev^
+    _ = output_rows^
 
 
 

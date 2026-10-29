@@ -7,7 +7,8 @@ allocation, layer traversal, token traversal and selection are native. Calling
 a compiled sibling extension through CPython's native function ABI changes no
 arithmetic and uses no interpreter callback; targets are checked at admission.
 """
-from providers.python.transformer_resident_pyapi import transformer_resident_decode_call, transformer_resident_words, transformer_resident_lm_open, transformer_resident_lm_close, transformer_resident_lm_run
+from providers.python.transformer_resident_pyapi import transformer_resident_decode_call, transformer_resident_words, transformer_resident_lm_open, transformer_resident_lm_close, transformer_resident_lm_run, transformer_resident_lm_read
+from core.resident_generation_read import ResidentGreedyRead, resident_greedy_publish, resident_greedy_outputs
 from std.python import Python, PythonObject
 from std.ffi import _Global
 from std.python._cpython import PyObjectPtr, GILReleased
@@ -278,6 +279,9 @@ def causal_lm_admit_binding(mut mods: NativeModules,
                          String("causal_lm_session_forward")]:
                 if _native_has_entry(mods, block_binding, name):
                     py_setitem(entries, name, _native_function(mods, block_binding, name))
+            if _native_has_entry(mods, block_binding, "causal_lm_resident_read_v1"):
+                py_setitem(entries, "resident_read_v1", Int(py=_native_function(mods, block_binding, "causal_lm_resident_read_v1")()) == 1)
+                mods.released()
             if model._head_int15 is not None:
                 py_setitem(entries, "transformer_decode_session_open_int15", _native_function(mods, block_binding, "transformer_decode_session_open_int15"))
                 py_setitem(entries, "causal_lm_session_open_int15", _native_function(mods, block_binding, "causal_lm_session_open_int15"))
@@ -1701,6 +1705,108 @@ def _read_engine(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int
     return out
 
 
+
+def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int,
+                   mut admission: NativeArrayAdmission) raises -> PythonObject:
+    # One provider boundary owns the complete token block. Native session
+    # reservations hold all layers; no Python metadata, callbacks or provider
+    # imports enter the GPU token loop. Mutable state is admitted each read.
+    var batch = len(s.finished)
+    var length = Int(py=s.current.shape[1])
+    _state(mods, s.model, s.state, batch, length)
+    var positions = Int(py=s.state.positions)
+    var entries = s.model._native_entries
+    var provider = entries["native_block_operations"]
+    var int15 = s.model._head_int15 is not None
+    var fields = _standalone_record_fields(mods, s.model)
+    var persist = (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+                   and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
+    var key = _resident_key(mods, s.model, s.state, batch, int15)
+    var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
+    var lm = PythonObject(None)
+    var sessions = PythonObject(None)
+    var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
+    var pending = generation_array([batch, capacity], "i")
+    # Heap-backed descriptor avoids the documented inline-address ABI issue;
+    # its native lists, plus every host buffer, remain live through release.
+    var progress = List[ResidentGreedyRead]()
+    progress.append(ResidentGreedyRead(s.finished, s.lengths, s.eos, s.pad))
+    if persist:
+        causal_model_cache_set(mods, s.model, fields, "_resident_busy", True)
+    try:
+        if kept is not None and Bool(py=kept[0] == key):
+            lm = kept[1]
+            sessions = kept[2]
+            _resident_load_states(entries, sessions, s.state, keep)
+            mods.released()
+        else:
+            if kept is not None:
+                causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
+                _resident_close(entries, kept[1], kept[2])
+                mods.released()
+            var opened = _resident_open_all(mods, s.model, entries, s.state, batch, length, int15, keep)
+            lm = opened[0]
+            sessions = opened[1]
+        var cached = transformer_resident_lm_read(provider, lm, sessions,
+            [_addr(s.current, keep), _addr(pending, keep), 0, Int(progress.unsafe_ptr())],
+            [length, capacity, Int(py=s.state.layers[0].cached_tokens)])
+        mods.released()
+        admission.recheck(generation_array_context())
+        # Export once per read, not once per token. The next public operation
+        # may change or release its Array metadata, so no host address is cached.
+        for i in range(len(sessions)):  # driver-loop: final owned layer-state publication
+            var blk = _block(mods, s.model, i)
+            var st = s.state.layers[i]
+            var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
+            var size = batch * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
+            var pk = _mutable(st.k_cache, [size], keep, copies, "k_cache")
+            var pv = _mutable(st.v_cache, [size], keep, copies, "v_cache")
+            _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
+            mods.released()
+            admission.recheck(generation_array_context())
+            py_setattr(st, "cached_tokens", PythonObject(cached))
+        _writeback(copies)
+        py_setattr(s.state, "positions", PythonObject(positions + length + progress[0].wrote - 1))
+    except error:
+        mods.released()
+        py_setattr(s.state, "_usable", PythonObject(False))
+        if persist:
+            causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
+            causal_model_cache_set(mods, s.model, fields, "_resident_busy", False)
+        if lm is not None:
+            try:
+                _resident_close(entries, lm, sessions)
+                mods.released()
+            except cleanup:
+                raise Error("resident read failed: " + String(error) + "; cleanup failed: " + String(cleanup))
+        raise error
+    finally:
+        _ = keep
+        _ = progress
+        _ = pending
+        _ = sessions
+        _ = lm
+    if persist:
+        causal_model_cache_set(mods, s.model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
+        causal_model_cache_set(mods, s.model, fields, "_resident_busy", False)
+    else:
+        _resident_close(entries, lm, sessions)
+        mods.released()
+    var wrote = progress[0].wrote
+    var out = generation_array([batch, wrote], "i")
+    var current = generation_array([batch, 1], "i")
+    resident_greedy_outputs(i32_ptr(_addr(pending, keep)), i32_ptr(_addr(out, keep)),
+        i32_ptr(_addr(current, keep)), batch, capacity, wrote)
+    resident_greedy_publish(progress[0], s.finished, s.lengths)
+    s.current = current
+    s.produced += wrote
+    _ = keep
+    _ = pending
+    return out
+
+
+
 def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admission: Optional[NativeArrayAdmission]) raises -> PythonObject:
     # `admission` is set by the first decode step: ONE full Array guard per
     # call. Each forward may release the GIL, so each is followed by exactly
@@ -1718,6 +1824,16 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
     var wrote = 0
     s.busy = True
     try:
+        if capacity > 0 and not s.done() and s.greedy:
+            var entries = s.model._native_entries
+            if (Bool(py=py_get(entries, "resident_read_v1", PythonObject(False)))
+                    and py_get(entries, "native_block_operations") is not None
+                    and py_get(entries, "parallel_call") is None
+                    and _resident_forward_ok(mods, s.model, s.state)):
+                admission = NativeArrayAdmission(generation_array_context())
+                var result = _read_resident(mods, s, capacity, admission.value())
+                s.busy = False
+                return result
         if capacity > 0 and not s.done() and _use_native_generation_engine(mods, s.model, s.state):
             var result = _read_engine(mods, s, capacity)
             s.busy = False
