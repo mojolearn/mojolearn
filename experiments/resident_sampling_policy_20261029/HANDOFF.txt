@@ -1,0 +1,62 @@
+Status: Boundary CPU compilation PASSED; native GPU implementation/joined review pending.
+Default-off candidate; no runtime execution or identity/performance claim.
+Boundary owner: lane/full-sampling-boundary-20261029.
+Native sampler/session owner: neural_loops (separate worktree).
+
+The opt-in MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32 selects one explicit
+stream policy at construction. It changes seeded results relative to the old
+Float64 selector. Host fallback and device route must use the same shared
+compensated-Float32 selector. Checkpoint v2 binds this policy in its checksum;
+v1 remains legacy even when resumed with the environment flag enabled.
+No old-release numerical compatibility or speed claim is made.
+
+Planned reduction: one admitted resident group and device token/sampling loop
+per read, avoiding per-token logits transfer, host selection, and KV transfers.
+Costs: live KV plus two alternating committed snapshots (approximately 3x KV
+storage), one full D2D KV copy after each successful forward, sequential
+selection per batch row. The old committed slot remains valid until the new
+slot's full copy synchronizes; buffers are allocated once per read.
+No promotion before within-release vendor identity, quality, public error/alias
+coverage, and full-workload A/B evidence. Reference hashes remain pending.
+
+Failure contract: recoverable logical/selection failures must publish the last
+successful forward's committed KV snapshot plus completed-token and earlier-row
+selection progress. A failed device readback/context loss may make that device
+snapshot unrecoverable. Unlike the legacy per-step host export, no already
+published host copy exists for every successful step. Such recovery failure must
+mark state unusable, preserve the first error, and never label partial/stale KV
+as valid. This experimental limitation needs explicit acceptance before default
+promotion; do not reintroduce per-step D2H or claim universal failure equivalence.
+
+Release freeze/install/central ledger remain untouched. No runtime, identity,
+performance campaign, or cloud rental is part of this implementation batch.
+
+Boundary compile (2026-10-29): exit 0, 24.87 seconds, actual public C entries
+4/5/7/11/12 (stream/read/generate/snapshot/resume), CPU identical, O0. Runtime
+toggle arms both instantiate in this single closure build. Core API dependency
+ceb7cbe0d2 is frozen in this worktree. Conservative retained source inventory
+contains 3932 Mojo files; it is not a claim every file was compiled. Before/after
+source hashes match. Binary SHA256:
+1d73110edab0a145bb030ce8fe4bf27f8a438afa40027b708812c47a0b165b97
+Evidence: ~/mojolearn-evidence/full-sampling-boundary-20261029/
+  compile.json, compile.exit, compile.log, compile-source.json,
+  compile-source.tar.gz, public_sampling.dylib, test-syntax.json.
+The Unicode generator wrote its expected output, but the receipt shell wrapper
+then failed on zsh's readonly `status` variable; generator exit was not captured.
+Original log/receipt preserved. Compilation subsequently consumed the retained
+generated source successfully; no generator exit success was invented.
+
+Seven targeted public cases are prepared in test_resident_sampling_policy.py
+(five test functions, one parametrized three ways): nonuniform/temperature/
+top-k/top-p/ties route agreement, read/checkpoint policy capture, old-v1 resume,
+late-capacity progress/lease cleanup, exposed-parameter fallback, and EOS/pad.
+Only syntax checked; none executed. Exact committed-KV and partial-row failure
+oracles require the peer's native descriptor fixture; failed public streams
+intentionally refuse checkpointing, so the public cases do not claim that scope.
+
+Private-state ownership reviewed independently: GenerationHandle allocates its
+own state; opaque native type exports no fields; info copies diagnostics and
+checkpoint/resume copy buffers. Class-only post-GIL checks do not claim mutable
+public-instance identity admission. This conclusion does not extend to public
+forward APIs accepting user-supplied state. Final session-cache publication
+checks live exposure/cache identity and never republishes a superseded tuple.

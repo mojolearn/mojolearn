@@ -47,6 +47,13 @@ def transformer_resident_lm_read(provider: PythonObject, session: PythonObject, 
     return _transformer_resident_lm_execute(provider, session, layers, 2, addresses^, parameters^)
 
 
+def transformer_resident_lm_sampling_read(provider: PythonObject, session: PythonObject, layers: PythonObject,
+                                          var addresses: List[Int], var parameters: List[Int]) raises -> Int:
+    # Operation 3 shares the ordinary group reservation and owner pins. Its
+    # descriptor owns sampling progress and committed-KV recovery destinations.
+    return _transformer_resident_lm_execute(provider, session, layers, 3, addresses^, parameters^)
+
+
 def _transformer_resident_lm_execute(provider: PythonObject, session: PythonObject, layers: PythonObject,
                                     operation: Int, var addresses: List[Int], var parameters: List[Int]) raises -> Int:
     var module = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module
