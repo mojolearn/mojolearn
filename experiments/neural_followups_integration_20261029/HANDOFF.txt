@@ -15,3 +15,23 @@ checked against frozen build commit. Compiler/artifact/archive hashes match.
 No duplicate build; no runtime/identity/performance or other GPU target evidence.
 Full scope and limits: experiments/mamba_preparation_20261029/HANDOFF.txt.
 Normal integration push logs: ~/mojolearn-evidence/neural-followups-integration-20261029/.
+
+Transformer prefill workspace: original80359b647e integratedc2e069c65a.
+One operation-local stage owner retains30 buffers and GEMM/int15 scratch across
+compatible sequential prefill layers. Full B/L/smax/window/lean/all-dims match;
+complete initialization/reset and current layer weights/options/rope/KV preserved.
+Shape changes replace after prior copy completion; failures drain pinned owners.
+Grown attention buffers may require extra zeroing versus fresh lean placeholders;
+this cost is explicit and unmeasured. Decode L1 and standalone forward unchanged.
+Root source review accepted. Previous scoped build passed, but integration changed
+imported MambaArena reset: one new actual native LM dispatch compile passed exit0
+in44.87s, Apple GPU identical O0 CPUhost/noCOLUMN_CPU.200-file closure exactmatch.
+Initial retention-controller setup hit sparse absent bench files before compilation;
+full failure log preserved, source snapshot now records sparse exclusions. No
+compiler failure or artifact execution. Normal main guards run at delivery.
+
+Latest request: SmallMLP iteration failure fix and greedy/EOS resident read already
+landed; source reconfirmed. Sampling draft held uncompiled pending clarification
+of requested NVIDIA attribution versus measurement deferral. Handoff-onlyb6f074648f
+and exact patch remain outside main. New source lanes trace training/optimizer
+transfers and Sequential operation preparation; no timing claim.
