@@ -1,0 +1,17 @@
+Neural follow-ups integration 2026-10-29
+
+Cleanup batches metrics e352037b71 and manifold f2574ea65e already pushed
+serially at main df5d35ec18; both normal pushes exit0. GIL draft remains parked.
+
+Mamba preparation: e2ff645185 + a4e6023b36 integrated as 42740c51bf +65338e6620.
+Retains nine weight and four state descriptors and fixed layout prefix. All live
+bytes, finite checks, required initialization, transient views and public fresh
+outputs remain. B/d_model/device key invalidates full workspace; existing exclusive
+lease/failure clearing protects ownership. Poison diagnostics preserve prior takes.
+Root source review accepted; actual native GPU workspace/capsule default identical
+and poison builds both exit0. Integrated 193-file conservative closure matches:
+192 retained archive sources and comment-only experiments package initializer
+checked against frozen build commit. Compiler/artifact/archive hashes match.
+No duplicate build; no runtime/identity/performance or other GPU target evidence.
+Full scope and limits: experiments/mamba_preparation_20261029/HANDOFF.txt.
+Normal integration push logs: ~/mojolearn-evidence/neural-followups-integration-20261029/.
