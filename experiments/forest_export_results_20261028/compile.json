@@ -1,0 +1,25 @@
+{
+  "base_commit": "244b54869129c89f30366dd37f3bde79ce1e0878",
+  "dependency_commit": "244b54869129c89f30366dd37f3bde79ce1e0878",
+  "compile_exit": 0,
+  "scope": "Both changed forest-export result wrappers and shared py_list_i64/py_list_f64 helpers, directly instantiated by compile-only CPU root; model registries and RF/tree importing bindings not instantiated/rebuilt",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "compile_slots": 4,
+  "compiler_workers": "default; no saturation measured",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/forest-export-results-20261028 -I /Users/andrewhendel/mojolearn-wt/forest-export-results-20261028/bindings /Users/andrewhendel/mojolearn-wt/forest-export-results-20261028/experiments/forest_export_results_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/forest-export-results-20261028/compile_forest_results",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/forest-export-results-20261028/compile_forest_results",
+  "binary_sha256": "92740adf80928c5a0dff4034470f4ca9bec9822345183f8fb62dfce98c67b764",
+  "log": "/Users/andrewhendel/mojolearn-evidence/forest-export-results-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/forest-export-results-20261028/source-sha256.json",
+  "source_manifest_scope": "All tracked Mojo files, Pixi manifest/lock and dedicated compile root; conservative superset, not all files compiled",
+  "relevant_source_sha256": {
+    "bindings/forest_export_binding.mojo": "19545e4943570be4e3859a1d5c5fde0f9acad88bba4b613dc610ede023fa890f",
+    "bindings/py_lists.mojo": "8fb4244758c0630dcd8fbe2cb2957f644d2551f590fca733f0bacf480209436e",
+    "experiments/forest_export_results_20261028/compile.mojo": "cfe88e10421587d3f3979105bae2ef88c620ea1abe1cbd9ab27c3fb6667051c1"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}

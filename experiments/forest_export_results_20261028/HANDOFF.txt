@@ -1,0 +1,36 @@
+Forest export typed result publication, 2026-10-28
+Branch: lane/forest-export-results-20261028
+Base/dependency: 244b54869129c89f30366dd37f3bde79ce1e0878 (native py_lists)
+
+Removed work:
+forest_export_py_list_i64/f64 now delegate to shared py_list_i64/f64 rather
+than independently importing NumPy, allocating typed arrays, looking up ctypes
+addresses, copying all source words and calling ndarray.tolist. This removes
+two additional tolist source sites from the frozen conversion inventory.
+
+Semantics/setup/lifetimes:
+Both wrapper signatures and Python list result types are unchanged. Signed
+Int64 words (including negative child markers) retain signed integer boxing;
+Float64 values use native Python double boxing. Shared helpers own fresh sized
+lists and consume each scalar reference exactly once, including failure cleanup.
+No retained cache or new invalidation rule. Argument owners stay in the shared
+helper through conversion. No tree/numerical operation or exported-model schema
+changed. The fitted forest registry, ownership transfer, graph/export boundary
+and outer caller result containers were not modified.
+
+Compilation:
+Focused Mac CPU root instantiates both changed wrappers/shared helpers, rc0,
+identical define, O0. Exact command/source/root/binary hashes in compile.json.
+It does not instantiate a model registry, rebuild every RF/tree binding, execute
+serialization, or qualify GPU/runtime/identity behavior. No measurements or
+runtime campaign. Root owns serialized merge/push and final guards; lane source
+results retained and reported with this handoff.
+
+Evidence: ~/mojolearn-evidence/forest-export-results-20261028/
+Complete log, compiled binary and conservative tracked-Mojo source hashes on
+Mac. No rented box or watcher service.
+
+Remaining:
+Required result list/scalar boxing remains. Registry descriptor/metadata appends
+and caller outer-list construction remain unchanged. No measured speedup or
+repo-wide conversion-completion claim.
