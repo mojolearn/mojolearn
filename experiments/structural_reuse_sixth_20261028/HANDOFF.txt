@@ -1,0 +1,63 @@
+Structural reuse sixth integration, 2026-10-28
+Base main849839b1b5. Root serial source review/integration; unchanged successful
+affected compilations reused. No runtime/identity/performance campaign.
+
+1. Shared metric program plans (original781455851e)
+   McProg/MxProg no longer create 16-word Python stage lists then immediately
+   scan/unbox them. Native stages, offsets, skip/output ranges feed the existing
+   numerical runner directly. Each program copies/admit-checks its opcode schema
+   once and lazily decodes used names into a native dictionary. Input owners stay
+   pinned through synchronous dispatch. Plans are local to each program/chunk;
+   later programs see new metadata, no cross-call cache. Public _Prog admission
+   remains. Pure plan and actual expansion/classification/public Prog CPU roots
+   compiled successfully. Result access and label conversion remain work.
+   experiments/native_metric_plans_20261028/HANDOFF.txt has full scope/failures.
+
+2. Neural import setup (original3d252e381d)
+   Four constructors explicitly opt out of creation of an unnecessary numeric-mode
+   wrapper, replacing module-tail unwrapping. Four final object access slots are
+   declared at class creation. The private class keyword is not inherited; custom
+   subclass constructors still receive mode injection, own override guards remain.
+   No algorithm moved or ported. No persistent cache; no invalidation needed.
+   Python syntax compilation and seven isolated declaration/setup checks passed;
+   no Mojo source in this batch, no native rebuild. Broader bridge cleanup pending.
+   experiments/import_bridge_setup_20261028/HANDOFF.txt records fixture limits.
+
+3. SmallMLP sequence preparation (originalce33f6f86a)
+   Exact list/tuple traversal resolves count and C item access once, avoiding
+   iterator/per-item attribute dispatch. Exact Arrays use a fresh pinned snapshot
+   and native row helpers; exact Torch inputs use admitted native unbind then
+   direct tuple traversal. Remaining admitted native iterators distinguish clean
+   exhaustion from error with PyIter_Next. Original errors survive lock cleanup.
+   Every operation re-admits mutable metadata; no cross-call cache or escaping
+   borrowed pointer. Arbitrary user iterators were already rejected publicly, so
+   this is not evidence of a reachable custom-iterator bug. Actual small_mlp_c CPU
+   root compiled after error-owner repair. Other object dispatch remains.
+   experiments/small_mlp_items_20261028/HANDOFF.txt retains failed attempts.
+
+4. Mamba decode plan (original5355bfa305 + optional auditdc978e0d39)
+   Session-owned typed dimensions/weights/state feed native address/parameter
+   preparation; removes Python address lists/appends followed by native unboxing
+   on descriptor routes. Provider keeps module/session pins and fresh escaping
+   report arrays. Per-call vectors preserve invocation ownership; state updates
+   follow successful calls, load refreshes state, close clears weights/state.
+   Mutable dt_limit remains re-admitted per call. Full Mamba public dispatcher and
+   independent native plan CPU compilations passed. Public admission, legacy
+   compatibility calls and shared endpoint GIL lifecycle remain. No blanket
+   Python-free claim. Dependency inventory is diagnostic by default; native-only
+   assertion is opt-in, not a source/push requirement. Root clarified leftover
+   header wording to match this policy (documentation-only change).
+   experiments/mamba_step_words_20261028/HANDOFF.txt and compile.json have scope.
+
+All native compilations are Apple CPU identical; receipts preserve exact roots,
+compiler/source/flags/hashes. Compilation does not qualify GPU/runtime behavior.
+No conflicting numerical edits required integrated recompilation. Required source
+guards and normal push checks still apply. Direct CPython is legal during execution;
+preferred native plans/reuse target repeated work, not import spelling.
+
+Evidence: ~/mojolearn-evidence/structural-reuse-sixth-20261028/ for integration,
+plus each batch's retained evidence directory cited in its handoff. No rented
+box created for this integration. Remaining resident GPU greedy/EOS batch needs
+root review; sampling remains unsupported on the proposed path pending suitable
+arithmetic support. Other agents continue metrics result reuse, bridge setup and
+source-policy reconciliation. No completed-library or speed claim.

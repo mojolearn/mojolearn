@@ -8,10 +8,10 @@ exit status does not reject legal CPython. --require-native-only is an explicit
 research assertion for a root expected to build without Python, never a general
 source/push requirement.
 
-No provider/bindings exemption applies BELOW a native root. The public provider
-may admit objects, pin owners, release/reacquire the GIL and publish results;
-it may import a native root, never the reverse. std/max/layout/linalg are external compiler
-packages (not recursively inspected); explicit std.python is still forbidden.
+No provider/bindings exemption hides dependencies BELOW an audited root.
+Provider and std.python dependencies are reported, and only the opt-in
+--require-native-only assertion rejects them. std/max/layout/linalg are external
+compiler packages (not recursively inspected).
 This is source inventory, not runtime or identity verification. A declared
 indirect ABI edge is followed just like an import, preventing a pure-looking
 function-pointer facade from concealing a Python-dependent target.
