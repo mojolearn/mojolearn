@@ -1,0 +1,21 @@
+Historical observation qualification transitions, 2026-10-29
+
+The synchronized095ab ledger conservatively invalidated all55 previously begun
+3fa5 identity units because relevant runtime inputs changed. No reruns began.
+51 completed observations remain retained and numerically unchanged; their
+qualification attempts were closed as superseded/unadmitted, with numerical_failed=0.
+The existing ledger supports only passed/failed completion. Its failed status on
+these51 means qualification_not_admitted, not a product or numerical failure.
+The original CLI exit (including historical-reference differences), output bytes,
+source reports, launch receipts and explicit pending within-release comparison
+are preserved. Four genuine failed attempts remain separately recorded.
+
+The transition JSON lists exact old/new fingerprints and changed inputs. It is
+not a source-equivalence waiver and does not admit one-vendor numerical identity.
+The completed data remain useful historical observations. Required same-release
+CPU/Apple/NVIDIA/AMD and applicable PTX agreement remains pending.
+
+095ab is itself awaiting a later freeze for the newly repaired Array tokenizer
+and package metadata setup; no final runtime qualification is claimed here.
+Full central ledger and logs remain at
+~/mojolearn-evidence/current-main-verification-20261029/.

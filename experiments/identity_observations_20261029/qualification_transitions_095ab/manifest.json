@@ -1,0 +1,32 @@
+[
+  {
+    "name": "sync-095ab32829-summary.json",
+    "sha256": "f54f82f592bf45b2df03c7d818351a6887228c28b651f1400414ee1c48006781",
+    "bytes": 2352,
+    "original": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/sync-095ab32829-summary.json"
+  },
+  {
+    "name": "superseded-observation-transitions.json",
+    "sha256": "6fb8f80eb085a76f1b609107ef6e89adc9e4945fd35bc208d9b054f36a9f77ad",
+    "bytes": 70486,
+    "original": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/superseded-observation-transitions.json"
+  },
+  {
+    "name": "superseded-observation-transitions-result.json",
+    "sha256": "e2b9cad211e2422ee3ee1fc2911f961d0c18ceb847d851c0bace070998e1c9d2",
+    "bytes": 153,
+    "original": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/superseded-observation-transitions-result.json"
+  },
+  {
+    "name": "close_superseded_observations.py",
+    "sha256": "9599b3d93af8264752735ee9c0e17320e7e6b69322a48b63c50ba2d2fff6e72e",
+    "bytes": 3213,
+    "original": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/close_superseded_observations.py"
+  },
+  {
+    "name": "close-run-api-search.log",
+    "sha256": "5d9bc702013fa7b78d1f70a837f024656a389e28387d4705dd153345b2079b8c",
+    "bytes": 107,
+    "original": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/close-run-api-search.log"
+  }
+]

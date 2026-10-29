@@ -1,0 +1,48 @@
+{
+  "mac-host-admitted.json": {
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/compile-admission/mac-host-admitted.json",
+    "sha256": "8a8a455428e6a35c6e319f85f074f10098b49c563ccafd4d096014b6920b8132",
+    "reports": 46,
+    "actions": {
+      "reuse": 92
+    },
+    "stale": [],
+    "absent_from_ledger": []
+  },
+  "linux-admitted-095.json": {
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/compile-admission/linux-admitted-095.json",
+    "sha256": "d8b3f7f13bd1023a0d9215b3639bb036c108ec7c9a2399fca77289869aa16f8c",
+    "reports": 4,
+    "actions": {
+      "reuse": 35,
+      "run": 6
+    },
+    "stale": [
+      "compile-amd/linux-64/host/-/host/_mojolearn_mamba_host",
+      "compile-amd/linux-64/host/-/host/_mojolearn_runtime_sequential_host",
+      "compile-nvidia/linux-64/host/-/host/_mojolearn_mamba_host",
+      "compile-nvidia/linux-64/host/-/host/_mojolearn_runtime_sequential_host",
+      "compile-amd/linux-64/host/-/host/_mojolearn_tokenizer_host",
+      "compile-nvidia/linux-64/host/-/host/_mojolearn_tokenizer_host"
+    ],
+    "absent_from_ledger": [
+      "compile-cpu/linux-64/host/-/host/_mojolearn_byte_lm_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_core_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_embedding_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_estimators_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_mamba_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_neural_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_runtime_classical_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_runtime_manifold_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_runtime_sequential_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_training_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_transformer_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_x_ann_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_x_cnn_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_x_decomp_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_x_sequence_host",
+      "compile-cpu/linux-64/host/-/host/_mojolearn_tokenizer_host"
+    ]
+  },
+  "scope": "Retrospective compile admission against095ab only, no runtime/identity. New Array tokenizer supersedes095 tokenizer; its two Mac requirements need new receipt at next freeze. LinuxCPU originals are absent because release CPUreference isosx; NV/AMDhost obligations remain."
+}
