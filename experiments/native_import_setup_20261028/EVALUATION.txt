@@ -22,9 +22,10 @@ Six lexical-loop sites at the base:
 - maxabs_native.mojo:169: same mechanism. Only one supported parameter; likely
   small benefit, but removes unnecessary imports and preserves ordered refusal.
 - host_svc_native.mojo:330: builtins.str and numeric_mode lookup/check per
-  nonempty support pair while publishing coef_. Resolve builtins once; lazily
-  check mode at the first nonempty pair after its count check, then reuse the
-  operation's admitted mode. All-zero-support behavior/error order retained.
+  nonempty support pair while publishing coef_. Resolve builtins/string type once, but retain per-pair mode checks after the
+  count check. Source review caught that the numerical entry releases the GIL;
+  the original lazy mode hoist was repaired rather than treating ownership as
+  an immutability guarantee. Zero-support behavior/error order retained.
 - device_plan_binding.mojo:46: builtins.tuple per logged device plan. Resolve
   once for a nonempty log, retain constructor across publication. Empty logs
   keep their no-module-lookup path. This is diagnostic output, not a claim

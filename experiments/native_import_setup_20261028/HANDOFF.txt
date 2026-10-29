@@ -5,8 +5,8 @@ Changes and boundary:
 Five of the six lexical import-loop sites repaired, with Samba's sixth forwarded
 to neural owner. Robust/MaxAbs set_params capture canonical builtin constructors
 and exact string type per operation. Device-plan log captures tuple constructor
-once per nonempty log. Host SVC coef_ captures builtins and lazily validates its
-operation mode once at the original first nonempty-support pair boundary.
+once per nonempty log. Host SVC coef_ captures builtins/string type; the follow-up source-review repair
+restores mode validation for every nonempty pair at its original position.
 
 SVC class-weight validation now caches classification per encountered exact
 scalar type (native integer identity map), retains one Float64 decode per weight
@@ -24,8 +24,9 @@ only during the GIL-held admitted-native scalar loop, before numerical dispatch.
 The values list keeps scalar/type owners alive through the final map use. One
 comparison integer remains owned through the final rich comparison. All three
 hoisted raw pointers have explicit underlying Array owner uses through their
-last reads/writes; none escapes. Mode capture is an operation metadata snapshot,
-not a new concurrent-mutation promise. Existing public metadata admission still
+last reads/writes; none escapes. Source review caught that svc_dual_gemv_host_binding releases the GIL, so the
+original lazy mode hoist was unsafe and was repaired; field ownership is not a
+mutation invariant. Existing public metadata admission still
 runs at each operation boundary. Empty logs and zero-support pairs retain their
 prior skip behavior; no input subclass/protocol admission was relaxed.
 
@@ -45,6 +46,10 @@ transport, class_weight dictionary mapping and native scalar CPython conversions
 remain. Device-plan helper is shared across GPU bindings; no GPU compilation
 claimed. Source guard outputs/results retained in evidence; root owns serialized
 integration and push guards.
+
+The affected host-SVC repair has its own focused compile/evidence in
+experiments/host_svc_mode_recheck_20261028/HANDOFF.txt. The other unchanged roots
+reuse this batch's original compilation; the original build is retained.
 
 Evidence: ~/mojolearn-evidence/native-import-setup-20261028/
 compile.log/json, source-manifest.json, source-bytes.tgz, _native_import_setup.so,

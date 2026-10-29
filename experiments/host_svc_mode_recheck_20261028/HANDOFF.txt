@@ -1,0 +1,43 @@
+Host SVC mutable-mode recheck repair and class-weight ownership review
+2026-10-28; follows b39006638d on lane/native-import-setup-20261028.
+
+Source review found a real mutation-invalidation gap in the previous batch:
+svc_dual_gemv_host_binding in providers/python/svm_host_svc_ovo_host_pyapi.mojo
+releases the GIL at line 52 around ovo_dual_gemv_host. _svc_coefficients retains
+fields but retaining their owner does not freeze dictionary values between rows.
+The lazy numeric_mode hoist therefore could skip a later row's changed mode.
+No runtime failure was observed or campaign run; the finding is source review.
+
+Repair:
+Restore per-row numeric_mode lookup/validation at the exact prior position:
+after count bounds checks and zero-support skip, before preparing row buffers.
+Keep the canonical builtins/string-type hoist: this retains an immutable exact
+type owner, rather than caching a mutable field value. No kernel changes.
+
+Class-weight lifetime review (no edits needed):
+- count_words and wide_words point to private newly allocated counts/wide
+  Arrays. Both owners have explicit uses after each widening read/write;
+  wide also survives the following class_ratio_f64 call before final consume.
+- weight_words points to the private w64 output. Every iteration retains w64
+  after the pointer read and native list-append call, including the last read.
+- Existing narrowed pointer np retains its Array after every store/read and
+  through the final class-row spread call; no pointer escapes this operation.
+- The exact values list owns all scalar objects/types while kinds uses their
+  native identities; an explicit final use follows the classification loop.
+  The owned integer one also survives the last comparison. The later narrowing
+  loop reads native decoded Float64 storage, not scalar/type pointers.
+- These count/weight Arrays are operation-private; no caller alias is published
+  during these loops. The review establishes source lifetime, not runtime or
+  bitwise qualification.
+
+Compilation:
+Focused repaired host_svc_attribute_c public root, Apple CPU identical O0, ten
+workers via compile_slot. See compile.json for actual exit/status and hashes.
+No unchanged scaler/linear-SVC/device-plan recompilation. Their prior focused
+compile remains applicable; no runtime, identity, performance or GPU campaign.
+Required branch source guards are retained alongside this repair's evidence.
+
+Complete evidence: ~/mojolearn-evidence/host-svc-mode-recheck-20261028/
+compile.log/json, controller.log, source-manifest.json, source-bytes.tgz,
+_host_svc_mode_recheck.so, compiler/artifact hashes and source-guards.json.
+Original batch compile retained at ~/mojolearn-evidence/native-import-setup-20261028/.

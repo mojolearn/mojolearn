@@ -323,21 +323,18 @@ def _svc_coefficients(model: PythonObject, context: PythonObject) raises -> Pyth
     if features < 1 or rows < 1 or rows > 2147483647 // features:
         raise Error("SVC coefficient dimensions exceed native indexing")
     var out = host_archive_typed(Python.tuple(rows, features), "<f4", context["output_context"])
-    var mode_checked = False
     for i in range(rows):  # driver-loop: pair coefficient orientation matches the existing public property
         var count = Int(py=fields["n_support_"]) if pairs is None else _svc_pair_count(pairs[i], context)
         if count < 0 or count > 2147483647 // features:
             raise Error("SVC support dimensions exceed native indexing")
         if count == 0:
             continue
-        if not mode_checked:
-            # The model fields stay owned by this operation. Preserve refusal
-            # order: zero-support pairs skip mode admission, and count checks
-            # precede it. Once admitted, later pairs reuse the same mode.
-            var mode = py_get(fields, "numeric_mode")
-            if mode is not None and (py_type(mode) is not string_type or String(mode) != "identical"):
-                raise Error("explicit host models run identical mode only")
-            mode_checked = True
+        # svc_dual_gemv_host_binding releases the GIL between rows. Fields
+        # ownership does not freeze their contents: recheck mutable mode at the
+        # original position, while reusing the admitted immutable string type.
+        var mode = py_get(fields, "numeric_mode")
+        if mode is not None and (py_type(mode) is not string_type or String(mode) != "identical"):
+            raise Error("explicit host models run identical mode only")
         var dual = _kernel_buffer(fields["dual_coef_"] if pairs is None else pairs[i]["dual"], count, "<f4", context)
         var support = _svr_matrix(fields["support_vectors_"] if pairs is None else pairs[i]["sv"], count, features, context)
         _ = py_call(_kernel_entry("svc_dual_gemv", context), classical_address(dual), classical_address(support),
