@@ -1,0 +1,9 @@
+{
+  "r2_key": "measurements/ordered-wheel-mode-coverage-20261029/retained-evidence.tgz",
+  "local": "/Users/andrewhendel/mojolearn-evidence/ordered-wheel-mode-coverage-20261029/retained-evidence.tgz",
+  "sha256": "b9f9c935ac99c2ded047d65127355aecd2f29b49d466548e0ac56f5b96e7ab34",
+  "bytes": 8893,
+  "put_status": 200,
+  "readback_status": 200,
+  "readback_matches": true
+}

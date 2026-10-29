@@ -1,0 +1,36 @@
+Branch lane/ordered-wheel-mode-coverage-20261029
+Product a3b1c298dff667bb33b404f7e8bcce0770f6edaa, base06e52d25b91b.
+
+The installed OrderedRMSE gate unconditionally switched to fast before loading
+its saved identical model. An intentionally identical-only wheel refused because
+no fast binding exists. Original exit1 retained in the prior connection evidence,
+including a separate verified R2 archive referenced in validation.json.
+
+Fixture-only repair: select alternate process default only when it belongs to
+MOJOLEARN_RELEASE_MODES and the installed supported per-binding/merged layout
+contains its GBDT image. An unset release list defaults to this run's requested
+mode, not a request to execute fast. Selected and physically present tiers still
+must load/read back correctly: errors propagate, with no catch-and-skip. Saved
+model mode restoration always executes. The resulting evidence separately marks
+alternate-default contrast NOT_EXERCISED when unavailable or unselected, with
+its exact reason. The installed gate validates this coverage distinction and
+refuses a fabricated alternate PASS or missing serialization evidence.
+
+Original numerical checks remain: two three-tree fits on32rows,8unseen query
+rows,6negative cases, exact repeat model/prediction bits, serialized model bytes
+and exact restored train/query predictions. Added restored native mode/vendor
+and process-default readbacks. No product or native arithmetic changes.
+
+Validation:7policy +7installed-admission +5retained-comparison tests pass.
+Actual canonical run_installed_ordered passes exit0 on private installed current
+wheel with six previously qualified setup-only overlays, Apple identical,
+Python3.13. All87native/runtime bytes unchanged; no rebuild. No alternate tier
+installed/executed: contrast is NOT_EXERCISED, not PASS. Four source guards exit0.
+This is one affected installed phase, not final five-Python matrix, release-wide
+identity, performance, or alternate-tier qualification. GPU handed back to peer.
+
+Full logs, exact command, model/prediction JSON, source diff, original failure
+reference, hashes and R2 readback receipt:
+~/mojolearn-evidence/ordered-wheel-mode-coverage-20261029/
+See validation.json and retention.json. Root owns integration and next final
+source freeze; no publication or wheel rebuild by this batch.
