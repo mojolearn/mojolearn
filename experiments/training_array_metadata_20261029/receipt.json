@@ -1,0 +1,172 @@
+{
+  "product_commit": "66c7b37dcdba56413af3930e567e9e16be8348b5",
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029",
+  "build": {
+    "family": "tokenizer",
+    "argv": [
+      "bash",
+      "tools/compile_slot.sh",
+      "sh",
+      "bindings/build_host_family.sh",
+      "tokenizer"
+    ],
+    "environment": {
+      "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/raw",
+      "MOJOLEARN_COMPILE_JOBS": "10",
+      "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_TARGET_COLUMN": "cpu"
+    },
+    "compiler_version": "Mojo 1.0.0 (ed45d567)",
+    "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+    "source_count": 654,
+    "source_archive_sha256": "50925f9a818d1fc3ed9d1da766b29707a2e4648a18165f5963aedd370f3247f1",
+    "exit_code": 0,
+    "elapsed_seconds": 478.82978870905936,
+    "binary": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/raw/_mojolearn_tokenizer_host.so",
+    "binary_sha256": "e94740be05aa0b835697950565d3988e7aa800ba561622d1a474a00c5cf65a1b",
+    "sources_changed_during_build": []
+  },
+  "stage": {
+    "staged_sha256": "674aebcdafb0286f969d38f1813773adb86a520675073b944819407bf095ef31",
+    "scope": "Three isolated candidate-wheel environments; only tokenizer replaced; other78 native,2adapter and5runtime images unchanged in each",
+    "initial_failure": "Standard restaging rewrote5runtime signed copies, caught by assertion before execution; restored exact original wheel runtime bytes from pristine sibling install. Failed receipt and replaced variants retained.",
+    "exit_code": 0
+  },
+  "runtime": {
+    "rows": [
+      {
+        "python": "3.10",
+        "name": "metadata",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/venv3.10/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/test_training_array_metadata_contract.py",
+          "--junitxml=/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/runtime/3.10-metadata.xml"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 3.105073875049129,
+        "log": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/runtime/3.10-metadata.log"
+      },
+      {
+        "python": "3.10",
+        "name": "canonical-language-model",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/venv3.10/bin/python",
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/language_model_smoke.py"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.9587260410189629,
+        "log": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/runtime/3.10-canonical-language-model.log"
+      },
+      {
+        "python": "3.11",
+        "name": "metadata",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/venv3.11/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/test_training_array_metadata_contract.py",
+          "--junitxml=/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/runtime/3.11-metadata.xml"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 1.6892093330388889,
+        "log": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/runtime/3.11-metadata.log"
+      },
+      {
+        "python": "3.11",
+        "name": "canonical-language-model",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/venv3.11/bin/python",
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/language_model_smoke.py"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.9084552080603316,
+        "log": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/runtime/3.11-canonical-language-model.log"
+      },
+      {
+        "python": "3.12",
+        "name": "metadata",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/venv3.12/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/test_training_array_metadata_contract.py",
+          "--junitxml=/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/runtime/3.12-metadata.xml"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 15.605777875054628,
+        "log": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/runtime/3.12-metadata.log"
+      },
+      {
+        "python": "3.12",
+        "name": "canonical-language-model",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/venv3.12/bin/python",
+          "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/language_model_smoke.py"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.7639922919915989,
+        "log": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/runtime/3.12-canonical-language-model.log"
+      }
+    ],
+    "status": "complete",
+    "all_passed": true
+  },
+  "versions_and_coverage": [
+    {
+      "python": "3.10.21 (main, Aug 12 2026, 23:03:10) [Clang 21.0.0 (clang-2100.1.1.101)]",
+      "numpy": "2.2.6",
+      "mojolearn": "0.8.63",
+      "tests": {
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      "installed_tokenizer_sha256": "674aebcdafb0286f969d38f1813773adb86a520675073b944819407bf095ef31"
+    },
+    {
+      "python": "3.11.16 (main, Aug 12 2026, 23:03:19) [Clang 21.0.0 (clang-2100.1.1.101)]",
+      "numpy": "2.4.6",
+      "mojolearn": "0.8.63",
+      "tests": {
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      "installed_tokenizer_sha256": "674aebcdafb0286f969d38f1813773adb86a520675073b944819407bf095ef31"
+    },
+    {
+      "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+      "numpy": "2.5.4",
+      "mojolearn": "0.8.63",
+      "tests": {
+        "tests": "2",
+        "failures": "0",
+        "errors": "0",
+        "skipped": "0"
+      },
+      "installed_tokenizer_sha256": "674aebcdafb0286f969d38f1813773adb86a520675073b944819407bf095ef31"
+    }
+  ],
+  "guards": {
+    "source_commit": "66c7b37dcdba56413af3930e567e9e16be8348b5",
+    "exit_code": 0,
+    "elapsed_seconds": 46.69784499995876,
+    "log": "/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029/guards.log",
+    "scope": "Committed-ref source/push guards, no push"
+  },
+  "native_invalidation": {
+    "host": [
+      "tokenizer"
+    ],
+    "GPU": []
+  },
+  "limits": "Focused actual installed API/NumPy and existing language-model wheel smoke on Apple only; not full vendor identity or performance qualification."
+}

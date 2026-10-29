@@ -1,0 +1,42 @@
+Training Array metadata repair — 2026-10-29
+
+Branch: lane/array-interface-compat-20261029
+Product commit: 66c7b37dcdba56413af3930e567e9e16be8348b5
+Base product: 095ab328298973b2625cc7c2e189da73efb2b46f
+
+The actual installed candidate wheel failed NumPy conversion of LanguageModel
+state Arrays on Python3.10/3.11. Native training_words32_owned and
+training_f32_cast_owned built Array.shape as a list. A fresh trainer also failed
+its own pre-step state export because native admission correctly requires tuple
+metadata. Python3.12's buffer protocol could mask the NumPy symptom.
+
+Both producers now canonicalize only their internally constructed dimension
+list to an exact builtin tuple before publishing storage. Array protocols and
+strict admission remain unchanged. No arbitrary user conversion, arithmetic,
+copy ordering, dtype policy or owner-pin behavior changes. Constructors and
+copies still refresh all source bytes. No new cache or pointer reuse.
+
+Validation:
+- Actual complete tokenizer CPU host extension, identical/O0,10 configured
+  workers under compile_slot: exit0,478.83s;654 source files unchanged.
+- Only tokenizer among captured46host/33GPU closures is invalidated.
+- Actual current-wheel private installs on Python3.10.21/3.11.16/3.12.11:
+  2 durable metadata/NumPy/ownership/export-load tests each:6pass,0skip.
+- Unchanged canonical packaging/language_model_smoke.py passed on all3:
+  two-step resident/stateless training, state-byte equality and evaluation.
+- Source/push guards passed0. No full identity or performance campaign.
+
+Failures retained: canonical original3.10/3.11 matrix failures; initial probe
+missing required data_schedule (setup failure); corrected pre-step export
+failures on both versions. Standard private restaging initially replaced five
+wheel runtime signed copies, triggering the unchanged-bytes assertion BEFORE
+runtime. Restored exact original wheel runtime files; final each install changes
+only tokenizer and preserves other78 native+2adapter+5runtime bytes.
+
+Evidence root:
+/Users/andrewhendel/mojolearn-evidence/array-interface-compat-20261029
+See receipt.json, source-manifest.json/source.tar.gz, compile.log, guards.json,
+stage/receipt.json and initial-stage-failure.json, runtime/receipt.json and
+JUnit/full logs. All active verification installs remained immutable. R2
+retention receipt accompanies this handoff. Parent serializes integration and
+new candidate assembly; no rebuild needed for the other78 native images.
