@@ -1763,9 +1763,15 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
             mods.released()
         else:
             if kept is not None:
+                # Retain every old owner for failure cleanup until all closes
+                # succeed; an early close refusal must not orphan later layers.
+                lm = kept[1]
+                sessions = kept[2]
                 causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
-                _resident_close(entries, kept[1], kept[2])
+                _resident_close(entries, lm, sessions)
                 mods.released()
+                lm = PythonObject(None)
+                sessions = PythonObject(None)
             var opened = _resident_open_all(mods, s.model, entries, s.state, batch, length, int15, keep)
             lm = opened[0]
             sessions = opened[1]
