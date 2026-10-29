@@ -50,3 +50,35 @@ request fit/stateful-fit/validation/predict and standalone forward compiled exit
 Runtime/GPU execution/performance unmeasured. Full details in
 experiments/sequential_preparation_reuse_20261029/HANDOFF.txt.
 Prior resident-layer normal main push exit0 at f0565f1e23.
+
+Program result publication: originalbcbdd5e843 integrated22831b1034.
+Selected training/control paths already retain minibatches/gradients/parameters/
+optimizer state; no hypothetical roundtrip removed. Ordinary identical GPU
+program outputs now copy directly to fresh private HostArray storage, omitting
+host staging allocation and CPU memcpy. Mandatory D2H bytes/per-output waits
+remain; pooled large-output pipeline retains existing route. CPU unchanged.
+Destination/source pins and failure drain preserve lifetimes/first error, no
+new persistent handles or cache invalidation. Original overload compiled but
+selected generic fallback: retained as nonqualifying evidence. Final static
+DEVICE flag with supported rebind reaches direct helper, confirmed in artifact.
+Actual CPU public entry compiled exit0/35.69s; changed DeviceExec generic-copy
+root compiled exit0/13.36s.197/121-file closures exactmatch including Sequential
+source, compiler/archive/binary hashes match. Full GPU program replay build and
+all runtime/identity/performance remain unqualified. Root source review accepted.
+Detailed routes and limitations: experiments/training_transfer_reuse_20261029/.
+
+Final delivery state before last normal push:
+Metrics/manifold cleanup, Mamba descriptors, resident prefill workspaces and
+Sequential preparation normal pushes all exit0. Final program-publication push
+result is retained in external program-push.json/log; no guard bypass requested.
+No rented boxes were needed; all active work used small Mac compilations.
+Execution/GIL draft430208ae62 stays parked. Sampling draftb6f074648f has only a
+handoff commit and uncommitted uncompiled product patch in its owned lane; none
+of that product code is in main. User requested attribution before sampling but
+also deferred measurements in same message: clarification remains pending, no
+NVIDIA attribution/runtime/identity/performance run started.
+SmallMLP iterator error fix and greedy/EOS resident read were already in main:
+bindings/small_mlp_items.mojo uses PyIter_Next/PyErr_Occurred; CausalLM _read
+selects _read_resident for eligible greedy reads including EOS. No duplicate fix.
+All latest lane handoffs preserve repeated work removed, setup/reuse boundaries,
+invalidation/ownership, exact compilation scope and remaining limitations.
