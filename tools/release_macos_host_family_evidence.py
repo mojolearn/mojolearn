@@ -152,6 +152,16 @@ def _check(requirement_id, wanted, facts, unit):
     require(binding.get('toolchain', {}).get('pixi_lock_sha256') == facts['source_files']['pixi.lock'],
             'pinned compiler package lock differs')
     for rel in common.require_closure(tree, wanted):
+        shim = 'bindings/build_' + facts['family'] + '_host.sh'
+        if rel == shim and rel not in facts['source_files']:
+            # The release closure starts at this exact two-line forwarding shim.
+            # The captured argv calls its exec target directly with the same
+            # family and no extra args; this shim did not run in that build.
+            expected_shim = ('#!/bin/sh\nexec sh "$(dirname -- "$0")/build_host_family.sh" '
+                             + facts['family'] + ' "$@"\n')
+            require(tree.text(shim) == expected_shim,
+                    'uncaptured release shim is not the exact direct-invocation alias')
+            continue
         expected = (common.generated_sha(tree, rel, facts['source_root']) if rel in common.GENERATED
                     else tree.sha256(rel))
         require(facts['source_files'].get(rel) == expected,

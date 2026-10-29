@@ -30,6 +30,8 @@ def producer(tmp_path):
              'pixi.lock': b'lock\n', 'pixi.toml': b'[workspace]\nname="fixture"\n',
              'bindings/_mojolearn_core_host.mojo': b'# module\n',
              'bindings/entry/entry__mojolearn_core_host.mojo': b'# entry\n'}
+    shim = 'bindings/build_core_host.sh'
+    files[shim] = b'#!/bin/sh\nexec sh "$(dirname -- "$0")/build_host_family.sh" core "$@"\n'
     for name, data in files.items():
         p = root / name
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -39,6 +41,7 @@ def producer(tmp_path):
     git('init', '-q')
     git('add', '.')
     git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture')
+    files.pop(shim)  # direct builder invocation never executes this release shim
     manifest = tmp_path / 'source-manifest.json'
     dump(manifest, {k: sha(v) for k, v in files.items()})
     archive = tmp_path / 'source.tar.gz'
@@ -149,10 +152,10 @@ def qualified(producer):
     binding = dict(target=host.common.MAC, vendor='host', arch=None, tier='host', name='_mojolearn_core_host',
                    host_toolchain=facts['cpu_toolchain'], flags=flags, selected_build_flags=semantic,
                    toolchain={'pixi_lock_sha256': facts['source_files']['pixi.lock']},
-                   closure={'scope':'closure', 'digest':host.common.closure_digest(tree, facts['source_files'])})
+                   closure={'scope':'closure', 'digest':host.common.closure_digest(tree, [*facts['source_files'],'bindings/build_core_host.sh'])})
     wanted = dict(kind='compile', inputs=dict(binding=binding, unit=dict(kind='compile', vendor='apple',
                   release_modes=['identical'], build_flags=semantic, compiler_sha256=receipt['compiler_sha256'])),
-                  coverage=[host.common.BASE_COVERAGE,unit['binding_key']], provenance_sources=list(facts['source_files']))
+                  coverage=[host.common.BASE_COVERAGE,unit['binding_key']], provenance_sources=[*facts['source_files'],'bindings/build_core_host.sh'])
     return rid, wanted, facts, unit
 
 
@@ -193,3 +196,12 @@ def test_partial_unconsumed_metal_labels_do_not_replace_cpu_witness(producer):
     dump(path,receipt)
     facts=host._facts(root,{'receipt':str(path)})
     assert facts['cpu_toolchain']['image']['build']['sdk']==[26,5,0]
+
+
+def test_changed_release_wrapper_is_not_equivalent_to_direct_invocation(producer, monkeypatch):
+    rid,wanted,facts,unit=qualified(producer)
+    tree=host.common.Tree.at(facts['source_root'],facts['source_revision'])
+    original=tree.text
+    monkeypatch.setattr(tree,'text',lambda name: '# extra work\n'+original(name) if name=='bindings/build_core_host.sh' else original(name))
+    with pytest.raises(ValueError,match='not the exact direct-invocation alias'):
+        host._check(rid,wanted,facts,unit)
