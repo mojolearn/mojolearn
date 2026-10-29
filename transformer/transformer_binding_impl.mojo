@@ -2181,8 +2181,7 @@ def _lm_run(
     var eos_device = Optional[DeviceBuffer[DType.int32]]()
     if read_address != 0:
         status = List[Int32](length=2 * b, fill=0)
-        for r in range(b):
-            status[r] = read[].finished[r]
+        memcpy(dest=status.unsafe_ptr(), src=read[].finished.unsafe_ptr(), count=b)
         status_device = ctx.enqueue_create_buffer[DType.int32](2 * b)
         lengths_device = ctx.enqueue_create_buffer[DType.int64](b)
         eos_device = ctx.enqueue_create_buffer[DType.int32](max(1, len(read[].eos)))
@@ -2269,7 +2268,7 @@ def _lm_run(
         cur_l = 1
         if read_address != 0:
             var complete = True
-            for r in range(b):
+            for r in range(b):  # driver-loop: device stop/error status only; predictions and EOS decisions ran on GPU
                 if status[b + r] >= 0:
                     raise Error("generation: non-finite logit at token " + String(status[b + r]))
                 complete = complete and status[r] != 0
@@ -2282,18 +2281,21 @@ def _lm_run(
     else:
         # A stopped read has unwritten trailing capacity. Copy only published
         # tokens, retaining row views until the final device synchronization.
-        for r in range(b):
+        for r in range(b):  # driver-loop: completed output-row transfer spans, no token computation
             output_rows.append(out_dev.create_sub_buffer[DType.int32](r * n_steps, read[].wrote))
             ctx.enqueue_copy(dst_ptr=out_i32 + r * n_steps, src_buf=output_rows[r])
     if read_address != 0:
         ctx.enqueue_copy(dst_ptr=read[].lengths.unsafe_ptr(), src_buf=lengths_device.value())
-        for r in range(b):
-            read[].finished[r] = status[r]
+        memcpy(dest=read[].finished.unsafe_ptr(), src=status.unsafe_ptr(), count=b)
     ctx.synchronize()
     _ = ids0^
     _ = next_ids^
     _ = out_dev^
     _ = output_rows^
+    _ = status_device^
+    _ = lengths_device^
+    _ = eos_device^
+    _ = status^
 
 
 
