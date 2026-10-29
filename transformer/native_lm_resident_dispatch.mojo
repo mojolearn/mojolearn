@@ -52,8 +52,14 @@ def _lm_group_reserve(group: NativeSessionGroup) raises:
         elif held >= 0 and held != cached:
             raise Error("causal_lm_session_forward: the layers hold different cached lengths")
         held = cached
-        if cached + length + steps - 1 > layer[].smax:
+        if cached + length + (0 if read else steps - 1) > layer[].smax:
             raise Error("causal lm resident: additional positions do not fit the cache")
+        if read:
+            # EOS may stop before the requested capacity is exhausted. Capture
+            # the tightest layer limit once; enforce it at each actual step.
+            var progress = MutPointer[ResidentGreedyRead, MutUntrackedOrigin](unsafe_from_address=group.addresses[3])
+            var remaining = layer[].smax - cached
+            progress[].cache_remaining = remaining if i == 0 else min(progress[].cache_remaining, remaining)
     for address in group.layers:  # driver-loop: original whole-model session reservation, no layer locks acquired
         MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=address)[].busy = True
     owner[].busy = True

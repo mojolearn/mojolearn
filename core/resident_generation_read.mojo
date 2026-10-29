@@ -8,8 +8,13 @@ struct ResidentGreedyRead(Movable):
     var eos: List[Int32]
     var pad: Int
     var wrote: Int
+    var position: Int
+    var max_positions: Int
+    var state_capacity: Int
+    var cache_remaining: Int
 
-    def __init__(out self, finished: List[Bool], lengths: List[Int], eos: List[Int], pad: Int):
+    def __init__(out self, finished: List[Bool], lengths: List[Int], eos: List[Int], pad: Int,
+                 position: Int, max_positions: Int, state_capacity: Int):
         self.finished = List[Int32](capacity=len(finished))
         self.lengths = List[Int64](capacity=len(lengths))
         self.eos = List[Int32](capacity=len(eos))
@@ -21,6 +26,10 @@ struct ResidentGreedyRead(Movable):
             self.eos.append(Int32(value))
         self.pad = pad
         self.wrote = 0
+        self.position = position
+        self.max_positions = max_positions
+        self.state_capacity = state_capacity
+        self.cache_remaining = 0
 
 
 def resident_greedy_publish(progress: ResidentGreedyRead, mut finished: List[Bool], mut lengths: List[Int]):

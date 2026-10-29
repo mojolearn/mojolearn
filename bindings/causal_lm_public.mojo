@@ -1731,7 +1731,8 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
     # Heap-backed descriptor avoids the documented inline-address ABI issue;
     # its native lists, plus every host buffer, remain live through release.
     var progress = List[ResidentGreedyRead]()
-    progress.append(ResidentGreedyRead(s.finished, s.lengths, s.eos, s.pad))
+    progress.append(ResidentGreedyRead(s.finished, s.lengths, s.eos, s.pad, positions,
+        -1 if s.model.max_positions is None else Int(py=s.model.max_positions), Int(py=s.state.max_tokens)))
     if persist:
         causal_model_cache_set(mods, s.model, fields, "_resident_busy", True)
     try:

@@ -1983,13 +1983,20 @@ def _lm_read_argmax_kernel(
     logits: MutPointer[Float32, MutAnyOrigin], next_ids: MutPointer[Int32, MutAnyOrigin],
     out_ids: MutPointer[Int32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
     lengths: MutPointer[Int64, MutAnyOrigin], eos: MutPointer[Int32, MutAnyOrigin],
-    batch: Int, cur_l: Int, vocab: Int, capacity: Int, step: Int, n_eos: Int, pad: Int32,
+    batch_in: Int32, cur_l_in: Int32, vocab_in: Int32, capacity_in: Int32,
+    step_in: Int32, n_eos_in: Int32, pad: Int32,
 ):
     # One block per row: stable lowest-index maximum, first nonfinite refusal,
     # EOS/length publication and next input all stay on the device. The host
     # sees only the small stop/error status, never logits or prediction work.
     var r = Int(block_idx.x)
     var tid = Int(thread_idx.x)
+    var batch = Int(batch_in)
+    var cur_l = Int(cur_l_in)
+    var vocab = Int(vocab_in)
+    var capacity = Int(capacity_in)
+    var step = Int(step_in)
+    var n_eos = Int(n_eos_in)
     if status[r] != 0:
         if tid == 0:
             next_ids[r] = pad
@@ -2185,6 +2192,15 @@ def _lm_run(
             ctx.enqueue_copy(dst_buf=eos_device.value(), src_ptr=read[].eos.unsafe_ptr())
     var cur_l = l
     for step in range(n_steps):
+        if read_address != 0:
+            var consumed = l + step
+            var position = read[].position + consumed
+            if read[].max_positions >= 0 and position > read[].max_positions:
+                raise Error("CausalLM: max_tokens or sequence exceeds max_positions")
+            if position > read[].state_capacity:
+                raise Error("CausalLM: sequence exceeds allocated state capacity")
+            if consumed > read[].cache_remaining:
+                raise Error("causal lm resident: additional positions do not fit the cache")
         var m = b * cur_l
         var x = ctx.enqueue_create_buffer[DType.float32](m * d)
         if step == 0:
@@ -2233,7 +2249,7 @@ def _lm_run(
             ctx.enqueue_function[_lm_read_argmax_kernel](
                 logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
                 status_device.value().unsafe_ptr(), lengths_device.value().unsafe_ptr(), eos_device.value().unsafe_ptr(),
-                b, cur_l, v, n_steps, step, len(read[].eos), Int32(read[].pad),
+                Int32(b), Int32(cur_l), Int32(v), Int32(n_steps), Int32(step), Int32(len(read[].eos)), Int32(read[].pad),
                 grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
             )
             ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(), src_buf=status_device.value())
