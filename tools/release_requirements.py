@@ -415,6 +415,8 @@ class RequirementsLedger:
         rows = {}
         positions = {run["id"]: index for index, run in enumerate(doc.get("runs", []))}
         finished = {a["run_id"] for a in doc.get("attempts", [])}
+        interruptions = {item["run_id"]: item for item in doc.get("interruptions", [])}
+        finished.update(interruptions)
         for name, wanted in doc["requirements"].items():
             # Begin order wins over finish order: an older in-flight result
             # cannot replace the result of a newer source freeze/run.
@@ -442,6 +444,16 @@ class RequirementsLedger:
                 row.update(action="complete-provenance", reasons=["requirement fingerprint does not match its inputs"])
             elif wanted.get("missing_inputs"):
                 row.update(action="complete-provenance", reasons=["missing input: " + k for k in wanted["missing_inputs"]])
+            elif runs and runs[-1]["id"] in interruptions:
+                interrupted = interruptions[runs[-1]["id"]]
+                errors = evidence_errors(interrupted["evidence"])
+                row.update(interruption=interrupted["id"],
+                           evidence=copy.deepcopy(interrupted["evidence"]),
+                           reasons=["previous launch interrupted without qualification: " + interrupted["reason"]])
+                # An interrupted required rerun cannot revive an older PASS.
+                # There is no algorithm verdict or fabricated coverage here.
+                if errors:
+                    row.update(action="restore-evidence", reasons=errors)
             elif candidate is not None:
                 later_failures = [a for a in attempts[attempts.index(candidate) + 1:] if a["status"] == "failed"]
                 conflicting = (candidate["status"] == "passed" and RequirementsLedger._conflicting_failure(
@@ -534,6 +546,51 @@ class RequirementsLedger:
             doc["status"] = self._evaluate(doc)
         return attempts
 
+    def interrupt(self, run_id, paths, reason, *, producer_stopped=False):
+        return self.interrupt_many([run_id], paths, reason,
+                                   producer_stopped=producer_stopped)[0]
+
+    def interrupt_many(self, run_ids, paths, reason, *, producer_stopped=False):
+        """Close stopped launches without inventing completed test attempts.
+
+        The owner must retain stop/absence evidence and explicitly confirm that
+        the producers cannot still complete. This operation does not kill jobs.
+        Original runs, attempts and evidence remain immutable; qualification
+        stays untested, including when an older attempt passed.
+        """
+        run_ids = list(run_ids)
+        if not run_ids or len(run_ids) != len(set(run_ids)):
+            raise ValueError("provide a nonempty list of unique interrupted run IDs")
+        if producer_stopped is not True:
+            raise ValueError("confirm producers stopped before interrupting their launches")
+        if not reason or not reason.strip():
+            raise ValueError("a concrete interruption reason is required")
+        evidence = evidence_files(paths)
+        if not evidence:
+            raise ValueError("retain producer stop/absence evidence before interruption")
+        with self.edit() as doc:
+            runs = {run["id"]: run for run in doc.get("runs", [])}
+            closed = {attempt["run_id"] for attempt in doc.get("attempts", [])}
+            closed.update(item["run_id"] for item in doc.get("interruptions", []))
+            unknown = set(run_ids) - set(runs)
+            if unknown:
+                raise ValueError("unknown interrupted run IDs: " + ", ".join(sorted(unknown)))
+            if closed.intersection(run_ids):
+                raise ValueError("run already recorded or interrupted; historical results are immutable")
+            interruptions = []
+            for run_id in run_ids:
+                run = runs[run_id]
+                item = dict(id=digest([run_id, evidence, reason, "interrupted"]),
+                            run_id=run_id, requirement=run["requirement"],
+                            source_revision=run["source_revision"], fingerprint=run["fingerprint"],
+                            status="interrupted", producer_stopped=True, reason=reason,
+                            evidence=copy.deepcopy(evidence), interrupted_at=stamp(),
+                            qualification_claim=False)
+                interruptions.append(item)
+            doc.setdefault("interruptions", []).extend(interruptions)
+            doc["status"] = self._evaluate(doc)
+        return interruptions
+
     def admit_retained_runtime(self, report_path, revision):
         """Reconcile a bounded historical execution without inventing a begun run.
 
@@ -603,6 +660,8 @@ class RequirementsLedger:
         if not evidence:
             raise ValueError("retain reports/logs before recording a result")
         run = next(r for r in doc["runs"] if r["id"] == run_id)
+        if any(item["run_id"] == run_id for item in doc.get("interruptions", [])):
+            raise ValueError("run was interrupted; retain late output separately, historical closure is immutable")
         if any(a["run_id"] == run_id for a in doc["attempts"]):
             raise ValueError("run already recorded; historical results are immutable")
         invalidation = run.get("invalidation_evidence", [])
@@ -642,7 +701,7 @@ class RequirementsLedger:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("command", choices=("sync", "plan", "check", "begin", "record"))
+    ap.add_argument("command", choices=("sync", "plan", "check", "begin", "record", "interrupt"))
     ap.add_argument("--ledger", required=True)
     ap.add_argument("--root", type=Path, default=ROOT)
     ap.add_argument("--revision", default="HEAD")
@@ -654,6 +713,9 @@ def main(argv=None):
     ap.add_argument("--invalidation-evidence", action="append", default=[],
                     help="retained diagnostic evidence required to rerun unchanged qualified inputs")
     ap.add_argument("--run-id")
+    ap.add_argument("--run-ids-file", type=Path, help="JSON list of exact run IDs to interrupt atomically")
+    ap.add_argument("--producer-stopped", action="store_true",
+                    help="owner confirms all selected producers stopped; retain proof with --evidence")
     ap.add_argument("--result", choices=("passed", "failed"))
     ap.add_argument("--evidence", action="append", default=[])
     ap.add_argument("--summary", default="")
@@ -667,6 +729,16 @@ def main(argv=None):
     ap.add_argument("--stage", choices=("pre", "post"))
     args = ap.parse_args(argv)
     ledger = RequirementsLedger(args.ledger, source_root=args.root, evidence_log_dir=args.dependency_log_dir)
+    if args.command == "interrupt":
+        if bool(args.run_id) == bool(args.run_ids_file):
+            ap.error("interrupt requires exactly one of --run-id or --run-ids-file")
+        run_ids = json.loads(args.run_ids_file.read_text()) if args.run_ids_file else [args.run_id]
+        if not isinstance(run_ids, list) or not all(isinstance(value, str) for value in run_ids):
+            ap.error("--run-ids-file must contain a JSON list of run ID strings")
+        result = ledger.interrupt_many(run_ids, args.evidence, args.reason,
+                                       producer_stopped=args.producer_stopped)
+        print(json.dumps(dict(interrupted=len(result), qualification_claim=False)))
+        return 0
     if args.command == "begin":
         print(ledger.begin(args.requirement, args.reason, invalidation_paths=args.invalidation_evidence)
               or "REUSE: no run required")

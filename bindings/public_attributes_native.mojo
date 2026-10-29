@@ -388,18 +388,32 @@ def public_attribute_generic_slot_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr)
 
 def _public_attribute_generic_entry[slot: Bool](args_ptr: PyObjectPtr) -> PyObjectPtr:
     try:
-        var args = PythonObject(from_borrowed=args_ptr)
-        if len(args) != 3:
-            raise Error("TypeError: generic public attribute expects model, name and native context")
-        var model = args[1] if slot else args[0]
-        var name = args[2] if slot else args[1]
-        var context = args[0] if slot else args[2]
         ref cpy = Python().cpython()
-        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(model._obj_ptr, name._obj_ptr)
+        if cpy.lib.get_function[Int]("PyTuple_Size")(args_ptr) != 3:
+            raise Error("TypeError: generic public attribute expects model, name and native context")
+        # CPython owns this METH_VARARGS tuple throughout the C call. Borrow
+        # its items directly, so a failed lookup has no PythonObject tuple/item
+        # temporaries to destroy while the original AttributeError is pending.
+        # The earlier wrapper path still lost one owner reference in the
+        # installed 543875 regression; its failure is retained under
+        # ~/mojolearn-evidence/host-attribute-error-repair-20261029/focused.log.
+        # This uses documented CPython APIs; the Mojo ownership failure's
+        # internal cause remains unconfirmed.
+        var model_ptr = cpy.PyTuple_GetItem(args_ptr, 1 if slot else 0)
+        var name_ptr = cpy.PyTuple_GetItem(args_ptr, 2 if slot else 1)
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(model_ptr, name_ptr)
         if not raw:
-            var failure = stash_python_error()
-            raise failure^
+            # This is already a CPython error boundary. Return its original
+            # exception directly, as array_native does; no fetch/restore or
+            # Mojo-error round trip is needed. The former path reproduced a
+            # lost instance reference on getattr(obj, missing, default), then
+            # a saved-host-model/traceback cleanup crash. Internal cause is
+            # unconfirmed; retained reproduction: experiments/
+            # host_attribute_error_20261029/HANDOFF.txt.
+            return PyObjectPtr()
         var result = PythonObject(from_owned=raw)
+        var name = PythonObject(from_borrowed=name_ptr)
+        var context = PythonObject(from_borrowed=cpy.PyTuple_GetItem(args_ptr, 0 if slot else 2))
         if py_type(name) is not py_type(PythonObject("")):
             return result.steal_data()
         var attributes = py_get(context, "attributes")

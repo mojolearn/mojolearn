@@ -141,6 +141,30 @@ def _linear_spectral_availability(package):
     return result
 
 
+def _inherited_host_availability(package, declared, missing):
+    # glue: only archive-registered package host classes inherit these rules.
+    # The method descriptor must be the exact admitted base descriptor; a
+    # replacement predicate, wrapper or application subclass gains no schema.
+    import sys
+    module = sys.modules.get(package.__name__ + '._classical_host')
+    if type(module) is not ModuleType:
+        return {}
+    result = {}
+    for classes in vars(module).get('_FORMATS', {}).values():  # glue: registered archive classes at package import
+        for cls in classes.values():  # glue: fixed Host class setup inventory
+            if type(cls) is not type or vars(cls).get('__module__') != module.__name__:
+                continue
+            methods = {}
+            for base in cls.__mro__[1:]:  # glue: inherited descriptor identities captured at setup
+                for name, rule in declared.get(base, {}).items():  # glue: fixed availability schema declarations
+                    if (name not in methods
+                            and _resolved(cls, name, missing) is _resolved(base, name, missing)):
+                        methods[name] = rule
+            if methods:
+                result[cls] = methods
+    return result
+
+
 def connect_classes(package):
     # glue: establish native slots once, before dependent estimator/parameter
     # tables capture method identities; lazy imports admit only new classes.
@@ -188,6 +212,8 @@ def connect_classes(package):
         name: ((vars(vars(_svm_impl.SVC)[name])['check'],), 'svm_probability')
         for name in ('predict_proba', 'predict_log_proba')  # glue: two fixed native availability schemas
     }
+    neighbor_availability.update(_inherited_host_availability(
+        package, neighbor_availability, context['missing']))
     stl_module = sys.modules.get(package.__name__ + '._x_sequence_stl')
     if not context['stl_connected'] and type(stl_module) is ModuleType:
         context['property_schemas'][vars(vars(stl_module)['STL'])['config']] = 'stl_config'

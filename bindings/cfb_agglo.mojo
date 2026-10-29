@@ -19,6 +19,7 @@ from bindings.mode_metadata_native import _fields
 from bindings.metrics_native_support import metric_warn
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_metadata_once, array_shape_once
 from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
+from providers.python.host_estimator_binding_pyapi import host_estimator_binding_mode
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit, xn_execute
 from providers.python.hierarchy_public_lifecycle_pyapi import hierarchy_public_begin, hierarchy_public_end, hierarchy_public_finish, hierarchy_public_refusal
@@ -385,7 +386,7 @@ def cfb_agglo_operation(model: PythonObject, operation: String, args: PythonObje
     var call = hierarchy_public_begin(model, operation, public_args, context)
     var result = PythonObject(None)
     try:
-        var estimators = args[0] if args[0] is not None else estimator_binding_mode(call.settings["numeric_mode"], "_mojolearn_estimators", context)
+        var estimators = args[0] if args[0] is not None else host_estimator_binding_mode(model, call.settings["numeric_mode"], "_mojolearn_estimators", context)
         if call.fitting:
             var solver = args[1] if explicit else estimator_binding(PythonObject(None), "_mojolearn_solver", context)
             var cluster = args[2] if explicit else estimator_binding_mode(call.settings["numeric_mode"], "_mojolearn_x_cluster", context)
