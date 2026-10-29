@@ -1,0 +1,17 @@
+{
+  "source_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+  "workflow_run": 40855235569,
+  "key": "measurements/github-amd-current-20261029/amd-gfx942-40855235569-complete.tgz",
+  "local_archive": "/Users/andrewhendel/mojolearn-evidence/github-amd-current-20261029/retention/amd-gfx942-40855235569-complete.tgz",
+  "bytes": 320223552,
+  "sha256": "248afe9ed265f5746fb5c0070aa64ead12bcf23b6c4aeec8e6cd112c94d35ca8",
+  "put_status": 200,
+  "files": 38829,
+  "unique_contents": 9747,
+  "runtime_qualified": false,
+  "get_status": 200,
+  "readback_sha256": "248afe9ed265f5746fb5c0070aa64ead12bcf23b6c4aeec8e6cd112c94d35ca8",
+  "all_member_readback_match": true,
+  "elapsed_seconds": 115.3043450419791,
+  "exit_code": 0
+}
