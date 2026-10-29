@@ -1,0 +1,447 @@
+{
+  "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "owners": [
+    {
+      "member": "_mojolearn_arima_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 22
+    },
+    {
+      "member": "_mojolearn_byte_lm_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 89
+    },
+    {
+      "member": "_mojolearn_core_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 73
+    },
+    {
+      "member": "_mojolearn_embedding_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 15
+    },
+    {
+      "member": "_mojolearn_embedding_infer_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 14
+    },
+    {
+      "member": "_mojolearn_estimators_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 191
+    },
+    {
+      "member": "_mojolearn_forecast_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 53
+    },
+    {
+      "member": "_mojolearn_forest_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 44
+    },
+    {
+      "member": "_mojolearn_gbdt_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 83
+    },
+    {
+      "member": "_mojolearn_gp_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 50
+    },
+    {
+      "member": "_mojolearn_gp_infer_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 36
+    },
+    {
+      "member": "_mojolearn_hdbscan_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 95
+    },
+    {
+      "member": "_mojolearn_hdbscan_infer_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 95
+    },
+    {
+      "member": "_mojolearn_ivf_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 39
+    },
+    {
+      "member": "_mojolearn_ivf_search_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 39
+    },
+    {
+      "member": "_mojolearn_kernel_methods_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 83
+    },
+    {
+      "member": "_mojolearn_linalg_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 100
+    },
+    {
+      "member": "_mojolearn_mamba_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 87
+    },
+    {
+      "member": "_mojolearn_metrics_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 106
+    },
+    {
+      "member": "_mojolearn_mixture_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 47
+    },
+    {
+      "member": "_mojolearn_mixture_infer_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 47
+    },
+    {
+      "member": "_mojolearn_neural_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 81
+    },
+    {
+      "member": "_mojolearn_preprocessing_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 15
+    },
+    {
+      "member": "_mojolearn_resample_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 27
+    },
+    {
+      "member": "_mojolearn_rf_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 69
+    },
+    {
+      "member": "_mojolearn_runtime_classical_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 439
+    },
+    {
+      "member": "_mojolearn_runtime_manifold_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 139
+    },
+    {
+      "member": "_mojolearn_runtime_model_selection_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 146
+    },
+    {
+      "member": "_mojolearn_runtime_sequential_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 207
+    },
+    {
+      "member": "_mojolearn_solver_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 85
+    },
+    {
+      "member": "_mojolearn_svm_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 128
+    },
+    {
+      "member": "_mojolearn_tokenizer_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 652,
+      "generated_input": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/generated-inputs/unicode_table_generated.mojo",
+        "sha256": "60aa4174d12b40b5dd48f9687d377f3fb10669d9c07f574f9c7e2ea8c70644ee"
+      }
+    },
+    {
+      "member": "_mojolearn_training_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 94
+    },
+    {
+      "member": "_mojolearn_transformer_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 62
+    },
+    {
+      "member": "_mojolearn_trees_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 110
+    },
+    {
+      "member": "_mojolearn_tsa_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 57
+    },
+    {
+      "member": "_mojolearn_x_ann_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 63
+    },
+    {
+      "member": "_mojolearn_x_cluster_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 74
+    },
+    {
+      "member": "_mojolearn_x_cnn_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 34
+    },
+    {
+      "member": "_mojolearn_x_decomp_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 132
+    },
+    {
+      "member": "_mojolearn_x_linear_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 68
+    },
+    {
+      "member": "_mojolearn_x_metrics_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 39
+    },
+    {
+      "member": "_mojolearn_x_neighbors_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 64
+    },
+    {
+      "member": "_mojolearn_x_prep_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 64
+    },
+    {
+      "member": "_mojolearn_x_sequence_host",
+      "mode": "host",
+      "source_mismatches": [
+        "providers/python/autograd_torch_program_pyapi.mojo"
+      ],
+      "source_files": 282
+    },
+    {
+      "member": "_mojolearn_x_trees_host",
+      "mode": "host",
+      "source_mismatches": [],
+      "source_files": 48
+    },
+    {
+      "member": "_mojolearn",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 165
+    },
+    {
+      "member": "_mojolearn_byte_lm",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 240
+    },
+    {
+      "member": "_mojolearn_embedding",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 138
+    },
+    {
+      "member": "_mojolearn_estimators",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 263
+    },
+    {
+      "member": "_mojolearn_gbdt",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 229
+    },
+    {
+      "member": "_mojolearn_gp",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 105
+    },
+    {
+      "member": "_mojolearn_hdbscan",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 149
+    },
+    {
+      "member": "_mojolearn_ivf",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 113
+    },
+    {
+      "member": "_mojolearn_kernel_methods",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 141
+    },
+    {
+      "member": "_mojolearn_linalg",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 141
+    },
+    {
+      "member": "_mojolearn_mamba",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 194
+    },
+    {
+      "member": "_mojolearn_metrics",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 296
+    },
+    {
+      "member": "_mojolearn_mixture",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 103
+    },
+    {
+      "member": "_mojolearn_rf",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 114
+    },
+    {
+      "member": "_mojolearn_solver",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 127
+    },
+    {
+      "member": "_mojolearn_svm",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 121
+    },
+    {
+      "member": "_mojolearn_training",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 273
+    },
+    {
+      "member": "_mojolearn_transformer",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 212
+    },
+    {
+      "member": "_mojolearn_trees",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 80
+    },
+    {
+      "member": "_mojolearn_x_ann",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 140
+    },
+    {
+      "member": "_mojolearn_x_cluster",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 144
+    },
+    {
+      "member": "_mojolearn_x_cnn",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 140
+    },
+    {
+      "member": "_mojolearn_x_decomp",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 216
+    },
+    {
+      "member": "_mojolearn_x_neighbors",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 81
+    },
+    {
+      "member": "_mojolearn_x_prep",
+      "mode": "identical",
+      "source_mismatches": [],
+      "source_files": 90
+    },
+    {
+      "member": "_mojolearn_x_sequence",
+      "mode": "identical",
+      "source_mismatches": [
+        "providers/python/autograd_torch_program_pyapi.mojo"
+      ],
+      "source_files": 306
+    }
+  ],
+  "unique_files": 2578,
+  "matching_owners": 70
+}

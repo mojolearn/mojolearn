@@ -1,0 +1,120 @@
+{
+  "schema": "mojolearn.linux-native-stage-receipt.v1",
+  "product_freeze": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "new_compiled_source": "be2dbd0397cc9e2379873319b38b90823c3c4e15",
+  "counts": {
+    "host": 46,
+    "identical_sm89": 33
+  },
+  "new_build": {
+    "source_commit": "be2dbd0397cc9e2379873319b38b90823c3c4e15",
+    "builder_exit": 3,
+    "elapsed_seconds": 617.7644414079841,
+    "expected": 9,
+    "completed": [
+      "_mojolearn_dev_x_sequence_host",
+      "_mojolearn_dev_x_trees",
+      "_mojolearn_dev_x_linear",
+      "_mojolearn_dev_preprocessing",
+      "_mojolearn_dev_resample",
+      "_mojolearn_dev_x_metrics",
+      "_mojolearn_dev_x_sequence",
+      "_mojolearn_dev_tsa",
+      "_mojolearn_dev_arima"
+    ],
+    "missing": [],
+    "complete": true,
+    "runtime_qualified": false
+  },
+  "build_resources": {
+    "allocated_cores": 32,
+    "workers": 32,
+    "concurrent_compilers": 1,
+    "semantic_flags": {},
+    "scope": "configured resources; no saturation claim"
+  },
+  "package_retention": {
+    "pod": "jvy2n0ghb8d6vp",
+    "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+    "archive": "/Users/andrewhendel/mojolearn-evidence/linux-install-bc11389-20261029/final-stage/linux-bc11389-installed-stage.tgz",
+    "key": "measurements/linux-install-bc11389-20261029/linux-bc11389-installed-stage.tgz",
+    "bytes": 85482344,
+    "sha256": "772026f68616fdabd70ff2f0fd3a0dad252554a8c5e0fcac4d06c632064154de",
+    "put": 200,
+    "get": 200,
+    "verified": true,
+    "package_members_verified": 1099,
+    "scope": "static staging and retention only; no product execution"
+  },
+  "complete_compiler_archive": {
+    "bytes": 463185968,
+    "sha256": "ca2640e76208f5a76e9bda05964d0acbc2bb31c205bcd98f5401f6c33c8c2280",
+    "put": 200,
+    "get": 200,
+    "key": "measurements/runpod-cpu/mojolearn-cpu-releasebe2-stage3-20261029-142712/results-complete.tgz",
+    "verified": true,
+    "transport": "owned box direct PUT then Mac GET and complete byte hash"
+  },
+  "unchanged_source_proof": "/Users/andrewhendel/mojolearn-evidence/linux-install-bc11389-20261029/existing72-source-match.json",
+  "new_source_proof": [
+    {
+      "mode": "host",
+      "member": "_mojolearn_x_sequence_host",
+      "source_files": 282,
+      "source_mismatches": []
+    },
+    {
+      "mode": "identical",
+      "member": "_mojolearn_x_trees",
+      "source_files": 49,
+      "source_mismatches": []
+    },
+    {
+      "mode": "identical",
+      "member": "_mojolearn_x_linear",
+      "source_files": 77,
+      "source_mismatches": []
+    },
+    {
+      "mode": "identical",
+      "member": "_mojolearn_preprocessing",
+      "source_files": 25,
+      "source_mismatches": []
+    },
+    {
+      "mode": "identical",
+      "member": "_mojolearn_resample",
+      "source_files": 36,
+      "source_mismatches": []
+    },
+    {
+      "mode": "identical",
+      "member": "_mojolearn_x_metrics",
+      "source_files": 38,
+      "source_mismatches": []
+    },
+    {
+      "mode": "identical",
+      "member": "_mojolearn_x_sequence",
+      "source_files": 306,
+      "source_mismatches": []
+    },
+    {
+      "mode": "identical",
+      "member": "_mojolearn_tsa",
+      "source_files": 55,
+      "source_mismatches": []
+    },
+    {
+      "mode": "identical",
+      "member": "_mojolearn_arima",
+      "source_files": 71,
+      "source_mismatches": []
+    }
+  ],
+  "teardown": "pod=jvy2n0ghb8d6vp\nname=mojolearn-cpu-releasebe2-stage3-20261029-142712\nterminated_verified=1\nexit=0\nat=2026-10-29T14:48:26Z\n",
+  "runtime_executed": false,
+  "limits": [
+    "Linux native Torch/MAX adapter payload not yet built; this is a complete public API development install, not a release wheel."
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "tested_commit": "109c4e98f7367f3ee0551a9d5f0f000a96cd12c5",
+  "scope": "required static source guards; no runtime",
+  "checks": [
+    {
+      "name": "host",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/linux-install-bc11389-20261029/guard-host.log"
+    },
+    {
+      "name": "fence",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/linux-install-bc11389-20261029/guard-fence.log"
+    },
+    {
+      "name": "python",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/linux-install-bc11389-20261029/guard-python.log"
+    },
+    {
+      "name": "shell",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/linux-install-bc11389-20261029/guard-shell.log"
+    }
+  ]
+}

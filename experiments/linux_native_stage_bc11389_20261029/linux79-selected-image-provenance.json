@@ -1,0 +1,2277 @@
+{
+  "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "images": [
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_arima_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/e3a381d7c2972d1ecd52d7106dc3f64cd90ed0c71ea211233f843d47c8334222/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/e3a381d7c2972d1ecd52d7106dc3f64cd90ed0c71ea211233f843d47c8334222/_mojolearn_dev_arima_host.so",
+      "sha256": "e9fe7e6f4d85126d34aa2a27e8bd7b47ec8a6ef5e3315df82e1cebe640ebedfd",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_arima_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/e3a381d7c2972d1ecd52d7106dc3f64cd90ed0c71ea211233f843d47c8334222/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/e3a381d7c2972d1ecd52d7106dc3f64cd90ed0c71ea211233f843d47c8334222/roots"
+      ],
+      "source_files": 22
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_byte_lm_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/c7c05af59b05021fd52404ddadfa60f516fb01c87a14c936b1f78086421d0116/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/c7c05af59b05021fd52404ddadfa60f516fb01c87a14c936b1f78086421d0116/_mojolearn_dev_byte_lm_host.so",
+      "sha256": "6a0e371145802fae713d3580b823bcac88d4f5220199c515b08fef772a14f432",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_byte_lm_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/c7c05af59b05021fd52404ddadfa60f516fb01c87a14c936b1f78086421d0116/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/c7c05af59b05021fd52404ddadfa60f516fb01c87a14c936b1f78086421d0116/roots"
+      ],
+      "source_files": 89
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_core_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/84539437e19eaeae016f3376fb8b48967ae06d6cc98dccb1b47219796fd4357c/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/84539437e19eaeae016f3376fb8b48967ae06d6cc98dccb1b47219796fd4357c/_mojolearn_dev_core_host.so",
+      "sha256": "80969806710a8ad65c8905a6af6ec7098c59647a6ae9008cdb740988f2afcf9e",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_core_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/84539437e19eaeae016f3376fb8b48967ae06d6cc98dccb1b47219796fd4357c/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/84539437e19eaeae016f3376fb8b48967ae06d6cc98dccb1b47219796fd4357c/roots"
+      ],
+      "source_files": 73
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_embedding_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/c2013bc03f574dbd63e86733e5ca48c71d61089bf1c6ba6dbdcaabb717be0e39/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/c2013bc03f574dbd63e86733e5ca48c71d61089bf1c6ba6dbdcaabb717be0e39/_mojolearn_dev_embedding_host.so",
+      "sha256": "1a07b98d4438b6f6a579e7309a6d3d3a506cac59e94bae069f204294259be8d3",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_embedding_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/c2013bc03f574dbd63e86733e5ca48c71d61089bf1c6ba6dbdcaabb717be0e39/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/c2013bc03f574dbd63e86733e5ca48c71d61089bf1c6ba6dbdcaabb717be0e39/roots"
+      ],
+      "source_files": 15
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_embedding_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/803e9cf7fd1229d6bf83d8d7399b9ea5d01f5f3d8eb399f2c53e9b863991174e/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/803e9cf7fd1229d6bf83d8d7399b9ea5d01f5f3d8eb399f2c53e9b863991174e/_mojolearn_dev_embedding_infer_host.so",
+      "sha256": "df6a8446cc26c6b54cd5a66d68e59ac905d661805cb181c723286f080925cb4a",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_embedding_infer_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/803e9cf7fd1229d6bf83d8d7399b9ea5d01f5f3d8eb399f2c53e9b863991174e/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/803e9cf7fd1229d6bf83d8d7399b9ea5d01f5f3d8eb399f2c53e9b863991174e/roots"
+      ],
+      "source_files": 14
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_estimators_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/85203c49e97876e2165dff836d15571367fed293ae6cfb01a4345843b97b06b7/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/85203c49e97876e2165dff836d15571367fed293ae6cfb01a4345843b97b06b7/_mojolearn_dev_estimators_host.so",
+      "sha256": "b12cce974b765ffe2c05bbc581361c372ce68d9d1ae36e9ca8693c3b7bec55f5",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_estimators_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/85203c49e97876e2165dff836d15571367fed293ae6cfb01a4345843b97b06b7/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/85203c49e97876e2165dff836d15571367fed293ae6cfb01a4345843b97b06b7/roots"
+      ],
+      "source_files": 191
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_forecast_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/4ec709ed001e58fbd2b4c6908a5949d8d35a8c1a1a2bf27c5a84da99e46ebb66/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/4ec709ed001e58fbd2b4c6908a5949d8d35a8c1a1a2bf27c5a84da99e46ebb66/_mojolearn_dev_forecast_host.so",
+      "sha256": "28ccb4dd2e4925e6d29ce454ee56e1e59503cc568e9dd2152bb966a8b130b794",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_forecast_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/4ec709ed001e58fbd2b4c6908a5949d8d35a8c1a1a2bf27c5a84da99e46ebb66/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/4ec709ed001e58fbd2b4c6908a5949d8d35a8c1a1a2bf27c5a84da99e46ebb66/roots"
+      ],
+      "source_files": 53
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_forest_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/633ea2d036b4405e9e92805402392ce451443ac63ead98b15e244a0ece75fbe8/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/633ea2d036b4405e9e92805402392ce451443ac63ead98b15e244a0ece75fbe8/_mojolearn_dev_forest_host.so",
+      "sha256": "07195bcfcd49fbcc9192beadd9e1ddd30a8af5bc65f9b2fd28794cb9af731b92",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_forest_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/633ea2d036b4405e9e92805402392ce451443ac63ead98b15e244a0ece75fbe8/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/633ea2d036b4405e9e92805402392ce451443ac63ead98b15e244a0ece75fbe8/roots"
+      ],
+      "source_files": 44
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_gbdt_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/8134e8444830718fc2daba43488ce39541346733a5ec0ebd98ac50152cf58bd4/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/8134e8444830718fc2daba43488ce39541346733a5ec0ebd98ac50152cf58bd4/_mojolearn_dev_gbdt_host.so",
+      "sha256": "ef786bcb53f9c02f232544fca7542edf30fa25b7c15f835bdf4f2ba22efd011a",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_gbdt_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/8134e8444830718fc2daba43488ce39541346733a5ec0ebd98ac50152cf58bd4/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/8134e8444830718fc2daba43488ce39541346733a5ec0ebd98ac50152cf58bd4/roots"
+      ],
+      "source_files": 83
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_gp_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/f8a555d9499afb211e3cc6dce85a5f0befcce7af60f5d99094b54f0738b8e6f1/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/f8a555d9499afb211e3cc6dce85a5f0befcce7af60f5d99094b54f0738b8e6f1/_mojolearn_dev_gp_host.so",
+      "sha256": "b8a02d55765db33bbb46ff36bb6c45c5ee7d8ede4abd2a660599b5e526010053",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_gp_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/f8a555d9499afb211e3cc6dce85a5f0befcce7af60f5d99094b54f0738b8e6f1/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/f8a555d9499afb211e3cc6dce85a5f0befcce7af60f5d99094b54f0738b8e6f1/roots"
+      ],
+      "source_files": 50
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_gp_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/e230686e5da4a0eab3d1027a085877337ae6153f79a3ac967ecc65c410a25df9/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/e230686e5da4a0eab3d1027a085877337ae6153f79a3ac967ecc65c410a25df9/_mojolearn_dev_gp_infer_host.so",
+      "sha256": "138447944ddb03e307347734600cc6922ab540caacd303e56dd0f814c00f5aa2",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_gp_infer_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/e230686e5da4a0eab3d1027a085877337ae6153f79a3ac967ecc65c410a25df9/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/e230686e5da4a0eab3d1027a085877337ae6153f79a3ac967ecc65c410a25df9/roots"
+      ],
+      "source_files": 36
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_hdbscan_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/c8a5f09af735ef93ca21747c369480a3ea86f7b853f1f0c75da27960ece43529/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/c8a5f09af735ef93ca21747c369480a3ea86f7b853f1f0c75da27960ece43529/_mojolearn_dev_hdbscan_host.so",
+      "sha256": "bf9f12ece4dab143ea18cb25eba40a41c8922f32e4c52b9a9aa84a3f6bf93c22",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_hdbscan_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/c8a5f09af735ef93ca21747c369480a3ea86f7b853f1f0c75da27960ece43529/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/c8a5f09af735ef93ca21747c369480a3ea86f7b853f1f0c75da27960ece43529/roots"
+      ],
+      "source_files": 95
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_hdbscan_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/693a13f46c4afb00309c848c98c7695d2bf70eb865731abca9cb887e1a15d1ec/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/693a13f46c4afb00309c848c98c7695d2bf70eb865731abca9cb887e1a15d1ec/_mojolearn_dev_hdbscan_infer_host.so",
+      "sha256": "f090e99c7b8edb16b7c397e882019d81348738dd74b503d9aebe8950a44d0d85",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_hdbscan_infer_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/693a13f46c4afb00309c848c98c7695d2bf70eb865731abca9cb887e1a15d1ec/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/693a13f46c4afb00309c848c98c7695d2bf70eb865731abca9cb887e1a15d1ec/roots"
+      ],
+      "source_files": 95
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_ivf_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/cb8062aa5b00e3830932b9a7c3bc427974f0245f6f8d8ed307d90b6272ccf967/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/cb8062aa5b00e3830932b9a7c3bc427974f0245f6f8d8ed307d90b6272ccf967/_mojolearn_dev_ivf_host.so",
+      "sha256": "2e7fa8e231bb6adca56c31a9944ceea049b6fd5463f8b08327673df510b92816",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_ivf_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/cb8062aa5b00e3830932b9a7c3bc427974f0245f6f8d8ed307d90b6272ccf967/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/cb8062aa5b00e3830932b9a7c3bc427974f0245f6f8d8ed307d90b6272ccf967/roots"
+      ],
+      "source_files": 39
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_ivf_search_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/eee760d69589d004c4e1e9f985791d677088c32af5e431a1226ae377259a499c/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/eee760d69589d004c4e1e9f985791d677088c32af5e431a1226ae377259a499c/_mojolearn_dev_ivf_search_host.so",
+      "sha256": "d293215c0ffed3b7a2d1e3eadb3346153ea6175f7729ea634edc48c0a5745275",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_ivf_search_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/eee760d69589d004c4e1e9f985791d677088c32af5e431a1226ae377259a499c/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/eee760d69589d004c4e1e9f985791d677088c32af5e431a1226ae377259a499c/roots"
+      ],
+      "source_files": 39
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_kernel_methods_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/6aa5dc88eb2dbfc69035cd3c4ecba4038d1ba53521ba08376dc726d13441af82/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/6aa5dc88eb2dbfc69035cd3c4ecba4038d1ba53521ba08376dc726d13441af82/_mojolearn_dev_kernel_methods_host.so",
+      "sha256": "d8b827631f5c7b896794c24e9cf47fb4e449e7197a2e6a60c481721dc0093da6",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_kernel_methods_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/6aa5dc88eb2dbfc69035cd3c4ecba4038d1ba53521ba08376dc726d13441af82/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/6aa5dc88eb2dbfc69035cd3c4ecba4038d1ba53521ba08376dc726d13441af82/roots"
+      ],
+      "source_files": 83
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_linalg_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/d720b126e8f7252e12ca957b9d18c82c89ac30a5cf67ddf9e83f32ec79eebb37/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/d720b126e8f7252e12ca957b9d18c82c89ac30a5cf67ddf9e83f32ec79eebb37/_mojolearn_dev_linalg_host.so",
+      "sha256": "e2e5cfbdd50891b62a037957bc33fc9e08cb6b46e36747d7074ac24c583f4bfa",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_linalg_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/d720b126e8f7252e12ca957b9d18c82c89ac30a5cf67ddf9e83f32ec79eebb37/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/d720b126e8f7252e12ca957b9d18c82c89ac30a5cf67ddf9e83f32ec79eebb37/roots"
+      ],
+      "source_files": 100
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_mamba_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/4bacfdc42f6e6f08f3e4acc010ed74b9e9885914d1b4cdd5f1516d417fbde06c/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/4bacfdc42f6e6f08f3e4acc010ed74b9e9885914d1b4cdd5f1516d417fbde06c/_mojolearn_dev_mamba_host.so",
+      "sha256": "d6625e50b5c46942f32d7804f63526cc268fa9139cff178d37a5311a08e1eb3b",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_mamba_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/4bacfdc42f6e6f08f3e4acc010ed74b9e9885914d1b4cdd5f1516d417fbde06c/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/4bacfdc42f6e6f08f3e4acc010ed74b9e9885914d1b4cdd5f1516d417fbde06c/roots"
+      ],
+      "source_files": 87
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_metrics_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/0163e22cab53aa95eb0702be071c4f8deffc3bfcfb7568113e609eeaa9c13f44/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/0163e22cab53aa95eb0702be071c4f8deffc3bfcfb7568113e609eeaa9c13f44/_mojolearn_dev_metrics_host.so",
+      "sha256": "202e9d4e762a463244abcf82ae0c624c7c9ab5cb570de4e1b875a9da813d2684",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_metrics_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/0163e22cab53aa95eb0702be071c4f8deffc3bfcfb7568113e609eeaa9c13f44/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/0163e22cab53aa95eb0702be071c4f8deffc3bfcfb7568113e609eeaa9c13f44/roots"
+      ],
+      "source_files": 106
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_mixture_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/defe3f2f01c825155f0955aa6e9ae17121a8483d6d0fefa20014aea55f8d4b9d/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/defe3f2f01c825155f0955aa6e9ae17121a8483d6d0fefa20014aea55f8d4b9d/_mojolearn_dev_mixture_host.so",
+      "sha256": "ba00e63c73ffa796b45c14c91e9e87a116d6101005285724312c2a38524adb3d",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_mixture_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/defe3f2f01c825155f0955aa6e9ae17121a8483d6d0fefa20014aea55f8d4b9d/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/defe3f2f01c825155f0955aa6e9ae17121a8483d6d0fefa20014aea55f8d4b9d/roots"
+      ],
+      "source_files": 47
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_mixture_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/ea93047ce0927e2694839a23ca92bbde4211774976f3a0463dde13622a29911f/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/ea93047ce0927e2694839a23ca92bbde4211774976f3a0463dde13622a29911f/_mojolearn_dev_mixture_infer_host.so",
+      "sha256": "030a0cb78488ccbba71a3198201a47ad0928432366c2b02483f28027e2ba4c37",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_mixture_infer_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/ea93047ce0927e2694839a23ca92bbde4211774976f3a0463dde13622a29911f/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/ea93047ce0927e2694839a23ca92bbde4211774976f3a0463dde13622a29911f/roots"
+      ],
+      "source_files": 47
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_neural_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/31b9184946024cb8802f668859ac67e1eb4171385dcfe10b056bc3bee66b101e/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/31b9184946024cb8802f668859ac67e1eb4171385dcfe10b056bc3bee66b101e/_mojolearn_dev_neural_host.so",
+      "sha256": "e0e7bc9053073f257593860a81e8b2ffdd2b60a1f3e153c198f96455c26173ca",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_neural_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/31b9184946024cb8802f668859ac67e1eb4171385dcfe10b056bc3bee66b101e/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/31b9184946024cb8802f668859ac67e1eb4171385dcfe10b056bc3bee66b101e/roots"
+      ],
+      "source_files": 81
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_preprocessing_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/cdd8c3e142103705233737e1a515ccd5e53ab5a864f6a994c30703c35682cf7a/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/cdd8c3e142103705233737e1a515ccd5e53ab5a864f6a994c30703c35682cf7a/_mojolearn_dev_preprocessing_host.so",
+      "sha256": "d102c7a2a21cca76387199a9a57140291cb45e05148eafdb851293452781e913",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_preprocessing_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/cdd8c3e142103705233737e1a515ccd5e53ab5a864f6a994c30703c35682cf7a/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/cdd8c3e142103705233737e1a515ccd5e53ab5a864f6a994c30703c35682cf7a/roots"
+      ],
+      "source_files": 15
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_resample_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/fd8256dd3f99bf1760d166c41af8487b91a2914ec4ff20f40d2e5b02975eb49e/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/fd8256dd3f99bf1760d166c41af8487b91a2914ec4ff20f40d2e5b02975eb49e/_mojolearn_dev_resample_host.so",
+      "sha256": "168a543566ab186e8395e166ccc43044f219a03b846190f1b4c157d24d37d7c9",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_resample_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/fd8256dd3f99bf1760d166c41af8487b91a2914ec4ff20f40d2e5b02975eb49e/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/fd8256dd3f99bf1760d166c41af8487b91a2914ec4ff20f40d2e5b02975eb49e/roots"
+      ],
+      "source_files": 27
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_rf_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/68050beff04fec2439c751021e6dffc04ceae463bbd4f49410b0889aa33f3e7c/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/68050beff04fec2439c751021e6dffc04ceae463bbd4f49410b0889aa33f3e7c/_mojolearn_dev_rf_host.so",
+      "sha256": "9c520ae40eec9372a43210583fecc45b46ffafe25875c807e096dc3a5e1edcad",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_rf_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/68050beff04fec2439c751021e6dffc04ceae463bbd4f49410b0889aa33f3e7c/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/68050beff04fec2439c751021e6dffc04ceae463bbd4f49410b0889aa33f3e7c/roots"
+      ],
+      "source_files": 69
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_runtime_classical_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/f34e8dc9dba1f331d77ca8647e9c207dc7bbabc245db13d2d18f0c1a3431d2ea/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/f34e8dc9dba1f331d77ca8647e9c207dc7bbabc245db13d2d18f0c1a3431d2ea/_mojolearn_dev_runtime_classical_host.so",
+      "sha256": "d14b0a418b02932b6a5df121db3f1d97d649b0badad9f9ed657c4c13a2214285",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_runtime_classical_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/f34e8dc9dba1f331d77ca8647e9c207dc7bbabc245db13d2d18f0c1a3431d2ea/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/f34e8dc9dba1f331d77ca8647e9c207dc7bbabc245db13d2d18f0c1a3431d2ea/roots"
+      ],
+      "source_files": 439
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_runtime_manifold_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/f882f41fca3bd61f322dcbc5f0ef6f26e7c80c882deaf74204fab94ed9faf3c7/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/f882f41fca3bd61f322dcbc5f0ef6f26e7c80c882deaf74204fab94ed9faf3c7/_mojolearn_dev_runtime_manifold_host.so",
+      "sha256": "29621d67a71e967f94be0be35d3b7afe671c42a6b8dc7419a5a3d8607f859a3f",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_runtime_manifold_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/f882f41fca3bd61f322dcbc5f0ef6f26e7c80c882deaf74204fab94ed9faf3c7/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/f882f41fca3bd61f322dcbc5f0ef6f26e7c80c882deaf74204fab94ed9faf3c7/roots"
+      ],
+      "source_files": 139
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_runtime_model_selection_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/77c5263bae2815d35ae23484aa72a1b5895ac41e9b6c6462ae2f9181f24bb481/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/77c5263bae2815d35ae23484aa72a1b5895ac41e9b6c6462ae2f9181f24bb481/_mojolearn_dev_runtime_model_selection_host.so",
+      "sha256": "e15884bcd031eabc4426f167093cf2520e84a3634a888d7ce8cc2a132710c25c",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_runtime_model_selection_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/77c5263bae2815d35ae23484aa72a1b5895ac41e9b6c6462ae2f9181f24bb481/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/77c5263bae2815d35ae23484aa72a1b5895ac41e9b6c6462ae2f9181f24bb481/roots"
+      ],
+      "source_files": 146
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_runtime_sequential_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/51021ece8277e948a156403457a4fbec2d6e467fe8fd293ad7035dff8c912180/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/51021ece8277e948a156403457a4fbec2d6e467fe8fd293ad7035dff8c912180/_mojolearn_dev_runtime_sequential_host.so",
+      "sha256": "2f56911b3505da759902d0108fd1742b820190ff4e448fb4639631f4b4d4b924",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_runtime_sequential_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/51021ece8277e948a156403457a4fbec2d6e467fe8fd293ad7035dff8c912180/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/51021ece8277e948a156403457a4fbec2d6e467fe8fd293ad7035dff8c912180/roots"
+      ],
+      "source_files": 207
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_solver_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/a803870e257306a2acfa32757febaf5a2a6cae1279e33d4908f0079901c437fb/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/a803870e257306a2acfa32757febaf5a2a6cae1279e33d4908f0079901c437fb/_mojolearn_dev_solver_host.so",
+      "sha256": "62d8e725e2991215a26f629c37f0f904355a5232a311316b3573399de5694afd",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_solver_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/a803870e257306a2acfa32757febaf5a2a6cae1279e33d4908f0079901c437fb/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/a803870e257306a2acfa32757febaf5a2a6cae1279e33d4908f0079901c437fb/roots"
+      ],
+      "source_files": 85
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_svm_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/cb10be863e560ad4583899f39e53ba4d5b9e42d109f050e0889d5e1804955e99/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/cb10be863e560ad4583899f39e53ba4d5b9e42d109f050e0889d5e1804955e99/_mojolearn_dev_svm_host.so",
+      "sha256": "734d6ce652bd85f016f33906665bcc9af3ee0356453807f7f060b671c74c92e8",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_svm_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/cb10be863e560ad4583899f39e53ba4d5b9e42d109f050e0889d5e1804955e99/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/cb10be863e560ad4583899f39e53ba4d5b9e42d109f050e0889d5e1804955e99/roots"
+      ],
+      "source_files": 128
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_tokenizer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/aa712650880b3a086dbd4d423605b640ef7cc5ceea7dc07c306b675a76999884/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/aa712650880b3a086dbd4d423605b640ef7cc5ceea7dc07c306b675a76999884/_mojolearn_dev_tokenizer_host.so",
+      "sha256": "a5c971f4c5dacdadc2df2f99d32e4b722fc2356bfc73d328f210351e79d57b0a",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_tokenizer_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/aa712650880b3a086dbd4d423605b640ef7cc5ceea7dc07c306b675a76999884/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/aa712650880b3a086dbd4d423605b640ef7cc5ceea7dc07c306b675a76999884/roots"
+      ],
+      "source_files": 652
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_training_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/567da8e87b459655ff76a7f54e38808ee0ec8b13a233b6468dee2b423f66c27f/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/567da8e87b459655ff76a7f54e38808ee0ec8b13a233b6468dee2b423f66c27f/_mojolearn_dev_training_host.so",
+      "sha256": "1ba2934f420576aef2c199f95ce65dd888cd99b4358f3f24d412613326ee3870",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_training_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/567da8e87b459655ff76a7f54e38808ee0ec8b13a233b6468dee2b423f66c27f/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/567da8e87b459655ff76a7f54e38808ee0ec8b13a233b6468dee2b423f66c27f/roots"
+      ],
+      "source_files": 94
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_transformer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/6145c60a4d943005d1c64353535d00f061f87fe91db8084a29f6e040d74cd40e/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/6145c60a4d943005d1c64353535d00f061f87fe91db8084a29f6e040d74cd40e/_mojolearn_dev_transformer_host.so",
+      "sha256": "eefeb29654957d15e9adffe6bdfd512abae6d092eca0fc2a9d7b8ef69a6a4483",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_transformer_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/6145c60a4d943005d1c64353535d00f061f87fe91db8084a29f6e040d74cd40e/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/6145c60a4d943005d1c64353535d00f061f87fe91db8084a29f6e040d74cd40e/roots"
+      ],
+      "source_files": 62
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_trees_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/7139d15160d9b63241e3c6e711c61ad9a24153b5e128f6ad9b4dedc6cb2745c1/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/7139d15160d9b63241e3c6e711c61ad9a24153b5e128f6ad9b4dedc6cb2745c1/_mojolearn_dev_trees_host.so",
+      "sha256": "2a049d15aa6227e5022fe898f58453dab8ca6d08e3098484be0ec28c4de7947d",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_trees_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/7139d15160d9b63241e3c6e711c61ad9a24153b5e128f6ad9b4dedc6cb2745c1/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/7139d15160d9b63241e3c6e711c61ad9a24153b5e128f6ad9b4dedc6cb2745c1/roots"
+      ],
+      "source_files": 110
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_tsa_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/7aacbf1d28b85649c864577be6d395ee04f9f82d7469c8dff68a91b5f0befbae/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/7aacbf1d28b85649c864577be6d395ee04f9f82d7469c8dff68a91b5f0befbae/_mojolearn_dev_tsa_host.so",
+      "sha256": "82a1832b9d15cabcbd41ec08093d236c28a1d716ed75ec45f1974a25b954f34d",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_tsa_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/7aacbf1d28b85649c864577be6d395ee04f9f82d7469c8dff68a91b5f0befbae/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/7aacbf1d28b85649c864577be6d395ee04f9f82d7469c8dff68a91b5f0befbae/roots"
+      ],
+      "source_files": 57
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_ann_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/4c00b69d2fec95ff246d3df357f416ced1f7653c7e5d4df34edae078b9132d94/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/4c00b69d2fec95ff246d3df357f416ced1f7653c7e5d4df34edae078b9132d94/_mojolearn_dev_x_ann_host.so",
+      "sha256": "7d92e35943bfe5a8423871ad50685c38d27affaf776a71608390c2cc6819605f",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_ann_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/4c00b69d2fec95ff246d3df357f416ced1f7653c7e5d4df34edae078b9132d94/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/4c00b69d2fec95ff246d3df357f416ced1f7653c7e5d4df34edae078b9132d94/roots"
+      ],
+      "source_files": 63
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_cluster_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/81a95d854e1e44900ae847dd8562bb7c14ea02dc25516c26e62e813da729d3f6/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/81a95d854e1e44900ae847dd8562bb7c14ea02dc25516c26e62e813da729d3f6/_mojolearn_dev_x_cluster_host.so",
+      "sha256": "1972ed0af0cf4cccd86472c00020066d4ba3c609b220b08810f6d18496be0264",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_cluster_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/81a95d854e1e44900ae847dd8562bb7c14ea02dc25516c26e62e813da729d3f6/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/81a95d854e1e44900ae847dd8562bb7c14ea02dc25516c26e62e813da729d3f6/roots"
+      ],
+      "source_files": 74
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_cnn_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/0897f851cdd33b0f1bcb0712fc305d075361f48697c80118b0de49d6ddbae8be/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/0897f851cdd33b0f1bcb0712fc305d075361f48697c80118b0de49d6ddbae8be/_mojolearn_dev_x_cnn_host.so",
+      "sha256": "00da398b71d148f4a145c5fb3121d3d36c19b455c027e587dcd361fee8fca146",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_cnn_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/0897f851cdd33b0f1bcb0712fc305d075361f48697c80118b0de49d6ddbae8be/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/0897f851cdd33b0f1bcb0712fc305d075361f48697c80118b0de49d6ddbae8be/roots"
+      ],
+      "source_files": 34
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_decomp_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/318aac23a97af0da1dbb8678e5905a9354535c0dbe37aa08539d9d3d310b0310/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/host-priority-retry1-cpu/remote/leg_out/development-cache/artifacts/318aac23a97af0da1dbb8678e5905a9354535c0dbe37aa08539d9d3d310b0310/_mojolearn_dev_x_decomp_host.so",
+      "sha256": "709411a7a670d52822a94d5aa16ee96b270164a188df691c24283a9c86f41fb9",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_decomp_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/318aac23a97af0da1dbb8678e5905a9354535c0dbe37aa08539d9d3d310b0310/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/318aac23a97af0da1dbb8678e5905a9354535c0dbe37aa08539d9d3d310b0310/roots"
+      ],
+      "source_files": 132
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_linear_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/2fb0f86382d65256c65079c439da72159c7e31e287647b57c9d65ce2549a9d55/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/2fb0f86382d65256c65079c439da72159c7e31e287647b57c9d65ce2549a9d55/_mojolearn_dev_x_linear_host.so",
+      "sha256": "56b22788faae33ab50c1d50ca73528b843ba87ecf402b17474ddb61fdfe6035d",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_linear_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/2fb0f86382d65256c65079c439da72159c7e31e287647b57c9d65ce2549a9d55/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/2fb0f86382d65256c65079c439da72159c7e31e287647b57c9d65ce2549a9d55/roots"
+      ],
+      "source_files": 68
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_metrics_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/cdb2a218431220267d26e1392fcf24c35512ad8a6cace6f86fef324f44f987c3/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/cdb2a218431220267d26e1392fcf24c35512ad8a6cace6f86fef324f44f987c3/_mojolearn_dev_x_metrics_host.so",
+      "sha256": "ee1b178882556d41c9115a569e4e7ba98fa260565caabfc3797d8990f75df474",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_metrics_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/cdb2a218431220267d26e1392fcf24c35512ad8a6cace6f86fef324f44f987c3/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/cdb2a218431220267d26e1392fcf24c35512ad8a6cace6f86fef324f44f987c3/roots"
+      ],
+      "source_files": 39
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_neighbors_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/70f18052bc107e4aa68ed28362c89cbaeed6dc0df3b9b2b35d0df67b070092db/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/70f18052bc107e4aa68ed28362c89cbaeed6dc0df3b9b2b35d0df67b070092db/_mojolearn_dev_x_neighbors_host.so",
+      "sha256": "7936eb9442e4fe857844657cfa3b8f1855706baae68055c46a774c7c3eb4dd83",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_neighbors_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/70f18052bc107e4aa68ed28362c89cbaeed6dc0df3b9b2b35d0df67b070092db/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/70f18052bc107e4aa68ed28362c89cbaeed6dc0df3b9b2b35d0df67b070092db/roots"
+      ],
+      "source_files": 64
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_prep_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/885daca59e42cdab6a3acb1430bcbe5dbff5371fccdc806898a3957014cbcc07/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/885daca59e42cdab6a3acb1430bcbe5dbff5371fccdc806898a3957014cbcc07/_mojolearn_dev_x_prep_host.so",
+      "sha256": "cdd702323b0a7449ae11a2e1f490626a8d86d24051e8bb43cc412677e40fd6e6",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_prep_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/885daca59e42cdab6a3acb1430bcbe5dbff5371fccdc806898a3957014cbcc07/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/885daca59e42cdab6a3acb1430bcbe5dbff5371fccdc806898a3957014cbcc07/roots"
+      ],
+      "source_files": 64
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_sequence_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/a8fccdd1b2d08187c3711ded82ac4d6609d9219e9e1d34689c7ce33899a318e3/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/a8fccdd1b2d08187c3711ded82ac4d6609d9219e9e1d34689c7ce33899a318e3/_mojolearn_dev_x_sequence_host.so",
+      "sha256": "7c0b2643289c336c53ddbd5fc6793a1674c4c1dd2edcaae0c25cdd9cb30b25a6",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_sequence_host",
+        "--outdir",
+        "/root/leg_out/development-cache/work/a8fccdd1b2d08187c3711ded82ac4d6609d9219e9e1d34689c7ce33899a318e3/output",
+        "--rootdir",
+        "/root/leg_out/development-cache/work/a8fccdd1b2d08187c3711ded82ac4d6609d9219e9e1d34689c7ce33899a318e3/roots"
+      ],
+      "source_files": 282
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_trees_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/c61351a7af8edd816a3b18448689d17e863615c4b3ced08bc796bfa57eb103a2/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/host/remote/leg_out/development-cache/artifacts/c61351a7af8edd816a3b18448689d17e863615c4b3ced08bc796bfa57eb103a2/_mojolearn_dev_x_trees_host.so",
+      "sha256": "09eb594bef0eafa3fb261b4d1fbc4ca240be9360b5f09c09704b3a50ae806bad",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_trees_host",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/c61351a7af8edd816a3b18448689d17e863615c4b3ced08bc796bfa57eb103a2/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/c61351a7af8edd816a3b18448689d17e863615c4b3ced08bc796bfa57eb103a2/roots"
+      ],
+      "source_files": 48
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/949a3e426f552cc7711de60f2fdb2b0ed5f6969dd77c0de1961306b7952acb33/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/949a3e426f552cc7711de60f2fdb2b0ed5f6969dd77c0de1961306b7952acb33/_mojolearn_dev_core.so",
+      "sha256": "d94ac2c257bea7dae822464d18c2730d098a1019e51df1ec60583684cf485caa",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "16",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_core",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/949a3e426f552cc7711de60f2fdb2b0ed5f6969dd77c0de1961306b7952acb33/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/949a3e426f552cc7711de60f2fdb2b0ed5f6969dd77c0de1961306b7952acb33/roots"
+      ],
+      "source_files": 165
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_byte_lm",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/2d6311e82b7bd2b49a1c019403d8d66e92f373702e64749a5c138c8b4fbff915/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/2d6311e82b7bd2b49a1c019403d8d66e92f373702e64749a5c138c8b4fbff915/_mojolearn_dev_byte_lm.so",
+      "sha256": "99f90984285a76dde7c1bbf6a217084eebde6e2a9d710b89b77d91ee0a9dba36",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "16",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_byte_lm",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/2d6311e82b7bd2b49a1c019403d8d66e92f373702e64749a5c138c8b4fbff915/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/2d6311e82b7bd2b49a1c019403d8d66e92f373702e64749a5c138c8b4fbff915/roots"
+      ],
+      "source_files": 240
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_embedding",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/1bbcd7f0166c8b0b90d072eecc61688b0fdebd6fa35d9e51c22e3720c8ab7143/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/1bbcd7f0166c8b0b90d072eecc61688b0fdebd6fa35d9e51c22e3720c8ab7143/_mojolearn_dev_embedding.so",
+      "sha256": "d396e9da070d58e3623c273340ed60fa1b818f936d66284ffda509978116bb6e",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "16",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_embedding",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/1bbcd7f0166c8b0b90d072eecc61688b0fdebd6fa35d9e51c22e3720c8ab7143/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/1bbcd7f0166c8b0b90d072eecc61688b0fdebd6fa35d9e51c22e3720c8ab7143/roots"
+      ],
+      "source_files": 138
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_estimators",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/f9da0d32be84a964118639eba7be8724db2b838f23d82b2deea9f9a41b4640c4/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/f9da0d32be84a964118639eba7be8724db2b838f23d82b2deea9f9a41b4640c4/_mojolearn_dev_estimators.so",
+      "sha256": "fad8cec6b4886a30ef1bf7bb4b09bba397510292add0a027c2c21f2ce36d7231",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_estimators",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/f9da0d32be84a964118639eba7be8724db2b838f23d82b2deea9f9a41b4640c4/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/f9da0d32be84a964118639eba7be8724db2b838f23d82b2deea9f9a41b4640c4/roots"
+      ],
+      "source_files": 263
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_gbdt",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/c3cd04ca35b835d803433d1e78d89fdfa01cb0cf4d4da2f16d878b0cc3d9f03e/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/c3cd04ca35b835d803433d1e78d89fdfa01cb0cf4d4da2f16d878b0cc3d9f03e/_mojolearn_dev_gbdt.so",
+      "sha256": "9fc07763357066770c3a79eb30d2a0edb34f153d280bdb26bfb05dc01a3635bc",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_gbdt",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/c3cd04ca35b835d803433d1e78d89fdfa01cb0cf4d4da2f16d878b0cc3d9f03e/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/c3cd04ca35b835d803433d1e78d89fdfa01cb0cf4d4da2f16d878b0cc3d9f03e/roots"
+      ],
+      "source_files": 229
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_gp",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/1af80ac705afb5808e423a5dd2ff111713e13107a8e3eb2c975b93cfc5ebc989/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/1af80ac705afb5808e423a5dd2ff111713e13107a8e3eb2c975b93cfc5ebc989/_mojolearn_dev_gp.so",
+      "sha256": "37dc862b4be2cc72a1ab68112c1cc20e8086dce25a7c66d4749cc530f5db4ecd",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_gp",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/1af80ac705afb5808e423a5dd2ff111713e13107a8e3eb2c975b93cfc5ebc989/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/1af80ac705afb5808e423a5dd2ff111713e13107a8e3eb2c975b93cfc5ebc989/roots"
+      ],
+      "source_files": 105
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_hdbscan",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/06f807d4b0a90f9b9fa26f270eb7622fcfa61f9d6814138c8a45c0b80b34e622/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/06f807d4b0a90f9b9fa26f270eb7622fcfa61f9d6814138c8a45c0b80b34e622/_mojolearn_dev_hdbscan.so",
+      "sha256": "132df7da1d4f2f10459e12801bbd25d3ea1539c25346fb57f161cd0ebb08b280",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_hdbscan",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/06f807d4b0a90f9b9fa26f270eb7622fcfa61f9d6814138c8a45c0b80b34e622/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/06f807d4b0a90f9b9fa26f270eb7622fcfa61f9d6814138c8a45c0b80b34e622/roots"
+      ],
+      "source_files": 149
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_ivf",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/50084c9c61f2f701f42b0e39c87b0ba20ec13b9db43ee5c2697d716580364901/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/50084c9c61f2f701f42b0e39c87b0ba20ec13b9db43ee5c2697d716580364901/_mojolearn_dev_ivf.so",
+      "sha256": "7bc5a8754f719ee524da9dd242a53183e526ee2155375e7dee4d708941dc3cb4",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_ivf",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/50084c9c61f2f701f42b0e39c87b0ba20ec13b9db43ee5c2697d716580364901/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/50084c9c61f2f701f42b0e39c87b0ba20ec13b9db43ee5c2697d716580364901/roots"
+      ],
+      "source_files": 113
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_kernel_methods",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/e836812de3f5c60f461e3bc1a9c533cef7bb6055b41bb348b5673f6b0e8a9ffc/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/e836812de3f5c60f461e3bc1a9c533cef7bb6055b41bb348b5673f6b0e8a9ffc/_mojolearn_dev_kernel_methods.so",
+      "sha256": "8d2e72063153e14227eccb01fa5ce455532beec586d3e8ee8fc9f7982bce1150",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_kernel_methods",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/e836812de3f5c60f461e3bc1a9c533cef7bb6055b41bb348b5673f6b0e8a9ffc/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/e836812de3f5c60f461e3bc1a9c533cef7bb6055b41bb348b5673f6b0e8a9ffc/roots"
+      ],
+      "source_files": 141
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_linalg",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/cc5885624df514765cffbb42038bbb831182f5ebacbefdef9dc199e727efbb0e/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/cc5885624df514765cffbb42038bbb831182f5ebacbefdef9dc199e727efbb0e/_mojolearn_dev_linalg.so",
+      "sha256": "570d9b948c2020d9f20adad1cb3c504c97fd19077bf9526c8f03d78786c5fe6a",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "16",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_linalg",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/cc5885624df514765cffbb42038bbb831182f5ebacbefdef9dc199e727efbb0e/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/cc5885624df514765cffbb42038bbb831182f5ebacbefdef9dc199e727efbb0e/roots"
+      ],
+      "source_files": 141
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_mamba",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/75fc7b0358bd52a4671e473c43a28e2b1ba70afdcc89a5d27a37a0044293c169/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/75fc7b0358bd52a4671e473c43a28e2b1ba70afdcc89a5d27a37a0044293c169/_mojolearn_dev_mamba.so",
+      "sha256": "2b66800f4143bddab01a60498039f1b4cc13360a0e8746e7ba2f317d454a2369",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "16",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_mamba",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/75fc7b0358bd52a4671e473c43a28e2b1ba70afdcc89a5d27a37a0044293c169/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/75fc7b0358bd52a4671e473c43a28e2b1ba70afdcc89a5d27a37a0044293c169/roots"
+      ],
+      "source_files": 194
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_metrics",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/0eae4a09612040c6bded50af9dea2e2eeb8b677b89c7d431af6fde4b8d459901/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/0eae4a09612040c6bded50af9dea2e2eeb8b677b89c7d431af6fde4b8d459901/_mojolearn_dev_metrics.so",
+      "sha256": "318695d1798a345211a496128a265f234b4cc1b65de0a3401dc74cad56a19c1d",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_metrics",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/0eae4a09612040c6bded50af9dea2e2eeb8b677b89c7d431af6fde4b8d459901/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/0eae4a09612040c6bded50af9dea2e2eeb8b677b89c7d431af6fde4b8d459901/roots"
+      ],
+      "source_files": 296
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_mixture",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/ee841767ee64fb9708165b3f1e283c6640aebbf6382bb95c9984c72da217579d/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/ee841767ee64fb9708165b3f1e283c6640aebbf6382bb95c9984c72da217579d/_mojolearn_dev_mixture.so",
+      "sha256": "6f75a6082e26e7f98e4255018d71e5dfde3293ca3d0e145c70f739a851a84850",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_mixture",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/ee841767ee64fb9708165b3f1e283c6640aebbf6382bb95c9984c72da217579d/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/ee841767ee64fb9708165b3f1e283c6640aebbf6382bb95c9984c72da217579d/roots"
+      ],
+      "source_files": 103
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_rf",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/5a41b9786feab53978c9f0c17ea71161ad26d30772f875361048c2fb4da157f4/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/5a41b9786feab53978c9f0c17ea71161ad26d30772f875361048c2fb4da157f4/_mojolearn_dev_rf.so",
+      "sha256": "cb82cceafa67079ed39f0f566efa24f98ceac5195abfe5b1ce67c111dc681c78",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_rf",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/5a41b9786feab53978c9f0c17ea71161ad26d30772f875361048c2fb4da157f4/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/5a41b9786feab53978c9f0c17ea71161ad26d30772f875361048c2fb4da157f4/roots"
+      ],
+      "source_files": 114
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_solver",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/e458967d37d4168adfd5d2f7c1333853ad2039400f33dd3b2c69b1d4a2a03621/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/e458967d37d4168adfd5d2f7c1333853ad2039400f33dd3b2c69b1d4a2a03621/_mojolearn_dev_solver.so",
+      "sha256": "2538702988414b2dd08437b056110483b5c32085c806cef6f2f64eed8afed07b",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_solver",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/e458967d37d4168adfd5d2f7c1333853ad2039400f33dd3b2c69b1d4a2a03621/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/e458967d37d4168adfd5d2f7c1333853ad2039400f33dd3b2c69b1d4a2a03621/roots"
+      ],
+      "source_files": 127
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_svm",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/cc507066522f38c3fbeb85cdfc818e1a70adc880e230aeceabce325b8124b1ec/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/cc507066522f38c3fbeb85cdfc818e1a70adc880e230aeceabce325b8124b1ec/_mojolearn_dev_svm.so",
+      "sha256": "5cae445182e0dc4d3590e5652080984fd14c8f4038957f0e9998f36b9b1694bc",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_svm",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/cc507066522f38c3fbeb85cdfc818e1a70adc880e230aeceabce325b8124b1ec/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/cc507066522f38c3fbeb85cdfc818e1a70adc880e230aeceabce325b8124b1ec/roots"
+      ],
+      "source_files": 121
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_training",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/af8497a856f781fea1840debc0aff3eb9d480cef1905c51be46a6c6a861c0f7b/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/af8497a856f781fea1840debc0aff3eb9d480cef1905c51be46a6c6a861c0f7b/_mojolearn_dev_training.so",
+      "sha256": "74e20f8ca55a0ad75d5be387f651391df751cd9b6f998b755693e1677176f5bd",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_training",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/af8497a856f781fea1840debc0aff3eb9d480cef1905c51be46a6c6a861c0f7b/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/af8497a856f781fea1840debc0aff3eb9d480cef1905c51be46a6c6a861c0f7b/roots"
+      ],
+      "source_files": 273
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_transformer",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/ba41465457724d064a25afa10acf54d90de605d17e6f7b7c8f883de4355151c3/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/ba41465457724d064a25afa10acf54d90de605d17e6f7b7c8f883de4355151c3/_mojolearn_dev_transformer.so",
+      "sha256": "0f1f525a6c54961c5909b5da8e7f154e64e3bed1d376bf7e3742cea5064a9b51",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_transformer",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/ba41465457724d064a25afa10acf54d90de605d17e6f7b7c8f883de4355151c3/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/ba41465457724d064a25afa10acf54d90de605d17e6f7b7c8f883de4355151c3/roots"
+      ],
+      "source_files": 212
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_trees",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/b33c340db4f4ebcb792a1d12f3b260c6045911c76d911455c236a8cbbf63ce45/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/b33c340db4f4ebcb792a1d12f3b260c6045911c76d911455c236a8cbbf63ce45/_mojolearn_dev_trees.so",
+      "sha256": "ca5322a2930ef4927dc663043c06e0f28767bf58149c58a27445300a01858ab0",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_trees",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/b33c340db4f4ebcb792a1d12f3b260c6045911c76d911455c236a8cbbf63ce45/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/b33c340db4f4ebcb792a1d12f3b260c6045911c76d911455c236a8cbbf63ce45/roots"
+      ],
+      "source_files": 80
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_ann",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/ca72604014990905af9d0966b8e2c0b191a230a1dcdba835d1023568126dda9b/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/ca72604014990905af9d0966b8e2c0b191a230a1dcdba835d1023568126dda9b/_mojolearn_dev_x_ann.so",
+      "sha256": "46b4fed74a323498445d4027978cf79cb40079fe006a0ccf581ab8ce100d4205",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_ann",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/ca72604014990905af9d0966b8e2c0b191a230a1dcdba835d1023568126dda9b/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/ca72604014990905af9d0966b8e2c0b191a230a1dcdba835d1023568126dda9b/roots"
+      ],
+      "source_files": 140
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cluster",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/034ee60e175508803e6864ed5daf3aa1107eb5d2b829dd94401016a19781ddf9/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/034ee60e175508803e6864ed5daf3aa1107eb5d2b829dd94401016a19781ddf9/_mojolearn_dev_x_cluster.so",
+      "sha256": "a7c226cd47423b26d7af004a075684051372c9b30138461af12925e9aa2d35c7",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_cluster",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/034ee60e175508803e6864ed5daf3aa1107eb5d2b829dd94401016a19781ddf9/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/034ee60e175508803e6864ed5daf3aa1107eb5d2b829dd94401016a19781ddf9/roots"
+      ],
+      "source_files": 144
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cnn",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/4a144c1c3e2261c3be559b96c20931e835df853acf7488a47cb2e486bbc884e0/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/sm89-priority-cpu/remote/leg_out/development-cache/artifacts/4a144c1c3e2261c3be559b96c20931e835df853acf7488a47cb2e486bbc884e0/_mojolearn_dev_x_cnn.so",
+      "sha256": "33433901b8b566eaff3939c87ace5a1cd15d70a257b8e4740c436f7a2b62b01f",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "16",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_cnn",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/4a144c1c3e2261c3be559b96c20931e835df853acf7488a47cb2e486bbc884e0/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/4a144c1c3e2261c3be559b96c20931e835df853acf7488a47cb2e486bbc884e0/roots"
+      ],
+      "source_files": 140
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_decomp",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/cb5da7b26af6f7fb3839e66cd0e89c3be436c2a09e15771fef439de1037c8197/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/cb5da7b26af6f7fb3839e66cd0e89c3be436c2a09e15771fef439de1037c8197/_mojolearn_dev_x_decomp.so",
+      "sha256": "47861cea4cf4a57ec26a1c7bad9885e8fc39054868712303708ab0f093c422bd",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_decomp",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/cb5da7b26af6f7fb3839e66cd0e89c3be436c2a09e15771fef439de1037c8197/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/cb5da7b26af6f7fb3839e66cd0e89c3be436c2a09e15771fef439de1037c8197/roots"
+      ],
+      "source_files": 216
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_neighbors",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/daa2e97a76f9509bbdf9ae5bdcb5d2632189ab2664a23598c3e87f7508c33dde/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/daa2e97a76f9509bbdf9ae5bdcb5d2632189ab2664a23598c3e87f7508c33dde/_mojolearn_dev_x_neighbors.so",
+      "sha256": "4f80e33273778ae3c2c8392726bfca8ab4945c6b29a36306d3bb94764d3cee4f",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_neighbors",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/daa2e97a76f9509bbdf9ae5bdcb5d2632189ab2664a23598c3e87f7508c33dde/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/daa2e97a76f9509bbdf9ae5bdcb5d2632189ab2664a23598c3e87f7508c33dde/roots"
+      ],
+      "source_files": 81
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_prep",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/fd4e0e7f9c0e651fcda4252727c203796dc8141684165b77c8a2a7b0c3e03ed0/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-final-builds-5ab-20261029/attempt2/sm89/remote/leg_out/development-cache/artifacts/fd4e0e7f9c0e651fcda4252727c203796dc8141684165b77c8a2a7b0c3e03ed0/_mojolearn_dev_x_prep.so",
+      "sha256": "3bef95e716ef6c47ff6425cea3d966a6aefbe09125ad339ee3e6a14b80ff5b9e",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_prep",
+        "--outdir",
+        "/root/results-cpu-leg/development-cache/work/fd4e0e7f9c0e651fcda4252727c203796dc8141684165b77c8a2a7b0c3e03ed0/output",
+        "--rootdir",
+        "/root/results-cpu-leg/development-cache/work/fd4e0e7f9c0e651fcda4252727c203796dc8141684165b77c8a2a7b0c3e03ed0/roots"
+      ],
+      "source_files": 90
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_sequence",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/b126525772a948c3a9b140bfefa6c22e4b00d8951b43d0e43ae379930c0c8f72/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/b126525772a948c3a9b140bfefa6c22e4b00d8951b43d0e43ae379930c0c8f72/_mojolearn_dev_x_sequence.so",
+      "sha256": "b5369accb85bd5b8410d96ee2677d42647f1ade1608731ba7cd4c4b2899b5de3",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_sequence",
+        "--outdir",
+        "/root/leg_out/development-cache/work/b126525772a948c3a9b140bfefa6c22e4b00d8951b43d0e43ae379930c0c8f72/output",
+        "--rootdir",
+        "/root/leg_out/development-cache/work/b126525772a948c3a9b140bfefa6c22e4b00d8951b43d0e43ae379930c0c8f72/roots"
+      ],
+      "source_files": 306
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_trees",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/02912eeeeaa531bfb0c60713d09fdb28adb8fc925c10944928960ea73efa7a2d/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/02912eeeeaa531bfb0c60713d09fdb28adb8fc925c10944928960ea73efa7a2d/_mojolearn_dev_x_trees.so",
+      "sha256": "90e37c721c15d45146c099b35bdb11622e5725736b55fd4b26392150458e8155",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_trees",
+        "--outdir",
+        "/root/leg_out/development-cache/work/02912eeeeaa531bfb0c60713d09fdb28adb8fc925c10944928960ea73efa7a2d/output",
+        "--rootdir",
+        "/root/leg_out/development-cache/work/02912eeeeaa531bfb0c60713d09fdb28adb8fc925c10944928960ea73efa7a2d/roots"
+      ],
+      "source_files": 49
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_linear",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/0de73615f0611ac46597426967212cd8adc9889c2adc99fd8900896bf1325b17/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/0de73615f0611ac46597426967212cd8adc9889c2adc99fd8900896bf1325b17/_mojolearn_dev_x_linear.so",
+      "sha256": "99830cacbc3c6f05c8b873bdb1c0bc4ee5702ca36f43cf4907c26fd2ab8f68b0",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_linear",
+        "--outdir",
+        "/root/leg_out/development-cache/work/0de73615f0611ac46597426967212cd8adc9889c2adc99fd8900896bf1325b17/output",
+        "--rootdir",
+        "/root/leg_out/development-cache/work/0de73615f0611ac46597426967212cd8adc9889c2adc99fd8900896bf1325b17/roots"
+      ],
+      "source_files": 77
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_preprocessing",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/17b51e686475d149aa3f9a61605dc36ab72d41f96b1f15acd0d0cef84c5928d0/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/17b51e686475d149aa3f9a61605dc36ab72d41f96b1f15acd0d0cef84c5928d0/_mojolearn_dev_preprocessing.so",
+      "sha256": "b262840614e13ae5ef30d5f502d61abb3295e39cb5a1e3aca6de7c32941ed1c8",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_preprocessing",
+        "--outdir",
+        "/root/leg_out/development-cache/work/17b51e686475d149aa3f9a61605dc36ab72d41f96b1f15acd0d0cef84c5928d0/output",
+        "--rootdir",
+        "/root/leg_out/development-cache/work/17b51e686475d149aa3f9a61605dc36ab72d41f96b1f15acd0d0cef84c5928d0/roots"
+      ],
+      "source_files": 25
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_resample",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/a31c9dfe3605491e8ab60fb2f55e38f563bf4dbf246b01888193bb89b945c355/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/a31c9dfe3605491e8ab60fb2f55e38f563bf4dbf246b01888193bb89b945c355/_mojolearn_dev_resample.so",
+      "sha256": "99dcb23b7614165e22ef43b19811898e69cc2ae99d6c062e40bcc089518cdf27",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_resample",
+        "--outdir",
+        "/root/leg_out/development-cache/work/a31c9dfe3605491e8ab60fb2f55e38f563bf4dbf246b01888193bb89b945c355/output",
+        "--rootdir",
+        "/root/leg_out/development-cache/work/a31c9dfe3605491e8ab60fb2f55e38f563bf4dbf246b01888193bb89b945c355/roots"
+      ],
+      "source_files": 36
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_metrics",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/de1d88eec5080d8245fb658c7dc3404524334b4601bd02e467eb29d819c4bfc7/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/de1d88eec5080d8245fb658c7dc3404524334b4601bd02e467eb29d819c4bfc7/_mojolearn_dev_x_metrics.so",
+      "sha256": "8b624457b2a013c9cd7187314acd5016c9b4a03a1a62be82c05ce792884808fa",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_metrics",
+        "--outdir",
+        "/root/leg_out/development-cache/work/de1d88eec5080d8245fb658c7dc3404524334b4601bd02e467eb29d819c4bfc7/output",
+        "--rootdir",
+        "/root/leg_out/development-cache/work/de1d88eec5080d8245fb658c7dc3404524334b4601bd02e467eb29d819c4bfc7/roots"
+      ],
+      "source_files": 38
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_tsa",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/e43103401dd57c7f6b65ad2dd88533c365c19c924b0e65dfa8eec3b0b9324596/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/e43103401dd57c7f6b65ad2dd88533c365c19c924b0e65dfa8eec3b0b9324596/_mojolearn_dev_tsa.so",
+      "sha256": "7a28337a835741208f08da900bbdec9865cae1a73e7f4948d74c5db3d547036a",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_tsa",
+        "--outdir",
+        "/root/leg_out/development-cache/work/e43103401dd57c7f6b65ad2dd88533c365c19c924b0e65dfa8eec3b0b9324596/output",
+        "--rootdir",
+        "/root/leg_out/development-cache/work/e43103401dd57c7f6b65ad2dd88533c365c19c924b0e65dfa8eec3b0b9324596/roots"
+      ],
+      "source_files": 55
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_arima",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/375720285cf1f312fd1cf2dbbb1ffa94972049f298b984846f2a4bdc221dcf99/receipt.json",
+      "raw": "/Users/andrewhendel/mojolearn-evidence/linux-followup-be2dbd-20261029/attempt3/final-leg/remote/leg_out/development-cache/artifacts/375720285cf1f312fd1cf2dbbb1ffa94972049f298b984846f2a4bdc221dcf99/_mojolearn_dev_arima.so",
+      "sha256": "992f99b065490799859125cf76a7a48f9f165dffc71a904ca0b2b768e0483878",
+      "original_environment": {
+        "MOJOLEARN_COMPILE_JOBS": "32",
+        "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+        "MOJOLEARN_GPU_ARCHS": "sm_89",
+        "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+        "MOJOLEARN_MERGED_PYTHON": "/root/mojolearn/.pixi/envs/default/bin/python",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_TARGET_COLUMN": "nvidia"
+      },
+      "original_command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_arima",
+        "--outdir",
+        "/root/leg_out/development-cache/work/375720285cf1f312fd1cf2dbbb1ffa94972049f298b984846f2a4bdc221dcf99/output",
+        "--rootdir",
+        "/root/leg_out/development-cache/work/375720285cf1f312fd1cf2dbbb1ffa94972049f298b984846f2a4bdc221dcf99/roots"
+      ],
+      "source_files": 71
+    }
+  ]
+}
