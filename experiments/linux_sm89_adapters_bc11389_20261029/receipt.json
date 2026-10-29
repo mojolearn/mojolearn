@@ -1,0 +1,63 @@
+{
+  "schema": "mojolearn.linux-adapter-build-receipt.v1",
+  "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "expected_outputs": [
+    "libmojolearn_adapter.so",
+    "mojolearn_torch.so",
+    "mojolearn_ops.mojoc"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 52.07043839304242,
+  "raw_outputs": {
+    "libmojolearn_adapter.so": {
+      "sha256": "f4acb4fb33233af19ef8277655bdefe3528e8d076467ee32af45848ebd509505",
+      "bytes": 6275656
+    },
+    "mojolearn_ops.mojoc": {
+      "sha256": "b39ac8c4743443b845aa31d0bf988bc2c6c29edab9d2c2d42b1f21fed2e431b9",
+      "bytes": 72407
+    },
+    "mojolearn_torch.so": {
+      "sha256": "fdffd68776b2bc1f948420b06233f916ac2998e54b5771a1f5779ddae2340cc6",
+      "bytes": 163136
+    },
+    "adapters-build.json": {
+      "sha256": "f8707814a9f90de4cc93b942668f2be4171b4f4485de69a365de0a911c1ed3e5",
+      "bytes": 4289
+    }
+  },
+  "allocated_cores": 16,
+  "compiler_workers": 16,
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+  "pixi_lock_sha256": "f6c531ef5300670dd0d66b0cd55cacabe12a28047e2d8d26648f430a46587509",
+  "source_input_count": 157,
+  "static_stage_exit": 0,
+  "manifest_finalize_exit": 0,
+  "unchanged_public_images": 79,
+  "package_retention": {
+    "pod": "bzup075va59kvy",
+    "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+    "archive": "/Users/andrewhendel/mojolearn-evidence/linux-adapter-build-bc11389-20261029/retained-stage/linux-bc11389-with-adapters.tgz",
+    "key": "measurements/linux-adapter-build-bc11389-20261029/linux-bc11389-with-adapters.tgz",
+    "bytes": 86731912,
+    "sha256": "c5b0ee2bee77ebb30c13d3113a3036bab4b264322a627ce6a9d4ce74e4d8fb83",
+    "put": 200,
+    "get": 200,
+    "verified": true,
+    "package_members_verified": 1103,
+    "scope": "static staging and retention only; no product execution"
+  },
+  "full_compiler_input_retention": {
+    "bytes": 914280516,
+    "sha256": "309511d2d0086f852a3bd4e0093cef59f169e7db8f910a83b7dc0935c2e30a82",
+    "put": 200,
+    "get": 200,
+    "key": "measurements/runpod-cpu/mojolearn-cpu-adapterbc-sm89c-20261029-150649/results-complete.tgz",
+    "verified": true,
+    "transport": "owned box direct PUT then Mac GET and complete byte hash"
+  },
+  "teardown": "pod=bzup075va59kvy\nname=mojolearn-cpu-adapterbc-sm89c-20261029-150649\nterminated_verified=1\nexit=0\nat=2026-10-29T15:14:32Z\n",
+  "runtime_executed": false,
+  "scope": "Native SM89 adapter bridge, MAX package and pinned Torch C++ registration compilation; static private full package staging. No installed adapter runtime or release wheel qualification."
+}

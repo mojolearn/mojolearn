@@ -1,0 +1,148 @@
+{
+  "abi": 1,
+  "arch": "sm_89",
+  "commands": {
+    "max": [
+      "pixi",
+      "run",
+      "mojo",
+      "precompile",
+      "adapters/max_ops",
+      "-o",
+      "/root/leg_out/adapters-raw/mojolearn_ops.mojoc"
+    ],
+    "native": [
+      "pixi",
+      "run",
+      "mojo",
+      "build",
+      "--emit",
+      "shared-lib",
+      "-j",
+      "16",
+      "-D",
+      "MOJOLEARN_NUMERIC_IDENTICAL=1",
+      "--target-cpu",
+      "x86-64-v3",
+      "--target-accelerator",
+      "sm_89",
+      "-D",
+      "MOJOLEARN_COLUMN_NVIDIA",
+      "-I",
+      ".",
+      "-I",
+      "bindings",
+      "adapters/native/c_api.mojo",
+      "-o",
+      "/root/leg_out/adapters-raw/libmojolearn_adapter.so"
+    ],
+    "torch": [
+      "c++",
+      "-std=c++20",
+      "-O2",
+      "-fPIC",
+      "-I",
+      "adapters/native",
+      "-I",
+      "/root/leg_out/adapter-build/torch-build/torch/include",
+      "-I",
+      "/root/leg_out/adapter-build/torch-build/torch/include/torch/csrc/api/include",
+      "-ffile-prefix-map=/root/mojolearn/=",
+      "-ffile-prefix-map=/root/leg_out/adapter-build/torch-build/=",
+      "-shared",
+      "-D_GLIBCXX_USE_CXX11_ABI=1",
+      "adapters/torch/registration.cpp",
+      "-o",
+      "/root/leg_out/adapters-raw/mojolearn_torch.so",
+      "-L",
+      "/root/leg_out/adapter-build/torch-build/torch/lib",
+      "-L",
+      "/root/leg_out/adapters-raw",
+      "-Wl,--as-needed",
+      "-lmojolearn_adapter",
+      "-ltorch",
+      "-ltorch_cpu",
+      "-lc10",
+      "-Wl,-z,defs"
+    ]
+  },
+  "files": {
+    "max": {
+      "bytes": 72407,
+      "name": "mojolearn_ops.mojoc",
+      "sha256": "b39ac8c4743443b845aa31d0bf988bc2c6c29edab9d2c2d42b1f21fed2e431b9"
+    },
+    "native": {
+      "bytes": 6283529,
+      "name": "libmojolearn_adapter.so",
+      "sha256": "f11e856886a8666d71b84ffe76c7d3ef920cdc1572b619be0f1ca5b4c57c8d23"
+    },
+    "torch": {
+      "bytes": 187785,
+      "name": "mojolearn_torch.so",
+      "sha256": "aa8f381b090486c5af2f47de47dc3bf04ddcfc444bda14e09a7e5ce78e4eb5f9"
+    }
+  },
+  "max": {
+    "version": "26.5.0"
+  },
+  "mojo": {
+    "conda": "1.0.0",
+    "version": "Mojo 1.0.0 (ed45d567)"
+  },
+  "numeric_mode": "identical",
+  "platform": "linux",
+  "requirements": {
+    "max": "max==26.5.0",
+    "torch": "torch>=2.13,<2.14"
+  },
+  "schema": "mojolearn.adapters.v1",
+  "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "sources": {
+    "adapters/__init__.mojo": "d8966489f04fdf4e71f76fd8008c2acffbd885d46c49c11884d0db80c59bf303",
+    "adapters/max_ops/__init__.mojo": "de643a39194a5f010891b40a9612d6e171204e4d3f15a82407d5bb1996039b32",
+    "adapters/native/__init__.mojo": "6c6ec57de9f82ef42d82760f144a4571cb16b3cd6de33aaa7aa9fd65e8ab1fa1",
+    "adapters/native/abi.h": "60246f5fd3973a0637afb73c0f3e6032b526c85372a7b720305b2966209eafe8",
+    "adapters/native/c_api.mojo": "e5754a2a4625c487ac59e398fa5923e069f6cc1a003e510570a351efee1e2e79",
+    "adapters/native/operation.mojo": "b63ac527fe0cd6a9e2be3aafcbd00f7eecfd659afa45650a9814f62d8d51c80c",
+    "adapters/native/training.mojo": "1ae0f8626fa582ee13d1f54515ebad24bd4c99026fc9d251f3b82c5b18946e47",
+    "adapters/torch/registration.cpp": "a6b88bdcf6d8e94c898c6a1393ae03fd9429fbb7c0d1cce27ae1038ac0968384",
+    "packaging/adapters/build.sh": "b7986e8094ed07b59f37a9de6a3851e43ec7c4692bfb6e16b4d9dfe72ceb7c52",
+    "packaging/adapters/fetch_torch.py": "0eadc437dbcd9d9f2107368eae856508f56a9fe2cacdeca342823fa20eb6ad13",
+    "packaging/adapters/manifest.py": "7b3e481d3869148d5fb3c33d74912233150d62a20ef5531351c53f3a966569d9",
+    "packaging/adapters/pins.json": "a318df0d010f07c2cc9543dfc2654370378df2e69611117a616f94553d8c9a74",
+    "packaging/adapters/test_adapters.py": "5628a0a4e5f880dc80232b9981ffe9658bd3fdb7ec11e44c88191490f9c2253f"
+  },
+  "torch": {
+    "backend": "cuda",
+    "backend_version": "13.0",
+    "cxx11_abi": 1,
+    "cxx11_abi_source": "symbols:libtorch_cpu.so",
+    "index_url": "https://pypi.org/simple",
+    "python_tag": "cp314",
+    "series": "2.13",
+    "version": "2.13.0+cu130",
+    "wheel": "torch-2.13.0-cp314-cp314-manylinux_2_28_x86_64.whl",
+    "wheel_sha256": "49f1ea385c754e54919408a9bb3b5a72b0b755bbe2c916c1d6f70afbec4908a2"
+  },
+  "torch_version_built": "2.13.0+cu130",
+  "torch_version_pin": "2.13.0",
+  "unstaged": {
+    "max": {
+      "bytes": 72407,
+      "name": "mojolearn_ops.mojoc",
+      "sha256": "b39ac8c4743443b845aa31d0bf988bc2c6c29edab9d2c2d42b1f21fed2e431b9"
+    },
+    "native": {
+      "bytes": 6275656,
+      "name": "libmojolearn_adapter.so",
+      "sha256": "f4acb4fb33233af19ef8277655bdefe3528e8d076467ee32af45848ebd509505"
+    },
+    "torch": {
+      "bytes": 163136,
+      "name": "mojolearn_torch.so",
+      "sha256": "fdffd68776b2bc1f948420b06233f916ac2998e54b5771a1f5779ddae2340cc6"
+    }
+  },
+  "vendor": "cuda"
+}
