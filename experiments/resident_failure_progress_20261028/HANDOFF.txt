@@ -1,7 +1,8 @@
 Resident generation failure-progress repair (2026-10-28)
 Branch: lane/resident-failure-progress-20261028
 Base: 9e3e2b359e68e8442ad1751b7488e1f02e7a3667 (root premerge, includes resident batch)
-Frozen final executable source: ecbf370db127a453c763b0ded1d11321380a5681
+Final public source: 68462acdedc837a8109174ed694361dbd9a6649c
+Final native source: ecbf370db127a453c763b0ded1d11321380a5681 (unchanged by public follow-up)
 
 Problem and repair
 The resident read returned diagnostics only after complete success. A later
@@ -32,7 +33,9 @@ finished, EOS owners and all input/output/session owners stay pinned. Device
 metadata/result buffers and row subviews remain owned through final readback.
 Public mutable Array admission/recheck remains per-read; no host pointer cache or
 cross-read mutation bypass is added. Existing native group reservation/lock/GIL
-protocol is unchanged. Cached sessions are cleared on error, not reused.
+protocol is unchanged. Cached sessions are cleared on error, not reused. Superseded cached owners are
+retained in cleanup locals until every normal close succeeds, so an early close
+refusal still attempts all old layers before returning the original error.
 
 Limits
 If device execution or diagnostic readback itself fails, no partially refreshed
@@ -48,6 +51,9 @@ Compilation and guards
 Attempt 1 native and actual read/generate public boundary CPU compiles: exit 0.
 A source review caught an extra final synchronize introduced by the recovery
 helper; removed it, then compiled changed final source in both closures: exit 0.
+Root review then caught missing old-owner retention when replacing a cached
+session: repaired it and compiled only the changed public boundary, attempt 3
+exit 0. Native attempt 2 remains valid without rebuilding unchanged source.
 No failed compile in this follow-up; all full warning logs are retained. The
 original resident batch's earlier failed compiles remain its separate evidence.
 Final source/push guards: exit 0, no baseline growth. No binary was executed;
@@ -56,7 +62,7 @@ qualify GPU execution. Recipe and fixture roots are beside this handoff.
 
 Evidence
 /Users/andrewhendel/mojolearn-evidence/resident-failure-progress-20261028/
-Retains all four full logs/binaries/exits; two frozen conservative source archives;
+Retains all five full logs/binaries/exits; three frozen conservative source archives;
 compiler version; full source guard log/exit. receipt.json records hashes, exact
 source commits, flags and scopes. No rented box used. Root integrates serially;
 no main mutation/push by this lane.
