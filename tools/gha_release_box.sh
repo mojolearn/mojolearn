@@ -87,9 +87,9 @@ R=/root/mojolearn
 T=/tooling
 OUT=/root/leg_out
 PIXIVER=0.77.0
-case "$MODE" in shard|assemble|host|ptx-stage) ;; *) echo "mode must be shard, assemble, host, ptx-stage or swap" >&2; exit 2 ;; esac
+case "$MODE" in shard|assemble|host|ptx-stage|development) ;; *) echo "mode must be shard, assemble, host, ptx-stage, development or swap" >&2; exit 2 ;; esac
 case "$MODE:$ARCH" in
-    host:host) VENDOR=none ;;
+    host:host|development:host) VENDOR=none ;;
     host:*) echo "host mode takes the arch 'host'" >&2; exit 2 ;;
     *:sm_90a|*:sm_89|*:sm_80) VENDOR=cuda ;;
     *:gfx942) VENDOR=hip ;;
@@ -114,7 +114,7 @@ ph start
 need=""
 command -v curl > /dev/null || need="$need curl ca-certificates"
 command -v xz > /dev/null || need="$need xz-utils"
-[[ "$MODE" = host || "$MODE" = ptx-stage ]] && ! command -v git > /dev/null && need="$need git"
+[[ "$MODE" = host || "$MODE" = ptx-stage || "$MODE" = development ]] && ! command -v git > /dev/null && need="$need git"
 if [[ -n "$need" ]]; then
     say "apt-get install$need"
     ( export DEBIAN_FRONTEND=noninteractive
@@ -232,6 +232,17 @@ fi
 env PYTHONPATH="$R/packaging/portable_math" "$R/.pixi/envs/default/bin/python3" -c \
     "import pathlib, stage; stage.build(pathlib.Path('$R/python/mojolearn/.libs/libMojolearnMath.so'))" \
     > "$G/portable_math.log" 2>&1 || { say "portable math build failed"; tail -5 "$G/portable_math.log"; exit 3; }
+
+# Explicit selected development groups use the source's existing builder.
+# They do not enter the legacy release route or alter its worker/recipe policy.
+if [[ "$MODE" = development ]]; then
+    git config --global --add safe.directory "$R"
+    "$R/.pixi/envs/default/bin/python3" "$T/tools/gha_development_group.py" \
+        --root "$R" --commit "$MOJOLEARN_COMMIT" --arch "$ARCH" \
+        --group "${GHA_DEVELOPMENT_GROUP:?selected physical group required}" \
+        --out "$OUT/development"
+    exit $?
+fi
 
 # ---------------------------------------------------------------- the route overlay
 # tools/release_linux_build.sh's list and record, byte for byte in format.

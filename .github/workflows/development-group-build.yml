@@ -1,0 +1,94 @@
+name: Selected development group build
+run-name: "development groups ${{ inputs.arch }} @ ${{ inputs.commit }} [${{ inputs.tag }}]"
+# Manual compile-only route. No rentals, publication, GPU/runtime or watchers.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Frozen product source (40 hex)
+        required: true
+      arch:
+        type: choice
+        options: [host, sm_89, sm_80]
+        required: true
+      groups:
+        description: Comma-separated exact development selectors; only missing groups
+        required: true
+      tag:
+        description: Dispatcher evidence tag
+        required: false
+permissions:
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          DEVELOPMENT_SOURCE_COMMIT: ${{ inputs.commit }}
+          DEVELOPMENT_GROUP_SELECTORS: ${{ inputs.groups }}
+        run: |
+          python3 - <<'PY'
+          import json,os,re
+          assert re.fullmatch('[0-9a-f]{40}',os.environ['DEVELOPMENT_SOURCE_COMMIT'])
+          groups=os.environ['DEVELOPMENT_GROUP_SELECTORS'].split(',')
+          assert 0<len(groups)<=64 and len(set(groups))==len(groups)
+          assert all(re.fullmatch(r'(?:host:|identical:)?[a-zA-Z0-9_]+',g) for g in groups)
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('matrix='+json.dumps({'group':groups})+'\n')
+          PY
+  build:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      IMAGE: rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit }}
+          path: source
+          persist-credentials: false
+      - name: Build selected group with actual CPU allocation
+        # Reserve ten minutes of the job for uploading complete/partial outputs.
+        timeout-minutes: 50
+        env:
+          MOJOLEARN_COMMIT: ${{ inputs.commit }}
+          GHA_DEVELOPMENT_GROUP: ${{ matrix.group }}
+          ARCH: ${{ inputs.arch }}
+          GHA_RUN: ${{ github.run_id }}
+          GHA_JOB: ${{ github.job }}
+          GHA_RUNNER: ${{ runner.name }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/development-out"
+          docker pull "$IMAGE"
+          set +e
+          docker run --rm -e MOJOLEARN_COMMIT -e GHA_DEVELOPMENT_GROUP \
+            -e GHA_RUN -e GHA_JOB -e GHA_RUNNER -e GHA_BUILD_JOBS=1 \
+            -v "$GITHUB_WORKSPACE/source:/root/mojolearn" \
+            -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
+            -v "$RUNNER_TEMP/development-out:/root/leg_out" \
+            "$IMAGE" bash /tooling/tools/gha_release_box.sh development "$ARCH" \
+            > "$RUNNER_TEMP/development-out/container.log" 2>&1
+          rc=$?
+          printf '%s\n' "$rc" > "$RUNNER_TEMP/development-out/container.exit"
+          sudo chmod -R a+rX "$RUNNER_TEMP/development-out"
+          exit "$rc"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: development-${{ inputs.arch }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/development-out
+          compression-level: 1
+          if-no-files-found: error
+          retention-days: 14
