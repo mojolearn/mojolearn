@@ -1,6 +1,7 @@
 #!/bin/sh
 # Install the built wheel into a CLEAN venv under every python3.N on this
-# machine and run a real fit.
+# machine. Run native compatibility checks on 3.10-3.13 and the existing
+# numerical suites once on the latest supported minor, 3.14.
 #
 # THE VENV MUST BE CLEAN AND MUST NOT BE THE BUILD ENVIRONMENT. On the build
 # machine the extension's original @rpath still resolves to the pixi
@@ -22,7 +23,7 @@ export NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 # attempt a fit. For environments with no usable GPU, which on this project
 # means GitHub's virtualized runners. See packaging/macos/smoke.py.
 SMOKE_ARGS=""
-MODE="full (device fits)"
+MODE="compatibility on 3.10-3.13; full suites on 3.14 (device fits)"
 if [ "${1:-}" = "--no-gpu" ]; then
     SMOKE_ARGS="--no-gpu"
     MODE="--no-gpu (import and API only, DEVICE NOT TESTED)"
@@ -75,10 +76,28 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     # the one that was asked for, so a wheel that silently shipped only the
     # fast set fails here rather than on a user's machine.
     okmode=1
+    # Keep the advertised Python range covered without repeating numerical
+    # suites on every interpreter. The latest supported minor owns those
+    # suites; earlier minors check installed native compatibility only.
+    runtime_args="$SMOKE_ARGS"
+    if [ "$py" != python3.14 ]; then runtime_args="--no-gpu"; fi
     # Verify the installed runtime before adding reference-test dependencies.
     if (cd "$tmp" && unset PYTHONPATH PYTHONHOME &&
-            "$tmp/venv/bin/python" "$here/tools/check_numpy_free_runtime.py" --installed $SMOKE_ARGS); then :; else
+            "$tmp/venv/bin/python" "$here/tools/check_numpy_free_runtime.py" --installed $runtime_args); then :; else
         echo "FAIL $py: dependency-free installed runtime"; okmode=0
+    fi
+    if [ "$py" != python3.14 ]; then
+        for mode in $MODES; do
+            if out=$(cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=$mode \
+                    "$tmp/venv/bin/python" "$here/packaging/macos/compatibility_smoke.py" $SMOKE_ARGS 2>&1); then
+                printf 'PASS %s [%s] compatibility  %s\n' "$py" "$mode" "$out"
+            else
+                printf 'FAIL %s [%s] compatibility\n%s\n' "$py" "$mode" "$out"; okmode=0
+            fi
+        done
+        if [ "$okmode" -eq 1 ]; then passed=$((passed+1)); else fails=$((fails+1)); fi
+        rm -rf "$tmp"
+        continue
     fi
     # NumPy belongs to the test harness, not the wheel's runtime metadata.
     if ! "$tmp/venv/bin/pip" install --quiet 'numpy>=1.24'; then

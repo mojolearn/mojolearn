@@ -27,13 +27,18 @@ class WheelMatrixTests(unittest.TestCase):
         self.bin.mkdir()
         for name in ('dirname', 'basename', 'mktemp', 'rm', 'mkdir', 'env'):
             (self.bin / name).symlink_to(shutil.which(name))
-        self.env = dict(os.environ, PATH=str(self.bin), MOJOLEARN_RELEASE_MODES='fast identical')
+        self.calls = self.root / 'calls.log'
+        self.env = dict(os.environ, PATH=str(self.bin), MOJOLEARN_RELEASE_MODES='fast identical',
+                        WHEEL_TEST_CALLS=str(self.calls))
 
     def interpreters(self, versions=range(10, 15), *, venv_fail=False, smoke_fail=False,
                      smoke_output='', runtime_fail=False):
         pip_script = '#!/bin/sh\nexit 0\n'
         runtime_guard = 'case "$*" in *--installed*) exit 1;; esac\n' if runtime_fail else ''
-        smoke_script = ("#!/bin/sh\n" + runtime_guard + "printf '%s\\n' " + shlex.quote(smoke_output)
+        smoke_script = ("#!/bin/sh\n"
+                        + 'printf "%s\\n" "$*" >> "$WHEEL_TEST_CALLS"\n'
+                        + 'case "$*" in *compatibility_smoke.py*) [ "${WHEEL_TEST_COMPAT_FAIL:-0}" = 0 ] || exit 1;; esac\n'
+                        + runtime_guard + "printf '%s\\n' " + shlex.quote(smoke_output)
                         + '\nexit ' + ('1' if smoke_fail else '0') + '\n')
         for version in versions:
             path = self.bin / ('python3.' + str(version))
@@ -88,6 +93,25 @@ class WheelMatrixTests(unittest.TestCase):
         self.assertEqual(result.stdout.count('dependency-free installed runtime'), 5)
         self.assertEqual(result.stdout.count('PASS python3.'), 10)  # 5 interpreters x {fast, identical}
 
+    def test_numerical_suites_only_run_on_latest_minor(self):
+        self.interpreters()
+        result = self.run_gate()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(sum('compatibility_smoke.py' in c for c in calls), 8)
+        self.assertEqual(sum('/macos/smoke.py' in c for c in calls), 2)
+        self.assertEqual(sum('language_model_smoke.py' in c for c in calls), 1)
+        runtime = [c for c in calls if 'check_numpy_free_runtime.py' in c]
+        self.assertEqual(len(runtime), 5)
+        self.assertEqual(sum('--no-gpu' in c for c in runtime), 4)
+
+    def test_older_minor_compatibility_failure_blocks_release(self):
+        self.interpreters()
+        self.env['WHEEL_TEST_COMPAT_FAIL'] = '1'
+        result = self.run_gate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('1 interpreter(s) passed, 4 failed, 0 skipped', result.stdout)
+
     def test_ambiguous_wheel_is_refused(self):
         (self.dist / 'mojolearn-other.whl').touch()
         result = self.run_gate()
@@ -109,9 +133,9 @@ class WheelMatrixTests(unittest.TestCase):
         for fails in (False, True):
             self.interpreters(smoke_fail=fails, smoke_output=evidence)
             result = self.run_gate()
-            # Runtime, FAST/IDENTICAL ByteLM availability, language-model smoke,
-            # and two numeric-mode smoke jobs (fast, identical), for each of five interpreters.
-            self.assertEqual(result.stdout.count(evidence), 30, result.stdout)
+            # Four minors: runtime + two compatibility jobs. Latest: runtime,
+            # FAST/IDENTICAL ByteLM, language-model smoke and two full mode jobs.
+            self.assertEqual(result.stdout.count(evidence), 18, result.stdout)
             self.assertEqual(result.returncode == 0, not fails)
 
 
