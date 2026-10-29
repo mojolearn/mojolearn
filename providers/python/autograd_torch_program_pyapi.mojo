@@ -8,8 +8,9 @@
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_get, py_fields, py_type, py_setitem
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from bindings.native_torch_admission import (
     native_torch_admit, native_torch_modes_admit, native_torch_device, native_torch_storage_metadata,
     native_torch_contiguous, native_torch_to,
@@ -160,18 +161,57 @@ def _torch_run_host(
     _ = outputs
 
 
+def _torch_loaded_namespace(modules: PythonObject, b: PythonObject,
+                            module_type: PythonObject, name: String) raises -> Tuple[PythonObject, PythonObject]:
+    # Optional Torch may load before OR after mojolearn. Match the existing
+    # native Tensor admission: read only an already-loaded exact module, never
+    # import it or consult its module-level __getattr__ (ordinary Torch has one).
+    var module = py_get(modules, name)
+    if module is None:
+        raise Error("ImportError: Torch program execution requires already imported " + name)
+    if py_type(module) is not module_type:
+        raise Error("TypeError: Torch program execution requires an exact module: " + name)
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    if not native_namespace_string_keys(raw, b.str):
+        raise Error("TypeError: Torch module namespace requires ordinary string fields")
+    return (module, PythonObject(from_owned=cpy.Py_NewRef(raw)))
+
+
+def _torch_native_type(cls: PythonObject, b: PythonObject, module: String, name: String) raises -> Bool:
+    if py_type(cls) is not b.type:
+        return False
+    var flags = b.type.__dict__["__flags__"].__get__
+    if (Int(py=py_call(flags, cls)) & 512) != 0:
+        return False
+    # Exact type + non-heap native type excludes user metaclasses and property
+    # hooks before these immutable type metadata reads.
+    return String(cls.__module__) == module and String(cls.__name__) == name
+
+
 def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
     # Resolve only loaded framework native entries. No capture, model callbacks,
     # weight-version polling or export runs when executing an artifact snapshot.
-    var torch = native_loaded_module("torch")
-    var native = native_loaded_module("torch._C")
     var b = native_loaded_module("builtins")
-    var fields = py_fields(native)
+    var sys = native_loaded_module("sys")
+    var module_type = py_type(sys)
+    var modules = sys.modules
+    if py_type(modules) is not b.dict or not native_namespace_string_keys(modules._obj_ptr, b.str):
+        raise Error("TypeError: Torch program execution requires the ordinary loaded-module dictionary")
+    var torch = _torch_loaded_namespace(modules, b, module_type, "torch")
+    var native = _torch_loaded_namespace(modules, b, module_type, "torch._C")
+    var fields = native[1]
     var variables = fields["_VariableFunctions"]
-    var flags = b.type.__dict__["__flags__"].__get__
-    if (Int(py=py_call(flags, py_type(variables))) & 512) != 0:
+    if not _torch_native_type(py_type(variables), b, "torch._C", "_VariableFunctionsClass"):
         raise Error("TypeError: Torch allocation requires its native function container")
     var context = Python.dict()
+    # Hold both admitted namespaces/modules through execution and GIL release.
+    py_setitem(context, "torch_owner", torch[0])
+    py_setitem(context, "torch_namespace", torch[1])
+    py_setitem(context, "native_owner", native[0])
+    py_setitem(context, "native_namespace", native[1])
     py_setitem(context, "empty", variables.empty)
     _ = _torch_entry(context, "empty")
     for pair in [Python.tuple("get_device", "_cuda_getDevice"),  # small-loop(fixed native framework entries)
@@ -179,13 +219,22 @@ def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
                  Python.tuple("synchronize", "_cuda_synchronize"),
                  Python.tuple("synchronize_mps", "_mps_deviceSynchronize")]:
         py_setitem(context, pair[0], py_get(fields, pair[1]))
-    var public = py_fields(torch)
+    var public = torch[1]
     var device_type = public["device"]
-    if py_type(device_type) is not b.type or (Int(py=py_call(flags, device_type)) & 512) != 0:
+    if not _torch_native_type(device_type, b, "torch", "device"):
         raise Error("TypeError: Torch device requires its native type")
+    var dtype_type = public["dtype"]
+    if not _torch_native_type(dtype_type, b, "torch", "dtype"):
+        raise Error("TypeError: Torch allocation requires its native dtype")
+    var f32 = public["float32"]
+    var i32 = public["int32"]
+    if py_type(f32) is not dtype_type or py_type(i32) is not dtype_type:
+        raise Error("TypeError: Torch allocation requires its native dtype")
+    if String(f32) != "torch.float32" or String(i32) != "torch.int32":
+        raise Error("TypeError: Torch allocation dtype exports were replaced")
     py_setitem(context, "cpu", py_call(device_type, "cpu"))
-    py_setitem(context, "f32", public["float32"])
-    py_setitem(context, "i32", public["int32"])
+    py_setitem(context, "f32", f32)
+    py_setitem(context, "i32", i32)
     var count = len(snapshot[2])
     var free = Python.list()
     for index in range(count):  # driver-loop: declared graph input positions

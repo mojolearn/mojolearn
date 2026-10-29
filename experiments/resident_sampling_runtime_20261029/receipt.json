@@ -1,0 +1,114 @@
+{
+  "product_commits": [
+    "43488971955343b2bdb96d3562f7ed5a991571da",
+    "be2dbd0397"
+  ],
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029",
+  "references": {
+    "optimized-retention.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/optimized-retention.json",
+      "sha256": "57b8124c36802074fbac1353ae8c1cd47bdf0bd411dc8c68401cce4a7ac91bd8"
+    },
+    "adapter-retention.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-retention.json",
+      "sha256": "dce6d2365eb58f8f409dcb740981e2a78ef9bd75b19dc90e4e8d80058d810af3"
+    },
+    "adapter-checked79.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-checked79.json",
+      "sha256": "71cbb50bf664edc6bd9b0ed977d17b39e6e862000515aa3180dde6c2d4976db7"
+    },
+    "stage-adapter-final-receipt.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/stage-adapter-final-receipt.json",
+      "sha256": "bf2bd56570078b2d02bcaa79a1aa36519c78b6da13a24f91bbcf0ccb82fb50b8"
+    },
+    "adapter-final-build/result.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-final-build/result.json",
+      "sha256": "52f27161f0b734e3aeb87fe659157826c3fa0eea27a342bc1d2978d472331755"
+    },
+    "adapter-final-smoke/adapter-smoke.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-final-smoke/adapter-smoke.json",
+      "sha256": "2c6fdb9260736fb11309a8a1c9dd5d082061f04c53622866ac799c8ee423cbee"
+    },
+    "adapter-final-tests/controller.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-final-tests/controller.json",
+      "sha256": "e8a62e40d9281cf026947778d929e48105181a0164bb25633972c416b810cfe0"
+    },
+    "adapter-final-tests/results.xml": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-final-tests/results.xml",
+      "sha256": "ca38bf868d1a5dedffbce96dcb4ae73b282a6326826397bcfbc0063fc3ddb6bb"
+    },
+    "adapter-configuration-selected-fragment.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-configuration-selected-fragment.json",
+      "sha256": "308de3a1b6d729df7b40278f5fb2e9beeb35d9ec1e5df59fcb0b91eae018da96"
+    },
+    "adapter-configuration-cpu-contracts.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-configuration-cpu-contracts.json",
+      "sha256": "7dc6e041209a563b1e64e2e9cf78065709ac2b3d3c1112511f268827afe62eda"
+    },
+    "adapter-host-producers.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-host-producers.json",
+      "sha256": "9cd1cd40428c5bafe9d87fd61b7c71ce525f4b9731bfeaff73d03f584b269855"
+    },
+    "candidate-observations/observations.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/candidate-observations/observations.json",
+      "sha256": "b8766b3b82573f4be289b36213c5d9d2b8ce71ed186e57adfb7abacd19c8a2b0"
+    }
+  },
+  "compile": {
+    "mode": "identical",
+    "workers": 10,
+    "optimization": "standard default",
+    "selected_images": 2,
+    "selected_exit_codes": [
+      0,
+      0
+    ],
+    "seconds": [
+      130.57358354190364,
+      116.96
+    ],
+    "controller_exit": 3,
+    "controller_scope": "selected images built; full development-set activation incomplete"
+  },
+  "runtime": {
+    "module_admission_tests": 6,
+    "failures": 0,
+    "skips": 0,
+    "test_controller_exit": 1,
+    "test_controller_failure": "post-test zsh readonly status variable; pytest JUnit all6 passed",
+    "canonical_adapter_phases": {
+      "max-training": 0,
+      "torch-compile": 0,
+      "torch-training": 0
+    },
+    "candidate_public_tests_passed": 11,
+    "framework_version_control_passed": 1,
+    "transformer_surface_passed": 116,
+    "candidate_observations": 4,
+    "cross_vendor_qualified": false
+  },
+  "source_guards": {
+    "direct": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "runtime_export": 0,
+    "retained_setup_failures": [
+      "sparse exception ledger missing",
+      "first external export omitted package inventory"
+    ]
+  },
+  "source_match": {
+    "owners": 79,
+    "source_mismatches": 0,
+    "raw_hash_mismatches": 0
+  },
+  "remaining": [
+    "final merged-source/payload alignment",
+    "fresh release-wide default-policy references after all image and adapter qualifications",
+    "candidate policy1 cross-vendor observation comparison",
+    "installed release-wheel dependency metadata qualification separate from development clone"
+  ]
+}

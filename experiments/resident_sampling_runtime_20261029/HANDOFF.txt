@@ -1,0 +1,44 @@
+Torch module admission and optimized resident sampling qualification
+
+Product: 4348897195 + be2dbd0397 on lane/resident-sampling-runtime-repair-20261029.
+The Torch exported-program context now admits already-loaded exact modules through
+canonical sys.modules and native module dictionaries. It does not import optional
+Torch, consult module hooks, or loosen the package registry. Immutable native
+allocator/device/dtype metadata is checked; module and namespace objects stay
+owned by the operation context through native execution and GIL release.
+Both import orders, ordinary hostile __getattr__, and three replacement refusals
+have six passing actual installed cases. Canonical Torch compile/training and MAX
+training phases all exited0. This is adapter-specific execution, not an arithmetic
+identity lane or a release-wheel extras claim.
+
+Only x_sequence host and Apple GPU source closures changed. Both standard default
+optimized shipping development images compiled0 with configured10workers, via
+compile_slot. Selected elapsed130.57s GPU/116.96s host; controller3 means the full
+79-image development set was not activated. Both earlier attempts failed on native
+Tuple-to-PythonObject owner stores; be2dbd fixes those stores, with full logs kept.
+Five source guards pass after exporting the complete gate payload; two incomplete
+sparse/export setup failures remain recorded. All79 raw hashes and complete source
+closures match current product be2dbd, with no mismatches.
+
+Sampler: source unchanged5ab. Actual O0 full-read output was incorrect. A minimal
+explicit-owner-pinned wrapper reproduced O0 wrong output/default optimization
+correct output. Internal compiler cause is unconfirmed; no toolchain workaround.
+Standard optimized Transformer passes all11 candidate cases plus one framework
+version control and the existing116 Transformer surface checks. Original seven
+candidate failures and the first fixture-location setup failure are preserved.
+Four candidate-policy1 token/checkpoint observations use recorder053ab924 exactly;
+these Apple observations are provisional until other vendors agree. Old O0 sampler
+image is runtime-rejected; this does not reject unrelated historical O0 images.
+
+The six-test receipt shell had a post-test readonly status-variable error; JUnit
+reports all6 passed with no skips. No duplicate product rerun was performed for
+that controller bookkeeping error. Canonical adapter controller exited0.
+
+Current private adapter-final-venv changed only two x_sequence extension copies;
+all5 runtime libraries match its validated predecessor. Old installs and raw cache
+images remain untouched. Final merged-source Python/payload alignment is pending.
+
+Complete paths, hashes, retained failures and Mac/R2 PUT+GET readback receipts are
+in receipt.json. Two archives retain optimized Transformer212-source evidence and
+adapter315-source evidence, logs, raw/staged images, runtime evidence, and probes.
+No performance claim; policy1 remains default-off and vendor qualification pending.
