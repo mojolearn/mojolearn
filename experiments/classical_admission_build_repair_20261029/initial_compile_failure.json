@@ -1,0 +1,40 @@
+{
+  "family": "runtime_classical",
+  "source_commit": "748c43207eccf20880fec95d4652d3a6a6c80852",
+  "cwd": "/Users/andrewhendel/CascadeProjects/mojolearn",
+  "argv": [
+    "bash",
+    "tools/compile_slot.sh",
+    "sh",
+    "bindings/build_host_family.sh",
+    "runtime_classical"
+  ],
+  "environment": {
+    "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current",
+    "MOJOLEARN_COMPILE_JOBS": "10",
+    "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+    "MOJOLEARN_NUMERIC_MODE": "identical",
+    "MOJOLEARN_TARGET_COLUMN": "cpu"
+  },
+  "compiler": "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "dependency_scope": {
+    "scope": "closure",
+    "digest": "d5499fb4a02eabc7b55e32f81ee6821eada3b3b8befd739830d9520d09914025",
+    "files": 443
+  },
+  "source_count": 445,
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/runtime_classical/source-manifest.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/runtime_classical/source.tar.gz",
+  "source_archive_sha256": "b7178ee9eeab8ffdd8aca1ab43ee74ec2e03334bd60226d5d81e6fefcfc6175c",
+  "target": "CPU identical, macOS arm64 apple-m1, O0; standard build_host_family.sh deployment floor/SDK",
+  "sdk": "26.5",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_runtime_classical_host.so",
+  "log": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/runtime_classical/compile.log",
+  "status": "failed",
+  "runtime_executed": false,
+  "exit_code": 1,
+  "elapsed_seconds": 28.81,
+  "sources_changed_during_build": []
+}

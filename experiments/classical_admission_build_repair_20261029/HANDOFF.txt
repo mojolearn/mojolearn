@@ -1,0 +1,76 @@
+Actual current-source classical build repair, 2026-10-29
+======================================================
+Branch: lane/classical-admission-build-repair-20261029
+Base: 108f33e541ca2423b6f78509f80044b6f3660481 (integrated sampling, main)
+Product: a44b6b7e19c98400687be8056cd2852a74cdc6dc
+Root serializes integration. No main edits/merge/push by this lane.
+
+Actual failure and repair
+-------------------------
+Standard runtime_classical CPU family compilation from initial main748c43207e
+failed with six calls to the obsolete _plan(model, attributes) signature:
+kernel_public_lifecycle_pyapi, cluster_public_lifecycle_pyapi,
+radius_public_lifecycle_pyapi, hierarchy_public_lifecycle_pyapi and two in
+pcs_public_lifecycle_pyapi. The current public attribute owner requires a native
+module-admission owner and returns _AttributeAdmission, retaining the plan/MRO
+rows. The five callers now create an operation-local NativeModules and pass it
+to _plan. Their existing _lookup calls already accept _AttributeAdmission, so
+no compatibility adapter or weaker admission was added. Descriptor precedence,
+class/hook checks, current instance fields, validation order and error paths
+remain under the same shared owner. No numerical algorithm or shared ABI change.
+
+Validation
+----------
+Actual standard build_host_family.sh runtime_classical, Mac compile_slot,
+CPU identical, apple-m1 target, O0,10 configured compiler jobs: exit0,401.03s.
+Whole actual host builder/entry compiled, not a surrogate fixture. Source hashes
+unchanged during build. Required source/push guards exit0,40.41s; direct guard
+invocation, no push. No artifact executed or runtime/identity/performance claim.
+
+The owned sparse worktree shares the main locked .pixi toolchain via symlink;
+compiler cwd was observed as the owned worktree. Compiler hash/version, complete
+command/env, SDK, source archive/hash, log, binary/hash are in the receipt.
+The dependency resolver widened to the conservative present-source tree
+(3,637 files) because x_metrics/common.mojo names excluded
+experiments.classical_identical_ideas.shared_controls. No missing source was
+materialized during compilation; the actual CPU family compiled successfully.
+This is a snapshot of the source tree actually compiled, not a claim to have
+compiled every archived module/branch. The absent import and widened scope are
+explicit so integration can compare actual retained source bytes.
+
+Other assigned current host families
+------------------------------------
+All outputs are actual fresh standard host families in:
+~/mojolearn-evidence/manifold-installed-integration-20261029/native-current/
+Runtime_manifold O0:0/21.38s,145source closure. x_ann O0:0/13.68s,69source
+closure. Core O0:0/53.38s,79source closure. X_decomp standard defaultO3:
+0/29.68s,138source closure. Estimators standard defaultO3:0/26.81s,197source
+closure. All10 configured compiler jobs; machine-wide compile slots bound
+concurrency to2. Configured jobs do not prove every compiler phase uses10cores.
+Tokenizer belongs to root and is not rebuilt or qualified by this lane.
+
+X_decomp and estimators O0 attempts failed in compiler LLVM lowering:
+llvm.masked.gather alignment must be a constant, got runtime value.
+These complete failures are retained. Supported ordinary builder default
+optimization (compiler help confirms3) passed both, with no compiler/source
+workaround or old binary substitution. Failure times16.54s/15.17s respectively.
+Initial runtime_classical failure1/28.81s retained separately from repair pass.
+
+Runtime_manifold and x_ann closures were checked against main108f33e541 after
+sampling integration: no changed source bytes; causal_lm_public is not in their
+closure. No duplicate build was requested for commit-name change. Other current
+families compiled on108f33e541; runtime_classical adds this five-file repair.
+Fresh freeze/installed admission remains root's responsibility. No test or
+verifier was executed by this compilation lane.
+
+Evidence
+--------
+Tracked: this directory's compile_runtime_classical.json, source-guards.json,
+initial_compile_failure.json, initial_errors.json and family-build-summary.json.
+Complete logs/source/binaries/controller scripts and all attempts retained at:
+~/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/
+  runtime_classical/ (original failure), repair-o0/runtime_classical/ (final),
+  runtime_manifold/, x_ann/, core/, x_decomp/, estimators/ (O0 attempts),
+  default-optimization/{x_decomp,estimators}/ (successful default builds),
+  repair-guards.log/json, final-family-summary.json, mojo-build-help.txt.
+No rented box used. No new runtime permission inferred from compilation.

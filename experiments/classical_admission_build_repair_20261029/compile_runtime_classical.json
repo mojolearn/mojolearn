@@ -1,0 +1,42 @@
+{
+  "family": "runtime_classical",
+  "source_commit": "a44b6b7e19c98400687be8056cd2852a74cdc6dc",
+  "cwd": "/Users/andrewhendel/mojolearn-wt/classical-admission-build-repair-20261029",
+  "argv": [
+    "bash",
+    "tools/compile_slot.sh",
+    "sh",
+    "bindings/build_host_family.sh",
+    "runtime_classical"
+  ],
+  "environment": {
+    "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current",
+    "MOJOLEARN_COMPILE_JOBS": "10",
+    "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+    "MOJOLEARN_NUMERIC_MODE": "identical",
+    "MOJOLEARN_TARGET_COLUMN": "cpu"
+  },
+  "compiler": "/Users/andrewhendel/mojolearn-wt/classical-admission-build-repair-20261029/.pixi/envs/default/bin/mojo",
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "dependency_scope": {
+    "scope": "tree",
+    "digest": "5e0b3795298e365833cada8973f7d11019c6faec5309a2eae9294b6e60bdc710",
+    "files": 3635
+  },
+  "source_count": 3637,
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/repair-o0/runtime_classical/source-manifest.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/repair-o0/runtime_classical/source.tar.gz",
+  "source_archive_sha256": "12d25b9786ff0b662e0b8aad37fe6869d4c4c81496baa69e46c35401ef0c67c5",
+  "target": "CPU identical, macOS arm64 apple-m1, O0; standard build_host_family.sh deployment floor/SDK",
+  "sdk": "26.5",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_runtime_classical_host.so",
+  "log": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/repair-o0/runtime_classical/compile.log",
+  "status": "compiled",
+  "runtime_executed": false,
+  "exit_code": 0,
+  "elapsed_seconds": 401.03,
+  "sources_changed_during_build": [],
+  "binary_sha256": "ead403bba4b8638b6066172675d7cb7a7c0e3498130e47dfea371e18f1e1d9fa",
+  "binary_bytes": 40280728
+}

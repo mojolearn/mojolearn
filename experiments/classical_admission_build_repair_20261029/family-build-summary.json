@@ -1,0 +1,130 @@
+{
+  "families": [
+    {
+      "family": "runtime_manifold",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/runtime_manifold/receipt.json",
+      "exit_code": 0,
+      "elapsed_seconds": 21.38,
+      "source_commit": "748c43207eccf20880fec95d4652d3a6a6c80852",
+      "source_count": 145,
+      "scope": "closure",
+      "binary": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_runtime_manifold_host.so",
+      "binary_sha256": "34230c94ab15ecba2e62d55fee8fe428c9fa0c622437ec13f602c52ea4346622",
+      "binary_present": true,
+      "environment": {
+        "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current",
+        "MOJOLEARN_COMPILE_JOBS": "10",
+        "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "runtime_executed": false
+    },
+    {
+      "family": "runtime_classical",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/repair-o0/runtime_classical/receipt.json",
+      "exit_code": 0,
+      "elapsed_seconds": 401.03,
+      "source_commit": "a44b6b7e19c98400687be8056cd2852a74cdc6dc",
+      "source_count": 3637,
+      "scope": "tree",
+      "binary": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_runtime_classical_host.so",
+      "binary_sha256": "ead403bba4b8638b6066172675d7cb7a7c0e3498130e47dfea371e18f1e1d9fa",
+      "binary_present": true,
+      "environment": {
+        "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current",
+        "MOJOLEARN_COMPILE_JOBS": "10",
+        "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "runtime_executed": false
+    },
+    {
+      "family": "x_decomp",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/default-optimization/x_decomp/receipt.json",
+      "exit_code": 0,
+      "elapsed_seconds": 29.68,
+      "source_commit": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "source_count": 138,
+      "scope": "closure",
+      "binary": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_x_decomp_host.so",
+      "binary_sha256": "c843bbb3363dfb922f6eceff9f7b13e4326801a93c4e444301a358c8dd8b3cba",
+      "binary_present": true,
+      "environment": {
+        "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current",
+        "MOJOLEARN_COMPILE_JOBS": "10",
+        "MOJOLEARN_MOJO_BUILD_FLAGS": "",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "runtime_executed": false
+    },
+    {
+      "family": "x_ann",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/x_ann/receipt.json",
+      "exit_code": 0,
+      "elapsed_seconds": 13.68,
+      "source_commit": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "source_count": 69,
+      "scope": "closure",
+      "binary": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_x_ann_host.so",
+      "binary_sha256": "cfeb2e96078f8c0bdca5d6f7cae6bee083e2d04d0287a1d0bede2ef07a0389cb",
+      "binary_present": true,
+      "environment": {
+        "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current",
+        "MOJOLEARN_COMPILE_JOBS": "10",
+        "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "runtime_executed": false
+    },
+    {
+      "family": "estimators",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/default-optimization/estimators/receipt.json",
+      "exit_code": 0,
+      "elapsed_seconds": 26.81,
+      "source_commit": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "source_count": 197,
+      "scope": "closure",
+      "binary": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_estimators_host.so",
+      "binary_sha256": "cce641355df3f85e34b7092131cb59478b30a56743acb2e344f49f406e1edd0b",
+      "binary_present": true,
+      "environment": {
+        "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current",
+        "MOJOLEARN_COMPILE_JOBS": "10",
+        "MOJOLEARN_MOJO_BUILD_FLAGS": "",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "runtime_executed": false
+    },
+    {
+      "family": "core",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/core/receipt.json",
+      "exit_code": 0,
+      "elapsed_seconds": 53.38,
+      "source_commit": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "source_count": 79,
+      "scope": "closure",
+      "binary": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_core_host.so",
+      "binary_sha256": "260f35f26c27e1c87f0bb5701a1168e23d261a8ec0427b499044a60b2a836158",
+      "binary_present": true,
+      "environment": {
+        "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current",
+        "MOJOLEARN_COMPILE_JOBS": "10",
+        "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "runtime_executed": false
+    }
+  ],
+  "preserved_failed_attempts": [
+    "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/runtime_classical/receipt.json",
+    "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/x_decomp/receipt.json",
+    "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/estimators/receipt.json"
+  ],
+  "limits": "Compilation only. Original runtime_classical six stale _plan calls repaired; x_decomp/estimators O0 masked.gather compiler lowering failures passed with supported standard default O3. No old binary substitutions or toolchain modifications."
+}

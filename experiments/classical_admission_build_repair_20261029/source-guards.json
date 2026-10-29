@@ -1,0 +1,12 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 40.41,
+  "command": [
+    "sh",
+    "tools/hooks/pre-push",
+    "origin",
+    "source-only-review"
+  ],
+  "source_commit": "a44b6b7e19c98400687be8056cd2852a74cdc6dc",
+  "scope": "Required source/push guards directly invoked; no push or product runtime"
+}
