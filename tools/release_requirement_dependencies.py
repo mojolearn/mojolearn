@@ -440,6 +440,46 @@ def _binding_context(snapshot, vendor, lane, context):
     return environment, missing
 
 
+def _selected_binding_flags(snapshot, configuration):
+    """Pin each selected image's actual build settings in every consuming unit.
+
+    Explicit semantic flags are complete, not merged with global flags. Worker
+    counts are declared separately but remain fingerprinted: changing compiler
+    parallelism has not been established to preserve binary bytes. Raw receipts
+    retain the complete invocation, and admission still checks exact values.
+    """
+    from release_requirements import build_flags
+    context = configuration.get("dependency_context", {})
+    selected = context.get("selected_binding_build_flags", {})
+    jobs = context.get("selected_binding_compile_jobs", {})
+    known = {b["key"] for b in snapshot.get("bindings", [])}
+    for name, mapping in (("selected_binding_build_flags", selected),
+                          ("selected_binding_compile_jobs", jobs)):
+        if not isinstance(mapping, dict) or any(not isinstance(key, str) for key in mapping):
+            raise ValueError(name + " must be a binding-key mapping")
+        if set(mapping) - known:
+            raise ValueError(name + " names unknown bindings: " + ", ".join(sorted(set(mapping) - known)))
+    routing = {"MOJOLEARN_NUMERIC_MODE", "MOJOLEARN_TARGET_COLUMN", "MOJOLEARN_GPU_ARCHS",
+               "MOJOLEARN_LINUX_CPU", "MOJOLEARN_PACKAGE_BYTE_LM", "MOJOLEARN_COMPILE_JOBS"}
+    for key, flags in selected.items():
+        if (not isinstance(flags, dict) or any(not isinstance(k, str) or not isinstance(v, str)
+                for k, v in flags.items()) or build_flags(flags) != flags or routing.intersection(flags)):
+            raise ValueError("selected build flags must contain only complete semantic build environment: " + key)
+    for key, count in jobs.items():
+        if not isinstance(count, str) or re.fullmatch(r"[1-9][0-9]*", count) is None:
+            raise ValueError("selected compiler workers must be a positive decimal string: " + key)
+    result = copy.deepcopy(snapshot)
+    for binding in result.get("bindings", []):
+        identity = binding.get("identity")
+        if identity is None:
+            continue
+        if binding["key"] in jobs:
+            identity.setdefault("flags", {})["compile_jobs"] = jobs[binding["key"]]
+        if binding["key"] in selected:
+            identity["selected_build_flags"] = copy.deepcopy(selected[binding["key"]])
+    return result
+
+
 def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None):
     """Replace compile/identity/performance rows with independently reusable units.
 
@@ -458,7 +498,10 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
     request = dict(compile="compile" in kinds, lanes=bool(kinds & {"identity", "performance"}),
                    recipes="performance" in kinds,
                    configuration=configuration, extra_paths=extra)
-    snapshot = frozen_snapshot(root, revision, request, log_dir=log_dir)
+    source_snapshot = frozen_snapshot(root, revision, request, log_dir=log_dir)
+    snapshot = source_snapshot
+    if kinds & {"compile", "identity", "performance"}:
+        snapshot = _selected_binding_flags(snapshot, configuration)
     expanded = []
     for spec in specs:
         kind = spec.get("kind")
@@ -488,8 +531,11 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
             rows = [b for b in snapshot["bindings"] if b["target"] == target
                 and (b["vendor"] == VENDORS[vendor] or b["tier"] == "host")]
             for binding in rows:
+                selected_common = dict(common)
+                if "selected_build_flags" in (binding["identity"] or {}):
+                    selected_common["build_flags"] = binding["identity"]["selected_build_flags"]
                 expanded.append(_unit(spec, binding["key"],
-                    dict(unit=common, binding=binding["identity"]), binding["sources"],
+                    dict(unit=selected_common, binding=binding["identity"]), binding["sources"],
                     common_missing + binding["unresolved"], [binding["key"]]))
             if target == "linux-64":
                 rt = snapshot["runtime"]
@@ -499,7 +545,10 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
             for arch in arches:
                 adapter = snapshot["adapters"]
                 exemplar = next(b for b in rows if b["arch"] == arch and b["tier"] != "host")
-                environment = {k: v for k, v in (exemplar["identity"] or {}).items()
+                # Selecting a binding image does not configure the separately
+                # built adapter. Keep its own original builder contract.
+                original = next(b for b in source_snapshot["bindings"] if b["key"] == exemplar["key"])
+                environment = {k: v for k, v in (original["identity"] or {}).items()
                     if k in ("target", "vendor", "arch", "toolchain", "flags", "image", "host_toolchain")}
                 environment["builders"] = adapter.get("builder_views", {}).get(target)
                 adapter_missing = list(adapter["unresolved"])

@@ -69,6 +69,68 @@ class Dependencies(unittest.TestCase):
         cpp = next(r for r in rows if "/adapters/" in r["id"])
         self.assertIn("adapters/torch/registration.cpp", cpp["resolved_inputs"]["adapter_sources"])
 
+    def test_selected_flags_change_only_affected_compile_and_identity_units(self):
+        key = snapshot()["bindings"][0]["key"]
+        config = copy.deepcopy(self.config)
+        config["dependency_context"]["selected_binding_build_flags"] = {
+            key: {"MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0"}}
+        before = manifest(self.expand(config=config), "a")
+        config["dependency_context"]["selected_binding_build_flags"][key] = {
+            "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 3"}
+        after = manifest(self.expand(config=config), "b")
+        changed = {rid for rid, row in before["requirements"].items()
+                   if row["fingerprint"] != after["requirements"][rid]["fingerprint"]}
+        self.assertEqual(changed, {"compile-nvidia/" + key, "identity-nvidia/one"})
+
+    def test_selected_flags_are_complete_not_merged_with_global_flags(self):
+        key = snapshot()["bindings"][0]["key"]
+        config = copy.deepcopy(self.config)
+        config["build_flags"] = {"MOJOLEARN_MOJO_BUILD_FLAGS": "-O3"}
+        config["dependency_context"]["selected_binding_build_flags"] = {key: {}}
+        rows = {r["id"]: r["resolved_inputs"] for r in self.expand(config=config)["requirements"]}
+        self.assertEqual(rows["compile-nvidia/" + key]["unit"]["build_flags"], {})
+        self.assertEqual(rows["compile-nvidia/" + snapshot()["bindings"][1]["key"]]["unit"]["build_flags"],
+                         config["build_flags"])
+        self.assertEqual(rows["identity-nvidia/one"]["execution_environment"]["one"]["bindings"][key]
+                         ["selected_build_flags"], {})
+
+    def test_selected_flags_refuse_unknown_bindings_and_nonsemantic_values(self):
+        key = snapshot()["bindings"][0]["key"]
+        invalid = [None, {"unknown": {}}, {key: {"MOJOLEARN_COMPILE_JOBS": "10"}},
+                   {key: {"MOJOLEARN_NUMERIC_MODE": "fast"}},
+                   {key: {"MOJOLEARN_MOJO_BUILD_FLAGS": 0}}, {key: {"MOJOLEARN_API_TOKEN": "secret"}}]
+        for value in invalid:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                config = copy.deepcopy(self.config)
+                config["dependency_context"]["selected_binding_build_flags"] = value
+                self.expand(config=config)
+
+    def test_selected_compiler_workers_are_pinned_without_mutating_source_snapshot(self):
+        snap = snapshot()
+        key = snap["bindings"][0]["key"]
+        snap["bindings"][0]["identity"]["flags"]["compile_jobs"] = "1"
+        config = copy.deepcopy(self.config)
+        config["dependency_context"]["selected_binding_compile_jobs"] = {key: "10"}
+        expanded = self.expand(snap=snap, config=config)
+        before = manifest(expanded, "a")
+        self.assertEqual(snap["bindings"][0]["identity"]["flags"]["compile_jobs"], "1")
+        row = next(r for r in expanded["requirements"] if r["id"] == "compile-nvidia/" + key)
+        self.assertEqual(row["resolved_inputs"]["binding"]["flags"]["compile_jobs"], "10")
+        config["dependency_context"]["selected_binding_compile_jobs"][key] = "32"
+        after = manifest(self.expand(snap=snap, config=config), "b")
+        changed = {rid for rid, row in before["requirements"].items()
+                   if row["fingerprint"] != after["requirements"][rid]["fingerprint"]}
+        self.assertEqual(changed, {"compile-nvidia/" + key, "identity-nvidia/one"})
+
+    def test_selected_compiler_workers_refuse_unknown_or_invalid_allocations(self):
+        key = snapshot()["bindings"][0]["key"]
+        for mapping in ({"unknown": "10"}, {key: "0"}, {key: "-1"}, {key: "1.5"},
+                        {key: "01"}, {key: 10}, {key: True}, None):
+            with self.subTest(mapping=mapping), self.assertRaises(ValueError):
+                config = copy.deepcopy(self.config)
+                config["dependency_context"]["selected_binding_compile_jobs"] = mapping
+                self.expand(config=config)
+
     def test_cpu_compile_uses_explicit_execution_target(self):
         snap = snapshot()
         host = binding("host_one", "bytes", vendor="host", arch="", target="osx-arm64")
