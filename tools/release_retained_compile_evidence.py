@@ -232,8 +232,13 @@ def _dev_collect(root, document, producer):
     facts = _dev_facts(root, producer)
     # compile-cpu names one target; a macOS host build cannot qualify Linux CPU.
     cpu_target = (document or {}).get("configuration", {}).get("dependency_context", {}).get("cpu_target")
-    units, flags, apple = {}, set(), set()
+    units, flags, apple, workers = {}, set(), set(), {}
     for stem, group in facts["groups"].items():
+        # The builder records the actual worker setting in its content key. Keep
+        # it per binding; another job count has not been proven byte-neutral.
+        jobs = group["environment"].get("MOJOLEARN_COMPILE_JOBS")
+        require(isinstance(jobs, str) and re.fullmatch(r"[1-9][0-9]*", jobs),
+                "development compile worker count is missing or malformed: " + stem)
         flags.add(json.dumps(derived_build_flags(group["environment"], DEV_ROUTING), sort_keys=True))
         apple.add(json.dumps(group["host_toolchain"], sort_keys=True))
         for name in group["members"]:
@@ -243,11 +248,18 @@ def _dev_collect(root, document, producer):
             else:
                 key = f"{MAC}/metal/apple/{group['mode']}/{name}"
                 specs = ("compile-apple",)
+            require(key not in workers or workers[key] == jobs,
+                    "development compile worker counts conflict for: " + key)
+            workers[key] = jobs
             for spec in specs:
-                units[spec + "/" + key] = dict(group=stem, binding_key=key)
+                rid = spec + "/" + key
+                require(rid not in units or units[rid]["group"] == stem,
+                        "development groups conflict for binding: " + key)
+                units[rid] = dict(group=stem, binding_key=key)
     require(len(flags) == 1 and len(apple) == 1, "development groups used different build flags or Apple toolchains")
     configuration = dict(release_modes=["identical"], build_flags=json.loads(flags.pop()),
-                         dependency_context=dict(apple_toolchain=json.loads(apple.pop()), cpu_target=MAC))
+                         dependency_context=dict(apple_toolchain=json.loads(apple.pop()), cpu_target=MAC,
+                                                 selected_binding_compile_jobs=workers))
     return dict(source_revision=facts["source_revision"], facts=facts, units=units, configuration=configuration,
                 spec_ids=sorted({rid.split("/", 1)[0] for rid in units}))
 
