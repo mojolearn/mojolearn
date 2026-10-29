@@ -658,6 +658,12 @@ cp "$OUT/create_response.json" "$TMPD/rp.body"
 COST_HR=$(rp_py cost)
 say "pod $POD_ID created. COST \$${COST_HR:-?}/hr"
 
+# CPU creation still uses the supported v1 CPU schema, but its legacy status
+# endpoint returned 403 for a live pod on 2026-10-29. The v2 status response
+# supplies ssh.direct and the shared parser already validates that shape.
+# Switch before readiness, guard readback and later lifecycle operations;
+# never interpret a deprecated-endpoint failure as a dead or unready pod.
+rp_select_api 2
 _deadline=$(( $(now) + READY_TIMEOUT ))
 while [ "$(now)" -lt "$_deadline" ]; do
     rp_call GET "$RP/pods/$POD_ID"
@@ -673,7 +679,7 @@ cp "$TMPD/rp.body" "$OUT/pod_ready.json"
 say "ssh up ($SSH_TARGET) after $((T_SSH - T_POST))s; cost \$${COST_HR:-?}/hr"
 ARCHIVE_STATE="${MOJOLEARN_DEVPOD_STATE:-$HOME/mojolearn-evidence/devpods}/cpu-$LANE-$POD_ID"
 mkdir -p "$ARCHIVE_STATE"
-{ printf 'PROVIDER=runpod\nPOD_ID=%q\nSSH_TARGET=%q\nOWNER=%q\n' "$POD_ID" "$SSH_TARGET" "cpu-leg:$LANE"; } > "$ARCHIVE_STATE/state.env"
+{ printf 'PROVIDER=runpod\nPOD_ID=%q\nSSH_TARGET=%q\nOWNER=%q\nRUNPOD_API_VERSION=2\n' "$POD_ID" "$SSH_TARGET" "cpu-leg:$LANE"; } > "$ARCHIVE_STATE/state.env"
 
 
 say "arming the ON-POD watchdog ($LEASE minutes)"
