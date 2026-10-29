@@ -115,3 +115,9 @@ _IMPORT_NATIVE, _IMPORT_CONTEXT = _native_import_bridge.connect(
 # Import-time connections; runtime dispatch is selected from the admitted native owner.
 _RUN_NATIVE = _IMPORT_CONTEXT["run_entry"]
 _TORCH_RUN_NATIVE = _IMPORT_CONTEXT["torch_entry"]
+
+# Register only when this importer module is loaded. This does not import
+# optional frameworks; native program admission consumes the initialized owner.
+import sys as _native_module_sys
+from .._native_loaded_modules import connect_module as _connect_native_module
+_connect_native_module(__name__, _native_module_sys.modules[__name__], ('_IMPORT_CONTEXT',))

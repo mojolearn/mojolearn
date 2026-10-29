@@ -13,6 +13,14 @@ _ENTRY = None
 _CONTEXT = None
 
 
+def _connect_context_module():
+    # glue: archive admission retains the initialized shared family owner,
+    # including the explicit unavailable-owner state on partial installations.
+    import sys
+    from ._native_loaded_modules import connect_module
+    connect_module(__name__, sys.modules[__name__], ('_CONTEXT',))
+
+
 def _unavailable(error):
     # glue: an install without the compiled owner keeps the package
     # importable; a connected method then explains what is missing.
@@ -32,6 +40,7 @@ def shared_context():
         context = _state_context()
         context.update(family_builtin_type=BuiltinFunctionType)
         _CONTEXT = context
+        _connect_context_module()
     return _CONTEXT
 
 
@@ -53,6 +62,7 @@ def connect():
         _ENTRY = _unavailable(error)
         if _CONTEXT is None:
             _CONTEXT = {"family_unavailable": str(error)}
+            _connect_context_module()
         return _ENTRY, _CONTEXT
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT

@@ -707,6 +707,10 @@ class NumericModeMixin(ParamsMixin):
 # replacing any method identities captured by other native owner layouts.
 from ._native_mode_metadata import connect as _connect_mode_metadata
 _MODE_METADATA, _MODE_METADATA_CONTEXT = _connect_mode_metadata()
+from ._native_loaded_modules import connect_module as _connect_native_module
+# GP lifecycle admission reads this initialized owner without importing or
+# invoking Python. Later class connections extend the same metadata dictionary.
+_connect_native_module(__name__, sys.modules[__name__], ('_MODE_METADATA_CONTEXT',))
 from ._native_params_metadata import connect as _connect_params_metadata
 _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT = _connect_params_metadata()
 # The generic public attribute and parameter-setter slots of every class

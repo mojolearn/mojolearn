@@ -1387,3 +1387,9 @@ def connect_helpers(resolve):
              ("strided_copy_bytes", resolve("strided_copy_bytes")),
              ("equal_elements", resolve("equal_elements")))
     _ARRAY_CONTEXT["helpers"].update(item for item in found if item[1] is not None)  # glue: four fixed helper names
+
+
+# SmallMLP's native strided-Array admission consumes the same helper owner.
+# Helpers added during core connection mutate this dictionary in place.
+from ._native_loaded_modules import connect_module as _connect_native_module
+_connect_native_module(__name__, sys.modules[__name__], ('_ARRAY_CONTEXT',))

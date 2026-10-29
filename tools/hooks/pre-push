@@ -110,6 +110,16 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     elif [ -n "$tomb_base" ] && git cat-file -e "$tomb_base:$tomb_test" 2>/dev/null; then
         echo "pre-push: REFUSED: $local_ref deletes $tomb_test (the tombstone fence)" >&2; exit 4
     fi
+    # Literal native package-owner requests must have reviewed setup exports.
+    # Run the pushed tree's checker against that tree, not this worktree's files.
+    if git cat-file -e "$local_sha:tools/check_native_package_connections.py" 2>/dev/null; then
+        connections=$(mktemp "${TMPDIR:-/tmp}/native-package-connections.XXXXXX") || exit 4
+        git show "$local_sha:tools/check_native_package_connections.py" >"$connections" || exit 4
+        python3 "$connections" --root "$top" --tree "$local_sha"
+        status=$?
+        rm -f "$connections"
+        [ $status -eq 0 ] || { echo "pre-push: REFUSED by native package connection declarations" >&2; exit 4; }
+    fi
     # the no-Python-in-kernels check (2026-10-21), same branch/main judging rule
     if [ -f "$here/no_python_in_kernels.py" ]; then python3 "$here/no_python_in_kernels.py" --tree "$local_sha" $mode || exit 4; fi
     # the no-compute-in-shells check (2026-10-21), same branch/main judging rule

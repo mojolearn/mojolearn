@@ -33,5 +33,40 @@ class HierarchyAttributeConnection(unittest.TestCase):
         self.assertEqual(model.labels_.shape, (8,))
 
 
+class NativeMetadataOwnerConnections(unittest.TestCase):
+    def test_initialized_owner_exports_are_connected_without_framework_imports(self):
+        import importlib
+        import sys
+        import mojolearn
+        from mojolearn import _native_loaded_modules
+        frameworks_before = {name for name in ('torch', 'onnx', 'tensorflow') if name in sys.modules}
+        owners = {
+            'mojolearn._array': '_ARRAY_CONTEXT',
+            'mojolearn._expansion_trees': '_TREES_CONTEXT',
+            'mojolearn._mode': '_MODE_METADATA_CONTEXT',
+            'mojolearn._native_family_bridge': '_CONTEXT',
+            'mojolearn.importers._program': '_IMPORT_CONTEXT',
+        }
+        for name, export in owners.items():
+            module = importlib.import_module(name)
+            records = [row for row in _native_loaded_modules.CONNECTIONS if row[0] == name]
+            self.assertEqual(len(records), 1, name)
+            self.assertIs(records[0][1], module)
+            self.assertIs(dict(records[0][2])[export], vars(module)[export])
+        self.assertEqual(frameworks_before, {name for name in ('torch', 'onnx', 'tensorflow') if name in sys.modules})
+
+    def test_gp_fit_predict_uses_connected_mode_metadata(self):
+        import numpy as np
+        import mojolearn as ml
+        x = np.array([[-2, -1], [-1, 1], [0, -2], [1, 2], [2, 0]], dtype=np.float32)
+        y = np.array([-1, 0, 1, 2, 3], dtype=np.float32)
+        model = ml.GaussianProcessRegressor(kernel=ml.RBF(1.0), alpha=2.0 ** -20)
+        self.assertIs(model.fit(x, y), model)
+        self.assertEqual(model.info_, 0)
+        result = model.predict(x)
+        self.assertEqual(result.shape, (5,))
+        self.assertTrue(np.isfinite(result).all())
+
+
 if __name__ == '__main__':
     unittest.main()

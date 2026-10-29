@@ -49,6 +49,11 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # `predict_proba` are one native call each (bindings/trees_public_forest.mojo;
 # splitter='random' grows one extra-trees tree there).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
+import sys as _native_module_sys
+from ._native_loaded_modules import connect_module as _connect_native_module
+# Bagging member publication uses this owner after the module's lazy import;
+# subsequent class installation extends its existing tables in place.
+_connect_native_module(__name__, _native_module_sys.modules[__name__], ('_TREES_CONTEXT',))
 
 __all__ = [
     "DecisionTreeClassifier",
