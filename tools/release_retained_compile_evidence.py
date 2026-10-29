@@ -164,7 +164,7 @@ def require_closure(tree, wanted):
 DEV_ROUTING = set(FLAG_ENV.values()) | set(DEV_PLACEMENT) | set(GLUE_INTERPRETERS)
 
 
-def _dev_group(row, repo, cache, tree):
+def _dev_group(row, repo, cache, tree, *, binary_path=None, cpu_contract=False):
     import development_build as devb
     fields = row["fields"]
     require(row["key"] == devb.digest(fields) and fields.get("schema") == DEV_KEY_SCHEMA
@@ -191,7 +191,7 @@ def _dev_group(row, repo, cache, tree):
     require(receipt.get("key") == row["key"] and receipt.get("fields") == fields
             and type(receipt.get("exit_code")) is int and receipt["exit_code"] == 0
             and HEX64.fullmatch(str(receipt.get("sha256"))), "development compile receipt differs: " + row["stem"])
-    binary = repo / "python/mojolearn" / row["mode"] / ".development" / row["key"] / (row["stem"] + ".so")
+    binary = binary_path or repo / "python/mojolearn" / row["mode"] / ".development" / row["key"] / (row["stem"] + ".so")
     binary_ref = reference(binary)
     require(binary_ref["sha256"] == receipt["sha256"], "compiled binary differs from its receipt: " + row["stem"])
     for path, sha in source["files"].items():
@@ -201,8 +201,15 @@ def _dev_group(row, repo, cache, tree):
     for path, sha in fields["builders"]["scripts"].items():
         require(path in tree.files and hashlib.sha256(recipe_text(tree.text(path)).encode()).hexdigest() == sha,
                 "development builder recipe differs from the tested revision: " + path)
+    host_toolchain = toolchain["apple"]
+    if cpu_contract:
+        import macos_cpu_compile_contract as cpu
+        require(row["mode"] == "host", "CPU link contract cannot qualify a device image")
+        lock_hash = toolchain["locked"].get("pixi_lock_sha256")
+        require(lock_hash == tree.sha256("pixi.lock"), "compiled CPU lock differs from frozen source")
+        host_toolchain = cpu.contract(toolchain["compiler_sha256"], lock_hash, cpu.read_image(binary))
     return dict(mode=row["mode"], key=row["key"], members=list(row["members"]), environment=dict(environment),
-                toolchain_locked=toolchain["locked"], host_toolchain=toolchain["apple"],
+                toolchain_locked=toolchain["locked"], host_toolchain=host_toolchain,
                 compiler_sha256=toolchain["compiler_sha256"], source_files=dict(source["files"]),
                 receipt=reference(receipt_path), binary=binary_ref)
 

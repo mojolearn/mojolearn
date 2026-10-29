@@ -24,6 +24,9 @@ Adapters (``--adapter``):
   mac-development-build   compile-apple bindings (and compile-cpu when the ledger's
                           cpu_target is osx-arm64) from a tools/development_build.py
                           result.json   (--producer result=)
+  mac-selected-development-build successful selected Mac host groups, including
+                          incomplete full sets; exact source/cache bytes and CPU
+                          link contract required (--producer result=)
   mac-host-family-build  custom Mac host-family receipts (original Apple toolchain witness required)
                           (--producer receipt=)
   linux-development-build Linux selected development groups (whole set may be incomplete)
@@ -75,6 +78,7 @@ LIMITATION = ("No pre-run ledger fingerprint existed for this producer run. Requ
 # producers of one kind; the report names its adapter explicitly.
 ADAPTERS = {
     "mac-development-build": ("release_retained_compile_evidence", "compile"),
+    "mac-selected-development-build": ("release_macos_selected_development_evidence", "compile"),
     "linux-development-build": ("release_linux_development_evidence", "compile"),
     "gha-development-build": ("release_gha_development_evidence", "compile"),
     "mac-host-family-build": ("release_macos_host_family_evidence", "compile"),
