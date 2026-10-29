@@ -577,7 +577,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             extended = extended or tail[i] != default_tail[i]
         py_setitem(fields, "_extended", PythonObject(extended))
         py_setitem(fields, "_gated", PythonObject(gated))
-        if String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        if String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1") == "1":
             py_setitem(fields, "_runtime_lock", operation_lock_create())
             mods.released()
         else:
@@ -585,7 +585,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             mods.released()
         var session = PythonObject(None)
         var session_binding = PythonObject(None)
-        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1") == "1":
             if _native_has_entry(mods, bindings[kind], "transformer_session_create"):
                 session = _native_function(mods, bindings[kind], "transformer_session_create")()
                 mods.released()

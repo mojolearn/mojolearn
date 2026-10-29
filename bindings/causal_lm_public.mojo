@@ -1368,6 +1368,10 @@ def _use_native_generation_engine(mut mods: NativeModules, model: PythonObject, 
         return True
     if setting != "auto":
         return False
+    # Explicit dispatch opt-out keeps automatic selection on its supported
+    # compatibility route. A forced engine still reports admission failures.
+    if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1") != "1":
+        return False
     var entries = model._native_entries
     if py_get(entries, "parallel_call") is not None or model._head_int15 is not None:
         return False

@@ -38,7 +38,7 @@ def test_resident_profile_mismatch_keeps_legacy_diagnostic(tmp_path):
     with pytest.raises(Exception, match="state arithmetic profile differs"):
         model.forward(np.array([[1]], dtype="i4"), state)
     assert state.layers[0].cached_tokens == 0
-    assert model._resident_sessions is None
+    assert getattr(model, "_resident_sessions", None) is None
 
 
 def test_changed_profile_unlabelled_cache_keeps_legacy_diagnostic(tmp_path):
@@ -49,7 +49,7 @@ def test_changed_profile_unlabelled_cache_keeps_legacy_diagnostic(tmp_path):
     model._blocks[0]._arithmetic_profile_changed = True
     with pytest.raises(Exception, match="cached state requires arithmetic profile metadata"):
         model.forward(np.array([[1]], dtype="i4"), state)
-    assert model._resident_sessions is None
+    assert getattr(model, "_resident_sessions", None) is None
 
 
 @pytest.mark.parametrize("family,entry,value", [
