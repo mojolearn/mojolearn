@@ -4,7 +4,6 @@ Requires the selected native SmallMLP owner and installed Torch. Missing either
 is a failure, not a skipped qualification. No GPU computation is needed: these
 cases fail at native iteration before training/prediction.
 """
-from contextlib import closing
 import pytest
 import torch
 from mojolearn import SmallMLPTrainer
@@ -20,10 +19,10 @@ def _trainer():
 
 
 def test_unsupported_gradient_container_is_a_type_refusal():
-    with closing(_trainer()) as model:
-        with pytest.raises(TypeError):
-            model.apply_gradients(object())
-        assert model.step_ == 0
+    model = _trainer()
+    with pytest.raises(TypeError):
+        model.apply_gradients(object())
+    assert model.step_ == 0
 
 
 def test_admitted_tensor_unbind_failure_keeps_exception_type_and_message():
@@ -32,11 +31,11 @@ def test_admitted_tensor_unbind_failure_keeps_exception_type_and_message():
     value = torch.tensor(1.0)
     with pytest.raises(Exception) as expected:
         value.unbind(0)
-    with closing(_trainer()) as model:
-        with pytest.raises(type(expected.value)) as actual:
-            model.apply_gradients(value)
-        assert str(actual.value) == str(expected.value)
-        assert model.step_ == 0
+    model = _trainer()
+    with pytest.raises(type(expected.value)) as actual:
+        model.apply_gradients(value)
+    assert str(actual.value) == str(expected.value)
+    assert model.step_ == 0
 
 
 def test_tensor_mode_refusal_remains_specific_and_does_not_call_user_hook():
@@ -47,8 +46,8 @@ def test_tensor_mode_refusal_remains_specific_and_does_not_call_user_hook():
             calls.append(func)
             raise AssertionError("user Torch mode executed")
     value = torch.ones((4, 1))
-    with closing(_trainer()) as model:
-        with Mode(), pytest.raises(TypeError, match="TorchFunctionMode"):
-            model.apply_gradients(value)
-        assert calls == []
-        assert model.step_ == 0
+    model = _trainer()
+    with Mode(), pytest.raises(TypeError, match="TorchFunctionMode"):
+        model.apply_gradients(value)
+    assert calls == []
+    assert model.step_ == 0
