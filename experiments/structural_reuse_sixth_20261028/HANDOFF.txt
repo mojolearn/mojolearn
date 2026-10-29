@@ -61,3 +61,11 @@ box created for this integration. Remaining resident GPU greedy/EOS batch needs
 root review; sampling remains unsupported on the proposed path pending suitable
 arithmetic support. Other agents continue metrics result reuse, bridge setup and
 source-policy reconciliation. No completed-library or speed claim.
+
+Initial normal main push refused by the runtime-source inventory: the new explicit
+_native_constructor class keyword was still classified as an unresolved metaclass
+and its constructor as mode-wrapped. Eight original/inference class entries raised
+the unresolved count237 above unchanged pin229. This is a source-gate failure,
+not a compile failure; complete push log retained. Owning agent repairs the narrow
+class-creation classification with regression checks, without baseline/pin growth.
+The first refused push did not update origin/main.
