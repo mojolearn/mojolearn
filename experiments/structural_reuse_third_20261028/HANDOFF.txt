@@ -13,7 +13,7 @@ owns reusable native workspace; atomic claim isolates overlap with transient
 scratch. Launch words refresh, output resets, owners pinned finally. CausalLM
 CPU forward/generate compile. Limits: Python admission and overlap allocation.
 
-2. f3330f17fe neural_descriptor_reuse_20261028 (admission follow-up)
+2. f3330f17fe neural_descriptor_admission_20261028
 Removed dict.keys/list materialization, duplicate module/builtins validation and
 throwaway owner construction. Live keys still checked every admission by native
 iteration. CausalLM CPU compile. Mutable metadata scans remain.
@@ -31,7 +31,7 @@ ownership and return finally. HostExec replay/constructor/add/free/close compile
 First borrow-alias compile failed, retained; supported move ownership repair passed.
 Retains duplicate scalar metadata/max capacity; no tensor/address cache.
 
-5. ed678da77d neural_descriptor_function_owner_20261028
+5. ed678da77d neural_descriptor_owner_20261028
 Exact native function ownership reads use PyCFunction_GetSelf instead of __self__
 attribute dispatch/temporary wrappers. Identity checks remain; cold connect owns
 module reference. CausalLM CPU compile. CPython boundary/admission still exists.
@@ -113,3 +113,11 @@ Root fetched/rebased its unpushed operand commit, preserved both histories and
 failed push log, then pushed successfully. No other worktree modified. Push/merge
 logs: ~/mojolearn-evidence/structural-reuse-third-20261028/. Audit tables owned by
 that other session remain untouched; new reviews live in their own experiment dirs.
+
+16. label_type_reuse_20261028 (commit in main log)
+Four native label walks reuse scalar classification per encountered exact type.
+Every element is still checked; owner List pins type identities against address
+reuse. Each cache ends before sorting/conversion/numerical dispatch; mixed/NaN/
+depth/error order preserved. Nested flatten captures container types/append once.
+Actual prep_owner_c and label accuracy CPU compile passed. Other label/input
+owners remain separate; every element still needs type inspection/native lookup.
