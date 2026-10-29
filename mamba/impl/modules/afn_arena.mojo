@@ -39,6 +39,7 @@ struct MambaArena(Movable):
     var off: Int
     var guard: Int
     var views: Int
+    var reset_view: Optional[DeviceBuffer[DType.float32]]
 
     @staticmethod
     def slot(n: Int, guard: Int) -> Int:
@@ -66,6 +67,7 @@ struct MambaArena(Movable):
         self.off = 0
         self.guard = guard
         self.views = 0
+        self.reset_view = None
         comptime if _AFN_POISON:
             self.base.enqueue_fill(bitcast[DType.float32](UInt32(0x7FC00000)))
         else:
@@ -73,6 +75,22 @@ struct MambaArena(Movable):
             # no wait; every reader is enqueued after it on the same
             # in-order context).
             self.base.enqueue_fill(Float32(0.0))
+
+    def reset(mut self, used: Int) raises:
+        """Reuse after the previous call synchronized and dropped every view.
+        Fill only this call's logical layout, preserving poison/zero policy.
+        Retain the fill view until the next reset so its queued fill owns a live
+        view without adding a preparation wait.
+        """
+        if used < 0 or used > self.cap:
+            raise Error("MambaArena.reset: logical layout exceeds capacity")
+        self.off = 0
+        self.views = 0
+        self.reset_view = self.base.create_sub_buffer[DType.float32](0, max(1, used))
+        comptime if _AFN_POISON:
+            self.reset_view.value().enqueue_fill(bitcast[DType.float32](UInt32(0x7FC00000)))
+        else:
+            self.reset_view.value().enqueue_fill(Float32(0.0))
 
     def take(mut self, ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
         """A view of `max(n, 1) + guard` floats, 256 B aligned."""

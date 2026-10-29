@@ -238,6 +238,7 @@ from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
 
 from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API, mamba_state_operation
 from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API
+from mamba.native_workspace_dispatch import NATIVE_MAMBA2_WORKSPACE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from mamba.impl.mamba_shell_impl import (
@@ -372,6 +373,11 @@ def mamba3_tape_handle_native_binding(tape: PythonObject) raises -> PythonObject
 
 def mamba_block_api_binding() raises -> PythonObject:
     var api = NATIVE_MAMBA_BLOCK_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def mamba2_workspace_api_binding() raises -> PythonObject:
+    var api = NATIVE_MAMBA2_WORKSPACE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
@@ -1536,6 +1542,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba1_profile_binding]("mamba1_profile")
         m.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         m.def_function[mamba_block_api_binding]("mamba_block_api_v1")
+        m.def_function[mamba2_workspace_api_binding]("mamba2_workspace_api_v1")
         m.def_function[mamba3_tape_create_native_binding]("mamba3_tape_create_native_v1")
         m.def_function[mamba3_tape_handle_native_binding]("mamba3_tape_handle_native_v1")
         m.def_function[mamba_prefill_native_handle_binding]("mamba_prefill_native_handle_v1")

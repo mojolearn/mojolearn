@@ -1,0 +1,83 @@
+Public Mamba2 step native workspace (2026-10-28)
+
+Branch: lane/mamba2-public-workspace-20261028; base d9112047fd.
+Optional ABI prerequisite: a4e7cda0f87a66f7b23e4b275909b9ee909c5a3b.
+Provider connection/lifetime is a separately compiled generation-agent batch.
+
+Actual default route:
+IDN_MAMBA_ARENA is ON by default for identical GPU. That existing route already
+avoids the reported nine host weight Lists and separate allocations. The first
+source draft missed that distinction; review caught it before integration.
+The final change retains the existing arena allocation across public steps.
+Capacity uses B/d_model and the contract maximum q0=CHUNK_SIZE-1 with L=1.
+Current q0 still determines every logical offset/view. Repeated calls zero only
+the current used prefix (or poison it under the existing guard build policy),
+never maximum capacity. The initial allocation fills capacity once. A retained
+reset view keeps its fill alive without adding a wait. The same shared arena
+executor uploads all live bytes, calls mamba2_block_forward and downloads the
+same outputs/state. No per-step transfer or arithmetic work was added.
+
+Arena-off supported route:
+Retains nine device weight buffers, four constructor-owned state buffers and
+exact B*d_model input storage. Removes repeated host weight/state/input Lists,
+four temporary state upload buffers/device-to-device copies, repeated device
+allocations and per-weight upload waits. One preparation synchronization follows
+all live refreshes. Stage allocations remain per step on this opt-out route.
+
+Mutability and lifetime:
+Every step copies ALL incoming weight/state/input bytes; weights_checked resets
+before existing named finite checks (fresh weight views default False in arena).
+Pointer identity never makes public contents immutable. Public y/h_last_ remain
+fresh escaped objects; no private immutable-weight decode session substitution.
+B/d_model/device-plan-root changes clear storage. Provider plan/backend/image/
+Array metadata invalidation remains in provider resource ownership. The native
+resource is pinned with its image through synchronous dispatch.
+An atomic nonblocking claim admits one cached user; concurrent/reentrant callers
+use private temporary storage. On failure the original operation error survives
+best-effort drains, all cache storage is dropped, then the lease is released.
+Optional owners pin every successfully constructed arena view across partial
+construction/uploads/compute/download failure drains. Clear drains before and
+after device-buffer destruction while retaining the context. Close refuses an
+active lease; provider pins normally make that race inadmissible.
+State buffers on arena-off retain constructor allocations, preserving the
+existing documented AMD field-replacement fault avoidance.
+
+Remaining work/tradeoffs:
+The default arena still reconstructs small view/layout metadata each call; its
+GPU allocation is retained. Maximum-q capacity may retain more memory than a
+single early-sequence call needs; this is a contract-derived bound, not a
+benchmark shape rule. Arena-off stages remain freshly zeroed per call. Other
+families, ordinary forward and older binding images retain established routes.
+No measurement or demonstrated speed claim is made.
+
+Validation:
+Final compile_native.json and compile_arena_off.json qualify the actual native
+GPU create/close/step descriptor plus capsule factory, Apple identical O0,
+10 configured workers per invocation through compile_slot. No COLUMN_CPU
+substitution. CPU host compilation does not mean CPU numerical execution.
+Provider neural_block_forward_binding CPU closure has a separate generation-
+agent receipt; together these compile each side of the dynamic ABI, not runtime
+loading or dispatch. No artifacts executed. NVIDIA/AMD compilation, runtime,
+identity and performance remain unqualified.
+
+Source review caught arena-default coverage and exceptional view lifetimes /
+error masking. All pre-repair compiles passed; none is final runtime evidence.
+Complete original logs/source/binaries are retained in native-attempt1,
+native-delegation-attempt2, native-before-error-repair and
+arena-off-before-error-repair. Their original receipt paths refer to the former
+native/arena-off locations; map filenames into those retained directories.
+Final logs/binary/source bytes:
+  ~/mojolearn-evidence/mamba2-public-workspace-20261028/native/
+  ~/mojolearn-evidence/mamba2-public-workspace-20261028/arena-off/
+Each contains compile.log/compile.json, _mamba2_public_workspace.so,
+source-bytes.tgz and source-manifest.json. Source guards and retained hash
+receipts accompany the final commit. No runtime/identity/performance campaign.
+
+Final status: native default compile exit 0 (35.51 s); arena-off compile exit 0
+(34.69 s). no_host_routes, no_python_in_kernels, no_compute_in_shells and
+rebuild_fence all exit 0 without override. Thirty retained-file/source checks
+matched: all six compile artifacts/source archives and final changed source
+bytes, plus complete logs. Source review by generation and neural peers found
+no remaining blocker after the documented repairs; no duplicate peer builds.
+Provider executable source ec6f1fbc1d compiled the real shared public boundary;
+its evidence and guard handoff are owned by generation agent.

@@ -20,6 +20,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
+from core.device_plan import device_plan_root
 from core.device_scan import device_first_nonfinite
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralMambaContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralMambaContextFast"
@@ -593,6 +594,154 @@ def _mamba2_run(
     return out_len
 
 
+struct Mamba2PublicWorkspace(Movable):
+    """Private public-step storage, never an immutable-weight decode session.
+
+    The provider pins its compiled image and this owner until dispatch returns.
+    The native descriptor loans storage exclusively; concurrent calls use their
+    own temporary workspace. All incoming bytes are refreshed on every call.
+    """
+    var ctx: Optional[DeviceContext]
+    var arena: Optional[MambaArena]
+    var weights: Optional[Mamba2DeviceWeights]
+    var state: Optional[Mamba2DeviceState]
+    var dx: Optional[DeviceBuffer[DType.float32]]
+    var b: Int
+    var dm: Int
+    var device: Int
+
+    def __init__(out self):
+        self.ctx = None
+        self.arena = None
+        self.weights = None
+        self.state = None
+        self.dx = None
+        self.b = 0
+        self.dm = 0
+        self.device = -1
+
+    def clear(mut self) raises:
+        # Drain all outstanding transfers before releasing their buffers. A
+        # failed call never makes partially refreshed storage available again.
+        try:
+            if self.ctx:
+                self.ctx.value().synchronize()
+        finally:
+            self.dx = None
+            self.state = None
+            self.weights = None
+            self.arena = None
+            try:
+                # Device frees may enqueue work too. Preserve the context
+                # until their completion, as the existing session release does.
+                if self.ctx:
+                    self.ctx.value().synchronize()
+            finally:
+                self.ctx = None
+                self.b = 0
+                self.dm = 0
+                self.device = -1
+
+
+def _mamba2_workspace_step(
+    mut workspace: Mamba2PublicWorkspace, a: List[Int], b: Int, dm: Int,
+    q0: Int, dt_lo: Float32, dt_hi: Float32,
+) raises -> Int:
+    # Same first refusals as _mamba2_run; no pointer-identity weight cache.
+    var dims = Mamba2Dims.of(dm)
+    var di = dims.d_inner
+    var cd = dims.conv_dim()
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    if q0 < 0 or q0 >= M2_CHUNK_SIZE:
+        raise Error(
+            String("mamba2: buf_len must be in [0, ")
+            + String(M2_CHUNK_SIZE)
+            + "), got "
+            + String(q0)
+            + "; the open-chunk buffer holds at most CHUNK_SIZE - 1 rows"
+            " between calls (contract section 5), so the two sides of this"
+            " boundary disagree about the state"
+        )
+    var device = max(0, device_plan_root())
+    comptime if AFN_MAMBA_ARENA:
+        # The default identical GPU route already groups all buffers into one
+        # arena. Retain that allocation without changing its logical views.
+        # q0 is bounded by the state contract; L=1, hence this capacity covers
+        # every legal next step, independent of any benchmark shape.
+        if not workspace.ctx or workspace.b != b or workspace.dm != dm or workspace.device != device:
+            workspace.clear()
+            workspace.ctx = neural_ctx[_NEURAL_CTX]()
+            workspace.arena = MambaArena(workspace.ctx.value(),
+                mamba2_arena_floats(b, 1, M2_CHUNK_SIZE - 1, dims), MAMBA_GUARD)
+            workspace.b = b
+            workspace.dm = dm
+            workspace.device = device
+        else:
+            workspace.arena.value().reset(mamba2_arena_floats(b, 1, q0, dims))
+        return _mamba2_arena_execute(workspace.ctx.value(), workspace.arena.value(),
+                                    a, b, 1, dm, q0, dt_lo, dt_hi, dims)
+    if not workspace.ctx or workspace.b != b or workspace.dm != dm or workspace.device != device:
+        workspace.clear()
+        workspace.ctx = neural_ctx[_NEURAL_CTX]()
+        ref setup_ctx = workspace.ctx.value()
+        workspace.weights = Mamba2DeviceWeights(setup_ctx, dims)
+        # Constructor-owned state buffers are NEVER replaced individually:
+        # the original _mamba2_run records the AMD field-replacement fault.
+        workspace.state = Mamba2DeviceState(setup_ctx, b, dims)
+        workspace.dx = mamba_zeros(setup_ctx, b * dm)
+        workspace.b = b
+        workspace.dm = dm
+        workspace.device = device
+    ref ctx = workspace.ctx.value()
+    ref weights = workspace.weights.value()
+    ref state = workspace.state.value()
+    ref dx = workspace.dx.value()
+    weights.weights_checked = False
+    mamba_copy_in(ctx, weights.norm_w, f32_ptr(a[1]), dm)
+    mamba_copy_in(ctx, weights.w_in, f32_ptr(a[2]), dip * dm)
+    mamba_copy_in(ctx, weights.conv_w, f32_ptr(a[3]), cd * M2_D_CONV)
+    mamba_copy_in(ctx, weights.conv_b, f32_ptr(a[4]), cd)
+    mamba_copy_in(ctx, weights.dt_bias, f32_ptr(a[5]), nh)
+    mamba_copy_in(ctx, weights.a_log, f32_ptr(a[6]), nh)
+    mamba_copy_in(ctx, weights.d_skip, f32_ptr(a[7]), nh)
+    mamba_copy_in(ctx, weights.gnorm_w, f32_ptr(a[8]), di)
+    mamba_copy_in(ctx, weights.w_out, f32_ptr(a[9]), dm * di)
+    var h_n = b * nh * M2_HEADDIM * M2_D_STATE
+    mamba_copy_in(ctx, state.conv_win, f32_ptr(a[10]), b * cd * M2_D_CONV)
+    mamba_copy_in(ctx, state.h, f32_ptr(a[11]), h_n)
+    mamba_copy_in(ctx, state.buf_xbc, f32_ptr(a[12]), b * M2_CHUNK_SIZE * cd)
+    mamba_copy_in(ctx, state.buf_dtraw, f32_ptr(a[13]), b * M2_CHUNK_SIZE * nh)
+    mamba_copy_in(ctx, dx, f32_ptr(a[0]), b * dm)
+    ctx.synchronize()
+    state.buf_len = q0
+    # q0 changes each step; stages encode q0 + L and chunk counts. Keep their
+    # original fresh zero initialization until capacity/logical spans are split.
+    var stages = Mamba2DeviceStages(ctx, b, 1, q0, dims)
+    try:
+        var trace = IdentityTrace.disabled()
+        mamba2_block_forward(ctx, stages, state, weights, dx, b, 1,
+                            dt_lo, dt_hi, trace, String("py"))
+        _m3_download_addr[False](ctx, stages.residual_out, b * dm, a[14])
+        _m3_download_addr[False](ctx, stages.h_last, h_n, a[15])
+        _m3_download_addr[False](ctx, state.conv_win, b * cd * M2_D_CONV, a[10])
+        _m3_download_addr[False](ctx, state.h, h_n, a[11])
+        _m3_download_addr[False](ctx, state.buf_xbc, b * M2_CHUNK_SIZE * cd, a[12])
+        _m3_download_addr[False](ctx, state.buf_dtraw, b * M2_CHUNK_SIZE * nh, a[13])
+    except problem:
+        # Keep stages and borrowed host owners live while draining partial work;
+        # a second device cleanup failure must not replace the operation error.
+        try:
+            ctx.synchronize()
+        except:
+            pass
+        _ = stages
+        raise problem^
+    ctx.synchronize()
+    _ = stages
+    return state.buf_len
+
+
 def _mamba2_run_arena(
     a: List[Int],
     b: Int,
@@ -622,46 +771,76 @@ def _mamba2_run_arena(
     var h_n = b * nh * M2_HEADDIM * M2_D_STATE
     var ctx = neural_ctx[_NEURAL_CTX]()
     var arena = MambaArena(ctx, mamba2_arena_floats(b, l, q0, dims), MAMBA_GUARD)
-    var dw = Mamba2DeviceWeights(ctx, dims, arena)
-    mamba_copy_in(ctx, dw.norm_w, _f32_ptr(a[1]), dm)
-    mamba_copy_in(ctx, dw.w_in, _f32_ptr(a[2]), dip * dm)
-    mamba_copy_in(ctx, dw.conv_w, _f32_ptr(a[3]), cd * M2_D_CONV)
-    mamba_copy_in(ctx, dw.conv_b, _f32_ptr(a[4]), cd)
-    mamba_copy_in(ctx, dw.dt_bias, _f32_ptr(a[5]), nh)
-    mamba_copy_in(ctx, dw.a_log, _f32_ptr(a[6]), nh)
-    mamba_copy_in(ctx, dw.d_skip, _f32_ptr(a[7]), nh)
-    mamba_copy_in(ctx, dw.gnorm_w, _f32_ptr(a[8]), di)
-    mamba_copy_in(ctx, dw.w_out, _f32_ptr(a[9]), dm * di)
-    var dstate = Mamba2DeviceState(ctx, b, dims, arena)
-    mamba_copy_in(ctx, dstate.conv_win, _f32_ptr(a[10]), b * cd * M2_D_CONV)
-    mamba_copy_in(ctx, dstate.h, _f32_ptr(a[11]), h_n)
-    mamba_copy_in(ctx, dstate.buf_xbc, _f32_ptr(a[12]), b * M2_CHUNK_SIZE * cd)
-    mamba_copy_in(ctx, dstate.buf_dtraw, _f32_ptr(a[13]), b * M2_CHUNK_SIZE * nh)
-    dstate.buf_len = q0
-    var dstages = Mamba2DeviceStages(ctx, b, l, q0, dims, arena)
-    var dx = arena.take(ctx, b * l * dm)
-    mamba_copy_in(ctx, dx, _f32_ptr(a[0]), b * l * dm)
+    return _mamba2_arena_execute(ctx, arena, a, b, l, dm, q0, dt_lo, dt_hi, dims)
 
-    var trace = IdentityTrace.disabled()
-    mamba2_block_forward(
-        ctx, dstages, dstate, dw, dx, b, l, dt_lo, dt_hi, trace, String("py")
-    )
 
-    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[14])
-    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[15])
-    _m3_download_addr[False](ctx, dstate.conv_win, b * cd * M2_D_CONV, a[10])
-    _m3_download_addr[False](ctx, dstate.h, h_n, a[11])
-    _m3_download_addr[False](ctx, dstate.buf_xbc, b * M2_CHUNK_SIZE * cd, a[12])
-    _m3_download_addr[False](ctx, dstate.buf_dtraw, b * M2_CHUNK_SIZE * nh, a[13])
-    ctx.synchronize()
-    var out_len = dstate.buf_len
-    _ = dw^
-    _ = dstate^
-    _ = dstages^
-    _ = dx^
-    _ = arena^
-    _ = ctx^
-    return out_len
+def _mamba2_arena_execute(
+    ctx: DeviceContext, mut arena: MambaArena, a: List[Int], b: Int, l: Int,
+    dm: Int, q0: Int, dt_lo: Float32, dt_hi: Float32, dims: Mamba2Dims,
+) raises -> Int:
+    # Shared one-shot/retained storage orchestration. Same logical view order,
+    # full mutable byte uploads, arithmetic entry and downloads on both routes.
+    var di = dims.d_inner
+    var cd = dims.conv_dim()
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    var h_n = b * nh * M2_HEADDIM * M2_D_STATE
+    var weights_owner = Optional[Mamba2DeviceWeights]()
+    var state_owner = Optional[Mamba2DeviceState]()
+    var stages_owner = Optional[Mamba2DeviceStages]()
+    var input_owner = Optional[DeviceBuffer[DType.float32]]()
+    try:
+        weights_owner = Mamba2DeviceWeights(ctx, dims, arena)
+        ref dw = weights_owner.value()
+        mamba_copy_in(ctx, dw.norm_w, _f32_ptr(a[1]), dm)
+        mamba_copy_in(ctx, dw.w_in, _f32_ptr(a[2]), dip * dm)
+        mamba_copy_in(ctx, dw.conv_w, _f32_ptr(a[3]), cd * M2_D_CONV)
+        mamba_copy_in(ctx, dw.conv_b, _f32_ptr(a[4]), cd)
+        mamba_copy_in(ctx, dw.dt_bias, _f32_ptr(a[5]), nh)
+        mamba_copy_in(ctx, dw.a_log, _f32_ptr(a[6]), nh)
+        mamba_copy_in(ctx, dw.d_skip, _f32_ptr(a[7]), nh)
+        mamba_copy_in(ctx, dw.gnorm_w, _f32_ptr(a[8]), di)
+        mamba_copy_in(ctx, dw.w_out, _f32_ptr(a[9]), dm * di)
+        state_owner = Mamba2DeviceState(ctx, b, dims, arena)
+        ref dstate = state_owner.value()
+        mamba_copy_in(ctx, dstate.conv_win, _f32_ptr(a[10]), b * cd * M2_D_CONV)
+        mamba_copy_in(ctx, dstate.h, _f32_ptr(a[11]), h_n)
+        mamba_copy_in(ctx, dstate.buf_xbc, _f32_ptr(a[12]), b * M2_CHUNK_SIZE * cd)
+        mamba_copy_in(ctx, dstate.buf_dtraw, _f32_ptr(a[13]), b * M2_CHUNK_SIZE * nh)
+        dstate.buf_len = q0
+        stages_owner = Mamba2DeviceStages(ctx, b, l, q0, dims, arena)
+        ref dstages = stages_owner.value()
+        input_owner = arena.take(ctx, b * l * dm)
+        ref dx = input_owner.value()
+        mamba_copy_in(ctx, dx, _f32_ptr(a[0]), b * l * dm)
+
+        var trace = IdentityTrace.disabled()
+        mamba2_block_forward(
+            ctx, dstages, dstate, dw, dx, b, l, dt_lo, dt_hi, trace, String("py")
+        )
+
+        _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[14])
+        _m3_download_addr[False](ctx, dstages.h_last, h_n, a[15])
+        _m3_download_addr[False](ctx, dstate.conv_win, b * cd * M2_D_CONV, a[10])
+        _m3_download_addr[False](ctx, dstate.h, h_n, a[11])
+        _m3_download_addr[False](ctx, dstate.buf_xbc, b * M2_CHUNK_SIZE * cd, a[12])
+        _m3_download_addr[False](ctx, dstate.buf_dtraw, b * M2_CHUNK_SIZE * nh, a[13])
+        ctx.synchronize()
+        var out_len = dstate.buf_len
+        return out_len
+    except problem:
+        # Partial upload, construction or kernel failure still drains while all
+        # successfully constructed views and the arena owner remain pinned.
+        try:
+            ctx.synchronize()
+        except:
+            pass
+        raise problem^
+    finally:
+        _ = input_owner
+        _ = stages_owner
+        _ = state_owner
+        _ = weights_owner
 
 
 # Resident Mamba-2 decode.  The arithmetic entry remains

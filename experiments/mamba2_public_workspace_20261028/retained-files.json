@@ -1,0 +1,164 @@
+[
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native/_mamba2_public_workspace.so",
+    "sha256": "1affbcf209b246fd222de3efa1d50c1632ce8117f7de55ee5cdc5d8081d3f94b",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native/source-bytes.tgz",
+    "sha256": "883d2051229ba19fffe1c53732a2e774f99e16088ea83b131f4ff450e368e367",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/arena-off/_mamba2_public_workspace.so",
+    "sha256": "e54ec4c76a0e896f34c4744d043cffb0bf597083b2f23dff192a5d33d45477f3",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/arena-off/source-bytes.tgz",
+    "sha256": "2f345d9d8b28d6d68925a4c855d096934a39ff66b6a3ae6aeca8ba247c7e2fad",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/arena-off/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native-attempt1/_mamba2_public_workspace.so",
+    "sha256": "91f35a3a2e197912777230716a82606768ec5f1d846efca8351162fc67bf4b28",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native-attempt1/source-bytes.tgz",
+    "sha256": "f71b684060926bed10801a14f32396986a3bc00bc32c889fce5282294a9843bc",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native-attempt1/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native-delegation-attempt2/_mamba2_public_workspace.so",
+    "sha256": "821667b12b2586896a3779c19c826e99c4c890f9db1f7bc86677f088f6353ee7",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native-delegation-attempt2/source-bytes.tgz",
+    "sha256": "5cc9b101e540403ee2e00a1cae1adf0c3f14dcff0193c8b0266054f8494e535e",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native-delegation-attempt2/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native-before-error-repair/_mamba2_public_workspace.so",
+    "sha256": "9beceb053be903ebee0cfc70b0d94d4518878f75ff5d4594dc120d0a6c6c9383",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native-before-error-repair/source-bytes.tgz",
+    "sha256": "06677e54a29e066d32dbdbcb87f0190414d7da52be30d831671d056fcb86a086",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/native-before-error-repair/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/arena-off-before-error-repair/_mamba2_public_workspace.so",
+    "sha256": "831dda639513008761d916baac652ac7fe204e0e5d7332fb470e7a123cc746d3",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/arena-off-before-error-repair/source-bytes.tgz",
+    "sha256": "ecb3ed0a968e0066820eb8af8a10eef4a3dee0fd1284dc08de559ad6e544f9e6",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/mamba2-public-workspace-20261028/arena-off-before-error-repair/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "source": "mamba/native_workspace_dispatch.mojo",
+    "compile": "native",
+    "sha256": "d7c0201a5b09e4c385d103ccae3daaa695efaa2906cf76b22a5ae1693c16bd71",
+    "matches_manifest": true
+  },
+  {
+    "source": "mamba/impl/mamba_shell_impl.mojo",
+    "compile": "native",
+    "sha256": "fab7443238a4fa5941229457c3b5c42b2f73b2334f85510109dc3e6e92a28d8c",
+    "matches_manifest": true
+  },
+  {
+    "source": "mamba/impl/modules/afn_arena.mojo",
+    "compile": "native",
+    "sha256": "96c1f23510f46f26574b584d9c09fa2200f3d03880863092d5f5e54509585c50",
+    "matches_manifest": true
+  },
+  {
+    "source": "mamba/impl/modules/mamba2.mojo",
+    "compile": "native",
+    "sha256": "477da5d16d41ab27324e2dfb3994cdea4b63c2d2188581ba2ad2a91c386872c2",
+    "matches_manifest": true
+  },
+  {
+    "source": "bindings/_mojolearn_mamba.mojo",
+    "compile": "native",
+    "sha256": "d1aeb1c391d0d204db975791fef08ea824959e59695e2556f088799269bc7f36",
+    "matches_manifest": true
+  },
+  {
+    "source": "core/native_mamba_workspace_abi.mojo",
+    "compile": "native",
+    "sha256": "fb3e92e1cafc4344199ed00d9a574dc076f51032a5dcaf694b85cfdfd4913f5f",
+    "matches_manifest": true
+  },
+  {
+    "source": "mamba/native_workspace_dispatch.mojo",
+    "compile": "arena-off",
+    "sha256": "d7c0201a5b09e4c385d103ccae3daaa695efaa2906cf76b22a5ae1693c16bd71",
+    "matches_manifest": true
+  },
+  {
+    "source": "mamba/impl/mamba_shell_impl.mojo",
+    "compile": "arena-off",
+    "sha256": "fab7443238a4fa5941229457c3b5c42b2f73b2334f85510109dc3e6e92a28d8c",
+    "matches_manifest": true
+  },
+  {
+    "source": "mamba/impl/modules/afn_arena.mojo",
+    "compile": "arena-off",
+    "sha256": "96c1f23510f46f26574b584d9c09fa2200f3d03880863092d5f5e54509585c50",
+    "matches_manifest": true
+  },
+  {
+    "source": "mamba/impl/modules/mamba2.mojo",
+    "compile": "arena-off",
+    "sha256": "477da5d16d41ab27324e2dfb3994cdea4b63c2d2188581ba2ad2a91c386872c2",
+    "matches_manifest": true
+  },
+  {
+    "source": "bindings/_mojolearn_mamba.mojo",
+    "compile": "arena-off",
+    "sha256": "d1aeb1c391d0d204db975791fef08ea824959e59695e2556f088799269bc7f36",
+    "matches_manifest": true
+  },
+  {
+    "source": "core/native_mamba_workspace_abi.mojo",
+    "compile": "arena-off",
+    "sha256": "fb3e92e1cafc4344199ed00d9a574dc076f51032a5dcaf694b85cfdfd4913f5f",
+    "matches_manifest": true
+  }
+]

@@ -124,6 +124,7 @@ from mamba.impl.modeling.modeling_mamba import (
     MAMBA_POISON_OVERREAD,
     mamba_rms_norm,
     mamba_upload,
+    mamba_device_alloc,
     mamba_zeros,
     _refuse_nonfinite_named_host,
     residual_add_kernel,
@@ -221,6 +222,23 @@ struct Mamba2DeviceWeights(Movable):
         self.d_skip = mamba_upload(ctx, w.d_skip)
         self.gnorm_w = mamba_upload(ctx, w.gnorm_w)
         self.w_out = mamba_upload(ctx, w.w_out)
+
+    def __init__(out self, ctx: DeviceContext, dims: Mamba2Dims) raises:
+        """Storage only for live public weights; caller refreshes every byte.
+        Preserve allocation poison/guard policy without temporary host Lists.
+        """
+        self.dims = dims.copy()
+        self.weights_checked = False
+        var sizes = _m2_weight_sizes(dims)
+        self.norm_w = mamba_device_alloc(ctx, max(1, sizes[0]))
+        self.w_in = mamba_device_alloc(ctx, max(1, sizes[1]))
+        self.conv_w = mamba_device_alloc(ctx, max(1, sizes[2]))
+        self.conv_b = mamba_device_alloc(ctx, max(1, sizes[3]))
+        self.dt_bias = mamba_device_alloc(ctx, max(1, sizes[4]))
+        self.a_log = mamba_device_alloc(ctx, max(1, sizes[5]))
+        self.d_skip = mamba_device_alloc(ctx, max(1, sizes[6]))
+        self.gnorm_w = mamba_device_alloc(ctx, max(1, sizes[7]))
+        self.w_out = mamba_device_alloc(ctx, max(1, sizes[8]))
 
     def __init__(
         out self, ctx: DeviceContext, dims: Mamba2Dims, mut arena: MambaArena
