@@ -550,6 +550,7 @@ class NearestNeighbors(NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @_native_query_method
     def load(cls, path):
         """Load a model written by `save`.
 
@@ -883,6 +884,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @_native_query_method
     def load(cls, path):
         """Load a model written by `save`.
 
@@ -1107,6 +1109,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @_native_query_method
     def load(cls, path):
         """Load a model written by `save`.
 
@@ -1338,6 +1341,7 @@ class RadiusNeighbors(NumericModeMixin):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @_native_query_method
     def load(cls, path):
         """Load a model written by `save`.
 

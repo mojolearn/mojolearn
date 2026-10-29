@@ -217,6 +217,10 @@ def _needs_fit(method, name, require_fit=True):
 
 
 def _loader(method):
+    if getattr(method, "_mojolearn_tracks_fit", False):
+        # The native archive owner publishes fitted state and admits any
+        # after-fit hook before returning; no Python post-load callback.
+        return classmethod(method)
     @functools.wraps(method)
     def load(cls, *args, **kwargs):
         out = method(cls, *args, **kwargs)

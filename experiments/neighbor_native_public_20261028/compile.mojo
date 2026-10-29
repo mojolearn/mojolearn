@@ -35,3 +35,9 @@ def compile_neighbor_local(model: PythonObject, operation: String, args: PythonO
 @export
 def compile_neighbor_ann(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return neighbors_ann_operation(model, operation, args, context)
+
+from bindings.host_archive_native import host_archive_build
+
+@export
+def compile_neighbor_archive(path: PythonObject, context: PythonObject, cls: PythonObject) raises -> PythonObject:
+    return host_archive_build(path, context, cls)

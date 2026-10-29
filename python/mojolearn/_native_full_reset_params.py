@@ -59,6 +59,13 @@ _NATIVE_PUBLIC_CLASSES = (
     _m4.IVFRaBitQIndex,
     _m4.CagraIndex,
 )
+# Native archives below also replace the old post-load fit wrapper. Their
+# sole package hook (NearestNeighbors' empty resident holder) is published by
+# host_archive_native; the connected identity refuses changed/user hooks.
+_NATIVE_PUBLIC_LOADERS = (
+    _m17.NearestNeighbors, _m17.KNeighborsClassifier,
+    _m17.KNeighborsRegressor, _m17.RadiusNeighbors, _m13.IVFIndex,
+)
 _CLASSES = (
     _m0.AdaBoostClassifier,
     _m0.AdaBoostRegressor,
@@ -251,6 +258,8 @@ def _install(classes):
     from ._mode import ParamsMixin
     from . import _classical_host
     from ._native_public_attributes import _resolved
+    from ._native_archive_bridge import connect as archive_connection
+    archive = archive_connection()[1].get('host_archive_context')
     for cls in classes:  # glue: exact source-vetted full-reset constructor contracts
         if _resolved(cls, 'set_params', _CONTEXT['missing']) is not ParamsMixin.set_params:
             raise TypeError('full-reset setter must preserve its original ParamsMixin contract')
@@ -309,6 +318,10 @@ def _install(classes):
         function.__doc__ = original.__doc__
         function.__signature__ = _CONTEXT['plans'][cls]['signature']
         cls.__init__ = function
+        if cls in _NATIVE_PUBLIC_LOADERS and archive is not None:
+            archive.setdefault('host_archive_native_loader_hooks', {})[cls] = (
+                _resolved(cls, '_mojolearn_after_fit', _CONTEXT['missing']),
+                _CONTEXT['missing'])
         if cls in _NATIVE_PUBLIC_CLASSES:
             cls._mojolearn_native_public = True
 

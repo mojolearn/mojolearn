@@ -2658,6 +2658,19 @@ def host_archive_public_owner(path: PythonObject, arrays: PythonObject, cls: Pyt
             break
     if owner is None:
         raise Error("TypeError: " + String(cls.__name__) + " has no connected saved format")
+    var native_hooks = py_get(context, "host_archive_native_loader_hooks")
+    if native_hooks is not None and py_contains(native_hooks, owner):
+        # These native loaders publish the vetted package hook's state in
+        # the builder. Never silently skip or execute a replacement callback.
+        var admitted = native_hooks[owner]
+        var current = admitted[1]
+        for i in range(len(mro)):  # driver-loop: resolve the native loader's connected hook without descriptors
+            var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
+            if py_contains(fields, "_mojolearn_after_fit"):
+                current = fields["_mojolearn_after_fit"]
+                break
+        if current is not admitted[0]:
+            raise Error("TypeError: native archive loading refuses replaced after-fit hooks")
     var accepted = connected[owner]
     var tag = PythonObject("")
     if py_contains(arrays, "format"):
@@ -2770,8 +2783,13 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         # a newly restored CPU neighbor model owns an empty query holder. A
         # public class's own `load` also set `used_query_tile_ = None`.
         var holder = Python.dict()
-        if public_owner is not None:
+        var native_hooks = py_get(context, "host_archive_native_loader_hooks")
+        if public_owner is not None and (native_hooks is None or not py_contains(native_hooks, public_owner)):
             py_setitem(holder, "used_query_tile_", PythonObject(None))
+        # The admitted native public loaders replace the former post-load
+        # NearestNeighbors._mojolearn_after_fit wrapper, whose final state was
+        # an empty holder. Build that final state once, without a callback or
+        # a second dictionary allocation that discards used_query_tile_.
         py_setitem(sequential_fields(model), "_resident_holder", holder)
     elif fmt == "mojolearn-iforest-1" and public_owner is not None:
         model = host_archive_public_iforest(cls, arrays, path, context)

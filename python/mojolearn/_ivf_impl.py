@@ -487,6 +487,7 @@ class IVFIndex(NumericModeMixin):
     # The layout itself is admitted by the binding
     # (`ivf_validate_index_arrays`) at the first search.
     @classmethod
+    @_native_query_method
     def load(cls, path):
         """Load an index written by `save`.
 
