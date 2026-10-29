@@ -29,6 +29,32 @@
   tails. Aggregate large JSON/status/worktree outputs before returning them;
   keep routine diagnostic responses around 2,000 tokens or less.
 
+## Use incremental development compilation (Andrew, 2026-10-29)
+
+- Use `tools/development_build.py` and the smallest supported affected groups
+  in `bindings/development_groups.json` for development repairs. Inspect the
+  source-closure plan first; select groups with repeated `--group` arguments.
+  For example, the shared attribute repair selects `--sets host
+  --group host:tokenizer --group host:runtime_classical`, not all host/GPU sets.
+- Reuse unchanged compiled groups when their source closure, compiler, flags,
+  target and dependencies match. A changed file requires rebuilding its actual
+  dependent groups, not the entire library. A commit, merge, documentation
+  update or reference-hash refresh alone is not a reason to rebuild them.
+- The current supported unit is a registered development group, which may
+  contain a large extension. Do not claim function-level incremental linking
+  exists. Prefer supported finer groups where available; do not interrupt an
+  active valid build or introduce a new loader/build scheme merely to make a
+  small repair's compilation smaller.
+- Keep standard optimized compiler settings and the existing Mac compile-slot
+  and resource admission rules. Do not use reduced optimization to shorten a
+  build. Record selected-group compile success separately from an incomplete
+  full-set result (the development builder may return exit 3 for the latter).
+- Assemble a complete current install from changed and proven unchanged
+  groups, then run the affected installed runtime checks and verifier. Separate
+  development groups are valid evidence for the paths actually executed; do
+  not require a monolithic rebuild merely to count that evidence. Test changed
+  loading/linking boundaries when assembling the release artifact.
+
 ## Direct CPython is allowed during execution (Andrew, 2026-10-28)
 
 - Direct CPython C-API calls are allowed throughout native product execution,
