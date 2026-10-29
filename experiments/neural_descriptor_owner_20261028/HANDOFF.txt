@@ -1,0 +1,37 @@
+Native-function descriptor owner access, 2026-10-28
+Branch: lane/neural-descriptor-reuse-20261028
+Base: 006eac123221638aca67d06ea5b12809cd8a6675
+
+Removed repeated work:
+Four exact native-function owner reads (entry admission, connection, provider
+reuse and state-constructor/handle-entry admission) now use the documented public
+PyCFunction_GetSelf API instead of Python __self__ attribute resolution. Reuse
+and admission compare borrowed owner pointers without creating owned PythonObject
+wrappers. Cold connection still obtains exactly one owned module reference.
+
+Validity/lifetimes:
+Exact native-function type admission still precedes every new entry/factory use;
+provider reuse requires its retained factory identity before borrowing the owner.
+Current owner equality remains checked, including reuse; no immutable-owner
+shortcut or stale cache was introduced. Module/type/binding validation and all
+refusal messages remain. A null native owner maps to None on cold connection,
+matching previous attribute semantics. The helper holds GIL and factory lifetime
+through the borrowed read. Existing provider/module ownership pins subsequent
+uses. This uses a public CPython API declared in the local Python 3.13 public
+methodobject.h, with no extension-layout inspection or toolchain workaround.
+
+Compilation:
+Focused CausalLM public forward/generate Mac CPU closure compiled successfully,
+rc0, identical define, O0. Exact command/source/binary hashes in compile.json.
+No runtime, identity or performance campaign. Root owns final main/push guards;
+lane source-guard receipts are retained and reported with this commit.
+
+Evidence: ~/mojolearn-evidence/neural-descriptor-owner-20261028/
+Complete build output, binary and source hash manifest retained on Mac.
+No rented boxes or watcher service.
+
+Limits:
+This removes Python attribute dispatch and reference-wrapper churn; the public
+CPython owner getter still executes. Admission/key scans/type and module checks,
+constructor/handle calls and GIL boundaries remain. No speedup measurement or
+full Python-free claim. No numerical execution or arithmetic changed.

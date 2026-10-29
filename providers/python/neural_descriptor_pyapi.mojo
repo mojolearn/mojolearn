@@ -98,6 +98,19 @@ def _neural_descriptor_entry_fields(entries: PythonObject, bi: PythonObject) rai
         raise Error("TypeError: neural provider entries require a native module or namespace")
 
 
+def _neural_descriptor_function_owner(function: PythonObject) raises -> PyObjectPtr:
+    # Callers first admit an exact native function (or its retained identity).
+    # The public CPython API reads its borrowed owner directly: no __self__
+    # attribute resolution or temporary owned PythonObject on the check path.
+    # This neither inspects extension layout nor skips current owner checks.
+    ref cpy = Python().cpython()
+    var owner = cpy.lib.get_function[PyObjectPtr]("PyCFunction_GetSelf")(function._obj_ptr)
+    if not owner and cpy.PyErr_Occurred():
+        raise cpy.unsafe_get_error()
+    _ = function
+    return owner
+
+
 def neural_descriptor_entry(module: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
     # Read an exact module dictionary, never its optional Python __getattr__.
     # Metadata/ownership doors must be compiled entries too; provider execution
@@ -108,7 +121,7 @@ def neural_descriptor_entry(module: PythonObject, name: String, required: Bool =
     var entry = py_get(_neural_descriptor_module_fields(module, bi), name)
     if entry is None and not required:
         return entry
-    if entry is None or py_type(entry) is not py_type(bi.len) or entry.__self__ is not module:
+    if entry is None or py_type(entry) is not py_type(bi.len) or _neural_descriptor_function_owner(entry) != module._obj_ptr:
         raise Error("TypeError: native provider requires compiled entry " + name)
     return entry
 
@@ -119,7 +132,12 @@ def neural_descriptor_connect(factory: PythonObject, var name: String, operation
     var bi = native_loaded_module("builtins")
     if py_type(factory) is not py_type(bi.len):
         raise Error("TypeError: neural native ABI factory must be a compiled extension entry")
-    var module = factory.__self__
+    var raw_module = _neural_descriptor_function_owner(factory)
+    # Cold connection owns the module reference; reuse/admission comparisons
+    # above/below only need borrowed pointer identity while factory is pinned.
+    var module = PythonObject(None)
+    if raw_module:
+        module = PythonObject(from_owned=Python().cpython().Py_NewRef(raw_module))
     if py_type(module) is not py_type(bi):
         raise Error("TypeError: neural native ABI factory must retain its extension module")
     # Lifetime belongs to the execution owner, which can use
@@ -150,7 +168,7 @@ def neural_descriptor_reuse(previous: PythonObject, factory: PythonObject, name:
     # module must reconnect, even if the facade/canonical module did not change.
     if previous is not None:
         var held = previous.downcast_value_ptr[NeuralDescriptorProvider]()
-        if held[].factory is factory and held[].module is factory.__self__ and held[].name == name and len(held[].calls) == operation_count:
+        if held[].factory is factory and held[].module._obj_ptr == _neural_descriptor_function_owner(factory) and held[].name == name and len(held[].calls) == operation_count:
             return previous
     return neural_descriptor_connect(factory, name, operation_count)
 
@@ -190,7 +208,7 @@ def neural_descriptor_cached(
 def _neural_descriptor_admit_entry(provider: PythonObject, factory: PythonObject) raises:
     var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     var bi = native_loaded_module("builtins")
-    if py_type(factory) is not py_type(bi.len) or factory.__self__ is not owner[].module:
+    if py_type(factory) is not py_type(bi.len) or _neural_descriptor_function_owner(factory) != owner[].module._obj_ptr:
         raise Error("TypeError: native state admission requires the provider's compiled entry")
 
 
