@@ -1,0 +1,62 @@
+Resident generation failure-progress repair (2026-10-28)
+Branch: lane/resident-failure-progress-20261028
+Base: 9e3e2b359e68e8442ad1751b7488e1f02e7a3667 (root premerge, includes resident batch)
+Frozen final executable source: ecbf370db127a453c763b0ded1d11321380a5681
+
+Problem and repair
+The resident read returned diagnostics only after complete success. A later
+capacity, input, or nonfinite-logit failure lost prior completed selections;
+parallel per-row EOS updates also differed from the source picker's earlier-row
+updates before its first refusal. The two existing device launches now separate
+pick and commit: pick computes IDs/errors; commit reduces the first failing row
+then updates lengths/EOS only for active preceding rows. With no error all active
+rows commit. Finished rows never increment. The first bad token from the first
+bad active row remains the reported refusal. No host prediction scan or per-token
+batch-sized transfer was added; the two-word status transfer is unchanged.
+
+wrote advances after complete successful steps. consumed advances after each
+successful forward, before policy selection; boundary positions use it, including
+a completed forward whose selection failed. A capacity or nonfinite-input refusal
+keeps prior successful positions. On synchronized errors, native recovery reads
+lengths/finished once. Boundary diagnostics publish before export/result allocation
+and on failure; success is never double-counted. Every failed stream is unusable;
+KV state is NOT restored or made resumable. Cleanup attempts LM and every layer
+independently; recovery/publication/cleanup errors never replace the original
+operation error. Normal successful reads retain the existing launch, transfer,
+and final synchronization counts.
+
+Ownership and boundaries
+The per-operation heap List[ResidentGreedyRead] remains stable through reservation,
+GIL release, native completion, error recovery and release. Its native lengths,
+finished, EOS owners and all input/output/session owners stay pinned. Device
+metadata/result buffers and row subviews remain owned through final readback.
+Public mutable Array admission/recheck remains per-read; no host pointer cache or
+cross-read mutation bypass is added. Existing native group reservation/lock/GIL
+protocol is unchanged. Cached sessions are cleared on error, not reused.
+
+Limits
+If device execution or diagnostic readback itself fails, no partially refreshed
+lengths/finished lists are published. Produced retains confirmed complete-step
+count; row diagnostics may remain from the prior public read. consumed records
+confirmed forwards only. Unusable KV/cache contents and failed-step output IDs
+are deliberately not exported/recoverable, and current token state is not made
+resumable. This is not a promise of full failed-device state identity. Sampling,
+workspace allocation reuse and GPU/runtime/identity/performance qualification
+remain outside this repair. Greedy/EOS route/default/capability remain unchanged.
+
+Compilation and guards
+Attempt 1 native and actual read/generate public boundary CPU compiles: exit 0.
+A source review caught an extra final synchronize introduced by the recovery
+helper; removed it, then compiled changed final source in both closures: exit 0.
+No failed compile in this follow-up; all full warning logs are retained. The
+original resident batch's earlier failed compiles remain its separate evidence.
+Final source/push guards: exit 0, no baseline growth. No binary was executed;
+no runtime, identity or measurement campaign. These CPU compilations do not
+qualify GPU execution. Recipe and fixture roots are beside this handoff.
+
+Evidence
+/Users/andrewhendel/mojolearn-evidence/resident-failure-progress-20261028/
+Retains all four full logs/binaries/exits; two frozen conservative source archives;
+compiler version; full source guard log/exit. receipt.json records hashes, exact
+source commits, flags and scopes. No rented box used. Root integrates serially;
+no main mutation/push by this lane.

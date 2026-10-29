@@ -1,0 +1,114 @@
+{
+  "code_commit": "ecbf370db127a453c763b0ded1d11321380a5681",
+  "base": "9e3e2b359e68e8442ad1751b7488e1f02e7a3667",
+  "branch": "lane/resident-failure-progress-20261028",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "Mac CPU identical, optimization 0, shared-library compile only",
+  "flags": [
+    "-j",
+    "8",
+    "--emit",
+    "shared-lib",
+    "--optimization-level",
+    "0",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "compile_exits": {
+    "compile_native-2": 0,
+    "compile_boundary-2": 0,
+    "compile_boundary-1": 0,
+    "compile_native-1": 0
+  },
+  "source_push_guards_exit": 0,
+  "runtime_executed": false,
+  "evidence_dir": "/Users/andrewhendel/mojolearn-evidence/resident-failure-progress-20261028",
+  "artifacts": {
+    "commit1.log": {
+      "bytes": 419,
+      "sha256": "e523895e39d7e69f99e295b976049394d45c9ba5cd031aeb3bf686312d170009"
+    },
+    "commit2.log": {
+      "bytes": 152,
+      "sha256": "dd3e37c5e2e414a863e4966e4ea3868628b0b5938ffed8a17039541eed3eafaa"
+    },
+    "compile_boundary-1.dylib": {
+      "bytes": 4769160,
+      "sha256": "6b0b48f8cc38fa91230094729846072cd526ffbae663617b1b8deacf50fc57e2"
+    },
+    "compile_boundary-1.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "compile_boundary-1.log": {
+      "bytes": 56739,
+      "sha256": "182352f25ad713d55fbde56582c914b75ed8042a2d904ab63370a9e183398a8a"
+    },
+    "compile_boundary-2.dylib": {
+      "bytes": 4769160,
+      "sha256": "eaee21622c64717e0d20cb3b654070148097325a555c0450821a6eff857eb5e4"
+    },
+    "compile_boundary-2.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "compile_boundary-2.log": {
+      "bytes": 56739,
+      "sha256": "90a0e0805ece1b43cac24f13983633df8ae008f523f4f731b7579f9625a4fc77"
+    },
+    "compile_native-1.dylib": {
+      "bytes": 8818776,
+      "sha256": "cd823fb209a4d07d893d3b399fcda03b767baa59da7fd391fb5c384c749f5f48"
+    },
+    "compile_native-1.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "compile_native-1.log": {
+      "bytes": 287873,
+      "sha256": "91e04e6f604d9fd8b3b9877c983ff5e76f4b7f8e315082f6ad3d0ab615c52778"
+    },
+    "compile_native-2.dylib": {
+      "bytes": 8818776,
+      "sha256": "1997944939d46341ebdbf3c1305b63a28fbc8d1d233ee8998fb6f0ac95a7fc36"
+    },
+    "compile_native-2.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "compile_native-2.log": {
+      "bytes": 287873,
+      "sha256": "91e04e6f604d9fd8b3b9877c983ff5e76f4b7f8e315082f6ad3d0ab615c52778"
+    },
+    "compiler-version.txt": {
+      "bytes": 22,
+      "sha256": "b514f4583371fc0e5f7b9061bdbebbf2a27825cd860e188b47384f4519786725"
+    },
+    "source-1.tar.gz": {
+      "bytes": 18323438,
+      "sha256": "ed550420e41a548a9e3a0e9eb5df47979c414019180df9bb1b4bd7cc4c58d843"
+    },
+    "source-2.tar.gz": {
+      "bytes": 18323341,
+      "sha256": "085cfcfda712416dd1908c64d21994efe388da104c84105f164946f85d5ac9df"
+    },
+    "source-commits.json": {
+      "bytes": 284,
+      "sha256": "78745ca647e3070550cb4b0dab6fe2569a9e350bc23a71964bc4f50253641fd7"
+    },
+    "source-push-guards.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "source-push-guards.log": {
+      "bytes": 1006,
+      "sha256": "e47d519e4e066f04dfbd80fecb2c7ddca9b5a68c433d7995d8aed5f29b5ed2a7"
+    },
+    "worktree.log": {
+      "bytes": 74,
+      "sha256": "49455a50cb946d85a5193cd553a66ae9e41042ea4da7f98251f8af89d95a9d28"
+    }
+  }
+}
