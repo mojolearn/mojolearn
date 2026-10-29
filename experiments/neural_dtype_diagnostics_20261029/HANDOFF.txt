@@ -1,0 +1,55 @@
+Neural dtype diagnostics — 2026-10-29
+
+Branch: lane/neural-dtype-diagnostics-20261029
+Product: caec55cb06 (depends on Array producer repair66c7b37dcd)
+Test corrections/extensions: 6d96cc8fbc,3a6053933f
+
+Canonical installed Mamba smoke passed99/102 checks: three expected TypeErrors
+lacked the promised dtype/policy names. Transformer subsequently reported the
+same omissions for input and gradient. The shared neural_block_f32 refusal now
+formats a label from its already admitted buffer format or captured Array dtype.
+Known float64/float16/uint16-bit encodings are named; unknown codes retain their
+literal captured format. The message explicitly keeps the float32-only policy,
+including bfloat16 refusal. No implicit conversion or runtime arithmetic changes.
+
+The earlier restricted Array snapshot still rejects float64 before this branch.
+Its validation order is deliberately unchanged. Native Array uint16 exercises
+the admitted-Array diagnostic; NumPy float64 exercises the native buffer path.
+No arbitrary dtype property access or user hook is introduced.
+
+Build scope is only tokenizer CPUhost among captured46host+33AppleGPU closures.
+The complete extension includes prior Array tuple-metadata repair. Other78
+native images are not rebuilt. Private tests use the actual current wheel with
+only tokenizer replaced, preserving other78native+2adapter+5runtime bytes.
+
+Negative evidence retained: original canonical Mamba/Transformer logs; initial
+added before-test run6fail (four genuine generic-message failures, two new-test
+expectations incorrectly demanding a downstream label after the earlier Array
+snapshot refusal). Those two tests were corrected to assert unchanged admission,
+not to alter product validation. No original failure is discarded.
+
+Final combined image qualification:
+- Complete tokenizer CPUhost, identical/O0/10 configured workers under
+  compile_slot: exit0/404.46s;655captured source files unchanged. Current
+  dependency tooling explicitly enumerates generated Unicode table bytes.
+- Source guards exit0/47.53s.
+- Actual private installed Python3.12 image:10dtype tests and4state tests pass;
+  unchanged Mamba canonical102/102 and corrected Transformer116/116 pass.
+  No skips. State tests retain KV bytes, first-error order and later usability.
+- Combined native source637e5fff61 includes generation peer's state repair and
+  Array producer repair. Later a3257a test-only commit does not change closure.
+- Initial dtype-only compiler was canceled143/405.60s by parent to combine the
+  independently discovered state diagnostics, not a product compile failure.
+- Private stage restoration initially missed portablemath removed by the
+  standard restager; corrected to restore all five exact original runtime
+  copies before execution. All other85native/adapter/runtime files unchanged.
+- Retention initially stopped on an inherited654file assertion; exact actual
+ 655file receipt/manifest validation replaced that stale count, no bytes waived.
+
+See receipt.json for final build/guard/runtime outcomes and retention.json for
+Mac/R2 readback proof. Complete evidence:
+/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029
+
+This is a focused installed diagnostic/float32 control regression, not full
+identity, cross-vendor or performance qualification. Main integration and final
+wheel assembly remain with parent; active installed candidates were not changed.

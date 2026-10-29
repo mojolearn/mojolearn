@@ -1,0 +1,16 @@
+{
+  "key": "measurements/neural-dtype-diagnostics-20261029/neural-diagnostics-combined-637e5ff-apple.tgz",
+  "local_archive": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/retention/neural-diagnostics-combined-637e5ff-apple.tgz",
+  "sha256": "806de2a1d86c533d21c4557e25e3ffaae4b23291a8b433016053da74bc83d15d",
+  "bytes": 54053115,
+  "put_status": 200,
+  "source_members_verified": 655,
+  "retained_file_count": 65,
+  "raw_tokenizer_sha256": "07a31fd680cc94c0adf09189f220e3e7332bc818cb4174dd07e8d05b1701165b",
+  "staged_tokenizer_sha256": "d4c4c410077a487ebd311d3b7c3fe47556d7e0f2f82aa5d25cf46de8559f3334",
+  "get_status": 200,
+  "readback_sha256": "806de2a1d86c533d21c4557e25e3ffaae4b23291a8b433016053da74bc83d15d",
+  "elapsed_seconds": 19.28761950007174,
+  "all_member_readback_sha256_match": true,
+  "exit_code": 0
+}

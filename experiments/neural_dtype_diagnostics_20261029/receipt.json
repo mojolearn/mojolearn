@@ -1,0 +1,178 @@
+{
+  "product_commits": {
+    "dtype": "caec55cb06",
+    "Array_admission_test_order": "6d96cc8fbc",
+    "Transformer_dtype_tests": "3a6053933f",
+    "peer_state_product": "d6c368fbaa",
+    "peer_odd_head_fixture": "18c00d691a",
+    "peer_state_tests": "383d7c5f17"
+  },
+  "combined_native_compile_commit": "637e5fff6122a2d97bcd85d1bd22f507bad98096",
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029",
+  "compile": {
+    "family": "tokenizer",
+    "argv": [
+      "bash",
+      "tools/compile_slot.sh",
+      "sh",
+      "bindings/build_host_family.sh",
+      "tokenizer"
+    ],
+    "environment": {
+      "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/combined/raw",
+      "MOJOLEARN_COMPILE_JOBS": "10",
+      "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_TARGET_COLUMN": "cpu"
+    },
+    "compiler_version": "Mojo 1.0.0 (ed45d567)",
+    "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+    "source_count": 655,
+    "source_archive_sha256": "e21b2db416343e948865b9f345093f98ef598dd641ffbce40a9fbb7537f8dc3c",
+    "dependency_scope": {
+      "scope": "closure",
+      "digest": "6bbf589601f4f52bfd44b08218d52fa1cd80d68a5fe79a1b57e7a98be75c89e9",
+      "files": 653
+    },
+    "exit_code": 0,
+    "elapsed_seconds": 404.45961962500587,
+    "binary": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/combined/raw/_mojolearn_tokenizer_host.so",
+    "binary_sha256": "07a31fd680cc94c0adf09189f220e3e7332bc818cb4174dd07e8d05b1701165b",
+    "sources_changed_during_build": []
+  },
+  "scope": {
+    "examined_host": 46,
+    "examined_gpu": 33,
+    "affected": [
+      {
+        "kind": "host",
+        "binding": "osx-arm64/host/-/host/_mojolearn_tokenizer_host",
+        "changed_sources": [
+          "bindings/neural_block_admission.mojo",
+          "bindings/neural_block_public.mojo"
+        ]
+      }
+    ]
+  },
+  "canceled_initial_compile": {
+    "exit_code": 143,
+    "elapsed_seconds": 405.59578104200773,
+    "reason": "Parent requested final combined image before completion; exact owned compiler terminated, complete logs/source retained."
+  },
+  "stage": {
+    "exit_code": 0,
+    "initial_stage_exit_code": 1,
+    "initial_failure": "Standard restager removes unreferenced portable-math helper from temporary runtime union; initial restore iterated remaining runtime paths rather than all five original wheel copies. Restored all five exact pre-stage runtime files from owned backup before any runtime.",
+    "staged": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_tokenizer_host.so",
+    "staged_sha256": "d4c4c410077a487ebd311d3b7c3fe47556d7e0f2f82aa5d25cf46de8559f3334",
+    "other85_native_adapter_runtime_unchanged": true
+  },
+  "runtime": {
+    "status": "complete",
+    "all_passed": true,
+    "rows": [
+      {
+        "name": "dtype-contract",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/venv/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/test_neural_dtype_diagnostics.py",
+          "--junitxml=/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/runtime/dtype.xml"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 2.777835833025165,
+        "log": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/runtime/dtype-contract.log",
+        "log_sha256": "99804f9573844f1beb155d2b0593f3983af51f0b934d580d28466e94c61231a1"
+      },
+      {
+        "name": "transformer-state",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/venv/bin/python",
+          "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/test_transformer_state_refusals.py"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.5566271669231355,
+        "log": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/runtime/transformer-state.log",
+        "log_sha256": "64e9f7b81655b1dce93d9989b3e21681e16e59e7eee32a902f930c65373917ee"
+      },
+      {
+        "name": "canonical-mamba",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/venv/bin/python",
+          "/Users/andrewhendel/mojolearn-wt/neural-dtype-diagnostics-20261029/python/mojolearn/tests/test_mamba_surface.py"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 1.2287766250083223,
+        "log": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/runtime/canonical-mamba.log",
+        "log_sha256": "edbef9b0d0ebc9caabf41ae1539c0c456c7ccfc535177473a1a1536625a5276b",
+        "reported_counts": [
+          [
+            "102",
+            "0"
+          ]
+        ],
+        "expected_checks": 102,
+        "coverage_matches": true
+      },
+      {
+        "name": "canonical-transformer",
+        "argv": [
+          "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/venv/bin/python",
+          "/Users/andrewhendel/mojolearn-wt/neural-dtype-diagnostics-20261029/python/mojolearn/tests/test_transformer_surface.py"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 0.9404127079760656,
+        "log": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/runtime/canonical-transformer.log",
+        "log_sha256": "3e748d2f4eac7ca037f5fad90efb6b3af599ce7ee01dd664feca021b25ecebab",
+        "reported_counts": [
+          [
+            "116",
+            "0"
+          ]
+        ],
+        "expected_checks": 116,
+        "coverage_matches": true
+      }
+    ]
+  },
+  "coverage": {
+    "dtype_tests": 10,
+    "state_tests": 4,
+    "canonical_mamba": 102,
+    "canonical_transformer": 116,
+    "failures": 0,
+    "skips": 0,
+    "source_test_hashes": {
+      "python/mojolearn/tests/test_neural_dtype_diagnostics.py": "816e5ce01380c48d3dda68905851946cff163dbb6e0fc41062e0c9dd9fe53601",
+      "python/mojolearn/tests/test_transformer_state_refusals.py": "e6d0c73f4cbb60329ef4c1ad5334b53e492c9846bdccef52eee904588ff576ef",
+      "python/mojolearn/tests/test_mamba_surface.py": "1a9433e16c7bcced8c60f67f619316d07a15758e6d664067ddeafb1aa920cf23",
+      "python/mojolearn/tests/test_transformer_surface.py": "0b55c3f5d3ff4b70dcaa07f14bd0cb616031eaa91c6b36f13bb5b331cecb4779"
+    },
+    "scope": "Actual private installed wheel with one replaced CPU tokenizer extension; configured identical/metal; Apple only, not full vendor identity."
+  },
+  "guards": {
+    "source_commit": "a3257a1ad03ba16001510360e3da53896b7807b7",
+    "exit_code": 0,
+    "elapsed_seconds": 47.527498874929734,
+    "scope": "Combined product/test committed-ref source guards; no push",
+    "log": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/guards-combined.log"
+  },
+  "prior_failures": {
+    "original_canonical_result": "99/102 pass;3 named dtype negative-message failures",
+    "original_canonical_log": "/Users/andrewhendel/mojolearn-evidence/neural-dtype-diagnostics-20261029/original-canonical-mamba-failures.log",
+    "added_before_test_exit": 1,
+    "added_before_test_failures": 6,
+    "classification": {
+      "actual_generic_message_failures": 4,
+      "new_test_overreach_Array_float64_earlier_snapshot_refusal": 2
+    },
+    "correction_commit": "6d96cc8fbc",
+    "native_build_source_unchanged": true,
+    "before_test_sha256": "e234f0bcfc35e0b415b3b521b82a1d035be01c6d79e5a53f0f3f91d2738b8970",
+    "final_test_sha256": "22f19bbd89e83f276302283bd28e6bbe17f738eabdba64a16173ed89e7962224",
+    "before_log_sha256": "1b03dfa58c0fc2a28698a4ed40fed2c058bb4fc26c05397e3dc6b519e39721ee"
+  },
+  "retention_initial_failure": "Inherited hardcoded654source count refused actual655manifest beforeupload. Changed to exact producer receipt count; generated Unicode table newly enumerated by current tooling. Failed log retained; no absent bytes waived."
+}
