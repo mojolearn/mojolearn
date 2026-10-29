@@ -84,3 +84,14 @@ qualifies that frozen final code. Complete output for every attempt and the
 intermediate binary are retained. See compile.json for final statuses/hashes.
 
 Evidence: /Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/
+
+Final delivery evidence
+-----------------------
+Frozen implementation: ef2df4a71edd3b5c7abdf376b73633bd82dac794
+Compile 4 exit 0; required source/push guards exit 0. Complete compiler
+warnings include unreachable native Dict insertion catches/unused locals and
+a redundant owned transfer; no errors. The compiler proves those insertion
+paths nonthrowing; the defensive catch branches introduce no runtime work.
+Binary SHA256: 77a7018e6b2284b200d7679bcaada98a05b62a142e11a1e0ed91f0f06c78bbc6
+Final source bytes, dependency manifests, compiler environment and complete
+logs retained at the evidence directory above. See compile.json for hashes.

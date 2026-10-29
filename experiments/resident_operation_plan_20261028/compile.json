@@ -1,0 +1,65 @@
+{
+  "scope": "Mac CPU native cross_validate, cross_val_predict, learning_curve and permutation_test_score front functions; shared private resident plan and retained DeviceRows branches compiled, never executed. Search/validation complete public frontdoors not separate fixture exports.",
+  "source_commit": "ef2df4a71edd3b5c7abdf376b73633bd82dac794",
+  "source_base": "f4c2b3e807c728b9ead33eb340d30b8d20383332",
+  "target": "Mac arm64 CPU, identical",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "command": "bash tools/compile_slot.sh pixi run mojo build -j 8 --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/resident_operation_plan_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/resident-rows.dylib",
+  "compiler_workers": 8,
+  "cpu_saturation_claimed": false,
+  "exit_code": 0,
+  "attempts": [
+    {
+      "attempt": 1,
+      "exit_code": 1,
+      "log": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/compile-1.log",
+      "log_sha256": "e5c4ccf9a382df4264e4ddc3992772d64459d215fc3162fc99022171ca066e5d",
+      "result": "Two mutable-self/field aliasing errors; fixed by retaining local PythonObject owners."
+    },
+    {
+      "attempt": 2,
+      "exit_code": 1,
+      "log": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/compile-2.log",
+      "log_sha256": "9e511bd959c7b4cc1c7d4de0348d98997d6b7b6a1cd568f0033ac81be5b08106",
+      "result": "Dict iteration requires Copyable values; record copies retain owners but do not free backend slots."
+    },
+    {
+      "attempt": 3,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/compile-3.log",
+      "log_sha256": "a496b9cf184c21dabfe2c54f9c7bd00943c7aec7485ef7418bbd3fa34e32cacc",
+      "result": "Intermediate pass before explicit retry publication-error guards. Not final-source qualification."
+    },
+    {
+      "attempt": 4,
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/compile-4.log",
+      "log_sha256": "3550190d110c72c6dfa7771798be187f6475e465415557d0d3b9aa8ccc4ccc43",
+      "result": "Final frozen source qualified; warnings retained, no errors."
+    }
+  ],
+  "binary": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/resident-rows.dylib",
+  "binary_sha256": "77a7018e6b2284b200d7679bcaada98a05b62a142e11a1e0ed91f0f06c78bbc6",
+  "intermediate_binary": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/resident-rows.intermediate.dylib",
+  "intermediate_binary_sha256": "b706a1e233cef16b0b5d6733bab327f85626d2d99f3ef0337bb37bf743150ea5",
+  "warnings": "Dependency warnings plus new unreachable insertion catches/unused handler locals (native Dict insertion nonthrowing) and redundant pop transfer. Complete final log retained.",
+  "environment": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/environment.json",
+  "source_retention": {
+    "archive": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/source-envelope.tar.gz",
+    "archive_sha256": "8ccfbb7ab5ad763b5cf754c84d18ffb6f15db8ce33613f7d7dc2975f9966c654",
+    "source_commit": "ef2df4a71edd3b5c7abdf376b73633bd82dac794",
+    "scope": "Conservative superset: tracked Mojo sources, binding shell scripts, compile_slot and pixi manifests",
+    "file_count": 3948,
+    "manifest": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/source-envelope.json"
+  },
+  "source_push_guards": {
+    "source_commit": "ef2df4a71edd3b5c7abdf376b73633bd82dac794",
+    "exit_code": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/source-push-guards.log",
+    "log_sha256": "f87b7d3c173955fedb9f1087629434ea74e6510a141db3c927519a5cff65e3c4"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_executed": false,
+  "rented_boxes": []
+}
