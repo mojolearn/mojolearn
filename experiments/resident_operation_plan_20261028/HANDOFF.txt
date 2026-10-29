@@ -95,3 +95,9 @@ paths nonthrowing; the defensive catch branches introduce no runtime work.
 Binary SHA256: 77a7018e6b2284b200d7679bcaada98a05b62a142e11a1e0ed91f0f06c78bbc6
 Final source bytes, dependency manifests, compiler environment and complete
 logs retained at the evidence directory above. See compile.json for hashes.
+
+Cleanup ordering source review: Modular's Dict module documentation explicitly
+specifies deterministic insertion order for key/value/item iteration, matching
+Python dictionary cleanup order (including release followed by reinsertion).
+https://docs.modular.com/mojo/std/collections/dict/
+Reviewed 2026-10-28; no extra order vector or code/build change is required.
