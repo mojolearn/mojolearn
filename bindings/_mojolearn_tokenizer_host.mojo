@@ -126,7 +126,7 @@ from bindings.mode_metadata_native import mode_metadata_c
 from bindings.backend_public_native import backend_public_c
 from bindings.numeric_profile_native import numeric_profile_c
 from bindings.params_metadata_native import params_metadata_c
-from bindings.public_attributes_native import public_attribute_c, public_attribute_generic_c
+from bindings.public_attributes_native import public_attribute_c, public_attribute_generic_c, public_attribute_generic_slot_c
 from bindings.linear_constructor_native import linear_constructor_c
 from bindings.full_reset_params_native import full_reset_params_c
 from bindings.full_reset_constructor_native import full_reset_constructor_c
@@ -1284,6 +1284,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(params_metadata_c, "params_metadata_native_call")
         module.def_py_c_function(public_attribute_c, "public_attribute_native_call")
         module.def_py_c_function(public_attribute_generic_c, "public_attribute_generic_native_call")
+        module.def_py_c_function(public_attribute_generic_slot_c, "public_attribute_generic_slot_native_call")
         module.def_py_c_function(linear_constructor_c, "linear_constructor_native_call")
         module.def_py_c_function(full_reset_params_c, "full_reset_params_native_call")
         module.def_py_c_function(full_reset_constructor_c, "full_reset_constructor_native_call")

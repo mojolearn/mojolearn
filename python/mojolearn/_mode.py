@@ -440,12 +440,6 @@ class PublicOutputsMixin:
             return  # one-call native methods: no Python wrappers
         install_public_outputs(cls)
 
-    def __getattribute__(self, name):
-        # One native call (bindings/public_attributes_native.mojo
-        # public_attribute_generic_c): CPython's generic lookup, then the
-        # Array -> NumPy view rule for callers outside the package.
-        return _GENERIC_ATTRIBUTE(self, name, _GENERIC_ATTRIBUTE_CONTEXT)
-
 
 class SklearnTagsMixin(PublicOutputsMixin):
     """`__sklearn_tags__` for an estimator: see `sklearn_tags`. Subclasses
@@ -707,5 +701,8 @@ _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT = _connect_params_metadata()
 # owner's context (_native_full_reset_params._CONTEXT), connected later.
 from ._native_mode_metadata import connect_generic_attributes as _connect_generic_attributes
 _GENERIC_ATTRIBUTE, _GENERIC_ATTRIBUTE_CONTEXT = _connect_generic_attributes()
+# Import-time connection: ordinary reads enter the native descriptor directly,
+# including the fallback classes not yet admitted to specialized native plans.
+PublicOutputsMixin.__getattribute__ = _GENERIC_ATTRIBUTE
 from ._native_mode_metadata import connect_generic_params as _connect_generic_params
 _GENERIC_PARAMS, _GENERIC_PARAMS_CONTEXT = _connect_generic_params()

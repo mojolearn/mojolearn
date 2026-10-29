@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connections for shared native fitted-state and binary metadata."""
-from types import BuiltinFunctionType, FunctionType, ModuleType
+from types import BuiltinFunctionType, FunctionType, MethodType, ModuleType
 
 
 def connect():
@@ -18,10 +18,13 @@ def connect_generic_attributes():
     # glue: the generic attribute slot's entry; its admission context is the
     # public attributes context, linked by _native_public_attributes.connect_classes.
     from .tokenizer import _binding
-    entry = _binding()._module.public_attribute_generic_native_call
-    if type(entry) is not BuiltinFunctionType:
-        raise TypeError('generic public attributes require a compiled native entry')
-    return entry, dict(attributes=None)
+    module = _binding()._module
+    entry = module.public_attribute_generic_slot_native_call
+    factory = module.classical_attribute_descriptor
+    if type(entry) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
+        raise TypeError('generic public attributes require compiled native entries')
+    context = dict(attributes=None)
+    return factory(MethodType(entry, context)), context
 
 
 def connect_generic_params():

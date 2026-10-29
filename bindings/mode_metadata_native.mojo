@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys, native_mapping_string_keys
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
@@ -54,10 +54,8 @@ def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject
     var fields = PythonObject(from_owned=raw)
     if py_type(fields) is not b.dict:
         raise Error("TypeError: native metadata requires an ordinary instance dictionary")
-    var keys = py_call(b.list, fields.keys())
-    for i in range(len(keys)):  # driver-loop: over instance field names before keyed reads
-        if py_type(keys[i]) is not b.str:
-            raise Error("TypeError: native metadata requires exact string state keys")
+    if not native_namespace_string_keys(fields._obj_ptr, b.str):
+        raise Error("TypeError: native metadata requires exact string state keys")
     return fields
 
 
@@ -109,10 +107,8 @@ def _class_fields(cls: PythonObject) raises -> PythonObject:
 def _class_fields(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
     var b = mods.module("builtins")
     var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
-    var names = py_call(b.list, fields.keys())
-    for i in range(len(names)):  # driver-loop: over native class namespace metadata names
-        if py_type(names[i]) is not b.str:
-            raise Error("TypeError: native metadata requires exact string class keys")
+    if not native_mapping_string_keys(fields, b.str):
+        raise Error("TypeError: native metadata requires exact string class keys")
     return fields
 
 

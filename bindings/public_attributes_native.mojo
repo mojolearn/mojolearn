@@ -6,7 +6,7 @@ from bindings.trees_bagging_members_native import bagging_members
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.native_caller_frame import native_frame_globals
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
 from bindings.classical_attributes import _type_mro, _classical_descriptor_get, classical_connect_numpy
@@ -21,10 +21,10 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 
 
 def _string_keys(fields: PythonObject) raises:
-    var keys = py_call(py_type(Python.list()), fields.keys())
-    for i in range(len(keys)):  # driver-loop: refuse dictionary equality hooks before native keyed reads
-        if py_type(keys[i]) is not py_type(PythonObject("")):
-            raise Error("TypeError: native attribute metadata requires exact string keys")
+    # Both callers supply an exact dictionary (native frame globals or an
+    # explicitly admitted state dict). Avoid key views, lists and indexed boxes.
+    if not native_namespace_string_keys(fields._obj_ptr, py_type(PythonObject(""))):
+        raise Error("TypeError: native attribute metadata requires exact string keys")
 
 
 def _outside() raises -> Bool:
@@ -68,8 +68,8 @@ def _outside() raises -> Bool:
         frame = PythonObject(from_owned=pointer)
 
 
-def _plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native attributes refuse Python metaclass protocols")
@@ -79,7 +79,7 @@ def _plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
     for i in range(len(mro)):  # driver-loop: validate native slot and passive subclass ancestry
         if py_type(mro[i]) is not b.type:
             raise Error("TypeError: native attributes refuse Python metaclass protocols")
-        var namespace = _class_fields(mro[i])
+        var namespace = _class_fields(mods, mro[i])
         if py_contains(namespace, "__getattr__"):
             raise Error("TypeError: native attributes refuse Python __getattr__ hooks")
         if getter is context["missing"] and py_contains(namespace, "__getattribute__"):
@@ -323,8 +323,11 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var name = args[2]
         if py_type(name) is not py_type(PythonObject("")):
             raise Error("TypeError: native model attribute name must be an exact string")
-        var plan = _plan(model, context)
-        var fields = _fields(model)
+        # Admission holds the GIL and invokes no application protocol. Share
+        # its builtins connection across plan and instance-storage validation.
+        var mods = NativeModules()
+        var plan = _plan(mods, model, context)
+        var fields = _fields(mods, model)
         var result = _lookup(model, name, fields, plan, context)
         var text = String(name)
         if (text.byte_length() > 0 and text.endswith("_") and not text.startswith("_")
@@ -343,7 +346,7 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
 
 
-# Generic public attribute slot (PublicOutputsMixin.__getattribute__) of every
+# Generic native attribute slot installed on PublicOutputsMixin once, for every
 # class without a connected native descriptor plan: application subclasses,
 # private package classes and the built-ins whose property owners are pending.
 # The lookup is CPython's own generic attribute operation, exactly
@@ -358,13 +361,23 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
 # (_native_public_attributes.connect_classes); before that connection no
 # caller outside the package holds an estimator, so the value is returned.
 def public_attribute_generic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    # Retain the earlier three-argument internal entry for binary consumers.
+    return _public_attribute_generic_entry[False](args_ptr)
+
+
+def public_attribute_generic_slot_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    # PyInstanceMethod_New binds the model after the import-bound context.
+    return _public_attribute_generic_entry[True](args_ptr)
+
+
+def _public_attribute_generic_entry[slot: Bool](args_ptr: PyObjectPtr) -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
         if len(args) != 3:
             raise Error("TypeError: generic public attribute expects model, name and native context")
-        var model = args[0]
-        var name = args[1]
-        var context = args[2]
+        var model = args[1] if slot else args[0]
+        var name = args[2] if slot else args[1]
+        var context = args[0] if slot else args[2]
         ref cpy = Python().cpython()
         var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(model._obj_ptr, name._obj_ptr)
         if not raw:

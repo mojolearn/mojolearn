@@ -37,6 +37,30 @@ def native_namespace_string_keys(fields: PyObjectPtr, string_type: PythonObject)
     return True
 
 
+def native_mapping_string_keys(fields: PythonObject, string_type: PythonObject) raises -> Bool:
+    # Only native mappingproxy instances from type.__dict__ use this helper.
+    # Python >=3.10 support precludes PyType_GetDict; the supported iterator
+    # removes keys-view/list materialization without accessing private layout.
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")(fields._obj_ptr)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var iterator = PythonObject(from_owned=raw)
+    var next_key = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")
+    while True:  # driver-loop: over exact native class mapping keys before keyed reads
+        var key = next_key(iterator._obj_ptr)
+        if not key:
+            if cpy.PyErr_Occurred():
+                raise cpy.unsafe_get_error()
+            return True
+        var cls = cpy.PyObject_Type(key)
+        var same = cls == string_type._obj_ptr
+        cpy.Py_DecRef(cls)
+        cpy.Py_DecRef(key)
+        if not same:
+            return False
+
+
 def _loaded_fields(module: PythonObject, pinned_hook: Bool = False) raises -> PythonObject:
     ref cpy = Python().cpython()
     var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)

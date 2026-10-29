@@ -1,0 +1,46 @@
+{
+  "base_commit": "ad29929a4db88829b5d1120b4c82f134ba985653",
+  "compile_exit": 0,
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS arm64 CPU",
+  "scope": "Actual specialized/generic public attribute C entries, new generic descriptor slot, existing descriptor factory, mode metadata C entry and shared admission helpers. Isolated exported entry closure, not full tokenizer host module.",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/shared_attribute_admission_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/shared-attribute-admission-20261028/compile.dylib",
+  "working_directory": "/Users/andrewhendel/mojolearn-wt/shared-attribute-admission-20261028",
+  "compile_slots": 4,
+  "compiler_workers": "compiler default; utilization not measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/shared-attribute-admission-20261028/compile.dylib",
+  "binary_sha256": "910ca4db96685b2d55e727bf886974f82ad92266ef54bce3763fd42e439fe802",
+  "log": "/Users/andrewhendel/mojolearn-evidence/shared-attribute-admission-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/shared-attribute-admission-20261028/source-sha256.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/shared-attribute-admission-20261028/sources.tar.gz",
+  "source_manifest_scope": "Conservative superset of tracked Mojo sources plus changed Python setup/test files, fixture and Pixi manifests; not all sources compiled",
+  "modified_source_sha256": {
+    "bindings/native_loaded_module.mojo": "6d37fd16b07e33e22c24b48b243fd1ab2f4e707a0c1f3ce03bf64dd21d456db3",
+    "bindings/mode_metadata_native.mojo": "10e548d8e6442410ebf4973a2a51e17eb615f79cc17d4de4ad5717c75cb2ca32",
+    "bindings/public_attributes_native.mojo": "7dbaf6736042ad3e02cfac44136a1fce0a2afd287ee96a99563dbea86ef8daf7",
+    "bindings/_mojolearn_tokenizer_host.mojo": "75d395b5c75d48f3d3d40d77a74b6d4f2504d86362815a8f07df80df285ffa8e",
+    "python/mojolearn/_mode.py": "81f5569ff7659e46d151a04a1a3f53a2bacfcd3db67184b40fed7eb6c10a95e0",
+    "python/mojolearn/_native_mode_metadata.py": "f753c1ed4701a67db984fbfd689f423d5b51145ff0389493d7427fee9e0258af",
+    "python/mojolearn/_native_public_attributes.py": "d4c15387b7e7bde72f0f3e4d03148d119a2c54e52a5a622f23998c63b0ac7f68",
+    "python/mojolearn/tests/test_native_public_attributes.py": "0af5274980bf189ac569e04ea7c21081ec0f54c3b34d37741d463ea971330234",
+    "experiments/shared_attribute_admission_20261028/compile.mojo": "9cdb1b2a65a02ea8adda3016cff7db4596b4fcb3415205468c5946e0a53aa69a"
+  },
+  "python_syntax": {
+    "files": [
+      "python/mojolearn/_mode.py",
+      "python/mojolearn/_native_mode_metadata.py",
+      "python/mojolearn/_native_public_attributes.py",
+      "python/mojolearn/tests/test_native_public_attributes.py"
+    ],
+    "result": "passed; compile(source, path, exec) only; no imports/execution"
+  },
+  "earlier_compile": {
+    "exit": 0,
+    "scope": "key admission reductions before adding native generic descriptor slot",
+    "log": "/Users/andrewhendel/mojolearn-evidence/shared-attribute-admission-20261028/compile-before-native-slot.log"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}

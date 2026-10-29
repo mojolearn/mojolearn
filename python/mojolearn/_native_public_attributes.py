@@ -217,6 +217,11 @@ def connect_classes(package):
             if _resolved(cls, '__getattr__', context['missing']) is not context['missing']:
                 raise TypeError('Python __getattr__ requires a native owner')
             plan = _layout(cls, context['descriptor'])
+            # The fallback getter is now a known native descriptor, so the
+            # generic FunctionType admission in _layout no longer covers it.
+            # Admit only this import-connected identity before examining names.
+            if _resolved(cls, '__getattribute__', context['missing']) is original:
+                plan['bindings']['__getattribute__'] = (original, original.__get__)
             names = {}
             for base in plan['mro']:  # glue: descriptor precedence is frozen at connection
                 for name, member in vars(base).items():  # glue: exact class namespace metadata

@@ -1,0 +1,55 @@
+Shared attribute admission and native generic slot, 2026-10-28
+Branch: lane/shared-attribute-admission-20261028
+
+Evaluation of user area 1:
+The source already installed specialized native attribute descriptors once per
+eligible class (_native_public_attributes.connect_classes); not every estimator
+used _mode.PublicOutputsMixin's Python wrapper. Pending built-ins, private classes
+and application subclasses still inherited that wrapper. Specialized paths also
+repeated MRO/storage/key admission. No measured frequency or cost ranking claimed.
+
+Removed work:
+- Generic fallback __getattribute__ is now an import-installed native descriptor
+  using the existing supported PyInstanceMethod_New factory. Each attribute read
+  enters its compiled slot directly, removing the package Python frame/function
+  call. Its context is bound once at import. CPython generic lookup and the
+  existing caller-sensitive trailing-underscore Array->NumPy view rule remain.
+- Shared instance/class namespace validation no longer constructs keys views
+  and Python lists or indexes boxed keys. Exact dictionaries use PyDict_Next;
+  native mappingproxy rows use their supported native iterator for Python >=3.10.
+- Specialized plan/storage admission share one operation-local NativeModules
+  connection instead of rebuilding builtins admission across those helpers.
+
+Setup/reuse/invalidation:
+Install generic descriptor once before estimator declarations, using the same
+context later connected by native public-attribute setup. The previous three-arg
+C entry remains available; a context-first entry supports native descriptor
+binding without constructing a reorder tuple per read. Specialized eligibility
+explicitly recognizes ONLY the exact original generic descriptor identity;
+FunctionType-based _layout admission alone no longer covers that descriptor.
+Final specialized installation still replaces its binding. Raw descriptor
+identity assertion in the existing test is updated; test is not executed.
+
+No cross-call class/instance metadata cache was added. Mutable namespace keys,
+class ancestry, getter identity, descriptor precedence and current instance state
+remain checked at each operation. No private CPython layout or version-specific
+type-dictionary API is used. Dictionary/mapping iterators and key/type references
+have native owners; key scans hold GIL and execute no caller protocols. Native
+module reuse ends before any property computation or possible GIL-release window.
+
+Validation:
+Focused Mac CPU identical O0 compile passed for actual new/existing attribute
+entries, descriptor factory, mode metadata and shared admission. Four changed
+Python files passed syntax compilation without import. Full host-module/wheel
+registration and runtime behavior remain unqualified. Independent source review
+confirmed binding order, initialization, ownership and the necessary eligibility
+repair; no runtime/identity/performance campaign or measured speedup.
+Complete logs/source bytes/binary/flags/hashes: compile.json and
+~/mojolearn-evidence/shared-attribute-admission-20261028/.
+
+Limits:
+CPython generic lookup/descriptor binding remains to preserve Python semantics.
+Unported property operations remain separately scoped. Specialized paths still
+scan mutable class namespaces and perform CPython object lookup/conversion.
+A retained class plan cannot skip mutation checks merely because it was installed
+once; native-owned metadata with explicit invalidation remains further work.
