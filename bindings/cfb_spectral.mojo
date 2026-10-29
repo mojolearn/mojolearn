@@ -12,6 +12,7 @@
 # entries, same inputs: the bits do not move.
 from std.math import isinf
 from std.python import Python, PythonObject
+from providers.python.host_estimator_binding_pyapi import host_estimator_binding
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
 from bindings.classical_arrays import classical_address, classical_dtype_str, classical_c_order
 from core.family_cast_impl import family_all_finite_f32
@@ -1080,7 +1081,7 @@ def _spectral_embedding(args: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, args: PythonObject,
-                           context: PythonObject) raises -> PythonObject:
+                           context: PythonObject, supplied_binding: PythonObject = PythonObject(None)) raises -> PythonObject:
     """Fit/predict shells pass (X,); route selection belongs to this owner."""
     if operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict":
         var routed = Python.tuple(
@@ -1093,10 +1094,20 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, ar
             return model
         return py_fields(model)["labels_"]
     if operation == "family_cfb_sc_predict":
-        var binding = spectral_umap_route(context, "metrics", py_get(py_fields(model), "numeric_mode"))
+        var mode = py_get(py_fields(model), "numeric_mode")
+        var binding = supplied_binding
+        if binding is None:
+            binding = host_estimator_binding(model, "_mojolearn_metrics", mode, context)
+        if binding is None:
+            binding = spectral_umap_route(context, "metrics", mode)
         return _sc_predict(model, binding, args[0], context)[0]
     if operation == "family_cfb_sc_predict_embedding":
-        var binding = spectral_umap_route(context, "metrics", py_get(py_fields(model), "numeric_mode"))
+        var mode = py_get(py_fields(model), "numeric_mode")
+        var binding = supplied_binding
+        if binding is None:
+            binding = host_estimator_binding(model, "_mojolearn_metrics", mode, context)
+        if binding is None:
+            binding = spectral_umap_route(context, "metrics", mode)
         return _sc_predict(model, binding, args[0], context)
     if operation == "family_cfb_se_validate":
         _se_validate(py_fields(model), context)
@@ -1127,12 +1138,17 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, ar
     raise Error("RuntimeError: unknown spectral operation " + operation)
 
 
-def cfb_spectral_operation(model: PythonObject, operation: String, args: PythonObject,
+def cfb_spectral_operation(model: PythonObject, operation: String, var args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var b = _builtins()
     if py_type(args) is not b.tuple:
         raise Error("TypeError: spectral public arguments require an exact tuple")
+    var supplied_binding = PythonObject(None)
+    if operation == "family_cfb_sc_predict" and len(args) == 2:
+        # The archive recipe already carries its admitted CPU owner.
+        supplied_binding = args[0]
+        args = Python.tuple(args[1])
     var clustering = operation.startswith("family_cfb_sc_")
     if model is None:
         return _cfb_spectral_algorithm_operation(model, operation, args, context)
@@ -1167,7 +1183,7 @@ def cfb_spectral_operation(model: PythonObject, operation: String, args: PythonO
     var outside = estimator_outside()
     var result = PythonObject(None)
     try:
-        result = _cfb_spectral_algorithm_operation(model, operation, Python.tuple(prepared), context)
+        result = _cfb_spectral_algorithm_operation(model, operation, Python.tuple(prepared), context, supplied_binding)
     except error:
         var refusal = _refusal(error, fitting, depth > 0, rows, columns, name)
         raise refusal^

@@ -396,9 +396,18 @@ def _public_attribute_generic_entry[slot: Bool](args_ptr: PyObjectPtr) -> PyObje
         var context = args[0] if slot else args[2]
         ref cpy = Python().cpython()
         var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(model._obj_ptr, name._obj_ptr)
+        _ = model  # keep both raw arguments owned through the native lookup
+        _ = name
+        _ = args
         if not raw:
-            var failure = stash_python_error()
-            raise failure^
+            # This is already a CPython error boundary. Return its original
+            # exception directly, as array_native does; no fetch/restore or
+            # Mojo-error round trip is needed. The former path reproduced a
+            # lost instance reference on getattr(obj, missing, default), then
+            # a saved-host-model/traceback cleanup crash. Internal cause is
+            # unconfirmed; retained reproduction: experiments/
+            # host_attribute_error_20261029/HANDOFF.txt.
+            return PyObjectPtr()
         var result = PythonObject(from_owned=raw)
         if py_type(name) is not py_type(PythonObject("")):
             return result.steal_data()

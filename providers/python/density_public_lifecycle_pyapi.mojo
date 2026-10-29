@@ -17,7 +17,7 @@ from bindings.native_array_view import native_array_ndarray_view
 from bindings.cfb_dbscan import cfb_dbscan_operation
 from bindings.cfb_resident import cfb_release
 from bindings.neighbors_kde_native import neighbors_kde_operation, _kde_release
-from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.host_estimator_binding_pyapi import host_estimator_binding_current as estimator_binding
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi import _target, _refusal
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
