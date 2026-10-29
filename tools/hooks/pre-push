@@ -16,11 +16,13 @@
 # class and per owner. A branch that predates the baseline is judged on what
 # it adds over its merge-base with main, against main's baseline.
 #
-# The fourth fence (2026-10-21): no_python_in_kernels.py --tree refuses a kernel
-# .mojo file (anything outside bindings/, *pyapi*.mojo, *_py.mojo, bench/,
-# experiments/ and checks/) that imports or calls Python, beyond
-# tools/hooks/python_in_kernels_baseline.txt. It judges refs exactly like the
-# host-route fence: main on the whole tree, any other branch with --branch.
+# The fourth fence (updated 2026-10-28): no_python_in_kernels.py --tree detects
+# explicit Python evaluator calls in product Mojo, including bindings/providers.
+# Native CPython C-API calls/imports are legal anywhere, including loops. This
+# narrow lexical check cannot prove dynamic target/hook safety; the runtime
+# endpoint ledger below and admission review retain that duty. Explicit execution
+# exceptions use python_execution_baseline.txt; the old import baseline is history.
+# Ref judging matches the host-route fence: main whole-tree, branches --branch.
 #
 # The tombstone fence (2026-10-28): tools/tests/test_tombstones_preserved.py --tree, when the
 # pushed tree has it, refuses a push whose docs/TOMBSTONES.md index row, section, patch under

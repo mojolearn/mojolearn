@@ -1,0 +1,69 @@
+Native CPython policy guard reconciliation, 2026-10-28
+Branch: lane/native-capi-policy-20261028
+Base/owner rule: 932b18b6708263ede219dbbf9b26d2279251cd7e
+Guard implementation/source-push check: 056970dc82.
+
+Changed enforcement
+- Direct native CPython imports/calls are permitted everywhere, including loops.
+  no_python_in_kernels keeps its hook/CI name for compatibility but no longer
+  fails on std.python/PythonObject/refcount/GIL/PyObject_Call spelling.
+- It flags only recognized explicit Python evaluation calls: imported
+  Python.evaluate (including simple aliases), direct PyRun/PyEval code-evaluation
+  symbols and literal ffi/cpython loader invocation forms. Comments, strings and
+  bare function references are not treated as execution.
+- Product bindings/providers/*pyapi files are included. Tooling/fixture paths
+  remain outside the product tree scan; dependency traversal can follow their
+  imported implementation. Moving an algorithm into providers does not exempt it.
+- This lexical check does NOT prove dynamic call targets, Python/user hooks,
+  admitted types, reference/GIL safety or transitive runtime compliance. In
+  particular PyObject_Call may invoke native code OR Python and requires target
+  review. Runtime endpoint/source audit remains a separate mandatory fence.
+- New empty python_execution_baseline.txt governs explicit execution exceptions.
+  Historical python_in_kernels_baseline.txt content is retained, with a superseding
+  note; historical import debt grants no execution exemption. New baseline rows
+  cannot bootstrap exceptions where main lacks the file. Additional evaluator
+  calls in an already-flagged changed file are not silently grandfathered.
+- check_generation_native_boundary defaults to dependency/source inventory:
+  imports/CAPI/provider folders are allowed; explicit evaluator calls and missing
+  local dependencies are reported. --require-native-only is an optional assertion
+  for a deliberately pure root, not mandatory product policy. Updated source
+  regression tests distinguish this optional assertion from the default policy.
+- Pre-push and CI descriptions now state the actual scope; existing status names
+  are preserved. Generation agent's native_neural_dependencies audit is separately
+  optional/diagnostic; no edits or mandatory invocation added here. No product
+  runtime code or public-runtime-inventory files changed in this lane.
+
+Validation
+- 12 targeted temporary-git-tree/scanner tests passed, covering legal native calls
+  (including loops), import aliases, explicit evaluator refusals in providers,
+  comments/strings, dynamic-call limits, baseline history/branch anti-growth.
+- Six related dependency-audit source tests passed: default CAPI/provider allowance,
+  actual provider evaluator detection, optional purity behavior and missing source.
+  pytest is absent in the system Python, so these six pure source test functions
+  were invoked directly with temporary Path fixtures. No package install or product
+  import was used. Earlier ten-test and twelve-test runs remain in the full logs.
+- Whole committed product evaluator source scan rc0; dependency inventory rc0
+  (265 modules, zero recognized findings); required source/push guards rc0.
+  These are limited source checks, not runtime or transitive callback proof.
+- No product compile: tooling/tests/docs only, per root's explicit scope. No
+  runtime/identity/performance campaign. Complete logs and exit files are under
+  ~/mojolearn-evidence/native-capi-policy-20261028/; source-checks.json records hashes.
+
+Concrete provider algorithm placement found (not an evasion inference)
+- Commit d1d75b049dfef09d78e90cee6e1716afa5a7de8a removed Python AutoARIMA
+  _penalty/_penalty_of and candidate search orchestration from
+  python/mojolearn/_x_sequence_autoarima.py and added
+  providers/python/autoarima_search_pyapi.mojo. Current source still has
+  _penalty at lines122-131: AIC/AICc/BIC Float64 arithmetic and portable_log_c;
+  candidate orchestration remains around lines243 onward.
+- Earlier83e06b57c0 moved construction/forecast into
+  providers/python/autoarima_lifecycle_pyapi.mojo; current forecast loops selected
+  groups, prepares ARIMA ABI words, calls native forecast, then native row scatter.
+- This is genuine algorithm/orchestration placement in a provider directory,
+  not Python computation: numerical ARIMA kernels remain native, and the scalar
+  penalty itself is Mojo. File placement is not evidence of integration-only
+  responsibilities or of full runtime removal. There is no evidence here of
+  intent to evade a guard. Recorded for ownership follow-up; no arithmetic move
+  or broad product audit was undertaken after the owner's reprioritization.
+
+Parent integrates serially. Worktree has not merged or pushed main.
