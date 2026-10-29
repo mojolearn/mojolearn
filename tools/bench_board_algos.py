@@ -6214,7 +6214,12 @@ def _build_optim(lane, arm, D):
     # the host (the same upload as before) and the optimizer back to its constructed state in
     # place (_opt_state_reset), then runs the 10 steps. The eager arm does the same per-round
     # work. Results raced before this change were wrong for this lane; apply extra scrutiny.
-    p = torch.nn.Parameter(p0_host.to(dev))
+    # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-29: the untimed CPU
+    # quality reference also uses this runner. A no-op .to("cpu") aliases
+    # p0_host and its NumPy reset baseline, so warm-up used to mutate the
+    # initial parameter and the next reference fit accumulated another update.
+    # Own the parameter storage on every device; keep the reset bytes intact.
+    p = torch.nn.Parameter(p0_host.to(dev, copy=True))
     # preflight-smoke (2026-10-14): ours' fixed math flags pinned explicitly where this torch class takes them
     # (compared through the read-back), and torch's capturable/differentiable modes explicitly off (no captured
     # graph, no autograd through the step; recorded as implementation-only exceptions).
