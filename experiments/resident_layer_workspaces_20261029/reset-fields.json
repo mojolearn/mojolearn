@@ -1,0 +1,132 @@
+{
+  "source": "transformer/impl/llama/modeling_llama.mojo",
+  "constructor_zero_buffers": [
+    "norm1_sumsq",
+    "norm1_out",
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "q_rope",
+    "k_rope",
+    "k_cache",
+    "v_cache",
+    "scores",
+    "masked",
+    "amax",
+    "aexp",
+    "denom",
+    "weights",
+    "ctxv",
+    "o_proj",
+    "residual1",
+    "norm2_sumsq",
+    "norm2_out",
+    "gate_proj",
+    "up_proj",
+    "silu_out",
+    "gated",
+    "down_proj",
+    "residual2",
+    "qbh",
+    "kbh",
+    "sbh",
+    "qk_sumsq"
+  ],
+  "reset_filled_buffers": [
+    "norm1_sumsq",
+    "norm1_out",
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "q_rope",
+    "k_rope",
+    "k_cache",
+    "v_cache",
+    "scores",
+    "masked",
+    "amax",
+    "aexp",
+    "denom",
+    "weights",
+    "ctxv",
+    "o_proj",
+    "residual1",
+    "norm2_sumsq",
+    "norm2_out",
+    "gate_proj",
+    "up_proj",
+    "silu_out",
+    "gated",
+    "down_proj",
+    "residual2",
+    "qbh",
+    "kbh",
+    "sbh",
+    "qk_sumsq"
+  ],
+  "missing_zero_reset": [],
+  "extra_zero_reset": [],
+  "constructor_metadata": [
+    "attn_estash_cells",
+    "attn_forward_status",
+    "attn_fused_off",
+    "attn_fwd_scan",
+    "attn_materialized",
+    "attn_prefer_eager",
+    "attn_recompute_backward",
+    "b",
+    "defer_addr",
+    "dims",
+    "gemm_workspace",
+    "int15",
+    "int15_on",
+    "l",
+    "s_cap",
+    "s_max",
+    "window"
+  ],
+  "reset_metadata": [
+    "attn_estash_cells",
+    "attn_forward_status",
+    "attn_fused_off",
+    "attn_fwd_scan",
+    "attn_materialized",
+    "attn_prefer_eager",
+    "attn_recompute_backward",
+    "defer_addr"
+  ],
+  "metadata_not_reset": [
+    "b",
+    "dims",
+    "gemm_workspace",
+    "int15",
+    "int15_on",
+    "l",
+    "s_cap",
+    "s_max",
+    "window"
+  ],
+  "llama_dims_fields": [
+    [
+      "d_model",
+      "Int"
+    ],
+    [
+      "n_heads",
+      "Int"
+    ],
+    [
+      "n_kv",
+      "Int"
+    ],
+    [
+      "head_dim",
+      "Int"
+    ],
+    [
+      "intermediate",
+      "Int"
+    ]
+  ],
+  "scope": "Source comparison only; semantic cache review is recorded in RESET_REVIEW.txt"
+}

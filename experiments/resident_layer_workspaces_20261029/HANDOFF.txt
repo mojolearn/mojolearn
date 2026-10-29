@@ -1,0 +1,50 @@
+Resident transformer prefill stage reuse, 2026-10-29
+
+Branch lane/resident-layer-workspaces-20261029, base mainb3c3df877d.
+Product scope: transformer/transformer_binding_impl.mojo only.
+
+Repeated work removed: _lm_layers_run previously constructed/destroyed a
+LlamaDeviceStages owner (30 zero-seeded GPU buffers plus GEMM/optional int15
+scratch) for every prefill layer. It now retains one operation-local stage owner
+across compatible layers. Current input values, weights, options, rope and KV
+remain live arguments; the previously retained prefill input copy is unchanged.
+
+Setup/reuse: compare B/L/s_max/window/lean and all five independent integer
+LlamaDims members. Matching layers use the existing complete reset and explicitly
+restore int15_on=False. This preserves all30 zero fills and route/refusal state;
+only allocations and repeated scratch capacity growth are removed. Constructor
+and reset have the same completion fence; no normal-path wait was added.
+Mismatches drop the old owner before constructing its replacement. The existing
+per-layer output-copy synchronization precedes every reuse/drop. Existing
+error-preserving drains and finally pins retain partial scratch on failure.
+
+Scope/invalidation: private to one LM layer operation; no cross-read/session
+cache or public alias change. Decode L=1 uses its already-retained per-layer
+session stages unchanged. Standalone _session_forward_run remains per-call.
+The real selected resident prefill route for forward/run/read is affected.
+
+Review: RESET_REVIEW.txt and reset-fields.json compare every constructor buffer
+and metadata field, including GEMM/int15 cache semantics and mixed packed/plain
+layers. LlamaDims has no floating fields; current floating BlockOptions remain
+explicit current-layer arguments. Grown attention spans are fully zeroed on
+reset, potentially more than fresh lean placeholders; this bounded, unmeasured
+cost is kept explicit. Root source review found no blocker before the freeze.
+
+Qualification: compile_native.json records actual native resident LM dispatch,
+including layer prefill and forward/run/read/reservation closure, Apple GPU
+identical O0 compiled on CPU host (no COLUMN_CPU substitution), through
+compile_slot with10configured workers. No artifact executed. Unchanged public
+provider boundary retains its prior compilation evidence; no duplicate build.
+Runtime, cross-vendor identity/performance and NVIDIA/AMD target compilation
+remain unqualified. No numerical arithmetic or route change was requested.
+
+Complete log/binary/source retention:
+~/mojolearn-evidence/resident-layer-workspaces-20261029/native/
+  compile.log, compile.json, _resident_layer_workspace.so,
+  source-bytes.tgz, source-manifest.json
+Normal source guards and retained hash checks accompany the final commit.
+
+Final status: native compile exit0 in52.16s; first affected compile passed.
+no_host_routes, no_python_in_kernels, no_compute_in_shells and rebuild_fence
+all exit0 without override. Five retained checks match accepted binary/source
+archive and current caller/stage/int15 source bytes. No runtime campaign ran.

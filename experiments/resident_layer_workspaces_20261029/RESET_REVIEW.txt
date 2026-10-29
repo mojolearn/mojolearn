@@ -1,0 +1,47 @@
+Source-only constructor/reset/lifetime review, 2026-10-29
+
+LlamaDeviceStages constructor and reset in transformer/impl/llama/modeling_llama:
+reset-fields.json records all30 constructor _zeros[False] buffers and identical
+30 reset enqueue_fill targets. Constructor and reset each submit fills then one
+synchronization; reuse introduces no additional normal-path wait.
+
+Metadata not assigned by reset:
+- b/l/s_max/window/dims: every constructor input is explicitly matched before
+  reuse. LlamaDims has exactly five integer members: d_model,n_heads,n_kv,
+  head_dim,intermediate; all are compared, none inferred from another field.
+  s_cap derives only from matched s_max/window/l. Lean policy is separately
+  matched because it changes attention placeholder extents.
+- int15_on: caller explicitly restores False after reset. Ordinary forward also
+  sets Bool(current w.int15) after input refusal, before any policy read.
+- gemm_workspace: stores ONLY a caller-owned scratch buffer. run sizes against
+  actual dispatcher, drains on growth and invokes current operands every time.
+  No weight/operand/value cache survives between layers.
+- int15: LlamaInt15Stage retains scratch planes/exponents/quantization maxima/
+  sums/qall capacity, not weight planes. ensure_a/b/q drain before growth;
+  llama_int15_proj always quantizes current input and borrows current weight
+  planes. S11 score helpers quantize current queries AND keys. A subsequent
+  unpacked layer ignores this optional scratch and uses current fp32 weights.
+
+reset restores attn_prefer_eager/recompute_backward/status/fused_off/materialized/
+estash_cells/defer_addr and replaces attn_fwd_scan. Thus an earlier layer's
+fused refusal, regime scan, stash or deferred-check pointer cannot select the
+next layer's route. Current weights/options/rope/KV remain explicit arguments;
+no floating BlockOptions word is captured by this stage constructor or cached
+by the new match function. All existing per-call refusals remain reachable.
+
+Grown eager/fused attention buffers may exceed the initial lean placeholders.
+reset zeros their full retained spans, matching existing retained-workspace
+semantics. This can clear more storage than a new lean constructor initially
+allocates, a bounded unmeasured tradeoff for avoiding allocation/growth. No
+initialization is skipped to claim a gain. No performance result is asserted.
+
+One stage owner exists per _lm_layers_run. Each layer's output copy into x and
+existing context synchronization completes before reset or incompatible-owner
+destruction. Different shape/lean drops the old owner BEFORE allocating the new
+one; this avoids retaining two full stage sets. Exceptions retain the partially
+used owner through the existing error-preserving drain and finally pin. Owners
+and all scratch die at operation exit, so no cross-call invalidation or model
+lifetime extension is introduced. Public escaped outputs remain copied data.
+
+Root reviewed final source before compilation and found no blocker. This is
+source review, not runtime, device identity or performance qualification.

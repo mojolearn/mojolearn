@@ -1,0 +1,27 @@
+[
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/resident-layer-workspaces-20261029/native/_resident_layer_workspace.so",
+    "sha256": "a94f3bb91e09ba5c0a627c55fe1f9076c49b9fd16aece682cbeff54bf6737aa3",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/resident-layer-workspaces-20261029/native/source-bytes.tgz",
+    "sha256": "1ef29237ce1b58b571be1b089018b00e3cf81bb76424ad14533ff2cee6c2881d",
+    "matches_receipt": true
+  },
+  {
+    "source": "transformer/transformer_binding_impl.mojo",
+    "sha256": "d0903c9fb16a9a3d7cd8c5a903a04277fdc5c3493b7d187108355c6bfc894874",
+    "matches_manifest": true
+  },
+  {
+    "source": "transformer/impl/llama/modeling_llama.mojo",
+    "sha256": "b7ef85e989af8d4a4c97addc56856421dea2c75f829b98cdebd0278e0f49d80c",
+    "matches_manifest": true
+  },
+  {
+    "source": "transformer/impl/llama/int15_block.mojo",
+    "sha256": "e3d88423f0f0228bf2dca8d69a06742716360802247c9f22405550ff71390856",
+    "matches_manifest": true
+  }
+]

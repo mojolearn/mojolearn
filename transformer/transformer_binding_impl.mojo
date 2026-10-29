@@ -2217,15 +2217,30 @@ struct _LMRunWorkspace(Movable):
             self.ws_packed = packed
 
 
+def _lm_prefill_stage_matches(
+    stages: LlamaDeviceStages, layer: TransformerDecodeSession, l: Int,
+    held_lean: Bool, lean: Bool,
+) -> Bool:
+    # All five LlamaDims members are independent integers (no option floats).
+    # The stage constructor captures only these shape fields plus window/lean;
+    # current layer options, weights, KV state and rope are still passed anew.
+    return (stages.b == layer.b and stages.l == l
+            and stages.s_max == layer.smax and stages.window == layer.window
+            and stages.dims.d_model == layer.dm and stages.dims.n_heads == layer.nh
+            and stages.dims.n_kv == layer.nkv and stages.dims.head_dim == layer.hd
+            and stages.dims.intermediate == layer.it and held_lean == lean)
+
+
 def _lm_layers_run(
     ctx: DeviceContext, layers: List[Int], mut x: DeviceBuffer[DType.float32], b: Int, l: Int,
 ) raises:
     """Every layer in order on `x` ([b * l * d], overwritten with the stack's
     output): at l = 1 on the session's own L = 1 stages and resident x buffer
-    (`_session_step_run`), otherwise on call-shaped stages
-    (`_session_forward_run`)."""
+    (`_session_step_run`), otherwise on one operation-owned prefill workspace
+    reused only between compatible sequential layers."""
     var prefill_input = Optional[DeviceBuffer[DType.float32]]()
     var prefill_stages = Optional[LlamaDeviceStages]()
+    var prefill_lean = False
     try:
         for i in range(len(layers)):
             var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
@@ -2238,9 +2253,23 @@ def _lm_layers_run(
                     sp[].dx.value(), sp[].b, 1, pos0, trace, String("py.session"))
                 ctx.enqueue_copy(dst_buf=x, src_buf=sp[].stages.value().residual2)
             else:
-                var dims = LlamaDims(sp[].dm, sp[].nh, sp[].nkv, sp[].hd, sp[].it)
-                prefill_stages = LlamaDeviceStages(ctx, sp[].b, l, sp[].smax, dims, sp[].window,
-                                                  lean=_lean_for_w(sp[].hd, sp[].w.value()))
+                var lean = _lean_for_w(sp[].hd, sp[].w.value())
+                var reused = False
+                if prefill_stages:
+                    reused = _lm_prefill_stage_matches(prefill_stages.value(), sp[], l, prefill_lean, lean)
+                if reused:
+                    # Previous layer output has already copied to x and the
+                    # context synchronized. Restore every constructor zero and
+                    # route/status flag before borrowing scratch for this layer.
+                    prefill_stages.value().reset(ctx)
+                    prefill_stages.value().int15_on = False
+                else:
+                    # Drop an incompatible owner before allocating its replacement
+                    # so heterogeneous layers do not retain two full workspaces.
+                    prefill_stages = None
+                    var dims = LlamaDims(sp[].dm, sp[].nh, sp[].nkv, sp[].hd, sp[].it)
+                    prefill_stages = LlamaDeviceStages(ctx, sp[].b, l, sp[].smax, dims, sp[].window, lean=lean)
+                    prefill_lean = lean
                 ref stages = prefill_stages.value()
                 _lm_scratch_buffer(ctx, prefill_input, b * l * sp[].dm)
                 ref dx = prefill_input.value()
@@ -2250,7 +2279,6 @@ def _lm_layers_run(
                     pos0, trace, String("py.session.forward"))
                 ctx.enqueue_copy(dst_buf=x, src_buf=stages.residual2)
                 ctx.synchronize()
-                prefill_stages = None
     except original:
         # Drain while the reused copy and any partially used stages stay live.
         try:
