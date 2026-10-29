@@ -1,0 +1,72 @@
+Manual selected development-group GHA wrapper; TOOLS ONLY, NOT DISPATCHED.
+Branch: lane/github-development-build-20261029 (base2d775c release freeze).
+
+The workflow takes an exact product commit, explicit existing development-group
+selectors, and host/sm_89/sm_80 target. Tooling checkout is separate: frozen
+product builder/recipes are invoked without overlay or compiler modifications.
+One physical group per job; compiler workers come from the frozen source's
+existing affinity/cgroup-aware build_sizing.box_resources, replacing inherited
+one/two-worker settings. Raw worker/environment/command facts remain recorded;
+configured worker count does not prove every phase saturates the machine.
+
+The job is limited to60minutes; compile step to50, reserving artifact upload
+margin. Existing development producer retains its group timeout/stall guards.
+A selected group's successful compilation may coexist with producer exit3 for
+an incomplete whole set. The original exit/state/missing list are retained;
+this wrapper only reports selected-group success after checking its own result,
+receipt fields and actual binary SHA. A failed support build is never waived.
+
+Retention includes full container/controller/build/execution logs, source git
+archive, tooling bytes/hashes, selected raw artifact+original receipt, support
+artifacts, hash-checked consumed source files (including generated Unicode),
+actual generated merged entry roots, and bootstrap portable-math binary bytes.
+These are configured for GHA artifact upload even on failure. A later run owner must
+retain them on Mac+R2 before artifact expiry; no watcher or auto-rental added.
+Generated Unicode preparation remains in the existing source builder before
+cache planning. No separate duplicate generator/build is introduced.
+
+Validation: original114 tests retained. Reviewed retention changes passed120
+focused tools tests (GHA wrapper/development producer/build sizing), exit0.
+A final workflow-variable correction avoids Bash's reserved GROUPS name; only
+the affected wrapper tests were rerun afterward (see workflow-final-tests.log).
+Python syntax, shell syntax and diff whitespace checks passed. Initial test
+launches using system Python/default pixi/old venv had no pytest and executed
+no tests; those failures remain in the evidence. The successful runs use the
+existing current-venv with bytecode writes disabled; no product code ran.
+
+Evidence: ~/mojolearn-evidence/github-development-build-20261029/
+Original tests.log/tests.exit; final-all-tests.log/.exit;
+workflow-final-tests.log/.exit; final-tests*.log preserve setup failures.
+No actual GHA dispatch, native compilation, runtime, identity, measurement,
+cloud rental, source-reference change, or central-ledger mutation occurred.
+
+Future ownership remains: root's host33 and missing sm89GPU24 route is separate;
+this lane's planned GHA scope is all33 missing sm80 PTX modules AFTER the joined
+sampling/release numerical freeze. Existing33 AMD modules from four merged GHA
+groups are retained and must not be rebuilt just to change layout or admission.
+The workflow is build preparation, not evidence that these targets compiled.
+
+Product tools commit:0ec29c43f25a8a626d65277a3ee21e1b2a112b47.
+Final affected wrapper test count22, exit0. Five source guards all passed0:
+host-route, Python-execution, shell-compute, generation-boundary and package
+connections. Complete argv/status/durations in guards.json plus individual logs.
+No native compile is needed for this Python/shell/YAML tooling-only batch.
+
+Root review follow-up: development cache now lives under the bind-mounted
+output/cache, including artifacts and work/roots. It is not the pixi/compiler
+cache. Successful support images, partial outputs and generated entry bytes
+therefore survive docker --rm even when the controller fails or times out,
+without relying on the success-only retain_inputs step. Bootstrap portable-math
+bytes are copied before the selected builder launches. An always-run workflow
+step retains generated Unicode from the persisted source checkout after build
+failure/timeout; absent Unicode is explicit, not fabricated input evidence.
+
+A real subprocess-interface fixture simulates failed selected compilation after
+writing a successful support binary and generated entry, proving both remain in
+the mounted output and exit1/statusfailed are preserved. Final focused tools
+suite122tests passed0/1.49s; Python/shell syntax and whitespace checks0. This is
+local tool testing, not an actual GHA build/timeout or runtime product campaign.
+Complete originals and final logs are retained; no cloud action dispatched.
+
+Failure-retention final source guards: all five exit 0; complete logs and
+argv/status/durations retained under failure-retention/. No dispatch performed.

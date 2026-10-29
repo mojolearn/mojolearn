@@ -1,0 +1,29 @@
+{
+  "schema": "mojolearn.gha-development-wrapper-review.v1",
+  "source_sha256": {
+    ".github/workflows/development-group-build.yml": "961bcf9bc7242714b3a74d9fbec1cdd5786695e63a8df9ab5c9f3339473c33a5",
+    "tools/gha_development_group.py": "f8ae7834fecf4c1e67588e9c6db2720ec28c3e678389bc67b51948ed911f6308",
+    "tools/test_gha_development_group.py": "7672da5a3a185e9829439e5ce16fbbb62be74072897e7917865edeb174fd4216",
+    "tools/gha_release_box.sh": "af18175aa26abaa10a477f8e313242ff13b069ec7f072591b06dc68dbef13395"
+  },
+  "tests": {
+    "producer_and_resources": {
+      "count": 120,
+      "exit_code": 0,
+      "log": "final-all-tests.log"
+    },
+    "final_workflow_wrapper": {
+      "exit_code": 0,
+      "log": "workflow-final-tests.log"
+    },
+    "failure_retention": {
+      "count": 122,
+      "exit_code": 0,
+      "log": "failure-retention-tests.log"
+    }
+  },
+  "native_compilation": false,
+  "runtime_execution": false,
+  "dispatch": false,
+  "cloud_rental": false
+}
