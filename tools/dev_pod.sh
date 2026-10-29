@@ -103,7 +103,11 @@ AMD_GPUS="${MOJOLEARN_DEVPOD_AMD_GPUS:-AMD Instinct MI300X OAM}"
 AMD_IMAGE="${MOJOLEARN_DEVPOD_AMD_IMAGE:-rocm/dev-ubuntu-22.04:6.4.1-complete}"
 DISK_GB="${MOJOLEARN_DEVPOD_DISK_GB:-80}"
 READY_TIMEOUT=900
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o BatchMode=yes"
+# Slow provider SSH handshakes may need a longer bounded connection attempt.
+SSH_CONNECT_TIMEOUT="${MOJOLEARN_RUNPOD_SSH_CONNECT_TIMEOUT:-20}"
+case "$SSH_CONNECT_TIMEOUT" in ''|*[!0-9]*) echo "SSH connect timeout must be an integer from 1 to 300" >&2; exit 2;; esac
+[ "$SSH_CONNECT_TIMEOUT" -ge 1 ] && [ "$SSH_CONNECT_TIMEOUT" -le 300 ] || { echo "SSH connect timeout must be an integer from 1 to 300" >&2; exit 2; }
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=$SSH_CONNECT_TIMEOUT -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o BatchMode=yes"
 REPO_URL="${MOJOLEARN_DEVPOD_REPO_URL:-https://github.com/mojolearn/mojolearn.git}"
 BOX_PATH='export PATH=/root/.pixi/bin:/opt/rocm/bin:$PATH'
 BOX_DIR=/root/mojolearn   # a slot on the shared AMD host: /root/mojolearn-<lane>
@@ -391,7 +395,7 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
     _deadline=$(( $(now) + READY_TIMEOUT )); SSH_TARGET=""
     while [ "$(now)" -lt "$_deadline" ]; do
         rp_call GET "$RP/pods/$POD_ID"; SSH_TARGET=$(rp_py ssh)
-        if [ -n "$SSH_TARGET" ] && with_timeout 40 ssh $SSH_OPTS $SSH_TARGET 'echo SSH-OK' 2>/dev/null | grep -q SSH-OK; then break; fi
+        if [ -n "$SSH_TARGET" ] && with_timeout "$((10#$SSH_CONNECT_TIMEOUT + 20))" ssh $SSH_OPTS $SSH_TARGET 'echo SSH-OK' 2>/dev/null | grep -q SSH-OK; then break; fi
         SSH_TARGET=""; sleep 10
     done
     [ -n "$SSH_TARGET" ] || { delete_pod "$POD_ID"; die "no ssh after ${READY_TIMEOUT}s; deleted"; }

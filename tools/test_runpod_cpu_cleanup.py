@@ -207,3 +207,14 @@ die() { exit 90; }
     assert result.returncode == 0, result.stderr
     assert output.read_text().splitlines() == ['GET https://invalid.test/v2/pods/owned123']
     assert 'RUNPOD_API_VERSION=2' in source[source.index('ARCHIVE_STATE=', end):]
+
+
+def test_runpod_ssh_timeouts_refuse_invalid_values_before_provider_access(tmp_path):
+    for script in ('runpod_cpu_leg.sh', 'dev_pod.sh', 'runpod_guard.sh'):
+        for value in ('0', '301', 'bad', '1; exit 0'):
+            env = dict(os.environ, MOJOLEARN_RUNPOD_SSH_CONNECT_TIMEOUT=value,
+                       MOJOLEARN_LEASE_DIR=str(tmp_path / 'leases'))
+            result = subprocess.run(['bash', str(ROOT / 'tools' / script), 'list'],
+                                    env=env, text=True, capture_output=True)
+            assert result.returncode == 2, (script, value, result.stderr)
+            assert 'SSH connect timeout must be an integer from 1 to 300' in result.stderr
