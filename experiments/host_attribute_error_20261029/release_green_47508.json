@@ -1,0 +1,78 @@
+{
+  "schema": "mojolearn.release-repair-progress.v1",
+  "source_freeze": "47508cfcd96771eee86b115739b2a83ddb0e43aa",
+  "repair_commit": "dcff38856c3de65cb7022924615d4fd9cc6c4a76",
+  "integrated_main": "d1e627afb9",
+  "scope": "Retained execution observations; release ledger admission and cross-vendor agreement are separate and incomplete.",
+  "compilation": {
+    "apple_selected_host_groups": {
+      "tokenizer": 0,
+      "runtime_classical": 0
+    },
+    "full_host_builder_exit": 3,
+    "full_host_builder_scope": "selected groups only, not full-set activation",
+    "source_aligned_images": 79,
+    "rebuilt": 2,
+    "reused": 77,
+    "proof": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-green-20261029/final79-source-match.json",
+      "sha256": "e371af9943eb593ba8ad31f7a64a1f531b19074757647210fb559442f2de6a09"
+    }
+  },
+  "installed_runtime": {
+    "passed": 11,
+    "failed": 0,
+    "skipped": 0,
+    "summary": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-green-20261029/final-focused-summary.json",
+      "sha256": "ebb604c979b3deb3edfb7cbf8906f65d8e776c90ce5553babc9323f061a4da71"
+    },
+    "report": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-green-20261029/final-focused.xml",
+      "sha256": "49a467307003b6a4f28fd661f75814e175a49a70c8b18a0bab1edd703b0c3b5b"
+    }
+  },
+  "measurement_smoke": {
+    "lanes": [
+      "gemm",
+      "transformer-decode",
+      "mamba1-decode"
+    ],
+    "passed": 3,
+    "failed": 0,
+    "scope": "small fixtures, own arm, no performance claim or board admission",
+    "summary": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-green-20261029/measurement-smoke/summary.json",
+      "sha256": "c022f7c6bdcee2edb2531d23b646f01222740edf378ab5d40df3eb3b09504732"
+    }
+  },
+  "apple_verifier": {
+    "lane": "agglomerative",
+    "verdict": "VERIFIED",
+    "exit": 0,
+    "detail": "verified 36 of 81 cell parts (0 divergent, 0 owed, 0 refused, 45 n/a); 1 verified, 0 not applicable, 0 owed, 0 held, of 1 lanes",
+    "cpu_crosscheck_agree": 18,
+    "report": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-evidence-prepare-20261029/campaign-47508/runs/apple/routine-all/agglomerative/verify.json",
+      "sha256": "2de9ddc5b1e9bb507df0cd4519f4e47a7f625df3cc25f52a6e3e2bb4383770be"
+    },
+    "coverage": "one lane only; full500 Apple column pending",
+    "reference_status": "provisional until required within-release vendor agreement"
+  },
+  "linux_compilation": "pending current affected groups",
+  "nvidia_runtime": "pending",
+  "amd_runtime": "pending",
+  "cross_vendor_identity": "pending",
+  "pypi_publication": "pending",
+  "retention": {
+    "full_bytes": "local retained; new R2 upload incomplete due transport timeout",
+    "composition": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-green-20261029/final-install/receipt.json",
+      "sha256": "a7e467ee12ef29f2e15c3bfef7daff22a33714102e5bdd2dcac7386f5a7dd95d"
+    },
+    "new_archive": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-green-20261029/final-retention.json",
+      "sha256": "e0ded2605e3f0742671126a9a89325273da0aae3b909e7bd9ecd8be18286ef94"
+    }
+  }
+}
