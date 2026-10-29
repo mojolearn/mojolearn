@@ -76,3 +76,9 @@ Retention:
 contains full compile.log/.exit, binary, source patch/archive/hash manifest and
 command/scope receipt. The initial paused, uncompiled draft remains separately
 retained at sampling-residency-20261029; its earlier HELD status is historical.
+
+Final compile/source status: actual public5+7 compile exit0; no_host_routes,
+no_python_in_kernels and no_compute_in_shells each exit0 on product
+ece162e045dc7ab3b8b7455ab54998be32e2f433. Only receipt changes follow. Ready for
+root's serialized integration after its prioritized manifold smoke; experiment
+remains off. Later measurement authorization does not count as executed evidence.
