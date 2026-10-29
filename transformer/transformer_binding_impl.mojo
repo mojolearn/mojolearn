@@ -2357,7 +2357,8 @@ def _lm_run(
                 ctx.enqueue_copy(dst_ptr=out_i32 + r * n_steps, src_buf=output_rows[r])
         if read_address != 0:
             _lm_read_progress(ctx, read[], lengths_device.value(), finished_device.value())
-        ctx.synchronize()
+        else:
+            ctx.synchronize()
     except original:
         if read_address != 0 and progress_synchronized:
             try:

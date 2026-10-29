@@ -8,7 +8,11 @@ struct ResidentGreedyRead(Movable):
     var eos: List[Int32]
     var pad: Int
     var wrote: Int
+    # Forward progress precedes selection; wrote advances only after a full
+    # successful step. Partial failing-row updates live in the two lists.
     var consumed: Int
+    # Set only after both list downloads synchronize. Failed device recovery
+    # never publishes a partially refreshed diagnostic snapshot.
     var progress_ready: Bool
     var position: Int
     var max_positions: Int
