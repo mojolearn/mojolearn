@@ -1,0 +1,53 @@
+{
+  "code_commit": "ef4ec325382d8b655dddd9b40ef8a984d5f67455",
+  "base": "49875eb068",
+  "branch": "lane/resident-finite-pair-20261028",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "local Mac CPU identical shared-library compile; helper only",
+  "command": "bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build -j 8 --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/resident-finite-pair-20261028 experiments/resident_finite_pair_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/resident-finite-pair-20261028/helper-1.dylib",
+  "compile_exit": 0,
+  "source_push_guards_exit": 0,
+  "runtime_executed": false,
+  "artifacts": {
+    "commit1.log": {
+      "bytes": 280,
+      "sha256": "3d144b17271ea0860515744ed867d6c4c5998abb2430b030a738b7cb0f91da27"
+    },
+    "compiler-version.txt": {
+      "bytes": 22,
+      "sha256": "b514f4583371fc0e5f7b9061bdbebbf2a27825cd860e188b47384f4519786725"
+    },
+    "helper-1.dylib": {
+      "bytes": 442256,
+      "sha256": "b2d1f2388bf8bc0f208bff8e7f314ab80c4408271043361896baab21dfd88a3a"
+    },
+    "helper-1.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "helper-1.log": {
+      "bytes": 203,
+      "sha256": "b4c76614671bdb86067db3673faaaa4b05ef768fc57861aa92ee2aa26169bf00"
+    },
+    "provenance.json": {
+      "bytes": 217,
+      "sha256": "e43b139e36d4550ebcd071b58efa107c88eedf030c6b27518c9a4d2bd09d3374"
+    },
+    "source-1.tar.gz": {
+      "bytes": 14973020,
+      "sha256": "cc5fb0342c7a2665fbe143064743b87bc399efdd64fd5cc6348bedea9bf09458"
+    },
+    "source-push-guards.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "source-push-guards.log": {
+      "bytes": 1006,
+      "sha256": "9c561a5a642d4efb01d0c178d0f0d84ff78c12de19d20742c7d2c029d5cb8279"
+    },
+    "worktree.log": {
+      "bytes": 69,
+      "sha256": "be113602936eb21e61d488ae7921066368f6ca81c880e38510c777c75092982c"
+    }
+  }
+}

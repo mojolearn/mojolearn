@@ -1,0 +1,45 @@
+Resident paired finite-scan helper, 2026-10-28
+Branch lane/resident-finite-pair-20261028, base pushed main 49875eb068.
+Frozen helper source ef4ec325382d8b655dddd9b40ef8a984d5f67455.
+Caller ownership remains classical lane in transformer/transformer_binding_impl.
+
+Removed repeated work
+Operation-owned DeviceNonfinitePair retains device partials and pinned host
+mirrors for the largest admitted prompt/decode length. Each scan call uses only
+current logical n and exact block-prefix copy views. Existing nonfinite kernel,
+geometry, bit predicate and host integer minimum are reused without new kernels
+or prediction arithmetic. x and hn share ONE completion wait, replacing two
+back-to-back waits on the normalized resident path. The no-norm path allocates
+and copies no first-slot buffers and keeps its single wait. No scan scratch
+allocation repeats per token; copy views remain per-call metadata.
+
+Setup/reuse/semantics
+Construct once per operation with context, largest length and first-slot flag;
+first_nonfinite(ctx,x,hn,n) rereads current source bytes and returns native pair.
+No source address or result persists as a cache. Same context, private owner,
+no concurrent scans. Recreate next operation; capacity bounds guard logical spans.
+Caller inspects x result before hn, BEFORE consumed/selection/progress commit.
+The selector/status wait is unchanged. This does not merge finite failures with
+picker work or alter first-error/row-prefix/wrote behavior.
+
+Owners and failure
+Both input buffers, partial buffers, host mirrors and exact copy views stay live
+through the joint wait and exceptional drain. Secondary drain failure cannot
+replace the original error. Only synchronized host partials are read. Existing
+operation owner remains responsible for session failure and device lifecycle.
+
+Delivery/validation
+Focused standalone helper compile: exit 0; source/push guards: exit 0, no baseline
+growth. No failed attempt. Full log includes the compiler's @export ABI warning.
+This compile covers helper optional-slot and dynamic prefix branches only; it is
+not runtime/GPU/vendor qualification. Actual resident caller compilation is owned
+by classical lane and remains separate, avoiding duplicate combined builds.
+Source-only review of that caller accepted lazy setup at original refusal site,
+x-before-hn errors, unchanged consumed/selector boundary, previous-step sync before
+exact-sized buffer replacement, and retained scratch/transfer views on errors.
+No runtime, identity or performance work; no measured speed claim.
+
+Evidence: ~/mojolearn-evidence/resident-finite-pair-20261028/
+Full helper log, exit, binary, frozen conservative Mojo source archive, compiler
+and platform provenance, full guard log/exit, hashes/command in receipt.json.
+No main edits/push by this lane. Parent serializes integration with caller batch.
