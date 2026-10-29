@@ -289,7 +289,7 @@ def _dev_check(requirement_id, wanted, facts, unit):
                 # exports; substantive sources and changed wrappers remain required.
                 if entries is None:
                     from release_development_entry_proof import entry_proof
-                    entries = entry_proof(tree, load(group["receipt"]["path"])["fields"])
+                    entries = entry_proof(tree, checked(group["receipt"])["fields"])
                 actual = entries.get(rel)
             require(actual is not None and actual == tree.sha256(rel),
                     "binding Mojo source was not compiled at its tested bytes: " + rel)

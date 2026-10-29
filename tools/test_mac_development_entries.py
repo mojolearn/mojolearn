@@ -60,6 +60,7 @@ def test_mac_merged_root_proves_exact_public_entry(setup):
 
 def test_changed_recorded_root_is_refused(setup):
     p=setup[1];d=json.loads(p.read_text());d['fields']['root_sha256']='0'*64;p.write_text(json.dumps(d))
+    setup[3]['groups'][setup[4]['group']]['receipt']=common.reference(p)
     with pytest.raises(ValueError,match='generated development root differs'):
         check(setup)
 
