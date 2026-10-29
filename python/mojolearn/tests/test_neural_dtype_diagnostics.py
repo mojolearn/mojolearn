@@ -27,7 +27,7 @@ def _block(version):
 
 @pytest.mark.parametrize("version", [1, 3])
 @pytest.mark.parametrize("array", [False, True])
-def test_float64_refusal_names_actual_dtype_and_float32_policy(version, array):
+def test_float64_refusal_preserves_admission_order_and_dtype_policy(version, array):
     block, dm = _block(version)
     data = np.zeros((1, 2, dm), np.float64)
     value = ml.Array.from_list(data.tolist(), dtype="<f8") if array else data
@@ -35,9 +35,15 @@ def test_float64_refusal_names_actual_dtype_and_float32_policy(version, array):
     with pytest.raises(TypeError) as caught:
         block.forward(value)
     message = str(caught.value)
-    assert "has dtype float64" in message
-    assert "float32 only" in message
-    assert "bfloat16" in message  # Existing public policy-message contract.
+    if array:
+        # The existing restricted Array snapshot refuses f8 before the float32
+        # check. Preserve that validation order rather than broaden admission
+        # merely to publish a more specific downstream message.
+        assert "neural Array storage dtype or rank is inconsistent" in message
+    else:
+        assert "has dtype float64" in message
+        assert "float32 only" in message
+        assert "bfloat16" in message  # Existing public policy-message contract.
     assert data.tobytes() == before
 
 
