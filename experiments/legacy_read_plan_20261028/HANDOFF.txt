@@ -61,3 +61,7 @@ speedup claimed; no broad Python cleanup or new arithmetic in this batch.
 Evidence: /Users/andrewhendel/mojolearn-evidence/legacy-read-plan-20261028/
 Full compile logs/exits (including failures), binary, source archive/hash manifest,
 workspace-call-sites.log, command/scope receipt and guard logs are retained.
+
+Final source guard status: no_host_routes, no_python_in_kernels and
+no_compute_in_shells each exit0 at product20ee2c27ec7c330b2bedff2495b2d28d8f17ef59.
+Compile source/binary retained before receipt commit; only evidence changes follow.
