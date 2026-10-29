@@ -1,0 +1,46 @@
+{
+  "observed_date": "2026-10-28",
+  "reason": "Root reported disk cleanup removed evidence directories; this is an existence check after that report",
+  "qualification": "Committed compile receipts record prior passes, but deleted full logs/source archives/binaries are not currently retained at their recorded paths. Do not claim full retention from those receipts.",
+  "directories": [
+    {
+      "directory": "/Users/andrewhendel/mojolearn-evidence/admitted-instance-lookup-20261028",
+      "exists": false,
+      "retained_files": []
+    },
+    {
+      "directory": "/Users/andrewhendel/mojolearn-evidence/scorer-recipe-reuse-20261028",
+      "exists": true,
+      "retained_files": [
+        "no_compute_in_shells.log",
+        "no_host_routes.log",
+        "no_python_in_kernels.log",
+        "rebuild_fence.log",
+        "root-distributed-review.diff",
+        "source-guards.json"
+      ]
+    },
+    {
+      "directory": "/Users/andrewhendel/mojolearn-evidence/label-type-reuse-20261028",
+      "exists": true,
+      "retained_files": [
+        "root-attribute-row-review.diff"
+      ]
+    },
+    {
+      "directory": "/Users/andrewhendel/mojolearn-evidence/native-import-setup-20261028",
+      "exists": false,
+      "retained_files": []
+    },
+    {
+      "directory": "/Users/andrewhendel/mojolearn-evidence/host-svc-mode-recheck-20261028",
+      "exists": false,
+      "retained_files": []
+    },
+    {
+      "directory": "/Users/andrewhendel/mojolearn-evidence/msel-native-list-gather-20261028",
+      "exists": false,
+      "retained_files": []
+    }
+  ]
+}

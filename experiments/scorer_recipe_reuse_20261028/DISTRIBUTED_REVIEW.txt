@@ -1,0 +1,36 @@
+Source-only peer review: distributed replay reuse, 2026-10-28
+Reviewed autograd/distributed_program.mojo uncommitted diff vs 7965f31955.
+No product edits, build or runtime. Result: no actionable findings.
+
+Each ProgramReplica copies its program and sets parameter handles during
+construction; the inspected distributed entry/checkpoint paths create new
+replicas rather than replacing a running replica's graph. PreparedProgramReplay
+therefore contains graph-owned metadata and private scratch, not dataset
+addresses. Dataset prepare/release clears/rebuilds batch shapes and input widths;
+retaining the immutable graph inventory across fits does not retain old data.
+Successful close clears replay, ready flag, parameter leaves and loss storage;
+aggregate close/failure marks the distributed owner unusable before later use.
+
+Widths equal the former original-shape count/original row count. ShapeN owns a
+copied InlineArray; changing batch_shapes[k].d[0] does not modify caller shapes.
+Only the leading dimension changes per microbatch; nonleading dimensions and
+gather widths remain the values captured in that prepare. Every gather still
+uses the same start/count and writes the same batch buffers.
+
+Replay values clear on entry; node handle scratch clears per node; parameter
+leaves clear before replay after previous tape/temp retirement. Returned live
+parameter handles drive the same gradient extraction loop. Every physical
+worker owns a separate mutable replay inventory; waves run at most one task
+per worker and join/synchronize before folding or reuse.
+
+Dropout uses PreparedReplayNode.original_last_int plus the original logical
+stream coordinate (step*logical_shards+shard), node span and offset. It does not
+accumulate the previous replay's mutated key. Lazy preparation occurs at the
+first executed microbatch at the old replay-construction boundary, preserving
+selected-node validation timing. Loss download uses replica-owned one-word
+storage and synchronizes before reading/reusing it; its pointer does not escape
+or outlive the worker. No new shared scratch or arithmetic/reduction change.
+
+git diff --check returned 0. Compile evidence was not duplicated. This is source
+review, not runtime/identity qualification.
+Reviewed source SHA256: 983d39003592d0e6a96f9bc417a9c1307667a4bf3727b5a9db4212fb65c82a4f
