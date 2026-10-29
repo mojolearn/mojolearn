@@ -1,0 +1,23 @@
+[
+  {
+    "commit": "439199dcddf58ca68fe7c7ed2078da0a7a864326",
+    "version": "0.8.57",
+    "path": "python/mojolearn/_version.py",
+    "source": "# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632\n# Kept in one place. pyproject.toml's `version` must agree with this; the\n# release procedure is what checks that they do.\n__version__ = \"0.8.57\"\n",
+    "sha256": "2be8d9df005e653df66cb226e24b59ad4046b44562ae60b123c812ec46dd9110"
+  },
+  {
+    "commit": "640adbe7ea09098c644926c845d2719f05a70f34",
+    "version": "0.8.58",
+    "path": "python/mojolearn/_version.py",
+    "source": "# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632\n# Kept in one place. pyproject.toml's `version` must agree with this; the\n# release procedure is what checks that they do.\n__version__ = \"0.8.58\"\n",
+    "sha256": "7f52166eff164cbb4221056f4d0d8713d8e28f9a2eb1f8ca59b7dfeb1a0b086a"
+  },
+  {
+    "commit": "b25df4e213e0de66f4db2d526bf2f350889f23f9",
+    "version": "0.8.57",
+    "path": "python/mojolearn/_version.py",
+    "source": "# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632\n# Kept in one place. pyproject.toml's `version` must agree with this; the\n# release procedure is what checks that they do.\n__version__ = \"0.8.57\"\n",
+    "sha256": "2be8d9df005e653df66cb226e24b59ad4046b44562ae60b123c812ec46dd9110"
+  }
+]

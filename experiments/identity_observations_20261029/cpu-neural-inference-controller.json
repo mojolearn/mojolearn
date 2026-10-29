@@ -1,0 +1,18 @@
+{
+  "chunks": 9,
+  "excluded": {
+    "byte-lm-host-infer": {
+      "reason": "Actual constructor ValueError arena_native_types; original exit4, failed ledger attempt retained; repair pending",
+      "status": "failed"
+    },
+    "byte-lm-host-infer-threaded": {
+      "reason": "Same LanguageModelInference constructor/context as failed nonthreaded lane; avoid redundant known-failure fixtures until repair",
+      "status": "not-run-blocked"
+    },
+    "language-model-config": {
+      "reason": "Same actual arena_native_types constructor failure; original exit4 and failed ledger attempt retained",
+      "status": "failed"
+    }
+  },
+  "status": "partial-with-explicit-blockers"
+}

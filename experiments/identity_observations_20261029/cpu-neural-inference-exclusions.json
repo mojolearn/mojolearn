@@ -6,5 +6,9 @@
   "byte-lm-host-infer-threaded": {
     "status": "not-run-blocked",
     "reason": "Same LanguageModelInference constructor/context as failed nonthreaded lane; avoid redundant known-failure fixtures until repair"
+  },
+  "language-model-config": {
+    "status": "failed",
+    "reason": "Same actual arena_native_types constructor failure; original exit4 and failed ledger attempt retained"
   }
 }

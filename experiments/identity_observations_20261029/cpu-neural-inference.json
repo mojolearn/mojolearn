@@ -1,0 +1,219 @@
+{
+  "source": "3fa5fac6d0bef136a42066134926bea90275e268",
+  "status": "partial-with-explicit-blockers",
+  "completed_shared_lanes": 9,
+  "failed_cpu_only_lanes": 2,
+  "not_run_related_lane": "byte-lm-host-infer-threaded",
+  "identity_admission": "pending",
+  "rows": [
+    {
+      "lane": "byte-lm-host-infer",
+      "local_observations_complete": false,
+      "producer_exit": 4,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 0,
+        "N/A": 0,
+        "OWED": 0,
+        "REFUSED": 81
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/byte-lm-host-infer.tar.gz",
+        "bytes": 2104393,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/byte-lm-host-infer/f74f512c7db1bf34b85b94f6938c9aa5db551f5d18b8532f3573f92ad02070fe.tar.gz",
+        "readback_verified": true,
+        "sha256": "f74f512c7db1bf34b85b94f6938c9aa5db551f5d18b8532f3573f92ad02070fe"
+      }
+    },
+    {
+      "lane": "hf-causal-lm",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/hf-causal-lm.tar.gz",
+        "bytes": 2103112,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/hf-causal-lm/f60445407e0d9d166bd16834820056847b64b68d5a9f28e913f5efa0806bd62c.tar.gz",
+        "readback_verified": true,
+        "sha256": "f60445407e0d9d166bd16834820056847b64b68d5a9f28e913f5efa0806bd62c"
+      }
+    },
+    {
+      "lane": "hf-causal-lm-stream",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/hf-causal-lm-stream.tar.gz",
+        "bytes": 2103201,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/hf-causal-lm-stream/30f76868ac2280c3b1e95c803ccef307d3265eaf632ad9b3289fa4b0a496e23d.tar.gz",
+        "readback_verified": true,
+        "sha256": "30f76868ac2280c3b1e95c803ccef307d3265eaf632ad9b3289fa4b0a496e23d"
+      }
+    },
+    {
+      "lane": "hf-causal-lm-text",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/hf-causal-lm-text.tar.gz",
+        "bytes": 2103637,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/hf-causal-lm-text/c0fca00638a27100386b6951f12efd808cf4c497c251ddabd7641762bc828ed2.tar.gz",
+        "readback_verified": true,
+        "sha256": "c0fca00638a27100386b6951f12efd808cf4c497c251ddabd7641762bc828ed2"
+      }
+    },
+    {
+      "lane": "hf-model-surface",
+      "local_observations_complete": true,
+      "producer_exit": 1,
+      "counts": {
+        "DIVERGENT": 9,
+        "IDENTICAL": 0,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/hf-model-surface.tar.gz",
+        "bytes": 2103482,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/hf-model-surface/37a3d9ab2ccf81edc39fbb03434b279b9002ccda3c95feb9f759f79f780c8d2a.tar.gz",
+        "readback_verified": true,
+        "sha256": "37a3d9ab2ccf81edc39fbb03434b279b9002ccda3c95feb9f759f79f780c8d2a"
+      }
+    },
+    {
+      "lane": "language-model-config",
+      "local_observations_complete": false,
+      "producer_exit": 4,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 0,
+        "N/A": 0,
+        "OWED": 0,
+        "REFUSED": 81
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/language-model-config.tar.gz",
+        "bytes": 2104040,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/language-model-config/163006a0a708b46e19c9d35d26327a0681285099e903c5aa09f66e55dbe9893c.tar.gz",
+        "readback_verified": true,
+        "sha256": "163006a0a708b46e19c9d35d26327a0681285099e903c5aa09f66e55dbe9893c"
+      }
+    },
+    {
+      "lane": "mamba2-decode-session",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/mamba2-decode-session.tar.gz",
+        "bytes": 2103371,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/mamba2-decode-session/7d8cad14dd9c5867d449e5d1b94a288e009b07668e66da38edd26d10db638ca6.tar.gz",
+        "readback_verified": true,
+        "sha256": "7d8cad14dd9c5867d449e5d1b94a288e009b07668e66da38edd26d10db638ca6"
+      }
+    },
+    {
+      "lane": "mamba3-decode-session",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/mamba3-decode-session.tar.gz",
+        "bytes": 2103363,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/mamba3-decode-session/f0ecda9b8871c68c11cd2f644165b8b32d0c7774eeead1edd74f1dc65746d412.tar.gz",
+        "readback_verified": true,
+        "sha256": "f0ecda9b8871c68c11cd2f644165b8b32d0c7774eeead1edd74f1dc65746d412"
+      }
+    },
+    {
+      "lane": "sequence-tape-program",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/sequence-tape-program.tar.gz",
+        "bytes": 2103233,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/sequence-tape-program/27419787ada27fa8f13ba0662872ac5bcdb0fa001b2c64a75e3ad122d56aa94e.tar.gz",
+        "readback_verified": true,
+        "sha256": "27419787ada27fa8f13ba0662872ac5bcdb0fa001b2c64a75e3ad122d56aa94e"
+      }
+    },
+    {
+      "lane": "sequence-tape-sequential",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/sequence-tape-sequential.tar.gz",
+        "bytes": 2103435,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/sequence-tape-sequential/0b7614a9acbe171237936dd51314b8a621baec6ecc80f79f1b2fc37699036a9b.tar.gz",
+        "readback_verified": true,
+        "sha256": "0b7614a9acbe171237936dd51314b8a621baec6ecc80f79f1b2fc37699036a9b"
+      }
+    },
+    {
+      "lane": "training-mlp-sessions",
+      "local_observations_complete": true,
+      "producer_exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/cpu/neural-inference/training-mlp-sessions.tar.gz",
+        "bytes": 2103341,
+        "key": "verification/0.8.63/3fa5fac6d0/cpu/neural-inference/training-mlp-sessions/54cc440aad1de92f400a0617a37569c13af60e03e11a23d20b2bf0eb24accb49.tar.gz",
+        "readback_verified": true,
+        "sha256": "54cc440aad1de92f400a0617a37569c13af60e03e11a23d20b2bf0eb24accb49"
+      }
+    }
+  ]
+}

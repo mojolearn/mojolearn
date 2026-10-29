@@ -16,6 +16,8 @@ class DecisionTests(unittest.TestCase):
   d,r=reports('hf-causal-lm');self.assertTrue(classify(d,r)['observation_complete'])
  def test_current_reference_is_not_excused(self):
   self.d['reference_evidence']['columns'][0]['recorded_at_commit']=self.d['device']['commit'];self.assertFalse(classify(self.d,self.r)['observation_complete'])
+ def test_unknown_old_revision_not_excused(self):
+  self.d['reference_evidence']['columns'][0]['recorded_at_commit']='a'*40;self.assertFalse(classify(self.d,self.r)['observation_complete'])
  def test_local_failure_not_excused(self):
   self.d['cells'][0]['local_check']='failed';self.assertFalse(classify(self.d,self.r)['observation_complete'])
  def test_refusal_not_excused(self):

@@ -1,0 +1,51 @@
+{
+  "source": "3fa5fac6d0bef136a42066134926bea90275e268",
+  "scope": "Preliminary direct comparison only; remaining required vendors/admission pending",
+  "rows": [
+    {
+      "lane": "hf-causal-lm",
+      "matching_slots": 81,
+      "differences": []
+    },
+    {
+      "lane": "hf-causal-lm-stream",
+      "matching_slots": 81,
+      "differences": []
+    },
+    {
+      "lane": "hf-causal-lm-text",
+      "matching_slots": 81,
+      "differences": []
+    },
+    {
+      "lane": "hf-model-surface",
+      "matching_slots": 81,
+      "differences": []
+    },
+    {
+      "lane": "mamba2-decode-session",
+      "matching_slots": 81,
+      "differences": []
+    },
+    {
+      "lane": "mamba3-decode-session",
+      "matching_slots": 81,
+      "differences": []
+    },
+    {
+      "lane": "sequence-tape-program",
+      "matching_slots": 81,
+      "differences": []
+    },
+    {
+      "lane": "sequence-tape-sequential",
+      "matching_slots": 81,
+      "differences": []
+    },
+    {
+      "lane": "training-mlp-sessions",
+      "matching_slots": 81,
+      "differences": []
+    }
+  ]
+}
