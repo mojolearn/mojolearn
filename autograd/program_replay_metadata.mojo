@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Operation-local native metadata for repeated replay of an admitted graph.
+# Native metadata for repeated replay of an admitted graph snapshot.
 from autograd.program import OpsProgram
 
 
@@ -21,9 +21,11 @@ struct PreparedReplayNode(Movable):
 
 
 struct PreparedProgramReplay(Movable):
-    # This inventory belongs to one admitted program snapshot and one public
-    # operation. Never cache it across program replacement or share it between
-    # concurrent replays. Each conditional component gets its own inventory.
+    # This inventory belongs to one admitted program snapshot/replay owner.
+    # Training owns it per public fit; an immutable session program may retain
+    # it until drop/close. Invalidate on program replacement and never share
+    # mutable scratch between concurrent replays. Each conditional component
+    # gets its own inventory.
     var nodes: List[PreparedReplayNode]
     var handles: List[Int]
     var values: List[Int]
