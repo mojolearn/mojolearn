@@ -1,0 +1,12 @@
+Frozen installed reference observations, not cross-vendor admission
+
+Source 3fa5fac6d0bef136a42066134926bea90275e268, package 0.8.63.
+Apple M4/macOS arm64: all nine neural-inference lanes executed all nine fixtures once (81 fixture executions). All nine parts requested; declared N/A parts remain explicit. No performance campaign. Full native binding and pre/post source/install witnesses accompany every column.
+
+Eight original CLI reports exit 0. hf-model-surface exits 1 because nine train values differ from historical shared reference 439199dc (CPU 640adbe), not this release; original report/exit retained. Its nine actual executions completed with valid values, no local-property failures/crashes/refusals. Current observations remain pending required CPU/NVIDIA/AMD/PTX agreement. No reference table or ledger unit marked passed from this Apple-only set.
+
+The external controller initially stopped on the historical comparison, then resumed without any fixture rerun after explicit classification. Nine decision tests cover actual reports and negative local failures, refusal, crash, missing property, current-source reference, arbitrary divergence, and unknown exit. Initial R2 certificate discovery error retained; existing /etc/ssl/cert.pem resolves trust with certificate checking enabled. All nine packets were uploaded and read back with matching SHA256. Mac originals remain under ~/mojolearn-evidence/current-main-verification-20261029/runs/apple/neural-inference/. Raw columns/report.gz/launch/provenance are retained through tools/retain_run_summary.py in bench/results/identity_break/retained/.
+
+CPU neural-inference execution is next/in progress. Other full applicable lanes, required foreign vendors/PTX, multi-GPU and strict table admission remain pending. No runtime package or frozen source mutation occurred during runs.
+
+CPU first lane byte-lm-host-infer actually failed: nine constructor attempts raise ValueError arena_native_types, original CLI exit4 and81 refused property outcomes. Failed column and witnesses retained; central requirement explicitly recorded FAILED. Threaded sibling shares that constructor and is not run pending repair; it is not qualified. Ten other CPU neural-inference lanes proceed without mutating frozen install.

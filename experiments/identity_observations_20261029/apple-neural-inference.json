@@ -1,0 +1,199 @@
+{
+  "source": "3fa5fac6d0bef136a42066134926bea90275e268",
+  "release": "0.8.63",
+  "actual_hardware": "Apple M4, 10 logical CPUs",
+  "phase": "apple/neural-inference",
+  "lanes": 9,
+  "actual_fixture_executions": 81,
+  "original_reference_counts": {
+    "DIVERGENT": 9,
+    "IDENTICAL": 90,
+    "N/A": 630,
+    "OWED": 0,
+    "REFUSED": 0
+  },
+  "cross_vendor_admission": "pending",
+  "performance_measurement": false,
+  "rows": [
+    {
+      "lane": "hf-causal-lm",
+      "producer_exit": 0,
+      "report_sha256": "1f51526f126ef67df3e3be1201f9bfb80f43a0d417be89d9878fc4f1b207e6b5",
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "completed_fixtures": 9,
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-inference/hf-causal-lm.tar.gz",
+        "bytes": 2102622,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-inference/hf-causal-lm/0e070dfc34a324c70330dcb37c08e69aaad79b89971ddb870729fdbec41d6690.tar.gz",
+        "readback_verified": true,
+        "sha256": "0e070dfc34a324c70330dcb37c08e69aaad79b89971ddb870729fdbec41d6690"
+      }
+    },
+    {
+      "lane": "hf-causal-lm-stream",
+      "producer_exit": 0,
+      "report_sha256": "e9f99b862fd8fd1c531915835ceef51d586af019f0dfbbdf7582db219018888d",
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "completed_fixtures": 9,
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-inference/hf-causal-lm-stream.tar.gz",
+        "bytes": 2103407,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-inference/hf-causal-lm-stream/7746c77db8c3fe54067abbe15ea2f43fa501712af182d18329b9541a3ef726be.tar.gz",
+        "readback_verified": true,
+        "sha256": "7746c77db8c3fe54067abbe15ea2f43fa501712af182d18329b9541a3ef726be"
+      }
+    },
+    {
+      "lane": "hf-causal-lm-text",
+      "producer_exit": 0,
+      "report_sha256": "a1d3d79c1685c1ce22b0e092b89793fb6f59fcdcbe685ff8c20d3e3145e69d4f",
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "completed_fixtures": 9,
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-inference/hf-causal-lm-text.tar.gz",
+        "bytes": 2103345,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-inference/hf-causal-lm-text/a7ca858ede0493ac8a90a125e1e84b50841a2a2876d1f4ef394c929f34217510.tar.gz",
+        "readback_verified": true,
+        "sha256": "a7ca858ede0493ac8a90a125e1e84b50841a2a2876d1f4ef394c929f34217510"
+      }
+    },
+    {
+      "lane": "hf-model-surface",
+      "producer_exit": 1,
+      "report_sha256": "8c4a0b030e76896f7ad0df4c151c6f25cd65010a5b22c39a1f0addf66838cc4f",
+      "counts": {
+        "DIVERGENT": 9,
+        "IDENTICAL": 0,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "completed_fixtures": 9,
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-inference/hf-model-surface.tar.gz",
+        "bytes": 2103188,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-inference/hf-model-surface/21074c5d35da598159648e53864dbaace59783ba215448371912bf1ee9b9e405.tar.gz",
+        "readback_verified": true,
+        "sha256": "21074c5d35da598159648e53864dbaace59783ba215448371912bf1ee9b9e405"
+      }
+    },
+    {
+      "lane": "mamba2-decode-session",
+      "producer_exit": 0,
+      "report_sha256": "220db434c47824c7fb6607b42145704529e1fec4c8746a99f4cf0481c9f2335a",
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "completed_fixtures": 9,
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-inference/mamba2-decode-session.tar.gz",
+        "bytes": 2103563,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-inference/mamba2-decode-session/a499fcd11932d9af151a962d87236673b9b652321159f8fb6dcbaeee00e5b759.tar.gz",
+        "readback_verified": true,
+        "sha256": "a499fcd11932d9af151a962d87236673b9b652321159f8fb6dcbaeee00e5b759"
+      }
+    },
+    {
+      "lane": "mamba3-decode-session",
+      "producer_exit": 0,
+      "report_sha256": "335f8c11be78fa9a3dbf5fb2879cda1d40de01fd946b9f42fbebe8d14ec981b1",
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "completed_fixtures": 9,
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-inference/mamba3-decode-session.tar.gz",
+        "bytes": 2103524,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-inference/mamba3-decode-session/34f71fed995b4f02c94ae697cdae30e65c4efb2e9f8729e984a7985a0ab6516f.tar.gz",
+        "readback_verified": true,
+        "sha256": "34f71fed995b4f02c94ae697cdae30e65c4efb2e9f8729e984a7985a0ab6516f"
+      }
+    },
+    {
+      "lane": "sequence-tape-program",
+      "producer_exit": 0,
+      "report_sha256": "5c0a457662cd43597af7dab7a43644ce1afb88ec9c45eb797533d1955e644b7a",
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "completed_fixtures": 9,
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-inference/sequence-tape-program.tar.gz",
+        "bytes": 2103352,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-inference/sequence-tape-program/f2d9faa1fcce5ceed8b41b1ca2b9c7977365bc5a6ee54d7ffba652f6e6a16d6f.tar.gz",
+        "readback_verified": true,
+        "sha256": "f2d9faa1fcce5ceed8b41b1ca2b9c7977365bc5a6ee54d7ffba652f6e6a16d6f"
+      }
+    },
+    {
+      "lane": "sequence-tape-sequential",
+      "producer_exit": 0,
+      "report_sha256": "237cdb8a49067275818f88f531a989004982cbfabfd606e173b2758fd1dc40e5",
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "completed_fixtures": 9,
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-inference/sequence-tape-sequential.tar.gz",
+        "bytes": 2103349,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-inference/sequence-tape-sequential/fe432c59fd008ae44a3b5e30371feadd6bf3678951a5e49461a3e5d833c8c0c4.tar.gz",
+        "readback_verified": true,
+        "sha256": "fe432c59fd008ae44a3b5e30371feadd6bf3678951a5e49461a3e5d833c8c0c4"
+      }
+    },
+    {
+      "lane": "training-mlp-sessions",
+      "producer_exit": 0,
+      "report_sha256": "d02e13f99c059d0d21d99a4ed9febe3d99f29f3a320ba8a1deb01ee8f752cb38",
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "completed_fixtures": 9,
+      "r2": {
+        "archive": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/archives/apple/neural-inference/training-mlp-sessions.tar.gz",
+        "bytes": 2103478,
+        "key": "verification/0.8.63/3fa5fac6d0/apple/neural-inference/training-mlp-sessions/4e3e71a6ba2554a8b85dc7755333e90ae40dff4658e1116af8fdbe8f373624b4.tar.gz",
+        "readback_verified": true,
+        "sha256": "4e3e71a6ba2554a8b85dc7755333e90ae40dff4658e1116af8fdbe8f373624b4"
+      }
+    }
+  ]
+}

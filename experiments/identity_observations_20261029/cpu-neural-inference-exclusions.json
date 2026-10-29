@@ -1,0 +1,10 @@
+{
+  "byte-lm-host-infer": {
+    "status": "failed",
+    "reason": "Actual constructor ValueError arena_native_types; original exit4, failed ledger attempt retained; repair pending"
+  },
+  "byte-lm-host-infer-threaded": {
+    "status": "not-run-blocked",
+    "reason": "Same LanguageModelInference constructor/context as failed nonthreaded lane; avoid redundant known-failure fixtures until repair"
+  }
+}

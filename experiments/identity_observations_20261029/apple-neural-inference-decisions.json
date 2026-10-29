@@ -1,0 +1,74 @@
+[
+  {
+    "lane": "hf-causal-lm",
+    "observation_complete": true,
+    "local_property_failures": 0,
+    "historical_reference_only": false,
+    "original_exit_code": 0,
+    "identity_admission": "pending"
+  },
+  {
+    "lane": "hf-causal-lm-stream",
+    "observation_complete": true,
+    "local_property_failures": 0,
+    "historical_reference_only": false,
+    "original_exit_code": 0,
+    "identity_admission": "pending"
+  },
+  {
+    "lane": "hf-causal-lm-text",
+    "observation_complete": true,
+    "local_property_failures": 0,
+    "historical_reference_only": false,
+    "original_exit_code": 0,
+    "identity_admission": "pending"
+  },
+  {
+    "lane": "hf-model-surface",
+    "observation_complete": true,
+    "local_property_failures": 0,
+    "historical_reference_only": true,
+    "original_exit_code": 1,
+    "identity_admission": "pending"
+  },
+  {
+    "lane": "mamba2-decode-session",
+    "observation_complete": true,
+    "local_property_failures": 0,
+    "historical_reference_only": false,
+    "original_exit_code": 0,
+    "identity_admission": "pending"
+  },
+  {
+    "lane": "mamba3-decode-session",
+    "observation_complete": true,
+    "local_property_failures": 0,
+    "historical_reference_only": false,
+    "original_exit_code": 0,
+    "identity_admission": "pending"
+  },
+  {
+    "lane": "sequence-tape-program",
+    "observation_complete": true,
+    "local_property_failures": 0,
+    "historical_reference_only": false,
+    "original_exit_code": 0,
+    "identity_admission": "pending"
+  },
+  {
+    "lane": "sequence-tape-sequential",
+    "observation_complete": true,
+    "local_property_failures": 0,
+    "historical_reference_only": false,
+    "original_exit_code": 0,
+    "identity_admission": "pending"
+  },
+  {
+    "lane": "training-mlp-sessions",
+    "observation_complete": true,
+    "local_property_failures": 0,
+    "historical_reference_only": false,
+    "original_exit_code": 0,
+    "identity_admission": "pending"
+  }
+]
