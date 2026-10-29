@@ -30,7 +30,9 @@ def worker(a):
     write(dest/'result.json',rec)
     try:
         started=time.perf_counter()
-        model=CausalLM.load(str(OUT/'checkpoints'/a.key),weight_format='float32',numeric_profile='fp32_v1',device='gpu')
+        checkpoint_root=pathlib.Path(os.environ.get('MOJOLEARN_BOARD_LM_CHECKPOINTS',str(OUT/'checkpoints')))
+        rec['checkpoint_input']=str(checkpoint_root/a.key)
+        model=CausalLM.load(str(checkpoint_root/a.key),weight_format='float32',numeric_profile='fp32_v1',device='gpu')
         rec['model_load_ms']=(time.perf_counter()-started)*1000
         rec['model']=dict(vocab_size=int(model.vocab_size),d_model=int(model.d_model),n_layers=len(model.blocks),
                           vendor=model._native_vendor,numeric_mode=model._native_numeric_mode,
