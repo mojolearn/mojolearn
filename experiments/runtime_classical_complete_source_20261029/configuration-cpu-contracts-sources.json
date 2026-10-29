@@ -1,0 +1,420 @@
+{
+  "frozen_source": "3fa5fac6d0bef136a42066134926bea90275e268",
+  "records": [
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_byte_lm_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/byte_lm/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_byte_lm_host.so",
+        "sha256": "5edb1714143e8e4a3e62884fbb9d0796e9e570a96e3f382ec64dca0d5ef55be1"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_forest_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/forest/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_forest_host.so",
+        "sha256": "cca7d9037c9c686a21011524c7b0097f68f3422d01c13722920c9efa8cfb19a1"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_tokenizer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/resident-profile-admission-20261029/engine/compile-receipt.json",
+      "source_commit": "eb86802a38623dad0f0548caf4d2586981c36eb5",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/resident-profile-admission-20261029/engine/raw/_mojolearn_tokenizer_host.so",
+        "sha256": "4a84f9945e3de297853130397702415e6d8ef53ce6294ac9eecc2fc2a16e101d"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_neural_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/neural/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_neural_host.so",
+        "sha256": "6a41ee145aaefeea72be27a6d46e46326824aefaf66a28283e2a369416e53758"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_core_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/core/receipt.json",
+      "source_commit": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_core_host.so",
+        "sha256": "260f35f26c27e1c87f0bb5701a1168e23d261a8ec0427b499044a60b2a836158"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_linalg_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/linalg/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_linalg_host.so",
+        "sha256": "2f6eb4df5285e86576ec47a9da69bb23141fdcaed01ccb2467e832e6fcf18a47"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_estimators_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/default-optimization/estimators/receipt.json",
+      "source_commit": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_estimators_host.so",
+        "sha256": "cce641355df3f85e34b7092131cb59478b30a56743acb2e344f49f406e1edd0b"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_metrics_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/metrics/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_metrics_host.so",
+        "sha256": "4d0600fa567468648a0d6596f39f35ae26582794f18f77532166dac8b3b24054"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_preprocessing_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/preprocessing/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_preprocessing_host.so",
+        "sha256": "64bd9032b6ac5c8c5c3243c56cce0f037992fec5cac0beaba0657dcafecef31d"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_tsa_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/tsa/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_tsa_host.so",
+        "sha256": "b00d0f3c07ce23b84f99a56095c7de6d9af42bda784fcb19daea9b44a0bebac6"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_solver_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/solver/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_solver_host.so",
+        "sha256": "7611e4b603c265f28ae6730fb3ec4de278de78e6e4c498aeb7e3ba3b33cabbb3"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_svm_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/svm/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_svm_host.so",
+        "sha256": "ccbd45e374a4aec89a0fc685af719cf02d0b9bf0365bba9657b6ade42cf04954"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_trees_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/trees/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_trees_host.so",
+        "sha256": "d0a748867560555082fa59358a7162c1a1e16653e904cca9782764071838ed05"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_rf_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/rf/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_rf_host.so",
+        "sha256": "c0f9c8b8508ee18a618acca070c634cd8eca9c3ccc6061a22d1fc38ae959ac5b"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_gp_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/gp/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_gp_host.so",
+        "sha256": "3e917825a1d2a4c52101951befaaffeb46ce493119cd41d8c29721001e8da96b"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_kernel_methods_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/kernel_methods/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_kernel_methods_host.so",
+        "sha256": "8f94bdc187a4ce23b5d60a81819581e1213e870ba45fe13c09846ddd1e9ef232"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_mixture_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/mixture/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_mixture_host.so",
+        "sha256": "558283c4f04c78c8d2d7b488380174f324339d32c2b33fb62257c9eefc5e5401"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_mixture_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/mixture_infer/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_mixture_infer_host.so",
+        "sha256": "470689b097c49a3c950ba7ef1b18923ec3ddde2e050beab91b8e5d1aef57e165"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_hdbscan_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/hdbscan/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_hdbscan_host.so",
+        "sha256": "cf078ff6f3a4b72fe5b6c2c2015c9cf32bac596c6ed1cbecd957763a36d5033a"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_gp_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/gp_infer/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_gp_infer_host.so",
+        "sha256": "358d85f660f15d2bfaef560ccf102e9a089022e5862e7c88b19a5ba06ab6b472"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_hdbscan_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/hdbscan_infer/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_hdbscan_infer_host.so",
+        "sha256": "a5c1f23855ae86c7fd1f9060244c9db7b21d079ac0515f784fd8d13bbad6bc23"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_gbdt_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/gbdt/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_gbdt_host.so",
+        "sha256": "34951d321178e9f81c33fc528ba4b498da40f02fb45a5c8b80b14bee28379df9"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_training_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/training/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_training_host.so",
+        "sha256": "e7b62e1b8f5d909c38877fad5ca632f836cfd31d5f0a25b790544e4bc454194b"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_resample_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/resample/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_resample_host.so",
+        "sha256": "fd827a33521a4f91464c9359cdee7ecff6a3001d489d085bdffb6ded3656e79e"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_mamba_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-build/mamba/receipt.json",
+      "source_commit": "4053a083f1958b8829b408e0935fded7955c07b1",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-identity-registration/_mojolearn_mamba_host.so",
+        "sha256": "b89104a93d8bfc9ec42877874be8bc2101049146b6c414f5771cef12bc219031"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_arima_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/arima/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_arima_host.so",
+        "sha256": "00fcc6700a91f31b73df051b6259d320423fafe7da0518ea409fe0380a38bd3a"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_embedding_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/embedding/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_embedding_host.so",
+        "sha256": "e757709bd3fbf4102d75121648817eaddc3eabc1896830c3a0008f76e4a059d2"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_embedding_infer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/embedding_infer/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_embedding_infer_host.so",
+        "sha256": "cf2ef32094db831c3d35f63a667f39734312579ae458f5d238438348a70f74e6"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_ivf_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/ivf/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_ivf_host.so",
+        "sha256": "9b7f0def4358891f3073e4a9534de7c8fa6972068dbcae8a67ae28a5f0a4fdb3"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_ivf_search_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/ivf_search/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_ivf_search_host.so",
+        "sha256": "83dc7e6b84fd9e15ba7705a5750976e220207d03d40b58499531bc4f6b709400"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_forecast_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/forecast/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_forecast_host.so",
+        "sha256": "729b32d712a63cbacd10938900fc25916e2bf25c8d0e03de57f2fcb30ee33c9c"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_transformer_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/transformer/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_transformer_host.so",
+        "sha256": "21976ada5773d74f26d4dcb1de7b27d24381bf4af65e0a9fa2722676edb8ba47"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_runtime_classical_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/runtime-classical-complete-source-20261029/receipt.json",
+      "source_commit": "ca880cd09211a6f4ee7a0b28f7cd153068be47ff",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/runtime-classical-complete-source-20261029/raw/_mojolearn_runtime_classical_host.so",
+        "sha256": "464a38a7460381db7b2d294f11f25c6f2436fcb74dbc2bfd1f91d1f2e608f30b"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_runtime_sequential_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-build/runtime_sequential/receipt.json",
+      "source_commit": "4053a083f1958b8829b408e0935fded7955c07b1",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-identity-registration/_mojolearn_runtime_sequential_host.so",
+        "sha256": "c47ff07326b49f0ea37ef375f90d6f07d0507e80093d98cb2246e0b894581d6c"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_runtime_manifold_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/runtime_manifold/receipt.json",
+      "source_commit": "748c43207eccf20880fec95d4652d3a6a6c80852",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_runtime_manifold_host.so",
+        "sha256": "34230c94ab15ecba2e62d55fee8fe428c9fa0c622437ec13f602c52ea4346622"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_runtime_model_selection_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/runtime_model_selection/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_runtime_model_selection_host.so",
+        "sha256": "6d20e03393bca71de90c1cce98846144e67d270ecb7894aa45ebee413802a805"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_linear_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_linear/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_x_linear_host.so",
+        "sha256": "7d387de4c10c1ee22310d860ed7532ce00651136a8a4ae978d7df8cb4cd5af35"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_cluster_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_cluster/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_x_cluster_host.so",
+        "sha256": "93e9da6fa0bff1a4ce4af2ce26505927a7aaad886f3221d56d71169e39d9e8aa"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_neighbors_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_neighbors/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_x_neighbors_host.so",
+        "sha256": "f34e59bce4eb9d3724fd6721e2108a97b855e43492643a252ff3385cf5189a79"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_decomp_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/default-optimization/x_decomp/receipt.json",
+      "source_commit": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_x_decomp_host.so",
+        "sha256": "c843bbb3363dfb922f6eceff9f7b13e4326801a93c4e444301a358c8dd8b3cba"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_prep_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_prep/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_x_prep_host.so",
+        "sha256": "8094be819f144c146c7b6040abc3ce00699b35b671d68d9836cf205a94d54f45"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_sequence_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_sequence/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_x_sequence_host.so",
+        "sha256": "f5563667d67a27d89a651114a0b1361ce3317b4f06b328c9303405c442dcf409"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_trees_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_trees/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_x_trees_host.so",
+        "sha256": "1cf21b23084f22503a5a7348a9880d53b62f9964a97cb1544351fc95a1957a97"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_cnn_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_cnn/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_x_cnn_host.so",
+        "sha256": "3144f1554f17a55168e32b560bbf36b7be9736cb46c411f66c1ab22cbd6c67a9"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_ann_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/current-family-builds/x_ann/receipt.json",
+      "source_commit": "108f33e541ca2423b6f78509f80044b6f3660481",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-current/_mojolearn_x_ann_host.so",
+        "sha256": "cfeb2e96078f8c0bdca5d6f7cae6bee083e2d04d0287a1d0bede2ef07a0389cb"
+      }
+    },
+    {
+      "binding_key": "osx-arm64/host/-/host/_mojolearn_x_metrics_host",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/remaining-host-build/x_metrics/receipt.json",
+      "source_commit": "09839a466645e47a6ddf6a90ecc5834fa7ebfe53",
+      "raw_binary": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-remaining-host/_mojolearn_x_metrics_host.so",
+        "sha256": "9689d1402061deaaec80806b18098287564668b43416d6f7387aff37fb5ac9a2"
+      }
+    }
+  ],
+  "scope": "46original raw CPU witnesses;45retained builds+1complete-source replacement; no fabricated historical metadata"
+}

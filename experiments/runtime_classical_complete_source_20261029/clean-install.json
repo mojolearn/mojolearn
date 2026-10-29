@@ -1,0 +1,30 @@
+{
+  "source_commit": "3fa5fac6d0bef136a42066134926bea90275e268",
+  "files": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/runtime-classical-complete-source-20261029/stage/receipt.json",
+      "sha256": "13745adcf2b5f4a79e3d689ff1f5c2ea35014622d13d9f0e9c592a332b361744"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-clean-install/receipt.json",
+      "sha256": "47f67bf09e04caafc2ab492006945c3e06a886b9dcc3c4f42b53dda9169e0c2c"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-clean-install/loader-smoke.json",
+      "sha256": "e25f4150c112c9db220c8f9afa36a4eb371850e8b722fba084438dd0520a2063"
+    }
+  ],
+  "installed_python": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-venv/bin/python",
+  "package_version": "0.8.63",
+  "cpu_host_extensions": 46,
+  "apple_gpu_extensions": 33,
+  "runtime_libraries": 5,
+  "tracked_package_source_files": 966,
+  "verification_payload_members": 143,
+  "loader_cases": [
+    "cpu",
+    "metal"
+  ],
+  "loader_failed": 0,
+  "scope": "Current-source development install and fresh loader/dependency/Array boundary; not release wheel or full identity qualification"
+}

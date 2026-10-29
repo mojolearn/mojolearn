@@ -1,0 +1,64 @@
+Complete-source runtime_classical build and clean verification install
+2026-10-29
+
+Exactly one required rebuild: original runtime_classical compiled from a sparse
+checkout missing three files in its required source closure. The raw old binary,
+logs and refused provenance remain retained. Other45 CPU families were reused.
+This rebuild addresses an actual source-input omission, not a version/commit bump.
+
+Source ca880cd09211a6f4ee7a0b28f7cd153068be47ff in a FULL owned worktree:
+/Users/andrewhendel/mojolearn-wt/runtime-classical-complete-source-20261029
+Standard build_host_family.sh runtime_classical via tools/compile_slot.sh;
+O0 and10 compiler workers, same prior settings.444closure files/446captured
+before launch, including all three formerly absent experiment files. Exact source
+manifest/archive, original compiler hash/version, SDK and full Apple toolchain
+captured before launch; source unchanged throughout. Workers are configured,
+not a claim that every compiler phase saturated the machine.
+
+Actual full CPU host-family compile exit0/395.73s. Raw binary SHA256:
+464a38a7460381db7b2d294f11f25c6f2436fcb74dbc2bfd1f91d1f2e608f30b
+Original Mach-O CPU witness: ARM64/ALL, minimum11.0, SDK26.5, linker1267.0,
+plus complete dynamic dependencies and original search paths. These are original
+link-emitted version identifiers, not original linker/SDK executable hashes.
+Exact replacement unit check1/1passed, with required source hashes checked.
+No ledger write by this lane; central admission belongs to the root/generation.
+
+Final source proof:46/46 selected CPU producers' captured bytes match frozen
+3fa5fac6d0bef136a42066134926bea90275e268,1825unique files,0mismatches;
+generated source checked from tracked generator inputs.45 prior successful
+producers +1 replacement, without other compilation. Source proof is not runtime.
+
+Standard macOS runtime staging of the replacement passed0. Staged SHA256:
+3427108ad26e9e83dc96427d281828dac8c2ba9c4b4aa91a342d9a71f634d902
+Other78 installed extension hashes unchanged; prior installed runtime_classical
+bytes retained. Standard portable-math helper reused without rebuilding.
+
+A clean isolated development install was then assembled with real pip Torch2.15.0
+and NumPy2.5.4, avoiding the earlier mixed pixi/pip Torch import failure. Source
+and verifier payload come from the immutable3fa5 checkout, using existing
+verification_repository.validate_payload/check_staged. Version0.8.63, exact
+COMMIT3fa5,966tracked package source files,143verifier payload members,
+46CPU+33AppleGPU extensions and5runtime libraries. Every staged native file was
+copied byte-for-byte; no old wheel bytes or numerical implementation changed.
+
+Fresh CPU and Metal loader/dependency/Array conversion boundary smokes both
+passed0, including torch, numpy, mojolearn and ops import, native vendor/mode
+readback and public Array conversion. Package manifest unchanged during these
+checks. No repeated manifold/SmallMLP/Sequential/Mamba API suites were run.
+This is development-install boundary coverage, not installed-wheel, adapter,
+full numerical identity, cross-vendor or performance qualification.
+
+Frozen source (read-only, owned by generation lane):
+/Users/andrewhendel/mojolearn-wt/verification-evidence-20261029
+Final installed Python:
+~/mojolearn-evidence/manifold-installed-integration-20261029/final-venv/bin/python
+Generation owns neural-first verifier execution next; package handed off idle.
+
+Full build/log/archive/unit proof:
+~/mojolearn-evidence/runtime-classical-complete-source-20261029/
+  compile.log,compile.exit,receipt.json,source-manifest.json,source.tar.gz,
+  unit-review.json,qualification.log,final-source-match.json,
+  configuration-cpu-contracts.json (exact46 CPU contracts),stage/*.
+Clean assembly/full loader logs:
+~/mojolearn-evidence/manifold-installed-integration-20261029/final-clean-install/
+  align.py,receipt.json,python-source.tar,loader-smoke.json,loader-{cpu,metal}.log.

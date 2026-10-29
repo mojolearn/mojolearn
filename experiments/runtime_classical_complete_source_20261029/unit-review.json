@@ -1,0 +1,53 @@
+{
+  "results": [
+    {
+      "id": "compile-apple/osx-arm64/host/-/host/_mojolearn_runtime_classical_host",
+      "fingerprint": "d57753c5dcb48c57b68e00e7bb91fb430964a2fd367781cb987f3a06eef97cc9",
+      "check": "passed",
+      "coverage": [
+        {
+          "id": "all selected native bindings and required enabled/disabled switches",
+          "status": "passed",
+          "exit_code": 0,
+          "expected": 1,
+          "completed": 1,
+          "failed": 0,
+          "skipped": 0
+        },
+        {
+          "id": "osx-arm64/host/-/host/_mojolearn_runtime_classical_host",
+          "status": "passed",
+          "exit_code": 0,
+          "expected": 1,
+          "completed": 1,
+          "failed": 0,
+          "skipped": 0
+        }
+      ],
+      "evidence": [
+        {
+          "path": "/Users/andrewhendel/mojolearn-evidence/runtime-classical-complete-source-20261029/receipt.json",
+          "sha256": "d875bce4827dac1b78fcecefd232e1fa6ce1aa9df3e58d437e7593662dfa1197"
+        },
+        {
+          "path": "/Users/andrewhendel/mojolearn-evidence/runtime-classical-complete-source-20261029/source-manifest.json",
+          "sha256": "d7a5df7525856e32e4263ac20f5b12d942e9a13f9fde5e6ad2408b46e75f48e1"
+        },
+        {
+          "path": "/Users/andrewhendel/mojolearn-evidence/runtime-classical-complete-source-20261029/source.tar.gz",
+          "sha256": "44b0259c5a856afb625fe5a8e64bd2f76e5900618d23d11d2dc8bf35c59f0c0e"
+        },
+        {
+          "path": "/Users/andrewhendel/mojolearn-evidence/runtime-classical-complete-source-20261029/raw/_mojolearn_runtime_classical_host.so",
+          "sha256": "464a38a7460381db7b2d294f11f25c6f2436fcb74dbc2bfd1f91d1f2e608f30b"
+        },
+        {
+          "path": "/Users/andrewhendel/mojolearn-evidence/runtime-classical-complete-source-20261029/compile.log",
+          "sha256": "f53c6f977a4feb371d5ae5b5d92bf725087b1e440d74839289c58ddb2ebdf644"
+        }
+      ]
+    }
+  ],
+  "formal_ledger_admitted": false,
+  "scope": "Fresh replacement original source/flags/compiler/rawCPUlink checks; no runtime"
+}
