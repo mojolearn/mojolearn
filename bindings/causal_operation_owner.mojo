@@ -162,11 +162,11 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
             # Typed provider/lifetime admission occurs at its native boundary;
             # these values are retained, never called or traversed as Python.
             py_setitem(result, names[i], item)
-        elif name == "resident_read_v1":
+        elif name == "resident_read_v1" or name == "resident_sampling_v1":
             # Native capability metadata, not an executable registry callback.
             # The constructed-owner identity check above still forbids edits.
             if py_type(item) is not bi.bool:
-                raise Error("TypeError: CausalLM resident_read_v1 capability must be bool")
+                raise Error("TypeError: CausalLM resident capability must be bool")
             py_setitem(result, names[i], item)
         elif (name == "cpu" or name == "weight_names" or name == "resident_vendor"
                 or name == "mamba1_profile" or name == "native_enabled"):

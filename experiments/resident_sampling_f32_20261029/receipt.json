@@ -1,0 +1,87 @@
+{
+  "product_commits": [
+    "ceb7cbe0d2",
+    "c6e19e5e2a1d816d54c08d09bd9e3e4359bfe071"
+  ],
+  "native_compile": {
+    "exit_code": 0,
+    "seconds": 135.23423558310606,
+    "command": [
+      "bash",
+      "tools/compile_slot.sh",
+      "pixi",
+      "run",
+      "mojo",
+      "build",
+      "--emit",
+      "shared-lib",
+      "--optimization-level",
+      "0",
+      "-j",
+      "10",
+      "--target-cpu",
+      "apple-m1",
+      "-D",
+      "MOJOLEARN_NUMERIC_IDENTICAL=1",
+      "-I",
+      ".",
+      "-I",
+      "bindings",
+      "bindings/entry/entry__mojolearn_transformer.mojo",
+      "-o",
+      "/Users/andrewhendel/mojolearn-evidence/full-resident-sampling-20261029/native-restored-source/_mojolearn_transformer_sampling.so"
+    ],
+    "source_archive_sha256": "fe4e48c0aece10445abd9a7668d27dfc983dcc2fb0b01a76f6b1b9668fa96760",
+    "source_changed": [],
+    "runtime_executed": false,
+    "scope": "Actual Transformer GPU module factory + native grouped read operation3, selector and recovery; Apple identical O0,10workers/compile_slot",
+    "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+    "artifact": "/Users/andrewhendel/mojolearn-evidence/full-resident-sampling-20261029/native-restored-source/_mojolearn_transformer_sampling.so",
+    "artifact_sha256": "aacd3f49a5876fca9af776f5751c8e04cc9e97c2de04a7ee196b2a457005ec26"
+  },
+  "source_file_count": 212,
+  "exported_init": "PyInit__mojolearn_transformer",
+  "artifact_role": "Supported per-binding module entry; retained alternate filename must be staged under canonical module basename with standard runtime dependencies. Not installed/loaded.",
+  "probe_compiles": [
+    {
+      "exit_code": 0,
+      "scope": "Host candidate branch and Apple GPU device selector compiled via actual enqueue_function; executable NOT run",
+      "binary": "/Users/andrewhendel/mojolearn-evidence/full-resident-sampling-20261029/sampler-probe",
+      "binary_sha256": "a97442863af639e562008ee76159a01c38b9a8c8d31ada51915a8efbc07eb93a",
+      "runtime_executed": false
+    },
+    {
+      "exit_code": 0,
+      "scope": "Host candidate and Apple GPU selector with dynamic seed/position kernel args; compile-only, NOT run",
+      "binary": "/Users/andrewhendel/mojolearn-evidence/full-resident-sampling-20261029/sampler-dynamic-probe",
+      "binary_sha256": "956a8a8bf47f575e9e7ddcf900d3c79af6d6fb12f28f6ff3c85c08762c3b290a",
+      "runtime_executed": false
+    }
+  ],
+  "guards": {
+    "host-routes": 0,
+    "python-runtime": 0,
+    "shell-compute": 0,
+    "rebuild-fence": 0,
+    "package-connections": 0
+  },
+  "pre_push_exit": 0,
+  "independent_review_sha256": "b6c6fcb51a038a332adb0695d4e2a221befec54422baa9f37e03ec2f4caad01c",
+  "retention": {
+    "archive": "/Users/andrewhendel/mojolearn-evidence/full-resident-sampling-c6e19e5-apple.tgz",
+    "bytes": 15435884,
+    "sha256": "9af351d92276fc29a8edaa65c829f68296d5a2b6c97dd1312fe5ccaf093d0892",
+    "r2_key": "measurements/full-resident-sampling-20261029/full-resident-sampling-c6e19e5-apple.tgz",
+    "put_status": 200,
+    "get_status": 200,
+    "readback_sha256": "9af351d92276fc29a8edaa65c829f68296d5a2b6c97dd1312fe5ccaf093d0892",
+    "matches": true
+  },
+  "pending": [
+    "runtime and native failure-state oracle",
+    "installed loader boundary",
+    "Apple/NVIDIA/AMD within-release identity",
+    "sampling quality/precision and whole-read performance"
+  ],
+  "default_enabled": false
+}

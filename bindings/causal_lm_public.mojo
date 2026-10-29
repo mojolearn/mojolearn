@@ -7,7 +7,8 @@ allocation, layer traversal, token traversal and selection are native. Calling
 a compiled sibling extension through CPython's native function ABI changes no
 arithmetic and uses no interpreter callback; targets are checked at admission.
 """
-from providers.python.transformer_resident_pyapi import transformer_resident_decode_call, transformer_resident_words, transformer_resident_lm_open, transformer_resident_lm_close, transformer_resident_lm_run, transformer_resident_lm_read
+from providers.python.transformer_resident_pyapi import transformer_resident_decode_call, transformer_resident_words, transformer_resident_lm_open, transformer_resident_lm_close, transformer_resident_lm_run, transformer_resident_lm_read, transformer_resident_lm_sampling_read
+from core.resident_sampling_read import ResidentSamplingRead
 from core.resident_generation_read import ResidentGreedyRead, resident_greedy_publish, resident_greedy_outputs
 from std.python import Python, PythonObject
 from std.ffi import _Global
@@ -283,6 +284,9 @@ def causal_lm_admit_binding(mut mods: NativeModules,
                     py_setitem(entries, name, _native_function(mods, block_binding, name))
             if _native_has_entry(mods, block_binding, "causal_lm_resident_read_v1"):
                 py_setitem(entries, "resident_read_v1", Int(py=_native_function(mods, block_binding, "causal_lm_resident_read_v1")()) == 1)
+                mods.released()
+            if _native_has_entry(mods, block_binding, "causal_lm_resident_sampling_v1"):
+                py_setitem(entries, "resident_sampling_v1", Int(py=_native_function(mods, block_binding, "causal_lm_resident_sampling_v1")()) == 1)
                 mods.released()
             if model._head_int15 is not None:
                 py_setitem(entries, "transformer_decode_session_open_int15", _native_function(mods, block_binding, "transformer_decode_session_open_int15"))
@@ -1910,6 +1914,7 @@ struct GenerationHandle(Movable, Writable):
     var max_new: Int
     var produced: Int
     var greedy: Bool
+    var sampling_policy: Int
     var temperature: Float32
     var top_k: Int
     var top_p: Float64
@@ -1932,6 +1937,7 @@ struct GenerationHandle(Movable, Writable):
         var length = Int(py=prompt.shape[1])
         self.state = causal_lm_allocate_binding(mods, model, PythonObject(batch), PythonObject(length + maximum))
         self.greedy = True
+        self.sampling_policy = 0
         self.temperature = Float32(1)
         self.top_k = 0
         self.top_p = Float64(1)
@@ -1969,6 +1975,12 @@ def _options(mut mods: NativeModules, mut s: GenerationHandle, options: PythonOb
     if py_type(options[0]) is not g[].bi.bool:
         raise Error("generation: greedy must be bool")
     s.greedy = Bool(py=options[0])
+    # DEFAULT OFF: this explicit stream policy changes seeded output relative
+    # to the legacy Float64 selector. Route admission never selects arithmetic.
+    # Host fallback and resident device sampling share the same compensated
+    # Float32 implementation. Cross-vendor identity/quality remain unqualified.
+    s.sampling_policy = 1 if (not s.greedy and
+        getenv("MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32", "0") == "1") else 0
     if not s.greedy and options[1] is None:
         raise Error("generation: greedy=True is the default decoding; greedy=False (sampling) requires an explicit seed")
     if options[1] is not None:
@@ -2048,6 +2060,9 @@ def _read_engine(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int
     var keep = List[PythonObject]()
     var address = _addr(s.current, keep)
     var progress = NativeGenerationProgress(address, batch, length, s.produced, capacity)
+    # The native engine already owns the same selector workspace. Carry the
+    # stream policy into it; changing policy does not require a fallback route.
+    progress.sampling.use_f32_policy = s.sampling_policy == 1
     try:
         native_generation_read(owner.native, progress, capacity, s.max_new, s.finished, s.lengths,
             s.eos, s.pad, s.greedy, s.temperature, s.top_k, s.top_p, s.seed)
@@ -2213,6 +2228,191 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
 
 
 
+def _sampling_read_progress(mut s: GenerationHandle, progress: ResidentGreedyRead,
+                            pending_address: Int, current: PythonObject, current_address: Int,
+                            capacity: Int, positions: Int, mut accounted: Bool) raises:
+    # Selection counts advance only after a complete row set. The failing
+    # selection may still carry earlier-row finished/length updates.
+    if not accounted:
+        s.produced += progress.wrote
+        accounted = True
+    if progress.progress_ready:
+        resident_greedy_publish(progress, s.finished, s.lengths)
+    if progress.progress_ready and progress.wrote > 0:
+        var source = i32_ptr(pending_address)
+        var target = i32_ptr(current_address)
+        for row in range(len(s.finished)):  # driver-loop: final owned token publication
+            target[row] = source[row * capacity + progress.wrote - 1]
+        s.current = current
+    py_setattr(s.state, "positions", PythonObject(positions + progress.consumed))
+
+
+def _sampling_read_state(mut mods: NativeModules, mut s: GenerationHandle, cached: Int,
+                         mut copies: List[PythonObject]) raises:
+    for i in range(len(s.state.layers)):  # driver-loop: one final layer metadata publication
+        _resident_publish_profile(_block(mods, s.model, i), s.state.layers[i])
+        py_setattr(s.state.layers[i], "cached_tokens", PythonObject(cached))
+    _writeback(copies)
+
+
+def _sampling_read_cache_valid(fields: PythonObject, expected: PythonObject) raises -> Bool:
+    var live = py_get(fields, "_causal_live_fields", fields)
+    if py_get(live, "_parameters_exposed", PythonObject(False)) is not PythonObject(False):
+        # A concurrent supported exposure must never be overwritten by this
+        # operation's earlier private-parameter snapshot.
+        py_setitem(fields, "_parameters_exposed", PythonObject(True))
+        return False
+    return py_get(live, "_resident_sessions") is expected
+
+
+def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int,
+                            mut admission: NativeArrayAdmission) raises -> PythonObject:
+    # DEFAULT OFF, UNMEASURED: one device sampling read, with the same policy
+    # used by host fallback. Live KV plus two alternating committed snapshots
+    # cost roughly 3x KV storage and one full cache copy per successful forward. This is not a
+    # performance claim or permission to promote without vendor qualification.
+    var batch = len(s.finished)
+    var length = Int(py=s.current.shape[1])
+    _state(mods, s.model, s.state, batch, length)
+    var positions = Int(py=s.state.positions)
+    var entries = s.model._native_entries
+    var provider = entries["native_block_operations"]
+    var int15 = s.model._head_int15 is not None
+    var fields = _standalone_record_fields(mods, s.model)
+    var persist = not Bool(py=py_get(fields, "_resident_busy", PythonObject(False)))
+    var key = _resident_key(mods, s.model, s.state, batch, int15)
+    var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
+    var expected = kept
+    var lm = PythonObject(None)
+    var sessions = PythonObject(None)
+    var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
+    var pending = generation_array([batch, capacity], "i")
+    var current = generation_array([batch, 1], "i")
+    var pending_address = _addr(pending, keep)
+    var current_address = _addr(current, keep)
+    var keys = List[Int]()
+    var values = List[Int]()
+    # Pin and admit all recovery destinations before the GIL-release window.
+    # No Python metadata lookup or deferred owner acquisition occurs on failure.
+    for i in range(len(s.state.layers)):  # driver-loop: one read's KV destination admission
+        var blk = _block(mods, s.model, i)
+        var st = s.state.layers[i]
+        var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
+        var size = batch * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
+        keys.append(_mutable(st.k_cache, [size], keep, copies, "k_cache"))
+        values.append(_mutable(st.v_cache, [size], keep, copies, "v_cache"))
+    var progress = List[ResidentSamplingRead]()
+    progress.append(ResidentSamplingRead(
+        ResidentGreedyRead(s.finished, s.lengths, s.eos, s.pad, positions,
+            -1 if s.model.max_positions is None else Int(py=s.model.max_positions), Int(py=s.state.max_tokens)),
+        s.temperature, s.top_k, Float32(s.top_p), s.seed, s.produced,
+        keys^, values^, Int(py=s.state.layers[0].cached_tokens)))
+    var accounted = False
+    var entered_native = False
+    var native_completed = False
+    if persist:
+        causal_model_cache_set(mods, s.model, fields, "_resident_busy", True)
+    try:
+        if kept is not None and Bool(py=kept[0] == key):
+            lm = kept[1]
+            sessions = kept[2]
+            _resident_load_states(entries, sessions, s.state, keep)
+            mods.released()
+        else:
+            if kept is not None:
+                lm = kept[1]
+                sessions = kept[2]
+                causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
+                expected = PythonObject(None)
+                _resident_close(entries, lm, sessions)
+                mods.released()
+                lm = PythonObject(None)
+                sessions = PythonObject(None)
+            var opened = _resident_open_all(mods, s.model, entries, s.state, batch, length, int15, keep)
+            lm = opened[0]
+            sessions = opened[1]
+        # Session opening/loading may release the GIL. Recheck the class
+        # contract before preparing the final current-token span for execution.
+        admission.recheck(generation_array_context())
+        expected = py_get(py_get(fields, "_causal_live_fields", fields), "_resident_sessions")
+        entered_native = True
+        _ = transformer_resident_lm_sampling_read(provider, lm, sessions,
+            [_addr(s.current, keep), pending_address, 0, Int(progress.unsafe_ptr())],
+            [length, capacity, Int(py=s.state.layers[0].cached_tokens)])
+        mods.released()
+        native_completed = True
+        _sampling_read_progress(s, progress[0].progress, pending_address, current,
+            current_address, capacity, positions, accounted)
+        admission.recheck(generation_array_context())
+        if not progress[0].kv_ready:
+            raise Error("generation: resident sampling KV publication did not complete")
+        _sampling_read_state(mods, s, progress[0].cached_tokens, copies)
+        if persist and _sampling_read_cache_valid(fields, expected):
+            expected = Python.tuple(key, lm, sessions)
+            causal_model_cache_set(mods, s.model, fields, "_resident_sessions", expected)
+        else:
+            if persist and py_get(py_get(fields, "_causal_live_fields", fields), "_resident_sessions") is expected:
+                causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
+            _resident_close(entries, lm, sessions)
+            mods.released()
+        if persist:
+            causal_model_cache_set(mods, s.model, fields, "_resident_busy", False)
+        var wrote = progress[0].progress.wrote
+        var out = generation_array([batch, wrote], "i")
+        if wrote > 0:
+            resident_greedy_outputs(i32_ptr(pending_address), i32_ptr(_addr(out, keep)),
+                i32_ptr(current_address), batch, capacity, wrote)
+        return out
+    except error:
+        mods.released()
+        s.usable = False
+        var state_valid = False
+        try:
+            # Failed native calls still require the post-GIL metadata recheck.
+            # This checks class descriptors, not public instance identities.
+            # Stream state is private to GenerationHandle; reads hold s.busy,
+            # and checkpoints return copies rather than mutable state owners.
+            _sampling_read_progress(s, progress[0].progress, pending_address, current,
+                current_address, capacity, positions, accounted)
+            admission.recheck(generation_array_context())
+            if entered_native and progress[0].kv_ready:
+                _sampling_read_state(mods, s, progress[0].cached_tokens, copies)
+                state_valid = native_completed or not progress[0].failure_is_forward
+        except publication:
+            _ = publication
+        if not state_valid:
+            try:
+                py_setattr(s.state, "_usable", PythonObject(False))
+            except publication:
+                _ = publication
+        # A device/context loss can prevent committed-KV readback. Unlike the
+        # old per-step host export, those bytes then cannot be recovered; mark
+        # state unusable, never claim stale/partial KV is valid, retain first error.
+        if persist:
+            try:
+                _ = _sampling_read_cache_valid(fields, expected)
+                if py_get(py_get(fields, "_causal_live_fields", fields), "_resident_sessions") is expected:
+                    causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
+                causal_model_cache_set(mods, s.model, fields, "_resident_busy", False)
+            except publication:
+                _ = publication
+        try:
+            _resident_read_cleanup(provider, lm, sessions)
+            mods.released()
+        except cleanup:
+            _ = cleanup
+        raise error
+    finally:
+        _ = keep
+        _ = copies
+        _ = progress
+        _ = pending
+        _ = current
+        _ = sessions
+        _ = lm
+
+
 def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admission: Optional[NativeArrayAdmission]) raises -> PythonObject:
     # `admission` is set by the first decode step: ONE full Array guard per
     # call. Each forward may release the GIL, so each is followed by exactly
@@ -2246,6 +2446,20 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
                 # Keep the original resident-forward host loop: another engine
                 # does not establish the missing cross-layer alias contract.
                 legacy_resident = True
+        if capacity > 0 and not s.done() and not s.greedy and s.sampling_policy == 1:
+            var entries = s.model._native_entries
+            var fields = _standalone_record_fields(mods, s.model)
+            if (Bool(py=py_get(entries, "resident_sampling_v1", PythonObject(False)))
+                    and py_get(entries, "native_block_operations") is not None
+                    and py_get(entries, "parallel_call") is None
+                    and not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+                    and _resident_forward_ok(mods, s.model, s.state)):
+                admission = NativeArrayAdmission(generation_array_context())
+                # Alias refusal changes transport only. The fallback below
+                # still selects the stream's checksum-bound FP32 policy.
+                if capacity == 1 or _resident_read_disjoint_state(mods, s.model, s.state):
+                    return _read_sampling_resident(mods, s, capacity, admission.value())
+                legacy_resident = True
         if capacity > 0 and not s.done() and not legacy_resident and _use_native_generation_engine(mods, s.model, s.state):
             var result = _read_engine(mods, s, capacity)
             return result
@@ -2260,6 +2474,7 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         # tokens of this read; the sampler overwrites all used words and greedy
         # never sizes it. Resident/native routes have already returned above.
         var sampling = GenerationSamplingScratch()
+        sampling.use_f32_policy = s.sampling_policy == 1
         # DEFAULT OFF, UNMEASURED A/B experiment (2026-10-29). Capture once per
         # public read, never per token. Before promotion, measure both arms from
         # the same source on supported sampling with EOS, streaming/read-call
@@ -2603,6 +2818,8 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
     for name in [String("schema"), String("model"), String("options"), String("maximum"),  # small-loop(checkpoint scalar fields)
                  String("produced"), String("positions"), String("lengths"), String("finished"), String("text"), String("tokenizer")]:
         _hash_scalar(h, checkpoint[name])
+    if String(checkpoint["schema"]) == "mojolearn.generation.v2":
+        _hash_scalar(h, checkpoint["sampling_policy"])
     sha256_update(h, checkpoint["pending_bytes"])
     sha256_update(h, _array_bytes(checkpoint["prompt"]))
     sha256_update(h, _array_bytes(checkpoint["current"]))
@@ -2637,7 +2854,9 @@ def causal_lm_snapshot_binding(mut mods: NativeModules, stream: PythonObject, na
         raise Error("generation: cannot checkpoint a busy or failed stream")
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var result = g[].bi.dict()
-    py_setitem(result, "schema", PythonObject("mojolearn.generation.v1"))
+    py_setitem(result, "schema", PythonObject("mojolearn.generation.v2" if s[].sampling_policy == 1 else "mojolearn.generation.v1"))
+    if s[].sampling_policy == 1:
+        py_setitem(result, "sampling_policy", PythonObject("mojolearn.sampling.fp32-compensated.v1"))
     py_setitem(result, "model", _fingerprint(mods, s[].model))
     py_setitem(result, "maximum", PythonObject(s[].max_new))
     py_setitem(result, "produced", PythonObject(s[].produced))
@@ -2698,8 +2917,16 @@ def causal_lm_snapshot_binding(stream: PythonObject, native: PythonObject) raise
 
 def causal_lm_resume_binding(mut mods: NativeModules, model: PythonObject, checkpoint: PythonObject, tokenizer: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if String(checkpoint["schema"]) != "mojolearn.generation.v1":
+    var schema = String(checkpoint["schema"])
+    if schema != "mojolearn.generation.v1" and schema != "mojolearn.generation.v2":
         raise Error("generation: unsupported checkpoint schema")
+    var sampling_policy = 0
+    if schema == "mojolearn.generation.v2":
+        if not py_contains(checkpoint, "sampling_policy") or String(checkpoint["sampling_policy"]) != "mojolearn.sampling.fp32-compensated.v1":
+            raise Error("generation: unsupported checkpoint sampling policy")
+        sampling_policy = 1
+    elif py_contains(checkpoint, "sampling_policy"):
+        raise Error("generation: legacy checkpoint cannot declare a sampling policy")
     if String(checkpoint["model"]) != String(_fingerprint(mods, model)):
         raise Error("generation: checkpoint model weights/settings do not match")
     if String(checkpoint["checksum"]) != String(_snapshot_hash(checkpoint)):
@@ -2713,7 +2940,12 @@ def causal_lm_resume_binding(mut mods: NativeModules, model: PythonObject, check
             raise Error("generation: checkpoint tokenizer differs")
     var stream = causal_lm_stream_binding(mods, model, checkpoint["prompt"], checkpoint["maximum"], checkpoint["options"])
     var s = _causal_stream_fields(mods, stream)["_native"].downcast_value_ptr[GenerationHandle]()
+    # Resume follows the checksum-bound policy, never the ambient toggle. This
+    # also preserves v1's legacy policy when the experiment is enabled later.
+    s[].sampling_policy = sampling_policy
     try:
+        if sampling_policy == 1 and s[].greedy:
+            raise Error("generation: sampled checkpoint policy requires greedy=False")
         s[].produced = Int(py=checkpoint["produced"])
         if s[].produced < 0 or s[].produced > s[].max_new:
             raise Error("generation: invalid checkpoint output position")

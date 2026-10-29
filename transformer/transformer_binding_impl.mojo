@@ -34,6 +34,8 @@ from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
 from core.identity_trace import IdentityTrace
 from core.resident_generation_read import ResidentGreedyRead
+from core.resident_sampling_read import ResidentSamplingRead
+from core.generation_sampling_f32 import sampling_pick_f32
 from core.device_scan import device_first_nonfinite
 from core.device_nonfinite_pair import DeviceNonfinitePair
 from std.gpu import block_idx, thread_idx
@@ -2303,9 +2305,136 @@ def _lm_read_progress(ctx: DeviceContext, mut read: ResidentGreedyRead,
     read.progress_ready = True
 
 
+struct _LMSamplingCheckpoint(Movable):
+    # Correctness prototype: live KV plus TWO full alternating snapshots =3x
+    # total KV storage. One full KV D2D copy per completed forward remains.
+    # No allocation per token and no claim that this is a performance win.
+    var k0: List[DeviceBuffer[DType.float32]]
+    var v0: List[DeviceBuffer[DType.float32]]
+    var k1: List[DeviceBuffer[DType.float32]]
+    var v1: List[DeviceBuffer[DType.float32]]
+    var active: Int
+    var pending: Int
+    var cached: Int
+    var pending_cached: Int
+    var ready: Bool
+
+    def __init__(out self, ctx: DeviceContext, layers: List[Int]) raises:
+        self.k0 = List[DeviceBuffer[DType.float32]]()
+        self.v0 = List[DeviceBuffer[DType.float32]]()
+        self.k1 = List[DeviceBuffer[DType.float32]]()
+        self.v1 = List[DeviceBuffer[DType.float32]]()
+        self.active = 1
+        self.pending = 0
+        self.cached = 0
+        self.pending_cached = 0
+        self.ready = False
+        try:
+            for address in layers:
+                var layer = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=address)
+                self.k0.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].kv.value().k)))
+                self.v0.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].kv.value().v)))
+                self.k1.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].kv.value().k)))
+                self.v1.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].kv.value().v)))
+            # Initial state is a valid recovery point even if the first forward
+            # fails. Only the first snapshot is initialized here.
+            self.enqueue(ctx, layers)
+            ctx.synchronize()
+            self.commit()
+        except original:
+            try:
+                ctx.synchronize()
+            except:
+                pass
+            raise original
+        finally:
+            _ = self
+            _ = layers
+
+    def enqueue(mut self, ctx: DeviceContext, layers: List[Int]) raises:
+        self.pending = 1 - self.active
+        for i in range(len(layers)):
+            var layer = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
+            if i == 0:
+                self.pending_cached = layer[].kv.value().s
+            elif self.pending_cached != layer[].kv.value().s:
+                raise Error("causal lm sampling: completed layers disagree about cached length")
+            if self.pending == 0:
+                ctx.enqueue_copy(dst_buf=self.k0[i], src_buf=layer[].kv.value().k)
+                ctx.enqueue_copy(dst_buf=self.v0[i], src_buf=layer[].kv.value().v)
+            else:
+                ctx.enqueue_copy(dst_buf=self.k1[i], src_buf=layer[].kv.value().k)
+                ctx.enqueue_copy(dst_buf=self.v1[i], src_buf=layer[].kv.value().v)
+
+    def commit(mut self):
+        # Caller has synchronized ALL inactive copies and accepted the forward.
+        self.active = self.pending
+        self.cached = self.pending_cached
+        self.ready = True
+
+    def publish(mut self, ctx: DeviceContext, mut read: ResidentSamplingRead) raises:
+        read.kv_ready = False
+        if not self.ready:
+            return
+        for i in range(len(read.cache_keys)):
+            if self.active == 0:
+                ctx.enqueue_copy(dst_ptr=_f32_ptr(read.cache_keys[i]), src_buf=self.k0[i])
+                ctx.enqueue_copy(dst_ptr=_f32_ptr(read.cache_values[i]), src_buf=self.v0[i])
+            else:
+                ctx.enqueue_copy(dst_ptr=_f32_ptr(read.cache_keys[i]), src_buf=self.k1[i])
+                ctx.enqueue_copy(dst_ptr=_f32_ptr(read.cache_values[i]), src_buf=self.v1[i])
+        ctx.synchronize()
+        read.cached_tokens = self.cached
+        read.kv_ready = True
+
+
+def _lm_read_sample_kernel(
+    logits: MutPointer[Float32, MutAnyOrigin], next_ids: MutPointer[Int32, MutAnyOrigin],
+    out_ids: MutPointer[Int32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
+    order: MutPointer[Int32, MutAnyOrigin], merge: MutPointer[Int32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin], batch_in: Int32, cur_l_in: Int32,
+    vocab_in: Int32, capacity_in: Int32, step_in: Int32, pad: Int32,
+    temperature: Float32, top_k: Int32, top_p: Float32, seed: UInt64, position: Int64,
+):
+    # One worker per row executes the SAME native policy as the host fallback.
+    # This deliberately simple experimental kernel may be slow for large V/B1.
+    var row = Int(block_idx.x)
+    if Int(thread_idx.x) != 0:
+        return
+    var b = Int(batch_in)
+    var v = Int(vocab_in)
+    var step = Int(step_in)
+    var capacity = Int(capacity_in)
+    if status[row] != 0:
+        next_ids[row] = pad
+        out_ids[row * capacity + step] = pad
+        status[b + row] = -1
+        return
+    var selected = sampling_pick_f32(
+        logits + (row * Int(cur_l_in) + Int(cur_l_in) - 1) * v,
+        order + row * v, merge + row * v, weights + row * v,
+        v, temperature, Int(top_k), top_p, seed, row, Int(position))
+    status[b + row] = Int32(selected[1])
+    next_ids[row] = Int32(selected[0]) if selected[1] < 0 else pad
+    out_ids[row * capacity + step] = next_ids[row]
+
+
+def _lm_sampling_outputs(ctx: DeviceContext, mut read: ResidentGreedyRead,
+                         out_dev: DeviceBuffer[DType.int32], output: MutPointer[Int32, MutUntrackedOrigin],
+                         capacity: Int, lengths: DeviceBuffer[DType.int64], finished: DeviceBuffer[DType.int32],
+                         mut views: List[DeviceBuffer[DType.int32]]) raises:
+    # progress_ready covers tokens AND row diagnostics, on success and failure.
+    read.progress_ready = False
+    for row in range(len(read.finished)):
+        if read.wrote > 0:
+            views.append(out_dev.create_sub_buffer[DType.int32](row * capacity, read.wrote))
+            ctx.enqueue_copy(dst_ptr=output + row * capacity, src_buf=views[len(views) - 1])
+    _lm_read_progress(ctx, read, lengths, finished)
+
+
 def _lm_run(
     mut s: CausalLMSession, layers: List[Int], p_ids: Int, p_out: Int, p_logits: Int,
-    l: Int, n_steps: Int, read_address: Int = 0,
+    l: Int, n_steps: Int, read_address: Int = 0, sampling_address: Int = 0,
 ) raises:
     ref ctx = s.ctx.value()
     var b = s.b
@@ -2322,7 +2451,11 @@ def _lm_run(
     ctx.enqueue_copy(dst_buf=ids0, src_ptr=ids_i32)
     var next_ids = ctx.enqueue_create_buffer[DType.int32](b)
     var out_dev = ctx.enqueue_create_buffer[DType.int32](b * n_steps)
-    var read = MutPointer[ResidentGreedyRead, MutUntrackedOrigin](unsafe_from_address=read_address)
+    var sampling = MutPointer[ResidentSamplingRead, MutUntrackedOrigin](unsafe_from_address=sampling_address)
+    var progress_address = read_address
+    if sampling_address != 0:
+        progress_address = Int(Pointer(to=sampling[].progress))
+    var read = MutPointer[ResidentGreedyRead, MutUntrackedOrigin](unsafe_from_address=progress_address)
     var status = List[Int32]()
     var status_device = Optional[DeviceBuffer[DType.int32]]()
     var finished_device = Optional[DeviceBuffer[DType.int32]]()
@@ -2343,11 +2476,22 @@ def _lm_run(
     var output_rows = List[DeviceBuffer[DType.int32]]()
     var logits_rows = List[DeviceBuffer[DType.float32]]()
     var workspace = _LMRunWorkspace()
+    var checkpoint = Optional[_LMSamplingCheckpoint]()
+    var sample_order = Optional[DeviceBuffer[DType.int32]]()
+    var sample_merge = Optional[DeviceBuffer[DType.int32]]()
+    var sample_weights = Optional[DeviceBuffer[DType.float32]]()
     var finite_checks = Optional[DeviceNonfinitePair]()
     var progress_synchronized = True
     try:
+        if sampling_address != 0:
+            checkpoint = _LMSamplingCheckpoint(ctx, layers)
+            sample_order = ctx.enqueue_create_buffer[DType.int32](b * v)
+            sample_merge = ctx.enqueue_create_buffer[DType.int32](b * v)
+            sample_weights = ctx.enqueue_create_buffer[DType.float32](b * v)
         var cur_l = l
         for step in range(n_steps):
+            if sampling_address != 0:
+                sampling[].failure_is_forward = False
             if read_address != 0:
                 var consumed = l + step
                 var position = read[].position + consumed
@@ -2357,6 +2501,8 @@ def _lm_run(
                     raise Error("CausalLM: sequence exceeds allocated state capacity")
                 if consumed > read[].cache_remaining:
                     raise Error("causal lm resident: additional positions do not fit the cache")
+            if sampling_address != 0:
+                sampling[].failure_is_forward = True
             var m = b * cur_l
             _lm_scratch_buffer(ctx, workspace.x, m * d)
             ref x = workspace.x.value()
@@ -2385,6 +2531,10 @@ def _lm_run(
                 identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
             else:
                 identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
+            if sampling_address != 0:
+                # The existing finite-check wait also completes every inactive
+                # snapshot copy. Rejecting the forward leaves the old slot live.
+                checkpoint.value().enqueue(ctx, layers)
             # The same independent x/hn scans share one completion wait.
             # Lazily prepare at the original refusal point (not for zero steps)
             # and keep x error priority before progress or selection commits.
@@ -2395,6 +2545,9 @@ def _lm_run(
                 raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad[0]))
             if bad[1] >= 0:
                 raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad[1]))
+            if sampling_address != 0:
+                checkpoint.value().commit()
+                sampling[].failure_is_forward = False
             if read_address != 0:
                 read[].consumed += cur_l
             if read_address == 0:
@@ -2404,12 +2557,22 @@ def _lm_run(
                     grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
                 )
             else:
-                ctx.enqueue_function[_lm_read_argmax_kernel](
-                    logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
-                    status_device.value().unsafe_ptr(),
-                    Int32(b), Int32(cur_l), Int32(v), Int32(n_steps), Int32(step), Int32(read[].pad),
-                    grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
-                )
+                if sampling_address != 0:
+                    ctx.enqueue_function[_lm_read_sample_kernel](
+                        logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
+                        status_device.value().unsafe_ptr(), sample_order.value().unsafe_ptr(),
+                        sample_merge.value().unsafe_ptr(), sample_weights.value().unsafe_ptr(),
+                        Int32(b), Int32(cur_l), Int32(v), Int32(n_steps), Int32(step), Int32(read[].pad),
+                        sampling[].temperature, Int32(sampling[].top_k), sampling[].top_p,
+                        sampling[].seed, Int64(sampling[].output_position + step),
+                        grid_dim=(b, 1, 1), block_dim=(1, 1, 1))
+                else:
+                    ctx.enqueue_function[_lm_read_argmax_kernel](
+                        logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
+                        status_device.value().unsafe_ptr(),
+                        Int32(b), Int32(cur_l), Int32(v), Int32(n_steps), Int32(step), Int32(read[].pad),
+                        grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
+                    )
                 progress_synchronized = False
                 ctx.enqueue_function[_lm_read_status_kernel](
                     status_device.value().unsafe_ptr(), summary_device.value().unsafe_ptr(),
@@ -2433,7 +2596,11 @@ def _lm_run(
                 read[].wrote = step + 1
                 if status[0] == 0:
                     break
-        if read_address == 0:
+        if sampling_address != 0:
+            _lm_sampling_outputs(ctx, read[], out_dev, out_i32, n_steps,
+                lengths_device.value(), finished_device.value(), output_rows)
+            checkpoint.value().publish(ctx, sampling[])
+        elif read_address == 0:
             ctx.enqueue_copy(dst_ptr=out_i32, src_buf=out_dev)
         else:
             # A stopped read has unwritten trailing capacity. Copy only published
@@ -2441,12 +2608,27 @@ def _lm_run(
             for r in range(b):  # driver-loop: completed output-row transfer spans, no token computation
                 output_rows.append(out_dev.create_sub_buffer[DType.int32](r * n_steps, read[].wrote))
                 ctx.enqueue_copy(dst_ptr=out_i32 + r * n_steps, src_buf=output_rows[r])
-        if read_address != 0:
-            _lm_read_progress(ctx, read[], lengths_device.value(), finished_device.value())
-        else:
-            ctx.synchronize()
+        if sampling_address == 0:
+            if read_address != 0:
+                _lm_read_progress(ctx, read[], lengths_device.value(), finished_device.value())
+            else:
+                ctx.synchronize()
     except original:
-        if read_address != 0 and progress_synchronized:
+        if sampling_address != 0:
+            if progress_synchronized:
+                try:
+                    _lm_sampling_outputs(ctx, read[], out_dev, out_i32, n_steps,
+                        lengths_device.value(), finished_device.value(), output_rows)
+                except recovery:
+                    read[].progress_ready = False
+                    _ = recovery
+            if checkpoint:
+                try:
+                    checkpoint.value().publish(ctx, sampling[])
+                except recovery:
+                    sampling[].kv_ready = False
+                    _ = recovery
+        elif read_address != 0 and progress_synchronized:
             try:
                 _lm_read_progress(ctx, read[], lengths_device.value(), finished_device.value())
             except recovery:
@@ -2461,6 +2643,10 @@ def _lm_run(
             pass
         raise original
     finally:
+        _ = checkpoint
+        _ = sample_order
+        _ = sample_merge
+        _ = sample_weights
         _ = finite_checks
         _ = workspace
         _ = logits_rows
