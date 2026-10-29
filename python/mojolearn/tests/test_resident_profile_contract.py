@@ -58,7 +58,7 @@ def test_changed_profile_unlabelled_cache_keeps_legacy_diagnostic(tmp_path):
     ("mamba2", "mamba2_workspace_provider", object()),
 ])
 def test_resident_registry_replacement_is_refused(tmp_path, family, entry, value):
-    model = load_fixture(tmp_path, family, uniform=True)
+    model = load_fixture(tmp_path, family, uniform=(family == "llama"))
     assert entry in model._native_entries
     model._native_entries[entry] = value
     with pytest.raises(Exception, match="native execution entry changed after admission"):
