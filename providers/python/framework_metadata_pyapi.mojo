@@ -3,12 +3,63 @@
 # Framework package loading remains import-time setup. Public helpers enter this
 # common native boundary without Python path/configuration callbacks.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_json import native_path_exists, native_json_parse
 from bindings.byte_checkpoint_io import ByteCheckpointIOError, byte_checkpoint_io
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.optimizer_public_words import stash_python_error
+
+
+def _framework_series(value: PythonObject, string_type: PythonObject) raises -> PythonObject:
+    # Torch 2.13 publishes __version__ as TorchVersion, a genuine str subclass.
+    # Read its Unicode storage without __class__, __str__, split, indexing, or
+    # any subclass hook. PyType_IsSubtype uses native type metadata, while the
+    # Unicode C APIs accept Unicode subclasses directly. No coercion of other
+    # objects is admitted. See experiments/adapter_version_metadata_20261029.
+    ref cpy = Python().cpython()
+    var kind = py_type(value)
+    if kind is not string_type and cpy.lib.get_function[Int32]("PyType_IsSubtype")(
+            kind._obj_ptr, string_type._obj_ptr) == 0:
+        raise Error("TypeError: framework version requires native string metadata")
+    var end = cpy.lib.get_function[Int]("PyUnicode_GetLength")(value._obj_ptr)
+    if end < 0:
+        var failure = stash_python_error()
+        raise failure^
+    # Preserve version.split('+', 1)[0].split('.')[:2] joined by '.': the
+    # first '+' bounds the prefix, and a second '.' ends the minor series.
+    # Unicode indices preserve embedded NULs, non-ASCII and lone surrogates;
+    # no UTF-8 conversion or temporary Python lists are needed.
+    var plus = cpy.lib.get_function[Int]("PyUnicode_FindChar")(
+        value._obj_ptr, UInt32(43), Int(0), end, Int32(1))
+    if plus == -2:
+        var failure = stash_python_error()
+        raise failure^
+    if plus >= 0:
+        end = plus
+    var first = cpy.lib.get_function[Int]("PyUnicode_FindChar")(
+        value._obj_ptr, UInt32(46), Int(0), end, Int32(1))
+    if first == -2:
+        var failure = stash_python_error()
+        raise failure^
+    if first >= 0:
+        var second = cpy.lib.get_function[Int]("PyUnicode_FindChar")(
+            value._obj_ptr, UInt32(46), first + 1, end, Int32(1))
+        if second == -2:
+            var failure = stash_python_error()
+            raise failure^
+        if second >= 0:
+            end = second
+    # PyUnicode_Substring borrows value and returns a new owned reference;
+    # CPython returns an exact str for a subclass without calling its hooks.
+    var result = cpy.lib.get_function[PyObjectPtr]("PyUnicode_Substring")(
+        value._obj_ptr, Int(0), end)
+    _ = value  # keep the Unicode owner pinned through the final native read
+    if not result:
+        var failure = stash_python_error()
+        raise failure^
+    return PythonObject(from_owned=result)
 
 
 def _directory(context: PythonObject) raises -> PythonObject:
@@ -83,9 +134,7 @@ def framework_metadata_operation(operation: PythonObject, args: PythonObject,
         py_setitem(cache, "manifest", doc)
         return doc
     if op == "series":
-        if py_type(args[0]) is not bi.str:
-            raise Error("TypeError: framework version requires native string metadata")
-        return py_call(PythonObject(".").join, py_call(py_call(args[0].split, "+", 1)[0].split, ".")[py_call(bi.slice, 0, 2)])
+        return _framework_series(args[0], bi.str)
     if op == "parameters":
         if py_type(args[0]) is not bi.dict:
             raise Error("TypeError: MAX parameters require native keyword dictionary storage")
