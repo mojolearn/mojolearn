@@ -1,0 +1,84 @@
+{
+  "source_commit": "6ce88eee6d9c90ca50698889dbfb2f59775c0ce1",
+  "branch": "lane/dependency-free-msel-20261029",
+  "source_files": {
+    "python/mojolearn/_native_arena_rows.py": "e6adca2288d38f6ce809c42654ab572b2f3cd327dea82e3c934fc28872182d17",
+    "python/mojolearn/_native_loaded_modules.py": "cc84403d037595a4637df1d291b84a2d9d96486bff321828ac6940bfc707022d",
+    "python/mojolearn/tests/test_numpy_free_cv_contract.py": "ad8aa8661952bd4f34957bdfe7a5402e0e04ccc14fbb8aaad0076f42a39ba050"
+  },
+  "python": "Python 3.10.21",
+  "base_wheel_sha256": "bdb3caff4a703ba6d47e7cb3d2e90213557c658583ad32110250bed865a4ce83",
+  "baseline": {
+    "exit_code": 1,
+    "tests": 3,
+    "errors": 2,
+    "reason": "missing ('memoryview',)",
+    "log": "before.log"
+  },
+  "intermediate": {
+    "exit_code": 1,
+    "tests": 3,
+    "errors": 2,
+    "reason": "missing import-time _thread connection",
+    "log": "after.log"
+  },
+  "final_regressions": {
+    "exit_code": 0,
+    "tests": 3,
+    "skipped": 0,
+    "log": "after-thread.log"
+  },
+  "affected_installed_smoke": {
+    "exit_code": 0,
+    "results": 7,
+    "numpy_loaded": false,
+    "scope": "Apple GPU dependency-free bounded correctness smoke, no timing",
+    "log": "affected-installed-smoke.log"
+  },
+  "native_runtime_members_unchanged": 87,
+  "native_rebuild": false,
+  "runtime_scope": "CPython3.10 installed currentcandidate with only two committed setup-file overlays; full final wheel/matrix pending next tokenizer freeze",
+  "guards": [
+    {
+      "name": "no-host-routes",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/dependency-free-msel-20261029/no-host-routes.log"
+    },
+    {
+      "name": "no-python-kernels",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/dependency-free-msel-20261029/no-python-kernels.log"
+    },
+    {
+      "name": "no-compute-shells",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/dependency-free-msel-20261029/no-compute-shells.log"
+    },
+    {
+      "name": "rebuild-fence",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/dependency-free-msel-20261029/rebuild-fence.log"
+    }
+  ],
+  "logs": {
+    "after-thread.log": "7e6f5688cd32467d4131483c82a2e0df12e2ddc3a46dd9024dc5cf62dfa5cdcf",
+    "rebuild-fence.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "no-python-kernels.log": "f7ceb4fafa7791d785f6757a8ab33d07147568b3bbafab71fd29ba1476c365cb",
+    "product-commit.log": "04ebcc009bd516df8599b5ea1f308fac65dbad3fc25fb20721118c2de14175a0",
+    "affected-installed-smoke.log": "2fa2d3a7a343f2f09bf496ddee7b78e0b245a8230290160102a65de97eed408e",
+    "no-compute-shells.log": "879b427b2db63dba761fbbff92f999b916bf756ab7d5f502fde1c2d69650165d",
+    "no-host-routes.log": "1f2c0a59dbbc08446fa0b9a23b802b82acf9be9a228f34c34070d628f041e470",
+    "before.log": "3904e9543276be539eeda9331c75b31024483b872ab5df2654ddaa6a31c26441",
+    "install.log": "02be98b97c5a85c4ac4ac0e0aacff102cb7cc4aab56ee195470e4c78bc54cfdb",
+    "after.log": "914ae3cdf6c7ca271e4307ce7371e6da73741be3c7a8ee3ab2a1896202ed1e52"
+  },
+  "retention": {
+    "r2_key": "measurements/dependency-free-msel-20261029/retained-evidence.tgz",
+    "local": "/Users/andrewhendel/mojolearn-evidence/dependency-free-msel-20261029/retained-evidence.tgz",
+    "sha256": "89202e2bacddda080078010e96a2387abe36583c9d3d9a15ba73e52594dd47c5",
+    "bytes": 22657,
+    "put_status": 200,
+    "readback_status": 200,
+    "readback_matches": true
+  }
+}

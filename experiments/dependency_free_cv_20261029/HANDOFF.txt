@@ -1,0 +1,41 @@
+Dependency-free public cross-validation setup repair (2026-10-29)
+
+Product: 6ce88eee6d9c90ca50698889dbfb2f59775c0ce1
+Branch: lane/dependency-free-msel-20261029
+
+The real installed CPython3.10 wheel matrix reached cross_val_score with native
+Array input and failed with missing (memoryview,) metadata. DeviceRows setup
+replaced the complete shared owner-type table with an arena-only subset.
+Reuse the already-connected owner table instead. After that repair, the same
+public operation exposed a missing canonical _thread connection: native arena
+resident admission needs its exact _local type. Connect only that consumed
+standard-library type during import setup. Native execution, arithmetic, buffer
+snapshotting, release checks, and per-use module export checks are unchanged.
+
+Fresh task-owned installed current-candidate environment, NumPy absent:
+- Original source: 3 public tests, 2 errors (Array/memoryview cross-validation),
+  released-memoryview negative control passed; exit1, before.log.
+- Owner-table-only intermediate: same2 errors now missing _thread; exit1,
+  after.log. Both original failure stages are retained.
+- Both setup repairs: all3 public tests passed, no skips, exit0,
+  after-thread.log. Native Array and2Dmemoryview folds execute successfully;
+  released memoryview retains its admission error.
+- Original tools/check_numpy_free_runtime.py --installed: exit0,7results,
+  including cross_val_score; NumPy remained absent. This is the existing
+  bounded Apple GPU correctness smoke, not timing or whole identity.
+- All4 required source guards passed. No native compilation was needed:
+  only2Python import-setup files changed, and all87 installed native/runtime
+  members (including adapters) were hash-identical before/after runtime.
+
+Runtime is qualified only for the tested CPython3.10 current-candidate private
+installation with explicit2-file overlays. The full final wheel/interpreter
+matrix remains pending the combined Samba tokenizer repair/new source freeze.
+No shared active verifier installation was changed.
+
+Full logs, source patch, before/after source bytes, wheel identity, member
+hashes, interpreter identity, and guard receipts:
+~/mojolearn-evidence/dependency-free-msel-20261029/
+R2 (verified readback):
+measurements/dependency-free-msel-20261029/retained-evidence.tgz
+SHA256 89202e2bacddda080078010e96a2387abe36583c9d3d9a15ba73e52594dd47c5
+22657bytes. See validation.json for exact scope and original failure receipts.
