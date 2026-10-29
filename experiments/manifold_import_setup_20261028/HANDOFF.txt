@@ -1,0 +1,38 @@
+Manifold method installation before class creation (2026-10-28)
+
+Branch lane/manifold-import-setup-20261028; dependency3d252e381d063359e69eeb7b5ec99347abd9d425.
+Changed _native_runtime_manifold_bridge.py, _expansion_decomp.py, _expansion_ann.py;
+source/setup tests only. No Mojo/provider algorithm changes.
+
+Removed work:12 existing native fit/fit_transform/transform methods across
+Isomap, ClassicalMDS, MDS, LocallyLinearEmbedding and TSNE no longer receive
+_mode output/fit/CPU wrappers only to traverse __wrapped__ and replace the
+method afterward. Their declaration decorator sets the existing native lifecycle
+flags before class creation, returns the same original function, and validates
+its exact function type and qualified package/class/method against the retained
+table. The helper's FunctionType import occurs once. Five late class connectors,
+the unwrap loop and12 class-method replacements are removed. The compiled owner
+connection stays at its existing import phase. No runtime operation is added.
+
+Constructors retain their independent mode handling, including TSNE's injected
+numeric_mode keyword: no native_public marker is introduced. Native fit methods
+now explicitly mark validates=True before _guard_cpu_training sees them because
+the same native lifecycle already owns input checks. Native method identities
+are final at classcreation. Passive subclasses inherit them, while application
+own fit/transform overrides still get tracking/fitted checks; own custom attribute
+slots stay intact. No public signature/default changes or persistent cache.
+
+Validation: Python3.14.6 syntax/bytecode compilation exit0 for four changed
+Python files, six focused setup checks exit0. Tests evaluate actual source class/
+helper declarations with inert connection/validation metadata; no package or
+native binding import and no numerical operation is executed. Tests check all12
+identities, no wrappers, five constructors/mode defaults, TSNE mode injection,
+passive/own-override subclass behavior, qualified declaration refusal and absent
+late repair. No Mojo source changed or duplicate native build. No runtime,
+identity or performance campaign; no hot-loop or measured speed claim.
+
+Remaining bridge cycles elsewhere (trees, decomp-kit and other classes) remain
+outside this batch; supplied repository counts are not claimed reproduced.
+Evidence /Users/andrewhendel/mojolearn-evidence/manifold-import-setup-20261028/
+contains full check logs/exits, exact source archive, source-guard logs/exits.
+checks.json records commands, Python version, hashes and actual coverage.

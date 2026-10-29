@@ -1,0 +1,26 @@
+{
+  "dependency": "3d252e381d063359e69eeb7b5ec99347abd9d425",
+  "python": "3.14.6",
+  "setup_tests": {
+    "command": "python3 tools/test_manifold_import_setup.py",
+    "count": 6,
+    "exit": 0,
+    "scope": "real AST class/setup declarations, inert connection/validation metadata, no package/native import or numerical operation"
+  },
+  "compilation": {
+    "command": "python3 -m py_compile python/mojolearn/_native_runtime_manifold_bridge.py python/mojolearn/_expansion_decomp.py python/mojolearn/_expansion_ann.py tools/test_manifold_import_setup.py",
+    "exit": 0,
+    "scope": "changed Python source syntax/bytecode; no Mojo source changed or binary rebuilt"
+  },
+  "source_sha256": {
+    "python/mojolearn/_native_runtime_manifold_bridge.py": "dbbb9677c687fcc197be0a68f1b9b9e47cbb0acb329f9b21d2eb68c1a7acf5dd",
+    "python/mojolearn/_expansion_decomp.py": "ea6f0fba42b4c76fefd0b0a136372ca94077eeeb433b824bcfbcbcb1d143ca97",
+    "python/mojolearn/_expansion_ann.py": "0452a0917c4ea9b6fc7a4cb50e6bac44d8f76b8316e31c77330dd105f7aff23f",
+    "tools/test_manifold_import_setup.py": "f91278daf7216b7a02ad96abd8905bf3fb6a50f923553babdf3a2d5383577967",
+    "tools/test_neural_import_setup.py": "17de9a6bd69f32016bf110fa162ad81f8fecefabad3c6273b7e0688d027308c8",
+    "python/mojolearn/_mode.py": "86e663cd75ce62dda4ee7e9d0d5e44acca0717096f9e89747a98f43b9fb43cff"
+  },
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/manifold-import-setup-20261028",
+  "runtime_campaign": "not run",
+  "performance": "not measured; import setup structural reduction only"
+}

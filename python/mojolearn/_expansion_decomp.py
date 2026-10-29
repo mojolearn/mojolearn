@@ -23,7 +23,7 @@ import ctypes
 from . import _portable_math as math
 import sys
 
-from . import _backend, _native_family_bridge
+from . import _backend, _native_family_bridge, _native_runtime_manifold_bridge
 from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
@@ -4108,6 +4108,7 @@ class Isomap(_Base):
         self.neighbors_algorithm, self.n_jobs, self.metric, self.p = neighbors_algorithm, n_jobs, metric, p
         self.metric_params, self.numeric_mode = metric_params, numeric_mode
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
         """Compute the embedding of X.
 
@@ -4123,6 +4124,7 @@ class Isomap(_Base):
         return _NATIVE(self, "family_mani_iso_fit",
                        (None, None, X, y), _NATIVE_CONTEXT)
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit_transform(self, X, y=None):
         """Fit the model and return ``embedding_``.
 
@@ -4138,6 +4140,7 @@ class Isomap(_Base):
         return _NATIVE(self, "family_mani_iso_fit_transform",
                        (None, None, X, y), _NATIVE_CONTEXT)
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def transform(self, X):
         """Embed new points.
 
@@ -4219,6 +4222,7 @@ class ClassicalMDS(_Base):
     def __init__(self, n_components=2, *, metric="euclidean", metric_params=None, numeric_mode=None):
         self.n_components, self.metric, self.metric_params, self.numeric_mode = n_components, metric, metric_params, numeric_mode
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
         """Compute the embedding.
 
@@ -4235,6 +4239,7 @@ class ClassicalMDS(_Base):
         return _NATIVE(self, "family_mani_cmds_fit",
                        (None, None, X, y), _NATIVE_CONTEXT)
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
 
@@ -4330,6 +4335,7 @@ class MDS(_Base):
         self.random_state, self.metric, self.metric_params = random_state, metric, metric_params
         self.normalized_stress, self.numeric_mode = normalized_stress, numeric_mode
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit_transform(self, X, y=None, init=None):
         """Compute the embedding and return it.
 
@@ -4348,6 +4354,7 @@ class MDS(_Base):
         return _NATIVE(self, "family_mani_mds_fit_transform",
                        (None, None, X, init, y), _NATIVE_CONTEXT)
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None, init=None):
         """Compute the embedding.
 
@@ -4450,6 +4457,7 @@ class LocallyLinearEmbedding(_Base):
         self.modified_tol, self.neighbors_algorithm, self.random_state = modified_tol, neighbors_algorithm, random_state
         self.n_jobs, self.numeric_mode = n_jobs, numeric_mode
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
         """Compute the embedding of X.
 
@@ -4465,6 +4473,7 @@ class LocallyLinearEmbedding(_Base):
         return _NATIVE(self, "family_mani_lle_fit",
                        (None, None, X, y), _NATIVE_CONTEXT)
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
 
@@ -4480,6 +4489,7 @@ class LocallyLinearEmbedding(_Base):
         return _NATIVE(self, "family_mani_lle_fit_transform",
                        (None, None, X, y), _NATIVE_CONTEXT)
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def transform(self, X):
         """Embed new points.
 
@@ -4504,7 +4514,6 @@ class LocallyLinearEmbedding(_Base):
 # (bindings/mani_decomp_native.mojo). Its tables: the kit's matrix and device
 # buffer classes and the per-binding broadcast zero (`_dev_one`'s cache), and
 # the metric kinds.
-from . import _native_runtime_manifold_bridge
 _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 _native_family_bridge.tables(family_mani_M=_M, family_mani_devbuf=_DevBuf, family_mani_dev_one=_DEV_ONE,
                              family_mani_pd_kind=dict(_PD_KIND))
@@ -5152,9 +5161,3 @@ _DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({
     "FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis,
     "LatentDirichletAllocation": LatentDirichletAllocation,
     "GaussianRandomProjection": GaussianRandomProjection, "SparseRandomProjection": SparseRandomProjection})
-# Import-time connection of the complete native manifold lifecycle envelopes.
-# Keep these at EOF so retained constructor injection locations remain stable.
-_native_runtime_manifold_bridge.connect_lifecycle(Isomap)
-_native_runtime_manifold_bridge.connect_lifecycle(ClassicalMDS)
-_native_runtime_manifold_bridge.connect_lifecycle(MDS)
-_native_runtime_manifold_bridge.connect_lifecycle(LocallyLinearEmbedding)

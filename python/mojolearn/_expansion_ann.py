@@ -534,6 +534,7 @@ class TSNE(NumericModeMixin):
         self.init = init
         self.random_state = random_state
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
         """Compute the embedding of `X`.
 
@@ -561,6 +562,7 @@ class TSNE(NumericModeMixin):
         return _NATIVE(self, "family_mani_tsne_fit", (None, None, X, y),
                        _NATIVE_CONTEXT)
 
+    @_native_runtime_manifold_bridge.native_lifecycle
     def fit_transform(self, X, y=None):
         """Compute the embedding of `X` and return it.
 
@@ -1258,7 +1260,3 @@ _native_family_bridge.connect_bindings("_mojolearn_x_ann")
 from ._native_neighbor_queries import connect as _connect_ann_attributes
 _ANN_ATTRIBUTE_CALL, _ANN_ATTRIBUTE_CONTEXT = _connect_ann_attributes(
     {IVFPQIndex: "ann_pq"}, _FAMILY_CONTEXT, _ARCHIVE_CONTEXT, ())
-
-# Import-time connection for the native manifold fit lifecycle.
-from ._native_runtime_manifold_bridge import connect_lifecycle as _connect_manifold_lifecycle
-_connect_manifold_lifecycle(TSNE)

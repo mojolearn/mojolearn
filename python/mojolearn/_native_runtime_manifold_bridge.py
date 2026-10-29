@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the compiled manifold orchestration owner."""
+from types import FunctionType
 
 _ENTRY = None
 
@@ -12,28 +13,25 @@ _LIFECYCLE_METHODS = {
 }
 
 
-def connect_lifecycle(cls):
-    """Import-time removal of inherited envelopes now owned by native code."""
-    from types import FunctionType
-
-    key = (cls.__module__, cls.__name__)
-    names = _LIFECYCLE_METHODS[key]
-    for name in names:  # glue: fixed qualified manifold public methods
-        method = cls.__dict__[name]
-        while hasattr(method, "__wrapped__"):  # glue: class-definition decorators only
-            method = method.__wrapped__
-        if type(method) is not FunctionType or method.__module__ != cls.__module__:
-            raise TypeError("manifold lifecycle requires the package's original public method")
-        # Passive subclasses retain the native method. An application-owned
-        # override still receives _mode's normal guards at class creation.
-        method._mojolearn_native_public_operation = True
-        method._mojolearn_public_out = True
-        if name in ("fit", "fit_transform"):
-            method._mojolearn_tracks_fit = True
-        else:
-            method._mojolearn_needs_fit = True
-            method._mojolearn_validates = True
-        setattr(cls, name, method)
+def native_lifecycle(method):
+    """Declare an original native method before _mode sees its class."""
+    if type(method) is not FunctionType:
+        raise TypeError("manifold lifecycle requires the package's original public method")
+    owner, separator, name = method.__qualname__.rpartition(".")
+    names = _LIFECYCLE_METHODS.get((method.__module__, owner), ())
+    if not separator or name not in names:
+        raise TypeError("manifold lifecycle requires the package's original public method")
+    # These flags already described the finished native methods. Publish them
+    # before class creation, avoiding output/fit/CPU wrappers and later unwraps.
+    # Constructors keep their independent numeric_mode injection unchanged.
+    method._mojolearn_native_public_operation = True
+    method._mojolearn_public_out = True
+    method._mojolearn_validates = True
+    if name in ("fit", "fit_transform"):
+        method._mojolearn_tracks_fit = True
+    else:
+        method._mojolearn_needs_fit = True
+    return method
 
 
 def connect():
