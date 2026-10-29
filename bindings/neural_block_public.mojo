@@ -607,11 +607,21 @@ def _neural_state(mut mods: NativeModules, owner: NativeBlockExecution, state: P
     var bi = mods.module("builtins")
     var fields = owner.fields
     if owner.plan.downcast_value_ptr[NativeBlockPlan]()[].kind == "transformer":
-        if Int(py=state.batch_size) != b or Int(py=state.n_kv_heads) != Int(py=fields["n_kv_heads"]) or Int(py=state.head_dim) != Int(py=fields["head_dim"]) or Int(py=state.window) != Int(py=fields["window"]):
-            raise Error("neural block: transformer state dimensions differ")
+        # Preserve the original short-circuit order while naming the first
+        # incompatible field. Admission must finish before state execution.
+        if Int(py=state.batch_size) != b:
+            raise Error("neural block: transformer state batch_size differs from input")
+        if Int(py=state.n_kv_heads) != Int(py=fields["n_kv_heads"]):
+            raise Error("neural block: transformer state n_kv_heads differs from block")
+        if Int(py=state.head_dim) != Int(py=fields["head_dim"]):
+            raise Error("neural block: transformer state head_dim differs from block")
+        if Int(py=state.window) != Int(py=fields["window"]):
+            raise Error("neural block: transformer state window differs from block")
         var past = Int(py=state.cached_tokens)
-        if past < 0 or past + l > Int(py=state.max_tokens) or past + l > Int(py=fields["max_positions"]):
-            raise Error("neural block: sequence exceeds state capacity or max_positions")
+        if past < 0:
+            raise Error("neural block: transformer state cached_tokens must be nonnegative")
+        if past + l > Int(py=state.max_tokens) or past + l > Int(py=fields["max_positions"]):
+            raise Error("neural block: cached_tokens plus sequence exceeds state capacity or max_positions")
 
 
 
