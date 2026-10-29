@@ -1,0 +1,59 @@
+{
+  "run": 40882485101,
+  "url": "https://github.com/mojolearn/mojolearn/actions/runs/40882485101",
+  "source_commit": "5abdda9d8dc9cdad007c581137623414e2168f8b",
+  "tooling_commit": "c4892dd3f1",
+  "scope": "One identical gfx942 merged native_sequence group only",
+  "expected_groups": 1,
+  "compiled_groups": 1,
+  "failed_groups": 0,
+  "controller_exit": 0,
+  "build_seconds": 1024.3,
+  "raw_images": [
+    {
+      "mode": 448,
+      "path": "python/mojolearn/identical/_mojolearn_native_sequence.so",
+      "sha256": "b76d2d975f153c67995753d1a3d1b8583ff52857c03b61f14ca3bde7fc48a60a",
+      "size": 27459336
+    }
+  ],
+  "retention": {
+    "source_commit": "5abdda9d8dc9cdad007c581137623414e2168f8b",
+    "workflow_run": 40882485101,
+    "key": "measurements/github-amd-sequence-20261029/amd-gfx942-40882485101-complete.tgz",
+    "local_archive": "/Users/andrewhendel/mojolearn-evidence/github-amd-sequence-20261029/retention/amd-gfx942-40882485101-complete.tgz",
+    "bytes": 296688297,
+    "sha256": "e1376eb00227173decb3946924bb1c30bfaff84b0f143c65b0f0134e229a6f07",
+    "put_status": 200,
+    "files": 9714,
+    "unique_contents": 9677,
+    "runtime_qualified": false,
+    "compile_complete": true,
+    "expected_groups": 1,
+    "failed_jobs": [],
+    "get_status": 200,
+    "readback_sha256": "e1376eb00227173decb3946924bb1c30bfaff84b0f143c65b0f0134e229a6f07",
+    "all_member_readback_match": true,
+    "elapsed_seconds": 137.17198383319192,
+    "exit_code": 0
+  },
+  "resource_witness": {
+    "nproc": 4,
+    "cpu_affinity": "0,1,2,3",
+    "compiler_jobs": "8",
+    "inherited_guard_thread_limit": 2,
+    "phase_saturation_claim": false
+  },
+  "full_route_exit": 1,
+  "full_route_reason": "Expected partial-tree refusal: existing shard protocol qualifies selected build outcome only, not full46/staging.",
+  "build_log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/github-amd-sequence-20261029/run/shard-artifacts/shard-gfx942-1/shard/1/report/build_logs/identical_merged__mojolearn_native_sequence.log",
+    "full_sha256": "6637e7826c73bf4e5a47179d1cff2321901f00585b6e8ad25c58380f319646ef",
+    "manifest_subprocess_sha256": "0fe2bebb7598fa010d7cc934e0acb3972337542c087055d1209a7b6ee59888a0",
+    "exact_framing_removed_sha256": "0fe2bebb7598fa010d7cc934e0acb3972337542c087055d1209a7b6ee59888a0"
+  },
+  "formal_release_admission": false,
+  "runtime_qualified": false,
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/github-amd-sequence-20261029",
+  "next_source_limitation": "be2dbd0397 exact-module provider repair invalidates x_sequence in this merged group; retain5ab result and rebuild only affected group at accepted nextfreeze."
+}
