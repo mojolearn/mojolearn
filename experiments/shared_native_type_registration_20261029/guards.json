@@ -1,0 +1,14 @@
+{
+  "command": [
+    "sh",
+    "tools/hooks/pre-push",
+    "origin",
+    "source-only-review"
+  ],
+  "source_commit": "4053a083f1958b8829b408e0935fded7955c07b1",
+  "ref": "refs/heads/lane/shared-native-type-registration-20261029",
+  "base": "7394913a923630abe4be08cb00d0dc0b903e3ebf",
+  "exit_code": 0,
+  "seconds": 80.43406541692093,
+  "scope": "Required source/push guards with committed ref; no push"
+}

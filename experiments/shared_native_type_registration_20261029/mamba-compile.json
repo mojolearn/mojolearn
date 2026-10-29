@@ -1,0 +1,42 @@
+{
+  "family": "mamba",
+  "source_commit": "4053a083f1958b8829b408e0935fded7955c07b1",
+  "cwd": "/Users/andrewhendel/mojolearn-wt/shared-native-type-registration-20261029",
+  "argv": [
+    "bash",
+    "tools/compile_slot.sh",
+    "sh",
+    "bindings/build_host_family.sh",
+    "mamba"
+  ],
+  "environment": {
+    "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-identity-registration",
+    "MOJOLEARN_COMPILE_JOBS": "10",
+    "MOJOLEARN_MOJO_BUILD_FLAGS": "",
+    "MOJOLEARN_NUMERIC_MODE": "identical",
+    "MOJOLEARN_TARGET_COLUMN": "cpu"
+  },
+  "compiler": "/Users/andrewhendel/mojolearn-wt/shared-native-type-registration-20261029/.pixi/envs/default/bin/mojo",
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "dependency_scope": {
+    "scope": "closure",
+    "digest": "ef3878d3694d9c686db6489be91b1fbbe828bfe13949392a82c4a734a4a93e0d",
+    "files": 91
+  },
+  "source_count": 93,
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-build/mamba/source-manifest.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-build/mamba/source.tar.gz",
+  "source_archive_sha256": "4c5bfe7b3df4afc2b05c61e474ef9231a1c2a1bfb19d9c1eced850e94f66b080",
+  "target": "CPU identical, macOS arm64 apple-m1; standard default O3; standard build_host_family.sh deployment floor/SDK",
+  "sdk": "26.5",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/native-identity-registration/_mojolearn_mamba_host.so",
+  "log": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/identity-registration-build/mamba/compile.log",
+  "status": "compiled",
+  "runtime_executed": false,
+  "exit_code": 0,
+  "elapsed_seconds": 65.22,
+  "sources_changed_during_build": [],
+  "binary_sha256": "b89104a93d8bfc9ec42877874be8bc2101049146b6c414f5771cef12bc219031",
+  "binary_bytes": 3894040
+}

@@ -1,0 +1,60 @@
+Canonical NativeIdentityKey across separate/merged host owners
+Product4053a083f1958b8829b408e0935fded7955c07b1; import-order test bootstrap6d8bbfa9971e52816d4550037fafacbe540fa094.
+
+Observed actual installed partial-development package import abort:
+_mojolearn_mamba_host attempted to register the same Mojo NativeIdentityKey
+already registered by tokenizer. Runtime Sequential registered it a third time.
+Manifold and SmallMLP regression subprocesses aborted before tests (-5/-6).
+Original logs are retained under manifold-installed-integration-20261029/
+current-installed-priority-contracts. This was a real loading defect, not an
+arithmetic or vendor identity result.
+
+Repair: three module builders call bindings/native_identity_type.mojo once at
+GIL-held setup. The supported lookup_py_type_object gets Mojo's canonical type.
+Only the exact missing-registration error authorizes add_type; every other
+lookup error, type-creation failure and module-attachment failure propagates.
+Otherwise the existing class is retained as the new module's attribute. Class
+identity, native allocation/downcast and destructor ownership share the same
+Mojo registry entry. There is no fake type, toolchain patch or user callback.
+No execution-loop or numerical algorithm changed. This handles either owner
+import order and the existing merged-owner construction order.
+
+Supported API/source:
+https://mojolang.org/docs/std/python/bindings/lookup_py_type_object/
+https://raw.githubusercontent.com/modular/modular/mojo/v1.0.0/mojo/stdlib/std/python/bindings.mojo
+
+Durable tools/test_native_identity_type_imports.py runs all six actual host
+owner import orders using backend's native module namespace, then imports the
+actual installed package. It loads the real installed _native_loaded_modules
+connector first because tokenizer correctly refuses unconnected native imports.
+No stub package, fake connection record, monkeypatch or missing-binding skip.
+
+Scope: only mamba_host/runtime_sequential_host/tokenizer_host invalidate;
+GPU owner sources and unrelated completed CPU groups are unchanged. Standard
+full host builds run serial via compile_slot,10 configured workers. Mamba and
+runtime Sequential use prior standard defaultO3; tokenizer keeps priorO0.
+Explicit runtime and guard statuses are retained in receipts. First-owner and
+existing-canonical-type early real Mamba module loads passed; the initial
+standalone tokenizer probe omitted its required connection setup and failed,
+retained separately rather than treated as a product failure or pass.
+
+Evidence root:
+~/mojolearn-evidence/manifold-installed-integration-20261029/
+  identity-registration-build/ (full logs, source archives, compiler/flags,
+    binaries and hashes per affected family)
+  identity-registration-early-import/ (bounded actual type-registration probes)
+  identity-registration-priority.json (unrelated CPU controller paused while
+    current child completed; auto-resume after priority build, no compiler killed)
+~/mojolearn-evidence/shared-native-type-registration-20261029/guards.*
+
+Runtime package and numerical regression results remain pending until all three
+compiled owners are staged together. Compilation is not runtime qualification.
+
+All3 actual full host builds passed0, source unchanged throughout:
+Mamba defaultO3 65.22s; runtime_sequential defaultO3 94.19s; tokenizerO0
+543.52s. Timings are controller wall times, not performance measurements.
+Committed-ref source/push guards0/80.43s. No GPU rebuild was needed.
+Unrelated CPU queue resumed automatically; all39 remaining host families
+passed0, yielding all46 current CPU families together with the original7
+(with these3 corrected owner binaries replacing their earlier outputs).
+Installed six-order and API regressions are the next step, still pending.
