@@ -37,7 +37,7 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
 from bindings.arena_prog_native import _metrics_run
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.label_admission_native import labels_primitive_kind, labels_admit_primitive, classifier_label_list
+from bindings.label_admission_native import labels_primitive_kind, labels_admit_primitive, classifier_label_list, LabelTypeKinds
 from bindings.label_snapshot_native import label_array_list
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -712,21 +712,26 @@ def _flatten_labels(var y: PythonObject, context: PythonObject) raises -> Python
     if cls is b.str or cls is b.bytes:
         raise Error("mojolearn: y must be a sequence of labels")
     var out = Python.list()
-    _flatten_into(item, out, context)
+    var kinds = LabelTypeKinds()
+    # Exact container types and the output's native append owner are stable
+    # throughout this recursive walk; capture them once, not per node/leaf.
+    _flatten_into(item, out.append, b.list, b.tuple, context, kinds)
+    _ = kinds^
     return out
 
 
-def _flatten_into(item: PythonObject, out_buf: PythonObject, context: PythonObject, depth: Int = 0) raises:
+def _flatten_into(item: PythonObject, append: PythonObject, list_type: PythonObject,
+                  tuple_type: PythonObject, context: PythonObject, mut kinds: LabelTypeKinds,
+                  depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: label nesting exceeds the supported native depth")
-    var b = labels_builtins()
     var cls = py_type(item)
-    if cls is b.list or cls is b.tuple:
+    if cls is list_type or cls is tuple_type:
         for k in range(len(item)):  # driver-loop: exact native container slots, never subclass iteration/indexing hooks
-            _flatten_into(item[k], out_buf, context, depth + 1)
+            _flatten_into(item[k], append, list_type, tuple_type, context, kinds, depth + 1)
         return
-    _ = labels_admit_primitive(item, context)
-    _ = py_call(out_buf.append, item)
+    _ = kinds.admit(item, context)
+    _ = py_call(append, item)
 
 
 def _label_kind(t: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
@@ -750,18 +755,22 @@ def _sorted_classes(var labels: PythonObject, context: PythonObject) raises -> C
         raise Error("mojolearn: y is empty")
     var seen_str = False
     var seen_number = False
+    _labels_connect(context)
+    var kinds = LabelTypeKinds()
     for i in range(n):  # cpu-route: Python label objects, the explicit label input step
         var item = labels[i]
         var t = py_type(item)
         # Inspect identities before hashing a class: an application metaclass
         # can define Python __hash__, even when the label itself is untouched.
-        var kind = _label_kind(t, b, context)
+        var primitive = kinds.kind(t, context)
+        var kind = 1 if primitive == 1 else 2 if primitive > 1 else 0
         if kind == 0:
             raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols, got " + labels_type_name(t))
         if kind == 2 and Bool(py=item != item):
             raise Error("mojolearn: y contains a NaN label; NaN is not a class")
         seen_str = seen_str or kind == 1
         seen_number = seen_number or kind == 2
+    _ = kinds^  # end admission reuse before sorting or numerical helpers
     if seen_str and seen_number:
         raise Error("mojolearn: y mixes numeric and str labels; encode one kind before fitting")
     var classes = py_call(b.sorted, py_call(b.dict.fromkeys, labels))
@@ -856,10 +865,12 @@ def labels_label_kind(var classes: PythonObject, context: PythonObject) raises -
         raise Error("TypeError: class labels require an exact native list or tuple")
     var all_int = True
     var all_real = True
+    var kinds = LabelTypeKinds()
     for i in range(len(classes)):  # driver-loop: exact primitive kinds preserve bool/string object-label output
-        var kind = labels_admit_primitive(classes[i], context)
+        var kind = kinds.admit(classes[i], context)
         all_int = all_int and kind == 3
         all_real = all_real and (kind == 3 or kind == 4)
+    _ = kinds^
     return String("int") if all_int else String("float") if all_real else String("object")
 
 
@@ -1357,12 +1368,12 @@ def _classification_labels(values: PythonObject, name: String, context: PythonOb
         raise Error(name + " must contain at least one label")
     var all_str = True
     var all_int = True
+    var kinds = LabelTypeKinds()
     for i in range(n):  # cpu-route: the label types of user labels, the explicit label input step
-        var v = labels[i]
-        var t = py_type(v)
-        var kind = labels_admit_primitive(v, context)
+        var kind = kinds.admit(labels[i], context)
         all_str = all_str and kind == 1
         all_int = all_int and (kind == 2 or kind == 3)
+    _ = kinds^  # no cached classification spans the following conversions
     var out = Python.list()
     if all_str:
         for i in range(n):  # cpu-route: str labels, the explicit label input step

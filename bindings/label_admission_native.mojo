@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared exact label scalar and connected ClassLabels admission. No numbers
 # ABC or Python subtype/iteration/conversion hook is part of this boundary.
+from std.collections import Dict
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_type, native_numpy_dtype
@@ -36,6 +37,38 @@ def labels_primitive_kind(cls: PythonObject, context: PythonObject) raises -> In
             if cls is py_call(factory, code).type:
                 return 4 if code == "g" else 3
     return 0
+
+
+struct LabelTypeKinds(Movable):
+    """Exact scalar classification reused only within one native label walk.
+
+    Every element still supplies its own exact type. Native identity keys do
+    not call metaclass hash/equality; retained owners prevent address reuse.
+    Start a fresh table after any numerical dispatch/GIL-release boundary.
+    """
+    var kinds: Dict[Int, Int]
+    var owners: List[PythonObject]
+
+    def __init__(out self):
+        self.kinds = Dict[Int, Int]()
+        self.owners = List[PythonObject]()
+
+    def kind(mut self, cls: PythonObject, context: PythonObject) raises -> Int:
+        var identity = Int(cls._obj_ptr)
+        if identity in self.kinds:
+            return self.kinds[identity]
+        # Preserve the existing ordered classifier on the first encounter,
+        # rather than assuming an exact outer list has homogeneous elements.
+        var kind = labels_primitive_kind(cls, context)
+        self.owners.append(cls)
+        self.kinds[identity] = kind
+        return kind
+
+    def admit(mut self, value: PythonObject, context: PythonObject) raises -> Int:
+        var kind = self.kind(py_type(value), context)
+        if kind == 0:
+            raise Error("TypeError: labels require exact native strings or real numeric scalars without Python protocols")
+        return kind
 
 
 def labels_admit_primitive(value: PythonObject, context: PythonObject) raises -> Int:

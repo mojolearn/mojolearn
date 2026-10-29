@@ -1,0 +1,71 @@
+Operation-local exact label type classification reuse, 2026-10-28
+Branch lane/label-type-reuse-20261028; base main f4c2b3e807.
+
+Repeated work removed:
+Each element of a label walk previously reran labels_primitive_kind: native
+builtins lookup, connected integer/scalar type scans, NumPy string-type lookup,
+and (for aliases) dtype constructor probes. LabelTypeKinds now classifies each
+encountered exact scalar class once in that walk, retaining its kind in a native
+Dict keyed by the type's native identity. Every element still supplies its own
+exact type. This is not a homogeneous-list assumption or a Python-keyed cache.
+
+Applied to four traversals in classical_labels.mojo:
+- Nested flattening: one table for the depth-first traversal, plus one capture
+  of exact list/tuple classes and the output list's native append owner. Removes
+  builtins retrieval per recursive node and append attribute lookup per leaf.
+- _sorted_classes admission: one initial NumPy connection check and one table
+  for the N-label classification loop; item-wise NaN checks and final mixed
+  string/number rejection remain in their original order.
+- labels_label_kind: reuse exact-class decisions across class-output labels;
+  bool/string/object and empty-class outcomes remain unchanged.
+- _classification_labels: one table for its N-label admission loop, consumed
+  before string/integer conversion. Per-element mixed-input checks remain.
+The existing single-value classifier/admission entry points remain unchanged.
+The public prep owner consumes these same helpers, so LabelEncoder,
+LabelBinarizer and MultiLabelBinarizer gain reuse without duplicated prep code.
+
+Setup/invalidation/lifetime rules:
+A fresh table is constructed within each traversal and explicitly consumed when
+that admission walk ends. No cached classification crosses sorting, scalar result
+conversion, numerical dispatch, a fit, another operation or a GIL-releasing
+kernel boundary. The recursive flatten walk passes the same table only within
+its existing native traversal. There is no global or cross-context cache.
+Classification stores no value data, model fields, dtype sizes or buffer address.
+Native integer identity keys avoid calling metaclass __hash__/equality. A native
+List[PythonObject] retains each encountered type owner until the table is
+consumed, preventing identity reuse. The recursive append callable owns its
+exact output list; caller input containers remain owned across child visits.
+No new raw buffer pointer is introduced. Existing per-value validation remains;
+unsupported subclasses/protocols are refused rather than admitted by a cache hit.
+No outer-container check is treated as proof about contained scalar classes.
+
+Source review:
+The changed admission/flatten loops contain no numerical dispatch or explicit
+GIL-release operation. Existing label equality/NaN comparisons apply only after
+exact native scalar admission; arbitrary Python label protocols remain refused.
+Caches are not reused across later calls that sort, convert, launch or allocate
+numerical output. Registry/model mutation outside the operation boundary does
+not reuse an earlier table. This is source review, not runtime qualification.
+
+Compile/check scope:
+One final compile passed, exit 0, 33.32 seconds: actual prep_owner_c public
+lifecycle (including all label-encoder operations) and labels_accuracy operation,
+instantiating all four changed traversals. Apple CPU identical O0, ten workers
+under tools/compile_slot.sh. See compile.json for full command, allocation,
+source archive/manifest and compiler/artifact hashes. No runtime, identity,
+benchmark or GPU campaign. No numerical kernel or arithmetic change.
+The initial tooling setup referenced an unavailable prior fixture path before
+starting a compiler; retained as initial-tooling-missing-script.log. The sole
+compiler invocation passed. Source guards retained beside the compile evidence;
+root owns serialized main integration/push checks.
+
+Remaining limits:
+Every element still requires exact-type inspection and native-map lookup.
+Classification work still runs once per distinct encountered class. Label
+values still cross Python-object containers and native CPython scalar conversion,
+comparison and hashing APIs. Other label/weight scans and user_objects_native
+have separate type contracts and remain unchanged; no broad migration claim.
+
+Evidence: ~/mojolearn-evidence/label-type-reuse-20261028/
+compile.log/json, controller.log, source-bytes.tgz, source-manifest.json,
+_label_type_reuse.so, source-guards.json and individual guard logs.
