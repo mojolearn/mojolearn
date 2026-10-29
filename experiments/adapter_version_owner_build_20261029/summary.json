@@ -1,0 +1,146 @@
+{
+  "source_commit": "4e1797c8c3188a4a37ea0f2e5dda8375b2c1499b",
+  "scope": "Actual Apple host and identical x_sequence shipping owner images, TorchVersion metadata repair. No runtime qualification.",
+  "controller_exit": 3,
+  "controller_exit_reason": "Documented incomplete full-set activation: exactly two of 79 groups selected; all selected builds exit 0.",
+  "owners": [
+    {
+      "mode": "identical",
+      "stem": "_mojolearn_dev_x_sequence_m1",
+      "state": "built",
+      "exit_code": 0,
+      "sha256": "9bac8bd1238470c374790eb7f51fe514dc3f2e7b0537862679ac94f071eb823f",
+      "command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_sequence_m1",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/work/a23f78d4e554f270be5be3af1aacdc6960158287be3d516c18ba29088f79e7a9/output",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/work/a23f78d4e554f270be5be3af1aacdc6960158287be3d516c18ba29088f79e7a9/roots"
+      ],
+      "log": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/build/identical-_mojolearn_dev_x_sequence_m1.log",
+      "execution_receipt": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/build/identical-_mojolearn_dev_x_sequence_m1.log.execution.json"
+    },
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_x_sequence_host",
+      "state": "built",
+      "exit_code": 0,
+      "sha256": "8c24e470c341dcc93a724893b7f38892c1b45279c2ca85dd656e6ff3b2dff506",
+      "command": [
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_sequence_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/work/b39dfae22a0089191cbd0259264b283063102a5c4a4f7eca902e9487787dec56/output",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/work/b39dfae22a0089191cbd0259264b283063102a5c4a4f7eca902e9487787dec56/roots"
+      ],
+      "log": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/build/host-_mojolearn_dev_x_sequence_host.log",
+      "execution_receipt": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/build/host-_mojolearn_dev_x_sequence_host.log.execution.json"
+    }
+  ],
+  "elapsed_seconds": {
+    "identical": 343.48635124997236,
+    "host": 207.42232991592027
+  },
+  "resources": {
+    "available_bytes": 5385519104,
+    "compiler_workers": 10,
+    "cores": 10,
+    "jobs": 1,
+    "min_available_bytes": 0,
+    "reservation_source": "group-floor",
+    "rss_bytes": 12884901888
+  },
+  "stage": {
+    "source_commit": "4e1797c8c3188a4a37ea0f2e5dda8375b2c1499b",
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/andrewhendel/mojolearn-wt/adapter-version-owner-build-20261029/packaging/macos/stage_dylibs.py",
+      "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/stage/mojolearn/host/_mojolearn_x_sequence_host.so",
+      "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/stage/mojolearn/identical/_mojolearn_x_sequence.so",
+      "/Users/andrewhendel/mojolearn-wt/adapter-version-owner-build-20261029/.pixi/envs/default/lib"
+    ],
+    "exit_code": 0,
+    "owners": [
+      {
+        "mode": "host",
+        "member": "_mojolearn_x_sequence_host",
+        "raw": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/artifacts/b39dfae22a0089191cbd0259264b283063102a5c4a4f7eca902e9487787dec56/_mojolearn_dev_x_sequence_host.so",
+        "raw_sha256": "8c24e470c341dcc93a724893b7f38892c1b45279c2ca85dd656e6ff3b2dff506",
+        "compile_receipt": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/artifacts/b39dfae22a0089191cbd0259264b283063102a5c4a4f7eca902e9487787dec56/receipt.json",
+        "staged": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/stage/mojolearn/host/_mojolearn_x_sequence_host.so",
+        "staged_sha256": "a8def4234c1afb4054db52edadabed5cd74f0f8916f80f661dd4a192aed15bbf"
+      },
+      {
+        "mode": "identical",
+        "member": "_mojolearn_x_sequence",
+        "raw": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/artifacts/a23f78d4e554f270be5be3af1aacdc6960158287be3d516c18ba29088f79e7a9/_mojolearn_dev_x_sequence_m1.so",
+        "raw_sha256": "9bac8bd1238470c374790eb7f51fe514dc3f2e7b0537862679ac94f071eb823f",
+        "compile_receipt": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/artifacts/a23f78d4e554f270be5be3af1aacdc6960158287be3d516c18ba29088f79e7a9/receipt.json",
+        "staged": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/stage/mojolearn/identical/_mojolearn_x_sequence.so",
+        "staged_sha256": "1eaa38881a0da1aa4e756094958b4107ce5df082caa9b7aef6c7d8c1569b0394"
+      }
+    ],
+    "runtime_files": {
+      ".dylibs/libAsyncRTRuntimeGlobals.dylib": "727fc22b82b4f28d6160773f39cc11837260378c296abbe858d2915aa8251c14",
+      ".dylibs/libMSupportGlobals.dylib": "370737053a3f51004e230621dd60215b8829ebc601f60654172047002e97816c",
+      ".dylibs/libKGENCompilerRTShared.dylib": "2870f6ff52a7a38a6a1e787881a41505d1e207cf83cbb65b6dfa114b8f8056f1",
+      ".dylibs/libAsyncRTMojoBindings.dylib": "45b4fd689edcd95e4fc2bc34921ceee2c54744b15cb12f0061d0a76a5b200f62",
+      ".dylibs/libMojolearnMath.dylib": "dd2de3c7d480f888ee7d633284349995ec8826bb71e1c6a1d5d2c93d856647d8"
+    },
+    "scope": "Two changed owner images only; no installed runtime qualification or full package assembly.",
+    "portable_math_stage_exit": 0,
+    "portable_math_stage_receipt": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/portable-math-stage.json"
+  },
+  "postbuild_proof": {
+    "source_paths_compared_with_duplicates": 588,
+    "source_mismatches": [],
+    "runtime_comparison": {
+      ".dylibs/libAsyncRTRuntimeGlobals.dylib": {
+        "old": "727fc22b82b4f28d6160773f39cc11837260378c296abbe858d2915aa8251c14",
+        "new": "727fc22b82b4f28d6160773f39cc11837260378c296abbe858d2915aa8251c14",
+        "equal": true
+      },
+      ".dylibs/libMSupportGlobals.dylib": {
+        "old": "370737053a3f51004e230621dd60215b8829ebc601f60654172047002e97816c",
+        "new": "370737053a3f51004e230621dd60215b8829ebc601f60654172047002e97816c",
+        "equal": true
+      },
+      ".dylibs/libKGENCompilerRTShared.dylib": {
+        "old": "2870f6ff52a7a38a6a1e787881a41505d1e207cf83cbb65b6dfa114b8f8056f1",
+        "new": "2870f6ff52a7a38a6a1e787881a41505d1e207cf83cbb65b6dfa114b8f8056f1",
+        "equal": true
+      },
+      ".dylibs/libAsyncRTMojoBindings.dylib": {
+        "old": "45b4fd689edcd95e4fc2bc34921ceee2c54744b15cb12f0061d0a76a5b200f62",
+        "new": "45b4fd689edcd95e4fc2bc34921ceee2c54744b15cb12f0061d0a76a5b200f62",
+        "equal": true
+      },
+      ".dylibs/libMojolearnMath.dylib": {
+        "old": "dd2de3c7d480f888ee7d633284349995ec8826bb71e1c6a1d5d2c93d856647d8",
+        "new": "dd2de3c7d480f888ee7d633284349995ec8826bb71e1c6a1d5d2c93d856647d8",
+        "equal": true
+      }
+    },
+    "entry_symbols": {
+      "host": true,
+      "identical": true
+    },
+    "source_commit": "4e1797c8c3188a4a37ea0f2e5dda8375b2c1499b"
+  },
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029",
+  "runtime": "NOT RUN; installed adapter/loader and vendor identity remain pending",
+  "unchanged_images": 77,
+  "sampler_pending_overlap": []
+}
