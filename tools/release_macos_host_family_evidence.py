@@ -111,20 +111,39 @@ def _facts(root, producer):
                 evidence=[reference(path), reference(manifest_path), archive_ref, binary, log])
 
 
+def host_build_flags(environment):
+    """Canonical semantic flags for the captured standard host invocation.
+
+    build_host_family.sh uses HOST_OUTDIR only to choose its destination/temp
+    -o path (destination and build command); raw binary bytes and original load metadata remain
+    separately bound to the receipt. An exactly empty MOJO_BUILD_FLAGS expands
+    to zero shell argv words, like an unset value. Never normalize nonempty
+    compiler settings or worker counts here.
+    """
+    flags = common.derived_build_flags(environment, ROUTING)
+    flags.pop("MOJOLEARN_HOST_OUTDIR", None)
+    if flags.get("MOJOLEARN_MOJO_BUILD_FLAGS") == "":
+        flags.pop("MOJOLEARN_MOJO_BUILD_FLAGS")
+    return flags
+
+
 def _collect(root, document, producer):
     facts = _facts(root, producer)
     key = common.MAC + '/host/-/host/_mojolearn_' + facts['family'] + '_host'
     specs = ['compile-apple']
     if (document or {}).get('configuration', {}).get('dependency_context', {}).get('cpu_target') == common.MAC:
         specs.append('compile-cpu')
-    flags = common.derived_build_flags(facts['environment'], ROUTING)
+    flags = host_build_flags(facts['environment'])
     context = dict(cpu_target=common.MAC, selected_macos_cpu_toolchains={key: facts['cpu_toolchain']},
                    compiler_sha256={common.MAC: facts['compiler_sha256']},
                    selected_binding_compile_jobs={key: facts['environment']['MOJOLEARN_COMPILE_JOBS']},
-                   selected_binding_build_flags={key: flags})
+                   selected_binding_build_flags={key: flags} if flags else {})
     return dict(source_revision=facts['source_revision'], facts=facts,
                 units={spec + '/' + key: dict(binding_key=key) for spec in specs}, spec_ids=specs,
-                configuration=dict(release_modes=['identical'], build_flags={}, dependency_context=context))
+                configuration=dict(release_modes=['identical'], build_flags={}, dependency_context=context),
+                declared=[dict(schema='mojolearn.mac-host-flag-normalization.v1',
+                               output_routing='MOJOLEARN_HOST_OUTDIR', empty_argv='MOJOLEARN_MOJO_BUILD_FLAGS',
+                               historical_records='retained unchanged; original exact declarations still validated')])
 
 
 def _check(requirement_id, wanted, facts, unit):
@@ -146,9 +165,13 @@ def _check(requirement_id, wanted, facts, unit):
     require('MOJOLEARN_PACKAGE_BYTE_LM' not in tree.text('bindings/build_host_family.sh'),
             'host recipe now consumes an uncaptured packaging flag')
     require(binding.get('flags') == expected_flags, 'host routing or worker allocation differs')
-    semantic = common.derived_build_flags(facts['environment'], ROUTING)
-    require(declared.get('build_flags') == semantic and binding.get('selected_build_flags') == semantic,
-            'host compiler flags differ')
+    semantic = host_build_flags(facts['environment'])
+    legacy = common.derived_build_flags(facts['environment'], ROUTING)
+    declared_flags = declared.get('build_flags')
+    # Old retained reports keep their original exact flags and fingerprints.
+    # Revalidate those unchanged records; only new preparation canonicalizes.
+    require(declared_flags == binding.get('selected_build_flags', {}) and
+            (declared_flags == semantic or declared_flags == legacy), 'host compiler flags differ')
     require(binding.get('toolchain', {}).get('pixi_lock_sha256') == facts['source_files']['pixi.lock'],
             'pinned compiler package lock differs')
     for rel in common.require_closure(tree, wanted):

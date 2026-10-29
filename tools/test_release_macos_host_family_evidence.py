@@ -75,7 +75,7 @@ def test_retains_original_revision_flags_and_missing_witness(producer):
     assert 'original link-emitted versions' in result['facts']['limitations'][0]
     context = result['configuration']['dependency_context']
     assert set(context['selected_binding_compile_jobs'].values()) == {'10'}
-    assert list(context['selected_binding_build_flags'].values()) == [{'MOJOLEARN_MOJO_BUILD_FLAGS': ''}]
+    assert context['selected_binding_build_flags'] == {}
     assert len(result['facts']['evidence']) == 5
 
 
@@ -204,4 +204,62 @@ def test_changed_release_wrapper_is_not_equivalent_to_direct_invocation(producer
     original=tree.text
     monkeypatch.setattr(tree,'text',lambda name: '# extra work\n'+original(name) if name=='bindings/build_core_host.sh' else original(name))
     with pytest.raises(ValueError,match='not the exact direct-invocation alias'):
+        host._check(rid,wanted,facts,unit)
+
+
+@pytest.mark.parametrize("setting, expected", [("", {}), ("--optimization-level 0", {"MOJOLEARN_MOJO_BUILD_FLAGS":"--optimization-level 0"})])
+def test_actual_output_routing_and_empty_flags_have_canonical_prepare_inputs(producer, setting, expected):
+    root,path,receipt=producer
+    receipt['environment'].update(MOJOLEARN_HOST_OUTDIR='/original/raw-output',MOJOLEARN_MOJO_BUILD_FLAGS=setting)
+    dump(path,receipt)
+    before=path.read_bytes()
+    result=host._collect(root,{}, {'receipt':str(path)})
+    context=result['configuration']['dependency_context']
+    assert context['selected_binding_build_flags'] == ({next(iter(result['units'].values()))['binding_key']:expected} if expected else {})
+    assert set(context['selected_binding_compile_jobs'].values())=={'10'}
+    assert result['facts']['environment']==receipt['environment']
+    assert path.read_bytes()==before
+    assert result['declared'][0]['schema']=='mojolearn.mac-host-flag-normalization.v1'
+
+
+def test_new_default_unit_omits_empty_selected_marker_and_legacy_remains_valid(producer):
+    rid,wanted,facts,unit=qualified(producer)
+    original=copy.deepcopy(wanted)
+    host._check(rid,wanted,facts,unit)  # original empty-string declaration retained
+    assert wanted==original
+    canonical=copy.deepcopy(wanted)
+    canonical['inputs']['binding'].pop('selected_build_flags')
+    canonical['inputs']['unit']['build_flags']={}
+    host._check(rid,canonical,facts,unit)
+    assert wanted==original
+
+
+def test_legacy_output_destination_must_remain_the_original_if_present(producer):
+    rid,wanted,facts,unit=qualified(producer)
+    facts['environment']['MOJOLEARN_HOST_OUTDIR']='/original/raw'
+    legacy={'MOJOLEARN_HOST_OUTDIR':'/original/raw','MOJOLEARN_MOJO_BUILD_FLAGS':''}
+    wanted['inputs']['binding']['selected_build_flags']=copy.deepcopy(legacy)
+    wanted['inputs']['unit']['build_flags']=copy.deepcopy(legacy)
+    host._check(rid,wanted,facts,unit)
+    wanted['inputs']['binding']['selected_build_flags']['MOJOLEARN_HOST_OUTDIR']='/different/raw'
+    wanted['inputs']['unit']['build_flags']['MOJOLEARN_HOST_OUTDIR']='/different/raw'
+    with pytest.raises(ValueError,match='compiler flags differ'):host._check(rid,wanted,facts,unit)
+
+
+def test_nonempty_optimizer_flag_cannot_be_canonicalized_to_default(producer):
+    rid,wanted,facts,unit=qualified(producer)
+    facts['environment']['MOJOLEARN_MOJO_BUILD_FLAGS']='--optimization-level 0'
+    wanted['inputs']['binding'].pop('selected_build_flags')
+    wanted['inputs']['unit']['build_flags']={}
+    with pytest.raises(ValueError,match='compiler flags differ'):host._check(rid,wanted,facts,unit)
+
+
+def test_canonical_flags_do_not_hide_changed_link_dependency_paths(producer):
+    rid,wanted,facts,unit=qualified(producer)
+    wanted=copy.deepcopy(wanted)
+    wanted['inputs']['binding'].pop('selected_build_flags')
+    wanted['inputs']['unit']['build_flags']={}
+    facts['environment']['MOJOLEARN_HOST_OUTDIR']='/original/raw'
+    facts['cpu_toolchain']['image']['rpaths']=['/changed/runtime/library/search']
+    with pytest.raises(ValueError,match='CPU link toolchain differs'):
         host._check(rid,wanted,facts,unit)

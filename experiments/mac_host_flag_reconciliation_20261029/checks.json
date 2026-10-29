@@ -1,0 +1,45 @@
+{
+  "old_units_revalidated": 2,
+  "old_json_sha256": {
+    "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/compile-admission/mac-host/_mojolearn_byte_lm_host/report.json": "01adf6dbb58ae63180978df58f7a89fecb689ab51ed0ec3f5710d7b7f4bc52cb",
+    "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/compile-admission/mac-host/_mojolearn_byte_lm_host/reconciliation.json": "d7f8f46404d5ef3a560a7733100218a014304676ada1cb7ae721090532182dc3",
+    "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/compile-admission/mac-host/_mojolearn_byte_lm_host/receipts.json": "ac8f18b68ecece2ff0f91891a4bcc8cd59ddf1308fb50507c900fd8425076303",
+    "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/compile-admission/mac-host/_mojolearn_byte_lm_host/originals.json": "1a6435fd7a83860197838f76cbfda96efa8807e9f1ab2c42a3071f55c7575b15",
+    "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/compile-admission/mac-host/_mojolearn_byte_lm_host/review.json": "55766c1676f37cf33ad149b2ab35bf7d49116add68a8b58c2b3a4cdadfe9f2bc"
+  },
+  "old_files_unchanged": true,
+  "producer_semantic_flags_and_workers_matched": 46,
+  "original_flag_counts": {
+    "": 41,
+    "--optimization-level 0": 5
+  },
+  "scope": "Read-only checks only; original fingerprints retained, no ledger writes; not runtime qualification",
+  "actual_preparation": {
+    "admitted": 2,
+    "refused": 0,
+    "reusable": 2,
+    "path": "/Users/andrewhendel/mojolearn-evidence/mac-host-flag-reconciliation-20261029/actual-canonical"
+  },
+  "tests": [
+    {
+      "log": "/Users/andrewhendel/mojolearn-evidence/mac-host-flag-reconciliation-20261029/tests.log",
+      "passed": 91,
+      "failed": 1,
+      "subtests_passed": 14,
+      "failure": "Owned sparse checkout omitted packaging/linux/stage_libs.py required by existing source test."
+    },
+    {
+      "log": "/Users/andrewhendel/mojolearn-evidence/mac-host-flag-reconciliation-20261029/tests-final.log",
+      "passed": 30,
+      "failed": 0,
+      "coverage": "All adapter cases plus formerly failed source test, after adding packaging/python to sparse checkout; includes one new changed-link-path negative."
+    }
+  ],
+  "evidence_sha256": {
+    "tests.log": "b3a66366c7e436fd9b6a49e6c5347e9b54b5fce9c6111c1f5fb693f5d63b36c4",
+    "tests-final.log": "9b410cd811a8c7fab752e6572f8291a9f77cd6fd6ab1a426a8c5fc7b51548d47",
+    "actual.log": "623f21986eaaadd8a0309394fcb9e4a643519c695badcc78bc4fa22d2a82496b",
+    "remaining-checks.json": "f5c716b8b7321eec077f0bad3dbcbae70ddd784fa61a67394a1b35728839d6df",
+    "old-report-preservation.json": "13992855564d4e76a99cab1f433fc4d4f0b210220fd0539c7cadbcf5cd87cd2e"
+  }
+}

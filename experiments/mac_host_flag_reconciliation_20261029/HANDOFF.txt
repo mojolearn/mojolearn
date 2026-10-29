@@ -1,0 +1,33 @@
+Mac host compile flag reconciliation (source tooling only)
+
+The standard host builder uses MOJOLEARN_HOST_OUTDIR only for output/temp
+placement. Exactly empty MOJOLEARN_MOJO_BUILD_FLAGS contributes zero shell argv
+words, equivalent to unset. New adapter preparation removes only those two
+nonsemantic representations. Nonempty flags and worker counts remain exact.
+
+Original receipts, facts, report JSON and fingerprints are not rewritten.
+Old records remain valid only with their exact original raw-derived declaration;
+a different historical destination or genuine flag is refused. New default
+records omit the empty per-binding override marker. An explicit normalization
+schema is retained in new reconciliation reports.
+
+Raw binary path/hash and original Mach-O dependency/rpath/SDK/linker contract
+checks remain unchanged. Staged-image and loader qualification remain separate
+requirements; this does not qualify arbitrary relocated binaries or runtime.
+
+Actual ByteLM re-preparation: 2 admitted, 0 refused, both reusable. Original
+2 units revalidated; all original JSON hashes preserved. All 46 original host
+producer semantic flags and worker settings match selected configuration:
+41 default, 5 explicit O0, all 10 workers. No central ledger/config writes.
+
+Tests: initial broader source suite 91 passed, 1 failed, 14 subtests passed;
+existing test failure was missing packaging/linux/stage_libs.py in owned sparse
+checkout. Added packaging/python checkout paths, then all 29 adapter cases plus
+that existing test passed (30/30), including an additional changed-rpath refusal.
+No native builds, product runtime, identity or performance runs in this batch.
+Committed-ref guards recorded separately after product commit.
+
+Full logs/new reports: ~/mojolearn-evidence/mac-host-flag-reconciliation-20261029/
+Source basis: bindings/build_host_family.sh destination selection and compiler
+argv expansion; tools/release_macos_host_family_evidence.py exact standard command
+admission. Original record retains settings even when not semantic compiler input.
