@@ -26,3 +26,8 @@ def connect_owner_context(context):
                                            dict=dict, str=str, bytes=bytes, bytearray=bytearray,
                                            bool=bool, int=int, float=float, complex=complex,
                                            memoryview=memoryview))
+    # The shared native Array materializer is also used by training-buffer
+    # copies (including CPU ByteLM inference/training). Its historical arena
+    # key must reference these same admitted builtins and retained Array slots.
+    # Connect once here; native layout/mutation checks still run at each use.
+    context["arena_native_types"] = context["owner_native_types"]

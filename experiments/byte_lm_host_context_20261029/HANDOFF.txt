@@ -1,0 +1,49 @@
+ByteLM host context/materialization repair, 2026-10-29
+
+Branch lane/byte-lm-host-context-20261029, based on frozen3fa5fac6d0.
+
+Actual failure: all nine CPU byte-lm-host-infer fixtures refused the public
+LanguageModelInference constructor with ValueError: 'arena_native_types'. The
+same constructor blocked language-model-config and Apple ByteLM RLPAIR property
+checks; completed unrelated numerical outputs are retained by the verifier lane.
+Original full verifier failures remain under current-main-verification-20261029/
+runs/cpu/neural-inference/{byte-lm-host-infer,language-model-config}/ and the Apple
+byte-lm training packet, already retained by root/generation.
+
+Cause: training_f32_cast_owned calls tsa_array, which uses the shared native
+Array materializer in arena_materialize_native. Its context needs exact builtin
+identities under arena_native_types. _state_context correctly connected the
+same map as owner_native_types and retained all Array slot descriptors, but the
+materializer key was absent. The repair aliases that existing map once in
+connect_owner_context. No new type map, per-operation Python work, numerical
+change, callback, fallback, or relaxation of native Array layout checks is added.
+The same shared setup covers inference, threaded inference and host training.
+
+Dedicated actual API regression file:
+python/mojolearn/tests/test_byte_lm_host_context_contract.py
+Five cases pass0 in a separate cloned installed environment: serial/threaded
+inference, owned parameter copy after caller mutation, fresh logits with expected
+shape/dtype and repeated bytes, one host training step and native output arrays,
+invalid-size ValueError, and unsupported user __array__ hook refusal without
+calling the hook. Native owners are required, no skip/fake providers.
+
+The original serial constructor failure was reproduced before repair. A first
+patch command used the wrong working directory and did not edit the source;
+its unpatched follow-up produced3 constructor failures and2 expected negative
+passes, retained separately. After the corrected setup edit,5/5 passed,31existing
+native-type __module__ deprecation warnings, no skips. These are bounded CPU
+API regressions, not full identity/cross-vendor or performance qualification.
+
+All79native extensions +5runtime libraries in the test clone exactly match the
+frozen candidate. Only _native_owner_lifetime.py changed there. Shared final-venv
+was not modified and remains available to the verification lane. No Mojo or
+native source changed, so no affected native rebuild is required.
+
+Full logs, JUnit, exact source/native hashes:
+~/mojolearn-evidence/byte-lm-host-context-20261029/
+  before.log/xml,after.log/xml (unpatched follow-up),after-fixed.log/xml,
+  runtime-receipt.json and separate venv/.
+
+After root integrates this batch, only failed/blocked affected verifier lanes
+and properties need verification under the next frozen setup. Preserve unrelated
+completed results; setup/runtime smoke is not a replacement for those lanes.
