@@ -1,0 +1,24 @@
+{
+  "base_commit": "c175d927352ee67b7bedd6a10a39dd6b09daa3cd",
+  "compile_exit": 0,
+  "scope": "Public schedule_operation CPU closure including schedule_list and schedule_values, shared f32 result boxing and lr_spec_fill source; compile only",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "compile_slots": 4,
+  "compiler_workers": "default; no saturation measured",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/schedule-list-results-20261028 -I /Users/andrewhendel/mojolearn-wt/schedule-list-results-20261028/bindings /Users/andrewhendel/mojolearn-wt/schedule-list-results-20261028/experiments/schedule_list_results_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/schedule-list-results-20261028/compile_schedule",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/schedule-list-results-20261028/compile_schedule",
+  "binary_sha256": "042e5f4e7c9f19fac42e7103f338a4249e5a80a9d4c6d3791114c1151a52d221",
+  "log": "/Users/andrewhendel/mojolearn-evidence/schedule-list-results-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/schedule-list-results-20261028/source-sha256.json",
+  "source_manifest_scope": "All tracked Mojo files, Pixi manifest/lock and dedicated root; conservative superset, not all files compiled",
+  "relevant_source_sha256": {
+    "bindings/optimizer_schedule_native.mojo": "9aa20b97d8f0acf0a954f30af240a847332f715127064af3d7aab5290581ec8c",
+    "bindings/py_lists.mojo": "8fb4244758c0630dcd8fbe2cb2957f644d2551f590fca733f0bacf480209436e",
+    "experiments/schedule_list_results_20261028/compile.mojo": "b311fe1b8e8c9b9ec9442ad65b426f6102429e96da39eb38d1cd9d71eae0e568"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}

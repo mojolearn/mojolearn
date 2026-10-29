@@ -1,0 +1,34 @@
+Native schedule-list result storage, 2026-10-28
+Branch: lane/schedule-list-results-20261028
+Base: c175d92735 (see full hash in compile.json)
+
+Removed work:
+For schedule_list, lr_spec_fill now writes operation-local native Float32
+storage, then shared py_list_f32 boxes its finished values. Removed intermediate
+Python array construction/storage metadata checks, buffer_info Python lookup and
+.tolist call. Those checks belonged only to the removed private intermediate;
+all caller/schedule validation remains. schedule_values still returns its original
+Python array and retains that path's storage validation.
+
+Semantics/setup/lifetime:
+Requested counts still normalize with max(requested, 0). The same native
+lr_spec_fill(spec, 1, count, ...) runs once and the same status/refusal mapping
+runs before result conversion. Float32 storage retains its rounding before Python
+float boxing. lr_spec_fill's source returns for n<=0 before reading dst, preserving
+empty-list counts. Output storage is private and held through boxing; no cache,
+foreign-buffer assumption or invalidation rule is added. Numerical kernel/order,
+scalar results, schedule config/spec and array-valued output remain unchanged.
+
+Compile:
+Focused public schedule_operation list/array CPU closure compiled rc0, identical,
+O0. Exact command, scope, source/root/binary hashes in compile.json. This is not
+runtime/identity/GPU qualification; no measurements or runtime campaign ran.
+Root owns main integration/final guards; lane source results retained separately.
+
+Evidence: ~/mojolearn-evidence/schedule-list-results-20261028/
+Complete compile log, binary and source manifest on Mac; no rented box/watchers.
+
+Remaining:
+Public schedule metadata/scalar admission still uses Python objects; schedule_values
+still returns a Python array. Final list and float boxing remain required. This
+removes one .tolist site from the frozen audit, without measured speedup claims.

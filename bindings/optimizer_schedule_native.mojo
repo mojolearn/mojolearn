@@ -9,6 +9,7 @@ from bindings.optimizer_admission import opt_scalar, opt_value, opt_schedule, op
 from bindings.optimizer_public_door import schedule_spec
 from bindings.lr_table_helpers import _lr_refusal
 from bindings.native_array_storage import native_array_zeros
+from bindings.py_lists import py_list_f32
 from sequence.lr_table import lr_spec_fill, F32P
 
 
@@ -147,12 +148,23 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
     var requested = Int(py=py_call(b.int, values[0]))
     if operation == "schedule_values" or operation == "schedule_list":
         var count = max(requested, 0)
+        if operation == "schedule_list":
+            # The public result is a list, so keep the completed rate buffer
+            # native rather than allocating array.array, querying buffer_info
+            # and dispatching its tolist method. Preserve Float32 storage and
+            # the identical lr_spec_fill call/error position before boxing.
+            var rates = List[Float32](length=count, fill=0)
+            var status = lr_spec_fill(spec, 1, count,
+                rates.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]())
+            if status[0] != 0:
+                raise _lr_refusal(status[0], 1 + status[1], style, spec.c)
+            return py_list_f32(rates)
         var result = native_array_zeros("f", count)
         var status = lr_spec_fill(spec, 1, count, F32P(unsafe_from_address=Int(py=result.buffer_info()[0])))
         _ = result
         if status[0] != 0:
             raise _lr_refusal(status[0], 1 + status[1], style, spec.c)
-        return py_call(result.tolist) if operation == "schedule_list" else result
+        return result
     var stored = List[Float32](length=1, fill=0)
     var status = lr_spec_fill(spec, requested, 1,
         stored.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]())
