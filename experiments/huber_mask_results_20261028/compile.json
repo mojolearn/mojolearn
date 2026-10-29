@@ -1,0 +1,23 @@
+{
+  "base_commit": "7f437f85e71dd3cd012afb490171fd487844048e",
+  "compile_exit": 0,
+  "scope": "xl_fit_huber and its reachable native CPU source closure including direct bool mask publication; compile-only root, not the x_linear_c dispatcher or device modules",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/huber-mask-results-20261028 -I /Users/andrewhendel/mojolearn-wt/huber-mask-results-20261028/bindings /Users/andrewhendel/mojolearn-wt/huber-mask-results-20261028/experiments/huber_mask_results_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/huber-mask-results-20261028/compile_huber",
+  "compile_slots": 4,
+  "compiler_workers": "default; no CPU saturation measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/huber-mask-results-20261028/compile_huber",
+  "binary_sha256": "cf5ca06ef0e85483a84119b8118d4ddc538a44cc447d366f62b05c9b1164ff41",
+  "log": "/Users/andrewhendel/mojolearn-evidence/huber-mask-results-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/huber-mask-results-20261028/source-sha256.json",
+  "source_manifest_scope": "All tracked Mojo, Pixi manifest/lock and dedicated root; conservative superset, not all compiled",
+  "relevant_source_sha256": {
+    "bindings/x_linear_native.mojo": "7b6b30299ee6d3e81bd2dbca0f56245fa65c47167192b93d38061a036e468758",
+    "experiments/huber_mask_results_20261028/compile.mojo": "2dd890688e9e64079c07a9cf7c17ae0324a12569f88d0a05f0500351a8dae80c"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}

@@ -1,0 +1,39 @@
+Huber outlier mask result publication (2026-10-28)
+
+Branch: lane/huber-mask-results-20261028
+Base: 7f437f85e71dd3cd012afb490171fd487844048e
+Scope: bindings/x_linear_native.mojo; xl_fit_huber result publication only.
+
+Removed work: one temporary integer list from array.tolist, one map(bool)
+iterator, per-element Python bool callable dispatch, and the separate final
+list construction. The completed native UInt8 flags now directly populate
+one exact-size Python list with the supported PyBool_FromLong/PyList_SetItem
+APIs. C API functions resolve once before the result loop.
+
+Setup/reuse: the freshly allocated private <u1 flags buffer's address is
+captured once and shared by the existing native rows call and publication.
+No persistent cache or new invalidation policy. The owner stays live through
+both consumers and is released at the existing cleanup point. The mask list
+is private until complete. Its immediate PythonObject owner releases all
+initialized slots on failure; NULL slots are safe. SetItem steals new bool
+references on both success and failure. Nonzero-byte truth semantics match
+the prior bool conversion; the existing kernel writes exactly 0/1 bytes.
+
+Behavior: all fit/input/field checks, allocation, numerical calls, threshold
+and ordering remain. No math/reduction change. Empty masks need no pointer
+loads. No generic user object is admitted by the new helper.
+
+Validation: affected xl_fit_huber CPU closure compiled successfully through
+tools/compile_slot.sh, O0, identical mode. Compile-only root was never run.
+See compile.json for command, binary hash, source snapshot and scope.
+Required source guards run on committed source and retained separately.
+No runtime/identity/performance campaign, no speedup claim, no rented box.
+
+Limits: existing Python calls/admission/call transport surrounding fit remain;
+this batch removes only the finished outlier mask conversion chain. The
+binding dispatcher, actual kernels/vendor modules, and runtime behavior are
+not qualified by this CPU source compilation.
+
+Evidence: /Users/andrewhendel/mojolearn-evidence/huber-mask-results-20261028/
+Complete compile.log, compile.exit, binary, conservative source-sha256.json,
+and no_host_routes/no_python_in_kernels/no_compute_in_shells logs/exit files.

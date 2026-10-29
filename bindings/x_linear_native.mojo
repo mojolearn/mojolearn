@@ -16,6 +16,7 @@
 # (no second conversion); IsotonicRegression.fit_transform transforms the
 # column the fit converted; a classifier's score scores the prediction the
 # same call decoded; Lasso / ElasticNet score the prediction buffer as it is.
+from std.ffi import c_int, c_long
 from std.math import isinf
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -855,6 +856,30 @@ def xl_fit_glm(model: PythonObject, args: PythonObject, context: PythonObject) r
     return model
 
 
+def _xl_huber_mask(flags: PythonObject, address: Int, count: Int) raises -> PythonObject:
+    # The private <u1 output already has one completed native flag per row.
+    # Keep its owner live while publishing directly into one final bool list.
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    # Own the NULL-filled list immediately: partial failures release every
+    # initialized slot, while CPython skips the uninitialized NULL slots.
+    var out = PythonObject(from_owned=raw)
+    var box = cpy.lib.get_function[PyObjectPtr]("PyBool_FromLong")
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
+    for i in range(count):  # driver-loop: publish completed native Huber result bytes as Python bool slots
+        var item = box(c_long(data[i] != 0))
+        if not item:
+            raise cpy.unsafe_get_error()
+        # SetItem steals the new reference on both success and failure.
+        if set_item(out._obj_ptr, i, item) != 0:
+            raise cpy.unsafe_get_error()
+    _ = flags
+    return out
+
+
 def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """HuberRegressor.fit(X, y, sample_weight): the fit, then the outlier
     mask of the training rows from the X the fit already holds."""
@@ -896,15 +921,14 @@ def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject)
     var thr = _float(py_call(_op().mul, scale, epsilon))
     # |y - pred| > thr in the binding (core/py2mojo_rows.mojo ROWS_HUBER_OUT)
     var flags = labels_vector(n, "<u1", context)
+    var flag_address = labels_address(flags)
     _ = py_call_typed(entries["py2mojo_rows"], PythonObject(_ROWS_HUBER_OUT), PythonObject(y.addr),
-                      PythonObject(labels_address(flags)),
+                      PythonObject(flag_address),
                       Python.list(PythonObject(n), PythonObject(1), PythonObject(labels_address(pred)), PythonObject(thr)))
     _ = y  # keep the Python object alive through the native call above
     _ = flags  # keep the Python object alive through the native call above
     _ = pred  # keep the Python object alive through the native call above
-    # scikit-learn's bool mask, as a list: one C pass of `bool` over the bytes
-    var b = _b()
-    py_setitem(fields, "outliers_", py_call(b.list, py_call(b.map, b.bool, py_call(flags._store.tolist))))
+    py_setitem(fields, "outliers_", _xl_huber_mask(flags, flag_address, n))
     _ = pred^
     _ = flags^
     _ = x^
