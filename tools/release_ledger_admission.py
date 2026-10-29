@@ -27,8 +27,8 @@ Adapters (``--adapter``):
   mac-host-family-build  custom Mac host-family receipts (original Apple toolchain witness required)
                           (--producer receipt=)
   linux-development-build Linux selected development groups (whole set may be incomplete)
-  gha-development-build   GHA selected development group (raw compilation only)
                           from a retained runpod_cpu_leg (--producer leg= --producer result=)
+  gha-development-build   GHA selected development group (raw compilation only)
   apple-retained-device   compile-apple Metal bindings from an original production
                           device subset run (apple_retained_groups)   (--producer run=)
   linux-host-build        Linux host-tier bindings of compile-cpu/nvidia/amd from a
