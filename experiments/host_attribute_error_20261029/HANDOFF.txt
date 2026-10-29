@@ -40,7 +40,7 @@ Runtime_classical corrected standard build remains active; no pass claimed.
 Initial classical compile failure and safe concurrency admission refusal retained.
 Five final source guards pass. Eleven durable regressions are prepared, unrun.
 
-Finite controller PID64763, existing build-shell PID44266:
+Finite controller PID67773 (detached session, confirmed PPID1), existing build-shell PID44266:
 ~/mojolearn-evidence/host-attribute-error-repair-20261029/finish-controller.py
 State: finish-state.json; full log: finish-controller.log; final exit: finish.exit.
 It does not create a service or launch another compilation. After successful
@@ -60,3 +60,6 @@ owned decode/resident sessions before adding code. Preserve ordinary .step
 caller mutation semantics and distinguish session APIs/workloads. Separate
 worktree/next-release scope only after this blocker is qualified and handed off.
 Root owns serialized main integration; this branch is not yet merge-qualified.
+
+The initial nohup launch PID64763 did not survive its shell; no controller step ran.
+The replacement starts a new session, and finish-state.json confirms PID67773.
