@@ -1,0 +1,85 @@
+Resident sampling integration, 2026-10-29
+
+Default-off experiment: MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32=1.
+Main integration combines native ceb7cbe0d2/c6e19e5e2a/a9832e3af9 with boundary
+1a85140c0b/04e51d25b4 and evidence/tests through edbcc6513b. The only merge
+conflict was the compile probe: retain the native lane's latest dynamic-input
+probe. Nine product files match their independently compiled lane bytes exactly;
+joined-source-match.json is retained with root integration evidence.
+
+Repeated work removed on the admitted resident route:
+- One native call owns the complete read, including sampling, RNG, EOS and the
+  token/layer loop. Provider/owner admission and handle construction happen at
+  read setup, rather than every forward/layer.
+- KV loads once per read and publishes once at successful completion, or from
+  a committed snapshot on recoverable failure. No per-token host KV round trip.
+- Logits stay on device. Selected tokens feed the next forward on device;
+  completed output IDs return at read completion. Two small stop/error control
+  words and required synchronization still occur per token in native code.
+- Sampling scratch and checkpoint storage are allocated once per read. Existing
+  activation/logit/GEMM reuse remains in place.
+
+Policy and reuse boundaries:
+- A shared portable FP32 selector implements stable token ordering, compensated
+  sums, explicit tiny-value handling, temperature/top-k/top-p, and a seeded
+  SplitMix counter. Its 24-bit draw/FP32 arithmetic can change older seeded text.
+  Bitwise compatibility with old versions is NOT required; supported vendors
+  must agree within the selected new release policy.
+- Capture the policy when creating the stream. Checksum-bound v2 checkpoints
+  retain it; legacy v1 checkpoints retain policy0. The native engine and host
+  fallback use the same selected policy when resident admission is unavailable.
+  Enabling the candidate does not route an otherwise native engine back through
+  the older object loop.
+- Admission requires supported native local sessions and private stream state;
+  multi-token reads retain the disjoint-KV/weight-span gate. Exposed weights,
+  unsupported routes and unproven aliases keep supported fallback execution.
+- Retain original owners/exported buffer views through execution. Recheck Array
+  class admission after GIL release; this is not an instance-identity promise.
+  Private stream state cannot be replaced through the public stream API. A live
+  model exposure/cache-owner change prevents stale session-cache publication.
+  Each new public read admits current model/state again; no cross-call promise
+  that pointer identity means unchanged data is introduced.
+
+Failure and cost limits:
+- Two alternating committed snapshots plus live KV use approximately THREE
+  times KV storage. One full device-to-device KV copy per forward remains;
+  its completion shares the existing finite-check synchronization. Commit only
+  after the forward/copy succeeds, retaining the previous snapshot on failure.
+- Successful-forward state precedes sampling. Preserve completed token progress,
+  earlier-row selection progress, first error and unusable-session cleanup.
+  Device/context loss may prevent recovery readback; do not describe stale or
+  partial host KV as valid. This cannot guarantee the legacy host bytes after
+  unrecoverable device loss and needs explicit qualification before promotion.
+- The first GPU selector uses one worker per batch row and may be slow for large
+  vocabularies. This is a correctness prototype with structural transfer and
+  dispatch reductions, NOT an established speedup or a promoted default.
+- Single-token reads still load/export per read. Legacy fallback loops remain.
+
+Compilation and review:
+- Actual public stream/read/generate/checkpoint/resume CPU entries compiled
+  successfully, including selected-policy native-engine propagation. The
+  retained 3932-file inventory is conservative source retention, not a claim
+  that every file was consumed by that compilation.
+- Actual Transformer Apple GPU module factory and group3 sampling/checkpoint
+  dispatch compiled successfully (212-file closure). Canonical
+  PyInit__mojolearn_transformer export retained; normal staging may reuse this
+  binary without another identical compile. It has not been loaded here.
+- CPU/Apple GPU sampler probes, focused source guards and independent source
+  review passed. Eleven public regression cases are prepared, not executed.
+- No runtime, cross-vendor identity or performance qualification for this batch.
+  NVIDIA/AMD candidate compilations and executions remain pending.
+
+Evidence:
+~/mojolearn-evidence/resident-sampling-attempt-20261029/
+~/mojolearn-evidence/full-resident-sampling-20261029/
+~/mojolearn-evidence/full-sampling-boundary-20261029/
+~/mojolearn-evidence/full-sampling-independent-review-20261029/
+Detailed per-lane receipts/R2 readback records are in the adjacent
+resident_sampling_f32_20261029 and resident_sampling_policy_20261029 handoffs.
+
+Next: settle the selected shipping policy/default, build only missing or changed
+images, then perform Andrew's authorized fresh reference recording for EVERY
+algorithm from one frozen configuration. First-vendor hashes are provisional;
+other supported vendors must agree before table admission. Candidate policy1
+records cannot be substituted into a wheel that still defaults to policy0.
+Preserve all historical records/failures; use the existing verifier/ledger tools.
