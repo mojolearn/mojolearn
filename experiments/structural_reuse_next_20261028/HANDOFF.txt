@@ -1,0 +1,80 @@
+Structural reuse continuation, 2026-10-28
+Base: e3f3c1572c. Four compiled batches integrated serially and pushed to main.
+Prior delivery: ../structural_reuse_20261028/HANDOFF.txt.
+No runtime, identity, concurrency or performance campaign. No measured speedup.
+Identical focus; no arithmetic/mode/default changes, no rented boxes or watchers.
+
+1. Captured-program training/replay: bff09cfc29 + 64e5ed7ae1
+Removed per-minibatch full graph copies, repeated shape/selection/parameter
+container construction, per-parameter learning-rate calculation, and fresh
+argument containers for every replay node. Reuse is local to one admitted fit
+or replay. Dynamic row counts, conditional masks, handle cleanup and dropout
+keys still update at their original boundaries; learning rate updates per epoch.
+Compile: focused HostExec ordinary/conditional training, replay, losses, optimizer
+updates and cleanup; Mac CPU identical O0, exit 0. GPU executors not compiled.
+Limits: node scalar words still copy into scratch; outputs/value lists and some
+conditional scans remain. Largest scratch capacity lives until replay/fit ends.
+Detail: ../program_loop_reuse_20261028/HANDOFF.txt and compile.json.
+
+2. Sequential native sample schemas/counts: 5a1d3c41a3 + b29b97867e
+Equivalent newly inferred sample tuples now compare by native dimensions rather
+than tuple identity. Successful parameter/output counts are retained at the
+original validation point. Known schemas skip redundant layer scans and unused
+sample-list construction. Layer/width/native-shape changes invalidate both plan
+and counts; mutable scalar buffers still decline caching. Registry slot bumped
+v1 -> v2 for the changed plan layout. Existing strong execution-owner pin remains.
+Compile: actual runtime_sequential host root, Mac CPU identical, exit 0.
+Limits: layer identity scans, scalar boxing and other provider boundaries remain;
+other host families/GPU roots are not qualified by this compilation.
+Detail: ../sequential_shape_reuse_20261028/HANDOFF.txt and compile.json.
+
+3. Shared native call transport: 378a5d8a95
+Removed reconstructed address/float spans, sessionless integer vectors, repeated
+session-word allocation and admitted-call output wrapper allocation. The existing
+admission owner now retains separate stable heap-backed endpoint/descriptor
+workspaces. Session-prefix integers still copy into retained exclusive capacity.
+Each call refreshes its words/result/error; atomic nonblocking claims isolate
+nested/concurrent calls with transient scratch. No new blocking wait. Temporary
+argument Lists are pinned through synchronous raw-span calls/GIL windows.
+The documented inline-address ABI issue is preserved: outputs remain List-backed.
+No changed C signatures, lock/GIL order or cleanup-error precedence.
+Compile: focused CausalLM public forward/generate CPU closure, identical O0,
+exit 0. Source-only independent review found no blocking lifetime/reentrancy
+issue in implementation 0be136e9ca (same source as integrated commit).
+Limits: atomic claim overhead and retained capacity are unmeasured; overlapping
+calls still allocate. Legacy descriptor consumers retain per-call allocation.
+No runtime/concurrency/ABI qualification is claimed from compile or source review.
+Detail: ../native_call_transport_20261028/HANDOFF.txt and compile.json.
+
+4. Model-selection group/fold setup: 8d0cdf7920
+Retains admitted group gather/select entries and private code/scratch addresses;
+removes unused n-row scratch allocation in ordinary folds (empty sides share one
+lazy scratch); captures completed arena pointers and class/output addresses
+outside nested fold/class/split loops. Every raw pointer retains its owner through
+final use. New storage is operation-local; later calls admit fresh plans; scratch
+owner/address publication is staged. No new cross-call cache or lazy-step reuse.
+Compile: changed helper bodies and actual stratified shuffle loop, Mac CPU
+identical O0, exit 0; focused implementation fixture, not full public dispatcher.
+Limits: Python scalar/result/ABI boxing and other splitter allocation strategies
+remain; no whole-model-selection migration claim.
+Detail: ../model_selection_loop_setup_20261028/HANDOFF.txt and compile.json.
+
+All four main pushes passed required source/push guards without relaxing guard
+baselines. Exact source/command/compiler/binary hashes, actual coverage, complete
+logs and source records are in each detail directory's compile.json and the
+corresponding ~/mojolearn-evidence/ directory. The final delivery-index push log
+is ~/mojolearn-evidence/structural-reuse-next-20261028/push.log.
+
+Next useful work (not completed here):
+- Legacy native_descriptor_call consumers still allocate output wrappers; only
+  admitted native execution has retained workspace ownership now.
+- autograd/ops_api.mojo _replay still constructs node argument Lists per node;
+  replay_values still copies node scalar metadata into reusable containers.
+  Consider native prepared node metadata within a well-defined program lifetime.
+- Mutable boundary snapshots/identity scans and Python-object result construction
+  remain transitional. Native-owned model metadata and explicit invalidation are
+  still the destination. Do not infer entire-repository migration completion.
+
+All delegated lanes finished and retain clean isolated worktrees. No box cleanup
+is outstanding. Continue from main, check current ownership, and preserve the
+compile-only/no-measurement policy and per-batch lifetime/invalidation records.
