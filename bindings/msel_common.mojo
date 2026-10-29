@@ -860,7 +860,14 @@ def msel_get_scorer(var scoring: PythonObject, context: PythonObject) raises -> 
 
 
 def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer: PythonObject,
-               context: PythonObject, memo: PythonObject = PythonObject(None)) raises -> PythonObject:
+               context: PythonObject) raises -> PythonObject:
+    # Construct the no-memo sentinel during execution: a PythonObject default
+    # requires compile-time evaluation in callers that omit the argument.
+    return msel_score(estimator, x, y, scorer, context, PythonObject(None))
+
+
+def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer: PythonObject,
+               context: PythonObject, memo: PythonObject) raises -> PythonObject:
     """`model_selection._score(estimator, X, y, scorer)`: the estimator's own
     `score` without a scorer; a real scalar, as a float."""
     var b = native_loaded_module("builtins")
