@@ -1,0 +1,40 @@
+{
+  "source_commit": "5f409d622fa4f53385ff01ce66357faaf6f42337",
+  "dependency_scope": {
+    "scope": "closure",
+    "digest": "576445057c867b78f94cb693f18853f97893d100b4df647cbd6cadd8e34c3a8a",
+    "files": 652
+  },
+  "source_count": 654,
+  "source_capture_timing": "during active build; tracked source frozen at committed HEAD before compiler launch, generated Unicode captured after standard builder generation",
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "source_archive_sha256": "33f0db2d92aee914394f39c862172369a83e931aeeb3007fa0307e3e35dc0156",
+  "command": [
+    "bash",
+    "tools/compile_slot.sh",
+    "sh",
+    "bindings/build_host_family.sh",
+    "tokenizer"
+  ],
+  "environment": {
+    "MOJOLEARN_COMPILE_JOBS": "10",
+    "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+    "MOJOLEARN_NUMERIC_MODE": "identical",
+    "MOJOLEARN_TARGET_COLUMN": "cpu",
+    "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/resident-profile-admission-20261029/raw"
+  },
+  "target": "macOS arm64 full tokenizer host extension, identical CPU, O0",
+  "runtime_executed": false,
+  "exit_code": 0,
+  "binary": "/Users/andrewhendel/mojolearn-evidence/resident-profile-admission-20261029/raw/_mojolearn_tokenizer_host.so",
+  "binary_sha256": "56e8db8096be5a123bde34df5dc1d50898ba1ece13868aae10112ccf127c3291",
+  "binary_bytes": 43609648,
+  "sources_changed_during_build": [],
+  "source_guards": {
+    "no_host_routes": 0,
+    "no_python_in_kernels": 0,
+    "no_compute_in_shells": 0
+  },
+  "test_fixture_commit": "50864318cd42d8bbda574dba0d7ad1e0db6d5133"
+}

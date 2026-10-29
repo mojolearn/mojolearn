@@ -1,0 +1,50 @@
+Resident registry/profile admission repair — 2026-10-29
+
+Product commit: 5f409d622fa4f53385ff01ce66357faaf6f42337
+Regression fixture correction: 50864318cd42d8bbda574dba0d7ad1e0db6d5133
+Base: b2d802861c4b4a47befbd4ee0934f7bfbba67785
+
+Observed installed failures (root retained original runtime logs):
+- resident_read_v1 bool and Mamba2 workspace provider were incorrectly
+  classified as callable entries, refusing ordinary model state allocation.
+- every freshly loaded transformer carries a native arithmetic-profile tag;
+  the resident route rejected all non-None tags, including the current default.
+
+Repairs:
+- admit resident_read_v1 only as exact bool, and retain the Mamba2 typed
+  workspace provider like the other native providers. Constructed entry-owner
+  identity checks remain mandatory; replacement is not an API escape hatch.
+- retain selected native module profile functions; compare captured block/state
+  tags with that module once at resident admission, in the existing layer scan.
+  Unknown/mismatched tags and changed-profile unlabelled nonempty caches decline
+  residency and reach the original ordered layer diagnostics. No recasting,
+  profile stripping, arithmetic change, or alternate numerical route was added.
+- include captured profile metadata in session cache keys; publish tags beside
+  successfully exported KV state on public forward and resident reads. Existing
+  reservation, invalidation, error cleanup and post-GIL Array checks remain.
+- six bounded GPU regression cases cover default tagged-state publication,
+  mismatch diagnostics, unlabelled changed-profile cache diagnostics, and
+  replacement rejection for capability/provider entries. Actual Mamba2 fixture
+  uses its family configuration (the uniform helper constructs llama only).
+
+Validation:
+Full installable tokenizer CPU host extension compiled successfully on Mac
+arm64, Mojo1.0.0(ed45d567), identical, O0, standard build_host_family.sh tokenizer,
+10 compiler workers inside default machine-wide compile_slot. This compiles
+actual public forward/read/generate/optional-resident and owner capture paths;
+dynamic GPU arithmetic binaries are unchanged and not compiled here.
+All654 retained source closure files were unchanged during compilation.
+no_host_routes, no_python_in_kernels, no_compute_in_shells all exit0 at product
+commit. Initial guard invocations without required --tree exited2 (usage only),
+retained separately; corrected complete scans passed. Regression syntax passed.
+Runtime testing remains pending installation, coordinated with root/neural lane.
+No performance or numerical identity claim; no measurements run.
+
+Evidence:
+~/mojolearn-evidence/resident-profile-admission-20261029/
+  compile.log/.exit, compile-receipt.json, source-manifest.json, source.tar.gz,
+  raw/_mojolearn_tokenizer_host.so, source guard logs/exits and original attempts.
+Raw binary SHA256:
+56e8db8096be5a123bde34df5dc1d50898ba1ece13868aae10112ccf127c3291
+43,609,648 bytes. Do not overwrite raw binary while staging runtime dependencies.
+Standard supported macOS dylib/portable-math staging is required for installed use.
