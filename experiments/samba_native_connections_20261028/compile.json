@@ -1,0 +1,35 @@
+{
+  "scope": "Samba public/configuration native C doors and retained shared value/metadata admission helper signatures. CPU boundary orchestration compilation; numerical GPU provider binaries not qualified.",
+  "source_commit": "28efda1bb85a8677cf4f7b956aef16d57595d472",
+  "source_base": "7965f31955e7a19a5cdd49149753837752f70e23",
+  "target": "Mac arm64 CPU, identical",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "command": "bash tools/compile_slot.sh pixi run mojo build -j 8 --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/samba_native_connections_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/samba-native-connections-20261028/samba-connections.dylib",
+  "compiler_workers": 8,
+  "cpu_saturation_claimed": false,
+  "exit_code": 0,
+  "log": "/Users/andrewhendel/mojolearn-evidence/samba-native-connections-20261028/compile-1.log",
+  "log_sha256": "5e6dbf47b73a93d71f45b29156f0ae0c16f2326d765848501cd304130baa69ae",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/samba-native-connections-20261028/samba-connections.dylib",
+  "binary_sha256": "87b8d9ee75144ede642f5150e24c2574f58e58260e38f4faa45037bebdefb22d",
+  "warnings": "Dependency warnings retained in complete log; no compiler errors.",
+  "environment": "/Users/andrewhendel/mojolearn-evidence/samba-native-connections-20261028/environment.json",
+  "source_retention": {
+    "archive": "/Users/andrewhendel/mojolearn-evidence/samba-native-connections-20261028/source-envelope.tar.gz",
+    "archive_sha256": "af8937abbd6d70769c2a6992ddc09c46cfbd52ffc60e5fbd3b1b576df1bda08e",
+    "source_commit": "28efda1bb85a8677cf4f7b956aef16d57595d472",
+    "scope": "Conservative superset: tracked Mojo files, binding shell scripts, compile_slot and pixi manifests",
+    "file_count": 3959,
+    "manifest": "/Users/andrewhendel/mojolearn-evidence/samba-native-connections-20261028/source-envelope.json"
+  },
+  "source_push_guards": {
+    "source_commit": "28efda1bb85a8677cf4f7b956aef16d57595d472",
+    "exit_code": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/samba-native-connections-20261028/source-push-guards.log",
+    "log_sha256": "e1f3cf6b11ac222eca765a91bf87d6e6fabff02fafa8775aa7b31681f19f2ecb"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_executed": false,
+  "rented_boxes": []
+}

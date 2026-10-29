@@ -63,3 +63,11 @@ No rented machines. Full outputs, source closure, compiler/flags and binary
 are retained at the path below; compile.json records actual exit status.
 
 Evidence: /Users/andrewhendel/mojolearn-evidence/samba-native-connections-20261028/
+
+Final evidence
+--------------
+Frozen source: 28efda1bb85a8677cf4f7b956aef16d57595d472
+Focused compilation exit 0; required source/push guards exit 0. No failed
+compiler attempts. Complete warnings/output retained; no runtime executed.
+Binary SHA256: 87b8d9ee75144ede642f5150e24c2574f58e58260e38f4faa45037bebdefb22d
+See compile.json and import_edits.json for exact provenance and edit inventory.

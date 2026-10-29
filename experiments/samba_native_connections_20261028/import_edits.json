@@ -1,0 +1,75 @@
+[
+  {
+    "file": "bindings/samba_step_native.mojo",
+    "replaced": 6,
+    "modules": [
+      "builtins"
+    ]
+  },
+  {
+    "file": "bindings/samba_training_native.mojo",
+    "replaced": 1,
+    "modules": [
+      "builtins"
+    ]
+  },
+  {
+    "file": "bindings/samba_construct_native.mojo",
+    "replaced": 2,
+    "modules": [
+      "builtins"
+    ]
+  },
+  {
+    "file": "bindings/samba_cpu_inference.mojo",
+    "replaced": 4,
+    "modules": [
+      "builtins"
+    ]
+  },
+  {
+    "file": "bindings/samba_config_native.mojo",
+    "replaced": 4,
+    "modules": [
+      "builtins"
+    ]
+  },
+  {
+    "file": "bindings/samba_inference_native.mojo",
+    "replaced": 9,
+    "modules": [
+      "array",
+      "builtins",
+      "operator"
+    ]
+  },
+  {
+    "file": "bindings/samba_checkpoint_native.mojo",
+    "replaced": 10,
+    "modules": [
+      "builtins"
+    ]
+  },
+  {
+    "file": "bindings/samba_public_native.mojo",
+    "replaced": 2,
+    "modules": [
+      "builtins",
+      "operator"
+    ]
+  },
+  {
+    "file": "bindings/samba_admission.mojo",
+    "replaced": 6,
+    "modules": [
+      "builtins"
+    ]
+  },
+  {
+    "file": "bindings/samba_state_native.mojo",
+    "replaced": 11,
+    "modules": [
+      "builtins"
+    ]
+  }
+]
