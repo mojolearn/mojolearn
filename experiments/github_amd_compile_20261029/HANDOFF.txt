@@ -1,0 +1,30 @@
+AMD device compilation, 2026-10-29
+
+All four missing merged device groups compiled successfully on the existing
+GitHub-hosted CPU workflow40855235569, source095ab328298973b2625cc7c2e189da73efb2b46f.
+Together they provide33logical device bindings for gfx942/identical.
+This is compilation only: no AMD runtime, identity, timing or full Linux wheel claim.
+
+Each runner reported4visible CPUs and15GiB RAM; the retained producer configured
+8compiler workers and one selected compile per runner. Exact effective phase
+affinity/cgroup utilization is not established by that visible count. No rental
+was created. Existing unchanged producer pins ROCmUbuntu22.04 by digest.
+
+Fouractual image hashes, complete logs, before-build captures, cache manifests,
+complete source archive, resource logs and all shard artifacts are onMac/R2.
+PUT/GET200 and all38829archive-member bytes validated. Duplicate dependency
+contents use verified hardlinks; no required binary bytes were omitted.
+The first archive validator was canceled during repeated compressed seeks;
+sequential validation completed.
+
+The cache manifest hashes compiler subprocess output, not the controller log.
+Initial whole-log assertions failed; allfour hashes exactly reconstruct after
+removing the documented start line and final cache/end lines. Complete original
+logs remain retained and separately hashed. No byte normalization is applied.
+
+Current2d775c source reuse and formal ledger admission remain pending; no rebuild
+is requested merely because the source commit name or image layout changed.
+NVIDIA/CPU/PTX missing compilation and all physicalGPU verification remain open.
+
+Full evidence: ~/mojolearn-evidence/github-amd-current-20261029/
+See receipt.json and retention.json for exact scope and bytes.

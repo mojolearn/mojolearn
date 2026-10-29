@@ -1,0 +1,104 @@
+{
+  "source_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+  "workflow_run": 40855235569,
+  "groups": [
+    {
+      "group": "_mojolearn_native",
+      "source_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+      "binary": {
+        "mode": 448,
+        "path": "python/mojolearn/identical/_mojolearn_native.so",
+        "sha256": "cf56a51282ffef2e1ec959bf8155a36a3bce316623a984ea0182f27ad57e1f1f",
+        "size": 24403856
+      },
+      "archive_sha256": "1c7dcc539ccf4755ad4e0c529e905dfbbeec081e7344620cc549b4afc77999ce",
+      "complete_log_sha256": "9ed7758eb07b7e8bfb549687f44e65d62137f5f8a71b36f9261efff789df5aba",
+      "compiler_output_sha256": "b9e2f81da810e7084ce77c23946abec57b275cd4c82541010776c885d37dc5c8",
+      "compiler_output_reconstruction": "complete log minus exact controller start line and cache/end completion lines",
+      "build_seconds": 639.9,
+      "workers": "8",
+      "before_build_capture_sha256": "8c9b89d68b843ce72b93eebc9633540769c0a944fc43e1077781a6221f1087cd",
+      "installed_toolchain": [
+        "max-26.5.0-3.14release",
+        "max-core-26.5.0-release",
+        "mojo-1.0.0-release",
+        "mojo-compiler-1.0.0-release"
+      ],
+      "shard_result": "identical:merged_build.sh:_mojolearn_native\tok\tmiss+built-uploaded\t641.2\te2c88ecd1fccaaea7474a967d4f3caf1fc9a1caaf174fe1af1460da6d929a830"
+    },
+    {
+      "group": "_mojolearn_native_sequence",
+      "source_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+      "binary": {
+        "mode": 448,
+        "path": "python/mojolearn/identical/_mojolearn_native_sequence.so",
+        "sha256": "21a477cafd2fa31520398682e49972abf610c39fcb17fdb69f2e90d9cb63ff6b",
+        "size": 27400728
+      },
+      "archive_sha256": "0a0568cb5a817f7d174599088ad0e0baa471c7dfac9ca6bb3903f632d55fdb9f",
+      "complete_log_sha256": "da006d8f891308067c3341a5c2dd13b5cc0c5ed1c39955f7f3b6933015447958",
+      "compiler_output_sha256": "8fcecab9fce9301aaa252f33e2a270404277b76903361511f99092825fcd105e",
+      "compiler_output_reconstruction": "complete log minus exact controller start line and cache/end completion lines",
+      "build_seconds": 682.4,
+      "workers": "8",
+      "before_build_capture_sha256": "8c9b89d68b843ce72b93eebc9633540769c0a944fc43e1077781a6221f1087cd",
+      "installed_toolchain": [
+        "max-26.5.0-3.14release",
+        "max-core-26.5.0-release",
+        "mojo-1.0.0-release",
+        "mojo-compiler-1.0.0-release"
+      ],
+      "shard_result": "identical:merged_build.sh:_mojolearn_native_sequence\tok\tmiss+built-uploaded\t683.9\t26478177c824baf0992ec2a7a0d17a8aa400d6f27f8e8ace5eb2d67a9b12a0da"
+    },
+    {
+      "group": "_mojolearn_native_trees",
+      "source_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+      "binary": {
+        "mode": 448,
+        "path": "python/mojolearn/identical/_mojolearn_native_trees.so",
+        "sha256": "10067d6fb330759ffa9f887cd54cc67e4dea3a9ed5c04e24187d50d1bc0cd8a9",
+        "size": 27677208
+      },
+      "archive_sha256": "960ca1172b5454345976cfb11b4c4a8ffa1529fa7eb397cd163f938a6be2f88e",
+      "complete_log_sha256": "aa7f75d2abdb956ff50d08d08325438fdb4c470dab4abc80c7d0ff29d446a22c",
+      "compiler_output_sha256": "044f6bde71c30846bbe2dfda6eac5c8700df1222dfa9aeba5d06ed3e6195bfe4",
+      "compiler_output_reconstruction": "complete log minus exact controller start line and cache/end completion lines",
+      "build_seconds": 661.6,
+      "workers": "8",
+      "before_build_capture_sha256": "8c9b89d68b843ce72b93eebc9633540769c0a944fc43e1077781a6221f1087cd",
+      "installed_toolchain": [
+        "max-26.5.0-3.14release",
+        "max-core-26.5.0-release",
+        "mojo-1.0.0-release",
+        "mojo-compiler-1.0.0-release"
+      ],
+      "shard_result": "identical:merged_build.sh:_mojolearn_native_trees\tok\tmiss+built-uploaded\t662.7\t2bfea9bdf23ef032b4c23a2c10e580b663ae272985a12d3fd6a1028b7c57f2fa"
+    },
+    {
+      "group": "_mojolearn_native_cluster",
+      "source_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+      "binary": {
+        "mode": 448,
+        "path": "python/mojolearn/identical/_mojolearn_native_cluster.so",
+        "sha256": "6d5136932baf6d1990090b23d8839b623cf6728e34a8792050ae0f03846a9305",
+        "size": 18436432
+      },
+      "archive_sha256": "ca798e754de2719e9e20753d4944f5c96917e84e67be0ed71aa4d554a33ee620",
+      "complete_log_sha256": "057547ea69f0f901c19dbf5c92ee2f67ae655527d8b74634d2d5bef904a3840e",
+      "compiler_output_sha256": "dd8424dd52e6d63488e5eb1f1b32acddb7de32783047842cd27c33383d0d0975",
+      "compiler_output_reconstruction": "complete log minus exact controller start line and cache/end completion lines",
+      "build_seconds": 571.1,
+      "workers": "8",
+      "before_build_capture_sha256": "8c9b89d68b843ce72b93eebc9633540769c0a944fc43e1077781a6221f1087cd",
+      "installed_toolchain": [
+        "max-26.5.0-3.14release",
+        "max-core-26.5.0-release",
+        "mojo-1.0.0-release",
+        "mojo-compiler-1.0.0-release"
+      ],
+      "shard_result": "identical:merged_build.sh:_mojolearn_native_cluster\tok\tmiss+built-uploaded\t572.3\tb8fa61c96013d380d69300c8346b834d05544998b6dd7407f92ae83fa0c58f78"
+    }
+  ],
+  "runtime_qualified": false,
+  "ledger_admission_pending": true
+}

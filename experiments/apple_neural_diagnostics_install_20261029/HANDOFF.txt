@@ -1,0 +1,28 @@
+Corrected neural install — frozen2d775c63859991f415f2548e043a889650d0bb5a
+
+One new isolated clone, final-neural-diagnostics-venv, assembled from immutable
+final-corrected-venv. All79 native source closures/raw hashes match frozen main:
+46CPUhost+33AppleGPU,2699 unique source paths,zero mismatches/failures.
+
+973 current tracked Python files,79 compiled extensions+5runtime libraries,
+143 exact verifier payload members and COMMIT2d775c. Only tokenizer native
+image replaced; the other83 native/runtime bytes match the prior candidate.
+Python comparison:7changed,4added. Verifier payload bytes unchanged except
+COMMIT witness. No active install was mutated. No new compile or product runtime
+was run for assembly; prior focused diagnostic runtime belongs to its own receipt.
+
+Immutable environment and full receipts:
+~/mojolearn-evidence/manifold-installed-integration-20261029/
+  final-neural-diagnostics-venv
+  final-neural-diagnostics-clean-install/
+
+Classical owns supported wheel assembly/matrix; generation owns central ledger
+and runtime. Both received paths and push confirmation. Selected46CPUcontracts
+and original producer mapping are in configuration-cpu-contracts.json and
+host-producers.json beside the receipt; no central ledger writes here.
+
+Retention is complete: new Python/payload/sourceproof archive PUT/GET200 with
+all157members verified. New compiled/staged tokenizer and655sourcefiles already
+retained in the combined-diagnostic archive;83unchanged native/runtime bytes
+reuse the recorded basearchive. See retention.json, replacement.json and
+base-artifacts.json for exact keys/hashes and original bytes mapping.

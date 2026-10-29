@@ -1,0 +1,50 @@
+{
+  "source_commit": "2d775c63859991f415f2548e043a889650d0bb5a",
+  "environment": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-neural-diagnostics-venv",
+  "package": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-neural-diagnostics-venv/lib/python3.13/site-packages/mojolearn",
+  "receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-neural-diagnostics-clean-install/receipt.json",
+  "receipt_sha256": "47e39ebc9305e2a10976055914cff0439c0d0dc75c64480d69f0ab7829323cd9",
+  "python_source_files": 973,
+  "native_extensions": 79,
+  "runtime_libraries": 5,
+  "verifier_payload_members": 143,
+  "harness_sha256": "589a7441f72a535c8ef411d33003ed5c3b84c339c09e4675dd31c0499713e2f0",
+  "payload_commit": "2d775c63859991f415f2548e043a889650d0bb5a",
+  "all79_source_match": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-neural-diagnostics-clean-install/all79-source-match.json",
+    "sha256": "755fec3c10d724e42a9a3f764ce4ba85d64afa271c25965f9ee8470388f787e3",
+    "passed": true,
+    "unique_source_paths": 2699,
+    "host": 46,
+    "gpu": 33,
+    "source_mismatch_records": 0,
+    "raw_hash_failures": 0
+  },
+  "comparison": {
+    "old_source": "095ab328298973b2625cc7c2e189da73efb2b46f",
+    "new_source": "2d775c63859991f415f2548e043a889650d0bb5a",
+    "changed_tracked_python": [
+      "_native_public_attributes.py",
+      "_mode.py",
+      "_native_family_bridge.py",
+      "_array.py",
+      "_expansion_trees.py",
+      "importers/_program.py",
+      "tests/test_transformer_surface.py"
+    ],
+    "added_tracked_python": [
+      "tests/test_hierarchy_attribute_connection.py",
+      "tests/test_neural_dtype_diagnostics.py",
+      "tests/test_training_array_metadata_contract.py",
+      "tests/test_transformer_state_refusals.py"
+    ],
+    "removed_tracked_python": [],
+    "native_or_runtime_changed": [
+      "host/_mojolearn_tokenizer_host.so"
+    ],
+    "verifier_payload_changed": [],
+    "old_receipt_sha256": "854baf55a1ec28f4b3267ea2c121e9a8c0792f860d00d3b85270567497815fae",
+    "new_receipt_sha256": "47e39ebc9305e2a10976055914cff0439c0d0dc75c64480d69f0ab7829323cd9"
+  },
+  "scope": "Single isolated source-aligned development install; no product runtime or new compile in assembly. Packaging/verification owners consume immutable clone."
+}
