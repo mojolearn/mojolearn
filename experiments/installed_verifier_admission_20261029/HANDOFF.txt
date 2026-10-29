@@ -18,6 +18,11 @@ source/install stability after execution, preserving nonzero and interrupted
 outcomes. An existing output directory refuses a duplicate run. This is a run
 receipt, not an identity PASS. --all collects every fixture/property; lane
 subsets remain explicit and must belong to the selected routine/neural profile.
+--include-pending retains current observations even when prior-release fixture
+references are stale. --no-models avoids repeating the separate portable-model
+checks in each disjoint subset; their installed smoke remains a once-only task.
+The ordinary per-cell model property remains collected. Both options and their
+reported effects are bound by the receipt and validated during admission.
 
 identity_columns.py from-verify --launch <receipt> retains the original report
 and receipt next to the column, validates full selected coverage, options,
@@ -34,7 +39,7 @@ alone remains an observation; local failure remains unusable. Cross-vendor
 agreement and CPU applicability are still required by the unchanged admission
 logic. No source/policy baseline changed.
 
-Validation: focused Python evidence tests: 73 passed, exit 0, covering
+Validation: focused Python evidence tests: 75 passed, exit 0, covering
 real conversion -> strict record_errors acceptance, missing/mismatched source,
 installation, binding, protocol, selection, command and receipt/report/cell
 witnesses, legacy refusal, and pre-execution receipt ordering with a fake
@@ -49,7 +54,8 @@ Evidence root:
   admission-tests-attempt1.log/.exit (missing pytest)
   test-env-install.log/.exit
   admission-tests-attempt2.log/.exit (72 pass before lane-order review)
-  admission-tests-final.log/.exit (73 pass including harness lane reordering)
+  admission-tests-final.log/.exit (73 pass including harness lane reordering; before review flags)
+  admission-tests-review.log/.exit (75 pass including pending/model boundaries)
   admission-syntax.log/.exit; admission-guard-*.log/.exit
   admission-source.patch; admission-source-sha256.json
 

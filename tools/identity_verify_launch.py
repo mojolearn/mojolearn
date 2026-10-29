@@ -91,9 +91,9 @@ def execute(root, python, out, lanes, profile, cpu_threads, *, runner=subprocess
     require(cpu_threads > 0, 'CPU thread request must be positive')
     options = dict(lanes=list(lanes), profile=profile, repeats=1, cpu_threads=cpu_threads,
                    fixtures=list(harness.FIXTURES), parts=list(columns.vref().PARTS + columns.vref().OPTIONAL_PARTS))
-    options['all'] = True
+    options.update({'all': True, 'include_pending': True, 'no_models': True})
     report = out / 'verify.json'
-    command = [str(python), '-m', 'mojolearn', 'verify', '--all', '--lanes', ','.join(lanes),
+    command = [str(python), '-m', 'mojolearn', 'verify', '--all', '--include-pending', '--no-models', '--lanes', ','.join(lanes),
                '--repeats', '1', '--cpu-threads', str(cpu_threads), '--json-out', str(report), '--json']
     if profile == 'neural-training':
         command.append('--neural-training')
@@ -140,10 +140,15 @@ def validate_run(receipt, report, report_sha):
             and set(options['lanes']) == set(report.get('lanes', []))
             and set(options.get('fixtures', [])) == set(report.get('fixtures', [])), 'verifier selection differs from pre-run options')
     require(options.get('profile') == report.get('selection', {}).get('profile', {}).get('name'), 'verifier profile differs from launch')
+    require(options.get('include_pending') is True and report.get('selection', {}).get('include_pending') is True,
+            'current pending/stale fixture observations were not requested')
+    require(options.get('no_models') is True and report.get('models_checked') == 0,
+            'column producer must defer portable models to their separate once-only smoke')
     command = receipt.get('command', [])
-    require(len(command) in (14, 15), 'missing verifier command')
-    expected = [command[0], '-m', 'mojolearn', 'verify', '--all', '--lanes', ','.join(options['lanes']),
-                '--repeats', '1', '--cpu-threads', str(options.get('cpu_threads')), '--json-out', command[12], '--json']
+    require(len(command) in (16, 17), 'missing verifier command')
+    expected = [command[0], '-m', 'mojolearn', 'verify', '--all', '--include-pending', '--no-models',
+                '--lanes', ','.join(options['lanes']), '--repeats', '1', '--cpu-threads',
+                str(options.get('cpu_threads')), '--json-out', command[14], '--json']
     if options.get('profile') == 'neural-training':
         expected.append('--neural-training')
     require(command == expected, 'verifier command differs from bound options')

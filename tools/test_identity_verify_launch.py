@@ -15,7 +15,7 @@ from test_identity_verify_record import example
 def setup_report(tmp_path):
     report, h = example(tmp_path)
     report.update(repeats=1, binding_provenance_protocol='loaded-native-v2',
-                  selection=dict(profile=dict(name='routine')))
+                  selection=dict(profile=dict(name='routine'), include_pending=True), models_checked=0)
     report['device']['platform'] = 'Linux-6.8-x86_64-with-glibc2.39'
     package = tmp_path / 'installed' / 'mojolearn'
     report['bindings'][0]['file'] = str(package / 'native.so')
@@ -23,9 +23,9 @@ def setup_report(tmp_path):
              '_identity_break.py': dict(size=30, sha256=report['harness']['sha256'])}
     options = dict(lanes=['lane'], profile='routine', repeats=1, cpu_threads=8,
                    fixtures=['base'], parts=list(C.vref().PARTS+C.vref().OPTIONAL_PARTS))
-    options['all'] = True
+    options.update({'all': True, 'include_pending': True, 'no_models': True})
     source = dict(root='/clean/frozen', commit='a'*40, dirty_tracked='')
-    command = ['/env/bin/python', '-m', 'mojolearn', 'verify', '--all', '--lanes', 'lane',
+    command = ['/env/bin/python', '-m', 'mojolearn', 'verify', '--all', '--include-pending', '--no-models', '--lanes', 'lane',
                '--repeats', '1', '--cpu-threads', '8', '--json-out', '/out/verify.json', '--json']
     raw = json.dumps(report).encode()
     receipt = dict(schema=L.SCHEMA, phase='before-execution', status='completed', exit_code=1,
@@ -60,7 +60,7 @@ def test_converted_report_enters_strict_record_admission_without_refit(tmp_path,
     assert C.validate_verifier_record(record, path)['all'] is True
 
 
-@pytest.mark.parametrize('damage', ['dirty','changed_source','changed_install','binding','protocol','repeat','profile','command','fixtures','parts'])
+@pytest.mark.parametrize('damage', ['dirty','changed_source','changed_install','binding','protocol','repeat','profile','command','fixtures','parts','pending','models'])
 def test_missing_or_mismatched_producer_witness_is_refused(tmp_path, monkeypatch, damage):
     def break_it(report, receipt):
         if damage == 'dirty': receipt['source']['dirty_tracked']=' M binding.mojo'; receipt['after_source']['dirty_tracked']=' M binding.mojo'
@@ -73,6 +73,8 @@ def test_missing_or_mismatched_producer_witness_is_refused(tmp_path, monkeypatch
         elif damage == 'command': receipt['command'][4]='--quick'
         elif damage == 'fixtures': receipt['options']['fixtures']=[]
         elif damage == 'parts': receipt['options']['parts'].pop()
+        elif damage == 'pending': report['selection']['include_pending']=False
+        elif damage == 'models': report['models_checked']=1
     with pytest.raises(ValueError): convert(tmp_path, monkeypatch, break_it)
 
 
@@ -130,7 +132,7 @@ def test_launch_writes_before_execution_and_preserves_nonzero_report(tmp_path,mo
 def test_harness_may_order_the_explicit_lane_set(tmp_path):
     report, _, receipt, _, _ = setup_report(tmp_path)
     receipt['options']['lanes'] = ['lane', 'other']
-    receipt['command'][6] = 'lane,other'
+    receipt['command'][receipt['command'].index('--lanes') + 1] = 'lane,other'
     report['lanes'] = ['other', 'lane']
     raw = json.dumps(report).encode()
     receipt['report_sha256'] = hashlib.sha256(raw).hexdigest()
