@@ -2,6 +2,7 @@
 # Setup/ownership boundary for explicitly named native execution ABIs. No
 # unwrapping of arbitrary Python functions, extension layouts or signatures.
 from std.ffi import c_int
+from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
@@ -9,7 +10,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_namespace_admitted, prepared_namespace_admit
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
+from core.native_descriptor_call import native_descriptor_call_spans
+from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLease
 
 
 struct NeuralDescriptorProvider(Movable, Writable):
@@ -19,6 +21,7 @@ struct NeuralDescriptorProvider(Movable, Writable):
     var name: String
     var entry: NativeDescriptorCall
     var calls: List[Int]
+    var workspace: List[NativeCallWorkspace]
 
     def __init__(out self, module: PythonObject, capsule: PythonObject, factory: PythonObject, var name: String, entry: NativeDescriptorCall, operation_count: Int = 6):
         self.module = module
@@ -27,6 +30,11 @@ struct NeuralDescriptorProvider(Movable, Writable):
         self.name = name^
         self.entry = entry
         self.calls = List[Int](length=operation_count, fill=0)
+        # Retain heap-backed ABI output and session-prefix capacity with this
+        # admitted provider. Its exclusive lease handles concurrent/reentrant
+        # calls without sharing writable scratch or waiting while holding GIL.
+        self.workspace = List[NativeCallWorkspace]()
+        self.workspace.append(NativeCallWorkspace())
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("NeuralDescriptorProvider(", self.name, ", calls=", self.calls, ")")
@@ -213,16 +221,29 @@ def neural_descriptor_execute(
     if operation < 0 or operation >= len(owner[].calls):
         raise Error("neural native ABI: unknown operation")
     owner[].calls[operation] += 1
-    var result = 0
-    if release_gil:
-        with GILReleased(Python()):
-            result = native_descriptor_call(owner[].entry, operation, addresses, ints, floats)
-    else:
-        # Native resource registry admission/finalization whose ownership
-        # requires the admission lock uses this branch; computation keeps True.
-        result = native_descriptor_call(owner[].entry, operation, addresses, ints, floats)
-    _ = provider
-    return result
+    var loan = NativeCallWorkspaceLease(Int(owner[].workspace.unsafe_ptr()))
+    var scratch = loan.pointer()
+    try:
+        var result = 0
+        if release_gil:
+            with GILReleased(Python()):
+                result = native_descriptor_call_spans(owner[].entry, operation,
+                    Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
+                    Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+        else:
+            # Native resource registry admission/finalization whose ownership
+            # requires the admission lock uses this branch; computation keeps True.
+            result = native_descriptor_call_spans(owner[].entry, operation,
+                Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
+                Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+        return result
+    finally:
+        loan.release()
+        # Span addresses and the workspace pointer do not retain these owners.
+        _ = addresses
+        _ = ints
+        _ = floats
+        _ = provider
 
 
 def neural_descriptor_reserved_execute(
@@ -234,28 +255,43 @@ def neural_descriptor_reserved_execute(
     # reservation operations. The caller obtained handle from that table's
     # checked native admission entry; no Python extension layout is inspected.
     var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
-    for op in [reserve, release, operation]:  # small-loop(three explicit table operation ids)
-        if op < 0 or op >= len(owner[].calls):
-            raise Error("neural native ABI: unknown operation")
-    var words: List[Int] = [handle]
-    for value in ints:  # small-loop(admitted operation scalar span)
-        words.append(value)
-    owner[].calls[reserve] += 1
-    _ = native_descriptor_call(owner[].entry, reserve, [], [handle], [])
-    var result = 0
+    var count = len(owner[].calls)
+    if reserve < 0 or reserve >= count or release < 0 or release >= count or operation < 0 or operation >= count:
+        raise Error("neural native ABI: unknown operation")
+    var loan = NativeCallWorkspaceLease(Int(owner[].workspace.unsafe_ptr()))
+    var scratch = loan.pointer()
     try:
-        owner[].calls[operation] += 1
-        with GILReleased(Python()):
-            result = native_descriptor_call(owner[].entry, operation, addresses, words, floats)
-    except problem:
+        # One exclusive vector supplies both the session-only reserve/release
+        # span and the full prefixed operation span. Refresh every launch word;
+        # only allocation capacity survives calls, never argument values.
+        scratch[].words.resize(len(ints) + 1, 0)
+        scratch[].words[0] = handle
+        if len(ints) > 0:
+            memcpy(dest=scratch[].words.unsafe_ptr() + 1, src=ints.unsafe_ptr(), count=len(ints))
+        var words = Int(scratch[].words.unsafe_ptr())
+        owner[].calls[reserve] += 1
+        _ = native_descriptor_call_spans(owner[].entry, reserve, 0, 0, words, 1, 0, 0, scratch[].output)
+        var result = 0
+        try:
+            owner[].calls[operation] += 1
+            with GILReleased(Python()):
+                result = native_descriptor_call_spans(owner[].entry, operation,
+                    Int(addresses.unsafe_ptr()), len(addresses), words, len(ints) + 1,
+                    Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+        except problem:
+            owner[].calls[release] += 1
+            _ = native_descriptor_call_spans(owner[].entry, release, 0, 0, words, 1, 0, 0, scratch[].output)
+            raise problem
         owner[].calls[release] += 1
-        _ = native_descriptor_call(owner[].entry, release, [], [handle], [])
-        raise problem
-    owner[].calls[release] += 1
-    _ = native_descriptor_call(owner[].entry, release, [], [handle], [])
-    _ = provider
-    _ = session_owner
-    return result
+        _ = native_descriptor_call_spans(owner[].entry, release, 0, 0, words, 1, 0, 0, scratch[].output)
+        return result
+    finally:
+        loan.release()
+        _ = addresses
+        _ = ints
+        _ = floats
+        _ = provider
+        _ = session_owner
 
 
 def neural_descriptor_info(provider: PythonObject) raises -> PythonObject:

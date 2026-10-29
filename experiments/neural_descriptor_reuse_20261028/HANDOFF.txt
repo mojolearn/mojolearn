@@ -1,0 +1,42 @@
+Neural descriptor provider workspace reuse, 2026-10-28
+Branch: lane/neural-descriptor-reuse-20261028
+Base: 249031017b
+
+Removed repeated work:
+NeuralDescriptorProvider now retains one native workspace. Ordinary execute
+borrows argument spans into its existing heap-backed output slot; reserved
+execute reuses one integer prefix vector and one result/error slot for reserve,
+operation and release. Reserve/release borrow the prefix's first word, removing
+fresh session-only vectors. The fixed three-operation bounds check no longer
+constructs a temporary integer List. No Python-object binding admission is
+skipped or newly cached; the following batch targets its key-list overhead.
+
+Setup/reuse/invalidation/lifetimes:
+The provider owns the stable one-element workspace List throughout its admitted
+lifetime. Existing native atomic claims isolate reentry/concurrency into private
+transient scratch without new waits. Output resets per call; prefix arguments
+refresh every reserved call; no launch values are cached. Provider/module/image
+and session owners plus argument Lists are explicitly pinned through finally,
+including error and GIL-release paths. Claims release after result/error use.
+
+The C ABI and stable heap-owned output requirement are unchanged. Unknown-op
+validation, counter increments, native reserve-before-GIL-release, normal/error
+release and cleanup-error precedence keep their existing sequence. Reservation
+failure still does not call release. No new lock, callback or arithmetic change.
+
+Compilation:
+Public CausalLM forward/generate Mac CPU source closure compiled successfully,
+rc0, identical define, O0. compile.json records exact command, binary hash and
+source manifest. No runtime, concurrency, identity or performance campaign.
+Root owns serialized integration and final main/push guards; lane source-guard
+results are reported with the handoff and retained under the evidence path.
+
+Evidence: ~/mojolearn-evidence/neural-descriptor-reuse-20261028/
+Complete output, binary and source hashes on Mac. No rented box or watcher.
+
+Limits:
+Provider admission still uses Python objects, module checks and dictionary key
+materialization. Each execution still downcasts the private provider object and
+performs GIL transitions. Session prefix integers still copy. Concurrent/reentrant
+calls may allocate transient scratch; provider error/prefix capacity remains
+until provider release. No measured speedup or runtime behavior is claimed.

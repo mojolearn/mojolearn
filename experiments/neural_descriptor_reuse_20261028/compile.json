@@ -1,0 +1,22 @@
+{
+  "base_commit": "249031017b",
+  "compile_exit": 0,
+  "scope": "Public CausalLM forward/generate CPU source closure, including neural_descriptor_execute/reserved_execute and provider workspace construction; compile only",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "compile_slots": 4,
+  "compiler_workers": "default; no saturation measured",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/neural-descriptor-reuse-20261028 -I /Users/andrewhendel/mojolearn-wt/neural-descriptor-reuse-20261028/bindings /Users/andrewhendel/mojolearn-wt/neural-descriptor-reuse-20261028/experiments/native_owner_hot_20261028/compile_engine.mojo -o /Users/andrewhendel/mojolearn-evidence/neural-descriptor-reuse-20261028/compile_engine",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/neural-descriptor-reuse-20261028/compile_engine",
+  "binary_sha256": "9c3682d4c71e369f497c193c51f097f302f8ff7a6783cefe4f7c5ee3ebc1ddf3",
+  "log": "/Users/andrewhendel/mojolearn-evidence/neural-descriptor-reuse-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/neural-descriptor-reuse-20261028/source-sha256.json",
+  "source_manifest_scope": "All tracked Mojo files plus Pixi manifest/lock; conservative superset, not all files compiled",
+  "modified_source_sha256": {
+    "providers/python/neural_descriptor_pyapi.mojo": "24ac06fb14ccdda4d017f78aaba2896276c06fd9a1cae09ffda89f12d46d7c6f"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}
