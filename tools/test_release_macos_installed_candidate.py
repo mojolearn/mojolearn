@@ -1,5 +1,6 @@
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -21,6 +22,55 @@ class RetainedCandidateTests(unittest.TestCase):
 
     def write_manifest(self):
         (self.root / "bindings/development_groups.json").write_text(json.dumps(self.manifest))
+
+    def corpus_repository(self):
+        from verify_linux_surface_qualification import CORPUS_CASES
+        repo = self.root / 'repo'
+        repo.mkdir()
+        def git(*args):
+            return subprocess.check_output(['git', '-C', str(repo), *args], stderr=subprocess.DEVNULL).decode().strip()
+        git('init', '-q')
+        git('config', 'user.email', 'fixture@example.invalid')
+        git('config', 'user.name', 'Fixture')
+        (repo / '.gitattributes').write_text('/mamba/corpus/** export-ignore\n')
+        for case in CORPUS_CASES:
+            directory = repo / 'mamba/corpus' / case
+            directory.mkdir(parents=True)
+            (directory / 'x.f32').write_bytes(b'frozen operand')
+            (directory / 'ref.f64').write_bytes(b'frozen reference')
+        git('add', '.')
+        git('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'corpus fixture')
+        return repo, git('rev-parse', 'HEAD'), CORPUS_CASES
+
+    def test_export_ignored_operands_restored_from_frozen_blobs(self):
+        repo, commit, cases = self.corpus_repository()
+        # A dirty checkout must not replace the frozen expectation.
+        (repo / 'mamba/corpus' / cases[0] / 'x.f32').write_bytes(b'changed checkout')
+        stage = self.root / 'stage'
+        report = candidate.stage_smoke_corpora(repo, commit, stage)
+        self.assertEqual(len(report['files']), 6)
+        self.assertEqual(report['source_commit'], commit)
+        for name, row in report['files'].items():
+            content = (stage / name).read_bytes()
+            self.assertNotEqual(content, b'changed checkout')
+            self.assertEqual(hashlib.sha256(content).hexdigest(), row['sha256'])
+
+    def test_staged_corpus_mutation_refused(self):
+        repo, commit, cases = self.corpus_repository()
+        stage = self.root / 'stage'
+        candidate.stage_smoke_corpora(repo, commit, stage)
+        (stage / 'mamba/corpus' / cases[0] / 'x.f32').write_bytes(b'wrong')
+        with self.assertRaisesRegex(ValueError, 'differs from frozen blob'):
+            candidate.stage_smoke_corpora(repo, commit, stage)
+
+    def test_absent_frozen_case_refused(self):
+        repo, commit, cases = self.corpus_repository()
+        subprocess.run(['git', '-C', str(repo), 'rm', '-r', 'mamba/corpus/' + cases[-1]],
+                       check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(['git', '-C', str(repo), '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'remove case'], check=True)
+        missing = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD']).decode().strip()
+        with self.assertRaisesRegex(ValueError, 'missing frozen smoke corpus'):
+            candidate.stage_smoke_corpora(repo, missing, self.root / 'stage')
 
     def test_truthful_single_member_indexes(self):
         result = candidate.native_indexes(self.root, self.records)
