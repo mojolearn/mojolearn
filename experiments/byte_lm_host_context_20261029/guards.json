@@ -1,0 +1,14 @@
+{
+  "source_commit": "4518ab85287f2ce0347f99eaf43ad68247e2cdcb",
+  "base": "3fa5fac6d0bef136a42066134926bea90275e268",
+  "ref": "refs/heads/lane/byte-lm-host-context-20261029",
+  "command": [
+    "sh",
+    "tools/hooks/pre-push",
+    "origin",
+    "source-only-review"
+  ],
+  "exit_code": 0,
+  "seconds": 42.017130792024545,
+  "scope": "Required source/push guards, committed ref; no push"
+}
