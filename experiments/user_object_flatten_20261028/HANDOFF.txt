@@ -1,0 +1,74 @@
+Prepared native user-object flattening (2026-10-28)
+
+Branch: lane/user-object-inputs-20261028
+Product commit: 730d04197e0d153589f65eef6f64320ad36a069e
+Scope: user_objects_native flatten route + dedicated user_object_flatten.
+
+Removed work/setup:
+Flatten bypasses legacy _Env: no builtins/numbers/operator/array import calls
+or ABC/sequence metadata construction. Exact builtin/container type owners
+are prepared once. Exact list/tuple slots use native GetItem APIs and output
+uses native PyList_Append. Generic hasattr(o,"tolist") and arbitrary o.tolist
+callbacks are gone. Supported extension tolist descriptors are admitted and
+retained once per exact encountered type, then called unbound.
+
+Supported behavior/refusals:
+Mixed exact lists/tuples and builtin str/bytes/bytearray/int/float/bool/complex/
+None leaves retain order and primitive reference identity. Native array.array,
+memoryview and static native NumPy arrays/scalars keep native tolist boxing.
+Python heap subclasses, metaclass hooks and custom tolist protocols are
+refused before invocation. A native scalar tolist result that remains a scalar
+(e.g. longdouble) is boxed once, not recursively reconverted. Structured/nested
+native results recurse through the same exact-container admission. Arbitrary
+custom conversion is explicitly refused, rather than executing its hook.
+
+mojolearn Array:
+The loaded module/context/class schema is captured once on first foreign
+input, through native module dictionary reads and exact string-key checks.
+Each Array separately validates/captures native slots and retained storage
+via native_array_snapshot. Shape/strides/dtype/count/address become native
+words once. Native scalar loads traverse logical C order for C/Fortran
+storage; rank-zero and zero-sized shapes follow captured count semantics.
+All supported Array f16/f32/f64 and signed/unsigned integer dtypes remain.
+No Python Array.tolist, C-order recopy, nested result list or re-flattening
+is needed. Numerical kernel/order logic is untouched.
+
+Lifetime/invalidation:
+All admission/cache state is local to one operation. Primitive references,
+class owners and descriptors stay owned. Each Array snapshot revalidates its
+live metadata and retains the native export through scalar publication.
+Native GetItem keeps bounds checks if a source list shortens. Python custom
+conversion/iteration overrides are never admitted by this reader. No GIL
+release or persistent cache is introduced. Unknown custom objects/protocols
+are refused; other user-object operations retain their legacy behavior.
+
+Compilation/evidence:
+The user_objects_call CPU source closure compiled, exit0, O0/identical,
+Mojo1.0.0, compile_slot.sh default2. No binary executed, no runtime, identity,
+performance or device campaign. A failed parse used reserved parameter name
+out; corrected to output, full failed log retained. An earlier attempt
+reported exit1 but its evidence directory disappeared before inspection;
+no compile coverage is claimed for it. Parent subsequently reported that
+user disk cleanup had removed several old evidence artifacts; exact deletion
+ownership/content is not inferred here. Current compile outputs are retained.
+
+Newest audit read without edits:
+/Users/andrewhendel/mojolearn-evidence/py-runtime-audit-20261028/callbacks.tsv
+Its 28 prohibited_user_object rows were inspected; none named user_objects.
+The removed generic hasattr/tolist is an additional direct-source finding,
+not a claimed resolution of those 28 rows. The audit file was absent on final
+receipt creation (FileNotFoundError). External reports were never modified.
+
+Limits/next work:
+Legacy nested/ints/floats/kinds/group helpers still contain generic conversion
+and ABC paths; they require further operation-specific admission repairs.
+Native extension tolist boxing remains for non-Array native inputs. Scalar
+publication still boxes final Python values and performs native append calls.
+Recursive container traversal has the inherited recursion/cycle limitations.
+No claim of complete migration or measured speedup.
+
+Full current evidence:
+/Users/andrewhendel/mojolearn-evidence/user-object-flatten-20261028/
+compile.log/.exit, parse-failed-compile.log/.exit, initial-attempt.txt, binary,
+source-sha256.json, and source-guard logs/exit files. compile.json records the
+exact command, source/binary hashes and sparse-checkout compilation scope.
