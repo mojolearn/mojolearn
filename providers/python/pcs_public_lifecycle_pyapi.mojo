@@ -3,7 +3,7 @@
 # finite/width checks and both fit_transform stages; target owners survive it.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.native_loaded_module import native_loaded_module, _loaded_fields
+from bindings.native_loaded_module import NativeModules, native_loaded_module, _loaded_fields
 from bindings.mode_metadata_native import _fields, _class_fields, _fitted
 from bindings.classical_attributes import classical_connect_numpy, _type_mro
 from bindings.classical_exceptions import classical_not_fitted_class
@@ -93,7 +93,8 @@ def pcs_public_begin(model: PythonObject, operation: String, args: PythonObject,
     var b = native_loaded_module("builtins")
     var fields = _fields(model)
     var attributes = py_get(_loaded_fields(native_loaded_module("mojolearn._native_public_attributes")), "_CONTEXT")
-    var plan = _plan(model, attributes)
+    var modules = NativeModules()
+    var plan = _plan(modules, model, attributes)
     var fitting = operation != "family_xn_pcs_transform"
     var method = String("fit") if operation == "family_xn_pcs_fit" else String("fit_transform") if fitting else String("transform")
     var ancestry = _type_mro(py_type(model))
@@ -149,7 +150,8 @@ def pcs_feature_names(model: PythonObject, context: PythonObject) raises -> Pyth
     var b = native_loaded_module("builtins")
     var fields = _fields(model)
     var attributes = py_get(_loaded_fields(native_loaded_module("mojolearn._native_public_attributes")), "_CONTEXT")
-    var plan = _plan(model, attributes)
+    var modules = NativeModules()
+    var plan = _plan(modules, model, attributes)
     var count = _lookup(model, PythonObject("n_components"), fields, plan, attributes)
     host_inference_scalar(count, context)
     var length = Int(py=py_call(b.int, host_inference_primitive_number(count, context, True)))

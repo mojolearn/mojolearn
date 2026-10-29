@@ -4,7 +4,7 @@
 # inside this one native operation. The existing algorithm owners are retained;
 # their legacy extension dispatch remains separately tracked migration debt.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.public_attributes_native import _plan, _lookup, _string_keys
@@ -49,7 +49,8 @@ def _admit_model(model: PythonObject, context: PythonObject) raises -> PythonObj
     if py_type(attributes) is not b.dict:
         raise Error("TypeError: native cluster attribute metadata requires its connected dictionary")
     _string_keys(attributes)
-    var plan = _plan(model, attributes)
+    var modules = NativeModules()
+    var plan = _plan(modules, model, attributes)
     var fields = _fields(model)
     var ancestry = _type_mro(py_type(model))
     var parameters = PythonObject(None)

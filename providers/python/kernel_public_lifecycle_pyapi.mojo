@@ -3,7 +3,7 @@
 # numerical owner retains operation-local input descriptors through completion.
 from std.python import Python, PythonObject
 from std.math import isfinite
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native import _fields, _fitted
 from bindings.public_attributes_native import _plan, _lookup, _string_keys
@@ -35,7 +35,8 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
     if py_type(attributes) is not py_type(Python.dict()):
         raise Error("TypeError: kernel methods require their native attribute metadata")
     _string_keys(attributes)
-    var plan = _plan(model, attributes)
+    var modules = NativeModules()
+    var plan = _plan(modules, model, attributes)
     var ancestry = _type_mro(py_type(model))
     var parameters = PythonObject(None)
     for i in range(len(ancestry)):  # driver-loop: passive subclasses inherit the connected schema

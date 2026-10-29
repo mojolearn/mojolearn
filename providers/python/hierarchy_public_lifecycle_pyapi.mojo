@@ -4,7 +4,7 @@
 # dedicated owner; moving this envelope does not make those calls descriptor ABI.
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module, _loaded_fields
+from bindings.native_loaded_module import NativeModules, native_loaded_module, _loaded_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _class_fields, _fitted
 from bindings.public_attributes_native import _plan, _lookup
@@ -57,7 +57,8 @@ def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> Pyt
         raise Error("TypeError: native hierarchy operations refuse Python metaclass hooks")
     var fields = _fields(model)
     var attributes = py_get(_loaded_fields(native_loaded_module("mojolearn._native_public_attributes")), "_CONTEXT")
-    var plan = _plan(model, attributes)
+    var modules = NativeModules()
+    var plan = _plan(modules, model, attributes)
     var ancestry = _type_mro(py_type(model))
     var setter_seen = False
     for i in range(len(ancestry)):  # driver-loop: passive subclass storage admission

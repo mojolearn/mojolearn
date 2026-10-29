@@ -4,7 +4,7 @@
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.native_loaded_module import native_loaded_module, _loaded_fields
+from bindings.native_loaded_module import NativeModules, native_loaded_module, _loaded_fields
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.classical_attributes import classical_connect_numpy, _type_mro
 from bindings.public_attributes_native import _plan, _lookup
@@ -30,7 +30,8 @@ def radius_settings(model: PythonObject, context: PythonObject) raises -> Python
     var b = native_loaded_module("builtins")
     var fields = _fields(model)
     var attributes = py_get(_loaded_fields(native_loaded_module("mojolearn._native_public_attributes")), "_CONTEXT")
-    var plan = _plan(model, attributes)
+    var modules = NativeModules()
+    var plan = _plan(modules, model, attributes)
     var ancestry = _type_mro(py_type(model))
     var setter_seen = False
     for i in range(len(ancestry)):  # driver-loop: native field writes and fit callbacks are admitted before mutation
