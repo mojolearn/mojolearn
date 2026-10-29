@@ -74,8 +74,15 @@ def test_mamba3_carried_state_refuses_descriptors_before_reading_them(monkeypatc
         calls.append(field)
         raise AssertionError("descriptor was invoked before admission")
 
-    monkeypatch.setattr(type(state), field, property(forbidden), raising=False)
-    with pytest.raises(TypeError, match="dictionary|descriptor"):
+    if field == "__dict__":
+        # CPython forbids replacing a class object's own __dict__ attribute.
+        # An ordinary subclass can legally shadow the instance descriptor.
+        state.__class__ = type("DictionaryHookState", (type(state),),
+                               {"__dict__": property(forbidden)})
+    else:
+        monkeypatch.setattr(type(state), field, property(forbidden), raising=False)
+    refusal = "exact connected native class" if field == "__dict__" else "dictionary|descriptor"
+    with pytest.raises(TypeError, match=refusal):
         block.step(_tokens(1, 1, dm), state)
     assert calls == []
 
@@ -114,7 +121,7 @@ def test_decode_session_refuses_replaced_handle_descriptor(monkeypatch):
         session.close()
 
 
-def test_mamba3_native_cpu_route_does_not_invoke_class_descriptor(monkeypatch):
+def test_mamba3_native_route_does_not_invoke_class_descriptor():
     block, dm = _block("mamba3")
     calls = []
 
@@ -122,9 +129,11 @@ def test_mamba3_native_cpu_route_does_not_invoke_class_descriptor(monkeypatch):
         calls.append("class")
         raise AssertionError("__class__ descriptor was invoked")
 
-    with monkeypatch.context() as patch:
-        patch.setattr(type(block), "__class__", property(forbidden), raising=False)
-        block.forward(_tokens(1, 1, dm))
+    # Define the instance descriptor on a subclass; setting __class__ on the
+    # class object itself instead attempts to replace its metaclass.
+    block.__class__ = type("ClassHookBlock", (type(block),),
+                           {"__class__": property(forbidden)})
+    block.forward(_tokens(1, 1, dm))
     assert calls == []
 
 
@@ -159,7 +168,8 @@ def test_mamba3_entry_selection_refuses_replaced_namespace_hooks(monkeypatch):
             raise AssertionError("entry namespace hook was invoked before admission")
 
     route = block.__dict__["_native_route"]
-    mode = "identical" if route == "cpu" else block.__dict__["numeric_mode"]
+    mode = "identical" if route == "cpu" else (
+        block.__dict__["numeric_mode"] or ml._backend.default_mode())
     key = route + ":" + mode
     with monkeypatch.context() as patch:
         patch.setitem(context["bindings"][key], "mamba3", EntryHook())
