@@ -1,0 +1,15 @@
+Apple x_sequence shipping owner rebuild — source 4e1797c8c3
+
+Both affected owners use providers/python/framework_metadata_pyapi.mojo. Existing C-entry compile was not treated as a shipping image. Actual supported development producer compiled host x_sequence (207.42s) and Apple identical x_sequence (343.49s), both exit 0, O0 and 10 workers, one compiler at a time under compile_slot. Allocation is10 Mac CPUs; configured worker count is not a saturation claim.
+
+The private cache intentionally contains only 2 of 79 groups. Controller exit 3 is the documented incomplete-set activation result, not a compiler failure. Portable-math support also built0. No full development index or active install was replaced.
+
+282 host / 306 GPU source paths (588 including duplicates) match final producer closures. Neither closure overlaps actual pending sampler lane changes from their merge bases. Both public member PyInit exports exist. Original compiler / build scripts/commands/source bytes and generated entry roots are retained.
+
+Standard stage_dylibs and portable_math staging both passed. All 5 final runtime libraries exactly match accepted immutable 2d775c candidate. Only 2 owner bytes change; other 77 images, frozen 2d install and wheel remain untouched. Initial stage_dylibs-only receipt/diffs and preliminary archive remain historical; completing the required portable-math step produced exact accepted runtime bytes.
+
+No installed runtime, adapter smoke, identity or cross-vendor campaign ran. Final composition/loader boundary and actual adapter checks remain pending after the joined source freeze. Compilation is not runtime qualification.
+
+Complete evidence and raw/staged images: ~/mojolearn-evidence/adapter-version-owner-build-20261029/. Mac/R2 retention receipt is copied alongside this handoff after verified readback. Root alone integrates evidence and future assembled candidate.
+
+Four required source guards and diff check passed (exit 0). Complete raw/staged binary archive is 70,639,506 bytes, SHA256 e77a41d1ee973422c1799005621bb8ed48f344cfc53e927b683a91bf8ec949ad. R2 PUT/GET returned 200 and readback hash matched. See retention.json for exact object key.

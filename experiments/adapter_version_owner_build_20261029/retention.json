@@ -1,0 +1,11 @@
+{
+  "archive": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/complete-owner-evidence.tgz",
+  "sha256": "e77a41d1ee973422c1799005621bb8ed48f344cfc53e927b683a91bf8ec949ad",
+  "bytes": 70639506,
+  "members": 63,
+  "r2_key": "measurements/adapter-version-owner-build-20261029/complete-owner-evidence.tgz",
+  "put_status": 200,
+  "readback_status": 200,
+  "readback_sha256": "e77a41d1ee973422c1799005621bb8ed48f344cfc53e927b683a91bf8ec949ad",
+  "verified": true
+}
