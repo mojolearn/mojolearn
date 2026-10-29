@@ -1,0 +1,86 @@
+Resident LM read scratch and paired input scan reuse (2026-10-28)
+
+Branch: lane/lm-read-workspaces-20261028, base main49875eb068.
+Dependencies, integrated separately by root:
+- ef4ec325382d8b655dddd9b40ef8a984d5f67455: DeviceNonfinitePair implementation.
+  Neural peer evidence-only follow-up5452dedbbcf3f327f28ec469858085ab3eafc966.
+- 1538de848f: generation-owned omitted Mamba workspace argument repair.
+This batch edits only transformer/transformer_binding_impl.mojo plus evidence.
+
+Repeated work removed:
+_lm_run allocated five private GPU buffers x/sumsq/hn/logits/GEMM workspace on
+EVERY token. They now belong to one typed read-local workspace and retain exact
+logical extents while unchanged. Prompt-to-decode length change replaces each
+only when its exact extent changes; subsequent decode tokens reuse it after the
+existing step synchronization. GEMM workspace sizing is memoized by m/v/d and
+packed-head mode for the same operation. Logit row view List ownership is also
+operation-local, cleared only after its transfers complete.
+_lm_layers_run prefill allocated a fresh input-copy buffer per layer. One local
+buffer now serves sequential compatible layers; changed extents replace it
+only after the previous layer's existing synchronization. Per-layer stages are
+still freshly constructed with that layer's dimensions/window/lean policy.
+Existing decode session dx/stages remain retained exactly as before.
+
+Paired refusal integration:
+At the original first refusal point, lazily construct DeviceNonfinitePair with
+capacity max(prompt,decode) and the admitted final-norm flag. It uses the SAME
+existing nonfinite_partial_kernel/fold geometry for x and hn, copies only live
+partials and completes both before one wait. Inspect x failure first, then hn,
+before consumed progress or token selection. No-norm skips the first slot;
+zero-step paths do not allocate/check the pair. The status/EOS selection wait
+and failure-progress publication remain in their original positions. No new
+scan arithmetic or host prediction scan was added.
+
+Setup/reuse/invalidation/lifetimes:
+All new scratch is PRIVATE TO ONE read; no cross-call data or mutable metadata
+cache. Exact buffer lengths preserve whole-buffer copy and kernel contracts.
+Embedding/norm/head/GEMM producers populate current live values on every step;
+no stale result reuse or extra zeroing. Copies into per-layer inputs remain.
+Existing head/session ownership and reservation rules are unchanged. Scratch
+cannot escape through public outputs, which still receive the same copied data.
+On failure, drains occur while scratch, logit transfer views and any partially
+constructed prefill stages are pinned; drain errors cannot replace the original
+operation error. Storage drops at operation exit. No next-call cache can become
+poisoned; no added normal-path synchronization. Paired scans reduce two input
+check waits to one when final norm is present, without moving selection ahead
+of validation.
+
+Scope/limits:
+Read-only allocation reuse, not new arithmetic/routes. _lm_forward_run retains
+its one-call head scratch setup; it benefits from prefill input reuse through
+_lm_layers_run. Layer prefill stages, output-id/status/EOS storage per read, and
+internal kernel workspace/scan allocations outside these two checks remain.
+No cross-read session cache, public output aliasing or mutable admission bypass.
+No performance measurement or quantified speed claim.
+
+Compilation and review:
+Native actual transformer_lm_resident_operation closure (open/forward/run/read/
+reservation lifecycle) compiled exit0,45.68s, Apple GPU identical O0 on CPU host,
+NO COLUMN_CPU substitution. Includes real paired GPU scans and both LM routes.
+Actual causal_public_c[3,5,7] forward/read/generate boundary compiled exit0,
+17.87s, Apple CPU identical O0. Each used10 configured workers via compile_slot.
+Compilations were never executed. GPU vendor runtime/identity/performance and
+NVIDIA/AMD target compilation remain unqualified.
+
+The initial broader public compile failed exit1 in4.29s on the earlier Mamba
+plumbing default PythonObject(None): omitted _run_snapshot arguments requested
+compile-time CPython initialization. Generation peer repaired three omitted
+calls in1538de848f. Failed full logs/source and receipt retained in
+boundary-before-default-repair. Native source/closure did not change after its
+successful compile, so that build was reused. Source review by neural peer found
+no remaining progress/owner/invalidation blocker; helper standalone compile is
+separate evidence, never promoted to public/runtime qualification.
+
+Evidence:
+~/mojolearn-evidence/lm-read-workspaces-20261028/{native,boundary}/
+  compile.log, compile.json, _lm_read_workspace.so,
+  source-bytes.tgz, source-manifest.json
+Original failed boundary evidence remains in boundary-before-default-repair;
+its receipt paths map by filename from the former boundary directory.
+Source-guard and retained-file hash results accompany the final commit.
+
+Final guards: no_host_routes, no_python_in_kernels, no_compute_in_shells and
+rebuild_fence all exit0 without override. Thirteen retained checks matched:
+accepted binaries, all original/final source archives and logs, native caller/
+helper bytes, and final public-boundary bytes. Native archive's older provider
+snapshot is explicitly outside its compiled native dependency closure.

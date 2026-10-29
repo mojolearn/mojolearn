@@ -35,6 +35,7 @@ from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 from core.identity_trace import IdentityTrace
 from core.resident_generation_read import ResidentGreedyRead
 from core.device_scan import device_first_nonfinite
+from core.device_nonfinite_pair import DeviceNonfinitePair
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -2170,6 +2171,52 @@ def _lm_open_run_int15(
 
 
 
+def _lm_scratch_buffer(ctx: DeviceContext, mut buffer: Optional[DeviceBuffer[DType.float32]], n: Int) raises:
+    # Exact extents keep whole-buffer copies and checked kernel layouts honest.
+    # Callers replace storage only after the preceding phase synchronized.
+    if not buffer or len(buffer.value()) != n:
+        buffer = ctx.enqueue_create_buffer[DType.float32](n)
+
+
+struct _LMRunWorkspace(Movable):
+    """Private scratch for one resident read; no output or input alias escapes.
+    Each producer overwrites its full logical output, as with fresh allocation.
+    Prompt-to-decode changes replace exact-sized buffers once; later tokens
+    reuse them only after the existing end-of-step synchronization.
+    """
+    var x: Optional[DeviceBuffer[DType.float32]]
+    var sumsq: Optional[DeviceBuffer[DType.float32]]
+    var hn: Optional[DeviceBuffer[DType.float32]]
+    var logits: Optional[DeviceBuffer[DType.float32]]
+    var ws: Optional[DeviceBuffer[DType.float32]]
+    var ws_rows: Int
+    var ws_vocab: Int
+    var ws_width: Int
+    var ws_packed: Bool
+
+    def __init__(out self):
+        self.x = None
+        self.sumsq = None
+        self.hn = None
+        self.logits = None
+        self.ws = None
+        self.ws_rows = -1
+        self.ws_vocab = 0
+        self.ws_width = 0
+        self.ws_packed = False
+
+    def prepare_gemm(mut self, ctx: DeviceContext, rows: Int, vocab: Int, width: Int, packed: Bool) raises:
+        if not self.ws or self.ws_rows != rows or self.ws_vocab != vocab or self.ws_width != width or self.ws_packed != packed:
+            var n = 1
+            if not packed:
+                n = identical_gemm_workspace_max_floats(rows, vocab, width)
+            _lm_scratch_buffer(ctx, self.ws, n)
+            self.ws_rows = rows
+            self.ws_vocab = vocab
+            self.ws_width = width
+            self.ws_packed = packed
+
+
 def _lm_layers_run(
     ctx: DeviceContext, layers: List[Int], mut x: DeviceBuffer[DType.float32], b: Int, l: Int,
 ) raises:
@@ -2177,29 +2224,43 @@ def _lm_layers_run(
     output): at l = 1 on the session's own L = 1 stages and resident x buffer
     (`_session_step_run`), otherwise on call-shaped stages
     (`_session_forward_run`)."""
-    for i in range(len(layers)):
-        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
-        var trace = IdentityTrace.disabled()
-        var pos0 = sp[].kv.value().s
-        if l == 1:
-            ctx.enqueue_copy(dst_buf=sp[].dx.value(), src_buf=x)
-            llama_decoder_layer_forward(
-                ctx, sp[].stages.value(), sp[].kv.value(), sp[].rope.value(), sp[].w.value(),
-                sp[].dx.value(), sp[].b, 1, pos0, trace, String("py.session"))
-            ctx.enqueue_copy(dst_buf=x, src_buf=sp[].stages.value().residual2)
-        else:
-            var dims = LlamaDims(sp[].dm, sp[].nh, sp[].nkv, sp[].hd, sp[].it)
-            var stages = LlamaDeviceStages(ctx, sp[].b, l, sp[].smax, dims, sp[].window,
-                                           lean=_lean_for_w(sp[].hd, sp[].w.value()))
-            var dx = ctx.enqueue_create_buffer[DType.float32](b * l * sp[].dm)
-            ctx.enqueue_copy(dst_buf=dx, src_buf=x)
-            llama_decoder_layer_forward(
-                ctx, stages, sp[].kv.value(), sp[].rope.value(), sp[].w.value(), dx, sp[].b, l,
-                pos0, trace, String("py.session.forward"))
-            ctx.enqueue_copy(dst_buf=x, src_buf=stages.residual2)
+    var prefill_input = Optional[DeviceBuffer[DType.float32]]()
+    var prefill_stages = Optional[LlamaDeviceStages]()
+    try:
+        for i in range(len(layers)):
+            var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
+            var trace = IdentityTrace.disabled()
+            var pos0 = sp[].kv.value().s
+            if l == 1:
+                ctx.enqueue_copy(dst_buf=sp[].dx.value(), src_buf=x)
+                llama_decoder_layer_forward(
+                    ctx, sp[].stages.value(), sp[].kv.value(), sp[].rope.value(), sp[].w.value(),
+                    sp[].dx.value(), sp[].b, 1, pos0, trace, String("py.session"))
+                ctx.enqueue_copy(dst_buf=x, src_buf=sp[].stages.value().residual2)
+            else:
+                var dims = LlamaDims(sp[].dm, sp[].nh, sp[].nkv, sp[].hd, sp[].it)
+                prefill_stages = LlamaDeviceStages(ctx, sp[].b, l, sp[].smax, dims, sp[].window,
+                                                  lean=_lean_for_w(sp[].hd, sp[].w.value()))
+                ref stages = prefill_stages.value()
+                _lm_scratch_buffer(ctx, prefill_input, b * l * sp[].dm)
+                ref dx = prefill_input.value()
+                ctx.enqueue_copy(dst_buf=dx, src_buf=x)
+                llama_decoder_layer_forward(
+                    ctx, stages, sp[].kv.value(), sp[].rope.value(), sp[].w.value(), dx, sp[].b, l,
+                    pos0, trace, String("py.session.forward"))
+                ctx.enqueue_copy(dst_buf=x, src_buf=stages.residual2)
+                ctx.synchronize()
+                prefill_stages = None
+    except original:
+        # Drain while the reused copy and any partially used stages stay live.
+        try:
             ctx.synchronize()
-            _ = stages^
-            _ = dx^
+        except:
+            pass
+        raise original^
+    finally:
+        _ = prefill_stages
+        _ = prefill_input
 
 
 
@@ -2252,6 +2313,9 @@ def _lm_run(
         if len(read[].eos) > 0:
             ctx.enqueue_copy(dst_buf=eos_device.value(), src_ptr=read[].eos.unsafe_ptr())
     var output_rows = List[DeviceBuffer[DType.int32]]()
+    var logits_rows = List[DeviceBuffer[DType.float32]]()
+    var workspace = _LMRunWorkspace()
+    var finite_checks = Optional[DeviceNonfinitePair]()
     var progress_synchronized = True
     try:
         var cur_l = l
@@ -2266,43 +2330,43 @@ def _lm_run(
                 if consumed > read[].cache_remaining:
                     raise Error("causal lm resident: additional positions do not fit the cache")
             var m = b * cur_l
-            var x = ctx.enqueue_create_buffer[DType.float32](m * d)
+            _lm_scratch_buffer(ctx, workspace.x, m * d)
+            ref x = workspace.x.value()
             if step == 0:
                 identical_embedding_forward_into(ctx, x, s.embed.value(), ids0, m, emb_cfg)
             else:
                 identical_embedding_forward_into(ctx, x, s.embed.value(), next_ids, m, emb_cfg)
             _lm_layers_run(ctx, layers, x, b, cur_l)
-            var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
-            var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
+            _lm_scratch_buffer(ctx, workspace.sumsq, m)
+            _lm_scratch_buffer(ctx, workspace.hn, m * d)
+            ref sumsq = workspace.sumsq.value()
+            ref hn = workspace.hn.value()
             if s.norm:
                 llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
             else:
                 # No final norm (LM_RESIDENT_GENERATE): the head reads the stack
                 # output, as the per-layer route's head does; a copy, no arithmetic.
                 ctx.enqueue_copy(dst_buf=hn, src_buf=x)
-            var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
-            var ws_n = 1
-            if not s.head15:
-                ws_n = identical_gemm_workspace_max_floats(m, v, d)
-            var ws = ctx.enqueue_create_buffer[DType.float32](ws_n)
+            _lm_scratch_buffer(ctx, workspace.logits, m * v)
+            workspace.prepare_gemm(ctx, m, v, d, Bool(s.head15))
+            ref logits = workspace.logits.value()
+            ref ws = workspace.ws.value()
             if s.head15:
                 llama_int15_proj(ctx, s.st15.value(), logits, hn, s.head15.value(), m, v, d)
             elif s.tied:
                 identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
             else:
                 identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
-            # lane cgr4-download-loop: the two refusals scan on the device (the
-            # first index by an integer minimum), not two m x d downloads walked
-            # on the host
-            if s.norm:
-                # Without a norm only the head's input scan applies (on `hn`, the
-                # copy of `x`), as on the per-layer route.
-                var bad_x = device_first_nonfinite(ctx, x, m * d)
-                if bad_x >= 0:
-                    raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
-            var bad_hn = device_first_nonfinite(ctx, hn, m * d)
-            if bad_hn >= 0:
-                raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))
+            # The same independent x/hn scans share one completion wait.
+            # Lazily prepare at the original refusal point (not for zero steps)
+            # and keep x error priority before progress or selection commits.
+            if not finite_checks:
+                finite_checks = DeviceNonfinitePair(ctx, max(b * l * d, b * d), Bool(s.norm))
+            var bad = finite_checks.value().first_nonfinite(ctx, x, hn, m * d)
+            if bad[0] >= 0:
+                raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad[0]))
+            if bad[1] >= 0:
+                raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad[1]))
             if read_address != 0:
                 read[].consumed += cur_l
             if read_address == 0:
@@ -2326,20 +2390,14 @@ def _lm_run(
                     grid_dim=(1, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
                 )
                 ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(), src_buf=summary_device.value())
-            var rows = List[DeviceBuffer[DType.float32]]()
             if p_logits != 0 and step == n_steps - 1:
                 var lp = _f32_ptr(p_logits)
                 for r in range(b):
-                    rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
-                    ctx.enqueue_copy(dst_ptr=lp + r * v, src_buf=rows[r])
+                    logits_rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
+                    ctx.enqueue_copy(dst_ptr=lp + r * v, src_buf=logits_rows[r])
             ctx.synchronize()
             progress_synchronized = True
-            _ = rows^
-            _ = x^
-            _ = sumsq^
-            _ = hn^
-            _ = logits^
-            _ = ws^
+            logits_rows.clear()
             cur_l = 1
             if read_address != 0:
                 if status[1] >= 0:
@@ -2367,8 +2425,17 @@ def _lm_run(
                 # Device/readback failure cannot replace the original model or
                 # policy error. progress_ready stays false after a partial copy.
                 _ = recovery
+        # Keep all read-owned scratch and transfer views live through failure
+        # completion too; cleanup cannot replace the original operation error.
+        try:
+            ctx.synchronize()
+        except:
+            pass
         raise original
     finally:
+        _ = finite_checks
+        _ = workspace
+        _ = logits_rows
         _ = ids0^
         _ = next_ids^
         _ = out_dev^

@@ -1,0 +1,72 @@
+[
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/lm-read-workspaces-20261028/native/source-bytes.tgz",
+    "sha256": "a8cfbc3b8e1f1af17ffb75b8970b4c9552556993d76630209951ae692500086f",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/lm-read-workspaces-20261028/native/_lm_read_workspace.so",
+    "sha256": "3f0d6bc8d5c4a1ec6ebfa16b9b37b145297915c2a7dc37d286db93430ae0154a",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/lm-read-workspaces-20261028/native/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/lm-read-workspaces-20261028/boundary/source-bytes.tgz",
+    "sha256": "d930f96ace484d219e00e46d410e8055f2464fb22a1246e336b5dc7e8e00f308",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/lm-read-workspaces-20261028/boundary/_lm_read_workspace.so",
+    "sha256": "babb2e201a788fab23f7bd68abb652058dc4c33bc9b65fa2f637038b014488a7",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/lm-read-workspaces-20261028/boundary/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/lm-read-workspaces-20261028/boundary-before-default-repair/source-bytes.tgz",
+    "sha256": "d4660c4aaf436f80ce1e2fe7b966597c9bd05626aeae09098771ccd247290723",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/lm-read-workspaces-20261028/boundary-before-default-repair/compile.log",
+    "exists": true,
+    "exit_code": 1
+  },
+  {
+    "source": "transformer/transformer_binding_impl.mojo",
+    "compile": "native",
+    "sha256": "5d0262bbf1853bff924801b8e8ec57708deef36d810bf832481f39c7f828f391",
+    "matches_manifest": true
+  },
+  {
+    "source": "core/device_nonfinite_pair.mojo",
+    "compile": "native",
+    "sha256": "d5a126fe0a1375b93dbd72d10fda9a8e9bb2a1b2229c8d8319d302c3cd7c59d2",
+    "matches_manifest": true
+  },
+  {
+    "source": "transformer/transformer_binding_impl.mojo",
+    "compile": "boundary",
+    "sha256": "5d0262bbf1853bff924801b8e8ec57708deef36d810bf832481f39c7f828f391",
+    "matches_manifest": true
+  },
+  {
+    "source": "core/device_nonfinite_pair.mojo",
+    "compile": "boundary",
+    "sha256": "d5a126fe0a1375b93dbd72d10fda9a8e9bb2a1b2229c8d8319d302c3cd7c59d2",
+    "matches_manifest": true
+  },
+  {
+    "source": "bindings/causal_lm_public.mojo",
+    "compile": "boundary",
+    "sha256": "95e89f7369be8bc6a583c7f69d7e2acfe0f36d935f7a1443a02eaffd26353f79",
+    "matches_manifest": true
+  }
+]
