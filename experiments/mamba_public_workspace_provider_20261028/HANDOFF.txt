@@ -52,3 +52,17 @@ Full compile.log/.exit, dylib, source.tar.gz and source-sha256.json retained.
 Earlier successful compile before exact environment alignment retained; missing
 root and mistyped compiler-query manifest failures also retained honestly.
 Source guards recorded in guards.json after product commit.
+
+Final source guards: no_host_routes, no_python_in_kernels and
+no_compute_in_shells each exit0 at product ec6f1fbc1de827b6e3b4b143eadb095bf4c1394c.
+
+Companion native source review (generation lane):
+Reviewed max-q capacity against existing _m2_stage_sizes: L1 has monotone t and
+chunk counts, so q0=CHUNK_SIZE-1 dominates all legal one-step layouts. Reset
+fills only this call's used prefix before rebuilding views in the original
+order, preserving zero/poison policy and full live uploads. Maximum arena
+capacity is retained even after a small-q first call; host view construction,
+logical zeroing and transfers remain. Requested and reviewed exception drain
+while Optional weight/state/stage/input owners remain pinned, with original
+operation error preserved. No blocking issue found by source review; neither
+that review nor compilation is runtime/identity evidence.
