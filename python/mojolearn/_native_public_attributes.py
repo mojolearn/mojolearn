@@ -169,6 +169,12 @@ def connect_classes(package):
         # The generic slot (_mode.PublicOutputsMixin.__getattribute__) uses
         # the same Array/NumPy admission metadata.
         _mode._GENERIC_ATTRIBUTE_CONTEXT['attributes'] = context
+        # Native hierarchy/cluster/kernel lifecycle admission consumes this
+        # same context through the canonical module registry. Connect after
+        # its one-time initialization; lazy class discovery mutates its plans
+        # in place, while replacing the owner must still refuse at native use.
+        from ._native_loaded_modules import connect_module
+        connect_module(__name__, sys.modules[__name__], ('_CONTEXT',))
     context = _CONTEXT
     from ._native_mode_properties import connect as connect_mode_properties
     connect_mode_properties(context, package)
