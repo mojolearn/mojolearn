@@ -9,7 +9,8 @@ that proof preserves the original execution receipt and tested revision.
 
 Configuration under ``dependency_context`` accepts ``apple_toolchain`` (the
 recorded build host toolchain), ``compiler_sha256`` keyed by execution target,
-``cpu_target``, and ``workloads`` keyed by vendor.
+``cpu_target``, ``optional_native_files`` (per-target Boolean presence contracts
+for source-proven optional loaders), and ``workloads`` keyed by vendor.
 Each workload specifies id, lanes, source_inputs (exact recipe/harness paths),
 dataset, settings, boundary, phases and environment. Missing provenance blocks
 the corresponding unit; it never expands to a guessed whole-library rerun.
@@ -384,6 +385,24 @@ def _binding_context(snapshot, vendor, lane, context):
     exclusions = routes.get("mode_exclusions", {}).get("identical", {})
     omitted = {name: exclusions[name] for name in declared if name in exclusions}
     names = declared - omitted.keys()
+    optional_contracts = {}
+    presence = context.get("optional_native_files", {}).get(target, {})
+    selected_layout = sorted(b["key"] for b in snapshot["bindings"] if b["target"] == target)
+    for name in names & routes.get("optional_files", {}).keys():
+        if name not in presence or type(presence[name]) is not bool:
+            continue
+        witness = routes["optional_files"][name]
+        optional_contracts[name] = dict(present=presence[name], predicate=witness,
+                                       selected_layout_sha256=digest(selected_layout))
+        selected = any(b["name"] == name and b["target"] == target for b in snapshot["bindings"])
+        if presence[name] is False:
+            if selected:
+                missing.append("optional absence contradicts selected native layout: " + name)
+            else:
+                # This is an installation contract, not a mode-guard inference.
+                # Runtime admission must also prove absence in its installed manifest.
+                omitted[name] = optional_contracts[name]
+    names -= omitted.keys()
     mapped = {}
     if vendor == "cpu":
         aliases = routes.get("cpu_aliases", {})
@@ -416,8 +435,8 @@ def _binding_context(snapshot, vendor, lane, context):
     if not matched:
         missing.append("no native binding context mapped for lane")
     environment = dict(target=target, toolchain=toolchain, bindings=build_context)
-    if omitted or mapped:
-        environment["loader_routes"] = dict(excluded=omitted, aliases=mapped, sources=routes.get("sources", {}))
+    if omitted or mapped or optional_contracts:
+        environment["loader_routes"] = dict(excluded=omitted, aliases=mapped, optional_files=optional_contracts, sources=routes.get("sources", {}))
     return environment, missing
 
 

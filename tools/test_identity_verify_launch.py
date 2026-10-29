@@ -137,3 +137,22 @@ def test_harness_may_order_the_explicit_lane_set(tmp_path):
     raw = json.dumps(report).encode()
     receipt['report_sha256'] = hashlib.sha256(raw).hexdigest()
     assert L.validate_run(receipt, report, receipt['report_sha256'])['lanes'] == ['lane', 'other']
+
+
+def test_optional_absence_is_checked_against_installed_manifest(tmp_path, monkeypatch):
+    path, record = convert(tmp_path, monkeypatch)
+    contract={'_mojolearn_tokenizer_fast':dict(present=False,predicate=dict(basename='_mojolearn_tokenizer_fast.so'))}
+    C.validate_optional_install_files(record,path,contract)
+    contract['_mojolearn_tokenizer_fast']['present']=True
+    with pytest.raises(ValueError,match='presence differs'):
+        C.validate_optional_install_files(record,path,contract)
+    present={'native':dict(present=False,predicate=dict(basename='native.so'))}
+    with pytest.raises(ValueError,match='presence differs'):
+        C.validate_optional_install_files(record,path,present)
+
+
+def test_optional_absence_cannot_use_unwitnessed_legacy_column(tmp_path,monkeypatch):
+    path, record = convert(tmp_path,monkeypatch)
+    record['verifier_observation'].pop('launch')
+    with pytest.raises(ValueError,match='retained verifier filename'):
+        C.validate_optional_install_files(record,path,{'optional':dict(present=False,predicate=dict(basename='optional.so'))})

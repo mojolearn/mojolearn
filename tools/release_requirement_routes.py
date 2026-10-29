@@ -54,6 +54,78 @@ return _DEFAULT_MODE
 '''
 
 
+
+def optional_file_route(tree, function, constants):
+    """A directly tested native file may be absent from a selected install.
+
+    This proves only the load's availability predicate, not mode exclusivity.
+    The requirement must also bind a selected layout and runtime absence.
+    """
+    imports_os = any(isinstance(n, ast.Import) and any(a.name == 'os' and a.asname in (None, 'os') for a in n.names) for n in tree.body)
+    def root_name(node):
+        while isinstance(node, ast.Attribute):
+            node = node.value
+        return node.id if isinstance(node, ast.Name) else None
+    mutations = any((isinstance(n, (ast.Name, ast.Attribute)) and isinstance(n.ctx, ast.Store)
+                     and root_name(n) in ('os', '_backend'))
+                    or (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == 'setattr'
+                        and n.args and root_name(n.args[0]) in ('os', '_backend')) for n in ast.walk(tree))
+    if not imports_os or mutations:
+        return None
+    for index, guard in enumerate(function.body):
+        if not (isinstance(guard, ast.If) and not guard.orelse and len(guard.body) == 1
+                and isinstance(guard.body[0], ast.Return) and isinstance(guard.test, ast.UnaryOp)
+                and isinstance(guard.test.op, ast.Not) and isinstance(guard.test.operand, ast.Call)):
+            continue
+        returned = guard.body[0].value
+        if isinstance(returned, ast.Name):
+            values = [n.value for n in tree.body if isinstance(n, ast.Assign)
+                      and any(isinstance(t, ast.Name) and t.id == returned.id for t in n.targets)]
+            if len(values) != 1:
+                continue
+            returned = values[0]
+        try:
+            ast.literal_eval(returned)
+        except (ValueError, TypeError):
+            continue
+        exists = guard.test.operand
+        if (_shape(exists.func) != _expression('os.path.exists') or len(exists.args) != 1
+                or exists.keywords or not isinstance(exists.args[0], ast.Name)):
+            continue
+        path = exists.args[0].id
+        assignments = [n for n in ast.walk(function) if isinstance(n, ast.Assign)
+                       and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name) and n.targets[0].id == path]
+        if len(assignments) != 1 or sum(isinstance(n, ast.Name) and n.id == path and isinstance(n.ctx, ast.Store) for n in ast.walk(function)) != 1:
+            continue
+        assignment = assignments[0]
+        before = {id(n) for stmt in function.body[:index] for n in ast.walk(stmt)}
+        if id(assignment) not in before:
+            continue
+        for call in (n for stmt in function.body[index+1:] for n in ast.walk(stmt) if isinstance(n, ast.Call)):
+            if (_shape(call.func) != _expression('_backend._load_member') or len(call.args) != 3 or call.keywords
+                    or not isinstance(call.args[0], ast.Constant) or call.args[0].value not in ('fast', 'identical')
+                    or not isinstance(call.args[1], ast.Name) or _shape(call.args[2]) != _expression(path)):
+                continue
+            tier, symbol = call.args[0].value, call.args[1].id
+            binding = constants.get(symbol)
+            if not binding or not binding.startswith('_mojolearn'):
+                continue
+            expected = f'os.path.join(_backend.tier_dir({tier!r}), {symbol} + ".so")'
+            if _shape(assignment.value) != _expression(expected):
+                continue
+            # An earlier/unconditional load invalidates this optionality proof.
+            uses = [n for n in ast.walk(function) if isinstance(n, ast.Call)
+                    and _shape(n.func) == _expression('_backend._load_member')
+                    and any(isinstance(a, ast.Name) and a.id == symbol for a in n.args)]
+            symbol_reads = sum(isinstance(n, ast.Name) and n.id == symbol and isinstance(n.ctx, ast.Load) for n in ast.walk(function))
+            if len(uses) != 1 or symbol_reads != 2:
+                continue
+            return dict(binding=binding, symbol=symbol, tier=tier, basename=binding+'.so',
+                        function=function.name, availability=ast.unparse(guard.test),
+                        function_sha256=hashlib.sha256(_shape(function).encode()).hexdigest())
+    return None
+
+
 def loader_routes(root, surface):
     """Read the same frozen metadata registry already used by lane_select.
 
@@ -61,7 +133,7 @@ def loader_routes(root, surface):
     map. Unknown loader syntax or unguarded binding uses stay unresolved.
     """
     root = Path(root)
-    sources, aliases, excluded = {}, {}, {}
+    sources, aliases, excluded, optional = {}, {}, {}, {}
 
     def read(path):
         data = (root / path).read_bytes()
@@ -71,7 +143,7 @@ def loader_routes(root, surface):
     backend_path = "python/mojolearn/_backend.py"
     surface_path = "python/mojolearn/host_surface.py"
     if not (root / backend_path).is_file() or not (root / surface_path).is_file():
-        return dict(sources=sources, cpu_aliases=aliases, mode_exclusions=excluded,
+        return dict(sources=sources, cpu_aliases=aliases, mode_exclusions=excluded, optional_files=optional,
                     unresolved=["frozen loader/host registry source unavailable"])
     backend, registry = read(backend_path), read(surface_path)
     assignments = {target.id: node.value for node in backend.body if isinstance(node, ast.Assign)
@@ -126,6 +198,21 @@ def loader_routes(root, surface):
                      and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
                      for target in node.targets if isinstance(target, ast.Name)}
         for function in (node for node in tree.body if isinstance(node, ast.FunctionDef) and not node.decorator_list):
+            candidate = optional_file_route(tree, function, constants)
+            if candidate and literals[candidate['binding']] == 1:
+                symbol = candidate['symbol']
+                descendants = {id(node) for node in ast.walk(function)}
+                outside = any(id(node) not in descendants for node in ast.walk(tree)
+                    if isinstance(node, ast.Name) and node.id == symbol and isinstance(node.ctx, ast.Load))
+                external = any((isinstance(node, ast.ImportFrom) and any(alias.name == symbol or (alias.name == '*' and (node.module or '').split('.')[-1] == path.stem) for alias in node.names))
+                    or (isinstance(node, ast.Attribute) and node.attr == symbol)
+                    or (isinstance(node, ast.Constant) and node.value == symbol)
+                    for other_path, other in parsed if other_path != path for node in ast.walk(other))
+                stores = sum(isinstance(node, ast.Name) and node.id == symbol and isinstance(node.ctx, ast.Store) for node in ast.walk(tree))
+                if not outside and not external and stores == 1:
+                    rel = str(path.relative_to(root))
+                    sources[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+                    optional[candidate['binding']] = dict(candidate, source=rel)
             body = function.body
             if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
                 body = body[1:]
@@ -172,5 +259,5 @@ def loader_routes(root, surface):
                     active_mode=mode, source=rel, function=function.name, guard=ast.unparse(test),
                     declared_default_mode="identical" if mode == "fast" else "fast",
                     function_sha256=hashlib.sha256(_shape(function).encode()).hexdigest())
-    return dict(sources=sources, cpu_aliases=aliases, mode_exclusions=excluded,
+    return dict(sources=sources, cpu_aliases=aliases, mode_exclusions=excluded, optional_files=optional,
                 unresolved=[] if direct else ["frozen CPU loader route could not be proven"])

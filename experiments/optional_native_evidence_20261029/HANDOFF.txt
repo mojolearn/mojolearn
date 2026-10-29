@@ -1,0 +1,65 @@
+OPTIONAL NATIVE FILE DEPENDENCY EVIDENCE — 2026-10-29
+
+Branch lane/verifier-record-admission-20261029, after installed-verifier
+receipt batch 3187bf8960 + 3bd00fbf3d + 41ae216be8.
+Tool-only source dependency/admission repair; no product arithmetic, flags or
+binaries changed, and no fast build or runtime executed.
+
+Observed blocker: clean 7b419bb38d requirements sync exited 0 but all 2288
+identity units had missing _mojolearn_tokenizer_fast native binding context.
+The old mode-exclusive guard proof no longer matches _fast_binding's explicit
+connect_all=True import setup. Restoring that old proof would be false: the
+optional module may be connected during identical import if its file exists.
+
+Repair: source analysis recognizes an exact availability predicate: a normal
+os import; no source reassignment of os/_backend; one os.path.join(tier_dir,
+constant_extension+'.so') path; direct not os.path.exists(path) returning a
+passive literal; one later _load_member using that same path; no competing
+binding-symbol use or external import/use. Unknown predicate hooks, extra
+loads/uses, altered paths and nonliteral absent returns remain unresolved.
+The actual current source yields one optional route and zero mode exclusions.
+
+Optionality alone does NOT omit a dependency. Configuration must explicitly
+bind optional_native_files for the execution target. Example for this
+identical-only selected installation:
+  dependency_context.optional_native_files.linux-64._mojolearn_tokenizer_fast = false
+  dependency_context.optional_native_files.osx-arm64._mojolearn_tokenizer_fast = false
+The source predicate and selected native-layout hash join the requirement's
+execution-environment fingerprint. A false/absent declaration may omit only
+that proven optional binding, and only when the selected layout omits it.
+Contradicting the selected layout is an error. Present/unknown or a missing
+required module cannot inherit the absence exemption; changing presence or
+layout changes the fingerprint.
+
+Runtime admission additionally requires the retained installed-verifier
+manifest to agree with every optional-file presence contract. A legacy column
+without an installed manifest cannot discharge this condition. Source setup
+therefore declares an expectation; the actual installed bytes establish it.
+No current runtime result or installation is claimed by this source repair.
+
+Retained verifier report/receipt parsing is cached by actual file state and
+required content hashes because hundreds of lane units share one report.
+Column values/options/protocols are still compared on every admission. File
+changes invalidate the cache; modified observations remain refused.
+
+Validation: 93 affected source/evidence tests passed, exit 0 (4.36 s). Includes
+missing-required versus optional-absent, optional-present fingerprint and
+native mapping, contradictory layout, unknown hooks, actual installed-manifest
+presence mismatches, and the prior conversion/admission negative tests.
+Actual current-source loader AST probe exit 0: exactly the tokenizer optional
+file, no obsolete mode exclusion. Source guards/syntax receipts follow commit.
+No Mojo compile needed, no product fit/device/runtime/performance test run.
+
+Evidence root:
+/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/
+  sync.log/.exit and ledger.json: original missing-context result
+  optional-tests-attempt1.log/.exit (93 pass before conflict/cache refinement)
+  optional-tests-final.log/.exit (93 pass)
+  optional-current-source.log/.exit (real loader predicate)
+  optional-guard-*.log/.exit; optional-source.patch/optional-source-sha256.json
+
+Next: root serializes this commit, freezes current source, and syncs the central
+ledger with the explicit absence contracts. Begin units before installed
+verifier execution. Current-source installed columns, cross-vendor agreement,
+CPU reference and portable saved-model smoke remain pending. Sampling KV reuse
+ON and multi-GPU coverage remain separate pending claims.

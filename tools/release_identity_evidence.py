@@ -549,6 +549,10 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
             require(target == environment["target"],
                     f"{cls} record platform {target} differs from the frozen execution target "
                     f"{environment['target']}; correct the configured target and sync, never the hardware label")
+            optional = environment.get("loader_routes", {}).get("optional_files", {})
+            if optional:
+                from identity_columns import validate_optional_install_files
+                validate_optional_install_files(record, ref["path"], optional)
         records[cls] = record
         detail_records[cls] = dict(ref, label=record.get("vendor"), platform=record.get("platform"))
     declared = gpu_only(lane, source)

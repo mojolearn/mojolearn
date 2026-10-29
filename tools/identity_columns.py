@@ -34,6 +34,7 @@ no binding is imported and nothing runs on a device.
 """
 import argparse
 import gzip
+from functools import lru_cache
 import hashlib
 import importlib.util
 import json
@@ -221,24 +222,51 @@ def record_from_verify(report, h, report_sha256):
                 **{p + "_protocol": value for p, value in contract.get("protocols", {}).items()})
 
 
+@lru_cache(maxsize=8)
+def _retained_verifier_bytes(receipt_file, receipt_stat, receipt_sha, report_file, report_stat, report_sha):
+    # The same complete report feeds hundreds of lane requirements. Cache only
+    # parsed evidence keyed by actual file state and required content digests;
+    # column-vs-report comparisons still run for every admission.
+    receipt_bytes = Path(receipt_file).read_bytes()
+    if hashlib.sha256(receipt_bytes).hexdigest() != receipt_sha:
+        raise ValueError("verifier receipt hash differs")
+    raw = gzip.decompress(Path(report_file).read_bytes())
+    if hashlib.sha256(raw).hexdigest() != report_sha:
+        raise ValueError("retained verifier report hash differs")
+    receipt, report = json.loads(receipt_bytes), json.loads(raw)
+    from identity_verify_launch import validate_run
+    options = validate_run(receipt, report, report_sha)
+    rows = report.get('cells', [])
+    indexed = {(r['lane'], r['fixture'], r['part']): r for r in rows if r.get('lane') in options['lanes']}
+    expected = {(l, f, p) for l in options['lanes'] for f in options['fixtures'] for p in options['parts']}
+    if len(indexed) != len(rows) or set(indexed) != expected:
+        raise ValueError("retained report properties missing or duplicated")
+    return receipt, report, converted_cells(indexed)
+
+
+def retained_verifier_evidence(record, path):
+    observation = record.get('verifier_observation', {})
+    base = Path(path).parent
+    def retained(name):
+        if not isinstance(name, str) or Path(name).name != name:
+            raise ValueError('invalid retained verifier filename')
+        result = base / name
+        st = result.stat()
+        return str(result), (st.st_mtime_ns, st.st_size)
+    receipt, receipt_stat = retained(observation.get('launch'))
+    report, report_stat = retained(observation.get('report'))
+    return _retained_verifier_bytes(receipt, receipt_stat, observation.get('launch_sha256'),
+                                   report, report_stat, observation.get('report_sha256'))
+
+
 def validate_verifier_record(record, path):
     """Recheck retained producer witnesses; never invent a harness resume signature."""
-    from identity_verify_launch import validate_run
     observation = record.get("verifier_observation", {})
     def require(ok, message):
         if not ok:
             raise ValueError(message)
-    base = Path(path).parent
-    def retained(name):
-        require(isinstance(name, str) and Path(name).name == name, "invalid retained verifier filename")
-        return base / name
-    receipt_bytes = retained(observation.get("launch")).read_bytes()
-    require(hashlib.sha256(receipt_bytes).hexdigest() == observation.get("launch_sha256"), "verifier receipt hash differs")
-    receipt = json.loads(receipt_bytes)
-    raw = gzip.decompress(retained(observation.get("report")).read_bytes())
-    require(hashlib.sha256(raw).hexdigest() == observation.get("report_sha256"), "retained verifier report hash differs")
-    report = json.loads(raw)
-    options = validate_run(receipt, report, observation["report_sha256"])
+    receipt, report, cells = retained_verifier_evidence(record, path)
+    options = receipt["options"]  # Retained-file cache validates the producer witness once.
     require(options == observation.get("options"), "retained verifier options differ")
     require(record.get("commit") == receipt["source"]["commit"], "column source differs from verifier launch")
     require(record.get("package", {}).get("bindings") == report.get("bindings"), "column binding witnesses differ from report")
@@ -246,14 +274,25 @@ def validate_verifier_record(record, path):
     require(set(record.get("fixtures", {})) == set(options["fixtures"]), "column fixture set differs from launch")
     require(record.get("fixtures") == report.get("verification_contract", {}).get("fixtures"), "column fixture bytes differ from report")
     require(record.get("heldout") == report.get("verification_contract", {}).get("heldout"), "column held-out bytes differ from report")
-    rows = report.get("cells", [])
-    indexed = {(r["lane"], r["fixture"], r["part"]): r for r in rows if r.get("lane") in options["lanes"]}
-    expected = {(l, f, p) for l in options["lanes"] for f in options["fixtures"] for p in options["parts"]}
-    require(len(indexed) == len(rows) and set(indexed) == expected, "retained report properties missing or duplicated")
-    require(record.get("cells") == converted_cells(indexed), "column observations differ from retained report")
+    require(record.get("cells") == cells, "column observations differ from retained report")
     for part, protocol in report.get("verification_contract", {}).get("protocols", {}).items():
         require(record.get(part + "_protocol") == protocol, "column protocol differs from report")
     return options
+
+
+def validate_optional_install_files(record, path, contracts):
+    """Discharge an optional-loader layout contract against actual installed bytes."""
+    if not contracts:
+        return
+    validate_verifier_record(record, path)
+    receipt, _, _ = retained_verifier_evidence(record, path)
+    basenames = {Path(name).name for name in receipt['install']['files']}
+    for name, contract in contracts.items():
+        basename = contract.get('predicate', {}).get('basename')
+        if not basename or Path(basename).name != basename or type(contract.get('present')) is not bool:
+            raise ValueError('invalid optional native installation contract: ' + name)
+        if (basename in basenames) != contract['present']:
+            raise ValueError('optional native file presence differs from frozen layout: ' + name)
 
 
 def cmd_from_verify(args):
