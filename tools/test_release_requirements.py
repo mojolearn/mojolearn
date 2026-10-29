@@ -697,3 +697,118 @@ def test_unadapted_source_audit_requires_admission_before_new_execution(tmp_path
     ledger.sync(target)
     assert ledger.plan()['runtime-source']['action'] == 'run'
     assert ledger.begin('runtime-source')
+
+
+def test_interrupted_launch_keeps_history_and_allows_changed_source(ledger, tmp_path):
+    run = ledger.begin('identity')
+    original = copy.deepcopy(ledger.read()['runs'])
+    ledger.sync(manifest(revision='new', arithmetic='two'))
+    proof = tmp_path / 'producer-stopped.json'
+    proof.write_text('{"pod_absent": true, "controller_stopped": true}')
+    closed = ledger.interrupt(run, [proof], 'lease expired; no final producer report', producer_stopped=True)
+    doc = ledger.read()
+    assert doc['runs'] == original and doc['attempts'] == []
+    assert closed['source_revision'] == 'a' and closed['qualification_claim'] is False
+    assert 'coverage' not in closed and 'exit_code' not in closed
+    row = ledger.plan()['identity']
+    assert row['status'] == 'untested' and row['action'] == 'run'
+    assert not ledger.gate()[0]
+    assert ledger.begin('identity') != run
+    assert ledger.read()['runs'][-1]['source_revision'] == 'new'
+    assert ledger.plan()['identity']['action'] == 'resume'
+
+
+def test_interruption_cannot_revive_pass_invalidated_by_required_rerun(ledger, tmp_path):
+    record(ledger, tmp_path)
+    attempts = copy.deepcopy(ledger.read()['attempts'])
+    reason = 'routing negative control requires a new execution'
+    proof = invalidation_evidence(tmp_path, reason)
+    run = ledger.begin('identity', reason=reason, invalidation_paths=[proof])
+    stopped = tmp_path / 'stopped.log'
+    stopped.write_text('controller stopped before qualification completed')
+    ledger.interrupt(run, [stopped], 'controller interrupted', producer_stopped=True)
+    assert ledger.read()['attempts'] == attempts
+    row = ledger.plan()['identity']
+    assert row['status'] == 'untested' and row['action'] == 'run'
+    assert ledger.begin('identity') is not None
+
+
+def test_interruption_preserves_prior_algorithm_failure(ledger, tmp_path):
+    record(ledger, tmp_path, status='failed')
+    attempts = copy.deepcopy(ledger.read()['attempts'])
+    run = ledger.begin('identity')
+    proof = tmp_path / 'stopped.log'
+    proof.write_text('repair producer stopped')
+    ledger.interrupt(run, [proof], 'repair execution interrupted', producer_stopped=True)
+    assert ledger.read()['attempts'] == attempts
+    assert ledger.read()['attempts'][0]['status'] == 'failed'
+    assert ledger.plan()['identity']['status'] == 'untested'
+
+
+def test_interruption_requires_stopped_confirmation_reason_and_evidence(ledger, tmp_path):
+    run = ledger.begin('identity')
+    proof = tmp_path / 'stopped.log'
+    proof.write_text('producer stopped')
+    original = ledger.path.read_bytes()
+    for paths, reason, stopped, match in [
+        ([proof], 'stopped', False, 'confirm producers stopped'),
+        ([proof], ' ', True, 'concrete interruption reason'),
+        ([], 'stopped', True, 'retain producer stop/absence evidence'),
+    ]:
+        with pytest.raises(ValueError, match=match):
+            ledger.interrupt(run, paths, reason, producer_stopped=stopped)
+        assert ledger.path.read_bytes() == original
+
+
+def test_interruption_batch_is_atomic_and_rejects_finished_or_unknown_runs(ledger, tmp_path):
+    first, second = ledger.begin('identity'), ledger.begin('metadata')
+    proof = tmp_path / 'stopped.log'
+    proof.write_text('both controllers stopped')
+    original = ledger.path.read_bytes()
+    for ids, match in [([first, 'unknown'], 'unknown interrupted'), ([first, first], 'unique interrupted')]:
+        with pytest.raises(ValueError, match=match):
+            ledger.interrupt_many(ids, [proof], 'batch stopped', producer_stopped=True)
+        assert ledger.path.read_bytes() == original
+    closed = ledger.interrupt_many([first, second], [proof], 'batch stopped', producer_stopped=True)
+    assert len(closed) == 2 and len(ledger.read()['interruptions']) == 2
+    after = ledger.path.read_bytes()
+    with pytest.raises(ValueError, match='already recorded or interrupted'):
+        ledger.interrupt(first, [proof], 'again', producer_stopped=True)
+    assert ledger.path.read_bytes() == after
+
+
+def test_late_results_cannot_rewrite_interrupted_or_completed_run(ledger, tmp_path):
+    run = ledger.begin('identity')
+    proof = tmp_path / 'stopped.log'
+    proof.write_text('producer stopped')
+    ledger.interrupt(run, [proof], 'interrupted producer', producer_stopped=True)
+    with pytest.raises(ValueError, match='run was interrupted'):
+        ledger.record(run, 'failed', [proof], 'late output', 1, 1, 0, failed=1)
+    record(ledger, tmp_path, name='metadata', status='failed')
+    completed = ledger.read()['attempts'][-1]['run_id']
+    with pytest.raises(ValueError, match='already recorded or interrupted'):
+        ledger.interrupt(completed, [proof], 'cannot rewrite failure', producer_stopped=True)
+
+
+def test_interruption_evidence_is_revalidated_before_relaunch(ledger, tmp_path):
+    run = ledger.begin('identity')
+    proof = tmp_path / 'stopped.log'
+    proof.write_text('stopped producer')
+    ledger.interrupt(run, [proof], 'stopped', producer_stopped=True)
+    proof.write_text('changed proof')
+    row = ledger.plan()['identity']
+    assert row['status'] == 'untested' and row['action'] == 'restore-evidence'
+    with pytest.raises(ValueError, match='restore provenance before rerunning'):
+        ledger.begin('identity')
+
+
+def test_interrupt_cli_bulk_preserves_unexecuted_status(ledger, tmp_path, capsys):
+    run = ledger.begin('identity')
+    ids = tmp_path / 'run-ids.json'
+    ids.write_text(json.dumps([run]))
+    proof = tmp_path / 'stopped.log'
+    proof.write_text('producer absent')
+    assert R.main(['interrupt', '--ledger', str(ledger.path), '--run-ids-file', str(ids),
+                   '--producer-stopped', '--reason', 'producer stopped', '--evidence', str(proof)]) == 0
+    assert json.loads(capsys.readouterr().out) == {'interrupted': 1, 'qualification_claim': False}
+    assert ledger.plan()['identity']['status'] == 'untested'
