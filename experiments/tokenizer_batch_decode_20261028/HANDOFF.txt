@@ -45,7 +45,11 @@ source/binary hashes and generated Unicode source are retained in compile.json
 and evidence. Initial compile also passed; final rebuild was required by
 empty-pointer hardening and sized result publication (changed source, not a
 duplicate build). Standard pinned Unicode generator exit 0; no workaround.
-Required source guards run on committed source, retained separately.
+The now-separate tokenizer_decode_utf8 bytes/bytearray helper also compiled
+through its own tiny CPU root, exit 0. This qualifies its changed native
+export pin/release path without rebuilding the public dispatcher closure.
+Both roots are compile-only and were not executed.
+Required source guards passed on product commit ab62f37ec680d9ae8dec2f495b32e66f001e2df9; retained separately.
 No runtime/identity/performance campaign; no speedup or runtime-success claim.
 No rented box or vendor device coverage.
 

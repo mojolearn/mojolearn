@@ -33,5 +33,16 @@
   "runtime_executed": false,
   "performance_measured": false,
   "identity_verified": false,
-  "rented_boxes": []
+  "rented_boxes": [],
+  "standalone_helper_compile": {
+    "exit": 0,
+    "scope": "tokenizer_decode_utf8 exact bytes/bytearray branch including native export pin/release and policy decoder; dispatcher is not rebuilt",
+    "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/tokenizer-batch-decode-20261028 -I /Users/andrewhendel/mojolearn-wt/tokenizer-batch-decode-20261028/bindings /Users/andrewhendel/mojolearn-wt/tokenizer-batch-decode-20261028/experiments/tokenizer_batch_decode_20261028/compile_utf8_helper.mojo -o /Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/compile_utf8_helper",
+    "root": "experiments/tokenizer_batch_decode_20261028/compile_utf8_helper.mojo",
+    "root_sha256": "2e294d115b99ac5a65f5d6da06bff69395239aa556b41baa4fdae584b43281ce",
+    "log": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/compile-helper.log",
+    "binary": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/compile_utf8_helper",
+    "binary_sha256": "a2231e8a6ce90d43b59f0f0f7f953096714de06ac9d6159467099f84997f7d15",
+    "runtime_executed": false
+  }
 }
