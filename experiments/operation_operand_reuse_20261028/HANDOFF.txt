@@ -1,0 +1,30 @@
+Native operation operand storage reuse, 2026-10-28
+Branch: lane/inference-replay-metadata-20261028
+Base source batch: 537335a94b (inference metadata retention).
+
+Removed work: the shared _op_run dispatcher no longer allocates/deallocates a
+Tensor List on every eager or replayed operation. One session-owned List retains
+operand capacity, moved into each synchronous native call and returned finally.
+The existing dispatch body is extracted unchanged into _op_run_tensors.
+
+Boundary/invalidation: empty storage is created with OpsSession and released at
+close. Each invocation resolves all handles again in original order, including
+live-generation checks; finally clears Tensor values and returns capacity even
+on failure. Only capacity survives, no tensor identity, metadata or raw pointer
+is reused. The move leaves session scratch empty during dispatch, avoids aliasing
+mutable session ownership, and requires no unsafe pointer or blocking claim.
+The existing session execution/ownership contract remains unchanged.
+
+Compilation: focused HostExec CPU identical O0 shared-library build exit 0,
+covering eager op, the full native dispatch body and recording/inference session
+construction/close. No GPU compile, runtime, concurrency, identity or performance
+campaign; no measured speedup. Native launch/arithmetic and op logging unchanged.
+
+Evidence: ~/mojolearn-evidence/operation-operand-reuse-20261028/, complete compile
+log/exit, source bytes+hash manifest, binary+hash; exact command in compile.json.
+Root owns serialized integration and required main/push guards.
+
+Limits: capacity up to largest operand list lives until session close. Per-op
+handle validation, dispatch, tape allocations and specialized operation-specific
+metadata containers remain. This is one shared allocation reduction, not whole
+repository migration completion or a claim of faster runtime behavior.

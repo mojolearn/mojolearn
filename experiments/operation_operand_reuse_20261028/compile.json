@@ -1,0 +1,25 @@
+{
+  "base_commit": "537335a94b32176c86bf92c8a2779774611a8832",
+  "compile_exit": 0,
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS arm64 CPU",
+  "scope": "OpsSession[HostExec] public eager op, native dispatcher, recording/inference construction and close; compile only",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/operation_operand_reuse_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/operation-operand-reuse-20261028/compile.dylib",
+  "working_directory": "/Users/andrewhendel/mojolearn-wt/inference-replay-metadata-20261028",
+  "compile_slots": 4,
+  "compiler_workers": "compiler default; utilization not measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/operation-operand-reuse-20261028/compile.dylib",
+  "binary_sha256": "dabde8d3aad3d4bd48cbe2834762da7547c3210802068f2332af03f3e390a2f5",
+  "log": "/Users/andrewhendel/mojolearn-evidence/operation-operand-reuse-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/operation-operand-reuse-20261028/source-sha256.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/operation-operand-reuse-20261028/sources.tar.gz",
+  "source_manifest_scope": "All tracked Mojo sources plus fixture, manifest and lock; conservative superset, not all sources compiled",
+  "modified_source_sha256": {
+    "autograd/ops_api.mojo": "af90f250940dff53a5e88eb6d891b7bbe0d9cec26d3608f18439c7fa387e048e",
+    "experiments/operation_operand_reuse_20261028/compile.mojo": "db54ff4f7966b5a580d4483a16201ea124fe4146d389ff93f6020e1ce0e6ec33"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}

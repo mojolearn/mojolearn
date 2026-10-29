@@ -330,6 +330,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var program_replays: List[List[PreparedProgramReplay]]
     var prog_tape: Tape
     var program_trace: ProgramTrace
+    #: Reusable operand capacity for synchronous native operation dispatch.
+    var op_tensors: List[Tensor]
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -357,6 +359,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.prog_tape = Tape()
         self.prog_tape.no_grad()
         self.program_trace = ProgramTrace()
+        self.op_tensors = List[Tensor]()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -589,6 +592,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.prog_tape.release(self.ex)
         self.programs.clear()
         self.program_replays.clear()
+        self.op_tensors = List[Tensor]()
         self.oplog.clear()
         self.ex.sync()
 
@@ -1100,9 +1104,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def _op_run(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         """`op` without the log: the eager call and a program's replay."""
+        # Move capacity into the call, so the native operation can mutate self
+        # without borrowing session-owned operand storage. Resolve every handle
+        # afresh; only allocation capacity survives success or failure.
         var x = List[Tensor]()
-        for i in range(len(hs)):  # small-loop(hs: an op's input handles, three or a concat's list): handle lookup, no data
-            x.append(self.tensor(hs[i]))
+        swap(x, self.op_tensors)
+        try:
+            for i in range(len(hs)):  # small-loop(hs: an op's input handles, three or a concat's list): handle lookup, no data
+                x.append(self.tensor(hs[i]))
+            return self._op_run_tensors(code, hs, ints, fs, x)
+        finally:
+            x.clear()
+            swap(x, self.op_tensors)
+
+    def _op_run_tensors(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """Execute with this call's freshly checked native tensor references."""
         var n = len(x)
         var ni = len(ints)
         var nf = len(fs)
