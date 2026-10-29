@@ -87,7 +87,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 LEASES="${MOJOLEARN_LEASE_DIR:-$HERE/../bench/results/runpod_leases}"
 mkdir -p "$LEASES"
 
-SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -o BatchMode=yes"
+# Slow provider SSH handshakes may need a longer bounded connection attempt.
+SSH_CONNECT_TIMEOUT="${MOJOLEARN_RUNPOD_SSH_CONNECT_TIMEOUT:-25}"
+case "$SSH_CONNECT_TIMEOUT" in ''|*[!0-9]*) echo "SSH connect timeout must be an integer from 1 to 300" >&2; exit 2;; esac
+[ "$SSH_CONNECT_TIMEOUT" -ge 1 ] && [ "$SSH_CONNECT_TIMEOUT" -le 300 ] || { echo "SSH connect timeout must be an integer from 1 to 300" >&2; exit 2; }
+SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=$SSH_CONNECT_TIMEOUT -o BatchMode=yes"
 
 GUARD_CURLRC=""
 

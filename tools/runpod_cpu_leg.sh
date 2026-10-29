@@ -76,7 +76,11 @@ RP_V2=https://api.runpod.io/v2
 BOX_REPO=/root/mojolearn
 PIXI_VERSION=0.77.0
 READY_TIMEOUT=600
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=20 -o ServerAliveInterval=30 -o BatchMode=yes"
+# Slow provider SSH handshakes may need a longer bounded connection attempt.
+SSH_CONNECT_TIMEOUT="${MOJOLEARN_RUNPOD_SSH_CONNECT_TIMEOUT:-20}"
+case "$SSH_CONNECT_TIMEOUT" in ''|*[!0-9]*) echo "SSH connect timeout must be an integer from 1 to 300" >&2; exit 2;; esac
+[ "$SSH_CONNECT_TIMEOUT" -ge 1 ] && [ "$SSH_CONNECT_TIMEOUT" -le 300 ] || { echo "SSH connect timeout must be an integer from 1 to 300" >&2; exit 2; }
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=$SSH_CONNECT_TIMEOUT -o ServerAliveInterval=30 -o BatchMode=yes"
 
 LANE=""; CMD=""; CMD_FILE=""; WORKTREE=""; INCLUDES=""; BUILD=""; SAB_BUILD=""
 SAB_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1"; ENVS="default"; VCPU=8; FLAVORS="cpu3c,cpu5c"
