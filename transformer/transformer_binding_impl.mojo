@@ -2051,6 +2051,40 @@ def _lm_read_argmax_kernel(
 
 
 
+
+def _lm_read_status_kernel(status: MutPointer[Int32, MutAnyOrigin],
+                           summary: MutPointer[Int32, MutAnyOrigin], batch_in: Int32):
+    # Summarize device progress once per token. Only two control words cross
+    # the boundary; the first failing row preserves generation_pick ordering.
+    var batch = Int(batch_in)
+    var tid = Int(thread_idx.x)
+    var rows = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
+    var pending = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
+    var first_bad = _LM_ARGMAX_NONE
+    var active = Int32(0)
+    var r = tid
+    while r < batch:
+        if status[batch + r] >= 0:
+            first_bad = min(first_bad, Int32(r))
+        if status[r] == 0:
+            active = 1
+        r += _LM_ARGMAX_TPB
+    rows[tid] = first_bad
+    pending[tid] = active
+    barrier()
+    var width = _LM_ARGMAX_TPB // 2
+    while width > 0:
+        if tid < width:
+            rows[tid] = min(rows[tid], rows[tid + width])
+            pending[tid] = max(pending[tid], pending[tid + width])
+        barrier()
+        width //= 2
+    if tid == 0:
+        summary[0] = pending[0]
+        summary[1] = -1 if rows[0] == _LM_ARGMAX_NONE else status[batch + Int(rows[0])]
+
+
+
 def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: Int, d: Int, eps: Float32) raises:
     if b < 1 or v < 1 or d < 1:
         raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
@@ -2177,15 +2211,18 @@ def _lm_run(
     var read = MutPointer[ResidentGreedyRead, MutUntrackedOrigin](unsafe_from_address=read_address)
     var status = List[Int32]()
     var status_device = Optional[DeviceBuffer[DType.int32]]()
+    var finished_device = Optional[DeviceBuffer[DType.int32]]()
+    var summary_device = Optional[DeviceBuffer[DType.int32]]()
     var lengths_device = Optional[DeviceBuffer[DType.int64]]()
     var eos_device = Optional[DeviceBuffer[DType.int32]]()
     if read_address != 0:
-        status = List[Int32](length=2 * b, fill=0)
-        memcpy(dest=status.unsafe_ptr(), src=read[].finished.unsafe_ptr(), count=b)
+        status = List[Int32](length=2, fill=0)
         status_device = ctx.enqueue_create_buffer[DType.int32](2 * b)
+        finished_device = status_device.value().create_sub_buffer[DType.int32](0, b)
+        summary_device = ctx.enqueue_create_buffer[DType.int32](2)
         lengths_device = ctx.enqueue_create_buffer[DType.int64](b)
         eos_device = ctx.enqueue_create_buffer[DType.int32](max(1, len(read[].eos)))
-        ctx.enqueue_copy(dst_buf=status_device.value(), src_ptr=status.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=finished_device.value(), src_ptr=read[].finished.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=lengths_device.value(), src_ptr=read[].lengths.unsafe_ptr())
         if len(read[].eos) > 0:
             ctx.enqueue_copy(dst_buf=eos_device.value(), src_ptr=read[].eos.unsafe_ptr())
@@ -2251,7 +2288,11 @@ def _lm_run(
                 Int32(b), Int32(cur_l), Int32(v), Int32(n_steps), Int32(step), Int32(len(read[].eos)), Int32(read[].pad),
                 grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
             )
-            ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(), src_buf=status_device.value())
+            ctx.enqueue_function[_lm_read_status_kernel](
+                status_device.value().unsafe_ptr(), summary_device.value().unsafe_ptr(), Int32(b),
+                grid_dim=(1, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(), src_buf=summary_device.value())
         var rows = List[DeviceBuffer[DType.float32]]()
         if p_logits != 0 and step == n_steps - 1:
             var lp = _f32_ptr(p_logits)
@@ -2267,13 +2308,10 @@ def _lm_run(
         _ = ws^
         cur_l = 1
         if read_address != 0:
-            var complete = True
-            for r in range(b):  # driver-loop: device stop/error status only; predictions and EOS decisions ran on GPU
-                if status[b + r] >= 0:
-                    raise Error("generation: non-finite logit at token " + String(status[b + r]))
-                complete = complete and status[r] != 0
+            if status[1] >= 0:
+                raise Error("generation: non-finite logit at token " + String(status[1]))
             read[].wrote = step + 1
-            if complete:
+            if status[0] == 0:
                 break
     var output_rows = List[DeviceBuffer[DType.int32]]()
     if read_address == 0:
@@ -2286,13 +2324,15 @@ def _lm_run(
             ctx.enqueue_copy(dst_ptr=out_i32 + r * n_steps, src_buf=output_rows[r])
     if read_address != 0:
         ctx.enqueue_copy(dst_ptr=read[].lengths.unsafe_ptr(), src_buf=lengths_device.value())
-        memcpy(dest=read[].finished.unsafe_ptr(), src=status.unsafe_ptr(), count=b)
+        ctx.enqueue_copy(dst_ptr=read[].finished.unsafe_ptr(), src_buf=finished_device.value())
     ctx.synchronize()
     _ = ids0^
     _ = next_ids^
     _ = out_dev^
     _ = output_rows^
+    _ = finished_device^
     _ = status_device^
+    _ = summary_device^
     _ = lengths_device^
     _ = eos_device^
     _ = status^
