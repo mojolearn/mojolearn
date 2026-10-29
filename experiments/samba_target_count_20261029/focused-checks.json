@@ -1,0 +1,52 @@
+{
+  "repro-before.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/repro-before.log",
+    "sha256": "eb96023d6d53ba735bf56dfc6ed4df5bb248b1fb466f435ffc6e66680bffee62",
+    "text": "1 -7\n7 -366\n8 -365\n9 9\n16 16\n32 -301\n33 -189\n128 -366\n"
+  },
+  "check-before.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/check-before.log",
+    "sha256": "202d8480802e772dc74fa7414247ab17726221b53731b41557f460b2935e0405",
+    "text": "stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`\nUnhandled exception caught during execution: Samba target count: n=1, pattern=0, expected=1, actual=-7\n"
+  },
+  "check-after.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/check-after.log",
+    "sha256": "0a99dff5cd1431208b9575b7770cdba491faf1efa35dea21ed050304c6d02dc7",
+    "text": "Samba target count: 40 cases passed\n"
+  },
+  "retention-diagnostic.log": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/retention-diagnostic.log",
+    "sha256": "0a99dff5cd1431208b9575b7770cdba491faf1efa35dea21ed050304c6d02dc7",
+    "text": "Samba target count: 40 cases passed\n"
+  },
+  "check-before.exit": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/check-before.exit",
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "text": "1\n"
+  },
+  "check-after.exit": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/check-after.exit",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "text": "0\n"
+  },
+  "retention-diagnostic.exit": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/retention-diagnostic.exit",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "text": "0\n"
+  },
+  "check-before-compile-corrected.exit": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/check-before-compile-corrected.exit",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "text": "0\n"
+  },
+  "check-after-compile.exit": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/check-after-compile.exit",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "text": "0\n"
+  },
+  "retention-diagnostic-corrected-compile.exit": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-20261029/retention-diagnostic-corrected-compile.exit",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "text": "0\n"
+  }
+}

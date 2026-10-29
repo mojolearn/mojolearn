@@ -1,0 +1,12 @@
+Samba target-count lifetime repair — 2026-10-29
+Base42fbe96d43. Source:core/samba_count_impl.mojo; regression:checks/samba_target_count_check.mojo.
+
+The actual Apple samba-optimizer-state verifier failed all9fixtures with negative CE num_items_in_batch (-122), in dropout/maximize training. Its input windows contain valid nonignored IDs. Original full failure retained in current-main-verification-20261029/runs/apple/neural-training/samba-optimizer-state/.
+Standalone O0 before repair reproduces wrong counts: one valid target yielded-7; assertion exits1. The old helper creates an ignored-value List and byte-mask List, then passes their raw integer addresses into compare/reduce helpers without retaining owners. A diagnostic with the SAME compare/reduce work and explicit post-use List retention passes40cases. This supports premature temporary-owner release as the source failure; no toolchain bug/workaround is asserted.
+
+Repair reads the caller-retained admitted Int32 targets directly and counts entries unequal to-100 in one exact-integer pass. Removes two O(rows) temporary allocations, their fills, comparison-mask construction and mask reduction. No persistent cache or new invalidation: input bytes are reread each call and caller ownership must extend through the call. No floating arithmetic or sampling change. Public mutable-input behavior preserved.
+
+Focused compilation:AppleCPU O0,10workers through tools/compile_slot.sh. Repaired executable40cases passes; covers allignored/noignored/mixed/othernegative IDs and lengths around former SIMDwidth. These are actual bounded runtime results, not speed or cross-vendor identity evidence. Original compiler invocation missing pixi environment and first test/dynamic-docstring syntax failures retained separately; corrected compile/runs succeeded.
+
+Pending before integration:full affected tokenizer-host compilation, actual installed public Samba regression, required source/pushguards. NativeGPU kernels unchanged; confirm all retained closures before deciding rebuild scope. Linux rebuilt tokenizer and vendor verification remain pending. No performance measured.
+Evidence:~/mojolearn-evidence/samba-target-count-20261029/ and focused-checks.json. Active frozen verifier installs unmodified.

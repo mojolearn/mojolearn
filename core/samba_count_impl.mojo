@@ -1,13 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # The same exact-integer target count used by the public Samba boundary.
-from core.hotpath_impl import equal_elements, reduce_stat
 
 
 def samba_target_count(address: Int, rows: Int) raises -> Int:
-    var ignored = List[Int32](length=rows, fill=-100)
-    var mask = List[UInt8](length=rows, fill=0)
-    _ = equal_elements(address, Int(ignored.unsafe_ptr()), 2, rows, Int(mask.unsafe_ptr()))
-    var count = reduce_stat(Int(mask.unsafe_ptr()), 5, rows, 5)
-    if count.hi != 0 or count.mid != 0:
-        raise Error("Samba: ignored-target count exceeds kernel indexing")
-    return rows - count.low
+    if address == 0 or rows < 1:
+        raise Error("Samba: target count requires a non-null buffer and positive rows")
+    # The caller retains its admitted Int32 target buffer through this call.
+    # Count directly: the old fill/compare/reduce path allocated two temporary
+    # lists and passed their raw integer addresses without retaining the owners.
+    # The installed optimizer-state verifier exposed negative target counts.
+    # One exact-integer pass needs neither scratch storage nor a mask reduction.
+    var targets = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=address)
+    var count = 0
+    for i in range(rows):
+        if targets[i] != -100:
+            count += 1
+    return count
