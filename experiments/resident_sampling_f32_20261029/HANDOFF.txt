@@ -1,0 +1,72 @@
+Default-off resident sampling candidate (2026-10-29)
+
+Native commits: ceb7cbe0d2 (common selector/descriptor), c6e19e5e2a (native group3 transaction).
+Boundary integration is a separate generation-agent batch; core/native commits alone do not select the experiment.
+
+Common policy uses portable FP32 exponentials, explicit FTZ arithmetic boundaries,
+compensated ordered FP32 sums and 24 high SplitMix64 bits. Both host fallback and
+device call the same selector. This deliberately changes seeded samples versus
+the old FP64/53-bit policy; within-release vendor identity remains unqualified.
+Finite IEEE ordering collapses signed zero ties to token ID. Tiny positive
+temperature is normalized without unsupported FP64; rounded-zero top_p retains
+at least one token. Public Float64 parameter admission remains at the boundary.
+
+Removed repeated work: eligible reads enter native once, retain token/selector
+scratch and KV for the operation, and publish final outputs/KV once. The token
+loop performs no Python dispatch, per-step logits download or token upload.
+This is a structural change, NOT an established speedup. One GPU worker per row
+performs stable mergesort and selection and may lose badly to host sampling for
+small batches/large vocabularies. No default promotion is justified.
+
+Recovery cost: THREE times total KV storage (live plus two snapshots), allocated
+once/read, and full KV D2D copies after every forward. Initial snapshot populates
+one slot. Inactive-slot copies precede the existing finite-check wait; only a
+successful wait and finite checks commit the slot and consumed count. Failed
+forward preserves prior committed slot; sampler failure preserves the just-completed
+forward and first-invalid-row prefix metadata. Completed tokens, lengths and EOS
+are published only after synchronized copies; KV has a separate readiness flag.
+Direct committed-snapshot export never re-enables invalid native sessions.
+Best-effort cleanup/readback preserves the original error. Device/context loss or
+failed readback can make diagnostics/KV unavailable; no full recovery is claimed
+for those failures. No hidden fallback occurs after partial native execution.
+
+Ownership/invalidation: descriptor lives in provider-owned heap storage, pins all
+host output destinations and moves its progress/address Lists. Native sessions use
+existing all-owner reservation and error invalidation. Device views, selector
+scratch and both snapshots span final success synchronization and error drain.
+Boundary retains existing exact-span alias, exposed-parameter and generation
+checks; changed live values are admitted per operation. This adds no immutable
+pointer cache. Peer boundary owns policy persistence/chunk counter and route parity.
+
+Compilation only:
+- Shared host/device selector probe: exit0, Apple identical,10 configured workers.
+- Dynamic seed/position kernel probe: exit0; NOT executed (compile fixture only).
+- Actual Transformer module factory + native group3 GPU closure: exit0,135.23s,
+  Apple M1 target, identical,O0,10 configured workers, compile_slot.212 source
+  files unchanged across build and at product commit. Configured worker count is
+  not a utilization claim.
+- Artifact exports PyInit__mojolearn_transformer from supported generated per-binding
+  entry. Retained basename _mojolearn_transformer_sampling.so is not a loader alias;
+  normal staging may rename it _mojolearn_transformer.so and apply standard runtime
+  dependency packaging without rebuilding. It has NOT been installed/loaded.
+- Raw artifact SHA256 aacd3f49a5876fca9af776f5751c8e04cc9e97c2de04a7ee196b2a457005ec26.
+- Initial probe failures (environment activation, fixture constructor/pointer origins)
+  and two native missing-sparse-dependency attempts are retained. The second arose
+  from an unsuccessful sparse-checkout restoration command. Complete supported
+  dependency restoration resolved compilation; no compiler workaround/patch.
+- Five focused source guards passed0; full source pre-push hook passed0.
+- Independent root/generation/classical source reviews found no blocker; classical
+  review SHA256 b6c6fcb51a038a332adb0695d4e2a221befec54422baa9f37e03ec2f4caad01c.
+
+Evidence: ~/mojolearn-evidence/full-resident-sampling-20261029/
+Native receipt/source archive/binary/log: native-restored-source/.
+Probe receipts: sampler-receipt.json, sampler-dynamic-receipt.json.
+Full failure logs, commands, compiler hash, source hashes, guards and symbols retained.
+Public regression cases are prepared by the boundary lane, not run. Native direct
+failure-KV/partial-row runtime oracle, vendor equality, seeded quality/precision
+assessment, loader smoke and whole-read performance evaluation remain pending.
+No runtime, identity or performance campaign was run for this candidate.
+
+R2 archive: measurements/full-resident-sampling-20261029/full-resident-sampling-c6e19e5-apple.tgz
+SHA256 9af351d92276fc29a8edaa65c829f68296d5a2b6c97dd1312fe5ccaf093d0892; upload/readback200, exact bytes matched.
+Boundary final source: 1a85140c0b +04e51d25b4 (receipts a437458a55,c4dd74eda6; tests edbcc6513b). Actual final boundary CPU compile0/27.44s, public C entries4/5/7/11/12; peer owns that evidence.
