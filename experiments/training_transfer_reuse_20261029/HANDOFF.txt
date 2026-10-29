@@ -1,0 +1,73 @@
+Program result publication: remove private host bounce copy (2026-10-29)
+
+Branch lane/training-transfer-reuse-20261029, original base260c49eaa1.
+Product scope: autograd/program_entries.mojo and new program_output_copy.mojo.
+Dependency coordination: neural peer5c0f99f21f +c4cf773a79 model/rankn changes
+were imported BEFORE actual public program compilation. Integrate those via
+root separately, then this publication commit only. No shared model edits here.
+
+Repeated work removed:
+For ordinary identical DeviceExec Program.execute outputs, remove the temporary
+HostBuffer allocation and its subsequent CPU memcpy. Copy GPU data directly into
+the same fresh private HostArray that the operation will return. Actual D2H bytes
+and per-output completion points remain; no fictitious training roundtrip claim.
+Existing pooled large-output SEQ_PIPE_DOWN condition retains the original
+pipelined download, including chunk ordering. CPU/other executor copies and
+Apple fast behavior are unchanged; no new benchmark-size routing rule.
+
+Ownership, error order, mutation:
+Admit shape, allocate this output, then perform the same live slot/value/count
+lookup as OpsSession.download. The HostArray is explicitly pinned through the
+copy; the device subview stays pinned through normal/failure drains. A failed
+copy is drained best effort without replacing its original Error. Each output
+completes BEFORE the following output is admitted or allocated, preserving
+first-error order. Completed/private outputs never escape a failed operation.
+No handles persist beyond their existing scratch tape/session lifetime. Input
+refresh, parameter generation/ownership checks, session concurrency rules and
+public fresh host-result ownership are untouched.
+
+Profiles:
+Count actual direct D2H bytes and completion time with existing profile hooks.
+Avoided temporary staging and CPU-copy counters disappear only for this route.
+All preceding pending executor publications are still completed by ex.sync at
+the same output boundary. The generic CPU path keeps ex.download unchanged.
+
+Generic specialization finding:
+Initial generic+DeviceExec overload source compiled successfully but resolved to
+the generic download fallback. Retained initial device symbol inspection proves
+the direct helper was absent; that compile does NOT qualify this optimization.
+Final source passes the existing KIND==OPS_DEVICE as a compile-time DEVICE flag.
+The supported rebind[DeviceExec] builtin asserts exact type after instantiation;
+it is not a runtime reinterpretation. CPU uses the ordinary generic fallback.
+Final equivalent-generic-call DeviceExec artifact contains the unexported direct
+copy helper, absent from the initial artifact (device-selection.json). Neither
+artifact was run. Modular documents static rebinding under parameterization:
+https://mojolang.static.modular-staging.com/docs/manual/parameters/
+
+Qualification:
+- compile_device.json: changed DeviceExec publication through equivalent generic
+  E:Exec caller, Apple GPU identical O0 on CPU host, exit0/13.36s. No full GPU
+  program replay compilation is claimed; this root contains the entire changed
+  copy path and preserves the same generic selection shape as the actual caller.
+- compile_public.json: actual ops_program_execute_py[HostExec,OPS_HOST] public
+  entry, admission/program_execute_run/profiling/result publication, Apple CPU
+  identical O0, exit0/35.69s; includes final neural peer model/rankn source.
+Both use10configured workers through compile_slot. No runtime, identity,
+performance or NVIDIA/AMD target campaign. No native algorithm changes.
+Initial successful-but-nonqualifying overload builds/source/binaries are retained
+in device-overload-attempt1 and public-overload-attempt1; their receipt paths map
+by filename from the former device/public directories.
+
+Evidence:
+~/mojolearn-evidence/training-transfer-reuse-20261029/{device,public}/
+  compile.log, compile.json, _program_output_copy.so,
+  source-bytes.tgz, source-manifest.json
+Device full symbols.txt and device-selection.json retain dispatch evidence.
+ROUTE_FINDINGS.txt records why training-gradient residency was left intact.
+Source guards and retained hashes accompany final delivery.
+
+Final guards: no_host_routes, no_python_in_kernels, no_compute_in_shells and
+rebuild_fence all exit0 without override. Seventeen retained checks matched
+all original/final artifacts/source archives/logs and final caller/helper plus
+coordinated model/rankn source. Final symbol selection check passed; original
+selection check is retained as negative evidence, not hidden as build success.

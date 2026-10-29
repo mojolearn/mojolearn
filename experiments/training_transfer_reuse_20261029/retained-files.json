@@ -1,0 +1,92 @@
+[
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/device/_program_output_copy.so",
+    "sha256": "3c00d3ddaaa459f54f7dc8175bf67939ef63ce46c70085810093c5e2aafbf87d",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/device/source-bytes.tgz",
+    "sha256": "245727e16cc07e29cb5942cb2c084f4c27afe237e826784186b2240e2400a720",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/device/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/public/_program_output_copy.so",
+    "sha256": "9a499e210be347371d919e965082fd927db5e37920ad71e095a812f9a798c05e",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/public/source-bytes.tgz",
+    "sha256": "536beb107b6a0818cd75eca80ad7861dab32b9ca03923975a6e825e395ca1854",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/public/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/device-overload-attempt1/_program_output_copy.so",
+    "sha256": "c67182102eda570b393282a096f6a11eb16d8ebc15ac488364ec79561d67bd1f",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/device-overload-attempt1/source-bytes.tgz",
+    "sha256": "3877863d833d51575bbc0acdbf13bb3ef40396ef23449d5a31c1da5225acef89",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/device-overload-attempt1/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/public-overload-attempt1/_program_output_copy.so",
+    "sha256": "69bbe4c3eb2f3cb28356c92a6e579c21bc376a18efc463fd2d12920b6f158b4f",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/public-overload-attempt1/source-bytes.tgz",
+    "sha256": "9123873dc1128d6896e661d5113ac32c17a4a7191fe2832cad3fec0b1224d31f",
+    "matches_receipt": true
+  },
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/training-transfer-reuse-20261029/public-overload-attempt1/compile.log",
+    "exists": true,
+    "exit_code": 0
+  },
+  {
+    "source": "autograd/program_output_copy.mojo",
+    "compile": "device",
+    "sha256": "57b09bb92830c58bd112ca64bf1a4f084eb7ea449175b9256439e178c53c4062",
+    "matches_manifest": true
+  },
+  {
+    "source": "autograd/program_output_copy.mojo",
+    "compile": "public",
+    "sha256": "57b09bb92830c58bd112ca64bf1a4f084eb7ea449175b9256439e178c53c4062",
+    "matches_manifest": true
+  },
+  {
+    "source": "autograd/program_entries.mojo",
+    "compile": "public",
+    "sha256": "2e261331c282ae4127c9a653055cfff08d3bbfc091f78a6ec84f6de9c64a9c45",
+    "matches_manifest": true
+  },
+  {
+    "source": "autograd/model.mojo",
+    "compile": "public",
+    "sha256": "91d14dc5c98ae66d7920f2d8a21a6cff5866980af910216ab81ab92fac96649b",
+    "matches_manifest": true
+  },
+  {
+    "source": "autograd/rankn_api.mojo",
+    "compile": "public",
+    "sha256": "e8d9f452374d11fc872cc3309ef8951f268476f8f971884dcdd64da9901d7929",
+    "matches_manifest": true
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "folder": "device-overload-attempt1",
+    "compiled_direct_copy": false,
+    "expected": false,
+    "matching_symbols": [],
+    "scope": "Compile-time symbol selection only; never executed"
+  },
+  {
+    "folder": "device",
+    "compiled_direct_copy": true,
+    "expected": true,
+    "matching_symbols": [
+      "0000000000046434 t _autograd::program_output_copy::_program_device_output_copy(sequence::exec_device::DeviceExec,::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::Pointer[::Bool(True), MutUntrackedOrigin, ::SIMD[::DType(float32), ::SIMDLength(1)], *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)])"
+    ],
+    "scope": "Compile-time symbol selection only; never executed"
+  }
+]

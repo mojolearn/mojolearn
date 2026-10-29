@@ -1,0 +1,41 @@
+Selected-route source trace, 2026-10-29 (no runtime campaign)
+
+Program.fit:
+providers/python/autograd_program_pyapi -> program_fit_native ->
+train_program_control in autograd/program_runtime.mojo. Full inputs upload once
+per fit; minibatches gather on the executor; replay/backward produce resident
+gradient pointers; step_lr receives those pointers and resident parameter/state
+buffers directly. Curve publication is at the end. Conditional training reads
+one predicate scalar to select its branch; removing that would require changing
+control execution, not merely deleting a redundant transfer. Existing optimizer
+state retention was not duplicated.
+
+Sequential/model training:
+autograd/model_execution.model_fit_native -> model_fit_state in model.mojo.
+The selected batch loop keeps P/Gr/optimizer buffers on the executor through
+forward/backward/step_lr. It uploads caller input/target and resumed mutable
+parameter/state arrays at entry, publishes parameter/state/curve at exit, and
+reads monitored scalar loss when early stopping/validation needs it. No private
+gradient GPU->CPU->GPU cycle was found in these loops. Neural peer separately
+owns ModelSpec/topology setup and its actual model descriptor compilation.
+
+Repeated public program execution:
+ops_program_execute_py -> program_execute_run is the actual host-result route.
+NativeProgramHostRun uses that same native entry. It validates current parameter
+handles and refreshes public mutable inputs each invocation, then returns fresh
+HostArrays. Those caller-visible host results cannot silently become resident
+handles. OpsSession.run_program is currently referenced by a source check, while
+public provider execution uses program_execute_run. The separate device-array
+program_device_execute route already copies device inputs/outputs directly for
+its admitted CUDA/ROCm interface; it does not stage public host arrays.
+
+Concrete repair:
+program_execute_run previously called OpsSession.download per returned array.
+The ordinary DeviceExec path copies into a temporary HostBuffer, waits, then
+memcpy's into the fresh HostArray. The new private publication helper copies
+straight into that final owner, removing temporary host staging and the host
+copy. It preserves the same per-output completion/error boundary, current
+handle/value lookup, immutable result ownership and public D2H bytes.
+No whole-program GPU replay execution, training transfer measurement or claimed
+throughput improvement was performed. This source trace is not proof that every
+library route is free of redundant transfers.

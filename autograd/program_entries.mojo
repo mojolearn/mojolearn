@@ -11,9 +11,10 @@ from core.cast_in import CastIn
 from autograd.rankn import ShapeN
 from autograd.tape import Tape
 from autograd.cast_ops import upload_cast, upload_cast_i32
-from autograd.ops_api import ops_session
+from autograd.ops_api import ops_session, OPS_DEVICE
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
 from autograd.program_io import HostArray, ProgramInput
+from autograd.program_output_copy import program_output_copy
 from autograd.program_tools import ProgramTrace
 from autograd.program_optimize import ProgramOptimization, program_optimize
 from autograd.program_runtime import replay_values, parameter_buffers, train_program_control
@@ -136,7 +137,16 @@ def program_execute_run[E: Exec & Movable & Deinitable, KIND: Int](
         for k in range(len(outs)):  # driver-loop: over returned arrays
             var sh = s[].shapes[s[]._slot(outs[k])]
             var a = HostArray(sh)
-            s[].download(outs[k], FP(unsafe_from_address=Int(a.data.unsafe_ptr())))
+            try:
+                # Same handle validation/value materialization as download,
+                # after this output's private host allocation and before the
+                # next output is admitted. No public owner is exposed early.
+                var slot = s[]._slot(outs[k])
+                var source = s[].tape.value_of(s[].ex, s[].tensors[slot])
+                var count = s[].rows[slot] * s[].cols[slot]
+                program_output_copy[E, KIND == OPS_DEVICE](s[].ex, FP(unsafe_from_address=Int(a.data.unsafe_ptr())), source, count)
+            finally:
+                _ = a  # Raw host address alone cannot retain its destination.
             download_bytes += sh.count() * 4
             outputs.append(a^)
         download_ns = Int(perf_counter_ns()) - started
