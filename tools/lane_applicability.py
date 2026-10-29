@@ -301,12 +301,67 @@ def _closure(node, limit=40):
 
 
 def _ml_attrs(node):
-    """The public classes and functions the lane asks `ml` for: `ml.KMeans`,
-    `ml.linalg`. This is the lane's door onto the package."""
+    """Public doors reached directly or through unambiguous namespace aliases.
+
+    ``M = ml.models; M.CausalLM.load(...)`` reaches CausalLM, not merely
+    Array.from_buffer. Never resolve an alias reassigned elsewhere in this
+    body: a partial guess must not invent a native route.
+    """
+    assignments = {}
+    for sub in ast.walk(node):
+        if sub is not node and isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            # An inner argument shadows an outer alias. Leave that ambiguous
+            # name unresolved rather than borrowing the outer namespace.
+            for arg in sub.args.posonlyargs + sub.args.args + sub.args.kwonlyargs:
+                assignments.setdefault(arg.arg, []).append(None)
+        if isinstance(sub, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            targets = sub.targets if isinstance(sub, ast.Assign) else [sub.target]
+            for target in targets:
+                for name in ast.walk(target):
+                    if isinstance(name, ast.Name):
+                        assignments.setdefault(name.id, []).append(getattr(sub, "value", None))
+    aliases = {} if "ml" in assignments else {"ml": ()}
+
+    def path(expr):
+        if isinstance(expr, ast.Name):
+            return aliases.get(expr.id)
+        if isinstance(expr, ast.Attribute):
+            parent = path(expr.value)
+            if parent is not None:
+                return parent + (expr.attr,)
+        return None
+
+    for _ in range(len(assignments) + 1):
+        changed = False
+        for name, values in assignments.items():
+            if len(values) == 1 and name not in aliases:
+                resolved = path(values[0])
+                if resolved is not None:
+                    aliases[name] = resolved
+                    changed = True
+        if not changed:
+            break
+    subpackages = {name for name in os.listdir(PKG)
+                   if os.path.isfile(os.path.join(PKG, name, "__init__.py"))}
     out = set()
     for sub in ast.walk(node):
-        if isinstance(sub, ast.Attribute) and isinstance(sub.value, ast.Name) and sub.value.id == "ml":
-            out.add(sub.attr)
+        if isinstance(sub, (ast.Attribute, ast.Name)):
+            resolved = path(sub)
+            if resolved:
+                out.add(resolved[0])
+                if len(resolved) > 1 and resolved[0] in subpackages:
+                    directory, index = os.path.join(PKG, resolved[0]), 1
+                    while index < len(resolved):
+                        member = os.path.join(directory, resolved[index])
+                        if os.path.isfile(member + ".py"):
+                            index += 1
+                            break
+                        if os.path.isfile(os.path.join(member, "__init__.py")):
+                            directory, index = member, index + 1
+                            continue
+                        break
+                    if index < len(resolved):
+                        out.add(resolved[index])
     return out
 
 
@@ -613,21 +668,29 @@ def _door_bindings():
         return _DOOR_BINDINGS
     binding_re = re.compile(r"_mojolearn[a-z0-9_]*")
     out = {}
-    for fn in sorted(os.listdir(PKG)):
-        if not fn.endswith(".py"):
-            continue
-        path = os.path.join(PKG, fn)
+    paths = []
+    for directory, children, files in os.walk(PKG):
+        children[:] = sorted(n for n in children if n != "tests" and not n.startswith("."))
+        paths.extend(os.path.join(directory, name) for name in sorted(files) if name.endswith(".py"))
+    for path in paths:
         try:
             text = open(path, encoding="utf-8").read()
             tree = ast.parse(text)
         except (OSError, SyntaxError):
             continue
         bindings = set(binding_re.findall(text))
-        if not bindings or len(bindings) > 3:
+        if not bindings or (len(bindings) > 3 and os.path.dirname(path) == PKG):
             # A file naming more than three bindings is a REGISTRY, not a
             # door (`_backend.py`, `host_surface.py`). lane_select measured
             # the same threshold and for the same reason: harvesting from a
-            # registry gives every name every binding.
+            # registry gives every name every binding. Nested model implementation
+            # modules legitimately select several native families; their own
+            # class definitions (not their __init__ re-exports) name those doors.
+            continue
+        if os.path.dirname(path) != PKG and all(x.endswith("_host") for x in bindings):
+            # A nested native entry module may dispatch to a selected device
+            # provider. Its host entry filename alone does not prove CPU-only
+            # arithmetic; explicit host-only lane contracts remain authoritative.
             continue
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
@@ -637,13 +700,20 @@ def _door_bindings():
 
 
 def _host_only_names(ml_attrs):
-    """The lane's public names whose only binding is a host binding."""
+    """Host arithmetic doors, excluding a buffer constructor beside device work."""
     doors = _door_bindings()
-    out = set()
+    out, device_door = set(), False
     for name in ml_attrs:
-        b = doors.get(name)
-        if b and all(x.endswith("_host") for x in b):
+        bindings = doors.get(name)
+        if bindings and any(not x.endswith("_host") for x in bindings):
+            device_door = True
+        if bindings and all(x.endswith("_host") for x in bindings):
             out.add(name)
+    if device_door:
+        # Array construction supplies buffers; it does not turn a CausalLM (or
+        # another admitted device door) into CPU arithmetic. Keep real host
+        # inference doors such as host_predict/LanguageModelInference intact.
+        out.discard("Array")
     return out
 
 
