@@ -1,0 +1,9 @@
+[
+  {
+    "key": "verification/0.8.63/bc11389e68/nvidia/routine-all/agglomerative/9f4e815b78efdf4169310a485a0702168f6cefe0324ee2592e3f3266e708a2bb.tar.gz",
+    "status": 200,
+    "sha256": "9f4e815b78efdf4169310a485a0702168f6cefe0324ee2592e3f3266e708a2bb",
+    "bytes": 2104736,
+    "local": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/full-bc11389/nvidia-recovery/9f4e815b78efdf4169310a485a0702168f6cefe0324ee2592e3f3266e708a2bb.tar.gz"
+  }
+]
