@@ -1,0 +1,179 @@
+{
+  "source_commit": "5abdda9d8dc9cdad007c581137623414e2168f8b",
+  "apple": {
+    "prior_images": 79,
+    "unchanged": 75,
+    "replacement_owners": [
+      {
+        "mode": "host",
+        "member": "_mojolearn_tokenizer_host",
+        "raw": "/Users/andrewhendel/mojolearn-evidence/sampling-release-images-20261029/tokenizer-complete/raw/_mojolearn_tokenizer_host.so",
+        "raw_sha256": "0c06bfc804e91e8f253f15569d5d95c04896279ceef71353c6e4eeecbea20f1d",
+        "compile_receipt": "/Users/andrewhendel/mojolearn-evidence/sampling-release-images-20261029/tokenizer-complete/receipt.json",
+        "staged": "/Users/andrewhendel/mojolearn-evidence/sampling-release-images-20261029/stage/mojolearn/host/_mojolearn_tokenizer_host.so",
+        "staged_sha256": "689b09ffb4a0c1f175932958326db1b4e32ef7c47f024411818ea17701190e3d"
+      },
+      {
+        "mode": "identical",
+        "member": "_mojolearn_transformer",
+        "raw": "/Users/andrewhendel/mojolearn-evidence/full-resident-sampling-20261029/native-restored-source/_mojolearn_transformer_sampling.so",
+        "raw_sha256": "aacd3f49a5876fca9af776f5751c8e04cc9e97c2de04a7ee196b2a457005ec26",
+        "compile_receipt": "/Users/andrewhendel/mojolearn-evidence/full-resident-sampling-20261029/native-restored-source/receipt.json",
+        "staged": "/Users/andrewhendel/mojolearn-evidence/sampling-release-images-20261029/stage/mojolearn/identical/_mojolearn_transformer.so",
+        "staged_sha256": "e87787564c494a0e577db331c3b6f9b47151d6c682af2f5c20255e0712cdbb40"
+      },
+      {
+        "mode": "host",
+        "member": "_mojolearn_x_sequence_host",
+        "raw": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/artifacts/b39dfae22a0089191cbd0259264b283063102a5c4a4f7eca902e9487787dec56/_mojolearn_dev_x_sequence_host.so",
+        "raw_sha256": "8c24e470c341dcc93a724893b7f38892c1b45279c2ca85dd656e6ff3b2dff506",
+        "compile_receipt": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/artifacts/b39dfae22a0089191cbd0259264b283063102a5c4a4f7eca902e9487787dec56/receipt.json",
+        "staged": "/Users/andrewhendel/mojolearn-evidence/sampling-release-images-20261029/stage/mojolearn/host/_mojolearn_x_sequence_host.so",
+        "staged_sha256": "a8def4234c1afb4054db52edadabed5cd74f0f8916f80f661dd4a192aed15bbf",
+        "reuse": "Normal-staged unchanged peer bytes"
+      },
+      {
+        "mode": "identical",
+        "member": "_mojolearn_x_sequence",
+        "raw": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/artifacts/a23f78d4e554f270be5be3af1aacdc6960158287be3d516c18ba29088f79e7a9/_mojolearn_dev_x_sequence_m1.so",
+        "raw_sha256": "9bac8bd1238470c374790eb7f51fe514dc3f2e7b0537862679ac94f071eb823f",
+        "compile_receipt": "/Users/andrewhendel/mojolearn-evidence/adapter-version-owner-build-20261029/cache/artifacts/a23f78d4e554f270be5be3af1aacdc6960158287be3d516c18ba29088f79e7a9/receipt.json",
+        "staged": "/Users/andrewhendel/mojolearn-evidence/sampling-release-images-20261029/stage/mojolearn/identical/_mojolearn_x_sequence.so",
+        "staged_sha256": "1eaa38881a0da1aa4e756094958b4107ce5df082caa9b7aef6c7d8c1569b0394",
+        "reuse": "Normal-staged unchanged peer bytes"
+      }
+    ],
+    "runtime_unchanged": 5,
+    "all79_source_raw_check": "/Users/andrewhendel/mojolearn-evidence/sampling-release-images-20261029/final79-source-match.json",
+    "all79_source_raw_check_sha256": "e81420cbb0b748689910edc17fad31465820bdfc0a3be9552ed6a56672328e6e",
+    "tokenizer_compile": {
+      "exit_code": 0,
+      "elapsed_seconds": 435.5055404580198,
+      "source_count": 657,
+      "sources_changed_during_build": [],
+      "binary_sha256": "0c06bfc804e91e8f253f15569d5d95c04896279ceef71353c6e4eeecbea20f1d",
+      "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+      "argv": [
+        "bash",
+        "tools/compile_slot.sh",
+        "sh",
+        "bindings/build_host_family.sh",
+        "tokenizer"
+      ],
+      "environment": {
+        "MOJOLEARN_HOST_OUTDIR": "/Users/andrewhendel/mojolearn-evidence/sampling-release-images-20261029/tokenizer-complete/raw",
+        "MOJOLEARN_COMPILE_JOBS": "10",
+        "MOJOLEARN_MOJO_BUILD_FLAGS": "--optimization-level 0",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      }
+    },
+    "runtime_executed": false
+  },
+  "linux": {
+    "original_retained_images": 25,
+    "raw_hash_failures": 0,
+    "source_candidates": {
+      "host": 12,
+      "identical": 7
+    },
+    "missing": {
+      "host": 34,
+      "identical": 26
+    },
+    "selectors": {
+      "host": [
+        "host:forest",
+        "host:trees",
+        "host:rf",
+        "host:gbdt",
+        "host:x_trees",
+        "host:linalg",
+        "host:solver",
+        "host:svm",
+        "host:gp",
+        "host:kernel_methods",
+        "host:mixture",
+        "host:mixture_infer",
+        "host:gp_infer",
+        "host:x_linear",
+        "host:hdbscan",
+        "host:hdbscan_infer",
+        "host:ivf",
+        "host:ivf_search",
+        "host:x_cluster",
+        "host:x_neighbors",
+        "host:metrics",
+        "host:preprocessing",
+        "host:resample",
+        "host:x_prep",
+        "host:x_metrics",
+        "host:mamba",
+        "host:embedding_infer",
+        "host:x_sequence",
+        "host:tsa",
+        "host:arima",
+        "host:forecast",
+        "host:tokenizer",
+        "host:runtime_model_selection",
+        "host:runtime_sequential"
+      ],
+      "identical": [
+        "identical:gbdt",
+        "identical:rf",
+        "identical:trees",
+        "identical:x_trees",
+        "identical:estimators",
+        "identical:svm",
+        "identical:solver",
+        "identical:gp",
+        "identical:kernel_methods",
+        "identical:mixture",
+        "identical:x_linear",
+        "identical:x_decomp",
+        "identical:hdbscan",
+        "identical:ivf",
+        "identical:x_cluster",
+        "identical:x_neighbors",
+        "identical:x_ann",
+        "identical:metrics",
+        "identical:preprocessing",
+        "identical:resample",
+        "identical:x_prep",
+        "identical:x_metrics",
+        "identical:transformer",
+        "identical:x_sequence",
+        "identical:tsa",
+        "identical:arima"
+      ]
+    },
+    "amd_old_source_reproduction_failures": 0,
+    "amd_member_source_unchanged": 31,
+    "amd_group_unchanged": [
+      "_mojolearn_native",
+      "_mojolearn_native_trees",
+      "_mojolearn_native_cluster"
+    ],
+    "amd_group_changed": [
+      "_mojolearn_native_sequence"
+    ]
+  },
+  "failures_retained": [
+    "tokenizer initial incomplete sparse/source capture canceled143 after28.22s; restored required paths and generated table before complete657-file build",
+    "initial staging missing __init__ package-marker refusal",
+    "pre-portable runtime hash assertion; standard portable stage with accepted helper restored exact5runtime hashes",
+    "AMD inventory initial sparse Python tooling import failure; retried pinned-source extraction with full main tools",
+    "AMD merged inventory first manifest parser assumed dict; actual files list corrected before source/raw result"
+  ],
+  "scope": "Compile/source/staging only. No installed package mutation, runtime, identity or performance claim. No Linux dispatch/ledger writes.",
+  "retention": {
+    "archive": "/Users/andrewhendel/mojolearn-evidence/sampling-release-images-5abdda-apple.tgz",
+    "bytes": 82291281,
+    "sha256": "4a8aaf3ddd7aa7ed2d7da47121c61b19c23be54a872fc2214b602ab0ab3666d7",
+    "r2_key": "measurements/sampling-release-images-20261029/sampling-release-images-5abdda-apple.tgz",
+    "put_status": 200,
+    "get_status": 200,
+    "readback_sha256": "4a8aaf3ddd7aa7ed2d7da47121c61b19c23be54a872fc2214b602ab0ab3666d7",
+    "matches": true
+  }
+}

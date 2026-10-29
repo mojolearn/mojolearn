@@ -1,0 +1,38 @@
+Sampling release image preparation (2026-10-29)
+Frozen product:5abdda9d8dc9cdad007c581137623414e2168f8b.
+
+All79 prior Apple source closures/raw binaries checked:75 unchanged,4 changed.
+Replacements are tokenizerhost(new),TransformerGPU(reused canonical actual factory),
+and host/GPU x_sequence(reused peer supported producer). No duplicate compilation.
+Complete tokenizerhost O0/10 configured workers/compile_slot compile passed0 in
+435.51s;657 captured source files unchanged. Configured workers do not establish
+utilization. Initial28.22s incomplete sparse-source attempt canceled143 and retained;
+required tracked dependencies/generated Unicode bytes restored before final build.
+
+Normal staging preserved raw artifacts. Four replacements are isolated under
+~/mojolearn-evidence/sampling-release-images-20261029/stage/mojolearn/.
+All5 runtime bytes equal immutable2d after supported dylib+portable-math staging
+with existing helper. Four statically closed dependency graphs are not runtime
+loader qualification. Initial missing-package-marker refusal and pre-portable
+runtime assertion are preserved as assembly setup failures. No active/frozen
+install or wheel was mutated.75 unchanged images still reside in original2dinstall.
+
+Linux read-only result:25 original images have0raw hash failures;12host+7sm89
+remain source candidates.34host+26sm89 groups are missing/stale. Exact selectors
+and original producer paths are in external linux/inventory.json and selector txt;
+classical owns these builds, generation owns new33PTX GHA run40875490559.
+AMD original33 source identities reproduced at095 without mismatch;31 unchanged,
+Transformer+x_sequence changed. Four archived merged-image raw hashes match.
+Preserve _mojolearn_native,_mojolearn_native_trees,_mojolearn_native_cluster;
+only _mojolearn_native_sequence is source-invalidated. Source matching alone does
+not replace target/toolchain/flags/admission or physical-device runtime evidence.
+No Linux dispatch, ledger writes, runtime/hash/performance campaign performed.
+
+Full evidence:~/mojolearn-evidence/sampling-release-images-20261029/.
+Key files:tokenizer-complete/receipt.json,source-manifest.json,source.tar.gz,
+compile.log;stage-receipt.json;final79-source-match.json;linux/inventory.json;
+linux/amd-inventory.json. Raw/staged paths/hashes and source comparison are retained.
+
+Retained archive:measurements/sampling-release-images-20261029/sampling-release-images-5abdda-apple.tgz
+SHA256 4a8aaf3ddd7aa7ed2d7da47121c61b19c23be54a872fc2214b602ab0ab3666d7;82291281bytes;PUT/GET200 exact readback.
+Incomplete first-stage copies are excluded (duplicate raw bytes retained in completed source artifacts); all failure logs retained.
