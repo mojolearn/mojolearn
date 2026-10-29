@@ -1,12 +1,15 @@
 {
   "files": {
-    "run_frozen_chunks_v3.py": "360c1e086548a4339e87ed34dfa51d3ae6e693b07187363b28c22075a069bba9",
     "controller_lease_budget.py": "32e14f57381f57ca637231d21debc4bf41605883dfafecd3bb278ba4939368aa",
-    "controller_preflight_v2.py": "31f5ac28c64fd11a27d17b8b9348e6f2e66d8cb79a5083a7d4ae02081469d147",
     "controller_preflight.py": "02d9fea8c6b05963d210823f83bd6bf0e626d1b09e978da689c20c04e87c933e",
+    "controller_preflight_v2.py": "31f5ac28c64fd11a27d17b8b9348e6f2e66d8cb79a5083a7d4ae02081469d147",
+    "controller_process.py": "8c96d3c83744059f567426fcc69017264ed52eff049df9a2f335a678399d5684",
     "observation_classification.py": "27a1667239ae42cde8d964aaa32dd86c82b3e52f7a22e202273fee242aa3dd41",
-    "test_controller_lease_budget.py": "9659e733c5d92a98afd00028ec27edab6492b00ab85f3b69748683ff9abcb94d",
-    "test_controller_preflight_v2.py": "df45ee228c643c6accadbddaf3ba0cb15d70a710e13820bcb2fd9b7bd5ad8a16"
+    "run_frozen_chunks_v3.py": "360c1e086548a4339e87ed34dfa51d3ae6e693b07187363b28c22075a069bba9",
+    "run_frozen_chunks_v4.py": "e137cc4a838a160faf48e31a561c6a5b6826fd50c286d330320849481f7eb73e",
+    "test_controller_lease_budget.py": "9080a1d43e5bed7ac3bc218d27b694e30f6f788f22b3e4fb534d9bf0e7c9b9ad",
+    "test_controller_preflight_v2.py": "df45ee228c643c6accadbddaf3ba0cb15d70a710e13820bcb2fd9b7bd5ad8a16",
+    "test_controller_process.py": "88da085fd3998d1bbe28bd3b43b9f089907ff9c7f978b460138b6fb06da09952"
   },
   "validation": {
     "tests": 22,
@@ -14,5 +17,11 @@
     "log": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/full-bc11389/finite-controller-tests-installed.log",
     "original_missing_pytest_attempt": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/full-bc11389/finite-controller-tests.log"
   },
-  "product_execution": false
+  "product_execution": false,
+  "validation_v4": {
+    "tests": 27,
+    "exit": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/full-bc11389/finite-controller-v4-final-tests.log"
+  },
+  "recommended_executor": "run_frozen_chunks_v4.py"
 }
