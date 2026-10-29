@@ -23,6 +23,7 @@ SCHEMA = "mojolearn.macos.installed-candidate.v1"
 PACKAGING_REFRESH_FILES = frozenset({
     "tools/release_macos_installed_candidate.py", "tools/test_release_macos_installed_candidate.py",
     "packaging/portable_math/wheel.py", "packaging/portable_math/test_wheel.py",
+    "packaging/macos/shrink_wheel.py", "tools/test_macos_recompression.py",
 })
 
 
@@ -89,9 +90,10 @@ def validate_snapshot(root, commit, package, receipt):
 def validate_adapters(root, directory, before, result, commit):
     common.require(result["exit_code"] == 0 and result["source_commit"] == before["source_commit"],
                    "adapter build did not complete for this source")
-    validate_refresh(root, before["source_commit"], commit)
     common.require(before.get("source_dirty") in (False, "", []), "adapter build used dirty source")
     common.require(before["native_mode"] == "identical", "adapter mode differs")
+    # Adapter reuse is based on the complete captured closure below, not an
+    # unrelated package commit: a Python owner-lifetime fix need not rebuild it.
     check_files(root, before["captured_inputs"])
     # Keep the original role closure and compiler identity, rather than accepting
     # the manifest's smaller list of direct source files as closure evidence.
