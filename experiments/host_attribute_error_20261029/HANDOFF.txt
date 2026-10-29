@@ -29,3 +29,26 @@ saved-host prediction, module replacement and changed availability descriptors.
 At source freeze tests are prepared, syntax/diff checks pass; changed-source
 compilation and actual installed regressions remain pending. Do not promote
 source review or compilation to runtime/cross-vendor success.
+
+Continuation: release-green-20261029
+The first installed repair at543875 still lost an owner reference on the first
+missing generic lookup. Preserve its original focused.log. The C entry now
+borrows the arguments directly from CPython's call-owned tuple before invoking
+GenericGetAttr; on failure it returns NULL with no PythonObject tuple/item
+temporaries to clean up. This is a documented native API path, not a compiler
+patch; the underlying ownership defect remains unconfirmed.
+
+Optimized Apple tokenizer compilation passed. A private installed clone with
+that replacement passed all11 focused regressions, including32 missing lookups
+with stable owner references, original exception metadata, saved-host CPU
+prediction, native route sabotage, and public fit/save/load/predict roundtrip.
+The sabotage fixture now checks the observed generated native arity exception:
+DBSCAN/Spectral retain Exception with a TypeError label, while Agglomerative
+translates that label to TypeError. Exact diagnostics and execution-route checks
+remain enforced; the original fixture failures are retained in attempt1..4.
+Evidence: ~/mojolearn-evidence/release-green-20261029/{focused-summary.json,
+stage-receipt.json,tokenizer-build,attempt1,attempt2,attempt3,attempt4}.
+runtime_classical also includes this source and its rebuild is pending. The
+screening clone is not yet a complete source-aligned release install. Linux
+affected builds, full verifier, cross-vendor agreement and publication remain
+pending.

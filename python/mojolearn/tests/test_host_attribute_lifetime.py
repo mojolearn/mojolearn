@@ -150,8 +150,13 @@ def test_expected_cpu_execution_entry_is_reached(tmp_path, monkeypatch, name, en
     row = next(row for row in rows if row[0] is type(model))
     module = row[2]
     replacement = vars(module)[row[4]]
-    with pytest.raises(TypeError) as expected:
+    # Mojo's generated native arity guard currently raises plain Exception
+    # containing the TypeError label, rather than CPython TypeError. Retained
+    # installed evidence: release-green-20261029/attempt1/focused.log. Capture
+    # that exact native refusal and require the public path to propagate it.
+    with pytest.raises(Exception, match=r'^TypeError: .*takes 0 positional arguments but 2 were given') as expected:
         replacement([], [])
+    assert type(expected.value) is Exception
     monkeypatch.setattr(module, entry_name, replacement)
     # This test deliberately reconnects the native export, so the expected
     # failure occurs at execution rather than the export-identity guard above.
@@ -159,9 +164,17 @@ def test_expected_cpu_execution_entry_is_reached(tmp_path, monkeypatch, name, en
     replacement_row = row[:3] + (exports, row[4])
     monkeypatch.setitem(context, 'family_host_binding_connections',
                         tuple(replacement_row if value is row else value for value in rows))
-    with pytest.raises(TypeError) as actual:
+    # DBSCAN and Spectral preserve the generated pending exception;
+    # Agglomerative translates its explicit label to CPython TypeError.
+    # Compare the exact arity diagnostic after that existing translation.
+    error_type = TypeError if name == 'AgglomerativeClustering' else Exception
+    with pytest.raises(error_type) as actual:
         model.predict(np.array([[1, 2]], dtype=np.float32))
-    assert actual.value.args == expected.value.args
+    assert type(actual.value) is error_type
+    expected_message = str(expected.value)
+    if error_type is TypeError:
+        expected_message = expected_message.removeprefix('TypeError: ')
+    assert actual.value.args == (expected_message,)
 
 
 def test_public_fit_save_host_load_and_prediction_roundtrip(tmp_path):
