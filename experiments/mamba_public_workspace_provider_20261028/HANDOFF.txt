@@ -1,0 +1,54 @@
+Public Mamba2Block.step retained-workspace provider (2026-10-28)
+
+Branch: lane/mamba-public-workspace-provider-20261028.
+Base: d9112047fdb59b49251488581852d2eb582cd51a.
+Prerequisite: ABI constants a4e7cda0f87a66f7b23e4b275909b9ee909c5a3b
+(local cherry-pick 7d88a9e12c). Native workspace implementation and factory are
+owned/compiled separately by the classical lane. Root serializes integration.
+
+Removed repeated work / setup boundary:
+NativeBlockPlan now captures the optional, versioned Mamba2 public workspace
+provider during existing binding admission. The first eligible public step
+creates one native opaque resource; subsequent steps reuse that resource. The
+native companion retains GPU storage and refreshes every live weight, state and
+input byte each call. This is the ordinary mutable public step ABI, never the
+private immutable-weight decode session. Algorithm loops remain native Mamba
+implementation code, not provider code.
+
+Invalidation and lifetimes:
+Only GPU identical with MOJOLEARN_NEURAL_NATIVE_DISPATCH exactly enabled uses
+this optional capability. Existing images without it keep the existing public
+route. Existing environment/model/context/binding/Array metadata and release
+checks remain. The owner identity key additionally watches the exact factory
+object, so same-module capability addition, removal or replacement rebuilds the
+plan/resource. Native storage also rebuilds for batch/model dimensions or device
+context selection changes. Live mutable bytes are not cached by pointer identity.
+Create/adopt is native metadata work with GIL held; adoption owns failure cleanup.
+Private resource + plan pins span synchronous native execution and GIL release;
+the resource pins its provider/image until close. Native nonblocking loans use a
+private temporary workspace on contention and clear failed retained storage.
+
+Publication and limits:
+Existing live input/state/weight validation, q publication, state writeback and
+h_last_ publication ordering remain. Public y and h_last_ arrays are freshly
+allocated because callers can retain them. All host/device data transfers remain.
+No runtime speedup or bitwise-identity claim is made. The separate native arena
+workspace retains maximum legal one-step capacity; logical views and zeroing
+remain per call. Its native receipt, source review and limitations accompany the
+companion commit. No private-session substitution or numerical reordering here.
+
+Compilation:
+Actual neural_block_forward_binding public forward/step CPU closure: exit0,
+Mac arm64, Mojo1.0.0(ed45d567), identical, O0, default2 compile slots. This covers
+provider admission/creation/dispatch/lifetimes, not the dynamic GPU numerical
+target or runtime loading. Separate native companion compilation covers that
+implementation. No duplicate combined build, runtime, identity or measurement
+campaign. Independent provider source review by neural lane found no blocker.
+
+Evidence:
+/Users/andrewhendel/mojolearn-evidence/mamba-public-workspace-provider-20261028/
+compile.json records command, binary/source hashes, coverage and retained source.
+Full compile.log/.exit, dylib, source.tar.gz and source-sha256.json retained.
+Earlier successful compile before exact environment alignment retained; missing
+root and mistyped compiler-query manifest failures also retained honestly.
+Source guards recorded in guards.json after product commit.

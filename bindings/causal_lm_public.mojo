@@ -20,7 +20,8 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from bindings.py_typed_call import py_call_typed
 from checks.numerics import NUMERIC_IDENTICAL
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_reserved_execute
+from core.native_mamba_workspace_abi import MAMBA2_WORKSPACE_ABI_NAME, MAMBA2_WORKSPACE_OP_COUNT, MAMBA2_WORKSPACE_STEP
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_reserved_execute, NativeDescriptorResource, neural_descriptor_resource_handle
 from providers.python.generation_session_pyapi import (
     generation_reuse_native_provider, generation_connect_native_session,
     generation_native_session_matches, generation_native_forward,
@@ -296,6 +297,15 @@ def causal_lm_admit_binding(mut mods: NativeModules,
     elif kind == "mamba2":
         py_setitem(entries, "forward", _native_function(mods, block_binding, "mamba2_forward"))
         py_setitem(entries, "decode", _native_function(mods, block_binding, "mamba2_decode_step"))
+        if (requested_gpu and mode == NUMERIC_IDENTICAL and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "1") == "1"
+                and _native_has_entry(mods, block_binding, "mamba2_workspace_api_v1")):
+            # Optional versioned public-step capability; older binding images
+            # retain their existing public operation, never a private session.
+            var workspace_provider = neural_descriptor_reuse(PythonObject(None),
+                _native_function(mods, block_binding, "mamba2_workspace_api_v1"),
+                String(MAMBA2_WORKSPACE_ABI_NAME), MAMBA2_WORKSPACE_OP_COUNT)
+            mods.released()
+            py_setitem(entries, "mamba2_workspace_provider", workspace_provider)
     else:
         raise Error("CausalLM: unsupported model kind " + kind)
     # Native ownership migration: resolve descriptor tables at admission by
@@ -717,7 +727,7 @@ def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: Py
     return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
 
 
-def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, kind: String, d: Int, packed: Bool, prepared: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
+def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, kind: String, d: Int, packed: Bool, prepared: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool = False, mamba_workspace: PythonObject = PythonObject(None)) raises -> PythonObject:
     # Standalone callers supply the retained native plan directly: no temporary
     # namespace or Python attribute dispatch to reconstruct execution metadata.
     _causal_array_guard(mods)
@@ -737,10 +747,10 @@ def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entri
             profile_changed = _generation_bool(py_get(fields, "_arithmetic_profile_changed", PythonObject(False)))
         ref reused = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer
         mods.released()
-        return _causal_layer_run_bound(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step, fields, profile_id, profile_changed)
+        return _causal_layer_run_bound(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step, fields, profile_id, profile_changed, mamba_workspace)
     var layer = GenerationLayerSnapshot(fields, kind, planes)
     mods.released()
-    return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
+    return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step, mamba_workspace)
 
 
 struct PreparedGenerationLayer(Movable, Writable):
@@ -772,14 +782,16 @@ def causal_prepared_layer(mut mods: NativeModules, block_fields: PythonObject, k
 def _causal_layer_run_prepared(mut mods: NativeModules,
     e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
     head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
+    mamba_workspace: PythonObject = PythonObject(None),
 ) raises -> PythonObject:
-    return _causal_layer_run_bound(mods, e, kind, d, b, l, layer, head_profile, device15, x, supplied_state, step, layer.block, layer.profile, layer.profile_changed)
+    return _causal_layer_run_bound(mods, e, kind, d, b, l, layer, head_profile, device15, x, supplied_state, step, layer.block, layer.profile, layer.profile_changed, mamba_workspace)
 
 
 def _causal_layer_run_bound(mut mods: NativeModules,
     e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
     head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
     block_override: PythonObject, profile_override: PythonObject, profile_changed_override: Bool,
+    mamba_workspace: PythonObject = PythonObject(None),
 ) raises -> PythonObject:
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
@@ -881,7 +893,15 @@ def _causal_layer_run_bound(mut mods: NativeModules,
         # Fixed public Mamba ABI words, plus the optional Mamba1 affine tail.
         # Reserve once so the input/weights/state/report vector does not grow
         # through multiple allocations during every public decode step.
-        var m_addresses = List[Int](capacity=len(layer.weights.addresses) + 7)
+        var workspace = mamba_workspace is not None
+        if workspace and (kind != "mamba2" or not step):
+            raise Error("Mamba2 public workspace requires its admitted public step")
+        var m_addresses = List[Int](capacity=len(layer.weights.addresses) + 7 + Int(workspace))
+        if workspace:
+            var handle = neural_descriptor_resource_handle(mamba_workspace, [])
+            if handle == 0:
+                raise Error("Mamba2 public workspace: owner is closed")
+            m_addresses.append(handle)
         m_addresses.append(_addr(x, keep))
         layer.weights.append_resolved(m_addresses, keep)
         if kind == "mamba1":
@@ -930,7 +950,12 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             _ = y  # keep the Python object alive through the native call above
             var m_params: List[Int] = [b, d, Int(py=st.buffered_tokens)] if step else [b, l, d, Int(py=st.buffered_tokens)]
             var native = py_get(e, "native_mamba")
-            if native is not None:
+            if workspace:
+                var resource = mamba_workspace.downcast_value_ptr[NativeDescriptorResource]()
+                py_setattr(st, "buffered_tokens", PythonObject(neural_descriptor_execute(resource[].provider,
+                    MAMBA2_WORKSPACE_STEP, m_addresses, m_params, [layer.words.dt_low, layer.words.dt_high])))
+                mods.released()
+            elif native is not None:
                 py_setattr(st, "buffered_tokens", PythonObject(neural_descriptor_execute(native, 3 if step else 2,
                     m_addresses, m_params, [layer.words.dt_low, layer.words.dt_high])))
                 mods.released()
@@ -944,6 +969,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             causal_block_cache_set(mods, blk, "h_last_", last)
     _writeback(copies)
     _ = layer  # retain captured Array weights until every native read completes
+    _ = mamba_workspace  # retain resource and compiled image across GIL release
     _ = keep^
     return y
 
