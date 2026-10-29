@@ -1,0 +1,427 @@
+{
+  "source_commit": "06347760c6a7a780201e8357dd3341ee85be2fa6",
+  "images": [
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_arima_host",
+      "mismatched_files": [],
+      "source_files": 22
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_byte_lm_host",
+      "mismatched_files": [],
+      "source_files": 89
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_core_host",
+      "mismatched_files": [],
+      "source_files": 73
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_embedding_host",
+      "mismatched_files": [],
+      "source_files": 15
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_embedding_infer_host",
+      "mismatched_files": [],
+      "source_files": 14
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_estimators_host",
+      "mismatched_files": [],
+      "source_files": 191
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_forecast_host",
+      "mismatched_files": [],
+      "source_files": 53
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_forest_host",
+      "mismatched_files": [],
+      "source_files": 44
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_gbdt_host",
+      "mismatched_files": [],
+      "source_files": 83
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_gp_host",
+      "mismatched_files": [],
+      "source_files": 50
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_gp_infer_host",
+      "mismatched_files": [],
+      "source_files": 36
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_hdbscan_host",
+      "mismatched_files": [],
+      "source_files": 95
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_hdbscan_infer_host",
+      "mismatched_files": [],
+      "source_files": 95
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_ivf_host",
+      "mismatched_files": [],
+      "source_files": 39
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_ivf_search_host",
+      "mismatched_files": [],
+      "source_files": 39
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_kernel_methods_host",
+      "mismatched_files": [],
+      "source_files": 83
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_linalg_host",
+      "mismatched_files": [],
+      "source_files": 100
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_mamba_host",
+      "mismatched_files": [],
+      "source_files": 87
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_metrics_host",
+      "mismatched_files": [],
+      "source_files": 106
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_mixture_host",
+      "mismatched_files": [],
+      "source_files": 47
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_mixture_infer_host",
+      "mismatched_files": [],
+      "source_files": 47
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_neural_host",
+      "mismatched_files": [],
+      "source_files": 81
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_preprocessing_host",
+      "mismatched_files": [],
+      "source_files": 15
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_resample_host",
+      "mismatched_files": [],
+      "source_files": 27
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_rf_host",
+      "mismatched_files": [],
+      "source_files": 69
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_runtime_classical_host",
+      "mismatched_files": [
+        "bindings/cfb_agglo.mojo",
+        "bindings/cfb_spectral.mojo",
+        "bindings/public_attributes_native.mojo",
+        "providers/python/density_public_lifecycle_pyapi.mojo"
+      ],
+      "source_files": 439
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_runtime_manifold_host",
+      "mismatched_files": [],
+      "source_files": 139
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_runtime_model_selection_host",
+      "mismatched_files": [],
+      "source_files": 146
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_runtime_sequential_host",
+      "mismatched_files": [],
+      "source_files": 207
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_solver_host",
+      "mismatched_files": [],
+      "source_files": 85
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_svm_host",
+      "mismatched_files": [],
+      "source_files": 128
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_tokenizer_host",
+      "mismatched_files": [
+        "bindings/public_attributes_native.mojo"
+      ],
+      "source_files": 652
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_training_host",
+      "mismatched_files": [],
+      "source_files": 94
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_transformer_host",
+      "mismatched_files": [],
+      "source_files": 62
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_trees_host",
+      "mismatched_files": [],
+      "source_files": 110
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_tsa_host",
+      "mismatched_files": [],
+      "source_files": 57
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_ann_host",
+      "mismatched_files": [],
+      "source_files": 63
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_cluster_host",
+      "mismatched_files": [],
+      "source_files": 74
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_cnn_host",
+      "mismatched_files": [],
+      "source_files": 34
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_decomp_host",
+      "mismatched_files": [],
+      "source_files": 132
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_linear_host",
+      "mismatched_files": [],
+      "source_files": 68
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_metrics_host",
+      "mismatched_files": [],
+      "source_files": 39
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_neighbors_host",
+      "mismatched_files": [],
+      "source_files": 64
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_prep_host",
+      "mismatched_files": [],
+      "source_files": 64
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_sequence_host",
+      "mismatched_files": [],
+      "source_files": 282
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_x_trees_host",
+      "mismatched_files": [],
+      "source_files": 48
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn",
+      "mismatched_files": [],
+      "source_files": 165
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_byte_lm",
+      "mismatched_files": [],
+      "source_files": 240
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_embedding",
+      "mismatched_files": [],
+      "source_files": 138
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_estimators",
+      "mismatched_files": [],
+      "source_files": 263
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_gbdt",
+      "mismatched_files": [],
+      "source_files": 229
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_gp",
+      "mismatched_files": [],
+      "source_files": 105
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_hdbscan",
+      "mismatched_files": [],
+      "source_files": 149
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_ivf",
+      "mismatched_files": [],
+      "source_files": 113
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_kernel_methods",
+      "mismatched_files": [],
+      "source_files": 141
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_linalg",
+      "mismatched_files": [],
+      "source_files": 141
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_mamba",
+      "mismatched_files": [],
+      "source_files": 194
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_metrics",
+      "mismatched_files": [],
+      "source_files": 296
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_mixture",
+      "mismatched_files": [],
+      "source_files": 103
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_rf",
+      "mismatched_files": [],
+      "source_files": 114
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_solver",
+      "mismatched_files": [],
+      "source_files": 127
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_svm",
+      "mismatched_files": [],
+      "source_files": 121
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_training",
+      "mismatched_files": [],
+      "source_files": 273
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_transformer",
+      "mismatched_files": [],
+      "source_files": 212
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_trees",
+      "mismatched_files": [],
+      "source_files": 80
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_ann",
+      "mismatched_files": [],
+      "source_files": 140
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cluster",
+      "mismatched_files": [],
+      "source_files": 144
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cnn",
+      "mismatched_files": [],
+      "source_files": 140
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_decomp",
+      "mismatched_files": [],
+      "source_files": 216
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_neighbors",
+      "mismatched_files": [],
+      "source_files": 81
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_prep",
+      "mismatched_files": [],
+      "source_files": 90
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_sequence",
+      "mismatched_files": [],
+      "source_files": 306
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_trees",
+      "mismatched_files": [],
+      "source_files": 49
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_linear",
+      "mismatched_files": [],
+      "source_files": 77
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_preprocessing",
+      "mismatched_files": [],
+      "source_files": 25
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_resample",
+      "mismatched_files": [],
+      "source_files": 36
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_x_metrics",
+      "mismatched_files": [],
+      "source_files": 38
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_tsa",
+      "mismatched_files": [],
+      "source_files": 55
+    },
+    {
+      "binding_key": "linux-64/cuda/sm_89/identical/_mojolearn_arima",
+      "mismatched_files": [],
+      "source_files": 71
+    }
+  ],
+  "unchanged": 77,
+  "changed": [
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_runtime_classical_host",
+      "mismatched_files": [
+        "bindings/cfb_agglo.mojo",
+        "bindings/cfb_spectral.mojo",
+        "bindings/public_attributes_native.mojo",
+        "providers/python/density_public_lifecycle_pyapi.mojo"
+      ],
+      "source_files": 439
+    },
+    {
+      "binding_key": "linux-64/host/-/host/_mojolearn_tokenizer_host",
+      "mismatched_files": [
+        "bindings/public_attributes_native.mojo"
+      ],
+      "source_files": 652
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "key": "measurements/linux-host-attribute-c9d8c07-20261029/source-0e59e89d3b733b39feb76e157c0e2755ebbe3296dee54bbf56cc4b8be57ad01b.tgz",
+  "sha256": "0e59e89d3b733b39feb76e157c0e2755ebbe3296dee54bbf56cc4b8be57ad01b",
+  "bytes": 153709595,
+  "put": 200,
+  "get": 200,
+  "remote_hash_verified": true,
+  "verified": true
+}

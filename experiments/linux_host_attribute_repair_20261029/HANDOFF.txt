@@ -1,0 +1,15 @@
+PENDING BUILD/RUNTIME CHECKPOINT — 2026-10-29 16:59 UTC
+Branch: lane/linux-host-attribute-build-20261029
+Frozen native/source:06347760c6a7a780201e8357dd3341ee85be2fa6 (reviewed c9d8 repair plus543875 spectral compile correction; prior3e8 tests/glue).
+Actual retained79 source audit:77unchanged; only tokenizer_host and runtime_classical_host invalidated,2650unique source paths. No GPU or adapter owner rebuilt.
+Tokenzier shipping host compiled0. Original runtime_classical compilation failed on Mojo compile-time Python initialization of optional default; full failure retained. Corrected classical owner is compiling; no green claim yet. First corrected launcher refused Unicode setup before compilation; supported pixi Python PATH restored, original setup refusal retained.
+Standard optimized16workers, one compiler, actual affinity/cgroup16cores,31,819,911,168bytes memory. No claim every phase saturates allcores.
+Owned RunPod axo93tzzw07p0b, SSH38.80.152.147:36037. Fixed deadman2026-10-29T17:22:53Z (no extension). Owner state ~/mojolearn-evidence/devpods/cpu-hostattr3e8-axo93tzzw07p0b/state.env.
+Local teardown controller PID31683 held only while corrected remote work completes; original remote deadman remains armed. Corrected remote controller2643; focused11-case prepared controller3824; final retention4321. No510-cell campaign launched; final reference freeze pending.
+Finite plan: corrected compile budget20min; static NV46host+33GPU and AMD46host+4merged/33logical staging then11focused installed CPU lifetime/routing/fit-save-load cases only if prerequisites pass. Final test fixture exact543875 tree; source stage063477, test-only differences explicit. MOJOLEARN_VENDOR=cpu. Earlier prepared10-case run canceled before any product runtime.
+At17:08UTC autonomous finalizer stops remaining owned work, archives complete outputs/binaries/source/logs, uploads and SHA-verifies R2. Keeps>14min before harddeadman. Mac companion downloads/verifies archive then resumes standard archive/delete controller. If Mac connection disappears, remote retention continues; no lease renewal or watcher.
+Final archive key measurements/linux-host-attribute-c9d8c07-20261029/results-autonomous.tgz and .receipt.json. These remain PENDING until actual retention receipts exist.
+Native stage keys (pending): measurements/linux-host-attribute-c9d8c07-20261029/{nvidia,amd}-host-repaired-installed-stage.tgz. Static assembly/receipts are separate from runtime qualification.
+Complete evidence ~/mojolearn-evidence/linux-host-attribute-c9d8c07-20261029/. Logs: controller.log, corrected-controller2.log remotely, retained original logs under initial-build/. Outcome receipts will be added without rewriting failures.
+HIP adapter remains pending and does not block native stage. Pinned6.23GB ROCm Torch input verified on Mac; multipart R2 retention separate. No adapter compile or GPU work in this lease.
+Queued after teardown: independent measurement-harness review/smoke with parent's measurement owner; no new arithmetic or duplicate GPU timing.

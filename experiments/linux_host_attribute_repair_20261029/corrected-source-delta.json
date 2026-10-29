@@ -1,0 +1,16 @@
+{
+  "original_archive": {
+    "key": "measurements/linux-host-attribute-c9d8c07-20261029/source-a82f0675badf875eb092836eb2534511004671e2e50cd299f18d1c3d6959c46b.tgz",
+    "sha256": "a82f0675badf875eb092836eb2534511004671e2e50cd299f18d1c3d6959c46b",
+    "bytes": 39878759,
+    "put": 200,
+    "get": 200,
+    "remote_hash_verified": true,
+    "verified": true
+  },
+  "changed_files": {
+    "bindings/cfb_spectral.mojo": "235970b2cc658406fe5d9ebbb9019d514005b8caeeac186e7893ffb6cf0edbc7"
+  },
+  "git_source": "06347760c6a7a780201e8357dd3341ee85be2fa6",
+  "parent_source": "3e8fe98a9b1a8b057d1cb81af70b21593f29af01"
+}
