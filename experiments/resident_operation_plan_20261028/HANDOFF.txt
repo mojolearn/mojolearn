@@ -1,0 +1,86 @@
+Operation-owned resident row plan, 2026-10-28
+
+Branch: lane/resident-operation-plan-20261028
+Base: f4c2b3e807c728b9ead33eb340d30b8d20383332
+
+Repeated work removed
+---------------------
+Non-DeviceRows MselFoldRows and learning_curve now use ArenaResidentPlan,
+without constructing a Python _Resident or re-entering its public C door for
+every entry/take/release/close. Cache hits use a native identity Dict instead of
+materializing and scanning all Python _entries keys. Every entry captures its
+shape, dtype, extent and byte count once, so a two-hit gather does not call
+_prepared_info four times or rebuild either metadata dictionary/buffer export.
+Layered backend put/gather/free calls themselves still use their existing native
+CPython ABI. No gather/scatter arithmetic, precision or device kernels change.
+
+The shared fold owner covers ordinary CV, search/validation loops, cross-val
+prediction placement and permutation scoring. The latter two now request the
+same plan's native store/release helpers rather than reaching into rows.res.
+Learning curves own one plan across size/fold loops and release each temporary
+subset index after its use. Label list gathers stay on their existing helper.
+
+Setup, ownership and invalidation
+--------------------------------
+Each private plan belongs to exactly one native public-operation control loop.
+It retains the import-connected put/free/gather callable owners once. It is
+never a Python object and neither its map nor its prepared Arrays are published
+to estimators or callers. Strong references to original inputs prevent identity
+address reuse until explicit erase/close. Keys are native Int addresses; only
+the native owner inserts, removes or accesses them.
+
+A miss follows the existing native input/materializer and numeric conversion
+admission, asks _prepare for a private snapshot, then captures _prepared_info
+once. Immutable native shape tuples and native scalar metadata are retained.
+Contiguous caller Arrays get independent snapshot views/owners; other layouts
+keep the existing conversion policy. A native AdmittedBorrowedBuffer export
+pins the prepared bytes throughout the GIL-releasing initial upload. No host
+buffer address is cached for later gathers; later work uses the native store
+ID, whose bytes already have first-upload snapshot semantics.
+
+Later caller Array slot replacement or released caller views cannot change the
+private uploaded schema. This is an explicit operation-local capture boundary,
+not an unchecked cache on a writable public _Resident. Each new operation starts
+empty and re-admits current inputs; release removes the native identity record
+and a subsequent use creates a new snapshot. Output _empty still runs the
+existing current Array-layout/slot admission before every returned gather.
+Buffer contents are not frozen before upload; no new copy-on-write promise.
+
+Cleanup removes live records before GIL-releasing frees. Close detaches the
+whole live map, attempts every independent slot, retains failed records for
+retry, and keeps successful owners alive until all free/republication attempts
+finish. FirstFailure retains the first backend error independently of later
+cleanup errors. Record copies only retain references; store freeing is owned
+exclusively by the plan, so Dict iteration copies cannot free a slot. Borrowed
+Dict records in take are acquired only after both potentially growing inserts.
+
+Public/DeviceRows boundary and remaining work
+--------------------------------------------
+The separately callable mutable _Resident implementation is untouched. DeviceRows
+retains a bound public take owner that can escape to its materializer; those
+folds remain entirely on their original public resident path, including y,
+index entries and cleanup. No mixed private/public cache duplicates their
+uploads. Scope/DeviceRows construction, writable public entries and repeated
+DeviceRows public admission remain pending. Extending the private path there
+requires an explicit native DeviceRows owner/lifetime protocol, not deletion
+of mutation checks. Backend ABI envelopes and output metadata construction
+also remain; this batch does not claim Python-free execution.
+
+Qualification and limits
+------------------------
+Focused Mac arm64 CPU identical compilation exports cross_validate,
+cross_val_predict, learning_curve and permutation_test_score, instantiating the
+changed native plan and shared fold helpers including the retained DeviceRows
+branch. No runtime, identity or performance campaign; no rented machines.
+Search/validation reuse the same compiled fold helpers, but their complete
+public frontdoors are not separate compilation exports in this fixture.
+
+Initial compile 1 failed on two mutable-self/field borrow conflicts; local
+owner references resolve those. Compile 2 failed because this supported Dict
+iteration requires Copyable values; ResidentRecord now copies metadata/owners
+without owning backend destruction. Compile 3 passed on the intermediate
+cleanup source. Final publication-error guards changed afterward; compile 4
+qualifies that frozen final code. Complete output for every attempt and the
+intermediate binary are retained. See compile.json for final statuses/hashes.
+
+Evidence: /Users/andrewhendel/mojolearn-evidence/resident-operation-plan-20261028/

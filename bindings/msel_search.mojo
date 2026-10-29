@@ -22,6 +22,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.arena_materialize_native import _cast
+from bindings.arena_resident_plan import ArenaResidentPlan
 from bindings.family_common import (
     FAMILY_I64P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
     family_type_name, family_as_f32,
@@ -31,8 +32,7 @@ from bindings.msel_common import (
     msel_take_labels, msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool, msel_is_integral, msel_is_real,
     msel_int, msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr,
     msel_p64, msel_pf64, msel_new, msel_new2, msel_f64_list, msel_f64_block, msel_i64_list, msel_i32_list,
-    msel_slice_i64, msel_index_i64, msel_resident_new, msel_resident_take, msel_resident_release,
-    msel_resident_close, msel_get_scorer, msel_score, msel_admit, MselRng, MselGroups, msel_apply,
+    msel_slice_i64, msel_index_i64, msel_get_scorer, msel_score, msel_admit, MselRng, MselGroups, msel_apply,
 )
 from bindings.msel_split import msel_truth, msel_flag_truth, msel_field, msel_cls, msel_sabotage
 from bindings.msel_cv import (
@@ -539,7 +539,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var te_s = List[Float64]()
     var ft = List[Float64]()
     var st = List[Float64]()
-    var res = msel_resident_new(context)
+    var res = ArenaResidentPlan(context["family_msel_resident_context"])
     var scoring = args[6]
     var error_score = args[10]
     var raise_errors = py_type(error_score) is b.str and String(error_score) == "raise"
@@ -568,11 +568,11 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                 tr_s.append(Float64(py=msel_score(est, xs, ys, sc, context)) if fitted else msel_error_value(error_score))
                 te_s.append(Float64(py=msel_score(est, _take(res, x, test, context), _take(res, y, test, context), sc, context))
                             if fitted else msel_error_value(error_score))
-                msel_resident_release(res, sub, context)
+                res.release(sub)
                 ft.append(t1 - t0)
                 st.append(msel_seconds() - t1)
     finally:
-        msel_resident_close(res, context)
+        res.close()
     var out = Python.list()
     _ = py_call(out.append, msel_i64_list(sizes, context))
     _ = py_call(out.append, msel_f64_block(tr_s, len(sizes), nf, context))
@@ -583,12 +583,12 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     return py_call(b.tuple, out)
 
 
-def _take(res: PythonObject, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
+def _take(mut res: ArenaResidentPlan, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
     """learning_curve's `take`: a list by index, else the resident gather."""
     var b = msel_b()
     if family_isinstance(values, b.list):
         return msel_take_labels(values, idx, context)
-    return msel_resident_take(res, values, idx, context)
+    return res.take(values, idx)
 
 
 # ---------------------------------------------------------------- permutation_test_score
@@ -802,8 +802,8 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
             else:
                 idx = _group_index(rng, order, n, context)
             # the permuted y: one device gather out of the resident base y
-            var yp = msel_resident_take(rows0.res, base, idx, context)
-            msel_resident_release(rows0.res, idx, context)
+            var yp = rows0.resident_take(base, idx, context)
+            rows0.resident_release(idx, context)
             if reuse:
                 perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, rows0, context))
             else:

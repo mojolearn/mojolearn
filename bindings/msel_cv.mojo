@@ -17,6 +17,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setatt
 from bindings.py_attr import py_attr
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.native_buffer_owner import native_storage_allocate
+from bindings.arena_resident_plan import ArenaResidentPlan
 from bindings.metrics_native_support import metric_float
 from bindings.msel_json import msel_canonical
 from bindings.sha256_door import sha256_update, sha256_hexdigest
@@ -250,6 +251,7 @@ struct MselFoldRows(Movable):
     var y: PythonObject
     var folds: PythonObject
     var res: PythonObject
+    var resident: ArenaResidentPlan
     var extra: PythonObject
     var dev: Bool
     var scope: PythonObject
@@ -259,12 +261,16 @@ struct MselFoldRows(Movable):
         self.x = x
         self.y = y
         self.folds = folds
-        self.res = msel_resident_new(context)
+        self.res = PythonObject(None)
+        self.resident = ArenaResidentPlan(context["family_msel_resident_context"])
         self.extra = PythonObject(None)
         self.dev = (device_rows and msel_is_array(x, context) and String(py=x.dtype) == "<f4" and Int(py=x.ndim) == 2
                     and Int(py=x.size) > 0 and msel_has_c(x))
         self.scope = PythonObject(None)
         if self.dev:
+            # DeviceRows exposes a bound take owner to its materializer. Keep
+            # that separately mutable public boundary on its existing checks.
+            self.res = msel_resident_new(context)
             # only DeviceRows bases enter this scope (`rows_slot` ignores the
             # size floor); no other program input is kept across folds
             var scope = native_storage_allocate(family_call(msel_b().getattr, context["family_msel_arena_io"],
@@ -274,9 +280,10 @@ struct MselFoldRows(Movable):
             _ = _arena_rows_call(scope, "scope_enter", Python.tuple(), context)
             self.scope = scope
 
-    def xrows(self, idx_in: PythonObject, context: PythonObject) raises -> PythonObject:
+    def xrows(mut self, idx_in: PythonObject, context: PythonObject) raises -> PythonObject:
         if not self.dev:
-            return self.rows(self.x, idx_in, context)
+            var x = self.x
+            return self.rows(x, idx_in, context)
         var idx = msel_index_i64(idx_in, context)
         var dr = native_storage_allocate(family_call(msel_b().getattr, context["family_msel_arena_io"],
                                                      PythonObject("DeviceRows")))
@@ -284,11 +291,28 @@ struct MselFoldRows(Movable):
         _ = _arena_rows_call(dr, "init", Python.tuple(self.x, idx, take), context)
         return dr
 
-    def rows(self, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
+    def resident_take(mut self, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
+        if self.dev:
+            return msel_resident_take(self.res, values, idx, context)
+        return self.resident.take(values, idx)
+
+    def resident_store(mut self, values: PythonObject, indices: Bool, context: PythonObject) raises -> Int:
+        if self.dev:
+            var dtype = PythonObject("<i8") if indices else PythonObject(None)
+            return Int(py=msel_resident_op(self.res, "msel_resident_entry", Python.tuple(values, dtype), context)[2])
+        return self.resident.store(values, indices)
+
+    def resident_release(mut self, values: PythonObject, context: PythonObject) raises:
+        if self.dev:
+            msel_resident_release(self.res, values, context)
+        else:
+            self.resident.release(values)
+
+    def rows(mut self, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
         var b = msel_b()
         if family_isinstance(values, b.list):
             return msel_take_labels(values, idx, context)
-        return msel_resident_take(self.res, values, idx, context)
+        return self.resident_take(values, idx, context)
 
     def take(mut self, i: Int, y_in: PythonObject, context: PythonObject) raises -> PythonObject:
         """(X_train, y_train, X_test, y_test) of fold i; a `y_in` (a permuted
@@ -303,7 +327,8 @@ struct MselFoldRows(Movable):
             y = self.y
         elif y is not self.y and y is not self.extra:
             if self.extra is not None:
-                msel_resident_release(self.res, self.extra, context)
+                var previous = self.extra
+                self.resident_release(previous, context)
             self.extra = y
         if y is None:
             return Python.tuple(xtr, PythonObject(None), xte, PythonObject(None))
@@ -317,7 +342,10 @@ struct MselFoldRows(Movable):
             if scope is not None:
                 _ = _arena_rows_call(scope, "scope_exit", Python.tuple(PythonObject(None), PythonObject(None), PythonObject(None)), context)
         finally:
-            msel_resident_close(self.res, context)
+            if self.dev:
+                msel_resident_close(self.res, context)
+            else:
+                self.resident.close()
 
 
 # ---------------------------------------------------------------- cross-validation
@@ -711,7 +739,7 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
     return Python.tuple(values, width)
 
 
-def _place(preds: PythonObject, tests: PythonObject, n: Int, res: PythonObject, context: PythonObject) raises -> PythonObject:
+def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: MselFoldRows, context: PythonObject) raises -> PythonObject:
     """`_cross_val_predict_place`: each fold's predictions put back in row
     order on the device (`msel_scatter_rows` into one resident block), or
     the label-object route."""
@@ -754,9 +782,9 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, res: PythonObject, 
                         var src = preds[f]
                         if not msel_has_c(src):
                             src = msel_materialize(src, "predictions", context)
-                        var sid = msel_resident_op(res, "msel_resident_entry", Python.tuple(t, PythonObject("<i8")), context)[2]
+                        var sid = resident_rows.resident_store(t, True, context)
                         _ = family_call(scatter, PythonObject(block), PythonObject(n), codes[PythonObject(dtype)],
-                                        PythonObject(msel_addr(src)), codes[src.dtype], t.size, PythonObject(cols), sid)
+                                        PythonObject(msel_addr(src)), codes[src.dtype], t.size, PythonObject(cols), PythonObject(sid))
                         _ = src  # keep the Python object alive through the native call above
                 _ = family_call(msel_entry("msel_read", context), PythonObject(block), PythonObject(msel_addr(out)),
                                 PythonObject(n * cols * 8))
@@ -858,7 +886,7 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
                 raise Error("TypeError: native prediction method must be an exact string")
             var pred = msel_estimator_call(est, String(method), Python.tuple(fr[2]), context)
             _ = py_call(preds.append, _numeric_pred(pred, context))
-        result = _place(preds, tests, n, rows.res, context)
+        result = _place(preds, tests, n, rows, context)
     finally:
         rows.close(context)
     return result
