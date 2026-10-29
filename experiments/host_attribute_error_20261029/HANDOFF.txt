@@ -29,3 +29,34 @@ saved-host prediction, module replacement and changed availability descriptors.
 At source freeze tests are prepared, syntax/diff checks pass; changed-source
 compilation and actual installed regressions remain pending. Do not promote
 source review or compilation to runtime/cross-vendor success.
+
+Disconnect checkpoint (2026-10-29 16:58 UTC)
+------------------------------------------
+Native source c9d8c07 +543875dbb0; latter fixes a compile-time PythonObject(None)
+default by passing the existing CPU owner explicitly at all calls. Tokenizer
+standard-optimized shipping image passed0, raw SHA256
+49091b9d1706b998a849680a1badb57784dafe03ea9b4dea5175c4cd379ba6c8.
+Runtime_classical corrected standard build remains active; no pass claimed.
+Initial classical compile failure and safe concurrency admission refusal retained.
+Five final source guards pass. Eleven durable regressions are prepared, unrun.
+
+Finite controller PID64763, existing build-shell PID44266:
+~/mojolearn-evidence/host-attribute-error-repair-20261029/finish-controller.py
+State: finish-state.json; full log: finish-controller.log; final exit: finish.exit.
+It does not create a service or launch another compilation. After successful
+existing compilation only: private two-owner stage, eleven focused regressions,
+nine-fixture/eighteen-part agglomerative crosscheck, native contract fragments.
+Any failure stops dependent work. It retains complete outputs, native/source
+bytes, and original failures locally/R2 with SHA readback. No whole-verifier
+pass is synthesized; original whole-lane failure and36 GPU observations stay.
+Controller and support scripts are copied under controller/ for recovery.
+
+Original-failure archive retained Mac/R2 (PUT/GET200, SHA readback):
+~/mojolearn-evidence/agglomerative-crosscheck-repair-20261029/failure-retention.json
+SHA ecd6c227b3c5d0ac6182763ddf537ab08294c549164386362eae3010fcfc7342.
+
+Next task is explicitly queued, NOT started: investigate existing Mamba
+owned decode/resident sessions before adding code. Preserve ordinary .step
+caller mutation semantics and distinguish session APIs/workloads. Separate
+worktree/next-release scope only after this blocker is qualified and handed off.
+Root owns serialized main integration; this branch is not yet merge-qualified.
