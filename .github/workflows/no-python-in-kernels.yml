@@ -1,12 +1,11 @@
-name: No Python in kernels, no compute in shells
+name: Native execution source guards
 
-# A kernel .mojo file must not import or call Python (Andrew, 2026-10-21).
-# tools/hooks/no_python_in_kernels.py --tree scans every .mojo file at the
-# checked commit outside the shell allowlist (bindings/, *pyapi*.mojo,
-# *_py.mojo, bench/, experiments/, checks/) and fails on any file that is not
-# in tools/hooks/python_in_kernels_baseline.txt. Rows main's baseline lacks are
-# not grandfathered, so the count can only go down. Plain python3 and git: no
-# pixi, no Mojo, no build. The count per directory goes to the job summary.
+# Updated owner rule 2026-10-28: direct native CPython calls/imports are legal
+# anywhere. The compatibility-named guard detects explicit interpreter-evaluation
+# calls in product Mojo, including bindings/providers. It is not a dynamic
+# callback-safety proof; runtime endpoint audits/admission review remain required.
+# Explicit execution exceptions use python_execution_baseline.txt. Historical
+# import-debt evidence is retained separately. Plain python3/git; no product run.
 # `gh workflow run no-python-in-kernels.yml -f pr=N` checks an open PR and
 # posts the result on its head commit.
 #
@@ -46,7 +45,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: No Python in kernel code beyond the shrinking baseline
+      - name: No explicit Python interpreter execution beyond documented exceptions
         env:
           PR: ${{ inputs.pr }}
           GH_TOKEN: ${{ github.token }}
@@ -70,7 +69,7 @@ jobs:
           { echo '### no-python-in-kernels'; echo '```'; cat npik.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$PR" ]; then
             gh api "repos/$REPO/statuses/$tip" -f state=$state -f context=no-python-in-kernels \
-              -f description="no Python in kernel .mojo files beyond the baseline" \
+              -f description="explicit Python evaluator source check; native C API allowed" \
               -f target_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID" >/dev/null
           fi
           [ $state = success ]

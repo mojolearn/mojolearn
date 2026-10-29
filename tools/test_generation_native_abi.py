@@ -8,30 +8,50 @@ def source(path):
     return (ROOT / path).read_text()
 
 
-def test_native_dependency_closure_has_no_python_or_provider_backedge():
+def test_native_dependency_closure_has_no_explicit_evaluation_or_missing_source():
     seen, problems = audit()
     assert "transformer.transformer_binding_impl" in seen
     assert not problems, problems
 
 
-def test_guard_finds_transitive_and_aliased_python_imports(tmp_path):
+def test_optional_pure_root_assertion_finds_transitive_imports(tmp_path):
     (tmp_path / "runtime").mkdir()
     (tmp_path / "runtime" / "entry.mojo").write_text("from runtime.bridge import run\n")
     (tmp_path / "runtime" / "bridge.mojo").write_text("from std.python import PythonObject as Hidden\n")
-    _, problems = audit(tmp_path, ("runtime.entry",))
+    _, problems = audit(tmp_path, ("runtime.entry",), require_native_only=True)
     assert (("runtime.entry", "runtime.bridge", "std.python"), "provider/Python dependency") in problems
 
 
-def test_guard_rejects_direct_cpython_symbol_without_a_python_import(tmp_path):
+def test_optional_pure_root_assertion_rejects_cpython_spelling(tmp_path):
     (tmp_path / "entry.mojo").write_text('from std.ffi import external_call\nexternal_call["PyObject_Call", Int](a, b, c)\n')
-    _, problems = audit(tmp_path, ("entry",))
+    _, problems = audit(tmp_path, ("entry",), require_native_only=True)
     assert (("entry",), "Python/CPython helper token in native code") in problems
 
 
-def test_guard_rejects_provider_helpers_and_missing_local_dependencies(tmp_path):
+def test_optional_pure_root_assertion_and_missing_dependencies(tmp_path):
     (tmp_path / "entry.mojo").write_text("from providers.python.hidden import run\nfrom absent.native import run\n")
-    _, problems = audit(tmp_path, ("entry",))
+    _, problems = audit(tmp_path, ("entry",), require_native_only=True)
     assert {reason for _, reason in problems} == {"provider/Python dependency", "unresolved local dependency"}
+
+
+def test_default_dependency_inventory_allows_native_capi_in_providers(tmp_path):
+    (tmp_path / "providers").mkdir()
+    (tmp_path / "entry.mojo").write_text("from providers.execution import run\n")
+    (tmp_path / "providers" / "execution.mojo").write_text(
+        'from std.python import PythonObject\nfrom std.ffi import external_call\n'
+        'def run(value):\n    return external_call["Py_INCREF", Int](value)\n')
+    seen, problems = audit(tmp_path, ("entry",))
+    assert "providers.execution" in seen
+    assert not problems, problems
+
+
+def test_default_inventory_checks_provider_execution_instead_of_exempting_folder(tmp_path):
+    (tmp_path / "providers").mkdir()
+    (tmp_path / "entry.mojo").write_text("from providers.algorithm import run\n")
+    (tmp_path / "providers" / "algorithm.mojo").write_text(
+        'from std.python import Python as P\ndef run():\n    return P.evaluate("1+2")\n')
+    _, problems = audit(tmp_path, ("entry",))
+    assert problems == [(("entry", "providers.algorithm"), "explicit Python evaluator call P.evaluate at line 3")]
 
 
 def test_connection_copies_table_once_and_retains_both_owners():

@@ -1,0 +1,5 @@
+# Explicit Python source/code execution exceptions in product Mojo.
+# Native CPython calls/imports are allowed everywhere (Andrew, 2026-10-28).
+# No exceptions currently recorded. Rows require documented owner exceptions;
+# branch additions are not grandfathered and this baseline may only shrink.
+# Historical import-debt evidence remains in python_in_kernels_baseline.txt.
