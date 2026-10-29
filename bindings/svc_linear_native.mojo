@@ -9,6 +9,7 @@
 # `qn_decision_function` and the score metrics are the Python methods' own,
 # in the same order with the same arguments: the bits do not move.
 from std.memory import memcpy
+from std.collections import Dict
 from std.python import Python, PythonObject
 from bindings.label_admission_native import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
@@ -97,9 +98,10 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
                         Python.list(PythonObject(n), PythonObject(k)))
         _ = counts  # keep the Python object alive through the native call above
         var wide = family_array(Python.tuple(PythonObject(k)), "<i8", context)
+        var wide_words = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(wide)))
+        var count_words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(counts)))
         for i in range(k):  # driver-loop: over the classes (the exact int32 -> int64 widening of astype)
-            FAMILY_I64P(unsafe_from_address=Int(py=classical_address(wide)))[i] = Int64(
-                FAMILY_I32P(unsafe_from_address=Int(py=classical_address(counts)))[i])
+            wide_words[i] = Int64(count_words[i])
             _ = wide  # keep the Python object alive through the native call above
             _ = counts  # keep the Python object alive through the native call above
         var w64 = family_array(Python.tuple(PythonObject(k)), "<f8", context)
@@ -111,8 +113,10 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
         _ = wide^
         _ = counts^
         values = Python.list()
+        var weight_words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(w64)))
+        var append_value = values.append
         for i in range(k):  # driver-loop: over the classes
-            _ = py_call(values.append, PythonObject(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(w64)))[i]))
+            _ = py_call(append_value, PythonObject(weight_words[i]))
             _ = w64  # keep the Python object alive through the native call above
     else:
         if py_type(class_weight) is not b.dict:
@@ -127,15 +131,36 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
             raise Error("class_weight contains labels absent from y")
         values = family_call(b.list, family_call(b.map, class_weight.get, classes, family_call(itertools.repeat, PythonObject(1.0))))
     var all_one = True
+    # Keep element admission (mixed scalar classes are supported), but resolve
+    # each encountered exact type only once in this GIL-held validation loop.
+    # values retains every scalar/type until the local identity table dies.
+    var kinds = Dict[Int, Int]()
+    var decoded = List[Float64](capacity=k)
+    var float_type = b.float
+    var one = PythonObject(1)
+    ref cpy = Python().cpython()
+    var compare = cpy.lib.get_function[Int32]("PyObject_RichCompareBool")
     for i in range(k):  # driver-loop: over the classes (the class weight argument checks)
         var v = values[i]
-        if labels_primitive_kind(py_type(v), context) < 3:
+        var cls = py_type(v)
+        var identity = Int(cls._obj_ptr)
+        if identity not in kinds:
+            kinds[identity] = labels_primitive_kind(cls, context)
+        if kinds[identity] < 3:
             raise Error("class weights must be finite nonnegative real numbers")
-        var f = svc_float(v)
+        var f = Float64(py=family_call(float_type, v))
         if not svc_isfinite(f) or f < 0:
             raise Error("class weights must be finite nonnegative real numbers")
-        if not Bool(py=family_call(Python.import_module("operator").eq, v, PythonObject(1))):
+        # Compare the original admitted scalar, not its rounded Float64 value:
+        # a long-double value near one must not become an all-one shortcut.
+        var equal = compare(v._obj_ptr, one._obj_ptr, Int32(2))
+        if equal < 0:
+            raise cpy.unsafe_get_error()
+        if equal == 0:
             all_one = False
+        decoded.append(f)
+    _ = one
+    _ = values  # owns the scalar classes used as keys until validation ends
     if all_one:
         return PythonObject(None)
     var narrowed = family_array(Python.tuple(PythonObject(k)), "<f4", context)
@@ -143,7 +168,7 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
     _ = narrowed  # keep the Python object alive through the native call above
     var top = Float32(0)
     for i in range(k):  # driver-loop: over the classes (the float32 narrowing and its checks)
-        var f = svc_float(values[i])
+        var f = decoded[i]
         np[i] = Float32(f)
         _ = narrowed  # keep the Python object alive through the native call above
         var g = Float64(np[i])

@@ -5,6 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.scaler_tags_native import scaler_tags
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
@@ -312,9 +313,11 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 py_setitem(result,names[k],fields[names[k]])
         elif operation == "set_params":
             var options = args[0]
-            var keys = py_call(Python.import_module("builtins").list,options)
+            var builtins = native_loaded_module("builtins")
+            var string_type = builtins.str
+            var keys = py_call(builtins.list,options)
             for k in range(len(keys)):  # driver-loop: proposed parameter names in caller order
-                if py_type(keys[k]) is not Python.import_module("builtins").str or not py_contains(names,keys[k]):
+                if py_type(keys[k]) is not string_type or not py_contains(names,keys[k]):
                     raise Error("mojolearn: invalid parameter for RobustScaler")
                 py_setitem(fields,keys[k],options[keys[k]])
             result = model

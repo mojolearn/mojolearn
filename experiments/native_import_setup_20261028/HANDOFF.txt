@@ -1,0 +1,51 @@
+Native import/setup and class-weight conversion reuse, 2026-10-28
+Branch lane/native-import-setup-20261028; base df2343c3d0.
+
+Changes and boundary:
+Five of the six lexical import-loop sites repaired, with Samba's sixth forwarded
+to neural owner. Robust/MaxAbs set_params capture canonical builtin constructors
+and exact string type per operation. Device-plan log captures tuple constructor
+once per nonempty log. Host SVC coef_ captures builtins and lazily validates its
+operation mode once at the original first nonempty-support pair boundary.
+
+SVC class-weight validation now caches classification per encountered exact
+scalar type (native integer identity map), retains one Float64 decode per weight
+for the later Float32 narrowing pass, and calls retained native rich comparison
+against one owned integer rather than importing/calling operator.eq each time.
+Per-element type/range/finite checks remain; original-value equality preserves
+long-double near-one behavior. Balanced weight loops reuse captured count/wide/
+weight pointers and bound list append instead of reconstructing addresses and
+bound method owners each iteration.
+
+Invalidation and ownership:
+All reuse is local to one operation. No global cache, no sharing across calls,
+fits, candidates or changed contexts. Per-type classification table is consulted
+only during the GIL-held admitted-native scalar loop, before numerical dispatch.
+The values list keeps scalar/type owners alive through the final map use. One
+comparison integer remains owned through the final rich comparison. All three
+hoisted raw pointers have explicit underlying Array owner uses through their
+last reads/writes; none escapes. Mode capture is an operation metadata snapshot,
+not a new concurrent-mutation promise. Existing public metadata admission still
+runs at each operation boundary. Empty logs and zero-support pairs retain their
+prior skip behavior; no input subclass/protocol admission was relaxed.
+
+Compile scope:
+One final compile exit 0, 21.60 seconds: actual RobustScaler/MaxAbsScaler lifecycle
+C doors, svc_linear_operation, host_svc_attribute_c, device_plan_log_binding.
+Apple CPU identical O0, ten configured workers under compile_slot. Complete
+source/archive/compiler/artifact hashes and command in compile.json. This
+qualifies these compiled paths only, not GPU roots or runtime behavior. No
+runtime, identity, benchmark or performance campaign. No measured speedup claim.
+
+Remaining work:
+EVALUATION.txt reconciles 577 source lines / 578 calls / 447 builtins, lists all
+six lexical-loop sites, evaluates mixed-element conversion tagging, and records
+an N-label classification reuse follow-up. Other imports, Python-object
+transport, class_weight dictionary mapping and native scalar CPython conversions
+remain. Device-plan helper is shared across GPU bindings; no GPU compilation
+claimed. Source guard outputs/results retained in evidence; root owns serialized
+integration and push guards.
+
+Evidence: ~/mojolearn-evidence/native-import-setup-20261028/
+compile.log/json, source-manifest.json, source-bytes.tgz, _native_import_setup.so,
+compiler/binary hashes, source-guards.json and individual source guard logs.

@@ -5,6 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.scaler_tags_native import scaler_tags
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
@@ -164,9 +165,11 @@ def maxabs_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             result = Python.dict(copy=fields["copy"])
         elif operation == "set_params":
             var options = args[0]
-            var names = py_call(Python.import_module("builtins").list,options)
+            var builtins = native_loaded_module("builtins")
+            var string_type = builtins.str
+            var names = py_call(builtins.list,options)
             for k in range(len(names)):  # driver-loop: proposed parameter names, in declared order
-                if py_type(names[k]) is not Python.import_module("builtins").str or String(names[k]) != "copy":
+                if py_type(names[k]) is not string_type or String(names[k]) != "copy":
                     raise Error("mojolearn: invalid parameter for MaxAbsScaler")
                 py_setitem(fields,names[k],options[names[k]])
             result = model

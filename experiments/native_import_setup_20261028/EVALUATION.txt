@@ -1,0 +1,71 @@
+Targeted evaluation of per-element conversion tags and repeated imports
+Base df2343c3d0, 2026-10-28. Source counts/frequencies, not measurements.
+
+Import inventory reconciled:
+The reported 577 import sites / 447 builtins / six in loops is correct when
+counting source lines across bindings/providers/core .mojo. There are 578 calls
+on those 577 lines: bindings/decomp_kit_native.mojo:84 contains two calls.
+539 calls are in bindings, 39 in providers, none in core. All 447 builtins calls
+occupy distinct lines. import-sites.json retains exact source lines and lexical
+same-function loop context. This is not a dynamic call-count or reachability
+report; helpers called inside loops can import despite no lexical loop around
+the import itself. Existing provider/audit records remain the broader audit.
+
+Six lexical-loop sites at the base:
+- svc_linear_native.mojo:137: operator.eq once per class weight. This batch
+  replaces operator lookup/call and boxed constant with retained native CPython
+  rich comparison plus one owned integer. Original exact scalar is compared,
+  so Float64 rounding cannot turn a near-one long-double into all-one weights.
+- robust_native.mojo:317: builtins.str per proposed parameter name. Resolve the
+  canonical loaded module/string type once per set_params operation. Each key
+  still receives exact-type/name checks in caller order.
+- maxabs_native.mojo:169: same mechanism. Only one supported parameter; likely
+  small benefit, but removes unnecessary imports and preserves ordered refusal.
+- host_svc_native.mojo:330: builtins.str and numeric_mode lookup/check per
+  nonempty support pair while publishing coef_. Resolve builtins once; lazily
+  check mode at the first nonempty pair after its count check, then reuse the
+  operation's admitted mode. All-zero-support behavior/error order retained.
+- device_plan_binding.mojo:46: builtins.tuple per logged device plan. Resolve
+  once for a nonempty log, retain constructor across publication. Empty logs
+  keep their no-module-lookup path. This is diagnostic output, not a claim
+  about numerical hot-loop frequency.
+- samba_state_native.mojo:143: builtins.list per parameter-registry tensor.
+  Forwarded to neural owner; no edit here. Hoist constructor per registry call,
+  retaining each row's dimensions, overflow and offset checks.
+
+Per-element conversion tags:
+An outer exact-list check only admits container access. It does not establish
+that elements share a class, dtype, or conversion rule. Do not classify the first
+element and apply that rule to the rest. A safe operation-local plan observes
+each element's exact type, caches classification by that native identity, and
+still performs per-value range/NaN/shape checks and ordered refusal. Storage
+buffers can instead admit a homogeneous native dtype/layout once and decode
+all elements with its fixed tag, while retaining an actual buffer export.
+
+Concrete application in this batch: _class_weight_rows resolves
+labels_primitive_kind once per encountered exact scalar class, converts each
+weight to Float64 once, and retains the native Float64 values for narrowing.
+Each element still receives its own classification lookup, finite/sign check,
+original-value equality test, and Float32 representability check. The input
+values list owns all scalar/type identities while the native map is consulted.
+The validation loop holds the GIL and invokes only admitted native scalar
+conversions/comparisons; the cache does not span compiled numerical calls.
+Balanced counts and weights also capture owner-backed pointers before their
+class loops, removing repeated classical_address/Int conversions.
+
+Higher-frequency follow-up, not changed here:
+classical_labels.mojo:_sorted_classes (base lines 741-763) calls _label_kind ->
+labels_primitive_kind per input label. That helper rereads canonical builtins,
+integer/scalar type sequences and NumPy dtype aliases. Reuse an operation-local
+exact-type classification table for this N-label pass, keeping per-value NaN
+checks and mixed-string/number refusal. This shares the mechanism demonstrated
+on class weights without treating mixed containers as homogeneous. Native
+buffer decoding in native_scalar_decode.mojo already separates dtype metadata
+from value bytes; a future batch decoder can reuse a captured dtype recipe and
+export, but singleton callers must keep their individual owner/shape checks.
+
+Why defensible without measuring:
+All changes eliminate duplicated work or import/callback dispatch at an existing
+setup boundary. None changes a numerical kernel, reduction order, default,
+threshold, vendor path or arithmetic shortcut. No claim that source counts equal
+hot-path costs or that these repairs guarantee an end-to-end speedup.

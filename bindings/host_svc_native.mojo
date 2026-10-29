@@ -6,6 +6,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.native_error_class import error_without_class
+from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_attributes import classical_check_layout, classical_getattribute, classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_kind, classical_cast_kind
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_type_fields
@@ -305,7 +306,9 @@ def _svc_coefficients(model: PythonObject, context: PythonObject) raises -> Pyth
     var fields = host_tree_constructor_fields(model, context)
     if not py_contains(fields, "dual_coef_"):
         raise Error("AttributeError: SVC coef_ requires a fitted model")
-    var keys = py_call(Python.import_module("builtins").list, fields.keys())
+    var builtins = native_loaded_module("builtins")
+    var string_type = builtins.str
+    var keys = py_call(builtins.list, fields.keys())
     for i in range(len(keys)):  # driver-loop: state admission before the computed property
         if String(keys[i]) == "classes_":
             _ = host_logistic_classes(fields[keys[i]], context)
@@ -320,15 +323,21 @@ def _svc_coefficients(model: PythonObject, context: PythonObject) raises -> Pyth
     if features < 1 or rows < 1 or rows > 2147483647 // features:
         raise Error("SVC coefficient dimensions exceed native indexing")
     var out = host_archive_typed(Python.tuple(rows, features), "<f4", context["output_context"])
+    var mode_checked = False
     for i in range(rows):  # driver-loop: pair coefficient orientation matches the existing public property
         var count = Int(py=fields["n_support_"]) if pairs is None else _svc_pair_count(pairs[i], context)
         if count < 0 or count > 2147483647 // features:
             raise Error("SVC support dimensions exceed native indexing")
         if count == 0:
             continue
-        var mode = py_get(fields, "numeric_mode")
-        if mode is not None and (py_type(mode) is not Python.import_module("builtins").str or String(mode) != "identical"):
-            raise Error("explicit host models run identical mode only")
+        if not mode_checked:
+            # The model fields stay owned by this operation. Preserve refusal
+            # order: zero-support pairs skip mode admission, and count checks
+            # precede it. Once admitted, later pairs reuse the same mode.
+            var mode = py_get(fields, "numeric_mode")
+            if mode is not None and (py_type(mode) is not string_type or String(mode) != "identical"):
+                raise Error("explicit host models run identical mode only")
+            mode_checked = True
         var dual = _kernel_buffer(fields["dual_coef_"] if pairs is None else pairs[i]["dual"], count, "<f4", context)
         var support = _svr_matrix(fields["support_vectors_"] if pairs is None else pairs[i]["sv"], count, features, context)
         _ = py_call(_kernel_entry("svc_dual_gemv", context), classical_address(dual), classical_address(support),

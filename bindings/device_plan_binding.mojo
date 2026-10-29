@@ -11,6 +11,7 @@ from std.python import PythonObject
 
 from std.python import Python
 from bindings.py_balanced import py_call
+from bindings.native_loaded_module import native_loaded_module
 from core.device_plan import device_plan_enter, device_plan_exit, device_plan_log_take
 
 
@@ -39,9 +40,13 @@ def device_plan_log_binding() raises -> PythonObject:
     two-device witness reads (python/mojolearn/_verify_par.py)."""
     var plans = device_plan_log_take()
     var out = Python.list()
+    # Empty logs need no module connection. Retain the constructor across plans.
+    var tuple_type = PythonObject(None)
+    if len(plans) != 0:
+        tuple_type = native_loaded_module("builtins").tuple
     for i in range(len(plans)):  # driver-loop: over the logged plans
         var ids = Python.list()
         for r in range(len(plans[i])):  # driver-loop: over a logged plan's ranks
             _ = ids.append(PythonObject(plans[i][r]))
-        _ = out.append(py_call(Python.import_module("builtins").tuple, ids))
+        _ = out.append(py_call(tuple_type, ids))
     return out

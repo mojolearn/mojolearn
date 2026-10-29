@@ -1,0 +1,4048 @@
+[
+  {
+    "path": "providers/python/samba_execution_pyapi.mojo",
+    "line": 59,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return py_call(Python.import_module(\"builtins\").object.__getattribute__, value, \"__dict__\")"
+  },
+  {
+    "path": "providers/python/samba_execution_pyapi.mojo",
+    "line": 84,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/samba_execution_pyapi.mojo",
+    "line": 321,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/samba_execution_pyapi.mojo",
+    "line": 480,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/samba_execution_pyapi.mojo",
+    "line": 524,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/samba_execution_pyapi.mojo",
+    "line": 552,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_control_checkpoint_pyapi.mojo",
+    "line": 42,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var out = Python.import_module(\"builtins\").dict()"
+  },
+  {
+    "path": "providers/python/autograd_weight_frontend_pyapi.mojo",
+    "line": 41,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_weight_frontend_pyapi.mojo",
+    "line": 53,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_weight_frontend_pyapi.mojo",
+    "line": 75,
+    "module": "\"os\"",
+    "loop": null,
+    "source": "var names = py_call(Python.import_module(\"os\").listdir, file)"
+  },
+  {
+    "path": "providers/python/autograd_weight_frontend_pyapi.mojo",
+    "line": 109,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_weight_frontend_pyapi.mojo",
+    "line": 186,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/x_cluster_out_pyapi.mojo",
+    "line": 12,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var arr = Python.import_module(\"array\")"
+  },
+  {
+    "path": "providers/python/x_cluster_out_pyapi.mojo",
+    "line": 37,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var zero = Python.import_module(\"builtins\").bytes(nbytes)"
+  },
+  {
+    "path": "providers/python/autograd_program_arrays_pyapi.mojo",
+    "line": 50,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "state[].builtins = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_program_arrays_pyapi.mojo",
+    "line": 51,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var numpy = Python.import_module(\"numpy\")"
+  },
+  {
+    "path": "providers/python/autograd_program_arrays_pyapi.mojo",
+    "line": 54,
+    "module": "\"mmap\"",
+    "loop": null,
+    "source": "state[].mmap_type = Python.import_module(\"mmap\").mmap"
+  },
+  {
+    "path": "providers/python/transformer_decode_pyapi.mojo",
+    "line": 62,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/transformer_decode_pyapi.mojo",
+    "line": 78,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(entry) is not py_type(Python.import_module(\"builtins\").len):"
+  },
+  {
+    "path": "providers/python/transformer_decode_pyapi.mojo",
+    "line": 84,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/transformer_decode_pyapi.mojo",
+    "line": 193,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var snapshot = py_call(Python.import_module(\"builtins\").dict, fields)"
+  },
+  {
+    "path": "providers/python/transformer_decode_pyapi.mojo",
+    "line": 201,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var slots = py_call(Python.import_module(\"builtins\").dict, live)"
+  },
+  {
+    "path": "providers/python/transformer_decode_pyapi.mojo",
+    "line": 207,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if profile is not None and py_type(profile) is not Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "providers/python/transformer_decode_pyapi.mojo",
+    "line": 307,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/transformer_decode_pyapi.mojo",
+    "line": 509,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var session = py_call(Python.import_module(\"builtins\").object.__new__, context[\"transformer_session_class\"])"
+  },
+  {
+    "path": "providers/python/transformer_decode_pyapi.mojo",
+    "line": 563,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_program_device_pyapi.mojo",
+    "line": 77,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/estimator_lifecycle_pyapi.mojo",
+    "line": 37,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/operation_lock_pyapi.mojo",
+    "line": 67,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var value = py_call(Python.import_module(\"builtins\").object.__new__, state[].cls)"
+  },
+  {
+    "path": "providers/python/operation_lock_pyapi.mojo",
+    "line": 129,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_gradient_diagnostics_pyapi.mojo",
+    "line": 11,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var out = Python.import_module(\"builtins\").dict()"
+  },
+  {
+    "path": "providers/python/autograd_gradient_diagnostics_pyapi.mojo",
+    "line": 24,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_ops_frontend_pyapi.mojo",
+    "line": 93,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return py_call(Python.import_module(\"builtins\").tuple, out)"
+  },
+  {
+    "path": "providers/python/autograd_ops_frontend_pyapi.mojo",
+    "line": 256,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var result = Python.import_module(\"builtins\").dict()"
+  },
+  {
+    "path": "providers/python/autograd_ops_frontend_pyapi.mojo",
+    "line": 324,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_ops_frontend_pyapi.mojo",
+    "line": 667,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_ops_frontend_pyapi.mojo",
+    "line": 673,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_ops_frontend_pyapi.mojo",
+    "line": 680,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "providers/python/autograd_ops_frontend_pyapi.mojo",
+    "line": 691,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/generator_draw_native.mojo",
+    "line": 15,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/generator_draw_native.mojo",
+    "line": 34,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/generator_draw_native.mojo",
+    "line": 55,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Float32(Float64(py=py_call(Python.import_module(\"builtins\").float, value)))"
+  },
+  {
+    "path": "bindings/generator_draw_native.mojo",
+    "line": 70,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/generator_draw_native.mojo",
+    "line": 94,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/generator_draw_native.mojo",
+    "line": 117,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/generator_draw_native.mojo",
+    "line": 130,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/generator_draw_native.mojo",
+    "line": 142,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_x_cnn.mojo",
+    "line": 396,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_plan_door.mojo",
+    "line": 29,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_plan_door.mojo",
+    "line": 69,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_plan_door.mojo",
+    "line": 79,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_plan_door.mojo",
+    "line": 94,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/minmax_archive_native.mojo",
+    "line": 21,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/minmax_archive_native.mojo",
+    "line": 47,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/trees_public_score.mojo",
+    "line": 473,
+    "module": "\"sys\"",
+    "loop": null,
+    "source": "var sys = Python.import_module(\"sys\")"
+  },
+  {
+    "path": "bindings/small_mlp_native.mojo",
+    "line": 133,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "b[].bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/small_mlp_native.mojo",
+    "line": 137,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "b[].arrays = Python.import_module(\"array\").array"
+  },
+  {
+    "path": "bindings/small_mlp_native.mojo",
+    "line": 138,
+    "module": "\"_thread\"",
+    "loop": null,
+    "source": "b[].rlock = Python.import_module(\"_thread\").RLock"
+  },
+  {
+    "path": "bindings/small_mlp_native.mojo",
+    "line": 144,
+    "module": "\"posix\"",
+    "loop": null,
+    "source": "b[].posix = Python.import_module(\"posix\")"
+  },
+  {
+    "path": "bindings/optimizer_device_native.mojo",
+    "line": 14,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/optimizer_device_native.mojo",
+    "line": 27,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/optimizer_device_native.mojo",
+    "line": 54,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "py_setitem(fields, \"shape\", py_call(Python.import_module(\"builtins\").tuple, shape))"
+  },
+  {
+    "path": "bindings/optimizer_device_native.mojo",
+    "line": 174,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/rp_native.mojo",
+    "line": 24,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return String(py_call(Python.import_module(\"builtins\").str, value))"
+  },
+  {
+    "path": "bindings/rp_native.mojo",
+    "line": 112,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return py_call(Python.import_module(\"builtins\").dict, py_fields(model))"
+  },
+  {
+    "path": "bindings/parallel_shard_common.mojo",
+    "line": 40,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_rf_host.mojo",
+    "line": 144,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 42,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 48,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 53,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 62,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 116,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 184,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 185,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "if Bool(py=py_call(b.isinstance, value, Python.import_module(\"array\").array)):"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 219,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "raise Error(\"X has \" + String(py=py_call(Python.import_module(\"builtins\").str, x.shape[2]))"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 221,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "+ String(py=py_call(Python.import_module(\"builtins\").str, fields[\"n_features_in_\"])))"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 363,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 383,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 421,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/xseq_neural_native.mojo",
+    "line": 534,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/minmax_native.mojo",
+    "line": 30,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/minmax_native.mojo",
+    "line": 61,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(value) is not Python.import_module(\"builtins\").int:"
+  },
+  {
+    "path": "bindings/minmax_native.mojo",
+    "line": 76,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(mode) is not Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/minmax_native.mojo",
+    "line": 151,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var names = py_call(Python.import_module(\"builtins\").list,fields)"
+  },
+  {
+    "path": "bindings/minmax_native.mojo",
+    "line": 224,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var names = py_call(Python.import_module(\"builtins\").list,fields)"
+  },
+  {
+    "path": "bindings/minmax_native.mojo",
+    "line": 268,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/minmax_native.mojo",
+    "line": 417,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/byte_lm_host_trainer_native.mojo",
+    "line": 46,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/optimizer_schedule_native.mojo",
+    "line": 36,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/optimizer_schedule_native.mojo",
+    "line": 40,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "return Int(py=py_call_typed(Python.import_module(\"operator\").index, value))"
+  },
+  {
+    "path": "bindings/optimizer_schedule_native.mojo",
+    "line": 49,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/optimizer_schedule_native.mojo",
+    "line": 114,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_inference_preparation.mojo",
+    "line": 22,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(blocks) is not Python.import_module(\"builtins\").tuple:"
+  },
+  {
+    "path": "bindings/trees_constructor_native.mojo",
+    "line": 23,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/trees_constructor_native.mojo",
+    "line": 35,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_inference_native.mojo",
+    "line": 40,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequential_weights.mojo",
+    "line": 36,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_training_host.mojo",
+    "line": 155,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/logistic_native.mojo",
+    "line": 48,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/generator_state_native.mojo",
+    "line": 8,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return py_call(Python.import_module(\"builtins\").object.__getattribute__, value, \"__dict__\")"
+  },
+  {
+    "path": "bindings/generator_state_native.mojo",
+    "line": 12,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/training_extra_native.mojo",
+    "line": 47,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/training_extra_native.mojo",
+    "line": 50,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var index = py_call_typed(Python.import_module(\"operator\").index, value)"
+  },
+  {
+    "path": "bindings/training_extra_native.mojo",
+    "line": 60,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/training_extra_native.mojo",
+    "line": 144,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/training_extra_native.mojo",
+    "line": 201,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pls_native.mojo",
+    "line": 54,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pls_native.mojo",
+    "line": 76,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pls_native.mojo",
+    "line": 121,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var keys = py_call(Python.import_module(\"builtins\").list, fields)"
+  },
+  {
+    "path": "bindings/pls_native.mojo",
+    "line": 238,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pls_native.mojo",
+    "line": 348,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pls_native.mojo",
+    "line": 380,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pls_native.mojo",
+    "line": 456,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pls_native.mojo",
+    "line": 518,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/svc_linear_native.mojo",
+    "line": 39,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/svc_linear_native.mojo",
+    "line": 89,
+    "module": "\"itertools\"",
+    "loop": null,
+    "source": "var itertools = Python.import_module(\"itertools\")"
+  },
+  {
+    "path": "bindings/svc_linear_native.mojo",
+    "line": 137,
+    "module": "\"operator\"",
+    "loop": "for i in range(k):  # driver-loop: over the classes (the class weight argument checks)",
+    "source": "if not Bool(py=family_call(Python.import_module(\"operator\").eq, v, PythonObject(1))):"
+  },
+  {
+    "path": "bindings/svc_linear_native.mojo",
+    "line": 242,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/svc_linear_native.mojo",
+    "line": 318,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/maxabs_native.mojo",
+    "line": 124,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(fields[\"n_features_in_\"]) is not Python.import_module(\"builtins\").int or Int(py=fields[\"n_features_in_\"]) != d:"
+  },
+  {
+    "path": "bindings/maxabs_native.mojo",
+    "line": 167,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var names = py_call(Python.import_module(\"builtins\").list,options)"
+  },
+  {
+    "path": "bindings/maxabs_native.mojo",
+    "line": 169,
+    "module": "\"builtins\"",
+    "loop": "for k in range(len(names)):  # driver-loop: proposed parameter names, in declared order",
+    "source": "if py_type(names[k]) is not Python.import_module(\"builtins\").str or String(names[k]) != \"copy\":"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 70,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 91,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 153,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 249,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 260,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 268,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 340,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 384,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var scalars = py_call(Python.import_module(\"builtins\").list, context[\"scalar_types\"])"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 391,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "py_setitem(context, \"scalar_types\", py_call(Python.import_module(\"builtins\").tuple, scalars))"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 401,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var text = py_call(Python.import_module(\"builtins\").str, args[0])"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 410,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(args[0]) is not Python.import_module(\"builtins\").dict:"
+  },
+  {
+    "path": "bindings/host_tree_native.mojo",
+    "line": 420,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var state = py_call(Python.import_module(\"builtins\").dict, fields)"
+  },
+  {
+    "path": "bindings/robust_native.mojo",
+    "line": 25,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/robust_native.mojo",
+    "line": 33,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/robust_native.mojo",
+    "line": 37,
+    "module": "\"sys\"",
+    "loop": null,
+    "source": "if module is None or py_type(module) is not py_type(Python.import_module(\"sys\")):"
+  },
+  {
+    "path": "bindings/robust_native.mojo",
+    "line": 55,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/robust_native.mojo",
+    "line": 88,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/robust_native.mojo",
+    "line": 159,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/robust_native.mojo",
+    "line": 258,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(fields[\"n_features_in_\"]) is not Python.import_module(\"builtins\").int or Int(py=fields[\"n_features_in_\"]) != d:"
+  },
+  {
+    "path": "bindings/robust_native.mojo",
+    "line": 315,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var keys = py_call(Python.import_module(\"builtins\").list,options)"
+  },
+  {
+    "path": "bindings/robust_native.mojo",
+    "line": 317,
+    "module": "\"builtins\"",
+    "loop": "for k in range(len(keys)):  # driver-loop: proposed parameter names in caller order",
+    "source": "if py_type(keys[k]) is not Python.import_module(\"builtins\").str or not py_contains(names,keys[k]):"
+  },
+  {
+    "path": "bindings/decomp_kit_native.mojo",
+    "line": 59,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return String(py_call(Python.import_module(\"builtins\").repr, value))"
+  },
+  {
+    "path": "bindings/decomp_kit_native.mojo",
+    "line": 64,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Int(py=py_call(Python.import_module(\"builtins\").int, value))"
+  },
+  {
+    "path": "bindings/decomp_kit_native.mojo",
+    "line": 69,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Float64(py=py_call(Python.import_module(\"builtins\").float, value))"
+  },
+  {
+    "path": "bindings/decomp_kit_native.mojo",
+    "line": 74,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/decomp_kit_native.mojo",
+    "line": 84,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var masked = py_call(Python.import_module(\"operator\").and_, py_call(Python.import_module(\"builtins\").int, seed),"
+  },
+  {
+    "path": "bindings/decomp_kit_native.mojo",
+    "line": 84,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var masked = py_call(Python.import_module(\"operator\").and_, py_call(Python.import_module(\"builtins\").int, seed),"
+  },
+  {
+    "path": "bindings/decomp_kit_native.mojo",
+    "line": 91,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/decomp_kit_native.mojo",
+    "line": 102,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/decomp_kit_native.mojo",
+    "line": 122,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/classical_ridge.mojo",
+    "line": 34,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/classical_ridge.mojo",
+    "line": 58,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/classical_ols.mojo",
+    "line": 99,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(decomp) is not Python.import_module(\"builtins\").dict:"
+  },
+  {
+    "path": "bindings/prep_iterimp_native.mojo",
+    "line": 71,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/kpca_native.mojo",
+    "line": 27,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/kpca_native.mojo",
+    "line": 43,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(entries) is Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/kpca_native.mojo",
+    "line": 54,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(entries) is Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/kpca_native.mojo",
+    "line": 73,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/kpca_native.mojo",
+    "line": 78,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "not Bool(py=py_call(Python.import_module(\"operator\").contains, context[\"kpca_kernels\"], kernel))"
+  },
+  {
+    "path": "bindings/als_native.mojo",
+    "line": 48,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var unit = Bool(py=py_call(Python.import_module(\"operator\").eq, alpha, PythonObject(1.0)))"
+  },
+  {
+    "path": "bindings/als_native.mojo",
+    "line": 173,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "raise Error(\"recommend: N must be non-negative, got \" + String(py=py_call(Python.import_module(\"builtins\").str, args[2])))"
+  },
+  {
+    "path": "bindings/als_native.mojo",
+    "line": 195,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "raise Error(\"similar_items: N must be non-negative, got \" + String(py=py_call(Python.import_module(\"builtins\").str, args[1])))"
+  },
+  {
+    "path": "bindings/als_native.mojo",
+    "line": 207,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/kpss_host_test.mojo",
+    "line": 45,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 240,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 503,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 534,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 656,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 657,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 701,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 820,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var arr = py_call(Python.import_module(\"array\").array, \"B\", raw)"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 836,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 837,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var arr = py_call(Python.import_module(\"array\").array, \"B\", py_call(bi.bytes, len(values)))"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 847,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 848,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var arr = py_call(Python.import_module(\"array\").array, \"q\", py_call(bi.bytes, 8 * len(values)))"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 887,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 919,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 941,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "raw = py_call(Python.import_module(\"builtins\").memoryview, value).tobytes()"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 950,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 991,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var tokenizer = py_call(Python.import_module(\"builtins\").object.__new__, cls)"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 1000,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 1046,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 1142,
+    "module": "\"os\"",
+    "loop": null,
+    "source": "source = Python.import_module(\"os\").getcwd() + PythonObject(\"/\") + source"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 1181,
+    "module": "\"os\"",
+    "loop": null,
+    "source": "filename = Python.import_module(\"os\").getcwd() + PythonObject(\"/\") + filename"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_host.mojo",
+    "line": 1190,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_byte_lm.mojo",
+    "line": 463,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/_mojolearn_byte_lm.mojo",
+    "line": 514,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/_mojolearn_byte_lm.mojo",
+    "line": 548,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var claimed = Int(py=Python.import_module(\"operator\").index(completed))"
+  },
+  {
+    "path": "bindings/samba_training_native.mojo",
+    "line": 85,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_preprocessing_host.mojo",
+    "line": 51,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/sequence_optimizer_native.mojo",
+    "line": 27,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequence_optimizer_native.mojo",
+    "line": 68,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequence_optimizer_native.mojo",
+    "line": 131,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequence_optimizer_native.mojo",
+    "line": 144,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var packed = py_call(Python.import_module(\"builtins\").memoryview, source._store)"
+  },
+  {
+    "path": "bindings/sequence_optimizer_native.mojo",
+    "line": 152,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequence_optimizer_native.mojo",
+    "line": 167,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequence_optimizer_native.mojo",
+    "line": 208,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequence_optimizer_native.mojo",
+    "line": 364,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequence_optimizer_native.mojo",
+    "line": 462,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/svc_ocsvm_native.mojo",
+    "line": 121,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/samba_step_native.mojo",
+    "line": 38,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_step_native.mojo",
+    "line": 108,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return py_call(Python.import_module(\"builtins\").dict, result)"
+  },
+  {
+    "path": "bindings/samba_step_native.mojo",
+    "line": 113,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_step_native.mojo",
+    "line": 176,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_step_native.mojo",
+    "line": 225,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_step_native.mojo",
+    "line": 235,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/lr_table_helpers.mojo",
+    "line": 101,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/lr_table_helpers.mojo",
+    "line": 125,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/lr_table_helpers.mojo",
+    "line": 129,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var out = py_call(Python.import_module(\"array\").array, PythonObject(\"f\"), py_call(bi.bytes, PythonObject(4 * n)))"
+  },
+  {
+    "path": "bindings/host_kernel_inference_native.mojo",
+    "line": 39,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_kernel_inference_native.mojo",
+    "line": 56,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_solver_host.mojo",
+    "line": 93,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/host_iforest_native.mojo",
+    "line": 36,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_iforest_native.mojo",
+    "line": 133,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 34,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return String(py_call(Python.import_module(\"builtins\").repr, value))"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 40,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 54,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 71,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Int(py=py_call(Python.import_module(\"builtins\").int, value))"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 77,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 93,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(entries) is Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 134,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(value) is Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 143,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 187,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(decomp) is Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 254,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 277,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var entries = (py_call(Python.import_module(\"builtins\").vars, py_call(model._bind, \"_mojolearn_estimators\"))"
+  },
+  {
+    "path": "bindings/tsvd_native.mojo",
+    "line": 345,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 399,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 417,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Bool(py=py_call(Python.import_module(\"builtins\").bool, value))"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 421,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 426,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 441,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 452,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Float64(py=py_call_typed(Python.import_module(\"builtins\").float, value))"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 456,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return String(py_call(Python.import_module(\"builtins\").str, value))"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 468,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(fitted) is not Python.import_module(\"builtins\").int or Int(py=fitted) != d:"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 508,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var text = py_call(Python.import_module(\"builtins\").str, mode)"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 606,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 713,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 714,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1109,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1214,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1263,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1269,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1293,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1331,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var maxc = -1 if max_categories is None else Int(py=py_call(Python.import_module(\"builtins\").int, max_categories))"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1428,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return String(py_call(Python.import_module(\"builtins\").format, value, \"\"))"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1599,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1732,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1783,
+    "module": "\"warnings\"",
+    "loop": null,
+    "source": "var warnings = Python.import_module(\"warnings\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1872,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var text = py_call(Python.import_module(\"builtins\").str, mode)"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1917,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var k = Int(py=py_call_typed(Python.import_module(\"builtins\").int, fields[\"degree\"]))"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1937,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 1968,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2274,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2316,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2437,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2534,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2537,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var store = py_call(Python.import_module(\"array\").array, \"q\", values)"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2596,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2651,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2770,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2830,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2952,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2968,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 2982,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var keys = py_call(Python.import_module(\"builtins\").list, args[2])"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 3077,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if cv is not None and not Bool(py=py_call(Python.import_module(\"builtins\").isinstance, cv,"
+  },
+  {
+    "path": "bindings/prep_encode_native.mojo",
+    "line": 3078,
+    "module": "\"numbers\"",
+    "loop": null,
+    "source": "Python.import_module(\"numbers\").Integral)):"
+  },
+  {
+    "path": "bindings/trees_public_inputs.mojo",
+    "line": 48,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pca_randomized.mojo",
+    "line": 22,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/scaler_tags_native.mojo",
+    "line": 23,
+    "module": "\"sklearn.utils._tags\"",
+    "loop": null,
+    "source": "module = Python.import_module(\"sklearn.utils._tags\")"
+  },
+  {
+    "path": "bindings/scaler_tags_native.mojo",
+    "line": 135,
+    "module": "\"dataclasses\"",
+    "loop": null,
+    "source": "var missing = py_get(py_fields(Python.import_module(\"dataclasses\")), \"MISSING\")"
+  },
+  {
+    "path": "bindings/cross_vendor_admission.mojo",
+    "line": 36,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "c[].bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/cross_vendor_admission.mojo",
+    "line": 38,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "c[].c_array = Python.import_module(\"array\").array"
+  },
+  {
+    "path": "bindings/cross_vendor_admission.mojo",
+    "line": 39,
+    "module": "\"pathlib\"",
+    "loop": null,
+    "source": "c[].path = Python.import_module(\"pathlib\").PosixPath"
+  },
+  {
+    "path": "bindings/cross_vendor_admission.mojo",
+    "line": 40,
+    "module": "\"pathlib\"",
+    "loop": null,
+    "source": "c[].pure_path = Python.import_module(\"pathlib\").PurePosixPath"
+  },
+  {
+    "path": "bindings/cross_vendor_admission.mojo",
+    "line": 44,
+    "module": "\"sys\"",
+    "loop": null,
+    "source": "c[].modules = Python.import_module(\"sys\").modules"
+  },
+  {
+    "path": "bindings/nmf_native.mojo",
+    "line": 28,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "return Bool(py=py_call(Python.import_module(\"operator\").contains, options, value))"
+  },
+  {
+    "path": "bindings/nmf_native.mojo",
+    "line": 151,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 22,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return py_call(Python.import_module(\"builtins\").object.__getattribute__, value, \"__dict__\")"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 37,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if Bool(py=py_call(Python.import_module(\"builtins\").hasattr, entries, \"training_experiment_profile\")):"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 43,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 77,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 109,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 143,
+    "module": "\"builtins\"",
+    "loop": "for i in range(len(source)):  # driver-loop: over the ordered parameter registry",
+    "source": "py_setitem(item, \"shape\", py_call(Python.import_module(\"builtins\").list, source[i][1]))"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 153,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 212,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 296,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 342,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_state_native.mojo",
+    "line": 402,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/x_linear_native.mojo",
+    "line": 88,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/x_linear_native.mojo",
+    "line": 92,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "return Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/x_linear_native.mojo",
+    "line": 1807,
+    "module": "\"sys\"",
+    "loop": null,
+    "source": "var frame = py_call(Python.import_module(\"sys\")._getframe, PythonObject(0))"
+  },
+  {
+    "path": "bindings/x_linear_native.mojo",
+    "line": 2331,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/linear_score_native.mojo",
+    "line": 21,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/linear_score_native.mojo",
+    "line": 42,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_forecast_native.mojo",
+    "line": 64,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_byte_native.mojo",
+    "line": 164,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "p[].bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_byte_native.mojo",
+    "line": 168,
+    "module": "\"ctypes\"",
+    "loop": null,
+    "source": "var ctypes = Python.import_module(\"ctypes\")"
+  },
+  {
+    "path": "bindings/parallel_byte_native.mojo",
+    "line": 171,
+    "module": "\"_operator\"",
+    "loop": null,
+    "source": "p[].index = Python.import_module(\"_operator\").index"
+  },
+  {
+    "path": "bindings/parallel_byte_native.mojo",
+    "line": 182,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "arrays[].arrays = Python.import_module(\"array\").array"
+  },
+  {
+    "path": "bindings/host_inference_features.mojo",
+    "line": 15,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_linalg_host.mojo",
+    "line": 127,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/samba_admission.mojo",
+    "line": 15,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_admission.mojo",
+    "line": 40,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_admission.mojo",
+    "line": 54,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_admission.mojo",
+    "line": 78,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_admission.mojo",
+    "line": 167,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_admission.mojo",
+    "line": 183,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_neural_host.mojo",
+    "line": 147,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/samba_public_native.mojo",
+    "line": 25,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_public_native.mojo",
+    "line": 30,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "items = Int(py=py_call(Python.import_module(\"operator\").index, value))"
+  },
+  {
+    "path": "bindings/decomp_owner_common.mojo",
+    "line": 21,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Int(py=py_call(Python.import_module(\"builtins\").int, value))"
+  },
+  {
+    "path": "bindings/decomp_owner_common.mojo",
+    "line": 25,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Float64(py=py_call(Python.import_module(\"builtins\").float, value))"
+  },
+  {
+    "path": "bindings/decomp_owner_common.mojo",
+    "line": 30,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "return Bool(py=py_call(Python.import_module(\"operator\").lt, a, b))"
+  },
+  {
+    "path": "bindings/decomp_owner_common.mojo",
+    "line": 34,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "return Bool(py=py_call(Python.import_module(\"operator\").le, a, b))"
+  },
+  {
+    "path": "bindings/decomp_owner_common.mojo",
+    "line": 38,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "return Bool(py=py_call(Python.import_module(\"operator\").eq, a, b))"
+  },
+  {
+    "path": "bindings/decomp_owner_common.mojo",
+    "line": 42,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return String(py_call(Python.import_module(\"builtins\").repr, value))"
+  },
+  {
+    "path": "bindings/decomp_owner_common.mojo",
+    "line": 58,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/decomp_owner_common.mojo",
+    "line": 96,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/native_transport.mojo",
+    "line": 51,
+    "module": "\"_json\"",
+    "loop": null,
+    "source": "var entry = Python.import_module(\"_json\").encode_basestring_ascii"
+  },
+  {
+    "path": "bindings/host_kde_native.mojo",
+    "line": 135,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var name = py_call(Python.import_module(\"builtins\").type.__dict__[\"__name__\"].__get__, py_type(model))"
+  },
+  {
+    "path": "bindings/str_labels_native.mojo",
+    "line": 115,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var array = Python.import_module(\"array\")"
+  },
+  {
+    "path": "bindings/str_labels_native.mojo",
+    "line": 116,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/str_labels_native.mojo",
+    "line": 232,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/logistic_admission.mojo",
+    "line": 22,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/logistic_admission.mojo",
+    "line": 109,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/svm_mixture_native.mojo",
+    "line": 26,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/svm_mixture_native.mojo",
+    "line": 52,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/optimizer_lifecycle.mojo",
+    "line": 16,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_byte_lm_host.mojo",
+    "line": 75,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/sequence_device_native.mojo",
+    "line": 39,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var result = py_call(Python.import_module(\"builtins\").object.__new__, context[\"sequence_device_class\"])"
+  },
+  {
+    "path": "bindings/sequence_device_native.mojo",
+    "line": 125,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/cross_vendor_native.mojo",
+    "line": 71,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "c[].bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/cross_vendor_native.mojo",
+    "line": 72,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "c[].arrays = Python.import_module(\"array\").array"
+  },
+  {
+    "path": "bindings/cross_vendor_native.mojo",
+    "line": 78,
+    "module": "\"sys\"",
+    "loop": null,
+    "source": "c[].argv = Python.import_module(\"sys\").argv"
+  },
+  {
+    "path": "bindings/cross_vendor_native.mojo",
+    "line": 79,
+    "module": "\"posix\"",
+    "loop": null,
+    "source": "c[].console_write = Python.import_module(\"posix\").write"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 20,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 34,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return py_call(PythonObject(\"MOJOLEARN-SAMBA\").encode, \"ascii\") + py_call(Python.import_module(\"builtins\").bytes, py_ints([2, 10]))"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 42,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 43,
+    "module": "\"sys\"",
+    "loop": null,
+    "source": "if String(Python.import_module(\"sys\").byteorder) != \"little\":"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 54,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 62,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 99,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 100,
+    "module": "\"posix\"",
+    "loop": null,
+    "source": "var os = Python.import_module(\"posix\")"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 172,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 196,
+    "module": "\"posix\"",
+    "loop": null,
+    "source": "if Int(py=py_call(Python.import_module(\"posix\").fstat, stream.fileno()).st_size) != expected:"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 221,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 249,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var stream = py_call(Python.import_module(\"builtins\").open, path, \"rb\")"
+  },
+  {
+    "path": "bindings/samba_checkpoint_native.mojo",
+    "line": 269,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var selected = py_call(Python.import_module(\"builtins\").dict, context)"
+  },
+  {
+    "path": "bindings/py2mojo_cluster_est.mojo",
+    "line": 22,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var zero = Python.import_module(\"builtins\").bytes(nbytes)"
+  },
+  {
+    "path": "bindings/py2mojo_cluster_est.mojo",
+    "line": 41,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var arr = Python.import_module(\"array\")"
+  },
+  {
+    "path": "bindings/classical_host_owner.mojo",
+    "line": 16,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/classical_host_owner.mojo",
+    "line": 36,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pca_exact.mojo",
+    "line": 31,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pca_exact.mojo",
+    "line": 85,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var shape = String(py_call(Python.import_module(\"builtins\").repr, view.shape))"
+  },
+  {
+    "path": "bindings/pca_exact.mojo",
+    "line": 123,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pca_exact.mojo",
+    "line": 147,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pca_exact.mojo",
+    "line": 170,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_mlp_native.mojo",
+    "line": 52,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "b[].bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_mlp_native.mojo",
+    "line": 55,
+    "module": "\"_thread\"",
+    "loop": null,
+    "source": "b[].lock = Python.import_module(\"_thread\").RLock"
+  },
+  {
+    "path": "bindings/samba_inference_native.mojo",
+    "line": 46,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_inference_native.mojo",
+    "line": 56,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_inference_native.mojo",
+    "line": 64,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/samba_inference_native.mojo",
+    "line": 96,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_inference_native.mojo",
+    "line": 122,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_inference_native.mojo",
+    "line": 193,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_inference_native.mojo",
+    "line": 226,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_inference_native.mojo",
+    "line": 242,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var packed = py_call(Python.import_module(\"array\").array, fmt)"
+  },
+  {
+    "path": "bindings/samba_inference_native.mojo",
+    "line": 260,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/neighbors_ann_native.mojo",
+    "line": 206,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/_mojolearn_svm_host.mojo",
+    "line": 130,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/py_lists.mojo",
+    "line": 21,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var array = Python.import_module(\"numpy\").empty(n, dtype=\"float64\")"
+  },
+  {
+    "path": "bindings/py_lists.mojo",
+    "line": 33,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var array = Python.import_module(\"numpy\").empty(n, dtype=\"float32\")"
+  },
+  {
+    "path": "bindings/py_lists.mojo",
+    "line": 45,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var array = Python.import_module(\"numpy\").empty(n, dtype=\"int32\")"
+  },
+  {
+    "path": "bindings/py_lists.mojo",
+    "line": 57,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var array = Python.import_module(\"numpy\").empty(n, dtype=\"int64\")"
+  },
+  {
+    "path": "bindings/py_lists.mojo",
+    "line": 69,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var array = Python.import_module(\"numpy\").empty(n, dtype=\"uint32\")"
+  },
+  {
+    "path": "bindings/py_lists.mojo",
+    "line": 81,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var array = Python.import_module(\"numpy\").empty(n, dtype=\"uint64\")"
+  },
+  {
+    "path": "bindings/py_lists.mojo",
+    "line": 94,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var array = Python.import_module(\"numpy\").empty(n, dtype=\"int64\")"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 62,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 181,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 195,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 207,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 208,
+    "module": "\"_warnings\"",
+    "loop": null,
+    "source": "_ = py_call(Python.import_module(\"_warnings\").warn,"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 235,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "+ String(py=py_call(Python.import_module(\"builtins\").repr, view.shape)))"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 400,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var shape = String(py=py_call(Python.import_module(\"builtins\").repr, view.shape))"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 511,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 522,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 617,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/linalg_decomp_native.mojo",
+    "line": 683,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/trees_public_lifecycle_native.mojo",
+    "line": 26,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/trees_public_lifecycle_native.mojo",
+    "line": 68,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pca_metadata.mojo",
+    "line": 11,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pca_metadata.mojo",
+    "line": 30,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pca_metadata.mojo",
+    "line": 70,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/pca_metadata.mojo",
+    "line": 100,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(mode) is not Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/pca_metadata.mojo",
+    "line": 111,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(entries) is Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/pca_archive.mojo",
+    "line": 22,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "py_setitem(values, \"svd_solver\", py_call(Python.import_module(\"builtins\").str, fields[\"svd_solver\"]))"
+  },
+  {
+    "path": "bindings/pca_archive.mojo",
+    "line": 75,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var model = py_call(Python.import_module(\"builtins\").object.__new__, cls)"
+  },
+  {
+    "path": "bindings/linalg_native.mojo",
+    "line": 101,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/decomp_inputs.mojo",
+    "line": 28,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var shape = String(py_call(Python.import_module(\"builtins\").repr, view.shape))"
+  },
+  {
+    "path": "bindings/samba_config_native.mojo",
+    "line": 12,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_config_native.mojo",
+    "line": 65,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "py_setitem(result, \"layers\", py_call(Python.import_module(\"builtins\").list, config.layers))"
+  },
+  {
+    "path": "bindings/samba_config_native.mojo",
+    "line": 77,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_config_native.mojo",
+    "line": 90,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Python.tuple(PythonObject(name), py_call(Python.import_module(\"builtins\").tuple, values))"
+  },
+  {
+    "path": "bindings/kmeans_native.mojo",
+    "line": 54,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/kmeans_native.mojo",
+    "line": 79,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/kmeans_native.mojo",
+    "line": 120,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "+ family_repr(py_call(Python.import_module(\"builtins\").sorted, table))"
+  },
+  {
+    "path": "bindings/kmeans_native.mojo",
+    "line": 123,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Int(py=family_call(Python.import_module(\"builtins\").int, metric))"
+  },
+  {
+    "path": "bindings/kmeans_native.mojo",
+    "line": 136,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "numpy = Python.import_module(\"numpy\")"
+  },
+  {
+    "path": "bindings/kmeans_native.mojo",
+    "line": 155,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/kmeans_native.mojo",
+    "line": 186,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "if Bool(py=family_call(Python.import_module(\"operator\").gt, k_obj, PythonObject(n))):"
+  },
+  {
+    "path": "bindings/kmeans_native.mojo",
+    "line": 340,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var state = py_call(Python.import_module(\"builtins\").dict, py_fields(model))"
+  },
+  {
+    "path": "bindings/mcd_native.mojo",
+    "line": 370,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var op = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/mcd_native.mojo",
+    "line": 457,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/apple_fast_bf16_public.mojo",
+    "line": 63,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "state[].builtins = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/apple_fast_bf16_public.mojo",
+    "line": 64,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "state[].array_type = Python.import_module(\"array\").array"
+  },
+  {
+    "path": "bindings/apple_fast_bf16_public.mojo",
+    "line": 65,
+    "module": "\"mojolearn._array\"",
+    "loop": null,
+    "source": "state[].array_class = Python.import_module(\"mojolearn._array\").Array"
+  },
+  {
+    "path": "bindings/classical_native.mojo",
+    "line": 71,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(mode) is not Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/classical_native.mojo",
+    "line": 77,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(entries) is Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/training_loss_options.mojo",
+    "line": 52,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/training_loss_options.mojo",
+    "line": 123,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/lm_corpus_files.mojo",
+    "line": 45,
+    "module": "\"posix\"",
+    "loop": null,
+    "source": "var posix = Python.import_module(\"posix\")"
+  },
+  {
+    "path": "bindings/lm_corpus_files.mojo",
+    "line": 56,
+    "module": "\"time\"",
+    "loop": null,
+    "source": "var clock = Python.import_module(\"time\").perf_counter"
+  },
+  {
+    "path": "bindings/lm_corpus_files.mojo",
+    "line": 57,
+    "module": "\"_json\"",
+    "loop": null,
+    "source": "var escape = Python.import_module(\"_json\").encode_basestring_ascii"
+  },
+  {
+    "path": "bindings/lm_corpus_files.mojo",
+    "line": 58,
+    "module": "\"pwd\"",
+    "loop": null,
+    "source": "var pwd = Python.import_module(\"pwd\")"
+  },
+  {
+    "path": "bindings/lm_corpus_files.mojo",
+    "line": 68,
+    "module": "\"pathlib\"",
+    "loop": null,
+    "source": "var cls = Python.import_module(\"pathlib\").PosixPath"
+  },
+  {
+    "path": "bindings/fa_native.mojo",
+    "line": 24,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "return Bool(py=py_call(Python.import_module(\"operator\").contains, options, value))"
+  },
+  {
+    "path": "bindings/fa_native.mojo",
+    "line": 29,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/fa_native.mojo",
+    "line": 55,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_labels_native.mojo",
+    "line": 72,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_labels_native.mojo",
+    "line": 729,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "and _truth(py_call(Python.import_module(\"operator\").lt, neg, pos))):"
+  },
+  {
+    "path": "bindings/host_archive_lifetime.mojo",
+    "line": 15,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_estimators_host.mojo",
+    "line": 165,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/xseq_score_native.mojo",
+    "line": 24,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return String(py=py_call(Python.import_module(\"builtins\").str, value.shape))"
+  },
+  {
+    "path": "bindings/xseq_score_native.mojo",
+    "line": 49,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_forest_host.mojo",
+    "line": 134,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/host_svc_native.mojo",
+    "line": 36,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_svc_native.mojo",
+    "line": 73,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_svc_native.mojo",
+    "line": 100,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_svc_native.mojo",
+    "line": 144,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "fields[\"_hp_cache_size\"], py_call(Python.import_module(\"builtins\").int, fields[\"_hp_degree\"]), Float64(py=fields[\"_hp_coef0\"]))"
+  },
+  {
+    "path": "bindings/host_svc_native.mojo",
+    "line": 199,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_svc_native.mojo",
+    "line": 301,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return classical_input(out, context, \"SVC result\") if py_type(out) is not Python.import_module(\"builtins\").list and public and py_get(context, \"ndarray\") is not None else out"
+  },
+  {
+    "path": "bindings/host_svc_native.mojo",
+    "line": 308,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var keys = py_call(Python.import_module(\"builtins\").list, fields.keys())"
+  },
+  {
+    "path": "bindings/host_svc_native.mojo",
+    "line": 330,
+    "module": "\"builtins\"",
+    "loop": "for i in range(rows):  # driver-loop: pair coefficient orientation matches the existing public property",
+    "source": "if mode is not None and (py_type(mode) is not Python.import_module(\"builtins\").str or String(mode) != \"identical\"):"
+  },
+  {
+    "path": "bindings/host_svc_native.mojo",
+    "line": 347,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequential_checkpoint.mojo",
+    "line": 110,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/svc_common.mojo",
+    "line": 114,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/parallel_neural_native.mojo",
+    "line": 60,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "b[].bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_neural_native.mojo",
+    "line": 67,
+    "module": "\"_thread\"",
+    "loop": null,
+    "source": "b[].lock = Python.import_module(\"_thread\").RLock"
+  },
+  {
+    "path": "bindings/trees_public_meta.mojo",
+    "line": 1148,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var getter = Python.import_module(\"operator\").itemgetter"
+  },
+  {
+    "path": "bindings/optimizer_public_door.mojo",
+    "line": 132,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "d[].bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/optimizer_public_door.mojo",
+    "line": 133,
+    "module": "\"mojolearn._training_impl\"",
+    "loop": null,
+    "source": "var training = Python.import_module(\"mojolearn._training_impl\")"
+  },
+  {
+    "path": "bindings/user_objects_native.mojo",
+    "line": 65,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/user_objects_native.mojo",
+    "line": 66,
+    "module": "\"numbers\"",
+    "loop": null,
+    "source": "var numbers = Python.import_module(\"numbers\")"
+  },
+  {
+    "path": "bindings/user_objects_native.mojo",
+    "line": 70,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "self.op = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/user_objects_native.mojo",
+    "line": 71,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "self.array = Python.import_module(\"array\").array"
+  },
+  {
+    "path": "bindings/native_idna.mojo",
+    "line": 41,
+    "module": "\"unicodedata\"",
+    "loop": null,
+    "source": "var unicode = Python.import_module(\"unicodedata\").ucd_3_2_0"
+  },
+  {
+    "path": "bindings/ica_native.mojo",
+    "line": 22,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "if not Bool(py=py_call(Python.import_module(\"operator\").contains, allowed, whiten)):"
+  },
+  {
+    "path": "bindings/ica_native.mojo",
+    "line": 31,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/ica_native.mojo",
+    "line": 40,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "if not Bool(py=py_call(Python.import_module(\"operator\").contains, Python.tuple(\"parallel\", \"deflation\"), algorithm)):"
+  },
+  {
+    "path": "bindings/device_plan_binding.mojo",
+    "line": 46,
+    "module": "\"builtins\"",
+    "loop": "for i in range(len(plans)):  # driver-loop: over the logged plans",
+    "source": "_ = out.append(py_call(Python.import_module(\"builtins\").tuple, ids))"
+  },
+  {
+    "path": "bindings/_mojolearn_tokenizer_fast.mojo",
+    "line": 53,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/host_kde_fit_native.mojo",
+    "line": 42,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_kde_fit_native.mojo",
+    "line": 88,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_kde_fit_native.mojo",
+    "line": 101,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_kde_fit_native.mojo",
+    "line": 159,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_kde_fit_native.mojo",
+    "line": 225,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_kde_fit_native.mojo",
+    "line": 263,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_kde_fit_native.mojo",
+    "line": 354,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/native_process_pool.mojo",
+    "line": 62,
+    "module": "\"posix\"",
+    "loop": null,
+    "source": "var posix = Python.import_module(\"posix\")"
+  },
+  {
+    "path": "bindings/causal_checkpoint.mojo",
+    "line": 63,
+    "module": "\"posix\"",
+    "loop": null,
+    "source": "var posix = Python.import_module(\"posix\")"
+  },
+  {
+    "path": "bindings/causal_checkpoint.mojo",
+    "line": 70,
+    "module": "\"mmap\"",
+    "loop": null,
+    "source": "var mmap = Python.import_module(\"mmap\")"
+  },
+  {
+    "path": "bindings/neural_prefill_native.mojo",
+    "line": 21,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/neural_prefill_native.mojo",
+    "line": 86,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var fields = py_call(Python.import_module(\"builtins\").object.__getattribute__, block, \"__dict__\")"
+  },
+  {
+    "path": "bindings/neural_prefill_native.mojo",
+    "line": 96,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/neural_prefill_native.mojo",
+    "line": 159,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/neural_prefill_native.mojo",
+    "line": 213,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequential_execution.mojo",
+    "line": 17,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequential_execution.mojo",
+    "line": 67,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequential_execution.mojo",
+    "line": 291,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if not Bool(py=py_call(Python.import_module(\"builtins\").tuple, actual) == sample):"
+  },
+  {
+    "path": "bindings/host_svr_native.mojo",
+    "line": 37,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_contains(fields, \"_hp_kernel\") and py_type(fields[\"_hp_kernel\"]) is not Python.import_module(\"builtins\").str:"
+  },
+  {
+    "path": "bindings/host_svr_native.mojo",
+    "line": 142,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "_ = py_call(params.append, py_call(Python.import_module(\"builtins\").int, fields[\"_hp_degree\"]))"
+  },
+  {
+    "path": "bindings/host_svr_native.mojo",
+    "line": 159,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var keys = py_call(Python.import_module(\"builtins\").list, fields.keys())"
+  },
+  {
+    "path": "bindings/host_svr_native.mojo",
+    "line": 172,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if mode is not None and (py_type(mode) is not Python.import_module(\"builtins\").str or String(mode) != \"identical\"):"
+  },
+  {
+    "path": "bindings/host_svr_native.mojo",
+    "line": 189,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/dbscan_core_device.mojo",
+    "line": 11,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var zero = Python.import_module(\"builtins\").bytes(nbytes)"
+  },
+  {
+    "path": "bindings/dbscan_core_device.mojo",
+    "line": 30,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "var arr = Python.import_module(\"array\")"
+  },
+  {
+    "path": "bindings/lda_native.mojo",
+    "line": 27,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/lda_native.mojo",
+    "line": 129,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "if not Bool(py=py_call(Python.import_module(\"operator\").contains, Python.tuple(\"batch\", \"online\"), method)):"
+  },
+  {
+    "path": "bindings/parallel_neural_admission.mojo",
+    "line": 9,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/parallel_neural_admission.mojo",
+    "line": 17,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_logistic_native.mojo",
+    "line": 24,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_logistic_native.mojo",
+    "line": 46,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_logistic_native.mojo",
+    "line": 60,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_logistic_native.mojo",
+    "line": 93,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_logistic_native.mojo",
+    "line": 218,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/sequential_native.mojo",
+    "line": 32,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/training_cross_entropy_native.mojo",
+    "line": 45,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/minmax_metadata.mojo",
+    "line": 13,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/minmax_metadata.mojo",
+    "line": 21,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/minmax_metadata.mojo",
+    "line": 43,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/neighbors_semi_native.mojo",
+    "line": 151,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "numpy = Python.import_module(\"numpy\")"
+  },
+  {
+    "path": "bindings/prep_select_native.mojo",
+    "line": 362,
+    "module": "\"numbers\"",
+    "loop": null,
+    "source": "var integral = context[\"integral_type\"] if py_contains(context, \"integral_type\") else Python.import_module(\"numbers\").Integral"
+  },
+  {
+    "path": "bindings/_mojolearn_metrics_host.mojo",
+    "line": 142,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/optimizer_native_router.mojo",
+    "line": 31,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/optimizer_native_router.mojo",
+    "line": 181,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/optimizer_native_router.mojo",
+    "line": 248,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/cluster_native.mojo",
+    "line": 29,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/cluster_native.mojo",
+    "line": 47,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/cluster_native.mojo",
+    "line": 142,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/cluster_native.mojo",
+    "line": 173,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/cluster_native.mojo",
+    "line": 182,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "predicts = Bool(py=family_call(Python.import_module(\"operator\").contains, context[\"family_agglo_predict_metrics\"], metric))"
+  },
+  {
+    "path": "bindings/cluster_native.mojo",
+    "line": 209,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return py_call(Python.import_module(\"builtins\").list, store)"
+  },
+  {
+    "path": "bindings/cluster_native.mojo",
+    "line": 216,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/cluster_native.mojo",
+    "line": 248,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "return family_call(Python.import_module(\"operator\").neg, result[2][0])"
+  },
+  {
+    "path": "bindings/_mojolearn_trees_host.mojo",
+    "line": 122,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/dict_learning_native.mojo",
+    "line": 38,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/dict_learning_native.mojo",
+    "line": 72,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/dict_learning_native.mojo",
+    "line": 119,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "raise Error(\"algorithm=\" + String(py=py_call(Python.import_module(\"builtins\").repr, algorithm))"
+  },
+  {
+    "path": "bindings/dict_learning_native.mojo",
+    "line": 544,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/decomp_native.mojo",
+    "line": 28,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/decomp_native.mojo",
+    "line": 159,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/forest_export_binding.mojo",
+    "line": 77,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var np = Python.import_module(\"numpy\")"
+  },
+  {
+    "path": "bindings/forest_export_binding.mojo",
+    "line": 90,
+    "module": "\"numpy\"",
+    "loop": null,
+    "source": "var np = Python.import_module(\"numpy\")"
+  },
+  {
+    "path": "bindings/_mojolearn_tsa_host.mojo",
+    "line": 76,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 55,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 78,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 84,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 241,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 345,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 409,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 664,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 848,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var got = py_call(Python.import_module(\"builtins\").tuple, value.shape)"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 959,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 1093,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 1180,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 1395,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 1472,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "+ _archive_builtin_repr(py_call(Python.import_module(\"builtins\").list, affinities))"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 1559,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var builtins = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 1846,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 1954,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 2242,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 2523,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var raw = py_call(Python.import_module(\"builtins\").bytes, stored._mv)"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 2559,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 2578,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 2649,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 2712,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "raise Error(\"mojolearn: \" + String(py_call(Python.import_module(\"builtins\").repr, path)) + \" was saved by \" + String(estimator) + \", which \" + fmt + \" does not hold\")"
+  },
+  {
+    "path": "bindings/host_archive_native.mojo",
+    "line": 2716,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/byte_checkpoint_native.mojo",
+    "line": 37,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "c[].bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/byte_checkpoint_native.mojo",
+    "line": 38,
+    "module": "\"posix\"",
+    "loop": null,
+    "source": "c[].os = Python.import_module(\"posix\")"
+  },
+  {
+    "path": "bindings/byte_checkpoint_native.mojo",
+    "line": 40,
+    "module": "\"sys\"",
+    "loop": null,
+    "source": "if String(Python.import_module(\"sys\").byteorder) != \"little\":"
+  },
+  {
+    "path": "bindings/byte_checkpoint_native.mojo",
+    "line": 49,
+    "module": "\"_operator\"",
+    "loop": null,
+    "source": "p[].index = Python.import_module(\"_operator\").index"
+  },
+  {
+    "path": "bindings/byte_checkpoint_native.mojo",
+    "line": 52,
+    "module": "\"array\"",
+    "loop": null,
+    "source": "g[].arrays = Python.import_module(\"array\").array"
+  },
+  {
+    "path": "bindings/samba_cpu_inference.mojo",
+    "line": 16,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_cpu_inference.mojo",
+    "line": 83,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_cpu_inference.mojo",
+    "line": 94,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_cpu_inference.mojo",
+    "line": 116,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/ipca_native.mojo",
+    "line": 29,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/ipca_native.mojo",
+    "line": 41,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "return Int(py=py_call(Python.import_module(\"builtins\").int, value))"
+  },
+  {
+    "path": "bindings/ipca_native.mojo",
+    "line": 54,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/ipca_native.mojo",
+    "line": 280,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/classical_tags.mojo",
+    "line": 14,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/classical_tags.mojo",
+    "line": 21,
+    "module": "\"dataclasses\"",
+    "loop": null,
+    "source": "var missing = py_get(py_call(b.object.__getattribute__, Python.import_module(\"dataclasses\"), \"__dict__\"), \"MISSING\")"
+  },
+  {
+    "path": "bindings/classical_tags.mojo",
+    "line": 60,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/classical_tags.mojo",
+    "line": 61,
+    "module": "\"sys\"",
+    "loop": null,
+    "source": "var module = py_get(Python.import_module(\"sys\").modules, \"sklearn.utils._tags\")"
+  },
+  {
+    "path": "bindings/classical_tags.mojo",
+    "line": 64,
+    "module": "\"sklearn.utils._tags\"",
+    "loop": null,
+    "source": "module = Python.import_module(\"sklearn.utils._tags\")"
+  },
+  {
+    "path": "bindings/classical_tags.mojo",
+    "line": 84,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/_mojolearn_x_cnn_host.mojo",
+    "line": 787,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/classical_score.mojo",
+    "line": 143,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/training_embedding_native.mojo",
+    "line": 131,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/training_embedding_native.mojo",
+    "line": 173,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_construct_native.mojo",
+    "line": 18,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/samba_construct_native.mojo",
+    "line": 99,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var bi = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/prep_owner_native.mojo",
+    "line": 33,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "var b = Python.import_module(\"builtins\")"
+  },
+  {
+    "path": "bindings/holtwinters_host_predict.mojo",
+    "line": 45,
+    "module": "\"operator\"",
+    "loop": null,
+    "source": "var operator_module = Python.import_module(\"operator\")"
+  },
+  {
+    "path": "bindings/entry/dev_verifier_repairs.mojo",
+    "line": 22,
+    "module": "\"types\"",
+    "loop": null,
+    "source": "if py_type(original) is not Python.import_module(\"types\").BuiltinFunctionType:"
+  },
+  {
+    "path": "bindings/entry/dev_verifier_repairs.mojo",
+    "line": 33,
+    "module": "\"builtins\"",
+    "loop": null,
+    "source": "if py_type(values) is not Python.import_module(\"builtins\").tuple:"
+  }
+]
