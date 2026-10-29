@@ -40,7 +40,8 @@ Remaining:
 Sampling still uploads/exports KV per token and downloads logits. Separate
 legacy_read_plan_20261028/RESIDENT_SAMPLING_OWNERSHIP.txt records required byte-range
 alias admission and failure-publication ownership before changing these transfers.
-An additional bounded review checks the already-landed greedy/EOS alias admission.
+The additional bounded review found and repaired greedy/EOS alias admission;
+see the follow-up below.
 Per-read public outputs/status, prefill stages and other kernel scratch remain.
 Public Mamba workspace still refreshes live mutable bytes on every call.
 Cross-call pointer identity does not establish immutable contents.
@@ -57,3 +58,18 @@ Per-batch compile/source/guard receipts and full-log locations are in
 experiments/lm_read_workspaces_20261028/HANDOFF.txt,
 experiments/resident_finite_pair_20261028/HANDOFF.txt,
 experiments/legacy_read_plan_20261028/HANDOFF.txt.
+
+Alias follow-up, 2026-10-29 (source f780389e83):
+Confirmed same/partial K/V and cross-layer host storage overlap changes later
+inputs when intermediate exports are skipped. Exposed/private-reopen weights
+can also overlap KV and change between tokens. New once-per-multi-token admission
+keeps those cases on the existing per-token route; no new input rejection or
+new host implementation. Exact captured Array byte ranges, not pointer identity.
+One-token reads skip the scan because there is no intervening export/reload.
+Optional supplied-state resident door uses its existing None eligibility result.
+New reads repeat admission; mutable byte/descriptor checks remain. Final actual
+public read and optional resident entries compiled CPU identical O0, exit0;
+numerical GPU closure unchanged. Independent source review accepted; no runtime.
+Receipt: experiments/resident_read_alias_20261028/HANDOFF.txt.
+Review: ~/mojolearn-evidence/resident-alias-source-review-20261029/.
+Final source closure125files matches integrated bytes; no duplicate build.
