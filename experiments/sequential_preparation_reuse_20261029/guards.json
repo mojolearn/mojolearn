@@ -1,0 +1,14 @@
+{
+  "command": [
+    "sh",
+    "tools/hooks/pre-push",
+    "origin",
+    "local-source-check"
+  ],
+  "stdin_ref": "refs/heads/lane/sequential-preparation-reuse-20261029",
+  "commit": "c4cf773a79d98524523e574583181974816cce83",
+  "remote_sha": "0000000000000000000000000000000000000000",
+  "exit_code": 0,
+  "elapsed_seconds": 39.73,
+  "scope": "Required pre-push source guards invoked directly; no push and no product execution."
+}

@@ -1,0 +1,84 @@
+Sequential operation preparation reuse (2026-10-29)
+==================================================
+Branch: lane/sequential-preparation-reuse-20261029
+Base: 260c49eaa145a0faf3641370b8d98d108b5513f6
+Product commits: 5c0f99f21fa51348c3e6286d7ae932d7b33526ef,
+                 c4cf773a79d98524523e574583181974816cce83
+Root owns serialized integration. No main merge or push by this lane.
+
+Repeated work removed
+---------------------
+ModelSpec parsing already runs once per whole native fit/predict operation;
+provider lifecycle expansion would not remove minibatch work. Existing public
+SequentialDescription identity/shape admission and invalidation remain intact.
+
+Previously each Linear in every training batch, validation batch and prediction
+chunk called _absorbed_activation, which scans all later layers for a Residual
+reader, then inspects the next activation. The original helper now runs once
+per Linear in operation setup. For Q forward passes and L linears, Q*L helper
+calls become L; each forward uses one native integer lookup per Linear. The
+original scan and decision semantics are retained; no arithmetic changes.
+
+rn_with_batch previously allocated a List, appended batch/sample dimensions,
+then rn_shape walked/copied that List into fixed ShapeN storage. It now writes
+fixed InlineArray storage directly. This removes one temporary allocation and
+one dimension-copy traversal per call at the input/layer view sites in every
+rank-N forward. Positive-dimension validation still runs per call. No speed
+claim or measurements were made.
+
+Reuse boundary, mutation and lifetimes
+-------------------------------------
+_ModelForwardTopology is private to one model_fit_state or model_predict call.
+Training, validation and chunk loops borrow its List of activation codes. The
+operation owns an immutable parsed ModelSpec; topology stores no model/parameter
+pointers, shapes, mutable tensor values or public object identities. Mutable
+weights, tape/gradient state, dropout counters, train flags and dynamic execution
+choices follow the original code. Trace/model-unfused behavior remains in the
+forward implementation. Legacy v1 MODEL_UNFUSED skips preparation entirely;
+version 2 preserves its historical use of fusion even under that define.
+
+The original model_forward signature remains a one-shot wrapper preparing fresh
+metadata on every standalone call. Native callers that construct or mutate a
+ModelSpec between calls cannot reuse a stale cache. Both parser constructors
+were reviewed; no persistent ModelSpec fields/cache or builder invalidation
+protocol was introduced. Benefits across batches/chunks apply only to enclosing
+fit/predict operations, not arbitrary standalone forward calls.
+
+rn_with_batch keeps unused dimensions set to one, rank-before-positive-dimension
+error ordering and error strings. For admitted ShapeN ranks 0..7, batch is checked
+before sample dimensions in ascending order. Negative sample rank retains the
+prior empty range behavior. Addressable-count/overflow and equal-element-count
+validation remain at Tape.view_nd/rn_check; rn_with_batch did not previously
+perform count validation and does not move it earlier now. No raw pointer or
+async owner lifetime was added, and no mutable-boundary check was bypassed.
+
+Validation and limits
+---------------------
+Focused Mac compile through tools/compile_slot.sh: exit 0, 26.61 seconds.
+CPU identical, -O0, 8 compiler jobs, inference enabled. Fixture instantiates the
+actual NativeModelRequest/model_request_execute HostExec path: plain/stateful
+fit, validation and prediction, both parsed model versions, plus the standalone
+model_forward wrapper. It is compilation only; fixture was never executed.
+Compiler warnings remain in full log; no compile failures or retries occurred.
+Required pre-push source guards: exit 0, 39.73 seconds, invoked directly without
+pushing. Root reviewed both-file product scope and requested the v1 unfused skip,
+which is included in the final source. The alternate MODEL_UNFUSED specialization,
+GPU targets and public provider loading were not separately compiled here.
+No runtime, identity, performance or cross-vendor campaign ran.
+
+Classical program-publication lane was given both product commits before its
+combined compile because its closure imports autograd.model. It owns separate
+output-publication edits; no duplicate stale-model combined build requested.
+
+Evidence
+--------
+Repository: experiments/sequential_preparation_reuse_20261029/
+  model_compile.mojo, compile.py, compile.json, guards.json, this HANDOFF.txt.
+Mac: /Users/andrewhendel/mojolearn-evidence/sequential-preparation-reuse-20261029/
+  compile.log, compile.exit, model.dylib, compile.json, guards.log, guards.json,
+  source-manifest.json, source-envelope.tar.gz, preparation-callers.txt,
+  worktree.log and both commit logs.
+The conservative source envelope retains 3,635 present Mojo/build inputs (not a
+minimal transitive closure); the binary/archive/compiler hashes are in compile.json.
+The fixture and original complete build/guard outputs are retained. No rented
+machine was used. No full logs or binary bytes are committed to the repository.
