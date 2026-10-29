@@ -46,8 +46,7 @@ struct ParameterGridRow(Movable):
     var choices: List[PythonObject]
     var widths: List[Int]
 
-    def __init__(out self, captured: PythonObject, sorted_keys: Bool) raises:
-        var b = native_loaded_module("builtins")
+    def __init__(out self, captured: PythonObject, b: PythonObject, sorted_keys: Bool) raises:
         var names = py_call(b.sorted, captured) if sorted_keys else py_call(b.list, captured)
         self.keys = List[PythonObject]()
         self.choices = List[PythonObject]()
@@ -68,11 +67,12 @@ struct PreparedParameterGrid(Movable):
         # `captured` is exclusively for the sampler's preceding native
         # distribution admission, which already prepared these exact lists.
         var grids = source if captured else parameter_grid_dicts(source, context, True)
+        var b = native_loaded_module("builtins")
         self.rows = List[ParameterGridRow]()
         # Finish every insertion-order validation before sorting/expansion,
         # matching the old grid_dicts -> grid_list refusal boundary.
         for i in range(len(grids)):  # driver-loop: one native schema per parameter dictionary
-            self.rows.append(ParameterGridRow(grids[i], sorted_keys))
+            self.rows.append(ParameterGridRow(grids[i], b, sorted_keys))
 
     def count(self) -> Int:
         var total = 0
