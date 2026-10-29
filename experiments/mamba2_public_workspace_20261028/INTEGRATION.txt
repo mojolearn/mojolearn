@@ -1,0 +1,55 @@
+Public Mamba2 workspace integration, 2026-10-28
+Base main3b33899708. Original prerequisitea4e7cda0f8, native926f85c162,
+provider ec6f1fbc1d/5a489ba7c5. Root reviewed source and integrated serially.
+
+Default identical GPU execution uses the existing arena, not the arena-off
+nine-host-weight-list implementation. The actual default now retains that arena
+across public steps; current logical layout and used-prefix initialization stay
+unchanged. The capacity bound comes from maximum legal q0, not benchmark shapes.
+Arena-off retains nine weight buffers, four state buffers and the input buffer,
+removing host staging/bounce allocations and redundant upload waits there.
+
+Reuse boundary: native resource belongs to retained NativeBlockPlan, created
+lazily only for public Mamba2 step and only when the GPU identical image advertises
+the versioned capability. Generic NativeDescriptorResource pins the native image
+and closes its opaque owner. Old images, forward, other modes/families retain
+their existing route. No private immutable-weight decode session substituted.
+
+Invalidation and refresh: every call uploads current weights, state and input;
+weights_checked resets. Shape/device change replaces storage; plan/backend/image/
+Array metadata changes and same-module factory add/replace/remove invalidate the
+provider plan. Atomic exclusive cached loan; overlapping calls use private storage.
+On failure drain/drop before releasing loan; original error stays primary. Escaped
+public outputs/reports remain fresh. No raw host pointer persists between calls.
+
+Root/independent peer source review covered native ABI counts and opaque ownership,
+provider create/adopt/close pins, capability gating, max-q layout monotonicity,
+used-prefix initialization, concurrency and exceptional lifetime. Peer review found
+and owner repaired error masking and premature arena-view destruction before final
+compilation. Source review evidence:
+~/mojolearn-evidence/mamba2-workspace-source-review-20261028/.
+
+Compilation: final actual default-arena and supported arena-off GPU descriptor
+create/close/step plus capsule factory passed Apple identical O0 compilation, no
+CPU numerical substitution. Actual public neural_block_forward_binding CPU
+identical closure separately passed, including optional provider ownership and
+transport. ABI shape matches on both sides. Unchanged accepted source reused;
+no duplicate combined build and no runtime loading/execution claim. Per-batch
+receipts retain compiler/flags/source/binary hashes, complete logs and superseded
+successful drafts. Normal source/push guards required without overrides.
+
+Limits/tradeoffs: capacity may retain more memory than an early-sequence call
+alone needs. Live input/weight/state transfers, small logical-view/ABI metadata
+construction, finite checks and fresh reports remain. Arena-off stages still
+allocate per step. No measured recovery, runtime correctness, concurrent/failure
+qualification, or NVIDIA/AMD compilation/identity result is established.
+
+This completes the current bounded neural structural-repair batches for a source
+freeze. Further broad Python removal and new arithmetic work remain deferred.
+No measurements are authorized in this session. When authorized, assess frozen
+public Mamba2.step and whole-generation workloads separately before the agreed
+29-lane suite; compilation/source review never substitute for those results.
+
+Integration evidence: ~/mojolearn-evidence/mamba2-workspace-integration-20261028/.
+Detailed native/provider handoffs: this directory/HANDOFF.txt and
+experiments/mamba_public_workspace_provider_20261028/HANDOFF.txt.
