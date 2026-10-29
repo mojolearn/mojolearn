@@ -1,0 +1,62 @@
+Tokenizer batch UTF-8 policy/result reuse (2026-10-28)
+
+Branch: lane/tokenizer-batch-decode-20261028
+Base: 7105ca64c8b3762eb4e9473ff235b5bb5da0792a
+Scope: bindings/tokenizer_public_native.mojo only.
+
+Repeated work removed:
+- Repeated errors exact-str validation/native string conversion, connection
+  lookup and canonical handler dictionary lookup are retained once per BPE
+  text-decode operation. Admission is lazy after first valid decoded id row,
+  preserving empty-batch behavior and id-error precedence.
+- Native BPE/Vocab byte Lists go straight to PyUnicode_DecodeUTF8 for text
+  results, removing a copied Python bytes intermediate for every text row.
+- No bound bytes.decode object, utf-8/errors argument tuple, PyObject_Call,
+  or Python codec-name dispatch is constructed for each result.
+- PyCodec_LookupError replaces the retained C lookup wrapper's Python call.
+- BPE batch rows populate one sized Python list through a once-resolved
+  PyList_SetItem, removing per-row bound append construction/dispatch.
+
+Policy/mutation/lifetimes:
+The immutable exact-str policy name and connected canonical handler owner
+are operation-local, not a persistent cache. EVERY decode still resolves the
+live error registry and compares object identity immediately before decoding.
+Register_error substitution is refused even if native function metadata looks
+valid; per-item input admission/allocations cannot conceal a registry change.
+All six originally admitted canonical policies remain; arbitrary policies or
+Python handlers remain refused. No GIL release surrounds identity check and
+native decoding. No assumption that a batch's intervening operations cannot
+mutate registry state permits skipping the live check.
+Native byte List owners remain live through decode. Zero-length native Lists
+use a valid local byte pointer without reading data. The standalone exact
+bytes/bytearray helper also uses direct decoding, retaining a native buffer
+export across decode/exception creation, released in finally. Exact raw type
+checks remain, so no arbitrary buffer exporter is introduced.
+CPython retains UTF-8 validation, surrogate/error policy behavior and Unicode
+error creation. Existing pending-error stashing preserves exception delivery.
+The private initially NULL-filled result list owns every initialized row on
+failure; PyList_SetItem steals each new result reference on success/failure.
+Bytes-only routes retain byte result type and do not validate unused errors.
+
+Validation:
+Final public tokenizer_public_c CPU source closure compilation: exit 0,
+Mojo 1.0.0, O0, identical, through tools/compile_slot.sh. Complete command,
+source/binary hashes and generated Unicode source are retained in compile.json
+and evidence. Initial compile also passed; final rebuild was required by
+empty-pointer hardening and sized result publication (changed source, not a
+duplicate build). Standard pinned Unicode generator exit 0; no workaround.
+Required source guards run on committed source, retained separately.
+No runtime/identity/performance campaign; no speedup or runtime-success claim.
+No rented box or vendor device coverage.
+
+Remaining per-item work/limits:
+Id container/buffer admission and id range checks remain per row. Live registry
+identity validation, native UTF-8 validation and result allocation remain per
+row. Native C symbol resolution remains inside the decoder. General tokenizer
+metadata/input marshalling and other result paths still use Python objects.
+This batch does not establish Python-free tokenizer execution.
+
+Evidence: /Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/
+Full build logs/exit files, binaries, generated table and source hashes;
+source guard logs/exit files: no_host_routes, no_python_in_kernels,
+no_compute_in_shells. No binaries executed.

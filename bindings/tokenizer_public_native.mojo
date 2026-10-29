@@ -342,33 +342,61 @@ def _ids(var value: PythonObject) raises -> List[Int]:
     return result^
 
 
+struct TokenizerUtf8Policy(Movable):
+    var name: String
+    var expected: PythonObject
+
+    def __init__(out self, errors: PythonObject) raises:
+        self.name = _str(errors, "errors")
+        var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
+        var handlers = state[].error_handlers
+        if handlers is None or state[].error_lookup is None:
+            raise Error("RuntimeError: tokenizer UTF-8 handlers require their import-time connection")
+        self.expected = py_get(handlers, errors)
+        if self.expected is None:
+            raise Error("ValueError: tokenizer decode requires a builtin UTF-8 error policy")
+
+    def decode(mut self, address: Int, count: Int) raises -> PythonObject:
+        ref cpy = Python().cpython()
+        var name = self.name.as_c_string_slice()
+        # Retain immutable policy admission across the batch, but check the
+        # live registry immediately before EVERY decode: admission/allocation
+        # between rows must not conceal register_error replacing a handler.
+        var found = cpy.lib.get_function[PyObjectPtr]("PyCodec_LookupError")(name.unsafe_ptr())
+        if not found:
+            var failure = stash_python_error()
+            raise failure^
+        var entry = PythonObject(from_owned=found)
+        if entry is not self.expected:
+            raise Error("ValueError: tokenizer decode requires its canonical builtin UTF-8 error policy")
+        # Only admitted builtin policies reach CPython's native UTF-8 codec.
+        # There is no bound bytes.decode object, argument tuple, or codec-name
+        # dispatch. The caller retains/pins the byte storage with the GIL held.
+        # A zero-length native List may expose a null address. Supply a valid
+        # byte pointer even for empty input, without reading or copying data.
+        var empty_byte = UInt8(0)
+        var source = Int(Pointer(to=empty_byte)) if count == 0 else address
+        var result = cpy.lib.get_function[PyObjectPtr]("PyUnicode_DecodeUTF8")(
+            source, count, name.unsafe_ptr())
+        _ = entry
+        if not result:
+            var failure = stash_python_error()
+            raise failure^
+        return PythonObject(from_owned=result)
+
+
 def tokenizer_decode_utf8(raw: PythonObject, errors: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     if py_type(raw) is not bi.bytes and py_type(raw) is not bi.bytearray:
         raise Error("TypeError: tokenizer UTF-8 decoding requires exact native bytes")
-    _ = _str(errors, "errors")
-    var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
-    var handlers = state[].error_handlers
-    var lookup = state[].error_lookup
-    if handlers is None or lookup is None:
-        raise Error("RuntimeError: tokenizer UTF-8 handlers require their import-time connection")
-    var expected = py_get(handlers, errors)
-    if expected is None:
-        raise Error("ValueError: tokenizer decode requires a builtin UTF-8 error policy")
-    # Registry names and native function types alone do not establish safety:
-    # register_error can replace a policy with another C builtin such as print.
-    # Refuse that mutation before the existing bytes/bytearray decode route.
-    var entry = py_call(lookup, errors)
-    if entry is not expected:
-        raise Error("ValueError: tokenizer decode requires its canonical builtin UTF-8 error policy")
-    ref cpy = Python().cpython()
-    var args = Python.tuple("utf-8", errors)
-    var decode = raw.decode
-    var result = cpy.PyObject_Call(decode._obj_ptr, args._obj_ptr, PyObjectPtr())
-    if not result:
-        var failure = stash_python_error()
-        raise failure^
-    return PythonObject(from_owned=result)
+    var policy = TokenizerUtf8Policy(errors)
+    # Preserve bytearray export pinning across native decoding and exception
+    # creation; exact type admission above excludes arbitrary buffer hooks.
+    var pin = AdmittedBorrowedBuffer(raw)
+    try:
+        return policy.decode(pin.layout.value().address, pin.layout.value().count)
+    finally:
+        pin.release()
 
 
 def _path(value: PythonObject) raises -> PythonObject:
@@ -536,13 +564,29 @@ def _bpe_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool, b
     var sequences = Python.tuple(data)
     if batch:
         sequences = _documents(data, "decode_bytes_batch")
-    var result = Python.list()
-    for i in range(len(sequences)):  # cpu-route: marshal admitted id sequences and publish completed decoded bytes
+    var count = len(sequences)
+    var result = _tokenizer_result_list(count)
+    ref cpy = Python().cpython()
+    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
+    var policy = Optional[TokenizerUtf8Policy](None)
+    for i in range(count):  # cpu-route: marshal admitted id sequences and publish completed decoded bytes
         var ids = _ids(sequences[i])
         bpe_check_ids(ids, owner[].tok.value().n_vocab())
         var bytes = bpe_decode_seq_bytes(owner[], ids, len(ids) * owner[].max_token_bytes)
-        var raw = _py_bytes(bytes)
-        _ = py_call(result.append, raw if bytes_only else tokenizer_decode_utf8(raw, errors))
+        var decoded: PythonObject
+        if bytes_only:
+            decoded = _py_bytes(bytes)
+        else:
+            # Lazy admission keeps empty-batch behavior and first-row id error
+            # precedence. Exact immutable errors/handler identity are retained.
+            if not policy:
+                policy = TokenizerUtf8Policy(errors)
+            decoded = policy.value().decode(Int(bytes.unsafe_ptr()), len(bytes))
+        _ = bytes
+        # SetItem steals the completed result on both success and failure;
+        # the private result list owns all earlier slots during unwinding.
+        if set_item(result._obj_ptr, i, decoded.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
     _ = handle
     _ = data
     return result if batch else result[0]
@@ -996,10 +1040,16 @@ def _vocab_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool,
         raise Error("ValueError: tokenizer vocabulary is not loaded")
     var ids = _ids(data)
     var bytes = vocab_decode_ids(owner[].tok.value(), ids)
-    var raw = _py_bytes(bytes)
+    var result: PythonObject
+    if bytes_only:
+        result = _py_bytes(bytes)
+    else:
+        var policy = TokenizerUtf8Policy(errors)
+        result = policy.decode(Int(bytes.unsafe_ptr()), len(bytes))
+    _ = bytes
     _ = handle
     _ = data
-    return raw if bytes_only else tokenizer_decode_utf8(raw, errors)
+    return result
 
 
 def _vocab_pretokenize(tokenizer: PythonObject, data: PythonObject, context: PythonObject) raises -> PythonObject:

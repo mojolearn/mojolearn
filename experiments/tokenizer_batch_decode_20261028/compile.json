@@ -1,0 +1,37 @@
+{
+  "base_commit": "7105ca64c8b3762eb4e9473ff235b5bb5da0792a",
+  "compile_exit": 0,
+  "scope": "Exported tokenizer_public_c public dispatcher CPU source closure including BPE batch and Vocab UTF-8 decoding, native bytes publication and canonical error policy admission; compile only",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/tokenizer-batch-decode-20261028 -I /Users/andrewhendel/mojolearn-wt/tokenizer-batch-decode-20261028/bindings /Users/andrewhendel/mojolearn-wt/tokenizer-batch-decode-20261028/experiments/peer3_neural_tokenizer_20261027/compile_tokenizer.mojo -o /Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/tokenizer_compile.dylib",
+  "compile_slots": 4,
+  "compiler_workers": "default; no CPU saturation measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/tokenizer_compile.dylib",
+  "binary_sha256": "1f4fff550c0d762a4d890170897ea5e88d0c6a8f53bdd9e21b902393c67eee67",
+  "log": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/source-sha256.json",
+  "source_manifest_scope": "All tracked Mojo, Pixi manifest/lock and generated Unicode inputs; conservative superset, not all compiled",
+  "relevant_source_sha256": {
+    "bindings/tokenizer_public_native.mojo": "15f1d34e1de528f94f8b971c38d83ed94e41f2becb6c333d41fc97679a080042",
+    "experiments/peer3_neural_tokenizer_20261027/compile_tokenizer.mojo": "2491ea402d0178a2dd60496b96cc45171593139dbcdca2eed4c463c7e1f6d367"
+  },
+  "generated_input": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/unicode_table_generated.mojo",
+    "sha256": "60aa4174d12b40b5dd48f9687d377f3fb10669d9c07f574f9c7e2ea8c70644ee",
+    "command": "bash tokenizer/tools/gen_unicode_table.sh",
+    "exit": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/unicode-generate.log"
+  },
+  "earlier_compile": {
+    "exit": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/initial-compile.log",
+    "source": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/tokenizer_public_native-initial.mojo",
+    "binary": "/Users/andrewhendel/mojolearn-evidence/tokenizer-batch-decode-20261028/initial-tokenizer_compile.dylib",
+    "scope": "Initial decoding implementation before empty-pointer hardening and sized batch list publication; retained, superseded by changed-source final compile"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}
