@@ -75,3 +75,15 @@ def test_missing_substantive_source_is_never_excused(setup,monkeypatch):
     monkeypatch.setattr(common,'require_closure',lambda *a:[ENTRY,'algorithm.mojo'])
     with pytest.raises(ValueError,match='not compiled at its tested bytes: algorithm.mojo'):
         check(setup)
+
+
+def test_wrong_logical_binding_is_refused(setup):
+    setup[4]['binding_key']='osx-arm64/metal/apple/identical/_mojolearn_other'
+    with pytest.raises(ValueError,match='admitted unit names another binding'):
+        check(setup)
+
+
+def test_present_entry_with_wrong_bytes_does_not_use_wrapper_proof(setup):
+    setup[3]['groups'][setup[4]['group']]['source_files'][ENTRY]='0'*64
+    with pytest.raises(ValueError,match='not compiled at its tested bytes'):
+        check(setup)

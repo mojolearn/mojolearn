@@ -161,7 +161,7 @@ def require_closure(tree, wanted):
 
 
 # ---------------------------------------------------------------- development build
-DEV_ROUTING = set(FLAG_ENV.values()) | set(DEV_PLACEMENT)
+DEV_ROUTING = set(FLAG_ENV.values()) | set(DEV_PLACEMENT) | set(GLUE_INTERPRETERS)
 
 
 def _dev_group(row, repo, cache, tree):

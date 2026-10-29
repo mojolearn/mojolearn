@@ -409,3 +409,15 @@ def test_runtime_multi_gpu_and_published_rows_with_partial_coverage_have_no_adap
         assert not admission.supports_requirement(wanted)
     assert adapters.supports_requirement(dict(kind='adapters', coverage=ADAPTER_COVERAGE, missing_inputs=[],
                                               inputs=dict(contract=dict(id='adapters-apple'))))
+
+
+def test_mac_development_glue_interpreter_must_be_absolute(tmp_path, repo, development):
+    result = json.loads(development['result'].read_text())
+    row = result['plan']['groups'][0]
+    row['fields']['environment']['MOJOLEARN_MERGED_PYTHON'] = 'relative/python'
+    row['key'] = devb.digest(row['fields'])
+    put(development['result'], result)
+    ledger = ledger_for(tmp_path, copy.deepcopy(development['originals']), MAC_CPU)
+    with pytest.raises(ValueError, match='glue interpreter is not recorded as an absolute path'):
+        admission.prepare('mac-development-build', repo, ledger.path, tmp_path/'invalid-glue',
+                          dict(result=development['result']))

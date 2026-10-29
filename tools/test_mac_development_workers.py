@@ -53,3 +53,12 @@ def test_conflicting_worker_records_are_refused(monkeypatch):
 def test_duplicate_binding_groups_are_not_silently_overwritten(monkeypatch):
     with pytest.raises(ValueError, match="groups conflict"):
         collect(monkeypatch, {"a": group("one", "10"), "b": group("one", "10")})
+
+
+def test_validated_glue_interpreter_placement_is_not_a_compile_switch(monkeypatch):
+    recorded = group("one", "10")
+    recorded["environment"].update(MOJOLEARN_MERGED_PYTHON="/recorded/env/bin/python",
+                                   MOJOLEARN_MOJO_BUILD_FLAGS="-O0")
+    result = collect(monkeypatch, {"a": recorded})
+    assert result["configuration"]["build_flags"] == {"MOJOLEARN_MOJO_BUILD_FLAGS": "-O0"}
+    assert recorded["environment"]["MOJOLEARN_MERGED_PYTHON"] == "/recorded/env/bin/python"
