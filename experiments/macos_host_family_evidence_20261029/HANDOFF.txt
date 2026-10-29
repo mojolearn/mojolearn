@@ -42,3 +42,52 @@ Full logs and retained reconciliation:
 No runtime, numerical identity, packaging or performance claims. Existing actual
 build evidence is retained; missing original auxiliary witness is a provenance
 limitation, not an automatic request to repeat unchanged compilation.
+
+CPU contract review and extension (later 2026-10-29)
+--------------------------------------------------
+The original full Apple snapshot gate above was reviewed against the actual CPU
+builder. build_host_family.sh invokes Mojo/LLVM with apple-m1, macOS minimum11.0
+and SDK platform_version; it never invokes Metal. bincache.darwin_toolchain
+explicitly describes the GPU Metal-half inputs. Requiring host OS/Xcode/Metal
+labels for these CPU builds was therefore overbroad.
+
+Owner approved a separate CPU contract implemented by b1d7f20b3f8f4d2849088bff0f52785e18211115:
+exact captured Mojo compiler hash and pixi.lock, exact captured build argv/flags,
+and original raw Mach-O ARM64/ALL dylib platform/minimum/SDK/linker tool+version,
+all dylib dependency names/versions and original LC_RPATH commands. Metadata is
+parsed directly from retained raw binaries, never inferred from the current
+machine or another job. Strict malformed/unknown command/type checks reject
+unproven images. SDK and linker identity remain VERSION evidence, not original
+executable or SDK content hashes, which were not captured. That limitation is
+explicit and matches the existing version-level Apple toolchain record.
+
+selected_macos_cpu_toolchains only applies to named macOS host/CPU bindings;
+GPU bindings still require the full Metal toolchain. It preserves every other
+unresolved dependency and checks the captured lock against the frozen source.
+CPU compiler identity is fingerprinted inside that exact CPU contract.
+
+6623668d00153e8a0e9bf82fe8099402a352d4bc recognizes ONLY the exact two-line
+build_<family>_host.sh forwarding shim as equivalent to the original direct
+build_host_family.sh <family> invocation. Those shims were not executed by the
+captured producer. Arbitrary shell code or any missing Mojo source still fails.
+
+Final tests87 +14subtests pass, zero failures; final source/push guards0/30.86s.
+Actual original46 CPU unit checks:45passed,1refused (runtime_classical missing
+experiments/__init__.mojo in its original sparse snapshot; the previously
+recorded three absent experiment files remain unproven inputs). These checks
+reconstruct exact original revisions and compare all required source hashes.
+No ledger writes or product runtime runs occurred in this tool lane.
+
+The earlier retrospective reviews are preserved: the first incorrectly checked
+a Linux-only unit compiler field, then the second required the unexecuted release
+shim. Those adapter assertions were fixed and checked using the same retained
+source snapshots; they were not compiler or product failures. Final results are
+cpu-unit-review.json; complete original attempts under external cpu-unit-review*,
+including per-revision frozen source snapshots and full logs.
+
+Root authorized exactly one fresh runtime_classical O0/10-worker compile from a
+FULL owned worktree to resolve the actual required-source omission. It is running
+at ca880cd09211a6f4ee7a0b28f7cd153068be47ff with444 closure files/446captured;
+all three formerly absent files are present. Other45 CPU builds are reused.
+Evidence: ~/mojolearn-evidence/runtime-classical-complete-source-20261029/.
+That replacement remains pending until its compile result and exact unit check.

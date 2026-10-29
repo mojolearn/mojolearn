@@ -1,0 +1,14 @@
+{
+  "source_commit": "6623668d00153e8a0e9bf82fe8099402a352d4bc",
+  "base": "b2d802861c4b4a47befbd4ee0934f7bfbba67785",
+  "ref": "refs/heads/lane/macos-host-family-evidence-20261029",
+  "command": [
+    "sh",
+    "tools/hooks/pre-push",
+    "origin",
+    "source-only-review"
+  ],
+  "exit_code": 0,
+  "seconds": 30.85620279191062,
+  "scope": "Required source/push guards, committed ref; no push"
+}

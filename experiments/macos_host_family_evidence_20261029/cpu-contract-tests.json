@@ -1,0 +1,10 @@
+{
+  "source_commit": "6623668d00153e8a0e9bf82fe8099402a352d4bc",
+  "exit_code": 0,
+  "tests_passed": 87,
+  "subtests_passed": 14,
+  "failed": 0,
+  "log": "/Users/andrewhendel/mojolearn-evidence/macos-host-family-evidence-20261029/cpu-contract-tests-shim.log",
+  "log_sha256": "24ad28395d30346aefc90482203ffd63891dcaddd6b4e28907218a784c41e4b3",
+  "scope": "Focused source-tooling tests only; no compiler or product execution"
+}
