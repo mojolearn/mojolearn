@@ -721,10 +721,10 @@ def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: Py
         var reused = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer.copy()
         reused.rebind(_block(mods, model, i), kind)
         mods.released()
-        return _causal_layer_run_prepared(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step)
+        return _causal_layer_run_prepared(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step, PythonObject(None))
     var layer = GenerationLayerSnapshot(_block(mods, model, i), kind, planes)
     mods.released()
-    return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
+    return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step, PythonObject(None))
 
 
 def causal_layer_run_fields(mut mods: NativeModules, fields: PythonObject, entries: PythonObject, kind: String, d: Int, packed: Bool, prepared: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool = False, mamba_workspace: PythonObject = PythonObject(None)) raises -> PythonObject:
@@ -1320,7 +1320,7 @@ def _run_snapshot(mut mods: NativeModules, snapshot: GenerationOperationSnapshot
     mods.released()
     for i in range(len(snapshot.layers)):  # driver-loop: over retained native layer descriptions
         x = _causal_layer_run_prepared(mods, snapshot.entries, snapshot.kind, snapshot.width, b, l,
-            snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, state.layers[i], False)
+            snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, state.layers[i], False, PythonObject(None))
     var out = _causal_model_head_prepared(snapshot.head, x, b, l, False)
     mods.released()
     _ = snapshot  # pins model and all captured weight owners until computation finishes
