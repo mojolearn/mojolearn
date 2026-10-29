@@ -1,0 +1,57 @@
+[
+  {
+    "name": "host-routes",
+    "argv": [
+      "python3",
+      "tools/hooks/no_host_routes.py",
+      "--tree",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "seconds": 19.997884035110474
+  },
+  {
+    "name": "python-execution",
+    "argv": [
+      "python3",
+      "tools/hooks/no_python_in_kernels.py",
+      "--tree",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "seconds": 0.677152156829834
+  },
+  {
+    "name": "shell-compute",
+    "argv": [
+      "python3",
+      "tools/hooks/no_compute_in_shells.py",
+      "--tree",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "seconds": 0.6951181888580322
+  },
+  {
+    "name": "generation-boundary",
+    "argv": [
+      "python3",
+      "tools/check_generation_native_boundary.py"
+    ],
+    "exit_code": 0,
+    "seconds": 0.2898900508880615
+  },
+  {
+    "name": "package-connections",
+    "argv": [
+      "python3",
+      "tools/check_native_package_connections.py",
+      "--root",
+      "/Users/andrewhendel/mojolearn-wt/github-development-build-20261029",
+      "--tree",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "seconds": 1.1817219257354736
+  }
+]

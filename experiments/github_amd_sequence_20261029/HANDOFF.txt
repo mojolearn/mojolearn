@@ -22,3 +22,7 @@ CPU/CUDA cap. Do not assert eight allocated physical CPUs or full utilization.
 Planner gives one13GiB peak group and1GiB swap. Preserve three unchanged prior
 AMD merged groups from40855235569; do not rebuild the complete AMD set.
 Wait root integration plus optimized Apple sampler diagnosis before dispatch.
+
+Guard commit: cecf454ed8d6cd5c9cab2bb8ad3f2746ff29898e.
+Five required source guards passed (all exit0); full logs and argv/status
+receipts retained alongside timeout tests. No actual AMD dispatch yet.
