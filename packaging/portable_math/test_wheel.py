@@ -97,6 +97,48 @@ def test_shipped_runtime_numpy_imports_use_only_the_guard():
     assert not errors
 
 
+@pytest.mark.parametrize('name', sorted(audit.NUMPY_ORACLES))
+def test_exact_verifier_controllers_may_use_reference_packages(tmp_path, name):
+    path = tmp_path / 'verifier.py'
+    path.write_text('import numpy\nimport math\n')
+    assert not audit.numpy_errors(path, name)
+    assert not audit.python_math_errors(path, name)
+    assert audit.numpy_errors(path, 'mojolearn/_verify_new_runtime.py')
+    assert audit.python_math_errors(path, 'mojolearn/_verify_new_runtime.py')
+
+
+@pytest.mark.parametrize('name,scope', [
+    ('mojolearn/_native_xcnn_bridge.py', 'connect'),
+    ('mojolearn/importers/_native_reader_bridge.py', 'connect'),
+    ('mojolearn/resample.py', None),
+])
+def test_native_metadata_import_guard_is_location_and_statement_scoped(tmp_path, name, scope):
+    path = tmp_path / 'setup.py'
+    guarded = 'try:\n    import numpy as np\nexcept ImportError:\n    np = None\n'
+    def scoped(text):
+        return ('def ' + scope + '():\n' + ''.join('    ' + line + '\n' for line in text.splitlines())) if scope else text
+    path.write_text(scoped(guarded))
+    assert not audit.numpy_errors(path, name)
+    assert audit.numpy_errors(path, 'mojolearn/unrelated.py')
+    path.write_text(scoped('import numpy\n'))
+    assert audit.numpy_errors(path, name)
+    path.write_text(scoped(guarded.replace('ImportError', 'ValueError')))
+    assert audit.numpy_errors(path, name)
+    path.write_text(scoped('def later():\n' + ''.join('    ' + line + '\n' for line in guarded.splitlines())))
+    assert audit.numpy_errors(path, name)
+
+
+def test_rng_setup_admits_only_exact_native_metadata_import(tmp_path):
+    path = tmp_path / 'rng.py'
+    text = ('def _connect_pcs_rng():\n    try:\n'
+            '        from numpy.random import mtrand, BitGenerator, MT19937, PCG64, PCG64DXSM, Philox, SFC64\n'
+            '    except ImportError:\n        return\n')
+    path.write_text(text)
+    assert not audit.numpy_errors(path, 'mojolearn/_expansion_neighbors.py')
+    path.write_text(text.replace('SFC64', 'default_rng'))
+    assert audit.numpy_errors(path, 'mojolearn/_expansion_neighbors.py')
+
+
 def test_compensated_sum_exception_cannot_admit_platform_transcendentals(tmp_path):
     path = tmp_path / '_portable_math.py'
     body = 'import math as _cmath\ndef fsum(vals):\n    return _cmath.fsum(vals)\n'

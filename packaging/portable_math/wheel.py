@@ -52,7 +52,61 @@ NUMPY_ORACLES = {
     # them. Keep exact names: a _verify_* prefix is not a runtime exemption.
     "mojolearn/_verify_distributed_program.py", "mojolearn/_verify_generation.py",
     "mojolearn/_verify_graph.py", "mojolearn/_verify_partitioned_program.py",
+    # The installed public-API verifier was split into these exact controllers.
+    # They construct reference fixtures/assertions, never product results.
+    "mojolearn/_verify_api.py", "mojolearn/_verify_api_estimators.py",
+    "mojolearn/_verify_api_faults.py", "mojolearn/_verify_api_metadata.py",
+    "mojolearn/_verify_api_misc.py", "mojolearn/_verify_api_models.py",
+    "mojolearn/_verify_api_neural.py", "mojolearn/_verify_api_optimizers.py",
+    "mojolearn/_verify_api_programs.py", "mojolearn/_verify_api_runner.py",
+    "mojolearn/_verify_api_training.py", "mojolearn/_verify_api_utilities.py",
+    "mojolearn/_verify_light.py",
 }
+
+
+def native_setup_numpy_imports(tree, relative):
+    """Exact optional import statements which connect native metadata at setup.
+
+    Do not exempt a module, an arbitrary function, or an unguarded dependency.
+    Product computation remains audited; these imports populate the retained
+    native type/descriptor tables once during package/reader installation.
+    """
+    setup = {
+        "mojolearn/_expansion_neighbors.py": "_connect_pcs_rng",
+        "mojolearn/_native_xcnn_bridge.py": "connect",
+        "mojolearn/importers/_native_reader_bridge.py": "connect",
+        "mojolearn/resample.py": None,
+    }
+    if relative not in setup:
+        return set()
+    scopes = [tree] if setup[relative] is None else [node for node in tree.body
+              if isinstance(node, ast.FunctionDef) and node.name == setup[relative]]
+    admitted = set()
+    # Walk compound statements, but never enter a nested callable/class: its
+    # execution may be a later user operation rather than import setup.
+    def statements(body):
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            yield node
+            for field in ("body", "orelse", "finalbody"):
+                yield from statements(getattr(node, field, []))
+    for scope in scopes:
+        for node in statements(scope.body):
+            if not isinstance(node, ast.Try):
+                continue
+            if not any(isinstance(handler.type, ast.Name) and handler.type.id in
+                       ("ImportError", "ModuleNotFoundError") for handler in node.handlers):
+                continue
+            for statement in node.body:
+                if isinstance(statement, ast.Import) and len(statement.names) == 1 and statement.names[0].name == "numpy":
+                    admitted.add(id(statement))
+                elif (relative == "mojolearn/_expansion_neighbors.py" and isinstance(statement, ast.ImportFrom)
+                      and statement.level == 0 and statement.module == "numpy.random"
+                      and {name.name for name in statement.names} ==
+                      {"mtrand", "BitGenerator", "MT19937", "PCG64", "PCG64DXSM", "Philox", "SFC64"}):
+                    admitted.add(id(statement))
+    return admitted
 
 
 def numpy_errors(path, relative):
@@ -70,7 +124,7 @@ def numpy_errors(path, relative):
             errors.append(relative + ": NumPy dependency metadata")
     if path.suffix == ".py" and relative not in NUMPY_ORACLES:
         tree = ast.parse(path.read_bytes(), filename=relative)
-        optional_imports = set()
+        optional_imports = native_setup_numpy_imports(tree, relative)
         # Optional runtime support is separate from the independent verifier.
         # Only this lazy, actionable dependency guard may import NumPy for APIs.
         if relative == "mojolearn/_optional_numpy.py":
@@ -238,6 +292,8 @@ def python_math_errors(path, relative):
     No libm transcendental, alias escape or dynamic module import is admitted.
     The fast sum is held byte-for-byte to the exact integer oracle in tests.
     """
+    if relative in NUMPY_ORACLES:
+        return []  # independent test expectations, not runtime arithmetic
     tree = ast.parse(path.read_bytes(), filename=relative)
     parents = {id(child): node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     admitted = set()
