@@ -7,6 +7,7 @@ from sequence.ops import FP, Args, OP_COPY, OP_SEQ_IOTA
 from autograd.ops_api import OpsSession, OPS_DROPOUT
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape
 from autograd.program_choice import ProgramChoice, conditional_program
+from autograd.program_replay_metadata import PreparedProgramReplay
 from autograd.rankn import ShapeN
 from autograd.tape import Tape, Tensor
 from autograd.cast_ops import upload_cast, upload_cast_i32
@@ -40,7 +41,21 @@ def replay_values[E: Exec & Movable & Deinitable](
     step: Int = -1,
     random_stride: Int = 0, random_offset: Int = 0,
 ) raises -> List[Int]:
-    var vals = List[Int]()
+    # Existing one-shot callers retain their interface and operation-local
+    # ownership. Training below prepares once and reuses across minibatches.
+    var prepared = PreparedProgramReplay(p)
+    return replay_values_prepared(s, p, prepared, inputs, shapes, params, trainable,
+                                  temps, phs, step, random_stride, random_offset)
+
+
+def replay_values_prepared[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], p: OpsProgram, mut prepared: PreparedProgramReplay,
+    inputs: List[FP], shapes: List[ShapeN], params: List[FP], trainable: List[Bool],
+    mut temps: List[Int], mut phs: List[Int], step: Int = -1,
+    random_stride: Int = 0, random_offset: Int = 0,
+) raises -> List[Int]:
+    ref vals = prepared.values
+    vals.clear()
     for j in range(len(inputs)):  # driver-loop: over program inputs
         var h = s._leaf(inputs[j], shapes[j], p.in_kinds[j] == PROGRAM_IN_IDS)
         temps.append(h)
@@ -51,29 +66,26 @@ def replay_values[E: Exec & Movable & Deinitable](
         s.int_words[s._slot(h)] = s.int_words[s._slot(p.params[j])]
         temps.append(h)
         phs.append(h)
-    # The synchronous operation consumes these words before the next node.
-    # Keep native scratch capacities across the replay rather than constructing
-    # three fresh containers for every captured operation.
-    var hs = List[Int]()
-    var ints = List[Int]()
-    var fs = List[Float32]()
+    # Handles change with each tape/minibatch and are resolved in the original
+    # node order. Integer/float arguments already belong to this native replay
+    # inventory: no per-minibatch metadata copy or new scratch allocation.
+    ref hs = prepared.handles
+    var stride = random_stride if random_stride > 0 else p.n_nodes()
     for k in range(p.n_nodes()):  # driver-loop: over captured operations
         hs.clear()
-        ints.clear()
-        fs.clear()
         for j in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over node arguments
             var rf = p.args[j]
             hs.append(phs[-rf - 1] if rf < 0 else vals[rf])
-        for j in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over node metadata
-            ints.append(p.ints[j])
-        for j in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: over node metadata
-            fs.append(p.fs[j])
-        if step >= 0 and p.code[k] == OPS_DROPOUT:
-            # Preserve the caller's stream key; advance its counter per
-            # optimizer step and node so distinct layers never share masks.
-            var stride = random_stride if random_stride > 0 else p.n_nodes()
-            ints[len(ints) - 1] += step * stride + random_offset + k
-        var h = s._program_op(k, p.code[k], hs, ints, fs)
+        ref node = prepared.nodes[k]
+        if p.code[k] == OPS_DROPOUT:
+            if step >= 0:
+                # Advance from the original captured key, never from the prior
+                # replay's updated counter. Preserve branch/node separation.
+                node.ints[len(node.ints) - 1] = node.original_last_int + (step * stride + random_offset + k)
+            elif len(node.ints) != 0:
+                # A later inference/predicate replay must see the original key.
+                node.ints[len(node.ints) - 1] = node.original_last_int
+        var h = s._program_op(k, p.code[k], hs, node.ints, node.fs)
         temps.append(h)
         vals.append(h)
     var outputs = List[Int]()
@@ -185,6 +197,14 @@ def train_program_control[E: Exec & Movable & Deinitable](
     var phs = List[Int]()
     var pred_params = List[Int]()
     var branch_stride = p.n_nodes() + choice.otherwise.n_nodes() if conditional else 0
+    # Graphs are immutable snapshots for this fit. Prepare their node metadata
+    # once; neither predicate selection nor row counts alter those arguments.
+    var body_replay = PreparedProgramReplay(p)
+    var predicate_replay = PreparedProgramReplay()
+    var otherwise_replay = PreparedProgramReplay()
+    if conditional:
+        predicate_replay = PreparedProgramReplay(choice.condition)
+        otherwise_replay = PreparedProgramReplay(choice.otherwise)
     var cfg = s.opts[oi].cfg
     try:
         for k in range(len(srcs)):  # driver-loop: over program input arrays
@@ -247,8 +267,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     # callback, unselected branch replay or gradient update.
                     s.tape.no_grad()
                     pred_params.clear()
-                    var decision = replay_values(s, choice.condition, batches, batch_shapes,
-                                                 params, no_grad, temps, pred_params)
+                    var decision = replay_values_prepared(s, choice.condition, predicate_replay,
+                                                 batches, batch_shapes, params, no_grad, temps, pred_params)
                     if s.shape_nd(decision[0]).count() != 1:
                         raise Error("ValueError: conditional training predicate must return one scalar")
                     var scalar = s.scalar(decision[0])
@@ -272,9 +292,9 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     random_offset = 0 if take_body else p.n_nodes()
                 # Borrow the admitted immutable graph. Copying it per batch
                 # duplicated every node, argument, shape and output table.
-                var outs = replay_values(s, p, batches, batch_shapes, params, selected,
-                                         temps, phs, step, random_stride, random_offset) if take_body else replay_values(
-                                         s, choice.otherwise, batches, batch_shapes, params, selected,
+                var outs = replay_values_prepared(s, p, body_replay, batches, batch_shapes, params, selected,
+                                         temps, phs, step, random_stride, random_offset) if take_body else replay_values_prepared(
+                                         s, choice.otherwise, otherwise_replay, batches, batch_shapes, params, selected,
                                          temps, phs, step, random_stride, random_offset)
                 var out = s.tensor(outs[0])
                 var y = s.tape.variable(s.ex, yb.value(), count, max(1, target.cols), False)
