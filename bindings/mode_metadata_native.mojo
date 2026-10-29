@@ -32,7 +32,6 @@ def _fields(model: PythonObject) raises -> PythonObject:
 def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
     # `mods`: the operation's admitted module connections (one check per GIL
     # release window instead of one per field read).
-    ref cpy = Python().cpython()
     var b = mods.module("builtins")
     var cls = py_type(model)
     # Native type descriptors read actual MRO/storage, including buffers with
@@ -46,6 +45,28 @@ def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject
                     or descriptor.__objclass__ is not ancestry[i] or String(descriptor.__name__) != "__dict__"):
                 raise Error("TypeError: native metadata refuses Python dictionary properties; use ordinary instance storage")
             break
+    return _instance_fields(b, model)
+
+
+def _fields_from_admitted_rows(mut mods: NativeModules, model: PythonObject,
+                              ancestry: PythonObject, rows: List[PythonObject]) raises -> PythonObject:
+    # Native public-attribute admission already checked these live class rows
+    # while holding the GIL. Reuse them for storage precedence without creating
+    # another MRO/proxy inventory or repeating each namespace key scan.
+    var b = mods.module("builtins")
+    for i in range(len(ancestry)):  # driver-loop: over already admitted class rows in storage precedence order
+        var namespace = rows[i]
+        if py_contains(namespace, "__dict__"):
+            var descriptor = namespace["__dict__"]
+            if (py_type(descriptor) is not py_type(b.type.__dict__["__dict__"])
+                    or descriptor.__objclass__ is not ancestry[i] or String(descriptor.__name__) != "__dict__"):
+                raise Error("TypeError: native metadata refuses Python dictionary properties; use ordinary instance storage")
+            break
+    return _instance_fields(b, model)
+
+
+def _instance_fields(b: PythonObject, model: PythonObject) raises -> PythonObject:
+    ref cpy = Python().cpython()
     # This documented accessor reads the actual native instance dictionary;
     # GenericGetAttr("__dict__") could invoke a user-defined property.
     var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(model._obj_ptr, PyObjectPtr())

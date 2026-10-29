@@ -8,7 +8,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.native_caller_frame import native_frame_globals
-from bindings.mode_metadata_native import _fields, _class_fields, _truth
+from bindings.mode_metadata_native import _fields, _fields_from_admitted_rows, _class_fields, _truth
 from bindings.classical_attributes import _type_mro, _classical_descriptor_get, classical_connect_numpy
 from bindings.native_array_view import native_array_ndarray_view as _array_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -68,18 +68,31 @@ def _outside() raises -> Bool:
         frame = PythonObject(from_owned=pointer)
 
 
-def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> PythonObject:
+struct _AttributeAdmission(Movable):
+    var plan: PythonObject
+    var ancestry: PythonObject
+    var rows: List[PythonObject]
+
+    def __init__(out self, plan: PythonObject, ancestry: PythonObject, var rows: List[PythonObject]):
+        self.plan = plan
+        self.ancestry = ancestry
+        self.rows = rows^
+
+
+def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) raises -> _AttributeAdmission:
     var b = mods.module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native attributes refuse Python metaclass protocols")
     var mro = _type_mro(cls)
+    var rows = List[PythonObject](capacity=len(mro))
     var plan = PythonObject(None)
     var getter = context["missing"]
     for i in range(len(mro)):  # driver-loop: validate native slot and passive subclass ancestry
         if py_type(mro[i]) is not b.type:
             raise Error("TypeError: native attributes refuse Python metaclass protocols")
         var namespace = _class_fields(mods, mro[i])
+        rows.append(namespace)
         if py_contains(namespace, "__getattr__"):
             raise Error("TypeError: native attributes refuse Python __getattr__ hooks")
         if getter is context["missing"] and py_contains(namespace, "__getattribute__"):
@@ -88,7 +101,7 @@ def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) r
             plan = py_get(context["plans"], mro[i])
     if plan is None or getter is not context["descriptor"]:
         raise Error("TypeError: native attribute class has no connected slot")
-    return plan
+    return _AttributeAdmission(plan, mro, rows^)
 
 
 def _has_slot(cls: PythonObject, name: String) raises -> Bool:
@@ -99,10 +112,9 @@ def _has_slot(cls: PythonObject, name: String) raises -> Bool:
     return False
 
 
-def _member(model: PythonObject, name: PythonObject) raises -> PythonObject:
-    var mro = _type_mro(py_type(model))
-    for i in range(len(mro)):  # driver-loop: exact native attribute resolution
-        var namespace = _class_fields(mro[i])
+def _member(admission: _AttributeAdmission, name: PythonObject) raises -> PythonObject:
+    for i in range(len(admission.rows)):  # driver-loop: exact native attribute resolution
+        var namespace = admission.rows[i]
         if py_contains(namespace, name):
             return Python.tuple(True, namespace[name])
     return Python.tuple(False, None)
@@ -131,7 +143,7 @@ def _availability_member(cls: PythonObject, name: PythonObject, missing: PythonO
 
 
 def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
-               fields: PythonObject, plan: PythonObject, context: PythonObject) raises -> PythonObject:
+               fields: PythonObject, admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
     # Admitted rules are presence of transform and LOF's novelty word. Never
     # call the Python available_if descriptor, its check, or its wrapped body.
     var ancestry = _type_mro(py_type(member))
@@ -164,7 +176,7 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
                 raise Error("TypeError: native availability requires its connected condition")
             var rule = String(condition)
             if rule == "density_predict" or rule == "svm_probability":
-                var requested = _lookup_impl[False](model, PythonObject("probability" if rule == "svm_probability" else "prediction_data"), fields, plan, context)
+                var requested = _lookup_impl[False](model, PythonObject("probability" if rule == "svm_probability" else "prediction_data"), fields, admission, context)
                 var b = native_loaded_module("builtins")
                 var kind = py_type(requested)
                 var enabled = False
@@ -176,28 +188,28 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
                 if not enabled:
                     raise Error("AttributeError: predict_proba is not available when probability=False" if rule == "svm_probability" else "AttributeError: prediction data was not requested")
             elif rule == "sgd_probability":
-                var loss = _lookup_impl[False](model, PythonObject("loss"), fields, plan, context)
+                var loss = _lookup_impl[False](model, PythonObject("loss"), fields, admission, context)
                 if py_type(loss) is not py_type(PythonObject("")):
                     raise Error("TypeError: SGD probability availability requires an exact native loss name")
                 if String(loss) != "log_loss":
                     raise Error("AttributeError: probabilities require loss='log_loss'")
             elif rule == "spectral_predict":
-                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
+                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, admission, context)
                 host_inference_scalar(requested, context, True)
                 if not Bool(py=requested):
-                    var references = _lookup_impl[False](model, PythonObject("_fit_X"), fields, plan, context)
+                    var references = _lookup_impl[False](model, PythonObject("_fit_X"), fields, admission, context)
                     if references is None:
                         raise Error("AttributeError: spectral prediction data was not requested or stored")
             elif rule == "hierarchy_predict":
-                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, plan, context)
+                var requested = _lookup_impl[False](model, PythonObject("prediction_data"), fields, admission, context)
                 if py_type(requested) is not py_type(PythonObject(True)) and py_type(requested) is not py_type(PythonObject(0)):
                     raise Error("TypeError: prediction_data availability requires an exact native boolean or integer")
                 if not Bool(py=requested):
-                    var references = _lookup_impl[False](model, PythonObject("_fit_X"), fields, plan, context)
+                    var references = _lookup_impl[False](model, PythonObject("_fit_X"), fields, admission, context)
                     if references is None:
                         raise Error("AttributeError: prediction data was not requested or stored")
             elif rule == "novelty" or rule == "not_novelty":
-                var novelty = _lookup_impl[False](model, PythonObject("novelty"), fields, plan, context)
+                var novelty = _lookup_impl[False](model, PythonObject("novelty"), fields, admission, context)
                 if py_type(novelty) is not py_type(PythonObject(True)) and py_type(novelty) is not py_type(PythonObject(0)):
                     raise Error("TypeError: novelty must be an exact native boolean or integer")
                 if Bool(py=novelty) != (rule == "novelty"):
@@ -205,7 +217,7 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
             else:
                 raise Error("TypeError: unknown native availability condition")
         else:
-            _ = _lookup_impl[False](model, PythonObject("transform"), fields, plan, context)
+            _ = _lookup_impl[False](model, PythonObject("transform"), fields, admission, context)
     except error:
         if String(error).startswith("AttributeError:"):
             var name = schema["attribute_name"]
@@ -220,7 +232,7 @@ def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
 
 
 def _property(model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
-              plan: PythonObject, context: PythonObject) raises -> PythonObject:
+              admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
     if kind == "svm_svc_coef" or kind == "svm_svr_coef":
         var owner = context["svm_owner"]
         var entry = owner[0]
@@ -234,7 +246,7 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
     if kind == "cholesky_logdet":
         var info = PythonObject(None)
         try:
-            info = _lookup_impl[False](model, PythonObject("info_"), fields, plan, context)
+            info = _lookup_impl[False](model, PythonObject("info_"), fields, admission, context)
         except error:
             if String(error).startswith("AttributeError:"):
                 raise Error("AttributeError: mojolearn Cholesky: logdet_ is set by fit")
@@ -244,12 +256,12 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
             raise Error("TypeError: Cholesky info_ must be native numeric status")
         if _truth(info):
             raise Error("ValueError: mojolearn Cholesky: the factorization failed (info=" + String(py_call(b.str, info)) + "), so there is no determinant to report (DEVIATION 1634)")
-        return _lookup_impl[False](model, PythonObject("_logdet"), fields, plan, context)
+        return _lookup_impl[False](model, PythonObject("_logdet"), fields, admission, context)
     if kind == "stl_config":
         var out = Python.dict()
         var names = Python.tuple("period", "seasonal", "seasonal_deg", "seasonal_jump", "trend", "trend_deg", "trend_jump", "low_pass", "low_pass_deg", "low_pass_jump", "robust")
         for i in range(len(names)):  # driver-loop: supported STL configuration fields
-            py_setitem(out, names[i], _lookup_impl[False](model, names[i], fields, plan, context))
+            py_setitem(out, names[i], _lookup_impl[False](model, names[i], fields, admission, context))
         return out
     var recipes = py_get(context, "native_property_recipes")
     var recipe = PythonObject(None) if recipes is None else py_get(recipes, PythonObject(kind))
@@ -268,9 +280,10 @@ def _property(model: PythonObject, name: PythonObject, kind: String, fields: Pyt
 # experiments/peer1_neighbors_kernels_20261027 and the corresponding evidence
 # directory's cpu-compile results. No Python fallback or toolchain change.
 def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
-                                    fields: PythonObject, plan: PythonObject,
+                                    fields: PythonObject, admission: _AttributeAdmission,
                                     context: PythonObject) raises -> PythonObject:
-    var found = _member(model, name)
+    var plan = admission.plan
+    var found = _member(admission, name)
     var present = Bool(py=found[0])
     var member = found[1]
     var cls = py_type(model)
@@ -283,7 +296,7 @@ def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
         comptime if allow_special:
             var property_plan = py_get(plan["properties"], name)
             if property_plan is not None and member is property_plan[0]:
-                return _property(model, name, String(property_plan[1]), fields, plan, context)
+                return _property(model, name, String(property_plan[1]), fields, admission, context)
         if not known:
             raise Error("TypeError: Python attribute properties/descriptors require a native owner")
         return _classical_descriptor_get(binding, model, cls, plan)
@@ -297,7 +310,7 @@ def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
         if availability is not None:
             var schema = py_get(availability, name)
             if schema is not None and member is schema["member"]:
-                return _available(model, member, schema, fields, plan, context)
+                return _available(model, member, schema, fields, admission, context)
     if descriptor:
         # Creating a bound method does not execute its body. Preserve ordinary
         # subclass functions and later import-time native setter connections.
@@ -311,8 +324,8 @@ def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
 
 
 def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
-            plan: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _lookup_impl[True](model, name, fields, plan, context)
+            admission: _AttributeAdmission, context: PythonObject) raises -> PythonObject:
+    return _lookup_impl[True](model, name, fields, admission, context)
 
 
 def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -326,9 +339,9 @@ def public_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         # Admission holds the GIL and invokes no application protocol. Share
         # its builtins connection across plan and instance-storage validation.
         var mods = NativeModules()
-        var plan = _plan(mods, model, context)
-        var fields = _fields(mods, model)
-        var result = _lookup(model, name, fields, plan, context)
+        var admission = _plan(mods, model, context)
+        var fields = _fields_from_admitted_rows(mods, model, admission.ancestry, admission.rows)
+        var result = _lookup(model, name, fields, admission, context)
         var text = String(name)
         if (text.byte_length() > 0 and text.endswith("_") and not text.startswith("_")
                 and py_type(result) is context["array_class"]):

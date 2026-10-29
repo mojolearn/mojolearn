@@ -1,0 +1,32 @@
+{
+  "base_commit": "562393ed302d801da3143dbac76e8cc6534763c7",
+  "compile_exit": 0,
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS arm64 CPU",
+  "scope": "Actual specialized/generic public attribute C entries, new generic descriptor slot, existing descriptor factory, mode metadata C entry and shared admission helpers. Isolated exported entry closure, not full tokenizer host module.",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/attribute_row_reuse_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/attribute-row-reuse-20261028/compile.dylib",
+  "working_directory": "/Users/andrewhendel/mojolearn-wt/shared-attribute-admission-20261028",
+  "compile_slots": 4,
+  "compiler_workers": "compiler default; utilization not measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/attribute-row-reuse-20261028/compile.dylib",
+  "binary_sha256": "e2ed1752b632d44bce555cf368ea28a3234c3fa1e6d488bfa96d169471472af5",
+  "log": "/Users/andrewhendel/mojolearn-evidence/attribute-row-reuse-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/attribute-row-reuse-20261028/source-sha256.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/attribute-row-reuse-20261028/sources.tar.gz",
+  "source_manifest_scope": "Conservative superset of tracked Mojo sources, fixture and Pixi manifests; not all sources compiled",
+  "modified_source_sha256": {
+    "bindings/mode_metadata_native.mojo": "d2af111b5f693889b2b074de96eff3ec2a8af9f525c277177bd7ad182bffa84e",
+    "bindings/public_attributes_native.mojo": "ce29b4e7eeda62ab9c0e70082130c1d9291100fa0518b3b596b89a9ecbfb2bc2",
+    "experiments/attribute_row_reuse_20261028/compile.mojo": "9cdb1b2a65a02ea8adda3016cff7db4596b4fcb3415205468c5946e0a53aa69a"
+  },
+  "earlier_compile": {
+    "exit": 0,
+    "scope": "same admitted-row change before removal of now-unused cpython connection expression",
+    "log": "/Users/andrewhendel/mojolearn-evidence/attribute-row-reuse-20261028/compile-before-unused-connection-removal.log"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": [],
+  "source_review": "/Users/andrewhendel/mojolearn-evidence/label-type-reuse-20261028/root-attribute-row-review.txt"
+}

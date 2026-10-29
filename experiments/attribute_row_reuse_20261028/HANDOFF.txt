@@ -1,0 +1,30 @@
+Attribute class-row reuse, 2026-10-28
+Branch: lane/shared-attribute-admission-20261028. Base 562393ed30.
+
+Repeated work removed: specialized attribute admission already walks/checks the
+model class ancestry. It now retains that MRO and native List of admitted class
+row owners for the rest of this lookup. Instance storage precedence and member
+resolution reuse these rows instead of rebuilding MRO/proxies and rechecking
+namespace keys. Native property/availability leaf reads reuse the same inventory.
+Shared instance dictionary retrieval is factored without new protocol calls.
+
+Boundary/invalidation: one public attribute read, no cross-call cache. Existing
+class/getter/full-key admission happens first in its original order. A native
+owner retains plan/MRO/rows until the lookup returns. Storage descriptor checks,
+data-descriptor vs instance vs non-data precedence, exact name admission and
+missing/error behavior remain. Calls that may release the GIL (SVM, bagging,
+recipe properties) return terminally; no row is reused after them. No raw class
+pointer, global mutable cache, mutation watcher or new callback was added.
+
+Compile: actual specialized/generic attribute entries, native descriptor factory
+and mode metadata CPU identical O0 closure passed, exit 0. Full tokenizer module,
+installed wheel, other vendors/runtime/identity/performance remain unqualified.
+Source-only independent review found no actionable lifetime/precedence/GIL issue.
+A final compile followed removing the now-unused cpython connection expression.
+Complete logs, source bytes/hashes and binary/flags/hash: compile.json and
+~/mojolearn-evidence/attribute-row-reuse-20261028/.
+
+Limits: each public lookup still admits mutable model class metadata. This adds
+one native owner vector per lookup in exchange for repeated CPython proxy/list/
+key scans. Descriptor-type hook scans, binding and output-object work remain.
+No speed or runtime claim follows from source review/compilation.
