@@ -1,0 +1,57 @@
+[
+  {
+    "name": "host-routes",
+    "argv": [
+      "python3",
+      "tools/hooks/no_host_routes.py",
+      "--tree",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "seconds": 20.105401754379272
+  },
+  {
+    "name": "python-execution",
+    "argv": [
+      "python3",
+      "tools/hooks/no_python_in_kernels.py",
+      "--tree",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "seconds": 0.674832820892334
+  },
+  {
+    "name": "shell-compute",
+    "argv": [
+      "python3",
+      "tools/hooks/no_compute_in_shells.py",
+      "--tree",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "seconds": 0.6871371269226074
+  },
+  {
+    "name": "generation-boundary",
+    "argv": [
+      "python3",
+      "tools/check_generation_native_boundary.py"
+    ],
+    "exit_code": 0,
+    "seconds": 0.2898292541503906
+  },
+  {
+    "name": "package-connections",
+    "argv": [
+      "python3",
+      "tools/check_native_package_connections.py",
+      "--root",
+      "/Users/andrewhendel/mojolearn-wt/full-sampling-boundary-20261029",
+      "--tree",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "seconds": 1.2140660285949707
+  }
+]
