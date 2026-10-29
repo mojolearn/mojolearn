@@ -20,7 +20,7 @@
 #   ("column", rows, j) / ("column_f32", rows, j) -> [r[j] for r in rows] / its float32 words
 #   ("transpose", cols)                       -> [list(r) for r in zip(*cols)]
 #   ("scatter", rows, address, count, vals)   -> rows[idx[k]] = vals[k]
-#   ("flatten", obj)                          -> every leaf (tolist() honoured at each level)
+#   ("flatten", obj)                          -> leaves of admitted native containers/array storage
 #   ("nested", obj, array_type)               -> (shape, leaves) of a rectangular nested list
 #   ("group_runs", ids)                       -> int64 run lengths of a ranking pool's group ids
 #   ("pairs", rows, weights, n_rows)          -> (int64 winner/loser words, float64 weights)
@@ -39,6 +39,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type
 from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
+from bindings.user_object_flatten import user_object_flatten
 
 comptime KIND_STR = 0         # isinstance(v, str)
 comptime KIND_BOOL = 1        # bool or NumPy bool_ (_labels.is_bool)
@@ -303,17 +304,6 @@ def _scatter(env: _Env, rows: PythonObject, address: Int, count: Int, vals: Pyth
     for k in range(n):  # cpu-route: Python prediction objects read once by user_objects_c (scatter)
         _ = py_call(py_attr(rows, "__setitem__"), PythonObject(_index_at(address, k, 8)), vals[k])
     return PythonObject(None)
-
-
-def _flatten_into(env: _Env, obj: PythonObject, out_buf: PythonObject) raises:
-    var o = obj
-    if Bool(py=py_call(env.b.hasattr, o, "tolist")):
-        o = py_call(o.tolist)
-    if env.isinstance(o, env.seq):
-        for i in range(len(o)):  # cpu-route: nested Python list read once by user_objects_c (flatten)
-            _flatten_into(env, o[i], out_buf)
-        return
-    _ = py_call(out_buf.append, o)
 
 
 def _nested_into(env: _Env, obj: PythonObject, array_type: PythonObject, out_buf: PythonObject) raises -> PythonObject:
@@ -606,8 +596,11 @@ def _indicator(env: _Env, rows: PythonObject) raises -> PythonObject:
 
 
 def user_objects_call(call: PythonObject) raises -> PythonObject:
-    var env = _Env()
     var operation = String(py=call[0])
+    if operation == "flatten":
+        # The prepared reader does not load numbers/ABC conversion machinery.
+        return user_object_flatten(call[1])
+    var env = _Env()
     if operation == "take":
         return _take(env, call[1], Int(py=call[2]), Int(py=call[3]), Int(py=call[4]))
     if operation == "first_seen":
@@ -630,10 +623,6 @@ def user_objects_call(call: PythonObject) raises -> PythonObject:
         return _transpose(env, call[1])
     if operation == "scatter":
         return _scatter(env, call[1], Int(py=call[2]), Int(py=call[3]), call[4])
-    if operation == "flatten":
-        var out = Python.list()
-        _flatten_into(env, call[1], out)
-        return out
     if operation == "nested":
         var flat = Python.list()
         var shape = _nested_into(env, call[1], call[2], flat)
