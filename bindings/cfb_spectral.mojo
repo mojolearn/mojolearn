@@ -1081,7 +1081,7 @@ def _spectral_embedding(args: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, args: PythonObject,
-                           context: PythonObject, supplied_binding: PythonObject = PythonObject(None)) raises -> PythonObject:
+                           context: PythonObject, supplied_binding: PythonObject) raises -> PythonObject:
     """Fit/predict shells pass (X,); route selection belongs to this owner."""
     if operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict":
         var routed = Python.tuple(
@@ -1151,14 +1151,14 @@ def cfb_spectral_operation(model: PythonObject, operation: String, var args: Pyt
         args = Python.tuple(args[1])
     var clustering = operation.startswith("family_cfb_sc_")
     if model is None:
-        return _cfb_spectral_algorithm_operation(model, operation, args, context)
+        return _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding)
     var fitting = operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict" or operation == "family_cfb_se_fit" or operation == "family_cfb_se_fit_transform"
     var fields = spectral_admit(model, clustering, fitting, context)
     if operation == "family_cfb_se_validate":
         for name in ["_n_components", "_n_neighbors", "_seed", "_gamma"]:  # small-loop(private validation output fields)
             if py_contains(fields, name):
                 native_release_admit(fields[name], context)
-        return _cfb_spectral_algorithm_operation(model, operation, args, context)
+        return _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding)
     var method = String("fit_predict") if operation.endswith("_fit_predict") else (String("fit_transform") if operation.endswith("_fit_transform") else (String("fit") if fitting else String("predict")))
     var public_prediction = operation == "family_cfb_sc_predict"
     if public_prediction:
