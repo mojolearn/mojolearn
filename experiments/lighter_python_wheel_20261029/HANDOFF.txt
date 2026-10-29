@@ -1,0 +1,21 @@
+Lighter macOS Python compatibility matrix, 2026-10-29
+
+Python 3.10-3.13: clean install, NumPy-free import/Array, every host
+binding/export/vendor/mode/column, and tiny native StandardScaler fit_transform.
+No NumPy test dependency or numerical suites on these four interpreters.
+Python 3.14 retains the existing full numerical and language-model suites.
+Missing interpreter, compatibility failure, or latest-suite failure still blocks.
+--no-gpu compatibility does not execute the scaler and labels device untested.
+
+Validation: 12 shell gate tests passed; sh -n and diff whitespace checks passed.
+Actual identical-only installed candidate checks passed on all five Python versions.
+Same candidate wheel as retained baseline: 142.49s -> 88.06s, saving 54.43s
+(38.2%). One successful sample versus historical baseline, not controlled A/B;
+installation/network/cache/machine load can vary. No native rebuild needed.
+This qualifies the changed checking workflow against that wheel, not the later
+sampler/adapter release changes or cross-vendor identity.
+
+First attempt retained: all interpreter pass rows, but final shell exit2 after
+a comment edit during execution shifted its read offset. Excluded from success
+and timing claims. Final run source hashes unchanged.
+Full logs and attempt receipts: /Users/andrewhendel/mojolearn-evidence/lighter-python-wheel-20261029

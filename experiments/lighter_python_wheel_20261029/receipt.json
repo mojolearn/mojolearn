@@ -1,0 +1,35 @@
+{
+  "command": [
+    "sh",
+    "/Users/andrewhendel/mojolearn-wt/lighter-python-wheel-20261029/packaging/macos/verify_wheel.sh"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 88.0648954580538,
+  "baseline_seconds": 142.49386382102966,
+  "candidate_wheel_sha256": "06216ef5b1c794337a1716e24a730e08672162b285eabc8d8de438efd51afab4",
+  "script_sha256_before": "a003dc94829ed175eb5ef3c9fb23cb6a2519fa595a6631c295d1e6086e4bab1c",
+  "script_sha256_after": "a003dc94829ed175eb5ef3c9fb23cb6a2519fa595a6631c295d1e6086e4bab1c",
+  "environment": {
+    "HOME": "/Users/andrewhendel",
+    "LANG": "en_US.UTF-8",
+    "PIP_CONFIG_FILE": "/dev/null",
+    "PATH": "/Users/andrewhendel/mojolearn-evidence/python-wheel-matrix-20261029/interpreter-bin:/opt/homebrew/bin:/usr/bin:/bin",
+    "TMPDIR": "/Users/andrewhendel/mojolearn-evidence/lighter-python-wheel-20261029/runtime-tmp",
+    "MOJOLEARN_RELEASE_MODES": "identical",
+    "MOJOLEARN_PACKAGE_BYTE_LM": "1"
+  },
+  "scope": "Apple identical, compatibility 3.10-3.13, full 3.14 suites; historical single-sample timing comparison",
+  "previous_attempt": "All interpreter PASS rows, but shell exit2 after a concurrent comment-only edit shifted its read offset; nonqualifying attempt retained.",
+  "pass_rows": [
+    "python3.10",
+    "python3.11",
+    "python3.12",
+    "python3.13",
+    "python3.14"
+  ],
+  "seconds_saved": 54.428968362975866,
+  "percent_saved": 38.19741208739901,
+  "runtime_log_sha256": "a0afa18590be3e2af33ec3f2d008038888a3c03f34f122731991215a6a16b989",
+  "shell_gate_tests": 12,
+  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/lighter-python-wheel-20261029"
+}
