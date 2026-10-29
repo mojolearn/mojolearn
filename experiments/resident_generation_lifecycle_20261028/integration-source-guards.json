@@ -1,0 +1,58 @@
+{
+  "source_commit": "2741aa66fdc69026bb65d16045dffee50a5f2d2a",
+  "scope": "source guards and dependency inventory only; no runtime or performance",
+  "results": [
+    {
+      "name": "no_host_routes",
+      "command": [
+        "python3",
+        "tools/hooks/no_host_routes.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/resident-generation-integration-20261028/no_host_routes.log"
+    },
+    {
+      "name": "no_python_in_kernels",
+      "command": [
+        "python3",
+        "tools/hooks/no_python_in_kernels.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/resident-generation-integration-20261028/no_python_in_kernels.log"
+    },
+    {
+      "name": "no_compute_in_shells",
+      "command": [
+        "python3",
+        "tools/hooks/no_compute_in_shells.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/resident-generation-integration-20261028/no_compute_in_shells.log"
+    },
+    {
+      "name": "rebuild_fence",
+      "command": [
+        "python3",
+        "tools/hooks/rebuild_fence.py",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/resident-generation-integration-20261028/rebuild_fence.log"
+    },
+    {
+      "name": "generation_dependency_inventory",
+      "command": [
+        "python3",
+        "tools/check_generation_native_boundary.py"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/resident-generation-integration-20261028/generation_dependency_inventory.log"
+    }
+  ]
+}
