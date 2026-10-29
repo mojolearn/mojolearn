@@ -1,20 +1,20 @@
 {
   "base_commit": "7965f31955e7a19a5cdd49149753837752f70e23",
   "compile_exit": 0,
-  "scope": "user_objects_call CPU source closure, including new prepared flatten reader, native Array snapshot and all existing dispatcher branches; compile only",
+  "scope": "user_objects_call CPU closure with corrected opaque leaf admission/identity preservation, native Array snapshot and all existing dispatch branches; compile only",
   "compiler": "Mojo 1.0.0 (ed45d567)",
   "target": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
   "command": "bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/user-object-inputs-20261028 -I /Users/andrewhendel/mojolearn-wt/user-object-inputs-20261028/bindings /Users/andrewhendel/mojolearn-wt/user-object-inputs-20261028/experiments/user_object_flatten_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/user-object-flatten-20261028/compile_user_objects",
   "compile_slots": "wrapper default2; no override",
   "compiler_workers": "default; no CPU saturation measured",
   "binary": "/Users/andrewhendel/mojolearn-evidence/user-object-flatten-20261028/compile_user_objects",
-  "binary_sha256": "cc2196b6a6b121823fe2a193bce6eb327e5645142537860b7ca7155891976054",
+  "binary_sha256": "dccb2382f7bb131431c75479cdf5334047f07dd689359c4a9aff74175a5d36af",
   "log": "/Users/andrewhendel/mojolearn-evidence/user-object-flatten-20261028/compile.log",
   "source_manifest": "/Users/andrewhendel/mojolearn-evidence/user-object-flatten-20261028/source-sha256.json",
   "source_manifest_scope": "Tracked Mojo files present in sparse checkout, Pixi manifest/lock and new helper/root; conservative superset, not all compiled; bench/experiments/docs bulk excluded",
   "relevant_source_sha256": {
     "bindings/user_objects_native.mojo": "d7c81fe98e3127d54d0692ba5124457ee461aba75bd52141d8e76a256257843c",
-    "bindings/user_object_flatten.mojo": "b7af1322e26312a3c4db7f89468bfaa0cd91f572c1fa9d78d99e2abe6bebf0b4",
+    "bindings/user_object_flatten.mojo": "481e58f7ee5b094ab29554712ea81edefd2c7561a4216f690ca687afd13493be",
     "experiments/user_object_flatten_20261028/compile.mojo": "82ad288d64ce144f67507e76a1129a87fbdead0adc6583c4a070e49271e9605b"
   },
   "earlier_attempts": [
@@ -31,5 +31,13 @@
   "runtime_executed": false,
   "performance_measured": false,
   "identity_verified": false,
-  "rented_boxes": []
+  "rented_boxes": [],
+  "prior_successful_source": {
+    "commit": "730d04197e0d153589f65eef6f64320ad36a069e",
+    "exit": 0,
+    "scope": "Initial reader before ordinary opaque-leaf preservation fix; superseded",
+    "log": "/Users/andrewhendel/mojolearn-evidence/user-object-flatten-20261028/initial-success-compile.log",
+    "binary": "/Users/andrewhendel/mojolearn-evidence/user-object-flatten-20261028/initial-success-compile_user_objects",
+    "binary_sha256": "cc2196b6a6b121823fe2a193bce6eb327e5645142537860b7ca7155891976054"
+  }
 }

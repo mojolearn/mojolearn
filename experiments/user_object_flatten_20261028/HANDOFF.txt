@@ -16,8 +16,9 @@ Supported behavior/refusals:
 Mixed exact lists/tuples and builtin str/bytes/bytearray/int/float/bool/complex/
 None leaves retain order and primitive reference identity. Native array.array,
 memoryview and static native NumPy arrays/scalars keep native tolist boxing.
-Python heap subclasses, metaclass hooks and custom tolist protocols are
-refused before invocation. A native scalar tolist result that remains a scalar
+Python container subclasses, custom conversion and attribute hooks are
+refused before invocation. Ordinary opaque leaf references are preserved
+after native class/instance metadata confirms no conversion/attribute hook. A native scalar tolist result that remains a scalar
 (e.g. longdouble) is boxed once, not recursively reconverted. Structured/nested
 native results recurse through the same exact-container admission. Arbitrary
 custom conversion is explicitly refused, rather than executing its hook.
@@ -39,8 +40,8 @@ class owners and descriptors stay owned. Each Array snapshot revalidates its
 live metadata and retains the native export through scalar publication.
 Native GetItem keeps bounds checks if a source list shortens. Python custom
 conversion/iteration overrides are never admitted by this reader. No GIL
-release or persistent cache is introduced. Unknown custom objects/protocols
-are refused; other user-object operations retain their legacy behavior.
+release or persistent cache is introduced. Custom conversion/attribute protocols are refused; ordinary callback-free
+objects retain identity. Other user-object operations retain legacy behavior.
 
 Compilation/evidence:
 The user_objects_call CPU source closure compiled, exit0, O0/identical,
@@ -77,3 +78,17 @@ Guard repair: no_compute_in_shells initially flagged the first line of a
 multiline eight-type setup loop because its small-loop tag was on the second
 line. The existing tag moved to the first line; comments only. No repeated
 compilation for this annotation-only edit. Initial guard failure retained.
+
+Leaf-compatibility correction before integration:
+The initial reader refused every unsupported nonprimitive type. Review caught
+that historical flatten appends ordinary opaque objects without a tolist hook.
+The corrected reader inspects actual native MRO/class dictionaries, rejects
+custom tolist/__getattr__/__getattribute__ protocols and container subclasses,
+and reads actual instance storage through public PyObject_GenericGetDict.
+Absent instance dictionaries (AttributeError only) are allowed; other errors
+propagate. Exact dictionary/string-key admission precedes the instance tolist
+check. Class and instance checks repeat for each opaque leaf; mutable hooks
+cannot be concealed by a cached type decision. Opaque leaf references are
+appended unchanged, without getattr/hasattr/iteration/conversion calls.
+The corrected source compiled exit0; the initial successful source/log/binary
+remain separately retained. Required source guards rerun on the correction.

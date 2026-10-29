@@ -7,7 +7,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import NativeModules, native_namespace_string_keys
 from bindings.native_array_snapshot import native_array_snapshot
 from bindings.mode_metadata_native import _class_fields
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_contains
 
 
 struct UserObjectFlatten(Movable):
@@ -75,7 +75,7 @@ struct UserObjectFlatten(Movable):
             var module_name = py_call(self.b.type.__getattribute__, cls, "__module__")
             supported = py_type(module_name) is self.b.str and String(module_name) == "numpy"
         if not supported:
-            raise Error("TypeError: user-object flatten requires native containers or scalars without Python conversion hooks")
+            return PythonObject(None)
         var descriptor = py_call(self.b.type.__getattribute__, cls, "tolist")
         var types = self.mods.module("types")
         if py_type(descriptor) is not types.MethodDescriptorType:
@@ -83,6 +83,38 @@ struct UserObjectFlatten(Movable):
         self.owners.append(cls)
         self.methods[identity] = descriptor
         return descriptor
+
+    def opaque_leaf(mut self, value: PythonObject, cls: PythonObject) raises:
+        # Opaque labels without a conversion protocol are leaves, preserving
+        # the old identity contract. Inspect actual native metadata rather
+        # than asking hasattr/getattr, which could execute a caller hook.
+        # Recheck these mutable class/instance dictionaries for EVERY leaf.
+        var ancestry = py_call(self.b.type.__dict__["__mro__"].__get__, cls)
+        var generic_get = self.b.object.__dict__["__getattribute__"]
+        for i in range(len(ancestry)):  # small-loop(opaque leaf class ancestry before any protocol access)
+            var base = ancestry[i]
+            if base is self.list_type or base is self.tuple_type:
+                raise Error("TypeError: user-object flatten requires exact list/tuple containers without subclass hooks")
+            var fields = _class_fields(self.mods, base)
+            if py_contains(fields, "tolist") or py_contains(fields, "__getattr__"):
+                raise Error("TypeError: user-object flatten cannot invoke custom conversion or attribute hooks")
+            var get = py_get(fields, "__getattribute__")
+            if get is not None and get is not generic_get:
+                raise Error("TypeError: user-object flatten cannot invoke custom attribute hooks")
+        ref cpy = Python().cpython()
+        # This public generic dictionary getter reads actual instance storage,
+        # bypassing overridden __dict__ properties and __getattribute__.
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(value._obj_ptr, PyObjectPtr())
+        if not raw:
+            if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(self.b.AttributeError._obj_ptr) != 0:
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                return  # A slots-only/native leaf need not have a dictionary.
+            raise cpy.unsafe_get_error()
+        var fields = PythonObject(from_owned=raw)
+        if py_type(fields) is not self.b.dict or not native_namespace_string_keys(fields._obj_ptr, self.b.str):
+            raise Error("TypeError: user-object leaf storage requires native string fields")
+        if py_contains(fields, "tolist"):
+            raise Error("TypeError: user-object flatten cannot invoke an instance conversion hook")
 
     def array_into(mut self, value: PythonObject, output: PythonObject) raises:
         var captured = native_array_snapshot(self.mods, value, self.array_context, True)
@@ -157,6 +189,11 @@ struct UserObjectFlatten(Movable):
             self.array_into(value, output)
             return
         var method = self.native_method(cls)
+        if method is None:
+            self.opaque_leaf(value, cls)
+            if cpy.lib.get_function[Int32]("PyList_Append")(output._obj_ptr, value._obj_ptr) != 0:
+                raise cpy.unsafe_get_error()
+            return
         var result = py_call(method, value)
         # A native scalar's tolist may return itself (e.g. longdouble). The
         # original contract boxes once, then treats a non-container as a leaf.
