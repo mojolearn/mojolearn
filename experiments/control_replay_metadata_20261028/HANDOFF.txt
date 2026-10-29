@@ -1,0 +1,71 @@
+Native control-loop replay reuse, 2026-10-28
+Branch: lane/control-replay-metadata-20261028
+Base/dependency: 80fbea0e88 (prepared training replay batch)
+Implementation: cb3e12e21051547182a8f971607f6efed5b4dfe7
+
+Removed repeated work:
+- Ordinary while_loop predicates and bodies now reuse PreparedProgramReplay
+  node integer/float inventories throughout one public control operation,
+  instead of going through the one-shot wrapper on every iteration.
+- VJP control loops previously reconstructed per-node integer, float and handle
+  Lists on each iteration. They now borrow the same prepared node metadata and
+  reuse handle/value capacity. Current state handles still refresh every replay.
+- Per-replay parameter-handle List capacity is retained in both walkers. The
+  ordinary inference-only replay's all-false gradient flags are created once.
+  Parameter buffer/shape/handle admission remains per replay in its old position.
+- If/else execution borrows the already admitted selected branch rather than
+  making an additional selected-graph copy. Unselected branches do not replay.
+
+Setup/reuse/invalidation:
+- New ControlReplay is local to one control_run/control_vjp_forward operation.
+  Predicate, body and otherwise components own separate instances. No persistent
+  cache, Python/CPython work, shared scratch or cross-operation invalidation
+  mechanism is introduced.
+- Metadata preparation is lazy, after the component's existing parameter
+  validation and immediately before its first actual graph replay. False
+  initial predicates, zero-iteration limits and unselected if/else branches
+  do not cause body preparation or operation-specific validation early.
+- Components are immutable admitted graph snapshots for the operation. Every
+  new public operation starts with empty replay owners. There is no reuse
+  across program edits, replacement, checkpoint restoration or session close.
+- Ordinary control replay keeps the default negative training step, restoring
+  original captured dropout keys. The VJP walker passes captured integers
+  unchanged; its inventory never receives training-step offsets. Predicate
+  evaluation order, maximum-iteration behavior and selected-node order remain.
+
+Ownership/error handling:
+- Replay owners hold native metadata Lists, integer handle words and Bool flags;
+  they own no tensor or raw input pointer. Existing temps, leaves, buffers and
+  tape state retain actual resource ownership and their existing cleanup.
+- Current parameter references/shapes are checked at the same replay position.
+  Changing loop state is still copied/uploaded/downloaded through its original
+  path. Clearing reusable handle vectors does not retire or free any tensor.
+- VJP replay keeps one recording tape across executed iterations; metadata
+  reuse adds no tape reset or state copy that could sever gradient parents.
+- Native replay owners remain alive throughout dispatch. VJP forward may drop
+  them when it returns its recorded state: the tape already owns the executed
+  tensor/gradient state, just as it did after old per-node metadata Lists died.
+- Existing ordinary error prefix/iteration count, tape restoration, VJP abort
+  and acquired buffer cleanup remain in place.
+
+Compilation/guards:
+See compile.json. One focused Mac arm64 identical CPU shared-library compile
+exports ordinary prepare/run (including optional graph optimization), VJP prepare,
+forward, finish and abort using HostExec. Optimization level 0, -j 8, held one
+machine-wide compile slot. Compiler exit 0. Required source/push guards run on
+cb3e12e210; complete logs and explicit results are retained with the receipt.
+No runtime, performance, identity or cross-vendor campaign ran. No GPU executor
+or installed Python boundary was executed. No rented boxes.
+
+Remaining limits:
+- Current parameter admission, dynamic state/handle resolution and result
+  construction still run each iteration; none is declared invariant here.
+- State buffer copying/allocation remains the ordinary loop's required ownership
+  boundary. This batch changes metadata work, not arithmetic or execution count.
+- Preparation retains an extra native copy of fixed node arguments for the
+  operation lifetime; a one-shot branch does not amortize that copy.
+
+Evidence:
+/Users/andrewhendel/mojolearn-evidence/control-replay-metadata-20261028/
+Complete compiler/guard logs, binary, environment and source bytes are retained.
+The source envelope is a conservative superset, not a claim all sources compiled.

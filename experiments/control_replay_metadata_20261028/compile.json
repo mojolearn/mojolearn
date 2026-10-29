@@ -1,0 +1,34 @@
+{
+  "scope": "focused HostExec ordinary control prepare/run, VJP prepare/forward/finish/abort; while and if/else replay branches compiled, never executed",
+  "source_commit": "cb3e12e21051547182a8f971607f6efed5b4dfe7",
+  "source_base": "80fbea0e88c4d022aa3f31d170df54914c00b6aa",
+  "target": "Mac arm64 CPU, identical",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "command": "bash tools/compile_slot.sh pixi run mojo build -j 8 --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/control_replay_metadata_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/control-replay-metadata-20261028/control.dylib",
+  "compiler_workers": 8,
+  "cpu_saturation_claimed": false,
+  "exit_code": 0,
+  "binary": "/Users/andrewhendel/mojolearn-evidence/control-replay-metadata-20261028/control.dylib",
+  "binary_sha256": "7fdbebcbdbfcb72e6c02cc746c02db7e0762ba6c833071b597b3f1ffcc26e44c",
+  "log": "/Users/andrewhendel/mojolearn-evidence/control-replay-metadata-20261028/compile.log",
+  "log_sha256": "a0e0d607a04c6a538e28ce08358e8c028df458367446ad678d9a30777be1afb7",
+  "environment": "/Users/andrewhendel/mojolearn-evidence/control-replay-metadata-20261028/environment.json",
+  "source_retention": {
+    "archive": "/Users/andrewhendel/mojolearn-evidence/control-replay-metadata-20261028/source-envelope.tar.gz",
+    "archive_sha256": "cf954801084fbfb74b7459a91cdb5c3f8a283f2c4f0cf78eb86deda84bd57530",
+    "source_commit": "cb3e12e21051547182a8f971607f6efed5b4dfe7",
+    "scope": "conservative superset: tracked Mojo sources, binding build scripts, compile-slot script and dependency manifests",
+    "file_count": 3942,
+    "manifest": "/Users/andrewhendel/mojolearn-evidence/control-replay-metadata-20261028/source-envelope.json"
+  },
+  "source_push_guards": {
+    "source_commit": "cb3e12e21051547182a8f971607f6efed5b4dfe7",
+    "exit_code": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/control-replay-metadata-20261028/source-push-guards.log",
+    "log_sha256": "e0f7ec449143b30d17eac956035af8cdd3b4a7d9c40f762900a666b1656ee5a6"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_executed": false,
+  "rented_boxes": []
+}
