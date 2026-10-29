@@ -42,11 +42,9 @@ def resident_model(path, *, uniform=False):
                  "transformer_decode_session_load_state",
                  "transformer_decode_session_export_state"):
         assert name in entries, name
-    # These fixtures have fresh disjoint state and no arithmetic-profile or
-    # externally held decode session. Together with the capability assertions
-    # and explicit environment this selects the resident read branch.
-    for block in model._blocks:
-        assert getattr(block, "_arithmetic_profile", None) is None
+    # Loaded blocks carry their compiled arithmetic-profile tag. Keep that
+    # metadata intact: successful public tests below must prove actual resident
+    # selection through the retained cache, not bypass admission in the fixture.
     return model
 
 
@@ -54,9 +52,9 @@ def test_resident_greedy_read_matches_legacy_forward_and_chunking(tmp_path, monk
     model = resident_model(tmp_path)
     prompt = np.array([[1, 3], [2, 4]], dtype="i4")
     with monkeypatch.context() as patch:
-        # Disable just the whole-read capability. The baseline still uses the
-        # resident forward implementation and exports/reloads between tokens.
-        patch.setitem(model._native_entries, "resident_read_v1", False)
+        # Use the supported legacy-route switch. The constructed native entry
+        # registry is immutable; altering its capability flag must be refused.
+        patch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "0")
         expected = np.asarray(model.stream(prompt, 5).read(5)).copy()
     whole = model.stream(prompt, 5)
     actual = np.asarray(whole.read(5)).copy()
@@ -83,6 +81,7 @@ def test_resident_greedy_eos_stops_and_text_omits_eos(tmp_path, eos):
     tokenizer = Tokenizer([bytes([i]) for i in range(256)], [], pattern="gpt2")
     assert model.generate_text("!", 8, tokenizer=tokenizer, eos_token_id=eos) == ""
     assert model._resident_busy is False
+    assert model._resident_sessions is not None
 
 
 @pytest.mark.parametrize("overlap", ["none", "same-layer", "cross-layer", "partial"])
@@ -149,3 +148,4 @@ def test_sampling_upload_reuse_preserves_integer_oracle_and_eos(tmp_path, monkey
     ]
     assert stream.info() == dict(done=True, generated_tokens=7, lengths=[1, 7], usable=True)
     assert model._resident_busy is False
+    assert model._resident_sessions is not None
