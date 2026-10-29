@@ -1,0 +1,45 @@
+VERIFIER COMPANION RETENTION — 2026-10-29
+
+Branch lane/verifier-record-admission-20261029, after optional-file evidence
+3177e8b0d7 + receipt5af324101f. Tool-only retention repair, no product changes.
+
+Found source gap: retain_run_summary identity copied only the column JSON and
+optional provenance. from-verify columns also reference the original compressed
+report and completed launch receipt by relative name. Losing these companions
+would prevent strict ledger admission after the producer directory disappeared.
+
+Repair: validate safe companion basenames, supported gzip encoding and exact
+referenced content hashes before publishing a retained column. Copy the report,
+launch receipt and provenance alongside immutable exact column bytes, preserving
+relative references and failed observations. Metadata summary lists companion
+paths/hashes. Identity input bytes have an explicit 64 MiB bound; expanded source
+report bytes have a 128 MiB bound. Generic compact-summary limits stay unchanged.
+
+The reference admission input path now carries companions for preview and normal
+retention, and repairs missing exact companions when reusing a byte-identical
+repository column. Conflicting bytes remain refused. The table tool's suggested
+git-add command includes converted report/receipt companions. No table values,
+source column bytes or numerical verdicts are rewritten or promoted by retention.
+
+Validation: 163 affected tests passed, exit0 (30.39s): retention, reference input
+handling/preview, installed conversion and strict ledger admission. A regression
+converts a full synthetic report, retains it into repository layout, deletes the
+original producer directory, and confirms strict record_errors still accepts the
+retained package. Negative cases cover missing/hash-mismatched/unsafe companions,
+missing provenance and bounded decompression. Initial narrower suite100passed
+also retained. Tests use bounded synthetic records, no product fits or devices.
+Syntax/source guard receipts follow commit; no Mojo compile needed.
+
+Evidence:
+/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/
+  retention-tests.log/.exit (100pass)
+  retention-tests-final.log/.exit (163pass)
+  retention-syntax.log/.exit; retention-guard-*.log/.exit
+  retention-source.patch; retention-source-sha256.json
+
+Run outputs still require explicit Mac+R2 retention before rented-box teardown;
+this helper neither uploads nor proves remote durability. Unique binary bytes
+are retained by the build/box controller, not replaced by manifest hashes.
+Actual installed verification, numerical agreement, source reference-table
+admission and publication remain root-serialized pending work. Successful
+columns enter repo bench/results via existing retention/admission tools only.

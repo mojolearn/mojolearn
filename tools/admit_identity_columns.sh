@@ -326,7 +326,7 @@ echo "NEXT (after SELFTEST rc=0):"
 printf '  git add -- %q %q ' "$DEST" "$TABLE"
 for f in "${files[@]}"; do
     printf '%q ' "${f#"$ROOT/"}"
-    for prov in "${f%/*}"/*.provenance.txt; do
+    for prov in "${f%/*}"/*.provenance.txt "${f%/*}"/*.source-report.json.gz "${f%/*}"/*.verifier-run.json; do
         [ ! -f "$prov" ] || printf '%q ' "${prov#"$ROOT/"}"
     done
 done

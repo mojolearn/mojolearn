@@ -254,3 +254,58 @@ def test_opt_in_campaign_publish_excludes_unrelated_staged_edits(repo, tmp_path)
     git('switch', '-c', 'development')
     with pytest.raises(RuntimeError, match='requires the main branch'):
         publish_campaign(config, [summary], command)
+
+
+def verifier_column(tmp_path):
+    import gzip
+    raw_report = b'{"verdict":"FAILED","cells":[]}\n'
+    raw_launch = b'{"status":"completed","exit_code":1}\n'
+    report = tmp_path/'amd.source-report.json.gz'
+    launch = tmp_path/'amd.verifier-run.json'
+    report.write_bytes(gzip.compress(raw_report, mtime=0)); launch.write_bytes(raw_launch)
+    column = tmp_path/'amd.identical.json'
+    write(column, dict(vendor='amd', commit='a'*40, complete=True,
+        verifier_observation=dict(report=report.name, report_encoding='gzip',
+            report_sha256=hashlib.sha256(raw_report).hexdigest(), launch=launch.name,
+            launch_sha256=hashlib.sha256(raw_launch).hexdigest())))
+    (tmp_path/'amd.provenance.txt').write_text('commit='+'a'*40+'\n')
+    return column, report, launch
+
+
+def test_identity_retains_exact_relative_verifier_companions(repo, tmp_path):
+    column, report, launch = verifier_column(tmp_path)
+    target = R.retain_identity(column)
+    assert target.read_bytes() == column.read_bytes()
+    assert target.with_name(report.name).read_bytes() == report.read_bytes()
+    assert target.with_name(launch.name).read_bytes() == launch.read_bytes()
+    assert target.with_name('amd.provenance.txt').read_bytes() == (tmp_path/'amd.provenance.txt').read_bytes()
+    assert len(saved(repo,'verification','identity-amd')['companions']) == 2
+    assert R.retain_identity(column) == target
+
+
+@pytest.mark.parametrize('damage',['missing_report','missing_launch','bad_report_hash','bad_launch_hash','escape','missing_provenance','expanded_limit'])
+def test_broken_verifier_companions_never_publish_column(repo,tmp_path,monkeypatch,damage):
+    column,report,launch=verifier_column(tmp_path)
+    doc=json.loads(column.read_text())
+    if damage=='missing_report': report.unlink()
+    elif damage=='missing_launch': launch.unlink()
+    elif damage=='bad_report_hash': doc['verifier_observation']['report_sha256']='0'*64
+    elif damage=='bad_launch_hash': doc['verifier_observation']['launch_sha256']='0'*64
+    elif damage=='escape': doc['verifier_observation']['report']='../outside.gz'
+    elif damage=='missing_provenance': (tmp_path/'amd.provenance.txt').unlink()
+    elif damage=='expanded_limit': monkeypatch.setattr(R,'MAX_IDENTITY_REPORT_BYTES',4)
+    write(column,doc)
+    with pytest.raises((OSError,ValueError)): R.retain_identity(column)
+    assert not list(repo.glob('bench/results/identity_break/retained/**/*.identical.json'))
+
+
+def test_retained_conversion_still_passes_admission_after_original_removed(repo,tmp_path,monkeypatch):
+    import shutil
+    import release_identity_evidence as E
+    from test_identity_verify_launch import convert
+    original=tmp_path/'producer';original.mkdir()
+    column,record=convert(original,monkeypatch)
+    target=R.retain_identity(column)
+    shutil.rmtree(original)
+    cls,errors=E.record_errors(record,target,E.reference(target),'a'*40)
+    assert cls=='nvidia' and errors==[]

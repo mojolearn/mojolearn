@@ -247,7 +247,8 @@ def repository_inputs(root, incoming, preview_dir=None):
     A check-only invocation owns a temporary preview directory in the record
     tree and removes it on exit. Ordinary admission keeps immutable copies.
     """
-    from retain_run_summary import read_bytes, immutable_bytes, retain_identity, destination
+    from retain_run_summary import (read_bytes, immutable_bytes, retain_identity, destination,
+                                    identity_companions, MAX_IDENTITY_BYTES)
     root = Path(root).resolve()
     base = root / 'bench/results/identity_break'
     if preview_dir is not None:
@@ -259,17 +260,27 @@ def repository_inputs(root, incoming, preview_dir=None):
         path = Path(filename).absolute()
         if path.resolve() != path or not path.name.endswith('.identical.json'):
             raise ValueError('expected a regular *.identical.json record without symlinks: ' + str(path))
-        data = read_bytes(path)
+        data = read_bytes(path, MAX_IDENTITY_BYTES)
+        companions = identity_companions(path, json.loads(data))
         matches = [path] if path.is_relative_to(base) else sorted(base.rglob(path.name))
         match = next((p for p in matches if p.resolve() == p and p.is_file()
                       and not any(part.startswith('.admission-preview-') for part in p.parts)
-                      and p.stat().st_size == len(data) and read_bytes(p) == data), None)
+                      and p.stat().st_size == len(data) and read_bytes(p, MAX_IDENTITY_BYTES) == data), None)
         if match is None:
             if preview_dir is None:
                 match = retain_identity(path, repo=root)
             else:
                 match = destination(root, preview_dir.relative_to(root) / hashlib.sha256(data).hexdigest() / path.name)
-                immutable_bytes(match, data)
+                for companion in companions:
+                    immutable_bytes(match.with_name(companion['name']), companion['raw'], limit=MAX_IDENTITY_BYTES)
+                provenance = path.with_name(path.name.replace('.identical.json', '.provenance.txt'))
+                if provenance.exists():
+                    immutable_bytes(match.with_name(provenance.name), read_bytes(provenance))
+                immutable_bytes(match, data, limit=MAX_IDENTITY_BYTES)
+        # A byte-identical older repository copy may predate companion retention.
+        # Fill only missing exact companions; conflicting bytes remain refused.
+        for companion in companions:
+            immutable_bytes(match.with_name(companion['name']), companion['raw'], limit=MAX_IDENTITY_BYTES)
         resolved.append(match)
     return resolved
 

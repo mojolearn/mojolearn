@@ -434,3 +434,22 @@ def test_host_only_na_needs_cpu_observation_too(monkeypatch):
     entry["ref"] = "n/a:declared"
     del entry["cols"]["cpu"]
     assert not GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)["admissible"]
+
+
+@pytest.mark.parametrize('preview', [False, True])
+def test_repository_inputs_keep_verifier_companions(tmp_path, preview):
+    from test_retain_run_summary import verifier_column
+    root=tmp_path/'repo';(root/'.git').mkdir(parents=True);(root/'tools').mkdir()
+    original=tmp_path/'producer';original.mkdir()
+    column,report,launch=verifier_column(original)
+    preview_dir=root/'bench/results/identity_break/.admission-preview-case' if preview else None
+    [retained]=GUARD.repository_inputs(root,[column],preview_dir=preview_dir)
+    assert retained.with_name(report.name).read_bytes()==report.read_bytes()
+    assert retained.with_name(launch.name).read_bytes()==launch.read_bytes()
+    assert retained.with_name('amd.provenance.txt').is_file()
+    if not preview:
+        # Reusing an old exact column repairs missing companion bytes from the
+        # supplied packet without rewriting the original record.
+        retained.with_name(launch.name).unlink()
+        assert GUARD.repository_inputs(root,[column])==[retained]
+        assert retained.with_name(launch.name).read_bytes()==launch.read_bytes()

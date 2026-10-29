@@ -6,6 +6,8 @@ caller owns execution/admission; retention never turns a partial run into a pass
 """
 import argparse
 import hashlib
+import gzip
+import io
 import json
 import math
 import os
@@ -18,6 +20,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 MAX_SUMMARY_BYTES = 4 * 1024 * 1024
 MAX_BOARD_BYTES = 64 * 1024 * 1024
+MAX_IDENTITY_BYTES = 64 * 1024 * 1024
+MAX_IDENTITY_REPORT_BYTES = 128 * 1024 * 1024
 
 
 def repository(repo=None):
@@ -205,7 +209,7 @@ def retain_verification(producer, reports, *, metadata=None, repo=None):
     return retain('verification', producer, payload, repo)
 
 
-def immutable_bytes(path, raw):
+def immutable_bytes(path, raw, *, limit=MAX_SUMMARY_BYTES):
     """Install complete bytes without replacing a prior record or a racing writer."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
@@ -215,10 +219,42 @@ def immutable_bytes(path, raw):
         try:
             os.link(temp, path)
         except FileExistsError:
-            if read_bytes(path) != raw:
+            if read_bytes(path, limit) != raw:
                 raise ValueError(f'refusing to overwrite immutable identity evidence: {path}')
     finally:
         temp.unlink()
+
+
+def identity_companions(path, record):
+    """Validate every referenced verifier companion before publishing a column."""
+    observation = record.get('verifier_observation') or {}
+    if not observation:
+        return []
+    files = []
+    for field, hash_field in (('report', 'report_sha256'), ('launch', 'launch_sha256')):
+        name = observation.get(field)
+        if name is None and field == 'launch':
+            continue  # Historical conversion retained no producer receipt.
+        if not isinstance(name, str) or Path(name).name != name or name in ('.', '..'):
+            raise ValueError('unsafe or missing verifier companion filename: ' + field)
+        expected = observation.get(hash_field)
+        if not isinstance(expected, str) or not re.fullmatch(r'[0-9a-f]{64}', expected):
+            raise ValueError('missing verifier companion digest: ' + field)
+        raw = read_bytes(path.with_name(name), MAX_IDENTITY_BYTES)
+        checked = raw
+        if field == 'report':
+            if observation.get('report_encoding') != 'gzip':
+                raise ValueError('unsupported verifier report encoding')
+            with gzip.GzipFile(fileobj=io.BytesIO(raw)) as stream:
+                checked = stream.read(MAX_IDENTITY_REPORT_BYTES + 1)
+            if len(checked) > MAX_IDENTITY_REPORT_BYTES:
+                raise ValueError('verifier source report exceeds retention limit')
+        if hashlib.sha256(checked).hexdigest() != expected:
+            raise ValueError('verifier companion digest differs: ' + field)
+        files.append(dict(name=name, raw=raw, field=field, sha256=hashlib.sha256(raw).hexdigest()))
+    if observation.get('launch') and not path.with_name(path.name.replace('.identical.json', '.provenance.txt')).is_file():
+        raise ValueError('strict verifier column lacks its provenance companion')
+    return files
 
 
 def retain_identity(path, repo=None):
@@ -227,11 +263,18 @@ def retain_identity(path, repo=None):
     path = Path(path)
     if not path.name.endswith('.identical.json'):
         raise ValueError('expected a *.identical.json column')
-    raw = read_bytes(path)
+    raw = read_bytes(path, MAX_IDENTITY_BYTES)
     record = json.loads(raw)
+    companions = identity_companions(path, record)
     sha = hashlib.sha256(raw).hexdigest()
     target = destination(root, Path('bench/results/identity_break/retained') / sha / path.name)
-    immutable_bytes(target, raw)
+    # Publish the column only after its relative companions are durable here.
+    retained_companions = []
+    for companion in companions:
+        sidecar = target.with_name(companion['name'])
+        immutable_bytes(sidecar, companion['raw'], limit=MAX_IDENTITY_BYTES)
+        retained_companions.append(dict(path=sidecar.relative_to(root).as_posix(),
+            kind=companion['field'], sha256=companion['sha256']))
     provenance = path.with_name(path.name.replace('.identical.json', '.provenance.txt'))
     retained_provenance = None
     if provenance.exists():
@@ -243,9 +286,10 @@ def retain_identity(path, repo=None):
             sidecar = target.with_name(hashlib.sha256(raw_provenance).hexdigest() + '.provenance.txt')
         immutable_bytes(sidecar, raw_provenance)
         retained_provenance = sidecar.relative_to(root).as_posix()
+    immutable_bytes(target, raw, limit=MAX_IDENTITY_BYTES)
     retain('verification', 'identity-' + str(record.get('vendor', 'unknown')),
            dict(record=target.relative_to(root).as_posix(), sha256=sha,
-                provenance=retained_provenance,
+                provenance=retained_provenance, companions=retained_companions,
                 original=str(path.resolve()),
                 metadata=pick(record, 'commit vendor mode partial_column parts_omitted')),
            root)
