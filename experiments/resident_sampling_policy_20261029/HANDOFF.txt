@@ -81,3 +81,6 @@ same actual entry scope, source hashes unchanged during build. New binary SHA:
 9ddec0fcfd8cabfc08cd277ae1f8537d042b07fa43c7d4fdf59c1be0cd5012df
 Full new evidence is in full-sampling-boundary-20261029/engine-policy/.
 Original compile logs, source and binary remain untouched at the parent path.
+
+Engine policy follow-up04e51d25b4287d7824b70ec8f8e7762bef80ddb9: all five
+source guards again exit 0 (complete logs in engine-policy/). No runtime run.
