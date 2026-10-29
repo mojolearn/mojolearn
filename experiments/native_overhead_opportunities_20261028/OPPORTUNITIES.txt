@@ -1,0 +1,160 @@
+Targeted native-runtime overhead scout, 2026-10-28
+Base: 249031017b. Source inspection only: no builds, execution or measurements.
+No product source was changed during scouting. Prior model-selection setup
+repairs are already integrated and are not listed again. Active autograd,
+prepared-program and shared neural transport lanes are excluded.
+
+Notation: C candidates, F folds, S named scorers, N selected rows, T output
+ tokens, B documents. Frequencies below are source-loop counts, not timings.
+Priorities express defensible structural work, not measured speed rankings.
+
+1. Reuse predictions between scorers of the same fitted model and data phase.
+   bindings/msel_cv.mojo:388, especially 426-431; msel_common.mojo:862/871;
+   msel_scorer_native.mojo:139, especially 158-178.
+   Work: CV calls msel_score once per named scorer, which always passes
+   memo=None. The scorer ALREADY supports prediction-by-response-method and
+   binary probability-column memoization, but this caller never uses it.
+   Frequency: up to C*F*S predictions per test phase, repeated for train scores,
+   even when scorers share predict or predict_proba.
+   Boundary: one fresh memo per fitted estimator + fold + test/train phase;
+   share only among that phase's named native scorers. Keep scorer=None on its
+   existing estimator.score route. Destroy memos before the next fit/fold.
+   Hazards: never mix train/test inputs or clones/candidates; preserve scorer
+   order, failure behavior, output owners and class/protocol admission. Check
+   that supported native metric input processing does not mutate predictions.
+   Why without measuring: prevents duplicate invocation of the same admitted
+   predictor and existing probability-column conversion. No arithmetic tuning.
+   Status: root assigned this scout lane to implement after report delivery.
+
+2. Replace repeated internal resident frontdoors with a direct native owner.
+   bindings/msel_common.mojo:784; msel_cv.mojo:246-320;
+   arena_resident_native.mojo:18/153; arena_resident_rows.mojo:65.
+   Work: every internal take/release/close does family_call through a CPython
+   entry, rebuilding argument tuples and performing _Resident class/instance
+   namespace scans again. Non-device fold rows issue four resident takes per
+   fold when y exists; search repeats them for each candidate. DeviceRows still
+   issues y takes and reconstructs two DeviceRows/bound-take owners per fold.
+   Boundary: create/admit a private native resident plan once for MselFoldRows
+   or learning_curve; call native lifecycle/take helpers directly inside it.
+   Preserve the separately callable public _Resident boundary and its checks.
+   Hazards: DeviceRows currently retains a bound take owner; close/release swaps
+   entry mappings before GIL-releasing frees and preserves retryable failures.
+   Do not bypass that protocol or expose a half-closed cache. Keep the selected
+   backend callable/module and prepared storage alive; no cached raw pointers
+   may outlive the plan. Direct-call pending-error ownership needs review.
+   Why: removes a CPython re-entry and repeated public-wrapper admission from
+   each internal row operation without changing the native gather algorithm.
+
+3. Give the private resident cache native identity indexes and retained metadata.
+   bindings/arena_resident_rows.mojo:15/65/97;
+   arena_materialize_native.mojo:152; arena_resident_native.mojo:57.
+   Work: take lists/scans every _entries key, then _entry hits run
+   _prepared_info for base and indices; take calls _prepared_info on both again.
+   Each _prepared_info rebuilds metadata, scans Array class layout, validates
+   the owner buffer and obtains/relinquishes a CPython buffer export.
+   Frequency: four metadata reconstructions on a two-hit gather plus O(E)
+   key admission, where E grows with retained inputs/fold-index owners.
+   Boundary: private operation-owned Dict[native identity, native record],
+   with retained original/prepared owners, store id, shape/dtype/byte metadata.
+   Capture once on entry creation, use typed metadata on hits, explicit erase
+   on release/close. This complements item 2 rather than duplicating it.
+   Hazards: public _Resident entries remain writable and require boundary
+   admission; do not apply an unchecked private path to those objects. Handle
+   alias identity, released Array views, metadata mutation, failed put/free and
+   reentrant cleanup. Keep bytes and owners, not just hashes/addresses.
+   Why: removes repeated scans and metadata reconstruction of data already
+   uploaded and owned by a private operation. No numerical kernel changes.
+
+4. Prepare scorer/metric recipes once; retain native scalar results internally.
+   bindings/msel_scorer_native.mojo:61/75/139;
+   msel_common.mojo:848/862; msel_cv.mojo:426;
+   msel_search.mojo:567 (learning_curve resolves the same scorer per size/fold).
+   Work: every score rescans scorer class hooks/keys, looks up metric plan,
+   copies defaults/kwargs, scans ABI recipe tags, normalizes numeric mode,
+   rebuilds an envelope, then repeatedly boxes/unboxes the resulting float
+   across metric -> scorer -> msel_score -> native score table.
+   Frequency: C*F*S (twice with train scores); learning_curve also resolves its
+   unchanged scoring setting for every requested-size/fold pair.
+   Boundary: operation-local admitted scorer/metric record with native recipe
+   indexes and fixed binding/options; fill only current y/prediction/weight
+   slots. Internal Float64 helper, boxing only at the public API boundary.
+   Hazards: mutable kwargs, response preferences, metric function __code__,
+   default numeric mode and estimator fitted state need their existing entry
+   checks. Do not cache fitted model data across fits. Keep public return types
+   and refusal precedence. Keep separate prediction memos from item 1.
+   Why: eliminates repeated schema setup and conversion of already-native
+   scalars, not a change to metric arithmetic.
+
+5. Native label/list row gathering instead of per-element callback mapping.
+   bindings/msel_cv.mojo:287-291; msel_search.mojo:586;
+   msel_common.mojo:811-817.
+   Work: list labels go through list(map(getattr(values,"__getitem__"),
+   indices._mv)); that binds a callable and invokes it for each selected row.
+   Frequency: O(N) CPython callback invocations per list gather, multiplied by
+   folds/candidates; all inputs already have native-only admission rules.
+   Boundary: capture exact container and index buffer once; build the output
+   list with native checked indexing/ref ownership, no map/callable dispatch.
+   Hazards: preserve negative-index rules where public helpers admit them,
+   out-of-range errors, tuple/list distinctions, label object identity and
+   reference counts. Reject subclasses/protocol hooks before native indexing.
+   Why: removes an interpreter dispatch layer per copied reference. It does
+   not remove the required result list or the caller's label identities.
+
+6. Tokenizer output publication without per-token append calls (unowned area).
+   bindings/tokenizer_public_native.mojo:258-262, 481-489, 928-934.
+   Work: native encoded IDs are already in Mojo vectors, but every output ID
+   goes through row.append lookup plus py_call; outer batch rows do likewise.
+   Frequency: T append calls per encode, plus B row appends; BOS/EOS loops add
+   the same protocol overhead. Vocabulary publication has a related cold path.
+   Boundary: allocate exact output list sizes once and populate owned slots
+   through supported CPython list/integer APIs or an existing native builder.
+   Hazards: PyList_SetItem steals references; partial construction and integer
+   allocation failure must clean up without leaks/double decrefs. Keep count
+   validation and final result list/list-of-lists ABI. Keep token buffers owned
+   until the last scalar read. This is identical/shared work, not fast tuning.
+   Why: output cardinality is known; it removes T bound-method constructions
+   and callback dispatches while preserving the same integer result objects.
+
+7. Tokenizer batch UTF-8 decode admission and native C entry setup.
+   bindings/tokenizer_public_native.mojo:324-350 and 499-514.
+   Work: each decoded sequence repeats builtins lookup, error-policy string
+   admission, handler-dictionary lookup, codec registry identity check, then
+   creates a bound bytes.decode method and ("utf-8", errors) argument tuple.
+   Frequency: B policy/dispatch setups in one decode_batch operation.
+   Boundary: typed operation-local decode policy and retained canonical handler;
+   use supported CPython UTF-8 decoding entry for each completed bytes buffer.
+   Hazards: codec registry mutation checks prevent Python error callbacks. Do
+   not simply delete them: prove no callback/GIL-release mutation interval or
+   retain an explicit per-item identity check where required. Preserve every
+   supported error policy, bytes/bytearray behavior and Unicode error details.
+   Why: fixed policy setup and bound-method construction are repeated work;
+   decoding bytes remains necessary. Safety proof is more involved than item 6.
+
+8. ParameterGrid: native mixed-radix enumeration of the prepared grid.
+   bindings/msel_search.mojo:103-147.
+   Work: admission materializes each parameter values sequence, then expansion
+   materializes it again; itertools.product is fully converted to an
+   intermediate combos list, then each candidate is zipped and converted to a
+   dictionary. Large grids retain both combos and final candidate dictionaries.
+   Frequency: one setup per search/grid iteration, O(C*P) intermediate tuples
+   for P parameters; lower priority than repeated fold/scorer work.
+   Boundary: capture sorted exact-string keys and prepared value vectors once,
+   enumerate native mixed-radix coordinates and publish final candidate dicts.
+   Hazards: preserve rightmost-fastest product order, outer-grid order, empty
+   grid semantics, object identities, overflow/refusal behavior and mutations
+   between separate public ParameterGrid operations.
+   Why: avoids redundant sequence preparation and an entire intermediate
+   cartesian-product object graph; no tuning or numerical changes.
+
+Not recommended blindly:
+- Reusing finished fold arrays across candidate fits. Native estimators may
+  retain training arrays or mutate admitted workspaces; return_estimator can
+  extend their lifetime. Output-buffer pooling needs an ownership/non-escape
+  proof or immutable data contract, not merely matching shape.
+- Removing mutable boundary checks globally. The safe destination is private
+  native metadata with explicit invalidation; public writable objects retain
+  admission until their ownership model changes.
+
+Suggested next order: 1, then 2+3 as one ownership design, 6 as an independent
+small batch, then 4/5. Item 7 needs a codec-mutation proof. Item 8 is useful setup
+work but not the first repeated-execution repair. No speedups are claimed.
