@@ -173,6 +173,10 @@ def platform_target(platform):
 
 def requested_lanes(record):
     options = (record.get("resume_signature") or {}).get("options") or {}
+    observation = record.get("verifier_observation") or {}
+    if observation.get("launch"):
+        lanes = (observation.get("options") or {}).get("lanes")
+        return lanes if isinstance(lanes, list) and all(isinstance(x, str) for x in lanes) else []
     lanes = options.get("lanes")
     return [lane for lane in lanes.split(",") if lane] if isinstance(lanes, str) else []
 
@@ -207,7 +211,15 @@ def record_errors(record, path, ref, source_revision, equivalent=()):
         errors.append("record lacks loaded native binding witnesses (loaded-native-v2)")
     signature = record.get("resume_signature") or {}
     options = signature.get("options") if isinstance(signature, dict) else None
-    if not isinstance(options, dict):
+    if (record.get("verifier_observation") or {}).get("launch"):
+        try:
+            from identity_columns import validate_verifier_record
+            options = validate_verifier_record(record, path)
+            if set(options.get("parts", [])) != set(ALL_PARTS):
+                errors.append("verifier launch omitted required properties")
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            errors.append("verifier producer witness invalid: " + str(error))
+    elif not isinstance(options, dict):
         errors.append("record lacks its bound harness options")
     else:
         if options.get("repeats") != 1:

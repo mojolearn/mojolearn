@@ -135,6 +135,32 @@ def cmd_check(args):
     return 1 if bad else 0
 
 
+def converted_cells(indexed):
+    """Map actual observations without turning local failures into STABLE values."""
+    v = vref()
+    def require(ok, message):
+        if not ok:
+            raise ValueError(message)
+    cells = {}
+    for (lane, fixture, part), row in indexed.items():
+        value = row.get("value")
+        require(row.get("state") in v.STATES, "unknown part state")
+        if row.get("state") == v.REFUSED or row.get("local_check") == "failed":
+            verdict = "REFUSED" if row.get("state") == v.REFUSED else "DIVERGENT"
+        elif isinstance(value, str) and re.fullmatch(r"[0-9a-f]{16}", value):
+            verdict = "STABLE"
+        elif isinstance(value, str) and value.startswith("n/a:"):
+            verdict = "N/A"
+        else:
+            verdict = "DIVERGENT"  # MOVED / BATCH_MOVED remain unusable evidence.
+        cell = cells.setdefault(lane + "/" + fixture, {})
+        cell["hashes" if part == "train" else part] = [value]
+        cell["verdict" if part == "train" else part + "_verdict"] = verdict
+        if verdict in ("REFUSED", "DIVERGENT"):
+            cell.setdefault("errors", {})[part] = row.get("detail", "local check failed")
+    return cells
+
+
 def record_from_verify(report, h, report_sha256):
     """Reuse measured verifier values, preserving their original provenance.
 
@@ -180,34 +206,54 @@ def record_from_verify(report, h, report_sha256):
     indexed = {(r["lane"], r["fixture"], r["part"]): r for r in rows}
     expected = {(l, f, p) for l in lanes for f in fixtures for p in parts}
     require(len(indexed) == len(rows) and set(indexed) == expected, "missing or duplicate cell parts")
-    cells = {}
-    for (lane, fixture, part), row in indexed.items():
-        value = row.get("value")
-        require(row.get("state") in v.STATES, "unknown part state")
-        if row.get("state") == v.REFUSED or row.get("local_check") == "failed":
-            verdict = "REFUSED" if row.get("state") == v.REFUSED else "DIVERGENT"
-        elif isinstance(value, str) and re.fullmatch(r"[0-9a-f]{16}", value):
-            verdict = "STABLE"
-        elif isinstance(value, str) and value.startswith("n/a:"):
-            verdict = "N/A"
-        else:
-            verdict = "DIVERGENT"  # MOVED / BATCH_MOVED remain unusable evidence.
-        cell = cells.setdefault(lane + "/" + fixture, {})
-        cell["hashes" if part == "train" else part] = [value]
-        cell["verdict" if part == "train" else part + "_verdict"] = verdict
-        if verdict in ("REFUSED", "DIVERGENT"):
-            cell.setdefault("errors", {})[part] = row.get("detail", "local check failed")
+    cells = converted_cells(indexed)
     return dict(mode="identical", vendor=device["device_class"], commit=device["commit"],
                 commit_source=device.get("commit_source"), platform=device.get("platform"),
                 repeats=1, complete=True, partial_column=False, parts_omitted=[],
                 parts_collected=[p for p in parts if p not in ("train", "infer", "model")],
                 fixtures=contract["fixtures"], heldout=contract["heldout"], heldout_seed=1,
                 lane_revisions=dict(h.LANE_REVISIONS), batch_revisions=contract.get("batch_revisions", {}),
-                cells=cells, package=dict(device, bindings=report["bindings"]),
+                cells=cells, package=dict(device, bindings=report["bindings"],
+                             binding_provenance_protocol=report.get("binding_provenance_protocol")),
                 verifier_observation=dict(report_sha256=report_sha256, harness_sha256=source_sha,
                                           reported_repeats=report["repeats"],
                                           original_verdict=report.get("verdict")),
                 **{p + "_protocol": value for p, value in contract.get("protocols", {}).items()})
+
+
+def validate_verifier_record(record, path):
+    """Recheck retained producer witnesses; never invent a harness resume signature."""
+    from identity_verify_launch import validate_run
+    observation = record.get("verifier_observation", {})
+    def require(ok, message):
+        if not ok:
+            raise ValueError(message)
+    base = Path(path).parent
+    def retained(name):
+        require(isinstance(name, str) and Path(name).name == name, "invalid retained verifier filename")
+        return base / name
+    receipt_bytes = retained(observation.get("launch")).read_bytes()
+    require(hashlib.sha256(receipt_bytes).hexdigest() == observation.get("launch_sha256"), "verifier receipt hash differs")
+    receipt = json.loads(receipt_bytes)
+    raw = gzip.decompress(retained(observation.get("report")).read_bytes())
+    require(hashlib.sha256(raw).hexdigest() == observation.get("report_sha256"), "retained verifier report hash differs")
+    report = json.loads(raw)
+    options = validate_run(receipt, report, observation["report_sha256"])
+    require(options == observation.get("options"), "retained verifier options differ")
+    require(record.get("commit") == receipt["source"]["commit"], "column source differs from verifier launch")
+    require(record.get("package", {}).get("bindings") == report.get("bindings"), "column binding witnesses differ from report")
+    require(record.get("package", {}).get("binding_provenance_protocol") == report.get("binding_provenance_protocol"), "column binding protocol differs from report")
+    require(set(record.get("fixtures", {})) == set(options["fixtures"]), "column fixture set differs from launch")
+    require(record.get("fixtures") == report.get("verification_contract", {}).get("fixtures"), "column fixture bytes differ from report")
+    require(record.get("heldout") == report.get("verification_contract", {}).get("heldout"), "column held-out bytes differ from report")
+    rows = report.get("cells", [])
+    indexed = {(r["lane"], r["fixture"], r["part"]): r for r in rows if r.get("lane") in options["lanes"]}
+    expected = {(l, f, p) for l in options["lanes"] for f in options["fixtures"] for p in options["parts"]}
+    require(len(indexed) == len(rows) and set(indexed) == expected, "retained report properties missing or duplicated")
+    require(record.get("cells") == converted_cells(indexed), "column observations differ from retained report")
+    for part, protocol in report.get("verification_contract", {}).get("protocols", {}).items():
+        require(record.get(part + "_protocol") == protocol, "column protocol differs from report")
+    return options
 
 
 def cmd_from_verify(args):
@@ -215,8 +261,23 @@ def cmd_from_verify(args):
     h = _load("identity_report_harness", Path(args.harness))
     result = record_from_verify(json.loads(raw), h, hashlib.sha256(raw).hexdigest())
     target = Path(args.out)
+    launch = getattr(args, 'launch', None)
+    receipt_bytes = None
+    receipt_path = target.with_suffix('.verifier-run.json')
+    if launch:
+        from identity_verify_launch import validate_run
+        receipt_bytes = Path(launch).read_bytes()
+        receipt = json.loads(receipt_bytes)
+        options = validate_run(receipt, json.loads(raw), hashlib.sha256(raw).hexdigest())
+        if set(options['fixtures']) != set(h.FIXTURES) or set(options['parts']) != set(vref().PARTS + vref().OPTIONAL_PARTS):
+            raise ValueError('release verifier launch must cover every fixture and property')
+        if not target.name.endswith('.identical.json'):
+            raise ValueError('release column must end with .identical.json')
+        result['verifier_observation'].update(launch=receipt_path.name,
+            launch_sha256=hashlib.sha256(receipt_bytes).hexdigest(), options=options)
     retained = target.with_suffix(".source-report.json.gz")
-    if target.exists() or retained.exists():
+    provenance = target.with_name(target.name[:-len(".identical.json")] + ".provenance.txt") if launch else None
+    if target.exists() or retained.exists() or (launch and (receipt_path.exists() or provenance.exists())):
         raise FileExistsError("record or retained report already exists")
     # Retain the original report bytes with the derived record so its source
     # survives a checkout move or cleanup of a remote testing machine.
@@ -228,6 +289,16 @@ def cmd_from_verify(args):
     with open(args.out, "x") as stream:
         json.dump(result, stream, sort_keys=True, indent=2)
         stream.write("\n")
+    if receipt_bytes is not None:
+        receipt_path.write_bytes(receipt_bytes)
+        # Cleanliness and options come from the before/after producer witness,
+        # not from the converter's checkout or a synthesized resume signature.
+        provenance = target.with_name(target.name[:-len('.identical.json')] + '.provenance.txt')
+        with provenance.open('x') as stream:
+            stream.write('commit=' + receipt['source']['commit'] + '\n')
+            stream.write('dirty_tracked=none\nrepeats=1\n')
+            stream.write('record_sha256=' + hashlib.sha256(target.read_bytes()).hexdigest() + '\n')
+            stream.write('verifier_launch_sha256=' + hashlib.sha256(receipt_bytes).hexdigest() + '\n')
     print(f"VERIFIER-OBSERVATION {args.out}: {len(result['cells'])} cells; admission pending")
     return 0
 
@@ -411,6 +482,7 @@ def main():
     v.add_argument("report")
     v.add_argument("--harness", required=True, help="exact identity_break.py that ran the report")
     v.add_argument("--out", required=True)
+    v.add_argument("--launch", help="completed identity_verify_launch receipt for strict release-ledger admission")
     g = sub.add_parser("changed-lanes")
     g.add_argument("--table", default=str(PKG / "verify_reference" / "table.json"))
     g.add_argument("--since", default="", help="one commit for every lane instead of each lane's own record commit")
