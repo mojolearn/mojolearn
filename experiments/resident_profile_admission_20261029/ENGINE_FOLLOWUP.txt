@@ -1,0 +1,32 @@
+Native engine owner construction follow-up — 2026-10-29
+Product/tests: eb86802a38623dad0f0548caf4d2586981c36eb5
+
+Root executed20 installed GPU resident/profile/family cases after the first
+repair:17 passed,3 failed. Two failures were test assertions directly reading
+an absent optional _resident_sessions attribute after the expected diagnostic;
+those assertions now use getattr(...,None). The third was a real product defect:
+transformer construction defaulted native dispatch to0, while native provider
+admission/selection defaulted to1, leaving RLock/no native session owners.
+Original runtime failures remain in root resident-repaired-runtime.log.
+
+Align exactly two transformer constructor conditions to existing dispatch
+value1. Mamba3 prefill default is unchanged. Automatic native engine selection
+now honors explicit native-dispatch opt-out; forced engine selection still
+reports unsupported admission instead of catching it and silently rerouting.
+No arithmetic or GPU kernel source changed.
+
+New four-case installed test_generation_engine_admission.py exercises default
+auto and forced native owners with public forward+stream reads, explicit opt-out
+legacy operation and explicit forced-engine refusal. Run separately on CPU/GPU;
+these are bounded API correctness regressions, not full identity measurements.
+Parent owns runtime execution after standard staging; no duplicate run here.
+
+Full installable tokenizer host extension compiled again because its product
+source changed: exit0, same supported Mac arm64 identical CPU O0 builder,
+10 compiler workers/default compile_slot, Mojo1.0.0(ed45d567). All654 retained
+source closure files unchanged. Three required source guards exit0; test syntax
+passed. Runtime for this second binary is pending at receipt time.
+Evidence: ~/mojolearn-evidence/resident-profile-admission-20261029/engine/
+Raw binary SHA256:
+4a84f9945e3de297853130397702415e6d8ef53ce6294ac9eecc2fc2a16e101d
+All raw binaries, complete logs and manifests from both builds retained.
