@@ -16,3 +16,12 @@ Normal main push guards run at delivery; full logs under
 ~/mojolearn-evidence/cleanup-reuse-integration-20261029/.
 
 Execution/GIL draft 430208ae62 remains parked: no implementation integrated.
+
+Manifold setup: original f2574ea65e. All six changed/depended source hashes match
+retained successful syntax/bytecode and six AST/setup checks. Reuses those checks;
+no Mojo changes or numerical execution. Twelve native methods across five classes
+now receive lifecycle flags before class creation; removes wrappers later unwrapped
+and replaced. Constructors and application override wrapping preserved. No cache
+or invalidation needed: declaration-only setup. Mainly import-time simplification.
+Metrics normal main push completed exit0 at ec8a8aece6; all local push guards passed.
+Manifold normal push result retained alongside metrics-push.log in external evidence.
