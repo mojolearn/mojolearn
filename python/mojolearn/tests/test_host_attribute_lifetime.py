@@ -74,7 +74,9 @@ def test_saved_host_public_predict_uses_connected_cpu_owner(tmp_path, name):
     rows = [row for row in shared_context()['family_host_binding_connections'] if row[0] is type(model)]
     assert len(rows) == 1
     module = rows[0][2]
-    assert Path(vars(module)['__file__']).parent.name == 'host'
+    assert Path(vars(module)['__file__']).is_file()
+    vendor_reader = rows[0][1].removeprefix('_mojolearn_') + '_vendor'
+    assert vars(module)[vendor_reader]() == 'cpu'
     query = np.array([[1, 2], [3, 4], [5, 6]], dtype=np.float32)
     actual = np.asarray(model.predict(query))
     explicit = np.asarray(ml.host_predict(archive, query))
