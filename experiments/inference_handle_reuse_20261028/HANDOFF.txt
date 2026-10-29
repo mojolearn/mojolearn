@@ -1,0 +1,36 @@
+Captured inference parameter handles and scratch, 2026-10-28.
+Branch lane/inference-handle-reuse-20261028; base1cd11dd607.
+
+Repeated work removed: immutable program parameter slot/generation decoding
+moves to lazy plan creation. Each run validates current session liveness,
+generation, ownership and exact shape once, captures current addresses and
+integer-word flags, then replay no longer re-resolves parameter slots. Native
+buffer/flag/leaf/temporary lists keep capacities across invocations. Earlier
+PreparedProgramReplay still owns reusable node metadata/value/argument scratch.
+No Python/CPython imports or provider objects introduced in this native path.
+
+Setup/reuse: PreparedInferenceReplay belongs to one immutable registered program;
+its whole owner is loaned out of the session vector during replay. Current
+addresses/flags/handles refresh each invocation and clear on every success/error;
+only immutable slot/generation metadata and allocated capacity remain. The live
+checks are never replaced with cached liveness. program_free and session close
+clear plans; public program() returns a copy, not mutable registry storage.
+
+Cleanup: existing scratch-tape swap remains; inner finally retires created
+handles and restores both tapes before outer finally returns the plan. Stale
+replay value/argument handles clear too. Source review caught those two initially
+uncleared lists (no current stale read was found); repaired before final compile.
+No new concurrent/reentrant session support is claimed: existing mutable-session
+exclusivity remains required. No changes to arithmetic or graph dispatch order.
+
+Compilation: actual HostExec run_program plus registry/session lifecycle exit0,
+Apple arm64 identical O0 Mojo1.0.0(ed45d567), default2 machine compile slots. Final
+source compiled after cleanup repair; first successful build/source/logs retained
+under attempt-1. No runtime/identity/performance/GPU campaign. Native compilation
+qualifies only the instantiated path. Independent classical-agent source review
+retained in small_mlp_items_20261028/INFERENCE_REVIEW.txt when that batch lands.
+
+Limits: live generation/shape validation remains per invocation; _leaf creation,
+per-node dispatch/tensor lookups and numerical temporary buffers still occur.
+This does not repair shared dynamic endpoint provider/GIL lifecycle in generation.
+Evidence: ~/mojolearn-evidence/inference-handle-reuse-20261028/.

@@ -78,7 +78,7 @@ from autograd.program import (
     OpsLog, OpsProgram, PROGRAM_IN_FLOAT, PROGRAM_IN_IDS, program_refuses_node, same_shape, shape_text,
 )
 from autograd.program_tools import ProgramTrace, program_op_name
-from autograd.program_replay_metadata import PreparedProgramReplay
+from autograd.program_inference_metadata import PreparedInferenceReplay
 from std.time import perf_counter_ns
 from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
@@ -327,7 +327,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var programs: List[OpsProgram]
     #: Immutable program metadata is prepared lazily, then owned until free/close.
     #: A one-slot owner transfers the plan into replay and receives it on exit.
-    var program_replays: List[List[PreparedProgramReplay]]
+    var program_replays: List[List[PreparedInferenceReplay]]
     var prog_tape: Tape
     var program_trace: ProgramTrace
     #: Reusable operand capacity for synchronous native operation dispatch.
@@ -355,7 +355,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.opt_state_indices = List[Dict[Int, Int]]()
         self.oplog = OpsLog()
         self.programs = List[OpsProgram]()
-        self.program_replays = List[List[PreparedProgramReplay]]()
+        self.program_replays = List[List[PreparedInferenceReplay]]()
         self.prog_tape = Tape()
         self.prog_tape.no_grad()
         self.program_trace = ProgramTrace()
@@ -1897,7 +1897,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if self.tape.is_recording():
             raise Error("ops: programs run in an inference session (Session(record=False))")
         self.programs.append(p^)
-        self.program_replays.append(List[PreparedProgramReplay]())
+        self.program_replays.append(List[PreparedInferenceReplay]())
         return len(self.programs)
 
     def _program_index(self, pid: Int) raises -> Int:
@@ -2001,91 +2001,87 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             srcs[k].check("ops: program input")
             if srcs[k].rows != sh.rows() or srcs[k].cols != sh.cols():
                 raise Error("ops: program input " + String(k) + " must have the shape " + shape_text(sh))
-        var pbufs = List[Int]()
-        for j in range(len(self.programs[pi].params)):  # driver-loop: over program parameters
-            var h = self.programs[pi].params[j]
-            var slot = (h & _SLOT_MASK) - 1
-            var gen = h >> _SLOT_BITS
-            if (h <= 0 or slot < 0 or slot >= len(self.live) or not self.live[slot]
-                    or self.generation[slot] != gen or self.owned[slot] == 0):
-                raise Error("ops: a parameter of program " + String(pid) + " was freed")
-            if not same_shape(self.shapes[slot], self.programs[pi].param_shapes[j]):
-                raise Error("ops: a parameter of program " + String(pid) + " changed shape")
-            pbufs.append(self.owned[slot])
-        # the scratch tape in, the session's tape held aside
-        var held = Tape()
-        swap(held, self.prog_tape)
-        swap(held, self.tape)
-        var temps = List[Int]()
-        try:
-            self.tape.reset()
-            self._replay(pi, srcs, dsts, pbufs, temps)
-        except e:
-            self._drop_temps(temps)
-            swap(held, self.tape)
-            swap(held, self.prog_tape)
-            raise e
-        self._drop_temps(temps)
-        swap(held, self.tape)
-        swap(held, self.prog_tape)
-
-    def _replay(
-        mut self, pi: Int, srcs: List[CastIn], dsts: List[FP], pbufs: List[Int], mut temps: List[Int],
-    ) raises:
         if len(self.program_replays[pi]) == 0:
-            self.program_replays[pi].append(PreparedProgramReplay(self.programs[pi]))
-        # Move the retained native plan into this invocation. Its Lists keep
-        # their allocations, while dispatch can mutate the session without an
-        # alias into session-owned metadata. Return it on success and failure.
+            self.program_replays[pi].append(PreparedInferenceReplay(
+                self.programs[pi], _SLOT_BITS, _SLOT_MASK))
+        # Loan private metadata/scratch to this invocation, never aliasing the
+        # mutable session during dispatch. Return its capacity on every exit.
         var prepared = self.program_replays[pi].pop()
         try:
-            prepared.values.clear()
-            for k in range(len(srcs)):  # driver-loop: over program inputs
-                var sh = self.programs[pi].in_shapes[k]
-                var buf = self.tape.reserve(self.ex, sh.count())
-                if self.programs[pi].in_kinds[k] == PROGRAM_IN_IDS:
-                    # ids: the int32 words upload_ids gives (embedding and take read them)
-                    upload_cast_i32(self.ex, buf, srcs[k], "ops: program input")
-                else:
-                    upload_cast(self.ex, buf, srcs[k])
-                var h = self._leaf(buf, sh, self.programs[pi].in_kinds[k] == PROGRAM_IN_IDS)
-                temps.append(h)
-                prepared.values.append(h)
-            var phs = List[Int]()
-            for j in range(len(pbufs)):  # driver-loop: over program parameters
-                var sh = self.programs[pi].param_shapes[j]
-                var integer_words = self.int_words[self._slot(self.programs[pi].params[j])]
-                var h = self._leaf(FP(unsafe_from_address=pbufs[j]), sh, integer_words)
-                temps.append(h)
-                phs.append(h)
-            var nn = self.programs[pi].n_nodes()
-            for k in range(nn):  # driver-loop: over program nodes
-                var code = self.programs[pi].code[k]
-                var a0 = self.programs[pi].a_at[k]
-                var a1 = self.programs[pi].a_at[k + 1]
-                prepared.handles.clear()
-                for j in range(a0, a1):  # small-loop(args: a node's input refs): handle lookup, no data
-                    var rf = self.programs[pi].args[j]
-                    if rf < 0:
-                        prepared.handles.append(phs[-rf - 1])
-                    else:
-                        prepared.handles.append(prepared.values[rf])
-                var h = self._program_op(k, code, prepared.handles,
-                    prepared.nodes[k].ints, prepared.nodes[k].fs)
-                temps.append(h)
-                prepared.values.append(h)
-            for k in range(len(dsts)):  # driver-loop: over program outputs
-                var rf = self.programs[pi].outs[k]
-                var h: Int
-                if rf < 0:
-                    h = phs[-rf - 1]
-                else:
-                    h = prepared.values[rf]
-                if not same_shape(self.shapes[self._slot(h)], self.programs[pi].out_shapes[k]):
-                    raise Error("ops: program output " + String(k) + " no longer has its recorded shape")
-                self.download(h, dsts[k])
+            prepared.clear_live()
+            for j in range(len(self.programs[pi].params)):  # driver-loop: refresh and validate live parameter ownership once per invocation
+                var h = self.programs[pi].params[j]
+                var slot = prepared.slots[j]
+                var gen = prepared.generations[j]
+                if (h <= 0 or slot < 0 or slot >= len(self.live) or not self.live[slot]
+                        or self.generation[slot] != gen or self.owned[slot] == 0):
+                    raise Error("ops: a parameter of program " + String(pid) + " was freed")
+                if not same_shape(self.shapes[slot], self.programs[pi].param_shapes[j]):
+                    raise Error("ops: a parameter of program " + String(pid) + " changed shape")
+                prepared.buffers.append(self.owned[slot])
+                prepared.integer_words.append(self.int_words[slot])
+            # Scratch tape in; session tape held aside until all handles retire.
+            var held = Tape()
+            swap(held, self.prog_tape)
+            swap(held, self.tape)
+            try:
+                self.tape.reset()
+                self._replay(pi, srcs, dsts, prepared)
+            finally:
+                self._drop_temps(prepared.temporaries)
+                swap(held, self.tape)
+                swap(held, self.prog_tape)
         finally:
+            prepared.clear_live()
             self.program_replays[pi].append(prepared^)
+
+    def _replay(
+        mut self, pi: Int, srcs: List[CastIn], dsts: List[FP], mut prepared: PreparedInferenceReplay,
+    ) raises:
+        prepared.replay.values.clear()
+        for k in range(len(srcs)):  # driver-loop: over program inputs
+            var sh = self.programs[pi].in_shapes[k]
+            var buf = self.tape.reserve(self.ex, sh.count())
+            if self.programs[pi].in_kinds[k] == PROGRAM_IN_IDS:
+                # ids: the int32 words upload_ids gives (embedding and take read them)
+                upload_cast_i32(self.ex, buf, srcs[k], "ops: program input")
+            else:
+                upload_cast(self.ex, buf, srcs[k])
+            var h = self._leaf(buf, sh, self.programs[pi].in_kinds[k] == PROGRAM_IN_IDS)
+            prepared.temporaries.append(h)
+            prepared.replay.values.append(h)
+        for j in range(len(prepared.buffers)):  # driver-loop: over program parameters
+            var sh = self.programs[pi].param_shapes[j]
+            var integer_words = prepared.integer_words[j]
+            var h = self._leaf(FP(unsafe_from_address=prepared.buffers[j]), sh, integer_words)
+            prepared.temporaries.append(h)
+            prepared.leaves.append(h)
+        var nn = self.programs[pi].n_nodes()
+        for k in range(nn):  # driver-loop: over program nodes
+            var code = self.programs[pi].code[k]
+            var a0 = self.programs[pi].a_at[k]
+            var a1 = self.programs[pi].a_at[k + 1]
+            prepared.replay.handles.clear()
+            for j in range(a0, a1):  # small-loop(args: a node's input refs): handle lookup, no data
+                var rf = self.programs[pi].args[j]
+                if rf < 0:
+                    prepared.replay.handles.append(prepared.leaves[-rf - 1])
+                else:
+                    prepared.replay.handles.append(prepared.replay.values[rf])
+            var h = self._program_op(k, code, prepared.replay.handles,
+                prepared.replay.nodes[k].ints, prepared.replay.nodes[k].fs)
+            prepared.temporaries.append(h)
+            prepared.replay.values.append(h)
+        for k in range(len(dsts)):  # driver-loop: over program outputs
+            var rf = self.programs[pi].outs[k]
+            var h: Int
+            if rf < 0:
+                h = prepared.leaves[-rf - 1]
+            else:
+                h = prepared.replay.values[rf]
+            if not same_shape(self.shapes[self._slot(h)], self.programs[pi].out_shapes[k]):
+                raise Error("ops: program output " + String(k) + " no longer has its recorded shape")
+            self.download(h, dsts[k])
 
     def metric(mut self, kind: Int, hs: List[Int]) raises -> Float32:
         """A forward-only metric of (y_true, prediction); one value read back."""
