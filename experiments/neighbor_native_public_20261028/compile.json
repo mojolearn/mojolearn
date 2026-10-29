@@ -1,0 +1,82 @@
+{
+  "commit": "7f9249a4820f1fc20d6a2b5e31ef59764224342b",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "source_files": 4579,
+  "source_scope": "Conservative superset: every present tracked Mojo source (including checks/numerics), Python package, manifests, slot script; omitted historical experiments/bench/tests not imported by fixture.",
+  "workers": 8,
+  "version_exit": 0,
+  "compile_attempts": [
+    {
+      "attempt": 1,
+      "exit": 1,
+      "coverage": "Seven-export closure; failed sparse-checkout dependency checks/numerics.mojo missing."
+    },
+    {
+      "attempt": 2,
+      "exit": 0,
+      "coverage": "Seven-export constructor/setter/query/attribute/KNN/local/ANN CPU closure before archive-wrapper repair."
+    },
+    {
+      "attempt": 3,
+      "exit": 0,
+      "coverage": "Final eight-export CPU closure adds native archive build and after-fit admission."
+    }
+  ],
+  "guard_exit": 0,
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "flags": [
+    "-j",
+    "8",
+    "--emit",
+    "shared-lib",
+    "--optimization-level",
+    "0",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "slot": "tools/compile_slot.sh, default machine-wide slot policy",
+  "runtime_run": false,
+  "identity_run": false,
+  "performance_measured": false,
+  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/neighbor-native-public-20261028",
+  "artifacts": {
+    "source.tar.gz": {
+      "bytes": 18302177,
+      "sha256": "11d88012e725a1e3e30f1e6312ef27f016085656c3ec5da33ffd7a6b2fb148f3"
+    },
+    "source-sha256.json": {
+      "bytes": 506869,
+      "sha256": "3a9722f71dccac6ad813f942ab8899e335a343ee400c71e6f86ce36efe3011ad"
+    },
+    "neighbor-public.dylib": {
+      "bytes": 11885384,
+      "sha256": "8144de4c5d0afcfba6792709758fa5397d01120dce2b8b0d5756aab4e1b83df8"
+    },
+    "compile-1.log": {
+      "bytes": 89388,
+      "sha256": "5c2b82ce21d170478f65b2b15385834b89f2179e5225fb82bb3542fd86c10101"
+    },
+    "compile-2.log": {
+      "bytes": 113881,
+      "sha256": "b6c6d4197ecb1c6ab91ad9882c928e57ff44f7ed788acdb392fbb01f0729ec6c"
+    },
+    "compile-3.log": {
+      "bytes": 137355,
+      "sha256": "844c6598b277d7d3415be7c681b15a95b3218c1298511715ded6115280e36200"
+    },
+    "source-checks.log": {
+      "bytes": 196,
+      "sha256": "a63f760a8dd11b120cc854ff19c47d02358f9e636ed324d0406752b5f2c2cc8b"
+    },
+    "source-push-guards.log": {
+      "bytes": 827,
+      "sha256": "0599c5eb229ac167d68e6c9e8a88ebc9a4f2f8cac740b4bb8294535045d154af"
+    },
+    "native-loader-decorators.json": {
+      "bytes": 740,
+      "sha256": "ad4de4f6acfc23fdd83eaea35b301dc46ffacc66585685744be4a30a8b14c6e0"
+    }
+  }
+}

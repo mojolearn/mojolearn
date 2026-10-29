@@ -1,0 +1,79 @@
+Neighbor native public ownership, 2026-10-28
+Branch: lane/neighbor-native-public-20261028
+Base: 7965f31955e7a19a5cdd49149753837752f70e23
+Product commits: f0722adb39, a6670749bc, 7f9249a482 (final compiled source).
+
+Scope and concrete repeated work removed
+- Explicitly vetted native-public inventory: NearestNeighbors, KNeighborsClassifier,
+  KNeighborsRegressor, RadiusNeighbors, LocalOutlierFactor, NearestCentroid,
+  IVFIndex (IVFFlat alias), IVFPQIndex, IVFSQIndex, IVFRaBitQIndex, CagraIndex.
+  Install their marker only after the existing native constructor/setter replacement.
+  The original NumericModeMixin injection has already supplied numeric_mode; its
+  inspected signature/default identities are retained on the installed constructor.
+  Field-only constructors alone do not justify marking other classes complete.
+- Five own classmethod loads now skip _mode._loader's Python post-call envelope.
+  Their native archive owner already restores arrays, mode and fitted state. KNN
+  loaders now construct the final empty resident holder directly, avoiding the old
+  Python after-fit call, resident release lookup and replacement dictionary. The
+  classmethod descriptor preserves the original method and its metadata.
+- neighbor_kneighbors captures one operation-owned ArrayMetadata and uses its native
+  dimensions/address for width, allocations and dispatch. Jensen-Shannon metric
+  validation consumes that same snapshot instead of admitting the converted Array
+  again; query address extraction does not re-read Python Array metadata.
+
+Setup/reuse and invalidation/owners
+- The five loader owners connect their original _mojolearn_after_fit identity (or
+  an absent sentinel) during full-reset installation. Each load resolves the actual
+  requested class's hook without invoking descriptors and refuses replacement or
+  subclass hooks before native model allocation. No unadmitted hook is silently
+  skipped or called. The known KNN hook's final state is native; Radius/IVF have no
+  package after-fit hook. All five are the only explicitly native-decorated
+  classmethod load/from_checkpoint declarations found by the source-only scan.
+- Query snapshots are per operation/request, never retained between calls. Fresh
+  input metadata/release admission remains mandatory. ArrayMetadata retains both
+  converted buffer and original storage/exporter owners independently of mutable
+  Array fields; a finally use pins the complete snapshot across dispatch and GIL
+  release/error cleanup. No raw address escapes the operation. Fit/index resident
+  cache admission, mutable public state checks, ordering and arithmetic unchanged.
+
+Reviewed native guards and contracts
+- KNN/local native lifecycle owns fittedness, rank/empty/finite/label/feature-name
+  checks, mode route admission, fit publication and output conversion.
+- Standalone neighbor queries own fitted index, rank/width, k/radius/flags, metric
+  and route checks; ANN/IVF native owners validate parameters, fitted storage,
+  dimensions, filters and finished outputs. Constructor modes retain their original
+  delayed validation in native operation selection; no eager new validation rule.
+- CPU public training is intentionally allowed (_cpu_reference.require_training
+  is a compatibility no-op); no GPU-only training restriction was added.
+- Investigated but did NOT add a query finite scan: kneighbors was in _OUTPUTS,
+  not _NEEDS_FIT. The historical generic finite-input contract therefore did not
+  apply to that query. ANN/IVF are likewise outside _SCANS_X_HERE. Existing behavior
+  is preserved, not inferred from a class-name-only heuristic.
+
+Validation and evidence
+- Attempt 1 rc1: sparse checkout omitted checks/numerics.mojo, imported by native
+  local/cluster helpers. Full failure log retained; added checks source checkout.
+- Attempt 2 rc0: seven-export CPU closure after complete snapshot pin repair.
+- Attempt 3 rc0: final eight-export closure including archive build/hook admission.
+- Required pre-push/source guards rc0. Source-only AST checks: eleven-class inventory,
+  marker ordering, five native load decorators before class hooks, loader early
+  guard; no package imports. No runtime, identity or performance campaign.
+- Complete logs, source envelopes (including failed/previous attempts), binaries,
+  compiler/flag receipts and hashes: ~/mojolearn-evidence/neighbor-native-public-20261028/.
+  Tracked compile.json and compile.mojo describe exact scope/provenance. Shared-library
+  compilation does not exercise Python import wiring, actual loading or GPU behavior.
+
+Remaining limits and integration
+- User application overrides still receive the existing own-only tracking wrapper
+  under _mode.SklearnTagsMixin; its contract is preserved pending root/user decision.
+  Inherited native methods are not rewrapped. Exact-class query/layout admission
+  remains unchanged; this batch does not broaden subclass query acceptance.
+- TSNE/manifold/Normalizer inventory is root-owned; excluded here. Mamba/Transformer
+  class work deferred for root's resident-generation priority. Private old Python
+  helper declarations and specialized migration debt are not claimed eliminated.
+- No additional build is needed solely to merge unchanged compiled source. Parent
+  integrates serially; this worktree has not merged or pushed main.
+- Prior unrelated evidence was removed by external disk cleanup: parameter-grid-direct
+  and resident-operation-plan directories absent; samba-native-connections retains
+  only source-push-guards.log. Their tracked receipts/source remain, but their binary/
+  full-log retention is incomplete. No rebuild was run merely to replace lost bytes.
