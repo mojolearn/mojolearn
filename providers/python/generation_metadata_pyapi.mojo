@@ -140,6 +140,18 @@ struct GenerationWeightSnapshot(Copyable, Movable):
 
     def resolve(self, mut keep: List[PythonObject]) raises -> List[Int]:
         var result = self.addresses.copy()
+        self.refresh_into(result, 0, keep)
+        return result^
+
+    def append_resolved(self, mut result: List[Int], mut keep: List[PythonObject]) raises:
+        # Caller-owned launch words avoid a temporary address List and a second
+        # copy. The caller reserves its complete fixed ABI span before this.
+        var offset = len(result)
+        for address in self.addresses:  # driver-loop: retained native weight metadata
+            result.append(address)
+        self.refresh_into(result, offset, keep)
+
+    def refresh_into(self, mut result: List[Int], offset: Int, mut keep: List[PythonObject]) raises:
         for k in range(len(self.refresh)):  # driver-loop: retained foreign-buffer copy compatibility
             var index = self.refresh[k]
             if self.failures[k] != "":
@@ -148,9 +160,8 @@ struct GenerationWeightSnapshot(Copyable, Movable):
             var packed = generation_array([layout.count], self.formats[k])
             var address = Int(py=packed._addr)
             layout.copy_to(address)
-            result[index] = address
+            result[offset + index] = address
             keep.append(packed)
-        return result^
 
 
 struct GenerationLayerSnapshot(Copyable, Movable):

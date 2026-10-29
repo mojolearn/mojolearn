@@ -878,10 +878,12 @@ def _causal_layer_run_bound(mut mods: NativeModules,
     else:
         if py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
             raise Error("neural block: state is owned by a resident decode session")
-        var m_addresses: List[Int] = [_addr(x, keep)]
-        var weight_addresses = layer.weights.resolve(keep)
-        for j in range(len(weight_addresses)):  # driver-loop: over retained native weight addresses
-            m_addresses.append(weight_addresses[j])
+        # Fixed public Mamba ABI words, plus the optional Mamba1 affine tail.
+        # Reserve once so the input/weights/state/report vector does not grow
+        # through multiple allocations during every public decode step.
+        var m_addresses = List[Int](capacity=len(layer.weights.addresses) + 7)
+        m_addresses.append(_addr(x, keep))
+        layer.weights.append_resolved(m_addresses, keep)
         if kind == "mamba1":
             var di = layer.words.inner
             m_addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies, "conv_window"))
