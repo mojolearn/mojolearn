@@ -1,0 +1,14 @@
+[
+  {
+    "guard": "no_host_routes",
+    "exit_code": 0
+  },
+  {
+    "guard": "no_python_in_kernels",
+    "exit_code": 0
+  },
+  {
+    "guard": "no_compute_in_shells",
+    "exit_code": 0
+  }
+]

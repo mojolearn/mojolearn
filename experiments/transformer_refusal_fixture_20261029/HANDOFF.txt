@@ -1,0 +1,21 @@
+Transformer invalid-head refusal fixture,2026-10-29
+
+Source18c00d691a moves construction and forward inside the existing by-name
+"even" refusal assertion for head_dim5. The documented identical contract
+(transformer/IDENTICAL_TRANSFORMER_CONTRACT.md158-160) requires evenhead_dim;
+modeling_llama validates the same, and native constructor validates the default
+rope_dim=head_dim earlier. The fixture must not require invalid configuration
+to survive construction. No product validation, numerical assertion or tolerance
+changed; validfloat32 positive controls remain in the complete suite.
+
+Actual immutable correctedwheel overlay (classical-owned) ran the entire canonical
+Transformer surface suite in identical mode:116checks,110passed,6failed,exit1.
+The corrected odd-head refusal and all numerical positive controls passed.
+Failures remain explicit: float64x,bfloat16x,float64grad_output message naming;
+batch_size,window,cached_tokens message naming. They are product diagnostic
+failures to repair, not waived assertions. Root and neural dtype owner notified.
+Original construction failure and complete new runtime log retained in
+~/mojolearn-evidence/transformer-refusal-fixture-20261029/.
+
+Three required sourceguards exit0. No native rebuild; no broad numericalidentity
+or performance campaign. AppleGPU returned to classical after the suite.

@@ -1,0 +1,41 @@
+{
+  "source_base": "06e52d25b91bb902f69f5388c2a695dde302a1a9",
+  "test_source": "/Users/andrewhendel/mojolearn-wt/transformer-refusal-fixture-20261029/python/mojolearn/tests/test_transformer_surface.py",
+  "test_sha256": "0b55c3f5d3ff4b70dcaa07f14bd0cb616031eaa91c6b36f13bb5b331cecb4779",
+  "installed_package": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/venv/lib/python3.13/site-packages/mojolearn",
+  "installed_python": "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/venv/bin/python",
+  "command": [
+    "env",
+    "-u",
+    "PYTHONPATH",
+    "/Users/andrewhendel/mojolearn-evidence/clustering-module-connection-20261029/venv/bin/python",
+    "/Users/andrewhendel/mojolearn-wt/transformer-refusal-fixture-20261029/python/mojolearn/tests/test_transformer_surface.py"
+  ],
+  "environment": {
+    "MOJOLEARN_NUMERIC_MODE": "identical",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "runtime_exit": 1,
+  "checks": 116,
+  "passed": 110,
+  "failed": 6,
+  "failures": [
+    "FAIL a float64 x is refused BY NAME (no silent downcast) -- raised TypeError but the message does not contain 'float64': neural x requires float32 input",
+    "FAIL the refusal message names bfloat16 (a reduced-precision profile ships under its own version, contract section 11) -- raised TypeError but the message does not contain 'bfloat16': neural x requires float32 input",
+    "FAIL a state allocated for another batch size is refused -- raised ValueError but the message does not contain 'batch_size': neural block: transformer state dimensions differ",
+    "FAIL cached_tokens outside [0, max_tokens] is refused BY NAME at the binding boundary (DEVIATION 795(iv): the two sides disagree about the state) -- raised Exception but the message does not contain 'cached_tokens': neural block: sequence exceeds state capacity or max_positions",
+    "FAIL a state allocated by a block with another window is refused -- raised ValueError but the message does not contain 'window': neural block: transformer state dimensions differ",
+    "FAIL a float64 grad_output is refused by name -- raised TypeError but the message does not contain 'float64': neural grad_output requires float32 input"
+  ],
+  "scope": "Actual installed Transformer surface API/numerical positive and refusal checks on Apple. Not cross-vendor identity. Invalid odd-head configuration may refuse at construction or forward; remaining diagnostic failures preserved.",
+  "logs": {
+    "runtime.log": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/transformer-refusal-fixture-20261029/runtime.log",
+      "sha256": "06344f4be51a810f7d715dec5bde7ad5de7c5664d2ccda75cf90ff3d70f8d152"
+    },
+    "original-construction-failure.log": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/transformer-refusal-fixture-20261029/original-construction-failure.log",
+      "sha256": "66fa39a3c7b65c659836bd44d1e4f0ed92e23379bfe28d2a2b8ecd9d7942a8ae"
+    }
+  }
+}
