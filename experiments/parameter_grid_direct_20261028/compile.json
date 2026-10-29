@@ -1,0 +1,53 @@
+{
+  "scope": "Native grid admission, direct expansion, count; sampler admission/expansion/count; GridSearchCV and RandomizedSearchCV candidate selection. Complete family dispatcher not an exported root.",
+  "source_commit": "bcb47ab3555f45de450d92f0d1d86e04b1d34926",
+  "source_base": "7105ca64c8b3762eb4e9473ff235b5bb5da0792a",
+  "target": "Mac arm64 CPU, identical",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "command": "bash tools/compile_slot.sh pixi run mojo build -j 8 --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/parameter_grid_direct_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/parameter-grid.dylib",
+  "compiler_workers": 8,
+  "cpu_saturation_claimed": false,
+  "exit_code": 0,
+  "attempts": [
+    {
+      "attempt": 1,
+      "source_commit": "570308a77b37fdb8fecf1616192552277939349c",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/compile-1.log",
+      "log_sha256": "9a02c9c6f586516f3ac7ad31970a133e28a5c62850d0dab5891e97983f39ce42",
+      "scope": "Intermediate pass before hoisting per-grid builtins resolution"
+    },
+    {
+      "attempt": 2,
+      "source_commit": "bcb47ab3555f45de450d92f0d1d86e04b1d34926",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/compile-2.log",
+      "log_sha256": "9a02c9c6f586516f3ac7ad31970a133e28a5c62850d0dab5891e97983f39ce42",
+      "scope": "Final frozen source pass"
+    }
+  ],
+  "binary": "/Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/parameter-grid.dylib",
+  "binary_sha256": "e2e16f312bc7a47ca2987ad44a5e300f3fd289c2264a2c07cd791ec1968e8c82",
+  "intermediate_binary": "/Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/parameter-grid.intermediate.dylib",
+  "intermediate_binary_sha256": "8e36fe8de39f27fa61fe986ea6df62d0a2de51233747da2ef59690e4dd21941c",
+  "warnings": "Dependency warnings retained in complete logs; no compiler errors.",
+  "environment": "/Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/environment.json",
+  "source_retention": {
+    "archive": "/Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/source-envelope.tar.gz",
+    "archive_sha256": "e18caedf1fc567bb8e4e6f98488aad3cf0c5670a1aa38eeba58e7b7fb4970d33",
+    "source_commit": "bcb47ab3555f45de450d92f0d1d86e04b1d34926",
+    "scope": "Conservative superset: tracked Mojo files, binding shell scripts, compile_slot and pixi manifests",
+    "file_count": 3955,
+    "manifest": "/Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/source-envelope.json"
+  },
+  "source_push_guards": {
+    "source_commit": "bcb47ab3555f45de450d92f0d1d86e04b1d34926",
+    "exit_code": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/source-push-guards.log",
+    "log_sha256": "fd0447bc317de63a7554a97cdd713eb2f35d0ba5df6e8d69306098ee0bbe3877"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_executed": false,
+  "rented_boxes": []
+}

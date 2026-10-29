@@ -68,3 +68,12 @@ No runtime/performance/identity campaign and no rented machines. See compile.jso
 for final status, exact flags, source bytes, binaries and complete retained logs.
 
 Evidence: /Users/andrewhendel/mojolearn-evidence/parameter-grid-direct-20261028/
+
+Final evidence
+--------------
+Frozen source: bcb47ab3555f45de450d92f0d1d86e04b1d34926
+Compile 1 passed before hoisting builtin module resolution out of the outer
+grid schema loop. Compile 2 passed after that setup improvement; source/push
+guards passed. Both complete logs and binaries retained. No compiler errors.
+Final binary SHA256: e2e16f312bc7a47ca2987ad44a5e300f3fd289c2264a2c07cd791ec1968e8c82
+Source closure/archive/compiler/flags are recorded in compile.json.
