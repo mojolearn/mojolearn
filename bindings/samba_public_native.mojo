@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """One compiled Samba boundary for public and distributed model operations."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -22,12 +23,12 @@ def _samba_public_items(value: PythonObject) raises -> PythonObject:
     # train step's internal microbatch calls do not pass through here.
     if value is None:
         return value
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(value) is bi.bool:
         raise Error("TypeError: Samba: num_items must be a positive integer")
     var items = 0
     try:
-        items = Int(py=py_call(Python.import_module("operator").index, value))
+        items = Int(py=py_call(native_loaded_module("operator").index, value))
     except error:
         raise Error("TypeError: Samba: num_items must be a positive integer")
     if items < 1:

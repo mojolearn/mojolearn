@@ -5,6 +5,7 @@ Built-in schedules are native configurations. Python callback schedules are
 refused before execution under the native-only public runtime contract.
 """
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
@@ -19,7 +20,7 @@ from bindings.samba_config_native import samba_config_dict, samba_config_from_di
 
 
 def samba_fields(value: PythonObject) raises -> PythonObject:
-    return py_call(Python.import_module("builtins").object.__getattribute__, value, "__dict__")
+    return py_call(native_loaded_module("builtins").object.__getattribute__, value, "__dict__")
 
 
 def samba_entries(context: PythonObject, mode: PythonObject) raises -> PythonObject:
@@ -34,13 +35,13 @@ def samba_entries(context: PythonObject, mode: PythonObject) raises -> PythonObj
 
 
 def samba_experiment(entries: PythonObject) raises -> PythonObject:
-    if Bool(py=py_call(Python.import_module("builtins").hasattr, entries, "training_experiment_profile")):
+    if Bool(py=py_call(native_loaded_module("builtins").hasattr, entries, "training_experiment_profile")):
         return _native_function(entries, "training_experiment_profile")()
     return PythonObject("baseline")
 
 
 def samba_view(flat: PythonObject, offset: Int, dims: List[Int], context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var n = 1
     for d in dims:  # driver-loop: over tensor shape metadata
         if d < 0 or (d != 0 and n > 2147483647 // d):
@@ -74,7 +75,7 @@ def samba_view(flat: PythonObject, offset: Int, dims: List[Int], context: Python
 def samba_schedule_snapshot(schedule: PythonObject, context: PythonObject) raises -> PythonObject:
     if schedule is None:
         return PythonObject(None)
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var kinds = py_call(bi.list, context["schedule_classes"])
     var kind = String()
     for i in range(len(kinds)):  # driver-loop: over supported built-in schedule classes
@@ -106,7 +107,7 @@ def samba_schedule_rate(config: PythonObject, step: Int, context: PythonObject) 
 def samba_schedule_from_state(config: PythonObject, context: PythonObject) raises -> PythonObject:
     if config is None:
         return PythonObject(None)
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var kind = String(config["kind"])
     if not py_contains(context["schedule_classes"], kind):
         raise Error("Samba: unsupported saved learning-rate schedule")
@@ -128,7 +129,7 @@ def samba_schedule_from_state(config: PythonObject, context: PythonObject) raise
 def _samba_registry(config: PythonObject) raises -> PythonObject:
     var source = samba_registry(config)
     var result = Python.list()
-    var list_type = Python.import_module("builtins").list
+    var list_type = native_loaded_module("builtins").list
     var offset = 0
     for i in range(len(source)):  # driver-loop: over the ordered parameter registry
         var entry = source[i]
@@ -153,7 +154,7 @@ def _samba_registry(config: PythonObject) raises -> PythonObject:
 
 def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
     var entries = samba_entries(context, fields["numeric_mode"])
     var opt = samba_fields(fields["optimizer"])
@@ -212,7 +213,7 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
 
 def samba_validate_state(state: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var entries = samba_entries(context, state["numeric_mode"])
     if String(py_get(state, "schema")) != "mojolearn.samba-stack-state.v1" or String(py_get(state, "profile")) != "mojolearn.samba-stack.fp32.v1":
         raise Error("Samba: state schema/profile mismatch")
@@ -296,7 +297,7 @@ def samba_publish(model: PythonObject, state: PythonObject, context: PythonObjec
 
 
 def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var config = samba_fields(model)["config"]
     py_setattr(model, "_blocks", bi.list())
     var route = PythonObject("cpu" if context["vendor"] is None or String(context["vendor"]) == "cpu" else "gpu")
@@ -342,7 +343,7 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
 
 def samba_from_state(state: PythonObject, context: PythonObject) raises -> PythonObject:
     var checked = samba_validate_state(state, context)
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var model = py_call(bi.object.__new__, context["model_class"])
     var config = samba_config_from_dict(context["config_class"], checked["config"])
     py_setattr(model, "config", config)
@@ -402,7 +403,7 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var entries = samba_entries(context, state["numeric_mode"])
     if Int(py=py_call(bi.int, getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))) > 1:
         for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:  # driver-loop: over cooperative native capability metadata

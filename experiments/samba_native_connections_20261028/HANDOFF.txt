@@ -1,0 +1,65 @@
+Samba native standard-module connections, 2026-10-28
+Branch: lane/samba-native-connections-20261028
+Base: 7965f31955e7a19a5cdd49149753837752f70e23
+
+Concrete repeated work removed
+------------------------------
+55 direct Python.import_module sites in ten Samba binding files now use the
+existing native_loaded_module connection for builtins, operator or array.
+This removes Python import dispatch/hooks from these product accesses; it does
+not claim the returned native builtin operations are free of CPython work.
+The connection validates retained module/export identity rather than importing.
+
+Samba recursive value/metadata/mapping/NumPy admission now resolves builtins once
+at the public walk boundary, passing that owner through all recursive nodes.
+This avoids replacing per-node imports with per-node native module scans.
+samba_admit shares one connection across its whole admission and scalar checks.
+Existing samba_admit_value/_samba_metadata helper signatures used by parallel
+neural admission remain as independent one-connection walk wrappers. No
+parallel/distributed implementation was edited.
+
+The Samba registry resolves its tuple constructor once for all tensor records
+and both lazy per-kind schemas, instead of resolving the builtin module/factory
+inside every _samba_registry_item. Standalone block-shape operations acquire
+one factory for their own call. Existing stable per-kind schema reuse remains.
+
+Connection proof and invalidation
+--------------------------------
+python/mojolearn/__init__.py imports _native_loaded_modules before binding loads.
+That module eagerly imports and registers exact builtins, operator and array:
+builtins retains its non-dunder exports, operator its public exports, array its
+native array type. Every consumed export in this batch is in those inventories.
+No optional dependency, lazy extension, importer or user hook is newly invoked;
+no new import-time module inventory wiring is necessary.
+
+native_loaded_module performs the existing exact-module/export checks at the
+new operation/helper boundary. Changed module identities/exports are refused
+by that shared admission. The recursive walk and registry construction hold
+the GIL, call only their already admitted native metadata/container operations,
+and do not release it. Their local PythonObject builtin/factory owners remain
+alive through all nested calls. No cross-call cache is added here; subsequent
+operations perform normal connection validation again. Existing native input,
+class-layout, metadata, schedule, depth and buffer admission remains in place.
+Optional NumPy detection remains a loaded-module lookup under its old policy.
+
+Deliberate remaining imports
+---------------------------
+Three direct import sites remain in samba_checkpoint_native: sys.byteorder,
+posix for save, and posix.fstat for load. The current connection inventory does
+not pin sys.byteorder or register posix for these uses. They were not blindly
+changed to a lookup that would refuse ordinary operation without setup wiring.
+Their stream/platform/export contract needs a separate coherent repair. Other
+PythonObject dispatch, configuration/class scans and protocol work also remain;
+this batch is not a claim of whole-family runtime migration completion.
+
+Qualification
+-------------
+Focused Mac arm64 CPU identical compile exports samba_public_c and samba_config_c,
+plus the two retained shared admission helper signatures. This instantiates
+Samba public lifecycle/checkpoint/inference/training orchestration code reached
+by those doors; numerical GPU provider binaries/devices are not qualified by
+this CPU boundary compile. No runtime, performance or identity campaign.
+No rented machines. Full outputs, source closure, compiler/flags and binary
+are retained at the path below; compile.json records actual exit status.
+
+Evidence: /Users/andrewhendel/mojolearn-evidence/samba-native-connections-20261028/

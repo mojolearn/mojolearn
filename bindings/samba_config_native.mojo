@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Samba configuration and ordered parameter registry metadata."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -9,7 +10,7 @@ from bindings.py_balanced import py_call, py_setattr, py_setitem
 
 
 def samba_config_init(config: PythonObject, args: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     py_setattr(config, "vocab", py_call(bi.int, args[0]))
     py_setattr(config, "d_model", py_call(bi.int, args[1]))
     var kinds = py_call(bi.list, args[2])
@@ -62,7 +63,7 @@ def samba_config_dict(config: PythonObject) raises -> PythonObject:
     var result = Python.dict()
     py_setitem(result, "vocab", config.vocab)
     py_setitem(result, "d_model", config.d_model)
-    py_setitem(result, "layers", py_call(Python.import_module("builtins").list, config.layers))
+    py_setitem(result, "layers", py_call(native_loaded_module("builtins").list, config.layers))
     py_setitem(result, "n_heads", config.n_heads)
     py_setitem(result, "n_kv_heads", config.n_kv_heads)
     py_setitem(result, "head_dim", config.head_dim)
@@ -74,7 +75,7 @@ def samba_config_dict(config: PythonObject) raises -> PythonObject:
 
 
 def samba_config_from_dict(cls: PythonObject, value: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var args = bi.list()
     for name in [String("vocab"), String("d_model"), String("layers"), String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("tie_embeddings"), String("norm_eps"), String("dropout")]:  # driver-loop: over fixed configuration keys
         _ = py_call(args.append, value[name])
@@ -83,48 +84,54 @@ def samba_config_from_dict(cls: PythonObject, value: PythonObject) raises -> Pyt
     return result
 
 
-def _samba_registry_item(name: String, dims: List[Int]) raises -> PythonObject:
+def _samba_registry_item(name: String, dims: List[Int], tuple_type: PythonObject) raises -> PythonObject:
     var values = Python.list()
     for dimension in dims:  # driver-loop: over tensor shape metadata
         _ = py_call(values.append, dimension)
-    return Python.tuple(PythonObject(name), py_call(Python.import_module("builtins").tuple, values))
+    return Python.tuple(PythonObject(name), py_call(tuple_type, values))
 
 
 def samba_block_shapes(config: PythonObject, kind: String) raises -> PythonObject:
+    return _samba_block_shapes(config, kind, native_loaded_module("builtins").tuple)
+
+
+def _samba_block_shapes(config: PythonObject, kind: String, tuple_type: PythonObject) raises -> PythonObject:
     var result = Python.list()
     var dm = Int(py=config.d_model)
     if kind == "mamba3":
         var di = 2 * dm
         var heads = di // 64
-        _ = py_call(result.append, _samba_registry_item("block_norm.weight", [dm]))
-        _ = py_call(result.append, _samba_registry_item("in_proj.weight", [2 * di + 256 + 3 * heads + 32, dm]))
-        _ = py_call(result.append, _samba_registry_item("dt_bias", [heads]))
-        _ = py_call(result.append, _samba_registry_item("B_norm.weight", [128]))
-        _ = py_call(result.append, _samba_registry_item("C_norm.weight", [128]))
-        _ = py_call(result.append, _samba_registry_item("B_bias", [heads, 128]))
-        _ = py_call(result.append, _samba_registry_item("C_bias", [heads, 128]))
-        _ = py_call(result.append, _samba_registry_item("D", [heads]))
-        _ = py_call(result.append, _samba_registry_item("out_proj.weight", [dm, di]))
+        _ = py_call(result.append, _samba_registry_item("block_norm.weight", [dm], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("in_proj.weight", [2 * di + 256 + 3 * heads + 32, dm], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("dt_bias", [heads], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("B_norm.weight", [128], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("C_norm.weight", [128], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("B_bias", [heads, 128], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("C_bias", [heads, 128], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("D", [heads], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("out_proj.weight", [dm, di], tuple_type))
     else:
         var qw = Int(py=config.n_heads) * Int(py=config.head_dim)
         var kw = Int(py=config.n_kv_heads) * Int(py=config.head_dim)
         var it = Int(py=config.intermediate)
-        _ = py_call(result.append, _samba_registry_item("input_layernorm.weight", [dm]))
-        _ = py_call(result.append, _samba_registry_item("post_attention_layernorm.weight", [dm]))
-        _ = py_call(result.append, _samba_registry_item("q_proj.weight", [qw, dm]))
-        _ = py_call(result.append, _samba_registry_item("k_proj.weight", [kw, dm]))
-        _ = py_call(result.append, _samba_registry_item("v_proj.weight", [kw, dm]))
-        _ = py_call(result.append, _samba_registry_item("o_proj.weight", [dm, qw]))
-        _ = py_call(result.append, _samba_registry_item("gate_proj.weight", [it, dm]))
-        _ = py_call(result.append, _samba_registry_item("up_proj.weight", [it, dm]))
-        _ = py_call(result.append, _samba_registry_item("down_proj.weight", [dm, it]))
+        _ = py_call(result.append, _samba_registry_item("input_layernorm.weight", [dm], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("post_attention_layernorm.weight", [dm], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("q_proj.weight", [qw, dm], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("k_proj.weight", [kw, dm], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("v_proj.weight", [kw, dm], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("o_proj.weight", [dm, qw], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("gate_proj.weight", [it, dm], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("up_proj.weight", [it, dm], tuple_type))
+        _ = py_call(result.append, _samba_registry_item("down_proj.weight", [dm, it], tuple_type))
     return result
 
 
 def samba_registry(config: PythonObject) raises -> PythonObject:
+    # Shared by every registry item and both lazily prepared block schemas.
+    var tuple_type = native_loaded_module("builtins").tuple
     var dm = Int(py=config.d_model)
     var vocab = Int(py=config.vocab)
-    var result = Python.list(_samba_registry_item("embed.weight", [vocab, dm]))
+    var result = Python.list(_samba_registry_item("embed.weight", [vocab, dm], tuple_type))
     var layers = config.layers
     # Admission fixes the native configuration for this GIL-held operation.
     # Every layer of one kind has the same parameter schema; build each kind
@@ -138,19 +145,19 @@ def samba_registry(config: PythonObject) raises -> PythonObject:
         var entries = PythonObject(None)
         if kind == "mamba3":
             if mamba_shapes is None:
-                mamba_shapes = samba_block_shapes(config, kind)
+                mamba_shapes = _samba_block_shapes(config, kind, tuple_type)
             entries = mamba_shapes
         else:
             if attention_shapes is None:
-                attention_shapes = samba_block_shapes(config, kind)
+                attention_shapes = _samba_block_shapes(config, kind, tuple_type)
             entries = attention_shapes
         var prefix = "layers." + String(i) + "."
         for j in range(len(entries)):  # driver-loop: over per-layer tensor registry metadata
             var entry = entries[j]
             _ = py_call(result.append, Python.tuple(PythonObject(prefix + String(entry[0])), entry[1]))
-    _ = py_call(result.append, _samba_registry_item("norm_f.weight", [dm]))
+    _ = py_call(result.append, _samba_registry_item("norm_f.weight", [dm], tuple_type))
     if not Bool(py=config.tie_embeddings):
-        _ = py_call(result.append, _samba_registry_item("lm_head.weight", [vocab, dm]))
+        _ = py_call(result.append, _samba_registry_item("lm_head.weight", [vocab, dm], tuple_type))
     return result
 
 

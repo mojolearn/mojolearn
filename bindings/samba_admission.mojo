@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native admission before Samba can encounter a Python-defined protocol."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_type
 
 
@@ -11,8 +12,7 @@ def _samba_exact(cls: PythonObject, types: PythonObject) raises -> Bool:
     return False
 
 
-def _samba_numpy(cls: PythonObject, admission: PythonObject) raises -> Bool:
-    var bi = Python.import_module("builtins")
+def _samba_numpy(cls: PythonObject, admission: PythonObject, bi: PythonObject) raises -> Bool:
     var module = py_get(admission["modules"], "numpy")
     if module is None or py_type(module) is not admission["module_type"]:
         return False
@@ -34,82 +34,79 @@ def samba_admit_schedule(value: PythonObject, admission: PythonObject) raises:
         raise Error("NotImplementedError: Samba requires ConstantLR, WarmupLinearLR or WarmupCosineLR; Python schedule callbacks cannot execute in the native runtime")
 
 
-def _samba_mapping_key(value: PythonObject, admission: PythonObject, depth: Int) raises:
+def _samba_mapping_key(value: PythonObject, admission: PythonObject, bi: PythonObject, depth: Int) raises:
     if depth > 64:
         raise Error("TypeError: Samba mapping keys exceed the native metadata limit")
-    var bi = Python.import_module("builtins")
     var cls = py_type(value)
-    if _samba_exact(cls, admission["scalar_types"]) or _samba_numpy(cls, admission):
+    if _samba_exact(cls, admission["scalar_types"]) or _samba_numpy(cls, admission, bi):
         return
     if cls is bi.tuple:
         for i in range(len(value)):  # driver-loop: over native tuple key elements before hashing
-            _samba_mapping_key(value[i], admission, depth + 1)
+            _samba_mapping_key(value[i], admission, bi, depth + 1)
         return
     raise Error("TypeError: Samba mapping keys require native scalar types without Python hash or equality hooks")
 
 
-def _samba_metadata(value: PythonObject, admission: PythonObject, depth: Int = 0) raises:
+def _samba_metadata_with_types(value: PythonObject, admission: PythonObject, bi: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: Samba scalar metadata exceeds the native nesting limit")
-    var bi = Python.import_module("builtins")
     var cls = py_type(value)
     if _samba_exact(cls, admission["scalar_types"]):
         return
-    if _samba_numpy(cls, admission):
+    if _samba_numpy(cls, admission, bi):
         var module = admission["modules"]["numpy"]
         if cls is not py_call(bi.object.__getattribute__, module, "__dict__")["ndarray"]:
             return
     if cls is bi.list or cls is bi.tuple:
         for i in range(len(value)):  # driver-loop: over scalar configuration and shape metadata
-            _samba_metadata(value[i], admission, depth + 1)
+            _samba_metadata_with_types(value[i], admission, bi, depth + 1)
         return
     if _samba_exact(cls, admission["mapping_types"]):
         var pairs = py_call(bi.list, value.items())
         for i in range(len(pairs)):  # driver-loop: over already admitted metadata mapping entries
-            _samba_mapping_key(pairs[i][0], admission, depth + 1)
-            _samba_metadata(pairs[i][1], admission, depth + 1)
+            _samba_mapping_key(pairs[i][0], admission, bi, depth + 1)
+            _samba_metadata_with_types(pairs[i][1], admission, bi, depth + 1)
         return
     raise Error("TypeError: Samba scalar and shape metadata cannot use array or object conversion protocols")
 
 
-def samba_admit_value(value: PythonObject, admission: PythonObject, depth: Int = 0) raises:
+def _samba_admit_value_with_types(value: PythonObject, admission: PythonObject, bi: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: Samba input nesting exceeds the native metadata limit")
-    var bi = Python.import_module("builtins")
     var cls = py_type(value)
     if _samba_exact(cls, admission["scalar_types"]) or _samba_exact(cls, admission["opaque_types"]):
         return
     if cls is bi.list or cls is bi.tuple:
         for i in range(len(value)):  # driver-loop: over admitted native container elements
-            samba_admit_value(value[i], admission, depth + 1)
+            _samba_admit_value_with_types(value[i], admission, bi, depth + 1)
         return
     if _samba_exact(cls, admission["mapping_types"]):
         if cls is admission["defaultdict_type"]:
             var factory = value.default_factory
-            var numpy_factory = py_type(factory) is bi.type and _samba_numpy(factory, admission)
+            var numpy_factory = py_type(factory) is bi.type and _samba_numpy(factory, admission, bi)
             if factory is not None and not _samba_exact(factory, admission["native_factories"]) and not numpy_factory:
                 raise Error("TypeError: Samba mapping defaults require native builtin constructors; Python callbacks cannot execute")
         var pairs = py_call(bi.list, value.items())
         for i in range(len(pairs)):  # driver-loop: over native mapping entries before lookup
-            _samba_mapping_key(pairs[i][0], admission, depth + 1)
-            samba_admit_value(pairs[i][1], admission, depth + 1)
+            _samba_mapping_key(pairs[i][0], admission, bi, depth + 1)
+            _samba_admit_value_with_types(pairs[i][1], admission, bi, depth + 1)
         return
     if cls is admission["array_class"]:
         var getters = admission["array_getters"]
         var names = admission["array_metadata"]
         for i in range(len(names)):  # driver-loop: over native Array slot metadata
-            _samba_metadata(py_call(getters[names[i]], value), admission, depth + 1)
+            _samba_metadata_with_types(py_call(getters[names[i]], value), admission, bi, depth + 1)
         var view = py_call(getters["_mv"], value)
         if py_type(view) is not bi.memoryview:
             raise Error("TypeError: Samba Array storage requires a native memoryview")
-        samba_admit_value(view, admission, depth + 1)
+        _samba_admit_value_with_types(view, admission, bi, depth + 1)
         return
     if cls is bi.memoryview:
         var owner = value.obj
-        if owner is not None and not _samba_exact(py_type(owner), admission["buffer_types"]) and not _samba_numpy(py_type(owner), admission):
+        if owner is not None and not _samba_exact(py_type(owner), admission["buffer_types"]) and not _samba_numpy(py_type(owner), admission, bi):
             raise Error("TypeError: Samba requires a memoryview over a native buffer exporter")
         return
-    if _samba_exact(cls, admission["buffer_types"]) or _samba_exact(cls, admission["path_types"]) or _samba_numpy(cls, admission):
+    if _samba_exact(cls, admission["buffer_types"]) or _samba_exact(cls, admission["path_types"]) or _samba_numpy(cls, admission, bi):
         return
     var records = admission["records"]
     for i in range(len(records)):  # driver-loop: over connected model/config/state class identities
@@ -133,7 +130,7 @@ def samba_admit_value(value: PythonObject, admission: PythonObject, depth: Int =
                     if key == "lr_schedule":
                         samba_admit_schedule(item, admission)
                     elif py_contains(admission["metadata_fields"], name):
-                        _samba_metadata(item, admission, depth + 1)
+                        _samba_metadata_with_types(item, admission, bi, depth + 1)
                     elif key == "_runtime_lock":
                         if item is not None and not _samba_exact(py_type(item), admission["opaque_types"]):
                             raise Error("TypeError: Samba runtime locks require native lock owners")
@@ -141,16 +138,18 @@ def samba_admit_value(value: PythonObject, admission: PythonObject, depth: Int =
                         if py_type(item) is not bi.list and py_type(item) is not bi.tuple:
                             raise Error("TypeError: Samba owner sequences require native lists or tuples")
                         if key == "offsets" or (key == "layers" and cls is admission["config_class"]):
-                            _samba_metadata(item, admission, depth + 1)
+                            _samba_metadata_with_types(item, admission, bi, depth + 1)
                     elif key == "_w" or key == "arrays":
                         if py_type(item) is not bi.list and py_type(item) is not bi.tuple and not _samba_exact(py_type(item), admission["mapping_types"]):
                             raise Error("TypeError: Samba parameter registries require native containers")
-                    samba_admit_value(item, admission, depth + 1)
+                    _samba_admit_value_with_types(item, admission, bi, depth + 1)
             return
     raise Error("TypeError: Samba requires native input types; Python-defined protocols and subclasses are not supported")
 
 
 def samba_admit(operation: String, values: PythonObject, context: PythonObject) raises:
+    # One checked builtin connection for this GIL-held recursive admission.
+    var bi = native_loaded_module("builtins")
     var admission = context["admission"]
     var guards = admission["guards"]
     for i in range(len(guards)):  # driver-loop: over registered runtime record/Array layouts
@@ -164,36 +163,50 @@ def samba_admit(operation: String, values: PythonObject, context: PythonObject) 
     if operation == "construct":
         # The public wrapper creates exact tuples; check this before indexing
         # so a direct C-boundary call cannot execute an arbitrary __getitem__.
-        var bi = Python.import_module("builtins")
         if py_type(values) is not bi.tuple or len(values) != 2 or py_type(values[1]) is not bi.tuple or len(values[1]) != 11:
             raise Error("TypeError: Samba constructor requires its native argument tuple")
         samba_admit_schedule(values[1][7], admission)
-    samba_admit_value(values, admission)
+    _samba_admit_value_with_types(values, admission, bi)
     # Type identity alone is insufficient: Array is an admitted buffer, but
     # bool(Array), list(Array), or scalar conversion is a Python operation.
     if operation == "initialize" or operation == "from_dict":
-        _samba_metadata(values[1], admission)
+        _samba_metadata_with_types(values[1], admission, bi)
     elif operation == "construct":
         for i in [3, 4, 5, 6, 8, 9, 10]:  # driver-loop: over scalar constructor metadata slots
-            _samba_metadata(values[1][i], admission)
+            _samba_metadata_with_types(values[1][i], admission, bi)
     elif operation == "allocate_state" or operation == "state_construct":
-        _samba_metadata(values[1], admission)
-        _samba_metadata(values[2], admission)
+        _samba_metadata_with_types(values[1], admission, bi)
+        _samba_metadata_with_types(values[2], admission, bi)
         if operation == "state_construct":
-            var bi = Python.import_module("builtins")
             if py_type(values[3]) is not bi.list and py_type(values[3]) is not bi.tuple:
                 raise Error("TypeError: Samba state layers require a native list or tuple")
     elif operation == "generator_init" or operation == "generator_restore":
-        _samba_metadata(values[1], admission)
+        _samba_metadata_with_types(values[1], admission, bi)
         if operation == "generator_init":
-            _samba_metadata(values[2], admission)
+            _samba_metadata_with_types(values[2], admission, bi)
     elif operation == "snapshot":
-        _samba_metadata(values[1], admission)
+        _samba_metadata_with_types(values[1], admission, bi)
     elif operation == "checkpoint_load":
-        _samba_metadata(values[2], admission)
+        _samba_metadata_with_types(values[2], admission, bi)
     elif operation == "gradients":
-        _samba_metadata(values[3], admission)
-        _samba_metadata(values[4], admission)
+        _samba_metadata_with_types(values[3], admission, bi)
+        _samba_metadata_with_types(values[4], admission, bi)
     elif operation == "model_gradients":
         for i in [3, 4, 5]:  # driver-loop: over count, RNG stream and offset metadata
-            _samba_metadata(values[i], admission)
+            _samba_metadata_with_types(values[i], admission, bi)
+
+
+# Existing helper entry points also serve parallel-neural admission. Keep their
+# signatures and checks; each independent walk acquires one native connection.
+def _samba_metadata(value: PythonObject, admission: PythonObject, depth: Int = 0) raises:
+    if depth > 64:
+        raise Error("TypeError: Samba scalar metadata exceeds the native nesting limit")
+    var bi = native_loaded_module("builtins")
+    _samba_metadata_with_types(value, admission, bi, depth)
+
+
+def samba_admit_value(value: PythonObject, admission: PythonObject, depth: Int = 0) raises:
+    if depth > 64:
+        raise Error("TypeError: Samba input nesting exceeds the native metadata limit")
+    var bi = native_loaded_module("builtins")
+    _samba_admit_value_with_types(value, admission, bi, depth)

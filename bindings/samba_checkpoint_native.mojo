@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native, bounded streaming for the existing Samba v2 checkpoint format."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.native_json import native_path, native_path_exists, native_json_parse
 from bindings.native_transport import _transport_json
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
@@ -17,7 +18,7 @@ comptime SAMBA_TRANSFER_CHUNK = 1048576
 
 
 def _checkpoint_path(value: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var cls = py_type(value)
     var module = String(cls.__module__)
     var name = String(cls.__name__)
@@ -31,7 +32,7 @@ def _checkpoint_names() -> List[String]:
 
 
 def _checkpoint_magic() raises -> PythonObject:
-    return py_call(PythonObject("MOJOLEARN-SAMBA").encode, "ascii") + py_call(Python.import_module("builtins").bytes, py_ints([2, 10]))
+    return py_call(PythonObject("MOJOLEARN-SAMBA").encode, "ascii") + py_call(native_loaded_module("builtins").bytes, py_ints([2, 10]))
 
 
 def _checkpoint_hash() -> Sha256:
@@ -39,7 +40,7 @@ def _checkpoint_hash() -> Sha256:
 
 
 def _checkpoint_raw(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if String(Python.import_module("sys").byteorder) != "little":
         raise Error("Samba streamed checkpoint requires a little-endian host")
     var own = py_type(value) is context["neural"]["array_class"]
@@ -51,7 +52,7 @@ def _checkpoint_raw(value: PythonObject, code: String, context: PythonObject) ra
 
 
 def _checkpoint_digest(raw: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var hash = _checkpoint_hash()
     for start in range(0, len(raw), SAMBA_TRANSFER_CHUNK):  # driver-loop: over bounded file hashing chunks
         sha256_update(hash, raw[py_call(bi.slice, start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))])
@@ -59,7 +60,7 @@ def _checkpoint_digest(raw: PythonObject) raises -> PythonObject:
 
 
 def _checkpoint_validate(metadata: PythonObject, descriptors: PythonObject, context: PythonObject) raises:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(metadata) is not bi.dict or String(py_get(metadata, "schema")) != "mojolearn.samba-stack-state.v1" or String(py_get(metadata, "profile")) != "mojolearn.samba-stack.fp32.v1":
         raise Error("Samba checkpoint state schema mismatch")
     var config = samba_config_from_dict(context["config_class"], metadata["config"])
@@ -96,7 +97,7 @@ def _checkpoint_validate(metadata: PythonObject, descriptors: PythonObject, cont
 
 def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: PythonObject) raises -> PythonObject:
     var state = samba_snapshot(model, False, context)
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var os = Python.import_module("posix")
     var path = _checkpoint_path(value)
     var names = _checkpoint_names()
@@ -169,7 +170,7 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
 
 
 def _checkpoint_read_stream(stream: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var size_bytes = py_call(stream.read, 8)
     if len(size_bytes) != 8:
         raise Error("Samba checkpoint truncated header length")
@@ -218,7 +219,7 @@ def _checkpoint_read_stream(stream: PythonObject, context: PythonObject) raises 
 
 
 def _checkpoint_read_legacy(stream: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var encoded = py_call(stream.read, 268435457)
     if len(encoded) > 268435456:
         raise Error("Samba checkpoint exceeds the legacy size limit")
@@ -246,7 +247,7 @@ def samba_checkpoint_read(value: PythonObject, context: PythonObject) raises -> 
     var path = _checkpoint_path(value)
     if not native_path_exists(path):
         raise Error("FileNotFoundError: Samba checkpoint does not exist")
-    var stream = py_call(Python.import_module("builtins").open, path, "rb")
+    var stream = py_call(native_loaded_module("builtins").open, path, "rb")
     var result = PythonObject(None)
     try:
         var magic = _checkpoint_magic()
@@ -266,6 +267,6 @@ def samba_checkpoint_load(cls: PythonObject, path: PythonObject, mode: PythonObj
     var state = samba_checkpoint_read(path, context)
     if mode is not None:
         py_setitem(state, "numeric_mode", mode)
-    var selected = py_call(Python.import_module("builtins").dict, context)
+    var selected = py_call(native_loaded_module("builtins").dict, context)
     py_setitem(selected, "model_class", cls)
     return samba_from_state(state, selected)

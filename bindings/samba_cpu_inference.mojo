@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native ownership of the existing CPU-only SambaInference surface."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.generation_buffers import generation_initialize_binding, generation_copy, py_ints
 from bindings.samba_state_native import samba_fields, _samba_registry
 from bindings.samba_config_native import samba_config_from_dict, samba_block_shapes
@@ -13,7 +14,7 @@ from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_typ
 
 def samba_inference_construct(model: PythonObject, config: PythonObject, weights: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if not Bool(py=py_call(bi.isinstance, config, context["config_class"])):
         raise Error("TypeError: SambaInference: config must be a SambaConfig")
     if py_type(weights) is not bi.dict:
@@ -80,7 +81,7 @@ def samba_inference_construct(model: PythonObject, config: PythonObject, weights
 
 def samba_inference_parameters(model: PythonObject) raises -> PythonObject:
     var arrays = samba_fields(model)["_w"]
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var keys = py_call(bi.list, arrays)
     var result = bi.dict()
     for i in range(len(keys)):  # driver-loop: over independent public weight copies
@@ -91,7 +92,7 @@ def samba_inference_parameters(model: PythonObject) raises -> PythonObject:
 
 def samba_inference_checkpoint(cls: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
     var state = samba_checkpoint_read(path, context)
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if String(py_get(state, "schema")) != "mojolearn.samba-stack-state.v1" or String(py_get(state, "profile")) != "mojolearn.samba-stack.fp32.v1":
         raise Error("SambaInference: checkpoint schema/profile mismatch")
     var config = samba_config_from_dict(context["config_class"], state["config"])
@@ -113,6 +114,6 @@ def samba_inference_checkpoint(cls: PythonObject, path: PythonObject, context: P
 
 
 def samba_inference_repr(model: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var config = samba_fields(samba_fields(model)["config"])
     return PythonObject("SambaInference(layers=" + String(py_call(bi.repr, py_call(bi.list, config["layers"]))) + ", d_model=" + String(config["d_model"]) + ", vocab=" + String(config["vocab"]) + ")")

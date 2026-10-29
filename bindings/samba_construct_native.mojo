@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Samba registry, explicit-weight and seeded constructor ownership."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from core.samba_construct_native_impl import samba_fill_ones
 from std.math import sqrt
 from std.memory import memcpy
@@ -15,7 +16,7 @@ from bindings.py_balanced import py_call, py_setitem
 
 def samba_load_weights(model: PythonObject, weights: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
     var names = fields["names"]
     if Bool(py=py_call(bi.set, names) != py_call(bi.set, weights)):
@@ -96,7 +97,7 @@ def _samba_initialize_parameters(model: PythonObject, context: PythonObject) rai
 
 def samba_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var config = args[0]
     if not Bool(py=py_call(bi.isinstance, config, context["config_class"])):
         raise Error("TypeError: SambaStack: config must be a SambaConfig")

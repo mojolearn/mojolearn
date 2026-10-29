@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Complete native Samba forward/backward over existing numerical kernels."""
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_training_ids_into
@@ -82,7 +83,7 @@ def _samba_close_tapes(tapes: PythonObject) raises:
 
 def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonObject, num_items: PythonObject, stream: PythonObject, token_offset: Int, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
     var entries = samba_entries(context, fields["numeric_mode"])

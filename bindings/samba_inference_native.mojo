@@ -7,6 +7,7 @@ module does not claim that all public state has native struct ownership.
 """
 from providers.python.samba_resident_pyapi import samba_resident_native_forward, samba_resident_provider
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from providers.python.samba_execution_pyapi import samba_provider_forward
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
@@ -43,7 +44,7 @@ def _m3_names() -> List[String]:
 
 
 def samba_state_construct(state: PythonObject, b: PythonObject, maximum: PythonObject, layers: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = samba_fields(state)
     py_setitem(fields, "batch_size", py_call(bi.int, b))
     py_setitem(fields, "max_tokens", py_call(bi.int, maximum))
@@ -53,7 +54,7 @@ def samba_state_construct(state: PythonObject, b: PythonObject, maximum: PythonO
 
 def samba_allocate(model: PythonObject, batch: PythonObject, maximum: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     # Integers only (anything with __index__): a str is not parsed and a
     # bool is not counted as 1.
     if py_type(batch) is bi.bool or py_type(maximum) is bi.bool:
@@ -61,7 +62,7 @@ def samba_allocate(model: PythonObject, batch: PythonObject, maximum: PythonObje
     var b = 0
     var cap = 0
     try:
-        var operator = Python.import_module("operator")
+        var operator = native_loaded_module("operator")
         b = Int(py=py_call(operator.index, batch))
         cap = Int(py=py_call(operator.index, maximum))
     except error:
@@ -93,7 +94,7 @@ def samba_allocate(model: PythonObject, batch: PythonObject, maximum: PythonObje
 
 
 def _samba_block_entries(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var nc = context["neural"]
     if Bool(py=py_call(bi.isinstance, block, nc["block_classes"]["cpu"]["mamba3"])):
         return _model_bindings(PythonObject("cpu"), "mamba3", nc, PythonObject("identical"))["mamba3"]
@@ -119,7 +120,7 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var addresses: List[Int] = [generation_address(x, keep)]
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     # an installed owned snapshot is read on the device (`mamba3_state_owned`)
     var owned = py_get(fields, "_owned_generation")
     var canonical = entries.canonical if Bool(py=py_call(bi.hasattr, entries, "canonical")) else entries
@@ -190,7 +191,7 @@ def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject,
 def _samba_resident_forward(fields: PythonObject, config: PythonObject, entries: PythonObject, ids: PythonObject) raises -> PythonObject:
     if py_get(fields, "_native_primitives") is not None:
         return samba_resident_native_forward(fields, config, entries, ids)
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if Float64(py=config["dropout"]) != 0.0:
         return PythonObject(None)
     var enabled = True
@@ -223,7 +224,7 @@ def _samba_resident_forward(fields: PythonObject, config: PythonObject, entries:
 
 
 def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var own = py_type(value) is context["neural"]["array_class"]
     var view = value._mv if own else py_call(bi.memoryview, value)
     var shape = value.shape if own else view.shape
@@ -239,7 +240,7 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     var fmt = String(py_call(view.format.lstrip, "=@<"))
     if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
         raise Error("Samba: inputs must be native-endian integer ids")
-    var packed = py_call(Python.import_module("array").array, fmt)
+    var packed = py_call(native_loaded_module("array").array, fmt)
     _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
     var column_major = own and String(value.order) == "F"
     var ids = generation_array([b, l], "i")
@@ -257,7 +258,7 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
 def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject, lengths: PythonObject,
                   step: Bool, resident: Bool, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if step and state is None:
         raise Error("SambaStack.step: state is required")
     if lengths is not None and state is not None:

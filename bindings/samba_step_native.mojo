@@ -9,6 +9,7 @@ from providers.python.samba_resident_pyapi import samba_resident_provider, samba
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_execute
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -35,7 +36,7 @@ def _samba_moments(opt: PythonObject, context: PythonObject) raises -> PythonObj
 def _samba_open_optimizer(opt: PythonObject, entries: PythonObject, context: PythonObject, provider: PythonObject) raises:
     if opt["_res"] is not None or opt["_resident_wanted"] is PythonObject(False):
         return
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var enabled = getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1") != "0" and getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") == "1"
     for name in [String("optimizer_resident_open"), String("optimizer_resident_close"), String("optimizer_resident_download"), String("optimizer_resident_upload"), String("optimizer_resident_step")]:  # driver-loop: over the existing resident optimizer ABI
         enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
@@ -105,12 +106,12 @@ def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObje
     py_setitem(result, "step", opt["t"])
     py_setitem(result, "total_norm", opt["total_norm_"])
     py_setitem(fields, "last_", result)
-    return py_call(Python.import_module("builtins").dict, result)
+    return py_call(native_loaded_module("builtins").dict, result)
 
 
 def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject,
                          accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var config = samba_fields(fields["config"])
     if Float64(py=config["dropout"]) != 0.0:
         return PythonObject(None)
@@ -173,7 +174,7 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
 def _samba_parameter_pack(fields: PythonObject, opt: PythonObject, context: PythonObject) raises -> PythonObject:
     # Parameters may have been rebound after construction. Preserve the
     # optimizer's writable C-buffer interface instead of assuming flat views.
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var params = opt["params"]
     if len(params) != len(fields["names"]):
         raise Error("Samba: optimizer parameter registry has changed")
@@ -222,7 +223,7 @@ def _samba_parameter_pack(fields: PythonObject, opt: PythonObject, context: Pyth
 
 
 def _samba_parameter_publish(flat: PythonObject, views: PythonObject, fields: PythonObject) raises:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var raw = py_call(flat._mv.cast, "B")
     for i in range(len(views)):  # driver-loop: over caller-owned parameter write-back buffers
         var begin = 4 * Int(py=fields["offsets"][i])
@@ -232,7 +233,7 @@ def _samba_parameter_publish(flat: PythonObject, views: PythonObject, fields: Py
 
 def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
     var opt = samba_fields(fields["optimizer"])
