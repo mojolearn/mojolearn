@@ -19,7 +19,15 @@ class NamespaceAliases(unittest.TestCase):
     def test_reassigned_or_shadowed_alias_is_not_invented(self):
         for body in ("M = ml.models\nM = other\nM.CausalLM.load(path)",
                      "M = ml.models\ndef helper(M):\n    M.CausalLM.load(path)",
-                     "M = other.models\nM.CausalLM.load(path)"):
+                     "M = other.models\nM.CausalLM.load(path)",
+                     "M = ml.models\ndef helper(*M):\n    M.CausalLM.load(path)",
+                     "M = ml.models\nf = lambda **M: M.CausalLM.load(path)",
+                     "M = ml.models\nfor M in others:\n    M.CausalLM.load(path)",
+                     "M = ml.models\nwith resource() as M:\n    M.CausalLM.load(path)",
+                     "M = ml.models\ntry:\n    work()\nexcept Exception as M:\n    M.CausalLM.load(path)",
+                     "M = ml.models\nimport other as M\nM.CausalLM.load(path)",
+                     "M = ml.models\ndef M():\n    pass\nM.CausalLM.load(path)",
+                     "M = ml.models\ndel M\nM.CausalLM.load(path)"):
             self.assertNotIn("CausalLM", self.names(body))
 
     def test_buffer_constructor_does_not_override_device_door(self):

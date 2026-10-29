@@ -312,14 +312,42 @@ def _ml_attrs(node):
         if sub is not node and isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             # An inner argument shadows an outer alias. Leave that ambiguous
             # name unresolved rather than borrowing the outer namespace.
-            for arg in sub.args.posonlyargs + sub.args.args + sub.args.kwonlyargs:
+            args = sub.args.posonlyargs + sub.args.args + sub.args.kwonlyargs
+            args += [arg for arg in (sub.args.vararg, sub.args.kwarg) if arg is not None]
+            for arg in args:
                 assignments.setdefault(arg.arg, []).append(None)
         if isinstance(sub, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
             targets = sub.targets if isinstance(sub, ast.Assign) else [sub.target]
             for target in targets:
                 for name in ast.walk(target):
-                    if isinstance(name, ast.Name):
+                    if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
                         assignments.setdefault(name.id, []).append(getattr(sub, "value", None))
+        elif isinstance(sub, (ast.For, ast.AsyncFor, ast.comprehension)):
+            for name in ast.walk(sub.target):
+                if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
+                    assignments.setdefault(name.id, []).append(None)
+        elif isinstance(sub, (ast.With, ast.AsyncWith)):
+            for item in sub.items:
+                if item.optional_vars is not None:
+                    for name in ast.walk(item.optional_vars):
+                        if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
+                            assignments.setdefault(name.id, []).append(None)
+        elif isinstance(sub, ast.ExceptHandler) and sub.name:
+            assignments.setdefault(sub.name, []).append(None)
+        elif isinstance(sub, (ast.Import, ast.ImportFrom)):
+            for name in sub.names:
+                assignments.setdefault(name.asname or name.name.split(".")[0], []).append(None)
+        elif sub is not node and isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            assignments.setdefault(sub.name, []).append(None)
+        elif isinstance(sub, ast.Delete):
+            for target in sub.targets:
+                for name in ast.walk(target):
+                    if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Del):
+                        assignments.setdefault(name.id, []).append(None)
+        elif isinstance(sub, (ast.MatchAs, ast.MatchStar)) and sub.name:
+            assignments.setdefault(sub.name, []).append(None)
+        elif isinstance(sub, ast.MatchMapping) and sub.rest:
+            assignments.setdefault(sub.rest, []).append(None)
     aliases = {} if "ml" in assignments else {"ml": ()}
 
     def path(expr):
