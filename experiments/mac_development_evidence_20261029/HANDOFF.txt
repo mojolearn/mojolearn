@@ -1,0 +1,27 @@
+Mac retained development evidence repair,2026-10-29
+
+Actual33-group preparation initially exposed three narrow adapter differences:
+1. Actual workers10 were reconstructed with historical defaults. Record positive
+   decimal workers per binding, preserve mixed values, refuse missing/malformed
+   or conflicting records. Worker changes still change fingerprints.
+2. Merged roots compile canonical public exports rather than standalone entry
+   files. Share the existing Linux entry_proof unchanged: verify recorded root
+   hash, tested templates, canonical imports/PyInit bodies and entry bytes.
+   Missing substantive sources, changed wrappers, wrong logical bindings and
+   mismatching actually-consumed standalone entries remain refused. Check the
+   original receipt digest before reading its recorded root fields.
+3. MOJOLEARN_MERGED_PYTHON is a validated absolute glue interpreter placement,
+   used for index generation rather than compilation. Treat it like the existing
+   Linux adapter; original environment/argv remain retained. Numerical flags and
+   compiler workers remain exact inputs; relative glue placement is refused.
+
+Final focused tests57+11subtests pass0;3sourceguards pass0. Actual retained33GPU
+aggregate now validates33/33, refuses0, reuses33against095, and33central admission
+requirements are reuse. No native build, numerical runtime or measurement ran.
+Earlier failed preparations are retained, including initial partial aggregate
+refusal, wrong workers and missing standalone entry proof. No producer document
+was rewritten. Existing Linux helper behavior and report-facts schemas stay intact.
+
+This is compilation evidence only. NewArraytokenizer and package setup repairs
+await a later product freeze; identity/vendor/PTX/release gates remain pending.
+Full evidence:~/mojolearn-evidence/mac-development-workers-20261029/.

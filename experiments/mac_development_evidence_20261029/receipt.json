@@ -1,0 +1,81 @@
+{
+  "source_commit": "cac7e08f5bb3db335b8f01d22bd18d8c8920c3c0",
+  "tests": {
+    "exit_code": 0,
+    "tests": 57,
+    "subtests": 11
+  },
+  "guards": [
+    {
+      "guard": "no_host_routes",
+      "exit_code": 0
+    },
+    {
+      "guard": "no_python_in_kernels",
+      "exit_code": 0
+    },
+    {
+      "guard": "no_compute_in_shells",
+      "exit_code": 0
+    }
+  ],
+  "actual": {
+    "preparation_exit": 0,
+    "validated": 33,
+    "refused": 0,
+    "reusable": 33,
+    "admission_exit": 0
+  },
+  "native_builds": 0,
+  "product_runtime_runs": 0,
+  "evidence": [
+    {
+      "name": "tests-pinned.log",
+      "path": "/Users/andrewhendel/mojolearn-evidence/mac-development-workers-20261029/tests-pinned.log",
+      "sha256": "6a25cc58593d0792ecb2795e57b8cf19e48cda20d83d1d8827118d2285b883d0",
+      "bytes": 108
+    },
+    {
+      "name": "tests-pinned.exit",
+      "path": "/Users/andrewhendel/mojolearn-evidence/mac-development-workers-20261029/tests-pinned.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "name": "guards-pinned.json",
+      "path": "/Users/andrewhendel/mojolearn-evidence/mac-development-workers-20261029/guards-pinned.json",
+      "sha256": "500cf0cf0b808ab8853c9023ac166894c04b86c591ec1ce85771a59632958203",
+      "bytes": 192
+    },
+    {
+      "name": "actual-qualified-summary.json",
+      "path": "/Users/andrewhendel/mojolearn-evidence/mac-development-workers-20261029/actual-qualified-summary.json",
+      "sha256": "ce302d3b80f9ccab66b541d8f62a7e7fe1761cdac0d24c6a2dfecd5a042a5fb8",
+      "bytes": 252
+    },
+    {
+      "name": "actual-qualified.log",
+      "path": "/Users/andrewhendel/mojolearn-evidence/mac-development-workers-20261029/actual-qualified.log",
+      "sha256": "069074b0c8711e8d3f80d9e1a05639c11a9b092aec6eab962a3f2be6cb5eaac1",
+      "bytes": 222
+    },
+    {
+      "name": "actual-qualified.exit",
+      "path": "/Users/andrewhendel/mojolearn-evidence/mac-development-workers-20261029/actual-qualified.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "name": "admit.json",
+      "path": "/Users/andrewhendel/mojolearn-evidence/mac-development-workers-20261029/admit.json",
+      "sha256": "208a9331dc02a3e1c069dd05113f7f8680bffd5cf84a291e8fc4c000b3426927",
+      "bytes": 5127
+    },
+    {
+      "name": "admit.exit",
+      "path": "/Users/andrewhendel/mojolearn-evidence/mac-development-workers-20261029/admit.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    }
+  ]
+}
