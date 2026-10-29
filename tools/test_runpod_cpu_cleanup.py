@@ -184,3 +184,26 @@ def test_retention_preserves_nested_compiler_links_without_archiving_targets(tmp
             member = archive.getmember('leg_out/source/' + name)
             assert member.issym() and member.linkname == target
         assert archive.extractfile('leg_out/source/binding.mojo').read() == b'# exact fault-arm source\n'
+
+
+def test_cpu_readiness_switches_to_v2_before_status_and_guard_readback(tmp_path):
+    """A live v2 SSH endpoint remains reachable after deprecated v1 status403."""
+    source = RUNNER.read_text()
+    begin = source.index('rp_select_api 2\n_deadline=')
+    end = source.index('T_SSH=$(now)', begin)
+    body = source[begin:end]
+    output = tmp_path / 'calls'
+    env = dict(os.environ, CALLS=str(output), POD_ID='owned123', COST_HR='.56', READY_TIMEOUT='900')
+    fixture = r"""
+set -eu
+now() { echo 100; }
+rp_select_api() { RP_API_VERSION=$1; RP="https://invalid.test/v$1"; }
+rp_call() { printf '%s %s\n' "$1" "$2" >> "$CALLS"; test "$2" = https://invalid.test/v2/pods/owned123; }
+rp_py() { test "$RP_API_VERSION" = 2; case "$1" in ssh) echo '-p 23456 root@192.0.2.5';; cost) echo .56;; esac; }
+bssh() { test "$SSH_TARGET" = '-p 23456 root@192.0.2.5'; echo SSH-OK; }
+die() { exit 90; }
+"""
+    result = subprocess.run(['bash', '-c', fixture + body], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert output.read_text().splitlines() == ['GET https://invalid.test/v2/pods/owned123']
+    assert 'RUNPOD_API_VERSION=2' in source[source.index('ARCHIVE_STATE=', end):]
