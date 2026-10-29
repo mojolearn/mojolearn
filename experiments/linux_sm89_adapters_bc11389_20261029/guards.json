@@ -1,0 +1,26 @@
+{
+  "tested_commit": "cf2b2fe224c20dcfb1fffd9ee87995f96121d95d",
+  "scope": "static source guards only",
+  "checks": [
+    {
+      "name": "host",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/linux-adapter-build-bc11389-20261029/guard-host.log"
+    },
+    {
+      "name": "fence",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/linux-adapter-build-bc11389-20261029/guard-fence.log"
+    },
+    {
+      "name": "python",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/linux-adapter-build-bc11389-20261029/guard-python.log"
+    },
+    {
+      "name": "shell",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/linux-adapter-build-bc11389-20261029/guard-shell.log"
+    }
+  ]
+}

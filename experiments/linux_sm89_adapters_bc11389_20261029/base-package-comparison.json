@@ -1,0 +1,11 @@
+{
+  "base_files": 1099,
+  "new_files": 1103,
+  "changed_existing": [],
+  "added": [
+    "_adapters/adapters.json",
+    "_adapters/libmojolearn_adapter.so",
+    "_adapters/mojolearn_ops.mojoc",
+    "_adapters/mojolearn_torch.so"
+  ]
+}

@@ -1,24 +1,26 @@
-Linux sm89 framework adapter compilation and private static staging
+Linux sm89 adapter compilation and static package assembly
 
-Branch lane/linux-adapter-build-bc11389-20261029; evidence-only batch.
-Exact numerical/source freeze bc11389e6896f918b95a404b8cf2bb97ad2ace09.
-No current Linux ELF adapter or Linux mojolearn wheel was found in retained Mac evidence; peer confirmed its PTX/AMD lanes had no current adapter bundle. Reused no old wheel.
+Branch: lane/linux-adapter-build-bc11389-20261029. Evidence only; no product changes.
+Source freeze: bc11389e6896f918b95a404b8cf2bb97ad2ace09.
 
-Supported packaging/adapters/build.sh cuda sm_89 completed0 in52.070s:
-- libmojolearn_adapter.so: native SM89/x86-64-v3, identical define, NVIDIA column, default optimization,16 compiler workers.
-- mojolearn_ops.mojoc: pinned MAX custom-operation package.
-- mojolearn_torch.so: C++20/O2 registration linked against fetched pinned Torch2.13.0 CUDA wheel, CXX11 ABI1.
-Actual cgroup allocation16cores/31,762,259,968bytes memory; all16workers used as configured, no saturation claim. Mojo1.0.0(ed45d567) executableSHA0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa. Original argv, source157-input snapshot/full source archive, compiler+lock hashes, Torchwheel SHA and bytes, link/symbol audits retained. No O0, no fast, no kernel owner rebuild.
+No current Linux adapter binary or Linux wheel was found in retained Mac evidence. The PTX/AMD peer confirmed its retained artifacts had no current adapter bundle. No old wheel was used.
 
-Two32-vCPU creates refused HTTP500 with explicit provider inventory-unavailable errors; subsequent listings showed no pod. Original logs retained; name guards cancelled only after absence proof. A16-vCPU lease succeeded, with exact source transferred via signedR2 and SHA checked instead of known slow MacSSH bulk path.
+The supported packaging/adapters/build.sh cuda sm_89 command passed in 52.070 seconds. It produced the native adapter bridge, the MAX package, and the Torch C++ registration against pinned Torch 2.13.0 CUDA (CXX11 ABI 1). Native settings were sm89/x86-64-v3, identical mode, NVIDIA column, default optimization, and all 16 allocated compiler workers. The cgroup allocation was 16 cores and 31,762,259,968 bytes of memory; configured workers do not prove saturation. No fast build, O0 override, or public kernel rebuild occurred.
 
-Canonical Linux stage_libs + adapter manifest finalize passed0 in a PRIVATE COPY of the fullbc package. All79 public image bytes asserted unchanged. The new payload adds only3adapter files+manifest plus standard dependency staging; it does not mutate the active API verifier install.
+The original commands, 157 captured input hashes and source bytes, complete frozen source archive, exact Mojo executable/lock hashes, original Torch wheel and extracted build files, symbol/dependency audits, and complete logs are retained. Mojo was 1.0.0 (ed45d567), executable SHA 0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa.
+
+Canonical Linux staging and adapter manifest finalization both passed. This used a private copy of the full bc package. All 1,099 original members remain byte-identical, including all 79 public images and runtime libraries. Exactly four files were added under _adapters: native bridge, MAX package, Torch registration, and manifest. The active verifier installation was never modified.
+
 Package: ~/mojolearn-evidence/linux-adapter-build-bc11389-20261029/retained-stage/linux-bc11389-with-adapters.tgz
-86,731,912bytes SHA c5b0ee2bee77ebb30c13d3113a3036bab4b264322a627ce6a9d4ce74e4d8fb83.
-R2 measurements/linux-adapter-build-bc11389-20261029/linux-bc11389-with-adapters.tgz; PUT/GET/readback and1103member hashes checked.
+Size: 86,731,912 bytes.
+SHA: c5b0ee2bee77ebb30c13d3113a3036bab4b264322a627ce6a9d4ce74e4d8fb83
+R2: measurements/linux-adapter-build-bc11389-20261029/linux-bc11389-with-adapters.tgz
+PUT/GET readback and all 1,103 member hashes passed.
 
-Owned podbzup075va59kvy armed15:07:39UTC/deadline16:07:39; deletion verified15:14:32UTC after full914,280,516-byte artifact/source/log/Torchinput archive retained onMac+R2 with readback. Controller0;457billedseconds,$0.0609. No active ownedCPU lease or watcher.
-Full archive SHA309511d2d0086f852a3bd4e0093cef59f169e7db8f910a83b7dc0935c2e30a82; R2 measurements/runpod-cpu/mojolearn-cpu-adapterbc-sm89c-20261029-150649/results-complete.tgz.
-Mac complete evidence ~/mojolearn-evidence/linux-adapter-build-bc11389-20261029/attempt3/leg/remote/leg_out/.
+Two 32-vCPU requests returned provider inventory-unavailable errors before any build. Listings proved no pod was created; original failures remain retained. The successful 16-vCPU pod bzup075va59kvy had a verified 15:07:39–16:07:39 UTC deadman. Deletion was verified at 15:14:32 UTC after complete Mac/R2 retention. Controller exit was 0; cost was $0.0609. There are no active owned CPU leases or watchers.
 
-No product runtime, identity, cross-vendor or performance run by this lane. This is a compiled development install payload, not final installed-wheel qualification. Parent must qualify adapters from a separate actual installed candidate on NVIDIA; never add duplicate arithmetic identity lanes. AMD adapter build remains separate/missing. Standard producer manifest and raw records are unchanged; formal ledger admission remains separate from this compilation receipt.
+Complete archive: 914,280,516 bytes, SHA 309511d2d0086f852a3bd4e0093cef59f169e7db8f910a83b7dc0935c2e30a82.
+R2: measurements/runpod-cpu/mojolearn-cpu-adapterbc-sm89c-20261029-150649/results-complete.tgz
+Mac evidence: ~/mojolearn-evidence/linux-adapter-build-bc11389-20261029/attempt3/leg/remote/leg_out/
+
+Four required source guards passed. No product runtime, identity, cross-vendor, or performance tests ran in this lane. This compiled development payload is not an installed-wheel qualification. NVIDIA adapter runtime must use a separate installed candidate; AMD adapter compilation remains pending. Do not add duplicate adapter arithmetic identity lanes. Formal ledger admission is separate from this receipt.
