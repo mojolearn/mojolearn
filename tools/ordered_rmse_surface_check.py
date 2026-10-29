@@ -12,10 +12,6 @@ import os
 from pathlib import Path
 import tempfile
 
-import numpy as np
-
-from mojolearn import OrderedRMSE, set_numeric_mode
-
 
 def require(condition, message):
     if not condition:
@@ -30,10 +26,47 @@ def expect_refusal(call, exception, label):
     raise AssertionError(f"{label}: unsupported input was accepted")
 
 
+def prepare_restore_default(mode, selected_modes, installed_modes, set_mode, read_mode):
+    """Select only a requested, physically installed tier for the contrast.
+
+    Missing files are coverage information, not a caught load failure. When an
+    alternate tier is selected and present its actual load/readback must work;
+    errors propagate instead of silently downgrading the check.
+    """
+    known = {"identical", "fast"}
+    require(mode in known, "unknown saved numeric mode")
+    for label, modes in (("selected", selected_modes), ("installed", installed_modes)):
+        require(bool(modes) and len(modes) == len(set(modes)) and set(modes) <= known,
+                f"invalid {label} numeric modes")
+        require(mode in modes, f"saved mode is not {label}")
+    alternate = "fast" if mode == "identical" else "identical"
+    if alternate not in installed_modes:
+        reason = "alternate_tier_not_installed"
+    elif alternate not in selected_modes:
+        reason = "alternate_tier_not_selected"
+    else:
+        reason = None
+    before_load = mode if reason else alternate
+    set_mode(before_load)
+    require(read_mode() == before_load, "process default mode readback differs before load")
+    return {"selected_modes": list(selected_modes), "installed_gbdt_tiers": list(installed_modes),
+            "alternate_mode": alternate, "process_default_before_load": before_load,
+            "alternate_default_contrast": {"status": "NOT_EXERCISED" if reason else "PASS",
+                                           "reason": reason}}
+
+
 def main():
+    import numpy as np
+    from mojolearn import OrderedRMSE, set_numeric_mode, numeric_mode, _backend
+
     mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").lower()
     require(mode in ("fast", "identical"), "unknown numeric mode")
     set_numeric_mode(mode)
+    # Respect the release's requested tiers. Direct invocation defaults to this
+    # run's mode, so an identical-only check never opts into fast implicitly.
+    selected_modes = os.environ.get("MOJOLEARN_RELEASE_MODES", mode).split()
+    installed_modes = [tier for tier in ("identical", "fast")
+                       if _backend._merged.binding_exists(_backend.tier_dir(tier), "_mojolearn_gbdt")]
     options = dict(n_estimators=3, max_depth=2, border_count=7,
                    learning_rate=0.2, l2_leaf_reg=1.0, numeric_mode=mode)
     # Dyadic features/targets/weights avoid fixture construction differences.
@@ -106,9 +139,17 @@ def main():
     with tempfile.TemporaryDirectory(prefix="mojolearn-ordered-") as directory:
         path = Path(directory) / "ordered.npz"
         first.save(path)
-        set_numeric_mode("fast" if mode != "fast" else "identical")
+        restoration = prepare_restore_default(
+            mode, selected_modes, installed_modes, set_numeric_mode, numeric_mode)
         restored = OrderedRMSE.load(path)
         require(restored.numeric_mode == mode, "saved numeric mode was not restored")
+        require(numeric_mode() == restoration["process_default_before_load"],
+                "loading the saved model changed the process default")
+        restored_binding = restored._bind("_mojolearn_gbdt")
+        restored_code = int(restored_binding.gbdt_numeric_mode())
+        restored_vendor = str(restored_binding.gbdt_vendor())
+        require(restored_code == actual_code and restored_vendor == actual_vendor,
+                "restored model native mode/vendor differs from saved model")
         restored_prediction = np.asarray(restored.predict(X))
         restored_query = np.asarray(restored.predict(query))
         require(str(restored.model_) == model_text, "serialized model text changed")
@@ -117,11 +158,22 @@ def main():
         require(np.array_equal(query_prediction.view(np.uint32), restored_query.view(np.uint32)),
                 "save/load unseen-row prediction bits differ")
 
+    # The pass below covers save/load and exact predictions in the saved mode.
+    # An unavailable/unselected alternate default is separately NOT_EXERCISED;
+    # it is never reported as a successful two-tier contrast.
+    restoration.update(saved_mode=mode, restored_mode=restored.numeric_mode,
+                       restored_native_mode_code=restored_code,
+                       restored_native_vendor=restored_vendor,
+                       model_text_equal=True, training_predictions_equal=True,
+                       query_predictions_equal=True)
+    set_numeric_mode(mode)
+    require(numeric_mode() == mode, "process default was not restored after the fixture")
     evidence = {
         "schema": "mojolearn.ordered_python.v1", "status": "PASS",
         "requested_mode": mode, "native_mode_code": actual_code,
         "native_vendor": actual_vendor, "rows": 32, "query_rows": 8,
         "trees": 3, "repeat_exact": bool(repeat_exact),
+        "serialization": restoration,
         "refusals": refusals, "model_text": model_text,
         "model_sha256": hashlib.sha256(model_text.encode()).hexdigest(),
         "prediction_bits": prediction.view(np.uint32).tolist(),

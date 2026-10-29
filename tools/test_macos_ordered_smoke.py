@@ -27,6 +27,13 @@ def output(mode='identical', vendor='metal'):
                   model_sha256=hashlib.sha256(model.encode()).hexdigest(),
                   refusals=['depth', 'objective', 'categorical', 'duplicate_permutation',
                             'zero_weight_mass', 'eval_set'])
+    record['serialization'] = dict(
+        saved_mode=mode, restored_mode=mode, restored_native_mode_code=gate.MODE_CODES[mode],
+        restored_native_vendor=vendor, selected_modes=[mode], installed_gbdt_tiers=[mode],
+        alternate_mode='fast' if mode == 'identical' else 'identical',
+        process_default_before_load=mode, model_text_equal=True,
+        training_predictions_equal=True, query_predictions_equal=True,
+        alternate_default_contrast={'status': 'NOT_EXERCISED', 'reason': 'alternate_tier_not_installed'})
     return 'ORDERED_PYTHON_JSON ' + json.dumps(record) + '\nORDERED PYTHON SURFACE PASS\n'
 
 
@@ -67,6 +74,33 @@ class OrderedReleaseTests(unittest.TestCase):
                         self.assertRaises((RuntimeError, AssertionError)):
                     gate.run_installed_ordered(prefix, package, 'identical', 'metal')
                 self.assertIn('retained native diagnostic', captured.getvalue())
+
+    def test_missing_or_mislabeled_serialization_refused(self):
+        text = output()
+        record = json.loads(text.splitlines()[0].removeprefix('ORDERED_PYTHON_JSON '))
+        for change in ('absent', 'false_pass', 'wrong_restored_mode', 'false_prediction', 'missing_tier'):
+            bad = json.loads(json.dumps(record))
+            if change == 'absent':
+                del bad['serialization']
+            elif change == 'false_pass':
+                bad['serialization']['alternate_default_contrast'] = {'status': 'PASS', 'reason': None}
+            elif change == 'wrong_restored_mode':
+                bad['serialization']['restored_native_mode_code'] = 0
+            elif change == 'false_prediction':
+                bad['serialization']['query_predictions_equal'] = False
+            else:
+                bad['serialization']['installed_gbdt_tiers'] = []
+            with self.subTest(change=change), self.assertRaises(AssertionError):
+                gate.admit_output('ORDERED_PYTHON_JSON ' + json.dumps(bad) +
+                                  '\nORDERED PYTHON SURFACE PASS\n', 'identical', 'metal')
+
+    def test_available_selected_alternate_contrast_admitted(self):
+        record = json.loads(output().splitlines()[0].removeprefix('ORDERED_PYTHON_JSON '))
+        record['serialization'].update(selected_modes=['identical', 'fast'],
+            installed_gbdt_tiers=['identical', 'fast'], process_default_before_load='fast',
+            alternate_default_contrast={'status': 'PASS', 'reason': None})
+        gate.admit_output('ORDERED_PYTHON_JSON ' + json.dumps(record) +
+                          '\nORDERED PYTHON SURFACE PASS\n', 'identical', 'metal')
 
     def test_checkout_package_refused(self):
         package = SimpleNamespace(__file__='/checkout/python/mojolearn/__init__.py')

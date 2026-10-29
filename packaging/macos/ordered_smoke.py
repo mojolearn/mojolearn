@@ -36,6 +36,28 @@ def admit_output(output, mode, vendor):
     if mode != 'fast' and (record.get('repeat_exact') is not True or
                            record['prediction_bits'] != record['repeat_prediction_bits']):
         raise AssertionError('OrderedRMSE pinned-mode repeat evidence differs')
+    serialization = record.get('serialization', {})
+    if (serialization.get('saved_mode') != mode or serialization.get('restored_mode') != mode
+            or serialization.get('restored_native_mode_code') != MODE_CODES[mode]
+            or serialization.get('restored_native_vendor') != vendor
+            or any(serialization.get(key) is not True for key in
+                   ('model_text_equal', 'training_predictions_equal', 'query_predictions_equal'))):
+        raise AssertionError('Incomplete OrderedRMSE saved-mode restoration evidence')
+    selected = serialization.get('selected_modes', [])
+    installed = serialization.get('installed_gbdt_tiers', [])
+    for values in (selected, installed):
+        if (not isinstance(values, list) or not values or any(type(v) is not str for v in values)
+                or len(values) != len(set(values)) or not set(values) <= set(MODE_CODES)
+                or mode not in values):
+            raise AssertionError('Invalid OrderedRMSE tier coverage')
+    alternate = 'fast' if mode == 'identical' else 'identical'
+    reason = ('alternate_tier_not_installed' if alternate not in installed else
+              'alternate_tier_not_selected' if alternate not in selected else None)
+    expected = {'status': 'NOT_EXERCISED' if reason else 'PASS', 'reason': reason}
+    if (serialization.get('alternate_mode') != alternate
+            or serialization.get('alternate_default_contrast') != expected
+            or serialization.get('process_default_before_load') != (mode if reason else alternate)):
+        raise AssertionError('OrderedRMSE alternate-default coverage is mislabeled')
     return record
 
 
