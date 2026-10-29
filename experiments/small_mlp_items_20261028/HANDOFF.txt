@@ -1,0 +1,72 @@
+SmallMLP admitted sequence preparation (2026-10-28)
+Base main: 1cd11dd607b5f6967be363d7f3b53f6bebe56fac.
+Branch: lane/small-mlp-native-items-20261028.
+
+Repair:
+_items no longer calls __iter__/__next__ attributes or treats every exception
+as exhaustion. The existing public sequential_admit_value gate already rejects
+arbitrary user iterators; this is NOT a reproduced public custom-iterator bug.
+Errors from remaining admitted native iterators previously could be swallowed.
+PyIter_Next now stops only on null without an error (including StopIteration);
+other native errors reach small_mlp_c with their original exception/traceback.
+Original iterator-construction TypeError refusal wording/order is retained.
+
+Removed work and setup/reuse boundary:
+- Exact list/tuple: read count once, reserve once, native borrowed get-item plus
+  NewRef. No iterator object, per-element attribute lookup/call or index boxing.
+  Element references and limits retain their original meaning.
+- Exact Array: one admitted metadata/storage snapshot; 1D uses existing native
+  scalar conversion, rank2+ uses existing native C-order preparation and direct
+  _row calls. No Array.__iter__, map, partial or per-row compiled-entry dispatch.
+  Retains all 9 supported dtypes, half conversion, F-order conversion, limits,
+  readonly/shape/zero-copy row storage semantics. Row owner chains include the
+  private passive snapshot, which pins the original Array and actual buffers.
+  This newly refuses inconsistent/tampered Array metadata through the existing
+  native snapshot guard; supported consistent arrays remain admitted.
+- Exact Tensor/Parameter: native admission then TensorBase.unbind(0), replacing
+  Python Tensor.__iter__ without converting tensors to NumPy or host scalars.
+  Keeps dtype/device/row views and eager unbind-before-limit behavior. Admitted
+  descriptor lookup occurs once; row tuple traversal uses the direct helper.
+- Remaining admitted native iterators: resolve GetIter/Next once per operation;
+  preserve the distinct exhaustion/error result rather than blanket except.
+
+Lifetimes / invalidation / errors:
+All new prepared objects are operation-local. Full mutable Array admission is
+performed each time; the snapshot owns real exports. After a possible native
+F-order reorder/GIL release, Array storage descriptors are readmitted before row
+construction. Only a selected exact native reorder callable is retained; local
+context dictionaries hold exact native dtype metadata, not caller callbacks.
+Torch dispatch modes are admitted before native unbind; Python iteration is not
+used. List/tuple owners survive all borrowed item NewRef acquisitions. Native
+iterator/error references remain owned during unwind. Source review caught that
+_locked calls lock.release during unwind: existing ByteCheckpointIOError ownership
+now fetches/restores the pending error around that cleanup, preserving the first
+error even if unlock fails. No global pending-error cache was introduced.
+
+Validation:
+Final actual small_mlp_c public entry CPU identical O0 compilation rc0, 14.30s;
+includes the new helper's list, tuple, Array, Torch and native iterator branches.
+Mac compile_slot, 10 compiler workers (sysctl allocation). No code executed.
+First source compile rc0 15.22s; retained before lock preservation was added.
+Second attempt rc1 1.96s: existing movable error holder restore requires explicit
+consume syntax; repaired pending^.restore(), then final compile above passed.
+All four normal source guards rc0, no override; recorded in source-guards.json. No runtime, identity,
+benchmark or GPU compilation. No standalone numerical module changed. This helper
+is provider-boundary preparation; native kernel dependencies remain unchanged.
+
+Limits:
+The whole SmallMLP operation still has other Python-object preparation/dispatch;
+this batch does not claim the whole public operation is Python-free. Generic
+admitted native iterators still use CPython iteration. No runtime reachability or
+error fixture was run; multidimensional/unsupported-format memoryview iteration
+is the relevant native-error mechanism, while a released view may fail earlier
+in admission/setup. No arbitrary iterator feature was removed to claim a fix.
+
+Evidence:
+~/mojolearn-evidence/small-mlp-items-20261028/
+compile.log/json, source-manifest.json, source-bytes.tgz, _small_mlp_items.so;
+attempt-1-before-lock-error-preservation/ (successful original source and binary),
+attempt-2-consumed-error-owner/ (failed compiler output/source); guard logs/receipt.
+Committed fixtures/receipts: experiments/small_mlp_items_20261028/.
+INFERENCE_REVIEW.txt separately records requested source-only review of root's
+inference reuse change, including corrected retired-handle cleanup finding.

@@ -1,0 +1,28 @@
+Source review: inference handle reuse (2026-10-28)
+Worktree: /Users/andrewhendel/mojolearn-wt/inference-handle-reuse-20261028
+Reviewed ops_api diff SHA256: eb87eac34521bb5bd5cbda1bb0fa7e74f3792d5262edbdfc12706b84aeaff4cd
+Reviewed program_inference_metadata SHA256: f77cc151f0c69a0910812e26f3f869238adb28e51f89c067d5aec45a63fb9d32
+
+Initial finding: clear_live left replay.values/replay.handles populated with
+retired temporary handles, contradicting the cleanup contract. No stale-read
+execution was identified: _replay cleared them before subsequent use. Root
+corrected both clears; final reviewed metadata contains those clears.
+
+No further source findings in the changed mechanism. Captured slot/generation
+words belong to immutable program handles; every invocation still validates
+live, generation, owned storage and shape before borrowing addresses and flags.
+Checkpoint restoration rebinds temporary program params BEFORE add_program;
+no repository mutation of registered params was found. program_free clears
+its plan; close clears all programs/plans; reset preserves uploaded owners and
+next replay refreshes their addresses/flags. Metadata is moved out of its outer
+List before replay, avoiding aliases during handle-vector growth/retirement.
+Nested finally retires temporary handles before restoring both tapes, and the
+outer finally returns cleared scratch capacity even on validation failure.
+
+Reentrancy scope: run_program mutably owns its session; no new Python callback
+or provider call is introduced. Existing executor/session exclusivity still
+applies; this review does not establish thread safety for an external caller
+that races raw session mutation. No new reentrant registry path was found.
+
+Source review only. No edits to root worktree, builds, runtime or identity runs.
+Complete reviewed diff/source stored in small-mlp-items evidence directory.

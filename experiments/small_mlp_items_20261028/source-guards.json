@@ -1,0 +1,48 @@
+{
+  "commit": "a3db4664469fd5b71fa822c5d2f8e841ed415c0f",
+  "checks": [
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_host_routes.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/small-mlp-items-20261028/no_host_routes.py.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_python_in_kernels.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/small-mlp-items-20261028/no_python_in_kernels.py.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_compute_in_shells.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/small-mlp-items-20261028/no_compute_in_shells.py.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/rebuild_fence.py",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/small-mlp-items-20261028/rebuild_fence.py.log"
+    }
+  ]
+}

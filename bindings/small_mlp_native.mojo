@@ -32,6 +32,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import sequential_admit_value
+from bindings.small_mlp_items import small_mlp_items, SMALL_MLP_ITEMS_PENDING
+from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from providers.python.training_metadata_pyapi import training_f32_scalar, training_schedule_json
 from bindings.native_json import native_json_parse, native_json_parse_unique, native_path
 from bindings.native_transport import _transport_json
@@ -900,20 +902,8 @@ def _adamw(mut state: MlpState, entries: MlpOperationMetadata, grads: List[Float
 
 
 def _items(value: PythonObject, limit: Int, refusal: String) raises -> List[PythonObject]:
-    """The caller's sequence as Mojo-held items (at most `limit` when it is
-    positive), read through its own iterator."""
-    var result = List[PythonObject]()
-    var items = PythonObject(None)
-    try:
-        items = value.__getattr__("__iter__")()
-    except:
-        raise Error("TypeError: " + refusal)
-    while limit < 0 or len(result) < limit:  # driver-loop: over the caller's sequence of tensors or session batches
-        try:
-            result.append(items.__getattr__("__next__")())
-        except:
-            break
-    return result^
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    return small_mlp_items(value, limit, refusal, b[].array_cls, b[].arrays, b[].bi)
 
 
 def _pack_gradients(gradients: List[PythonObject]) raises -> List[Float32]:
@@ -1672,7 +1662,20 @@ def _locked(operation: String, handle_value: PythonObject, args: PythonObject) r
         else:
             raise Error("SmallMLPTrainer: unknown operation " + operation)
     finally:
-        _ = lock.release()
+        if Python().cpython().PyErr_Occurred():
+            # _items preserves native iterator errors. Clear the indicator
+            # while releasing the C lock, then restore owned exception refs;
+            # a cleanup call must not replace the original iteration failure.
+            var pending = ByteCheckpointIOError()
+            pending.capture()
+            try:
+                _ = lock.release()
+            except:
+                _ = pending^.restore()
+                raise Error(SMALL_MLP_ITEMS_PENDING)
+            _ = pending^.restore()
+        else:
+            _ = lock.release()
     return result
 
 
@@ -1719,6 +1722,8 @@ def small_mlp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         return result.steal_data()
     except error:
         var message = String(error)
+        if message == SMALL_MLP_ITEMS_PENDING:
+            return PyObjectPtr()  # Native iterator error remains set, with original class/traceback.
         if message.startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("RuntimeError:"):
