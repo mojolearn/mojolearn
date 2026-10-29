@@ -1,0 +1,11 @@
+Installed neural release regressions, 2026-10-29
+
+Current generation source eb86802a: full tokenizer CPU compilation passed with 654 source files unchanged; other compiled numerical groups reused. Root integrated source closure comparison matches. Supported macOS staging preserves the raw image and records the staged hash.
+
+Runtime: 20 GPU generation/owner/profile/alias/EOS/failure/sampling checks and four CPU engine admission checks passed with no skips. Earlier 24 Mamba-session/Sequential checks passed. Separate 50 transformer/Mamba/optimizer boundary cases are covered by 47 initial passes and the four-case affected rerun (one duplicate case); three original test-setup failures retained. These are bounded API/within-route comparisons, not cross-vendor identity.
+
+Repairs: admit exact-bool resident capability and pinned Mamba2 workspace provider; preserve and validate selected native arithmetic-profile tags; publish tags with exported state; align transformer native lock/session setup with native dispatch defaults. Explicit dispatch opt-out stays on the legacy route. Native registry replacement remains refused.
+
+Setup/reuse: native functions retained at model construction; compatible profile checked at operation admission; resident cache key includes profile. Profile mismatches and changed-profile unlabeled caches retain legacy diagnostics. No removal of mutation, ownership, or failure checks.
+
+All original failures and reruns are retained in the evidence directory named in results.json. Final full verifier/reference table, non-Apple execution and assembled-wheel qualification remain pending. No speed measurement or broad identity claim.

@@ -1,0 +1,81 @@
+{
+  "scope": "Installed development API regressions on Apple; not full bitwise identity or a published-wheel qualification",
+  "mode": "identical",
+  "generation_source": "eb86802a38623dad0f0548caf4d2586981c36eb5",
+  "raw_tokenizer_sha256": "4a84f9945e3de297853130397702415e6d8ef53ce6294ac9eecc2fc2a16e101d",
+  "staging_receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/engine-tokenizer-stage/receipt.json",
+  "records": {
+    "engine-final-gpu": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 20,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      "files": {
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/engine-final-gpu.log": "f7022930c213433c5b6081e3709df74fec12f1734f83bf607f885b2d50d92f5f",
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/engine-final-gpu.xml": "17dd69e5792409bc055e6e5d191375ca92403d4144e7651f71d0b8ec37a7e889"
+      }
+    },
+    "engine-final-cpu": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 4,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      "files": {
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/engine-final-cpu.log": "e8b5b1e43fe25cbb94b70be7cb6c67675c7d165817b9148e368de59dcdbb4716",
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/engine-final-cpu.xml": "19b57d0e746a6fea04d1a9a3b3a05e4a40667fd128cad8dcb57ea39dd99f1f57"
+      }
+    },
+    "sequence-mamba-runtime": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 24,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      "files": {
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/sequence-mamba-runtime.log": "e021f450be4a11b566f040c5970dee070ed6b0af4c940a4c72a30dd5ce1d03e2",
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/sequence-mamba-runtime.xml": "e173870c6c778629f8508ee076a70d3d65cb33c044cde60703355853b0e04714"
+      }
+    },
+    "neural-boundary-runtime": {
+      "exit_code": 1,
+      "counts": {
+        "tests": 50,
+        "errors": 0,
+        "failures": 3,
+        "skipped": 0
+      },
+      "files": {
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/neural-boundary-runtime.log": "a5208c44bc3419e8dc5d7ede76f15839db28f336dc110f359b3485e55035be30",
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/neural-boundary-runtime.xml": "fe054ef26ebea24c4dcf6b1d95973c7d72e9f616752772dd3ca45752c22876bf"
+      }
+    },
+    "boundary-corrections-final": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 4,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      "files": {
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/boundary-corrections-final.log": "aa1e9ebaa65ac7c7e2049c8a5acd0f629859ab097cb69ed58fe712cc01cd7ad5",
+        "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/boundary-corrections-final.xml": "9fa6a6cdd61fc89813acf4fb843284c62420300e675ff89ca8d7868a5f84d368"
+      }
+    }
+  },
+  "original_generation_failures": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/resident-contract/resident-repaired-runtime.log",
+  "remaining": [
+    "Final source/version and verifier-payload alignment.",
+    "Full installed identity/reference records on Apple/NVIDIA/AMD/CPU.",
+    "Required PTX, multi-GPU, adapter and wheel gates.",
+    "Performance unmeasured; deferred until release."
+  ]
+}
