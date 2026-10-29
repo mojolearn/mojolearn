@@ -39,3 +39,25 @@ def native_instance_item(fields: PythonObject, name: PythonObject) raises -> Pyt
             raise cpy.unsafe_get_error()
         raise Error("KeyError: missing native instance field")
     return PythonObject(from_owned=cpy.Py_NewRef(raw))
+
+
+def native_instance_find_admitted(fields: PythonObject, name: PythonObject) raises -> Tuple[Bool, PythonObject]:
+    # Internal form of the explicitly authorized native dictionary repair above.
+    # The caller has already admitted an exact dict, EVERY stored key as exact
+    # str, and an exact str name. Do not use for class mappingproxy namespaces
+    # or arbitrary mappings. Keep native_instance_item's defensive interface
+    # for callers that still need its redundant exact-type checks.
+    #
+    # One dictionary probe replaces contains+getitem. A native Bool distinguishes
+    # absence from an existing None; the native Tuple creates no Python wrapper.
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")(fields._obj_ptr, name._obj_ptr)
+    if not raw:
+        if cpy.PyErr_Occurred():
+            raise cpy.unsafe_get_error()
+        return (False, PythonObject(None))
+    # Same Stable ABI/GIL contract as native_instance_item. Pin the mapping
+    # through the owned-reference acquisition; no borrowed pointer escapes.
+    var value = PythonObject(from_owned=cpy.Py_NewRef(raw))
+    _ = fields
+    return (True, value^)

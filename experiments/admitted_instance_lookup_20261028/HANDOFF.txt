@@ -1,0 +1,55 @@
+Single admitted instance-dictionary lookup, 2026-10-28
+Branch lane/admitted-instance-lookup-20261028; final base 22374a7111.
+
+Repeated work removed:
+The public attribute instance-field branch formerly did py_contains(fields,name)
+then native_instance_item(fields,name). The latter also allocated an empty
+Python dict merely to probe its type. The branch now calls the internal
+native_instance_find_admitted once. It performs one PyDict_GetItemWithError and
+returns native Tuple[Bool,PythonObject], eliminating the second dictionary probe,
+redundant exact-type checks and empty-dict type-probe allocation on this path.
+It creates no Python tuple wrapper or value sentinel that could confuse None.
+
+Admission/setup boundary:
+public_attribute_c's _fields_from_admitted_rows already requires an exact dict
+and validates EVERY stored key as exact str. The public name check and all leaf
+dependency-name constructors provide exact str names. Only this admitted field
+branch calls the new helper. Data descriptors retain priority; an absent field
+falls through to unchanged class-member/availability/non-data descriptor logic.
+Existing native_instance_item stays unchanged, including defensive exact-type
+checks and missing-field error, for other callers. Its documented owner-approved
+CPython repair, suspected Mojo defect, reproducer and screening history remain
+inline; the new helper explicitly refers to that same authorized API repair.
+No new fallback, workaround or compiler/library modification.
+
+Missing/error/ownership:
+A missing key with no CPython error returns (False,None). Stored None is a real
+non-null PyObject pointer and returns (True, owned None). A null result with a
+pending CPython exception raises it before returning. A found borrowed value
+gets exactly one Py_NewRef before return; an explicit fields use follows that
+acquisition, retaining its owner through the last borrowed access. The binding
+holds the GIL through lookup/ref acquisition. No borrowed pointer escapes and
+no cache or new GIL-release/callback route is added. No cross-call invalidation
+is necessary: every attribute request performs its own live dictionary probe.
+
+Compilation:
+One compile passed, exit 0, 13.18 seconds: actual public_attribute_c entry with
+both descriptor specializations and native dependency paths. Apple CPU identical
+O0, ten workers under compile_slot. Source bytes, compiler/flags/allocation and
+artifact hashes retained in compile.json. No duplicate unchanged build, runtime,
+identity, performance or GPU campaign. No measured speedup claim.
+
+Limits:
+The old defensive helper retains its original type-probe work for unrelated
+callers; only the fully admitted attribute branch bypasses it. Class lookup,
+namespace admission and output conversion still perform their existing work.
+Three source guards passed. Branch rebuild_fence initially returned 5 solely
+for inherited native_loaded_module changes in base 562393ed30 (53 bindings),
+not this patch's two product files. The documented MOJOLEARN_WIDE_REBUILD_OK=1
+mode passed for that explicitly requested shared repair. Original refusal and
+authorized-base result are both retained in source-guards.json/logs. Root owns
+serialized main integration/push guards.
+
+Evidence: ~/mojolearn-evidence/admitted-instance-lookup-20261028/
+compile.log/json, controller.log, source-manifest.json, source-bytes.tgz,
+_admitted_instance_lookup.so, source-guards.json and individual guard logs.

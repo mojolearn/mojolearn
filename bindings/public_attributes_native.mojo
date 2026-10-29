@@ -13,7 +13,7 @@ from bindings.classical_attributes import _type_mro, _classical_descriptor_get, 
 from bindings.native_array_view import native_array_ndarray_view as _array_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_error_class import error_without_class
-from bindings.native_instance_item import native_instance_item
+from bindings.native_instance_item import native_instance_find_admitted
 from bindings.native_mode_recipe import mode_recipe_call
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error, PYTHON_ERROR_PENDING
 from bindings.host_inference_scalars import host_inference_scalar
@@ -300,9 +300,12 @@ def _lookup_impl[allow_special: Bool](model: PythonObject, name: PythonObject,
         if not known:
             raise Error("TypeError: Python attribute properties/descriptors require a native owner")
         return _classical_descriptor_get(binding, model, cls, plan)
-    if py_contains(fields, name):
-        # See native_instance_item for the retained Mojo subscript failure.
-        return native_instance_item(fields, name)
+    # _fields and the public/dependency-name boundary already admitted exact
+    # dict/string storage. Preserve the authorized lookup repair with one probe
+    # and no temporary dict allocation for a redundant type check.
+    var item = native_instance_find_admitted(fields, name)
+    if item[0]:
+        return item[1]
     if not present:
         raise Error("AttributeError: native model has no attribute '" + String(name) + "'")
     comptime if allow_special:
