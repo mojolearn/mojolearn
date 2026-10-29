@@ -1,0 +1,24 @@
+PTX-only compilation and complete retention
+
+Run40875490559: all33 selected identical sm80 development groups compiled.
+Numerical source5abdda9d8dc9cdad007c581137623414e2168f8b; tooling
+b8b2b3a1b429460ac339c330b0c587238a288486. No host/sm89/AMD duplication.
+All33 exact receipts: default optimization (no O0 override), compilerjobs4
+from actual runner affinity/cgroup policy. No claim of continuous saturation.
+Compiler SHA0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa.
+
+Original all-artifact download timed out124 after19 complete groups. That
+partial result and full failure evidence remain Mac+R2 retained. A separate
+attempt downloaded only14 missing artifacts; no builds repeated. Final33
+selected receipts/raw binary hashes passed,0failed/0missing, controllerexit0.
+Complete archive232325460bytes, SHA
+87d63230b4169cfe167668305e9e92b3415f18ffcb9766e78755b5bd2a04c9e6,
+all6059 members verified through actual R2GET. Exact key/paths inreceipt.json.
+Original archive also retains predispatch tooling capture including hidden
+workflow file; default GHAartifact upload omitted that duplicate hidden path.
+
+No installed loader, runtime, identity, or formal release admission is claimed.
+The pending exact-module provider repair changes x_sequence; preserve these
+5ab images and rebuild only its affected group after the next frozen source.
+Other unchanged groups remain reusable subject to exact source/flags checks.
+Evidence: ~/mojolearn-evidence/github-ptx-current-20261029/.
