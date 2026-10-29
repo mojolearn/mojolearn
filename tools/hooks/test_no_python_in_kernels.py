@@ -47,7 +47,7 @@ class TreeTest(unittest.TestCase):
         return r.returncode, r.stderr
 
     def test_native_imports_and_capi_are_allowed_everywhere(self):
-        native = IMPORT + 'def native(entry, args):\n    external_call["PyGILState_Ensure", Int]()\n    external_call["Py_INCREF", NoneType](entry)\n    external_call["PyObject_Call", Int](entry, args, 0)\n'
+        native = IMPORT + 'def native(entry, args):\n    external_call["PyGILState_Ensure", Int]()\n    external_call["Py_INCREF", NoneType](entry)\n    external_call["PyObject_Call", Int](entry, args, 0)\n    for i in range(3):\n        external_call["PyDict_GetItemWithError", Int](entry, args)\n'
         for path in ("core/x.mojo", "autograd/x.mojo", "transformer/x.mojo", "bindings/x.mojo",
                      "providers/python/x.mojo", "providers/python/x_pyapi.mojo"):
             self.write(path, native)

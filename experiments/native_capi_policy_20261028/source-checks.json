@@ -1,0 +1,36 @@
+{
+  "source_commit": "056970dc82",
+  "checks": {
+    "checker-tests-final": {
+      "exit": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-capi-policy-20261028/checker-tests-final.log",
+      "sha256": "2c6358e39c06c02a5f691bbea8b0318b1a62f24444f67033a66da89be7d73042"
+    },
+    "dependency-tests-1": {
+      "exit": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-capi-policy-20261028/dependency-tests-1.log",
+      "sha256": "07d041acde08b871840030c2304cfda9e634b0ea62711415d09d3fb51a9fb49c"
+    },
+    "product-source-scan": {
+      "exit": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-capi-policy-20261028/product-source-scan.log",
+      "sha256": "8aa2c310ef0532ce0878be9c51c87d5254c62aa7b7a059228a1fa87c57419d67"
+    },
+    "dependency-inventory": {
+      "exit": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-capi-policy-20261028/dependency-inventory.log",
+      "sha256": "5e362c565e8deb3a4bed1659ec34bdd1ed89f7a1dbf49dba0bb1b21a1ace7697"
+    },
+    "source-push-guards": {
+      "exit": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/native-capi-policy-20261028/source-push-guards.log",
+      "sha256": "3f67950abccc0e8631d16c246f57b9be150414c54d527e7aa09cfa4a71a1c582"
+    }
+  },
+  "unique_targeted_source_tests": 18,
+  "test_scope": "12 temporary-tree/scanner unittest cases + 6 dependency-audit source fixtures; no product imports/execution. Final regression fixture additionally includes legal native C API inside a loop.",
+  "product_compile": false,
+  "runtime_campaign": false,
+  "performance_measurement": false,
+  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/native-capi-policy-20261028"
+}
