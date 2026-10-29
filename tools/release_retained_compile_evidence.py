@@ -279,9 +279,19 @@ def _dev_check(requirement_id, wanted, facts, unit):
     require(declared["build_flags"] == derived_build_flags(group["environment"], DEV_ROUTING),
             "declared build flags differ from the compiled environment")
     tree = Tree.at(facts["source_root"], facts["source_revision"])
+    entries = None
     for rel in require_closure(tree, wanted):
         if rel.endswith(".mojo"):
-            require(group["source_files"].get(rel) == tree.sha256(rel),
+            actual = group["source_files"].get(rel)
+            if actual is None:
+                # Merged builds compile a generated root instead of the standalone
+                # entries. Prove its recorded bytes and identical canonical public
+                # exports; substantive sources and changed wrappers remain required.
+                if entries is None:
+                    from release_development_entry_proof import entry_proof
+                    entries = entry_proof(tree, load(group["receipt"]["path"])["fields"])
+                actual = entries.get(rel)
+            require(actual is not None and actual == tree.sha256(rel),
                     "binding Mojo source was not compiled at its tested bytes: " + rel)
     return coverage_rows(wanted), [facts["result"], group["receipt"], group["binary"]]
 
