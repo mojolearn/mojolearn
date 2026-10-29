@@ -160,3 +160,18 @@ def test_expected_cpu_execution_entry_is_reached(tmp_path, monkeypatch, name, en
     with pytest.raises(TypeError) as actual:
         model.predict(np.array([[1, 2]], dtype=np.float32))
     assert actual.value.args == expected.value.args
+
+
+def test_public_fit_save_host_load_and_prediction_roundtrip(tmp_path):
+    import mojolearn as ml
+    values = np.array([[0, 0], [0, 1], [1, 0], [1, 1],
+                       [8, 8], [8, 9], [9, 8], [9, 9]], dtype=np.float32)
+    original = ml.AgglomerativeClustering(n_clusters=2, prediction_data=True)
+    original.fit(values)
+    expected = np.asarray(original.predict(values))
+    path = tmp_path / 'public-agglomerative.npz'
+    original.save(path)
+    restored = ml.host_model(path)
+    assert getattr(restored, '_binding', None) is None
+    np.testing.assert_array_equal(np.asarray(restored.predict(values)), expected)
+    np.testing.assert_array_equal(np.asarray(ml.host_predict(path, values)), expected)
