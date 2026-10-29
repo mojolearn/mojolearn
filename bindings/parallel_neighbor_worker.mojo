@@ -123,7 +123,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
     finally:
         # family_call may release the GIL or raise; keep the admitted source
         # owner alive until every consumer of its captured address has left.
-        _ = query.keep
+        _ = query
     _ = index
     _ = dist
     var wide = _wide(ids, Python.tuple(nq, k), context)
