@@ -1,0 +1,39 @@
+{
+  "source_commit": "6ac9506144ba49076436c7729fc46c4c73b319a3",
+  "source_hashes": {
+    "tools/release_requirement_dependencies.py": "f72040f8c678a9e5a5e1b02128d9353b5b193edd5dcad582b062f9d503cbf322",
+    "tools/test_dependency_analysis_cache.py": "ac09fd9743bb44b9b7b31f810416cd0e7c1cf607728526b1c93b25db1e21014c"
+  },
+  "tests": {
+    "exit_code": 0,
+    "passed": 67,
+    "subtests": 25
+  },
+  "source_guards": {
+    "no_host_routes": 0,
+    "no_python_in_kernels": 0,
+    "no_compute_in_shells": 0
+  },
+  "actual_retained_producers": [
+    {
+      "binding": "_mojolearn_byte_lm_host",
+      "admitted": 2,
+      "refused": {},
+      "reusable": 2,
+      "originals_equal": true,
+      "analysis_reports": 1
+    },
+    {
+      "binding": "_mojolearn_forest_host",
+      "admitted": 2,
+      "refused": {},
+      "reusable": 2,
+      "originals_equal": true,
+      "analysis_reports": 1
+    }
+  ],
+  "product_compilations": 0,
+  "product_runtime_runs": 0,
+  "performance_measurements": 0,
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/dependency-analysis-cache-20261029"
+}

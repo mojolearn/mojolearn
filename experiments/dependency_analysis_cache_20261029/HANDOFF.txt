@@ -1,0 +1,9 @@
+Reuse frozen source analysis across selected-image witnesses
+
+Code6ac9506144ba49076436c7729fc46c4c73b319a3; branchlane/dependency-analysis-cache-20261029. Only the three maps validated/applied after frozen_snapshot are removed from its worker request: selected_binding_build_flags, selected_binding_compile_jobs, selected_macos_cpu_toolchains. Every other configuration/source/target/compiler/environment/manifest input remains keyed. Full original configuration still controls selected image validation and final compile/identity fingerprints; cached snapshots remain immutable through existing deep copies.
+
+Removed repeated whole-source analysis when separate family receipts differ only in selected image metadata. Setup/reuse boundary is the exact frozen revision+analysis request+analyzer bytes. A change to any of those invalidates the analysis cache; selected flags/jobs/link witnesses remain distinct final requirements and are revalidated on every use. No admission rule relaxed, no original producer record rewritten.
+
+67tests+25subtests passed, including actual temporary Git trees/diskcache, unknown maps refused aftercachehit, flags/worker/link-contract fingerprint separation, and source/target/compiler/environment/manifest invalidation. Three required sourceguards0. Actual retained ByteLM+forest producer preparations:4units admitted,0refused,all4reusable; both originals.json objects exactly equal prior checked preparation, and onlyONE frozenanalysis report used forboth. Full logs/source evidence externalpathinreceipt.
+
+No productsource, native compilation, product runtime, identity campaign or performance measurement ran for this tool change. Current release runtime remains held for final wheel API/adapter smokes. Remaining45host admission preparation can reuse analysis by originalsource; tokenizer uses its newSamba producer receipt.

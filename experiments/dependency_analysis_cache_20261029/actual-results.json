@@ -1,0 +1,18 @@
+[
+  {
+    "binding": "_mojolearn_byte_lm_host",
+    "admitted": 2,
+    "refused": {},
+    "reusable": 2,
+    "originals_equal": true,
+    "analysis_reports": 1
+  },
+  {
+    "binding": "_mojolearn_forest_host",
+    "admitted": 2,
+    "refused": {},
+    "reusable": 2,
+    "originals_equal": true,
+    "analysis_reports": 1
+  }
+]
