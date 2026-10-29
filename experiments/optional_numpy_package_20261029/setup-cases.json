@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "case": "catalog-present-numpy",
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/tensor-test-venv/bin/python",
+        "-I",
+        "-c",
+        "from pathlib import Path\nimport mojolearn\nassert Path(mojolearn.__file__).resolve().parent == Path('/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/tensor-test-venv/lib/python3.13/site-packages/mojolearn')\n\nimport json, sys\nassert 'mojolearn.models._catalog' not in sys.modules\nassert 'catalog' in dir(mojolearn.models)\nfrom mojolearn.models import catalog, verify_catalog_entry\nrows = catalog()\nassert type(rows) is list\nassert catalog is mojolearn.models.catalog\nassert callable(verify_catalog_entry)\nprint(json.dumps({'catalog_rows': len(rows), 'lazy_exports': True}))\n"
+      ],
+      "exit_code": 0
+    },
+    {
+      "case": "missing-identical-owner",
+      "command": [
+        "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/tensor-test-venv/bin/python",
+        "-I",
+        "-c",
+        "from pathlib import Path\nimport mojolearn\nassert Path(mojolearn.__file__).resolve().parent == Path('/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/tensor-test-venv/lib/python3.13/site-packages/mojolearn')\n\nimport json\ntry:\n    import mojolearn.ops\nexcept ImportError as error:\n    message = str(error)\n    assert 'no host binding covers _mojolearn_x_sequence' in message, message\n    assert 'fast' not in message, message\n    print(json.dumps({'expected_missing_owner_error': message}))\nelse:\n    raise AssertionError('Missing required native owner was not refused')\n"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "native_binary_restored_sha256": "ca3a11dfee5ae9affaff4512d6f18c78fa27cc8b59bbe6aae39aa1e45eded2bd",
+  "scope": "Real exclusive installed clone; actual catalog and missing-owner diagnostic; CPU only"
+}

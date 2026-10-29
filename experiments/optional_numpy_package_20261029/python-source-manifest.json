@@ -1,0 +1,9 @@
+{
+  "scope": "Python setup-only change; parsed all changed Python source; no native closure changes or Mojo rebuild required",
+  "files": {
+    "python/mojolearn/models/__init__.py": "b99e59ed315e686f81c3bb0c9763c018af0426914b935ec5a82274a6c48ad359",
+    "python/mojolearn/ops.py": "f2fc19208e4fdd53c2e1ba045a392530634c0bc8e972b554fdf3d7b761dace2c",
+    "python/mojolearn/tests/test_manifold_installed_contract.py": "d652cdf1f8d194f1e6fa82f93f91814964368a6b6e35a636ed05a244b559af95",
+    "experiments/optional_numpy_package_20261029/check_installed_setup.py": "a46be26864de172a3e61751f6d179b026991fb6e4a4baa92a47911dcdc0bd9cd"
+  }
+}

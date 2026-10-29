@@ -37,8 +37,23 @@ from .parallel_causal_lm import ParallelCausalLM
 from .tokenizer import PATTERNS, Tokenizer
 # catalog / verify_catalog_entry: listed in docs-site/api_exclude.txt until the first verified catalog
 # entry lands; then add them to the docstring above and drop those two lines.
-from ._catalog import catalog, verify_catalog_entry
+# Catalog verification depends on the optional ops/importer surface. Keep
+# its import-time connection lazy, like mojolearn.ops itself, so unrelated
+# native models and estimators remain importable without NumPy.
 
 __all__ = ["ParallelCausalLM", "CausalLM", "CausalLMState", "GenerationStream", "Checkpoint", "FAMILIES", "HFConfig", "ModelPlan",
            "PATTERNS", "SafetensorsFile", "Tokenizer", "UnsupportedModel", "catalog", "plan_for",
            "verify_catalog_entry"]
+
+
+def __getattr__(name):
+    if name in ("catalog", "verify_catalog_entry"):
+        from . import _catalog
+        value = getattr(_catalog, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))  # glue: include lazy public module exports

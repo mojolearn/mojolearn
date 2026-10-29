@@ -2,11 +2,13 @@
 
 Run against an installed current build. Native owners are required: missing
 bindings fail rather than skip. This is bounded correctness, not a benchmark.
-The NumPy-free case runs in a new process without hiding or patching NumPy.
+The NumPy-free case uses MOJOLEARN_NUMPY_FREE_PYTHON, a real isolated install
+without NumPy. No dependency is hidden or patched.
 """
 import importlib
 import inspect
 import json
+import os
 import subprocess
 import sys
 import types
@@ -93,7 +95,8 @@ def test_numpy_free_native_result_in_fresh_installed_process(name, settings):
     # No fake modules or import blocking. Prove NumPy was never imported, use
     # the package's own public Array input, and assert its default result type.
     code = """
-import json, sys
+import importlib.util, json, sys
+assert importlib.util.find_spec('numpy') is None, 'NumPy-free contract requires an interpreter without NumPy installed'
 import mojolearn as ml
 assert 'numpy' not in sys.modules
 name, settings = json.loads(sys.argv[1])
@@ -102,8 +105,17 @@ result = getattr(ml, name)(**settings, numeric_mode='identical').fit_transform(x
 assert type(result) is ml.Array, type(result)
 assert result.shape == (8, 2)
 assert 'numpy' not in sys.modules
+if name == 'ClassicalMDS':
+    try:
+        import mojolearn.ops
+    except ModuleNotFoundError as error:
+        assert error.name == 'numpy' and 'mojolearn.ops' in str(error), str(error)
+    else:
+        raise AssertionError('Optional ops unexpectedly admitted an absent required dependency')
 print(json.dumps({'class': name, 'result': type(result).__name__, 'shape': result.shape}))
 """
-    result = subprocess.run([sys.executable, "-I", "-c", code, json.dumps([name, settings])],
+    interpreter = os.environ.get("MOJOLEARN_NUMPY_FREE_PYTHON")
+    assert interpreter, "Set MOJOLEARN_NUMPY_FREE_PYTHON to a real installed environment without NumPy"
+    result = subprocess.run([interpreter, "-I", "-c", code, json.dumps([name, settings])],
                             text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr

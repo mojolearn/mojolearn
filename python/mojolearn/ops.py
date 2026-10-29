@@ -1559,7 +1559,9 @@ _session_connected = _SESSION_CONNECTIONS["identical"]
 if isinstance(_session_connected, str):
     _session_connected = _SESSION_CONNECTIONS["fast"]
 if isinstance(_session_connected, str):
-    raise ImportError(_session_connected)
+    # Both connections failed. Preserve the required/default identical owner
+    # error; an unavailable optional tier must not hide the missing owner.
+    raise ImportError(_SESSION_CONNECTIONS["identical"])
 _SESSION_INITIALIZE = _session_connected.initialize
 
 _SESSION_CALL = _session_connected.call

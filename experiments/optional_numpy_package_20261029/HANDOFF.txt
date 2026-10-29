@@ -1,0 +1,63 @@
+Optional NumPy package setup and missing-owner diagnostic, 2026-10-29
+
+Branch: lane/optional-numpy-package-20261029, based on b2d802861c.
+
+Actual defect: importing mojolearn eagerly imported models._catalog, then
+importers._program and ops, requiring NumPy even for Array-only manifold APIs.
+The package's documented optional-ops boundary and existing no-NumPy test
+require core import without NumPy. models now lazily connects only catalog and
+verify_catalog_entry when those exports are requested, caches their exact
+functions, and includes them in dir(). No numerical fallback or public method
+wrapper was added. Explicit ops import still refuses missing NumPy.
+
+Second defect: if both session connections failed, ops reported optional fast's
+failure and hid the actual identical missing-owner diagnostic. It now reports
+the retained identical error; successful connection/fallback routing is unchanged.
+
+Validation (real isolated installed package; no stubs or import blockers):
+- Existing NumPy-present manifold suite: 15 unique import/constructor, method
+  return type, inherited method and own-override cases passed. Native fit returns
+  self; default NumPy outputs and output conversion were asserted.
+- Corrected separate no-NumPy environment: five fit_transform cases passed,
+  native Array outputs asserted; explicit ops missing-NumPy refusal also passed.
+- Actual lazy catalog() call with NumPy passed, returning six entries.
+- Actual missing x_sequence native owner retained identical's original failure;
+  the disposable clone's owner was restored and its SHA256 checked.
+- SmallMLP three tensor-error cases passed in a clean dependency environment;
+  their product code is unchanged by this setup batch.
+- All four changed/new Python files parsed; git diff --check passed.
+- No Mojo source changed and no native rebuild was needed for this batch.
+  Committed-ref source/push guards are recorded separately after product freeze.
+
+Retained failures, not erased or counted as successes:
+- Original five nominal no-NumPy tests used an interpreter with NumPy installed;
+  those failed their precondition. A genuinely NumPy-free installed clone then
+  exposed the eager catalog import defect repaired here.
+- Initial missing-owner regression expected the wrong exact wording. The actual
+  error was already the correct missing CPU owner. Only the assertion was fixed;
+  the final durable script asserts the supported missing-owner wording and that
+  fast does not replace it. Both outputs remain retained.
+- Original mixed pixi NumPy / pip Torch environment aborted during torch import
+  before product import. Clean standalone pip dependencies pass the three actual
+  SmallMLP tests; no runtime/library hack was used.
+
+Evidence root:
+~/mojolearn-evidence/manifold-installed-integration-20261029/
+  current-installed-full-contracts/ (original 15 successes + five preconditions)
+  optional-numpy-setup-regression/ (five corrected no-NumPy successes, original
+    setup diagnostic assertion failure, final-setup/ with two passing checks)
+  small-mlp-clean-dependencies/ (three actual tensor-error successes)
+  torch-dependency-probe/ (reproduced dependency-only import failure)
+
+Durable regression code:
+python/mojolearn/tests/test_manifold_installed_contract.py
+  requires MOJOLEARN_NUMPY_FREE_PYTHON pointing to an actual isolated install.
+experiments/optional_numpy_package_20261029/check_installed_setup.py
+  requires exclusive disposable installed clone; temporarily removes/restores
+  its x_sequence owner. It must never target an install in use by another test.
+
+The shared current development install was not modified for these Python checks.
+Two private COW installed clones use retained current-source native binaries;
+only models/__init__.py and ops.py changed in those clones. Subsequent tokenizer
+profile fixes affect unrelated generation routes. No full verifier, GPU identity,
+release-wheel or performance qualification is claimed by these bounded checks.

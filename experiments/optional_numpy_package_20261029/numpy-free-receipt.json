@@ -1,0 +1,24 @@
+{
+  "command": [
+    "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/tensor-test-venv/bin/python",
+    "-I",
+    "-m",
+    "pytest",
+    "--import-mode=importlib",
+    "-q",
+    "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/optional-numpy-setup-regression/test_manifold_installed_contract.py",
+    "-k",
+    "numpy_free",
+    "--junitxml=/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/optional-numpy-setup-regression/numpy-free.xml"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 6.737975458963774,
+  "changed_python_sources": {
+    "no-numpy-venv/models/__init__.py": "b99e59ed315e686f81c3bb0c9763c018af0426914b935ec5a82274a6c48ad359",
+    "no-numpy-venv/ops.py": "f2fc19208e4fdd53c2e1ba045a392530634c0bc8e972b554fdf3d7b761dace2c",
+    "tensor-test-venv/models/__init__.py": "b99e59ed315e686f81c3bb0c9763c018af0426914b935ec5a82274a6c48ad359",
+    "tensor-test-venv/ops.py": "f2fc19208e4fdd53c2e1ba045a392530634c0bc8e972b554fdf3d7b761dace2c"
+  },
+  "test_sha256": "d652cdf1f8d194f1e6fa82f93f91814964368a6b6e35a636ed05a244b559af95",
+  "scope": "5actual NumPy-free manifold fit_transform return contracts + explicit optional ops refusal, using real standalone installed no-NumPy interpreter; no native binaries changed"
+}
