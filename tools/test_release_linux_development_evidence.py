@@ -89,10 +89,10 @@ def test_selected_success_from_incomplete_set(producer):
     assert found['configuration']['dependency_context']['compiler_sha256']['linux-64'] == 'c'*64
 
 
-@pytest.mark.parametrize('target', ['binary', 'stage', 'execution', 'log'])
+@pytest.mark.parametrize('target', ['binary', 'stage', 'execution', 'log', 'receipt'])
 def test_missing_retained_bytes_refused(producer, target):
-    p, binary, _, stage = producer
-    paths = dict(binary=binary, stage=stage, execution=Path(p['result']).parent/'build.log.execution.json',
+    p, binary, receipt, stage = producer
+    paths = dict(binary=binary, stage=stage, receipt=receipt, execution=Path(p['result']).parent/'build.log.execution.json',
                  log=Path(p['result']).parent/'build.log')
     paths[target].unlink()
     with pytest.raises((ValueError, OSError)):
@@ -134,25 +134,26 @@ def wanted(found):
     g = found['facts']['groups']['_mojolearn_dev_training']
     b = dict(target='linux-64', vendor='cuda', arch='sm_89', tier='identical', name='_mojolearn_training',
              toolchain=g['toolchain_locked'], flags=dict(numeric_mode='identical', target_column='nvidia',
-             gpu_archs='sm_89', linux_cpu='x86-64-v3', compile_jobs='2', package_byte_lm='1'))
+             gpu_archs='sm_89', linux_cpu='x86-64-v3', compile_jobs='32', package_byte_lm='1'))
     return dict(kind='compile', missing_inputs=[], coverage=[common.BASE_COVERAGE,common.binding_key(b)],
                 inputs=dict(binding=b, unit=dict(kind='compile', vendor='nvidia', release_modes=['identical'],
                 compile_variants=[], build_flags={}, compiler_sha256='c'*64)))
 
 
-def test_scheduling_only_equivalence_and_semantic_refusals(producer, monkeypatch):
+def test_exact_worker_count_and_semantic_refusals(producer, monkeypatch):
     p, _, _, _ = producer
     found = adapter.collect('/source', {}, p)
     w = wanted(found)
     monkeypatch.setattr(common, 'require_closure', lambda *args: ['a.mojo'])
     rid, unit = next(iter(found['units'].items()))
-    adapter.check_unit(rid, w, found['facts'], unit)  # actual32 versus recipe2 workers
-    for key, value in [('numeric_mode', 'fast'), ('gpu_archs', 'sm_80')]:
+    adapter.check_unit(rid, w, found['facts'], unit)
+    assert found['configuration']['dependency_context']['selected_binding_compile_jobs'][unit['binding_key']] == '32'
+    for key, value in [('numeric_mode', 'fast'), ('gpu_archs', 'sm_80'), ('compile_jobs', '2')]:
         bad = copy.deepcopy(w);bad['inputs']['binding']['flags'][key] = value
         with pytest.raises(ValueError, match='compiled flag differs'):
             adapter.check_unit(rid, bad, found['facts'], unit)
     bad = copy.deepcopy(found['facts'])
-    bad['groups'][unit['group']]['environment']['MOJOLEARN_OPT_LEVEL'] = '0'
+    bad['groups'][unit['group']]['environment']['MOJOLEARN_MOJO_BUILD_FLAGS'] = '--optimization-level 0'
     with pytest.raises(ValueError, match='semantic build flags differ'):
         adapter.check_unit(rid, w, bad, unit)
     bad = copy.deepcopy(found['facts'])
@@ -176,4 +177,40 @@ def test_recorded_root_hash_refused(producer):
     d['plan']['groups'][0]['key'] = dev.digest(d['plan']['groups'][0]['fields'])
     put(Path(p['result']), d)
     with pytest.raises(ValueError, match='generated development root differs'):
+        adapter.collect('/source', {}, p)
+
+
+def test_wrong_compiler_refused(producer, monkeypatch):
+    p, _, _, _ = producer
+    found = adapter.collect('/source', {}, p)
+    w = wanted(found)
+    w['inputs']['unit']['compiler_sha256'] = 'f'*64
+    rid, unit = next(iter(found['units'].items()))
+    with pytest.raises(ValueError, match='compiler identity differs'):
+        adapter.check_unit(rid, w, found['facts'], unit)
+
+
+def test_native_sm80_does_not_qualify_ptx(producer):
+    p, _, _, _ = producer
+    found = adapter.collect('/source', {}, p)
+    w = wanted(found)
+    binding = w['inputs']['binding']
+    binding['arch'] = binding['flags']['gpu_archs'] = 'sm_80'
+    key = common.binding_key(binding)
+    w['coverage'] = [common.BASE_COVERAGE, key]
+    unit = dict(group='_mojolearn_dev_training', binding_key=key)
+    found['facts']['groups'][unit['group']]['environment']['MOJOLEARN_GPU_ARCHS'] = 'sm_80'
+    with pytest.raises(ValueError, match='native does not qualify PTX'):
+        adapter.check_unit('compile-nvidia/'+key, w, found['facts'], unit)
+
+
+@pytest.mark.parametrize('workers', ['0', '032', '-1', '٣٢', 32])
+def test_noncanonical_worker_count_refused(producer, workers):
+    p, _, _, _ = producer
+    d = json.loads(Path(p['result']).read_text())
+    row = d['plan']['groups'][0]
+    row['fields']['environment']['MOJOLEARN_COMPILE_JOBS'] = workers
+    row['key'] = dev.digest(row['fields'])
+    put(Path(p['result']), d)
+    with pytest.raises(ValueError, match='compiler worker count'):
         adapter.collect('/source', {}, p)

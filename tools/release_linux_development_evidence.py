@@ -9,6 +9,7 @@ selected-group executions and their original logs must all still be present.
 import ast
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import development_build as dev
@@ -97,7 +98,7 @@ def _group(row, result, result_path, leg, tree, stage):
             "Linux compiler executable/package witness is missing")
     environment = fields.get("environment", {})
     workers = environment.get("MOJOLEARN_COMPILE_JOBS", "")
-    require(isinstance(workers, str) and workers.isdecimal() and int(workers) > 0, "compiler worker count is missing")
+    require(isinstance(workers, str) and re.fullmatch(r"[1-9][0-9]*", workers) is not None, "compiler worker count is missing")
     for name, rel in common.DEV_PLACEMENT.items():
         require(name not in environment or Path(environment[name]) == repo / rel,
                 "toolchain placement differs: " + name)
@@ -176,7 +177,7 @@ def facts(root, producer):
 
 def collect(root, document, producer):
     found = facts(root, producer)
-    units, flags, compilers = {}, set(), set()
+    units, flags, compilers, workers = {}, set(), set(), {}
     for stem, group in found["groups"].items():
         env = group["environment"]
         flags.add(json.dumps(common.derived_build_flags(env, ROUTING), sort_keys=True))
@@ -192,9 +193,11 @@ def collect(root, document, producer):
             for spec in specs:
                 key = prefix + name
                 units[spec + "/" + key] = dict(group=stem, binding_key=key)
+                workers[key] = str(group["compiler_workers"])
     require(len(flags) == len(compilers) == 1, "selected groups used different compiler/semantic flags")
     config = dict(release_modes=["identical"], build_flags=json.loads(flags.pop()),
-                  dependency_context=dict(cpu_target=common.LINUX, compiler_sha256={common.LINUX: compilers.pop()}))
+                  dependency_context=dict(cpu_target=common.LINUX, compiler_sha256={common.LINUX: compilers.pop()},
+                                          selected_binding_compile_jobs=workers))
     return dict(source_revision=found["source_revision"], facts=found, units=units, configuration=config,
                 spec_ids=sorted({rid.split("/", 1)[0] for rid in units}))
 
@@ -208,14 +211,10 @@ def check_unit(requirement_id, wanted, found, unit):
     require(binding["name"] in group["members"] and binding["tier"] == group["mode"], "binding not compiled in this group")
     require(binding.get("toolchain") == group["toolchain_locked"]
             and declared["compiler_sha256"] == group["compiler_sha256"], "compiler identity differs")
-    # Owner policy: all allocated compiler workers are required. -j is scheduling,
-    # not an arithmetic/optimization switch (release_requirements.build_flags has
-    # the same exclusion). Keep actual argv/environment and count; do not assert
-    # byte equality with an unbuilt -j2 image or runtime identity.
+    # Keep the actual worker setting in the selected binding's fingerprint.
+    # Compiler codegen partitioning is not assumed byte-neutral across -j values.
     flags = dict(binding.get("flags") or {})
     environment = dict(group["environment"])
-    flags.pop("compile_jobs", None)
-    environment.pop("MOJOLEARN_COMPILE_JOBS", None)
     common.check_flags(flags, environment)
     arch = binding.get("arch")
     expected_format = "ptx" if arch == "sm_80" else "native"

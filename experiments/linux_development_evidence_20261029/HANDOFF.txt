@@ -1,0 +1,71 @@
+Linux retained development compile-evidence adapter
+
+Initial tool commit: 09fa49d0a0dfecec62e5f26a6133ce50bb5bd417; follow-up requires exact selected compiler workers.
+Branch: lane/linux-development-evidence-20261029, base b2d802861c.
+No Mojo product edits, compilation, installed execution, identity or timing run.
+
+New linux-development-build admission adapter accepts actual retained
+runpod_cpu_leg output: --producer leg=LOCAL_LEG --producer result=LOCAL_RESULT.
+It reads original files; it does not rewrite producer records or invent a
+successful whole-set schema. An incomplete development result can qualify its
+selected successful groups only. Missing/failed selected execution refuses.
+
+The source tarball has no .git, so original result.source_commit is empty.
+The adapter reads retained leg.txt clean commit and independently reproduces
+ALL recorded source hashes/build recipes at that exact Git revision. It checks
+compiler executable SHA/package pins, command, successful execution, selected
+result, raw cache binary, unchanged per-binding staged binary, execution receipt
+and retained log. Paths are relocated explicitly to the retained cache. It
+records compiler worker count and complete original argv/environment/toolchain.
+
+Compiler -j counts remain exact in selected_binding_compile_jobs fingerprints.
+The adapter records actual16/32 workers, not the release recipe's historical2.
+No codegen byte-neutrality is assumed; compiler worker setting, numerical,
+optimization, target and code-format flags all remain exact. Explicit ptx is
+required for sm80; native images do not qualify PTX. Root owns the corresponding
+selected-binding dependency contract propagated to compile and identity units.
+
+First actual prepare correctly refused a per-binding entry not present in the
+development source closure. The repaired adapter proves the narrow wrapper
+mapping: literal templates from the tested merged_bindings.py, canonical
+production entry bytes, identical imported member PyInit body, and reproduced
+generated development-root SHA. All substantive Mojo sources still require
+exact compiled hashes. This is compilation coverage, not production-layout
+loading/packaging/runtime coverage.
+
+Initial actual retained evidence read successfully: 16Linux host groups (56c source)
+and9sm89 groups (7b source),4 producer phases. Superseded scheduling-equivalence preparation accepted
+57 compile requirement units (48host acrossCPU/NVIDIA/AMD +9GPU),0refused.
+No central ledger mutation/admit was performed. Final exact-worker preparation
+awaits the shared selected-binding contract commit; old preparation is not final admission. At the reviewed b2 ledger all
+57 were not reusable because its Linux compiler SHA was not yet supplied;
+changed tokenizer/mamba/runtime_sequential closure fingerprints also stayed
+changed. Final synchronization must preserve those distinctions. Other13host
+and9GPU recorded closures matched b2; final freeze needs its own reuse check.
+
+Evidence-only tests: exact-worker final suite48 tests +38subtests passed; targeted
+adapter tests21. Missing/stale raw/staged bytes, absent receipt/log/execution,
+failed execution, dirty source, changed source/wrapper/root, wrong compiler,
+semantic flags and native-as-PTX refusals covered. Initial test invocations
+failed because default/system Python lacked pytest; a dedicated external test
+venv was created, no product dependency changed. All original logs retained.
+Source guards no_host_routes, no_python_in_kernels, no_compute_in_shells and
+rebuild_fence passed for09fa49d0a; final evidence-only follow-up receipt below.
+
+External evidence root:
+~/mojolearn-evidence/current-neural-nvidia-20261029/
+  adapter-tests-exact-workers-final.log; adapter-tests-final-expanded.log (superseded design)
+  adapter-guards.json; adapter-guard-*.log
+  adapter-actual-admission-summary.json
+  admission-training-attempt1/review.json (original honest refusal)
+  admission-training-attempt2/ (1GPU unit)
+  admission-sm89-priority-cpu-neural-rest/ (8GPU units)
+  admission-host-priority-retry1-cpu-tokenizer/ (3host units)
+  admission-host-priority-retry1-cpu-neural-rest/ (45host units)
+  compiler-provenance-summary.json; b2-source-equivalence.json
+  RELEASE-REMAINDER.txt (full release pending coverage and ownership)
+Actual binaries/logs/caches retained on Mac+R2 in original CPU-leg archives.
+All owned machines deleted; no new rental/extension until root clarifies
+requested deadman duration. Tokenizer build remains held for causal admission
+repair. Measurements deferred until release; full native/PTX/multiGPU/runtime
+requirements remain pending, not waived by this compile adapter.
