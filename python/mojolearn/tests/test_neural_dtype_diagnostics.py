@@ -64,3 +64,29 @@ def test_float32_public_forward_still_returns_float32(version):
     assert view.shape == (1, 2, dm)
     assert view.dtype == np.float32
     assert np.isfinite(view).all()
+
+
+def _transformer():
+    dm, width, kv, hidden = 32, 32, 16, 64
+    shapes = {"input_layernorm.weight": (dm,),
+              "post_attention_layernorm.weight": (dm,),
+              "q_proj.weight": (width, dm), "k_proj.weight": (kv, dm),
+              "v_proj.weight": (kv, dm), "o_proj.weight": (dm, width),
+              "gate_proj.weight": (hidden, dm), "up_proj.weight": (hidden, dm),
+              "down_proj.weight": (dm, hidden)}
+    return ml.TransformerBlock({k: np.zeros(s, np.float32) for k, s in shapes.items()},
+                               n_heads=2, n_kv_heads=1)
+
+
+def test_transformer_float64_forward_refusal_uses_same_admitted_dtype_message():
+    with pytest.raises(TypeError) as caught:
+        _transformer().forward(np.zeros((1, 2, 32), np.float64))
+    assert "has dtype float64" in str(caught.value)
+    assert "bfloat16" in str(caught.value)
+
+
+def test_transformer_float64_gradient_is_named_before_execution():
+    with pytest.raises(TypeError) as caught:
+        _transformer().backward(np.zeros((1, 2, 32), np.float32),
+                                np.zeros((1, 2, 32), np.float64))
+    assert "grad_output has dtype float64" in str(caught.value)
