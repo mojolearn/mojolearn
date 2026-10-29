@@ -47,9 +47,11 @@ def connect():
     half_copy_canonical = struct.pack('<e', struct.unpack('<e', b'\x01\x7c')[0]) == b'\x00\x7e'
     # glue: retain native builtin constructors and exact scalar identities;
     # mutable builtins module names must never become product callbacks
-    native_types = dict(type=type, object=object, list=list, tuple=tuple, dict=dict,
-                        str=str, bytes=bytes, bytearray=bytearray, int=int,
-                        float=float, bool=bool)
+    # The shared native Array snapshot path also needs memoryview when it
+    # independently pins backing exports. Keep the complete owner table:
+    # replacing it with an arena-only subset broke NumPy-free cross_val_score
+    # with a missing ('memoryview',) lookup before the first fold could run.
+    native_types = context["owner_native_types"]
     context.update(arena_native_types=native_types, native_module_type=ModuleType, arena_memoryview=memoryview,
                    arena_half_copy_canonical=half_copy_canonical,
                    arena_resident_class=model_selection._Resident,

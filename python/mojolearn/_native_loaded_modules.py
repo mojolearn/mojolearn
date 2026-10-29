@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time canonical module and native-export connections."""
 import array
+import _thread
 import builtins
 import itertools
 import math  # exact integer exports only; see the connect_module('math', ...) call below
@@ -73,6 +74,10 @@ connect_module('builtins', builtins, tuple(name for name in vars(builtins)  # gl
                                           if not name.startswith('__')))
 connect_module('sys', sys, ('modules',))
 connect_module('array', array, ('array',))
+# Resident fold storage admits an exact native thread-local object before
+# reading its dictionary. This standard-library owner is needed even when
+# NumPy is absent; connect the consumed type once rather than importing at use.
+connect_module('_thread', _thread, ('_local',))
 connect_module('operator', operator, tuple(name for name in vars(operator)  # glue: fixed scalar/index operator exports
                                           if not name.startswith('_')))
 # glue: only the exact integer-valued math exports the model-selection
