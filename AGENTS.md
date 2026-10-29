@@ -1,5 +1,34 @@
 # Agent working rules
 
+## Within-release identity and fresh reference hashes (Andrew, 2026-10-29)
+
+- Bitwise identity is required across supported GPU vendors (Apple, NVIDIA and
+  AMD) within the same release. It is NOT required across versions. Do not block
+  a correct implementation or sampling arithmetic change merely because it
+  changes an older release's hashes or seeded output. Document numerical policy
+  changes; preserve supported API semantics, correctness and sampling quality.
+- After the current sampler change and remaining release fixes are settled,
+  freeze the selected source/configuration and regenerate reference hashes for
+  EVERY algorithm. Andrew explicitly requests this fresh reference campaign;
+  it supersedes compile-only/no-campaign instructions for that subsequent work.
+  Do not start it against a moving sampler implementation.
+- Apple or NVIDIA may generate the first candidate hashes. Those hashes are
+  provisional until corresponding supported vendor executions agree under the
+  same release policy, inputs and configuration. Never accept vendor-specific
+  reference columns to hide a disagreement, or regenerate expected hashes from
+  a failing vendor merely to make that failure pass.
+- Preserve historical tables, raw failures and provenance. Replace the active
+  release reference through the supported verifier/ledger tools with complete
+  algorithm coverage and explicit failed, skipped and missing cells. Fresh
+  reference hashes are not independent correctness evidence or a speed claim.
+- Reuse unchanged compiled artifacts when their source closure, compiler,
+  flags, target and dependencies match; refreshing all hashes does not itself
+  require rebuilding all binaries.
+- Keep complete logs on disk. Inspect exit/status summaries, then targeted
+  rg/grep (normally at most 20 matches with 2-3 surrounding lines) or short
+  tails. Aggregate large JSON/status/worktree outputs before returning them;
+  keep routine diagnostic responses around 2,000 tokens or less.
+
 ## Direct CPython is allowed during execution (Andrew, 2026-10-28)
 
 - Direct CPython C-API calls are allowed throughout native product execution,
