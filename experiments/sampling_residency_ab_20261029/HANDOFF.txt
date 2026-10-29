@@ -1,0 +1,78 @@
+Default-off sampling KV upload reuse A/B experiment (2026-10-29)
+
+Branch lane/sampling-residency-20261029; source base748c43207e.
+Only product file: bindings/causal_lm_public.mojo.
+Root serializes integration after the separately prioritized manifold smoke.
+
+A/B control:
+Unset or MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE=0 is the baseline.
+MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE=1 opts into the candidate.
+The flag is captured once per legacy public read, outside the token loop, and
+only for sampling (greedy=False). It is DEFAULT OFF and UNMEASURED. A single
+runtime-flag compile instantiates both arms; setting it does not qualify a path
+unless the retained-owner admission below actually succeeds.
+
+Repeated work removed when admitted:
+A multi-token read loans an already-persistable native resident session set,
+loads KV once, and keeps device KV between forwards. Every successful forward
+STILL exports/writes back KV before the existing host selector, preserving the
+last successfully published state if a later forward fails. The model session
+cache tuple is published once on read exit rather than after every token.
+Native session group reserve/release remains per forward; the model busy lease,
+not native layer busy bits, spans the host selection loop.
+
+Admission, ownership and invalidation:
+Only captured local snapshots, native resident provider, a multi-token read,
+unexposed parameters, an available model cache lease and provably disjoint KV
+storage qualify. The existing alias gate remains. Single-token, exposed-weight,
+private-busy, alias/unknown, parallel and uncaptured paths retain baseline work.
+Prompt/current tokens are copied by generation_ids; state is allocated privately;
+resume and checkpoint copy KV. Stream busy remains true through final cleanup.
+This matches existing resident-read operation ownership, not pointer-identity
+immutability or support for concurrent raw mutation of internal state/weights.
+
+The held arm checks live _parameters_exposed and cache-owner identity before the
+next retained forward and final publication. Exposure/invalidation disables reuse,
+closes the owned group and resumes the ordinary per-step path. Exposure True is
+also retained in captured fields so this call cannot publish its stale False.
+Other supported calls see model busy and use their existing private fallback.
+Every initial/new public read still captures current metadata and live state.
+
+Failure/publication contract:
+Successful-step exports remain before selection. Positions/capacity checks and
+post-GIL Array checks remain at their existing points. Native forward failure
+invalidates/closes the group, retaining earlier exported host bytes and the first
+error. A sampler error retains its completed forward, earlier-row policy progress
+and last committed current token. Descriptor/result allocation errors likewise
+cannot skip finally release. Cancel tries every pinned owner, including partial
+open/close cases; close releases optional native storage while owner structs stay
+pinned. Cleanup after an existing error cannot replace that first exception.
+
+Evidence and limits:
+Actual public C entries5(read) and7(generate) compiled successfully: Mac arm64 CPU,
+Mojo1.0.0(ed45d567), identical O0, default2 compile slots. Both runtime-toggle arms
+are in this single compiled closure. Dynamic GPU arithmetic targets are unchanged
+and not compiled by this CPU root. Prior independent peer source review found no
+blocker in the preserved lease/failure/invalidation draft; adding the default-off
+flag does not qualify runtime behavior. Required source guard receipt follows.
+No GPU rented; no runtime, identity or performance campaign ran for this batch.
+
+KV D2H exports, logits downloads, selected-token uploads and host selection remain.
+This is upload reuse, not full GPU sampling residency. No Apple FP64 workaround,
+new selector, new host fallback or arithmetic/RNG change. No speedup claimed.
+
+Required before promotion:
+Measure default-off/on arms from the SAME SOURCE on supported real sampling
+workloads with identical parameters, EOS, streaming/read-call boundaries and
+reported actual admission. Attribute NVIDIA transfers before claiming benefit;
+include whole-operation preparation/synchronization/consumed outputs, not only
+kernel time. Qualify alias, partial sampler progress, bounds, later-forward errors,
+publication and live invalidation correctness before enabling the default. Single
+-token reads deliberately do not activate this experiment. Measurements are later,
+not part of this compile-and-merge batch.
+
+Retention:
+/Users/andrewhendel/mojolearn-evidence/sampling-residency-ab-20261029/
+contains full compile.log/.exit, binary, source patch/archive/hash manifest and
+command/scope receipt. The initial paused, uncompiled draft remains separately
+retained at sampling-residency-20261029; its earlier HELD status is historical.

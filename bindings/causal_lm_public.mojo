@@ -1204,7 +1204,7 @@ def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, 
     return True
 
 
-def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, output: PythonObject, prepared_key: PythonObject) raises -> PythonObject:
+def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, output: PythonObject, prepared_key: PythonObject, mut read_plan: Optional[LegacyGenerationReadPlan]) raises -> PythonObject:
     """`(B, L, V)` logits of `forward` in one resident program: the kept (or
     newly opened) sessions take the state's caches, run the stack, and the
     advanced caches come back into the state."""
@@ -1216,30 +1216,63 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
     var int15 = model._head_int15 is not None
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
-    var fields = _standalone_record_fields(mods, model)
-    var persist = (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+    var held = Bool(read_plan) and read_plan.value().resident_active
+    if held and not _legacy_resident_valid(read_plan.value()):
+        # A supported parameters() call may expose/invalidate the model while
+        # native execution releases the GIL. Do not reuse or republish its old
+        # session cache: release this loan and resume the ordinary per-step path.
+        read_plan.value().resident_reuse = False
+        _legacy_resident_cancel(mods, model, read_plan.value())
+        held = False
+    var fields = read_plan.value().resident_fields if held else _standalone_record_fields(mods, model)
+    var persist = held or (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
     var key = _resident_key(mods, model, state, b, int15) if prepared_key is None else prepared_key
-    var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
+    var retain = persist and Bool(read_plan) and read_plan.value().resident_reuse
+    var kept = py_get(fields, "_resident_sessions") if persist and not held else PythonObject(None)
     var lm = PythonObject(None)
     var sessions = PythonObject(None)
     var out = _causal_logits_output(b, l, v, output)
-    if persist:
+    if persist and not held:
         causal_model_cache_set(mods, model, fields, "_resident_busy", True)
+    if retain:
+        read_plan.value().resident_fields = fields
+        read_plan.value().resident_active = True
     try:
-        if kept is not None and Bool(py=kept[0] == key):
+        if held:
+            # The preceding successful forward exported these exact cache
+            # contents. The read owns the model lease and disjoint stream state;
+            # no host reload or immutable-weight re-admission is needed here.
+            lm = read_plan.value().resident_lm
+            sessions = read_plan.value().resident_sessions
+        elif kept is not None and Bool(py=kept[0] == key):
             lm = kept[1]
             sessions = kept[2]
+            if retain:
+                read_plan.value().resident_lm = lm
+                read_plan.value().resident_sessions = sessions
             _resident_load_states(e, sessions, state, keep)
             mods.released()
         else:
             if kept is not None:
+                if retain:
+                    read_plan.value().resident_lm = kept[1]
+                    read_plan.value().resident_sessions = kept[2]
                 causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
                 _resident_close(e, kept[1], kept[2])
                 mods.released()
+                if retain:
+                    read_plan.value().resident_lm = PythonObject(None)
+                    read_plan.value().resident_sessions = PythonObject(None)
             var opened = _resident_open_all(mods, model, e, state, b, l, int15, keep)
             lm = opened[0]
             sessions = opened[1]
+            if retain:
+                read_plan.value().resident_lm = lm
+                read_plan.value().resident_sessions = sessions
+        if retain and not held:
+            var live = py_get(fields, "_causal_live_fields", fields)
+            read_plan.value().resident_cache = py_get(live, "_resident_sessions")
         var provider = py_get(e, "native_block_operations")
         var cached = PythonObject(None)
         if provider is not None:
@@ -1268,6 +1301,9 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
         _writeback(copies)
     except error:
         mods.released()
+        if retain:
+            _legacy_resident_cancel(mods, model, read_plan.value())
+            raise error
         if persist:
             causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
             causal_model_cache_set(mods, model, fields, "_resident_busy", False)
@@ -1275,7 +1311,11 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             _resident_close(e, lm, sessions)
             mods.released()
         raise error
-    if persist:
+    if retain:
+        # Export/writeback above is still per successful forward, before host
+        # selection. Only the upload and cache-owner publication are deferred.
+        _ = read_plan
+    elif persist:
         causal_model_cache_set(mods, model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
         causal_model_cache_set(mods, model, fields, "_resident_busy", False)
     else:
@@ -1378,6 +1418,12 @@ struct LegacyGenerationReadPlan(Movable):
     var resident_key: PythonObject
     var logits: PythonObject
     var logits_length: Int
+    var resident_reuse: Bool
+    var resident_active: Bool
+    var resident_fields: PythonObject
+    var resident_cache: PythonObject
+    var resident_lm: PythonObject
+    var resident_sessions: PythonObject
 
     def __init__(out self, model: PythonObject, state: PythonObject, batch: Int, resident: Bool) raises:
         self.resident = resident
@@ -1388,6 +1434,19 @@ struct LegacyGenerationReadPlan(Movable):
         self.resident_key = PythonObject(None)
         self.logits = PythonObject(None)
         self.logits_length = -1
+        self.resident_reuse = False
+        self.resident_active = False
+        self.resident_fields = PythonObject(None)
+        self.resident_cache = PythonObject(None)
+        self.resident_lm = PythonObject(None)
+        self.resident_sessions = PythonObject(None)
+
+    def clear_resident(mut self):
+        self.resident_active = False
+        self.resident_fields = PythonObject(None)
+        self.resident_cache = PythonObject(None)
+        self.resident_lm = PythonObject(None)
+        self.resident_sessions = PythonObject(None)
 
     def positions(self, state: PythonObject, batch: Int, length: Int) raises:
         # Position/capacity checks retain their per-step execution point, before
@@ -1401,6 +1460,60 @@ struct LegacyGenerationReadPlan(Movable):
             raise Error("CausalLM: max_tokens or sequence exceeds max_positions")
         if have + length > self.capacity:
             raise Error("CausalLM: sequence exceeds allocated state capacity")
+
+
+def _legacy_resident_valid(mut plan: LegacyGenerationReadPlan) raises -> Bool:
+    # This is an ownership invalidation check, not a scan of model data. A
+    # per-operation snapshot does not own a concurrent public cache transition.
+    var fields = plan.resident_fields
+    var live = py_get(fields, "_causal_live_fields", fields)
+    var exposed = py_get(live, "_parameters_exposed", PythonObject(False))
+    if exposed is not PythonObject(False):
+        # Exposure is monotonic. Preserve the live transition in this snapshot
+        # too, so final publication cannot restore its earlier False value.
+        py_setitem(fields, "_parameters_exposed", PythonObject(True))
+        return False
+    return py_get(live, "_resident_sessions") is plan.resident_cache
+
+
+def _legacy_resident_cancel(mut mods: NativeModules, model: PythonObject, mut plan: LegacyGenerationReadPlan):
+    # Failure cleanup must neither replace the operation error nor leave the
+    # model busy. Pins remain live until every owner has had its close attempt.
+    var fields = plan.resident_fields
+    var lm = plan.resident_lm
+    var sessions = plan.resident_sessions
+    plan.resident_active = False
+    try:
+        causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
+    except:
+        mods.released()
+    try:
+        _resident_read_cleanup(py_get(model._native_entries, "native_block_operations"), lm, sessions)
+        mods.released()
+    except:
+        mods.released()
+    try:
+        causal_model_cache_set(mods, model, fields, "_resident_busy", False)
+    except:
+        mods.released()
+    plan.clear_resident()
+
+
+def _legacy_resident_finish(mut mods: NativeModules, model: PythonObject, mut read_plan: Optional[LegacyGenerationReadPlan]) raises:
+    if not read_plan or not read_plan.value().resident_active:
+        return
+    ref plan = read_plan.value()
+    try:
+        if not _legacy_resident_valid(plan):
+            _legacy_resident_cancel(mods, model, plan)
+            return
+        causal_model_cache_set(mods, model, plan.resident_fields, "_resident_sessions",
+            Python.tuple(plan.resident_key, plan.resident_lm, plan.resident_sessions))
+        causal_model_cache_set(mods, model, plan.resident_fields, "_resident_busy", False)
+    except error:
+        _legacy_resident_cancel(mods, model, plan)
+        raise error
+    plan.clear_resident()
 
 
 def _legacy_read_captured(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
@@ -1420,7 +1533,7 @@ def _run(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state:
 
 def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject,
                   mut snapshot: Optional[GenerationOperationSnapshot], mut read_plan: Optional[LegacyGenerationReadPlan], remote_step: Bool = False,
-                  admitted: Bool = False) raises -> PythonObject:
+                  admitted: Bool = False, retain_resident: Bool = False) raises -> PythonObject:
     # `admitted`: the caller (the generation loop) already guarded the Array
     # class for this GIL-release window; do not repeat the full guard.
     if not admitted:
@@ -1442,6 +1555,11 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
         var resident = read_plan.value().resident if read_plan else _resident_forward_ok(mods, model, state)
         if not read_plan and admitted and _legacy_read_captured(mods, model, state):
             read_plan = LegacyGenerationReadPlan(model, state, b, resident)
+            if resident and retain_resident and py_get(entries, "native_block_operations") is not None:
+                var fields = _standalone_record_fields(mods, model)
+                if (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+                        and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False)))):
+                    read_plan.value().resident_reuse = _resident_read_disjoint_state(mods, model, state)
         var output = PythonObject(None)
         var resident_key = PythonObject(None)
         if read_plan:
@@ -1455,7 +1573,7 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
                     plan.resident_key = _resident_key(mods, model, state, b, model._head_int15 is not None)
                 resident_key = plan.resident_key
         if resident:
-            var logits = _resident_forward(mods, model, ids, state, output, resident_key)
+            var logits = _resident_forward(mods, model, ids, state, output, resident_key, read_plan)
             if read_plan:
                 read_plan.value().logits = logits
                 read_plan.value().logits_length = l
@@ -2067,6 +2185,8 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
     var v = Int(py=s.model.vocab_size)
     var capacity = min(count, s.max_new - s.produced)
     s.busy = True
+    var read_plan: Optional[LegacyGenerationReadPlan] = None
+    var failed = False
     try:
         var legacy_resident = False
         if capacity > 0 and not s.done() and s.greedy:
@@ -2080,32 +2200,42 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
                 # intermediate export/reload, so storage coupling is irrelevant.
                 if capacity == 1 or _resident_read_disjoint_state(mods, s.model, s.state):
                     var result = _read_resident(mods, s, capacity, admission.value())
-                    s.busy = False
                     return result
                 # Keep the original resident-forward host loop: another engine
                 # does not establish the missing cross-layer alias contract.
                 legacy_resident = True
         if capacity > 0 and not s.done() and not legacy_resident and _use_native_generation_engine(mods, s.model, s.state):
             var result = _read_engine(mods, s, capacity)
-            s.busy = False
             return result
         # Only the legacy fallback needs host token staging. Resident/native
         # engines return their final native result without this unused buffer.
         var tokens = List[Int32](capacity=b * capacity)
         var wrote = 0
         var snapshot: Optional[GenerationOperationSnapshot] = None
-        var read_plan: Optional[LegacyGenerationReadPlan] = None
         var token_a = PythonObject(None)
         var token_b = PythonObject(None)
         # Only this host-selection fallback needs scratch. Retain it across
         # tokens of this read; the sampler overwrites all used words and greedy
         # never sizes it. Resident/native routes have already returned above.
         var sampling = GenerationSamplingScratch()
+        # DEFAULT OFF, UNMEASURED A/B experiment (2026-10-29). Capture once per
+        # public read, never per token. Before promotion, measure both arms from
+        # the same source on supported sampling with EOS, streaming/read-call
+        # boundaries, and qualify failure/alias correctness. This only removes
+        # repeated KV uploads: successful-step exports and host selection remain,
+        # so it is not full GPU sampling residency or a claimed speedup.
+        var reuse_sampling_uploads = (not s.greedy and
+            getenv("MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE", "0") == "1")
+        # Stream prompts/current tokens are copied by generation_ids; state is
+        # allocated privately and resume/checkpoint copy its buffers. The busy
+        # stream owns those bytes for this operation. This follows the resident
+        # greedy read's ownership contract, not a promise for concurrent writes
+        # through manually exposed internal storage or mutable model weights.
         while wrote < capacity and not s.done():  # driver-loop: over decode steps, one model forward each
             if not admission:
                 admission = NativeArrayAdmission(generation_array_context())
             var l = Int(py=s.current.shape[1])
-            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, read_plan, s.produced > 0, True)
+            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, read_plan, s.produced > 0, True, reuse_sampling_uploads and capacity > 1 and not legacy_resident)
             # Post-release re-check for this forward's GIL-release window (not redundant).
             admission.value().recheck(generation_array_context())
             var raw = f32_ptr(Int(py=logits._addr))
@@ -2139,19 +2269,28 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
             wrote += 1
         var out = generation_array([b, wrote], "i")
         if wrote == 0:
-            s.busy = False
             return out
         var dst = i32_ptr(Int(py=out._addr))
         _ = out  # keep the Python object alive through the native call above
         causal_lm_tokens_row_major(tokens, dst, b, wrote)
         _ = out  # keep the Python object alive through the native call above
-        s.busy = False
         return out
     except error:
         mods.released()
-        s.busy = False
+        failed = True
         s.usable = False
         raise error
+    finally:
+        try:
+            # A sampler/descriptor/result-allocation failure follows a
+            # successful exported forward; its valid sessions may be retained.
+            _legacy_resident_finish(mods, s.model, read_plan)
+        except cleanup:
+            if not failed:
+                s.usable = False
+                raise cleanup
+        finally:
+            s.busy = False
 
 
 def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int) raises -> PythonObject:
