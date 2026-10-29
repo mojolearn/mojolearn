@@ -276,6 +276,20 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
     return result
 
 
+def _neural_dtype_refusal(name: String, code: String) -> String:
+    # code is captured native Array metadata or the admitted buffer format,
+    # never an arbitrary object's dtype attribute or a coercion callback.
+    var label = String(code)
+    if code == "<f8" or code == ">f8" or code == "d" or code == "<d" or code == ">d" or code == "=d" or code == "@d":
+        label = "float64"
+    elif code == "<f2" or code == ">f2" or code == "e" or code == "<e" or code == ">e" or code == "=e" or code == "@e":
+        label = "float16"
+    elif code == "<u2" or code == ">u2" or code == "H" or code == "<H" or code == ">H" or code == "=H" or code == "@H":
+        label = "uint16 (bfloat16 bits)"
+    return ("TypeError: neural " + name + " has dtype " + label + "; float32 only: bfloat16, "
+            + "float16 and float64 are refused rather than converted. Convert to float32.")
+
+
 def neural_block_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     # Callers without an operation handle keep their per-call module checks.
     var mods = NativeModules()
@@ -286,7 +300,7 @@ def neural_block_f32(mut mods: NativeModules, value: PythonObject, name: String,
     if py_type(value) is context["array_class"]:
         var captured = neural_array_snapshot(mods, value, context)
         if String(captured.dtype) != "<f4":
-            raise Error("TypeError: neural " + name + " requires float32 input")
+            raise Error(_neural_dtype_refusal(name, String(captured.dtype)))
         if String(captured.order) == "C":
             return captured
         # F-order follows the existing byte-preserving C preparation, with
@@ -303,7 +317,7 @@ def neural_block_f32(mut mods: NativeModules, value: PythonObject, name: String,
     admit_native_buffer_exporter(value)
     var pin = AdmittedBorrowedBuffer(value)
     if pin.format != "f" and pin.format != "<f" and pin.format != "=f" and pin.format != "@f":
-        raise Error("TypeError: neural " + name + " requires float32 input")
+        raise Error(_neural_dtype_refusal(name, pin.format))
     var layout = pin.layout.value().copy()
     if layout.itemsize != 4:
         raise Error("TypeError: neural float32 input requires four-byte elements")
