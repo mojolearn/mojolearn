@@ -1,0 +1,8 @@
+{
+  "source_commit": "45a1496bcb2c52f94874c2d65899348b04653e4c",
+  "exit_code": 0,
+  "elapsed_seconds": 68.76228100003209,
+  "log": "/Users/andrewhendel/mojolearn-evidence/mac-host-flag-reconciliation-20261029/guards.log",
+  "scope": "Committed-ref source/push guards; no push, compile or product execution",
+  "log_sha256": "7dbaae40e4ae82a520bf6a45d793ca8a55fc84374bff4dbce96bfa48954bbce9"
+}

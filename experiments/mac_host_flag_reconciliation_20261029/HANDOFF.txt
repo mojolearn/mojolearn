@@ -31,3 +31,5 @@ Full logs/new reports: ~/mojolearn-evidence/mac-host-flag-reconciliation-2026102
 Source basis: bindings/build_host_family.sh destination selection and compiler
 argv expansion; tools/release_macos_host_family_evidence.py exact standard command
 admission. Original record retains settings even when not semantic compiler input.
+
+Committed-ref source/push guards: exit 0, 68.76 seconds at 45a1496bcb.
