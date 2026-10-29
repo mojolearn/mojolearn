@@ -1,0 +1,28 @@
+Distributed replay metadata and scratch reuse, 2026-10-28
+Branch lane/distributed-replay-reuse-20261028; base 7965f31955.
+
+Repeated work removed: each logical microbatch previously rebuilt replay node
+metadata, copied every input shape, recomputed row widths, allocated parameter
+leaf storage and allocated a one-word host loss buffer. Each physical replica
+now owns lazy PreparedProgramReplay, reusable parameter leaves and loss storage.
+Dataset prepare captures widths and batch shapes; gradient changes only the
+leading row extent. No arithmetic or worker scheduling change.
+
+Reuse/invalidation: immutable graph metadata belongs exclusively to one replica;
+no sharing between concurrently active workers. Dropout resets from captured
+keys and applies the existing stream. Dataset release clears widths/shapes;
+prepare captures the new dataset. Each replay clears current parameter handles;
+no stale tape handle is reused. Loss storage remains alive through download and
+sync. Close releases replay/scratch after the existing session close.
+
+Compile scope: fixture instantiates actual DistributedProgram[HostExec].fit,
+worker replay/gradient/reduction/update scheduling, constructor and close.
+Two focused Apple CPU identical O0 compilations returned exit0 (second after
+removing the redundant original-shape vector). The local build logs/binaries
+were subsequently found missing during disk cleanup; no retained-artifact claim
+is made for those runs. A fresh integrated Linux CPU compilation is pending.
+Runtime, bitwise identity, GPU behavior and performance are unmeasured.
+
+Remaining: distributed inference retains its one-shot program setup; temporary
+numeric intermediates and output handles are still created as before. No broader
+public binding, installed-wheel or multi-device behavior is qualified here.

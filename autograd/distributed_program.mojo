@@ -11,7 +11,8 @@ from sequence.ops import FP, Args, OP_COPY, OP_FILL, OP_SCALE, dummy_ptr
 from autograd.ops import OP_AG_ACCUMULATE
 from autograd.ops_api import OpsSession
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape
-from autograd.program_runtime import parameter_buffers, replay_values, program_loss
+from autograd.program_runtime import parameter_buffers, replay_values_prepared, program_loss
+from autograd.program_replay_metadata import PreparedProgramReplay
 from autograd.rankn import ShapeN
 from autograd.optim import OptimizerConfig, OptimizerState, step_lr, optimizer_slots
 from autograd.model import epoch_lr
@@ -31,7 +32,12 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
     var full: List[FP]
     var dataset_storage: List[FP]
     var batches: List[FP]
-    var shapes: List[ShapeN]
+    var batch_shapes: List[ShapeN]
+    var input_widths: List[Int]
+    var replay: PreparedProgramReplay
+    var replay_ready: Bool
+    var parameter_leaves: List[Int]
+    var loss_word: List[Float32]
     var target: FP
     var batch_target: FP
     var indices: FP
@@ -55,7 +61,12 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
         self.full = List[FP]()
         self.dataset_storage = List[FP]()
         self.batches = List[FP]()
-        self.shapes = List[ShapeN]()
+        self.batch_shapes = List[ShapeN]()
+        self.input_widths = List[Int]()
+        self.replay = PreparedProgramReplay()
+        self.replay_ready = False
+        self.parameter_leaves = List[Int](capacity=len(p.params))
+        self.loss_word = List[Float32](length=1, fill=Float32(0))
         self.target = dummy_ptr()
         self.batch_target = dummy_ptr()
         self.indices = dummy_ptr()
@@ -94,7 +105,8 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
         self.dataset_storage.clear()
         self.full.clear()
         self.batches.clear()
-        self.shapes.clear()
+        self.batch_shapes.clear()
+        self.input_widths.clear()
         self.target = dummy_ptr()
         self.batch_target = dummy_ptr()
         self.indices = dummy_ptr()
@@ -112,7 +124,8 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
                 var batch_buf = self.session.ex.alloc(batch * (shapes[k].count() // rows))
                 self.dataset_storage.append(batch_buf)
                 self.batches.append(batch_buf)
-                self.shapes.append(shapes[k])
+                self.batch_shapes.append(shapes[k])
+                self.input_widths.append(shapes[k].count() // rows)
                 if self.program.in_kinds[k] == PROGRAM_IN_IDS:
                     upload_cast_i32(self.session.ex, buf, srcs[k], "distributed program ids")
                 else:
@@ -137,17 +150,25 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
         self.temps.clear()
         self.session.tape.reset()
         self.session.tape.record()
-        var shapes = self.shapes.copy()
+        # Dataset-invariant widths/shapes were captured during prepare. Only
+        # the current logical microbatch's leading dimension changes here.
         for k in range(len(self.full)):  # driver-loop: input arrays
-            var width = shapes[k].count() // shapes[k].d[0]
-            gather_rows(self.session.ex, self.full[k], self.indices, start, count, width, self.batches[k])
-            shapes[k].d[0] = count
+            gather_rows(self.session.ex, self.full[k], self.indices, start, count,
+                        self.input_widths[k], self.batches[k])
+            self.batch_shapes[k].d[0] = count
         if loss_kind != 0:
             gather_rows(self.session.ex, self.target, self.indices, start, count,
                         self.target_cols, self.batch_target)
-        var phs = List[Int]()
-        var outs = replay_values(self.session, self.program, self.batches, shapes, self.params,
-                                 self.trainable, self.temps, phs, stream)
+        # Each physical replica owns an immutable graph and separate scratch.
+        # Prepare only on its first executed microbatch; no sharing between
+        # concurrently active workers, and dropout keys still use stream.
+        if not self.replay_ready:
+            self.replay = PreparedProgramReplay(self.program)
+            self.replay_ready = True
+        self.parameter_leaves.clear()
+        var outs = replay_values_prepared(self.session, self.program, self.replay,
+                                 self.batches, self.batch_shapes, self.params,
+                                 self.trainable, self.temps, self.parameter_leaves, stream)
         var output = self.session.tensor(outs[0])
         var y = self.session.tape.variable(self.session.ex, self.batch_target, count, self.target_cols, False)
         var loss = program_loss(self.session.tape, self.session.ex, output, y, loss_kind, delta)
@@ -155,7 +176,7 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
             self.session.tape.backward_scalar_with_rules(self.session.ex, loss, ImportRules())
         for j in range(len(self.params)):  # driver-loop: parameter gradients
             if self.trainable[j]:
-                var parameter = self.session.tensor(phs[j])
+                var parameter = self.session.tensor(self.parameter_leaves[j])
                 if self.session.tape._nodes[parameter._index].grad_ready:
                     self.gradients[j] = self.session.tape.gradient(parameter)
                 else:
@@ -169,11 +190,10 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
                     fill.f0 = Float32(0)
                     self.session.ex.launch[OP_FILL](fill, n)
                     self.gradients[j] = zero
-        var word = List[Float32](length=1, fill=Float32(0))
-        self.session.ex.download(FP(unsafe_from_address=Int(word.unsafe_ptr())),
+        self.session.ex.download(FP(unsafe_from_address=Int(self.loss_word.unsafe_ptr())),
                                  self.session.tape.value(loss), 1)
         self.session.ex.sync()
-        self.loss = word[0]
+        self.loss = self.loss_word[0]
 
     def clear_totals(mut self) raises:
         for j in range(len(self.params)):  # driver-loop: owned gradient ranges
@@ -201,6 +221,10 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
             self.session.ex.free(self.incoming[j])
         self.states.clear()
         self.session.close()
+        self.replay = PreparedProgramReplay()
+        self.replay_ready = False
+        self.parameter_leaves = List[Int]()
+        self.loss_word = List[Float32]()
 
 
 struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
