@@ -1,0 +1,18 @@
+Default sampling-policy evidence contract
+
+Product source remains5ab; no native rebuild or product runtime in this batch.
+The installed verifier producer now resets both sampling experiment flags to0,
+records the effective default policy before execution, and retains producer
+revision/file SHA separately from the frozen product source/install witness.
+Receipt v2 validation refuses candidate1, missing policy, or upload-reuse1
+records as default columns. Legacyv1 observations are not rewritten; their
+unrecorded new policy is explicitly unavailable for default qualification.
+This is an evidence limitation, not a numerical-failure verdict.
+
+43 producer/transport tests and49 admission tests passed; five required source
+guards passed. A first extra-test invocation named a nonexistent test file and
+ran no tests; its original failure is retained beside the corrected49-test run.
+Full evidence: ~/mojolearn-evidence/default-sampling-evidence-20261029/.
+No ledger writes or reference runs. Candidatepolicy1 needs separate qualified
+records; fresh default columns must use this updated producer tooling against
+the clean frozen source/install, preserving the producer's separate revision.
