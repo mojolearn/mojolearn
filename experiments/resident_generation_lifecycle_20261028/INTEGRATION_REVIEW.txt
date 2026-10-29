@@ -1,0 +1,49 @@
+Root integration review, 2026-10-28
+Resident batch28970a194a..6405efdd40 applied cleanly atop sixth integration3696b223e1.
+Product source unchanged by cherry-pick. Existing final native and boundary
+compilation receipts reused; no runtime/identity/performance claim.
+
+Reviewed concrete native read path: capability-gated routing before fallback
+staging; one current model/state admission; heap-backed progress and session group;
+all-layer validation before busy reservation; native per-step cache/position limits;
+device greedy/EOS/length/error reduction; final row-span copies exclude unwritten
+trailing capacity. Host receives two scalar stop/error words each token, no logits.
+Group execution failure marks all layers and LM unusable; provider release occurs
+before exception propagation, and public state/stream failure paths reject reuse.
+
+Position accounting remains prompt_length + wrote - 1, leaving the final picked
+token for next read. Entry requires positive capacity and unfinished rows, so
+successful read writes at least one token before final current-token packing.
+EOS can stop before requested capacity would exceed state/cache limits. Greedy
+order keys normalize signed zeros and preserve lowest-index ties; first nonfinite
+token of the first invalid active row is the reported selection error. Finished
+rows receive pad without selection. These are source-review findings only.
+
+Metadata/ownership: mutable input/model state is re-admitted per read; weight
+exposure disables persistent session reuse. List-backed descriptors, host owners,
+device policy storage and transfer subviews stay pinned through synchronization
+and native release. KV exports once per layer after read, not per token. Caller
+mutation between reads is not bypassed by retaining device state across reads.
+
+Remaining cost: layer/LM GPU activation, norm/logit/GEMM workspace allocations and
+finite-check synchronization still occur inside steps. Sampling stays on existing
+routes; no unsupported Apple Float64 workaround or arithmetic rewrite. Count-one
+public reads still load/export once per call. Larger per-call residency is achieved,
+but cross-call transfer elimination needs an explicit mutation ownership contract.
+
+Owner priorities adopted: defer further broad Python-removal/new arithmetic work;
+retain useful direct CPython. Next bounded repairs target actual public Mamba2Block
+.step preparation (distinct from MambaDecodeSession transport), and retained
+fallback sampling scratch per read. Do not count native session transport as a
+complete repair of public block-step preparation.
+
+Future measurements are NOT authorized now. When authorized, freeze repaired
+source and begin with the previously regressed public Mamba2.step recipe and
+representative whole-generation recipes, reporting them separately; then the
+agreed29-lane neural suite. The user's approximately15xAMD/29xNVIDIA historical
+regressions have not been independently reproduced here. Compilation does not
+replace required runtime/correctness/cross-vendor identity evidence.
+
+Integration evidence: ~/mojolearn-evidence/resident-generation-integration-20261028/.
+Per-batch complete build/source/binary evidence remains in the HANDOFF directory.
+Normal source/push gates still required; no override or baseline allowance added.
