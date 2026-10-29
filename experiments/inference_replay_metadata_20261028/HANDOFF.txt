@@ -1,0 +1,33 @@
+Inference replay metadata reuse, 2026-10-28
+Branch: lane/inference-replay-metadata-20261028
+Depends on training prepared-metadata helper (32fa61cbfc + 5accf1c215).
+
+Removed work: each registered inference graph prepares its node integer/float
+Lists once at first replay. Subsequent nodes/runs borrow those Lists instead of
+allocating and copying scalar arguments. Handle/value Lists retain capacity
+across nodes/runs. No graph arithmetic, validation or numerical mode changed.
+
+Boundary/invalidation: immutable registered program -> lazy native plan. Adding
+a program allocates an empty owner; free and close discard its plan. Public
+program() returns a copy. Live parameter generation/ownership/shape checks still
+run each invocation; tensor handles and values refresh on replay. No data buffer
+or parameter address is cached. Graph metadata itself stays until program free.
+The plan moves into the call and returns in finally on success or any failure,
+so native dispatch borrows local Lists without a raw alias into mutable self.
+Existing outer temporary-handle retirement and tape restoration stay in place.
+
+Compilation: focused HostExec CPU identical O0 compile passed (exit 0), covering
+run_program/_replay and constructor/add/free/close lifecycle. Not GPU qualification.
+Initial compile exposed an ownership/aliasing error; retained log/exit below.
+Fixed using supported move ownership, then recompiled successfully. Independent
+agent source review found no missing stored-program mutation/invalidation site.
+No runtime, concurrency, identity or performance execution; no measured speedup.
+
+Evidence: ~/mojolearn-evidence/inference-replay-metadata-20261028/ (complete logs,
+source bytes/hashes, compiler/flags/command, binary/hash, failure and success).
+compile.json records exact scope. Main integration/push guards run by root.
+
+Limits: retains duplicate node scalar metadata and maximum scratch capacity
+until program free/close. Fresh params/temps arrays, input uploads, live-parameter
+scans, per-node Tensor resolution and operation dispatch remain. Inference uses
+existing exclusive native session access; no new concurrent-replay guarantee.

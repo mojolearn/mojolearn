@@ -1,0 +1,31 @@
+{
+  "base_commit": "a361276d2ac81ec2951a52278f87b6d6decb60e9",
+  "compile_exit": 0,
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "target": "macOS arm64 CPU",
+  "scope": "OpsSession[HostExec] run_program/replay and add/free/close/constructor; compile only",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/inference_replay_metadata_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/inference-replay-metadata-20261028/compile.dylib",
+  "working_directory": "/Users/andrewhendel/mojolearn-wt/inference-replay-metadata-20261028",
+  "compile_slots": 4,
+  "compiler_workers": "compiler default; utilization not measured",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/inference-replay-metadata-20261028/compile.dylib",
+  "binary_sha256": "ffe63ce8792517ce05b19b0073b339759205001c37a77c970f78e434ba7bae83",
+  "log": "/Users/andrewhendel/mojolearn-evidence/inference-replay-metadata-20261028/compile.log",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/inference-replay-metadata-20261028/source-sha256.json",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/inference-replay-metadata-20261028/sources.tar.gz",
+  "source_manifest_scope": "All tracked Mojo sources plus fixture, manifest and lock; conservative superset, not all sources compiled",
+  "modified_source_sha256": {
+    "autograd/ops_api.mojo": "02b56abb49048dc5cb0c39d30e673d0d2081e8bbb32a4a3f6219760af79b6f73",
+    "autograd/program_replay_metadata.mojo": "e10acc60a7567739e4218d08cf604bcdb5f55b0ab381f1e0c442b5e0239dea34",
+    "experiments/inference_replay_metadata_20261028/compile.mojo": "7d2e0ded56bc3bce5bcbc389504eb0866037eef854b2d579e81dd3ff17e234b6"
+  },
+  "earlier_failure": {
+    "exit": 1,
+    "reason": "Compiler rejected borrowing session-owned plan during mut self dispatch. Replaced with move into local owner and finally return; no unsafe alias suppression.",
+    "log": "/Users/andrewhendel/mojolearn-evidence/inference-replay-metadata-20261028/compile-borrow-failed.log"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "identity_verified": false,
+  "rented_boxes": []
+}
