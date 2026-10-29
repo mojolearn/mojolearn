@@ -637,14 +637,16 @@ def main(out=sys.stdout):
                "a NaN in x is refused IN MOJO under the upstream name "
                "(llama_refuse_bad_call; payloads are vendor-shaped)",
                blk.forward, x_nan)
-    # head_dim odd: sized weights for d_model 5, n_heads 1, head_dim 5;
-    # the wrapper can size everything, the refusal is LlamaDims.validate's.
+    # head_dim odd: this configuration is unsupported because RoPE pairs
+    # halves. Native construction may reject it before forward, so include both
+    # boundaries in the refusal assertion; valid float32 forwards above remain
+    # the positive controls. Do not require invalid configuration to survive setup.
     w_odd = _weights(rng, 5, 1, 1, 5, 8)
-    blk_odd = TransformerBlock(w_odd, n_heads=1)
     rep.raises(arm, Exception, "even",
                "an odd head_dim is refused IN MOJO by name (RoPE pairs "
-               "halves; LlamaDims.validate)",
-               blk_odd.forward, np.zeros((1, 2, 5), np.float32))
+               "halves; construction or LlamaDims.validate)",
+               lambda: TransformerBlock(w_odd, n_heads=1).forward(
+                   np.zeros((1, 2, 5), np.float32)))
 
     # -- SLIDING WINDOW: reference, ring decode, split prefill, round trip
     W_WIN, W_L = 3, 8
