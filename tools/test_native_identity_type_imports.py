@@ -18,6 +18,14 @@ CHILD = r"""
 import importlib.machinery, importlib.util, json, pathlib, sys
 package = pathlib.Path(sys.argv[1]).resolve()
 order = json.loads(sys.argv[2])
+# Load the package's actual standalone import-time connector first. Tokenizer
+# deliberately refuses a native owner import before these real connections.
+# No stub package or fabricated connection record is installed.
+connection_name = 'mojolearn._native_loaded_modules'
+connection_spec = importlib.util.spec_from_file_location(connection_name, package / '_native_loaded_modules.py')
+connection = importlib.util.module_from_spec(connection_spec)
+sys.modules[connection_name] = connection
+connection_spec.loader.exec_module(connection)
 modules = []
 for family in order:
     basename = '_mojolearn_' + family + '_host'
