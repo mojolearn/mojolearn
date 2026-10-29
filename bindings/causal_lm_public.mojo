@@ -36,7 +36,7 @@ from bindings.generation_buffers import (
     generation_ids, generation_initialize_binding, generation_array_context, generation_array_snapshot, generation_buffer_view, py_ints,
 )
 from bindings.native_array_snapshot import native_array_slots, NativeArrayAdmission
-from core.generation_policy_impl import generation_pick
+from core.generation_policy_impl import GenerationSamplingScratch
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
 from bindings.sha256_door import sha256_update, sha256_update_text
@@ -1842,6 +1842,10 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         var tokens = List[Int32](capacity=b * capacity)
         var wrote = 0
         var snapshot: Optional[GenerationOperationSnapshot] = None
+        # Only this host-selection fallback needs scratch. Retain it across
+        # tokens of this read; the sampler overwrites all used words and greedy
+        # never sizes it. Resident/native routes have already returned above.
+        var sampling = GenerationSamplingScratch()
         while wrote < capacity and not s.done():  # driver-loop: over decode steps, one model forward each
             if not admission:
                 admission = NativeArrayAdmission(generation_array_context())
@@ -1855,7 +1859,7 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
             var dst = i32_ptr(Int(py=next._addr))
             _ = next  # keep the Python object alive through the native call above
             causal_lm_pick_step(raw, dst, b, l, v, s.finished, s.lengths, s.eos, s.pad, s.greedy,
-                                s.temperature, s.top_k, s.top_p, s.seed, s.produced, tokens)
+                                s.temperature, s.top_k, s.top_p, s.seed, s.produced, tokens, sampling)
             _ = next  # keep the Python object alive through the native call above
             _ = logits  # keep the Python object alive through the native call above
             # `raw` points into `logits`: keep it alive through the pick (Mojo

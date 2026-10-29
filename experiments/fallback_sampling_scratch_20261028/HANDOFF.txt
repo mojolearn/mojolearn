@@ -1,0 +1,56 @@
+Fallback generation sampling scratch reuse (2026-10-28)
+Branch lane/fallback-sampling-scratch-20261028.
+Base root premerge d6970c0e8b1e24edf6917cf0d13bd65958bfa2f1, including the
+resident-read lifecycle and previous native generation buffer integration.
+
+Change:
+The legacy _read token loop previously used the compatibility pick-step overload,
+which created fresh order/merge/weight Lists each token. Allocate one native
+GenerationSamplingScratch per read AFTER resident/native route selection and pass
+the existing workspace overload. Each token/row overwrites used words; greedy
+never sizes the arrays. No model weights, logits pointer or caller metadata is
+cached in the workspace. It dies on completion/failure, with no cross-read cache.
+
+Semantics/lifetimes:
+Sampler validation, finite checks, tie order, portable exp/ordered sums and the
+seed/row/produced counter remain in the existing shared implementation. Logit and
+next-token owners remain pinned through the final raw read/write. The per-forward
+post-GIL-release Array recheck is untouched. A failed step retains existing partial
+progress/failure publication semantics. Route decisions are unchanged; resident
+greedy reads and the native engine return before this fallback scratch is created.
+No host selection path was added to resident GPU execution. Public forward and
+escaped output ownership are unchanged.
+
+Targeted allocation coverage review (source only):
+- Native nonresident fp32 Transformer/Mamba engine: existing operation-owned
+  activation, logits, current/next token, sampling and Mamba2 report double buffers
+  already cover the token loop. This batch does not duplicate them.
+- Resident greedy _read_resident: device loop owns token progression/policy; host
+  pending/progress/output/current construction is per public read, not per token.
+  Publication/readmission keeps caller state mutable across public calls.
+- Legacy fallback: now reuses sampling buffers per read. It still obtains fresh
+  logits and next-token Arrays each token. Auto native-engine admission excludes
+  parallel execution, packed head, explicit legacy setup and resident forward;
+  resident sampling remains the existing separate unfinished GPU-policy scope.
+- _causal_model_head_prepared creates temporary norm and packed hi/lo/ex buffers.
+  Packed quantization buffers are a concrete future operation-local workspace
+  candidate, with prompt/decode extent invalidation; no repair attempted here.
+- Ordinary Mamba2 fallback last report is published as h_last_. Reusing that Array
+  blindly would overwrite previously escaped public aliases. Native-engine report
+  double buffering is safe because it publishes fresh copies at the boundary.
+- Public forward returns fresh logits; that escaping ownership remains required.
+
+Validation:
+Actual causal_public_c[5] read and [7] generate on the root's integrated source:
+Apple CPU identical O0 compile rc0, 18.35s. Includes resident/native early route
+glue and new fallback overload. Mac compile_slot, 10 compiler workers from sysctl.
+This CPU compilation does not qualify GPU kernel execution or GPU sampling.
+All four normal branch source guards rc0, no override; receipt in source-guards.json.
+No runtime, identity, timing or
+benchmark campaign; no failed compile.
+
+Evidence:
+~/mojolearn-evidence/fallback-sampling-scratch-20261028/
+compile.log/json, source-manifest.json, source-bytes.tgz,
+_fallback_sampling_scratch.so, controller.log, guard logs/receipt,
+retained-files.json. Committed fixture/receipt in this experiment directory.
