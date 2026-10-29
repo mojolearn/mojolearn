@@ -22,7 +22,10 @@ Dedicated test files:
 Compilation and actual runtime statuses are recorded separately in receipts.
 Required source/push checks must use a real ref envelope: an initial no-input
 hook invocation returned0 without checking a ref and is nonqualifying evidence.
-Focused public small_mlp_c CPU compilation is pending at handoff creation.
+Focused public small_mlp_c CPU compilation passed0; elapsed303.25s includes
+compile_slot queue time. Apple CPU identical O0,10 configured workers.
+Actual committed-ref source/push guards passed0/78.64s. Full source archive,
+binary and hashes retained; no GPU build or runtime claim for this change.
 Installed regression execution is pending current-source assembly; no runtime
 success is inferred from syntax, compilation or source review.
 
@@ -37,3 +40,9 @@ Full logs/binary/source archive:
 ~/mojolearn-evidence/small-mlp-tensor-errors-20261029/
 Current installed smoke and binary mapping:
 ~/mojolearn-evidence/manifold-installed-integration-20261029/
+
+Installed7b import attempt failed before numerical tests because the current
+partial install lacks x_sequence host required by ops.py import-time Session
+connection. Its subsequent optional-fast refusal masks the first missing-owner
+error. x_sequence current-source build is next; manifold return contracts and
+SmallMLP repaired-tokenizer runtime cases remain pending, not skipped passes.

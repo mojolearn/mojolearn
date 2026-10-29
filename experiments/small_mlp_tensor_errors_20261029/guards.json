@@ -1,0 +1,14 @@
+{
+  "command": [
+    "sh",
+    "tools/hooks/pre-push",
+    "origin",
+    "source-only-review"
+  ],
+  "source_commit": "bc7b379aae4a0a2bd6a6165224673e4a728ff3b9",
+  "ref": "refs/heads/lane/small-mlp-tensor-errors-20261029",
+  "base": "7b419bb38d92e7ddf1a873a253bb5947678ee987",
+  "exit_code": 0,
+  "seconds": 78.64239979197737,
+  "scope": "Required source/push guards with actual committed ref envelope; no push"
+}
