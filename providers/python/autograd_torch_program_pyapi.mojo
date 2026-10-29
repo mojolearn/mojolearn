@@ -208,8 +208,10 @@ def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
         raise Error("TypeError: Torch allocation requires its native function container")
     var context = Python.dict()
     # Hold both admitted namespaces/modules through execution and GIL release.
-    py_setitem(context, "torch_owner", torch)
-    py_setitem(context, "native_owner", native)
+    py_setitem(context, "torch_owner", torch[0])
+    py_setitem(context, "torch_namespace", torch[1])
+    py_setitem(context, "native_owner", native[0])
+    py_setitem(context, "native_namespace", native[1])
     py_setitem(context, "empty", variables.empty)
     _ = _torch_entry(context, "empty")
     for pair in [Python.tuple("get_device", "_cuda_getDevice"),  # small-loop(fixed native framework entries)
