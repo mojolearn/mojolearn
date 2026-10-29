@@ -8,6 +8,7 @@ remain separate gates. Each index truthfully names one existing image/member;
 no development cache, merged compilation or runtime qualification is invented.
 """
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -53,6 +54,41 @@ def check_files(base, records):
         path = member_path(base, relative)
         digest = value["sha256"] if isinstance(value, dict) else value
         common.require(path.is_file() and common.sha(path) == digest, "retained file differs: " + relative)
+
+
+def stage_smoke_corpora(root, commit, stage):
+    """Restore the committed qualification operands excluded by git archive.
+
+    Match release-provenance.yml's bounded three-case restoration. These are
+    external test inputs, not wheel members. Read the frozen Git blobs, never
+    working-tree bytes or regenerated expectations, and retain their hashes.
+    """
+    from verify_linux_surface_qualification import CORPUS_CASES
+    records = {}
+    for case in CORPUS_CASES:
+        prefix = "mamba/corpus/" + case
+        listing = subprocess.check_output(
+            ["git", "-C", str(root), "ls-tree", "-r", "-z", commit, "--", prefix])
+        entries = [entry for entry in listing.split(b"\0") if entry]
+        common.require(bool(entries), "missing frozen smoke corpus: " + prefix)
+        names = []
+        for entry in entries:
+            header, raw_name = entry.split(b"\t", 1)
+            mode, kind, blob = header.decode().split()
+            name = raw_name.decode()
+            common.require(kind == "blob" and mode in ("100644", "100755")
+                           and name.startswith(prefix + "/"), "invalid frozen corpus member: " + name)
+            target = member_path(stage, name)
+            content = subprocess.check_output(["git", "-C", str(root), "cat-file", "blob", blob])
+            common.require(not target.exists() or target.read_bytes() == content,
+                           "staged smoke corpus differs from frozen blob: " + name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+            records[name] = {"git_blob": blob, "sha256": hashlib.sha256(content).hexdigest(),
+                             "bytes": len(content)}
+            names.append(name)
+        common.require(prefix + "/x.f32" in names, "missing frozen corpus input: " + prefix)
+    return {"source_commit": commit, "files": records}
 
 
 def native_indexes(root, records):
@@ -144,6 +180,7 @@ def assemble(args):
         document["source_archive"] = common.reference(archive)
         with tarfile.open(archive) as stream:
             stream.extractall(stage, filter="data")
+        document["smoke_corpora"] = stage_smoke_corpora(root, commit, stage)
         pkg = stage / "python/mojolearn"
         common.require(not list(pkg.rglob("*.so")), "source contains unadmitted native files")
         rows = []
