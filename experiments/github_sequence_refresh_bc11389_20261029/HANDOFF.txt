@@ -1,0 +1,7 @@
+Source: bc11389e6896f918b95a404b8cf2bb97ad2ace09.
+PTX run40889979931 selected identical:x_sequence; AMD run40890311009 selected identical:merged_build.sh:_mojolearn_native_sequence. Both controllers exited0 and selected group compilation passed. No host, sm89 or unrelated AMD/PTX rebuild.
+PTX raw development builder exit3 is preserved: the deliberately selected group passed while the whole set remained incomplete. AMD compile-only protocol likewise does not qualify the partial tree as a complete release build.
+Full source, generated entries, original logs, receipts and unique binaries are retained in the Mac evidence roots and R2 archives named by receipt.json. Both downloaded archives match original SHA256; all retained members were readback checked (PTX372, AMD9714). AMD binary was independently rehashed from its hot archive.
+No runtime, identity or performance claim. Formal compile admission, installed AMD/PTX execution and within-release reference agreement remain pending. Other32 PTX groups and3 AMD merged groups retain earlier evidence; no rerun solely for commit metadata.
+The AMD partial tree includes pinned Torch headers and three libraries, but not the full original6.2GB ROCm wheel or complete runtime. Assembly owner was told not to treat this as full input retention or substitute CUDA adapter bytes.
+Evidence: ~/mojolearn-evidence/github-sequence-refresh-bc11389-20261029/{ptx,amd}/.

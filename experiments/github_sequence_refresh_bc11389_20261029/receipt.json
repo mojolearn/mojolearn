@@ -1,0 +1,147 @@
+{
+  "amd": {
+    "actual_build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_BUILD_TIERS": "identical",
+      "MOJOLEARN_COMPILE_JOBS": "8",
+      "MOJOLEARN_CUDA_CODE_FORMAT": "native",
+      "MOJOLEARN_GPU_ARCHS": "gfx942",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_MERGED_KEY": "a467586571f6d62082ad98569d718db7bf34481f7a0ee8902d3f2ee68d562026",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "amd"
+    },
+    "archive_base": "/Users/andrewhendel/mojolearn-evidence/github-sequence-refresh-bc11389-20261029/amd/run",
+    "build_seconds": 623.7,
+    "files": [
+      {
+        "mode": 448,
+        "path": "python/mojolearn/identical/_mojolearn_native_sequence.so",
+        "sha256": "e34daaaa675999ea23d141cae794d4dbcca3e9d596569d29690caf16420123d4",
+        "size": 27469256
+      }
+    ],
+    "index": {
+      "archives": [
+        "shard-artifacts/shard-gfx942-1/shard/1/hot/b8ac90514b4df11b82fbb90d83aa41b9c8f4353b56f1206a60673f8a2b106139.tar.gz"
+      ],
+      "compilation_only": true,
+      "complete_build": false,
+      "expected_groups": [
+        "identical:merged_build.sh:_mojolearn_native_sequence"
+      ],
+      "failed_jobs": [],
+      "run": 40890311009,
+      "runtime_qualified": false,
+      "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+      "status": "retained"
+    },
+    "manifest_sha256": "8cb28a7051b7afaf8a224d568ee4008bc7188296036e02ec55e95cc7ddeddde7",
+    "target": "none",
+    "whole_build_complete": false
+  },
+  "ptx": {
+    "actual_environment": {
+      "MOJOLEARN_COMMIT": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+      "MOJOLEARN_COMPILE_JOBS": "4",
+      "MOJOLEARN_CUDA_CODE_FORMAT": "ptx",
+      "MOJOLEARN_GPU_ARCHS": "sm_80",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "nvidia"
+    },
+    "actual_workers": 4,
+    "raw_builder_exit": 3,
+    "request_sha256": "b0b842789a0bc694d7fd2d631616639f52e8879cc9e278dfe83d2e5c89936f81",
+    "summary": {
+      "artifact_count": 1,
+      "compiled": [
+        {
+          "binary": "artifacts/development-sm_80-0/development/retained/cc1d14ed4c5c1e7177e741e9fac71e7e3079f60bed5847b2223af2827cffcfa5/_mojolearn_dev_x_sequence.so",
+          "bytes": 17538696,
+          "compiler_workers": 4,
+          "group": "identical:x_sequence",
+          "raw_builder_exit": 3,
+          "request": "artifacts/development-sm_80-0/development/request.json",
+          "sha256": "9cf3e36fc74d39bae062598037f00ab788e1ecb994ce2fd857cff5b049515b0c",
+          "status": "selected-group-compiled"
+        }
+      ],
+      "download_exit": 0,
+      "expected_groups": 1,
+      "failed": [],
+      "formal_release_admission": false,
+      "full_log_exit": 0,
+      "missing": [],
+      "run": 40889979931,
+      "runtime_qualified": false,
+      "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+      "tooling_commit": "eac4a13ca9596b2a96eb9a305ea5cb98ac5455db",
+      "url": "https://github.com/mojolearn/mojolearn/actions/runs/40889979931",
+      "watch_exit": 0,
+      "workflow_conclusion": "success",
+      "workflow_status": "completed"
+    },
+    "whole_set_status": "incomplete"
+  },
+  "reference_admitted": false,
+  "retention": [
+    {
+      "controller_exit": 0,
+      "evidence_root": "/Users/andrewhendel/mojolearn-evidence/github-sequence-refresh-bc11389-20261029/ptx",
+      "lane": "ptx",
+      "retention": {
+        "bytes": 159576228,
+        "files": 372,
+        "get_status": 200,
+        "key": "measurements/github-sequence-refresh-bc11389-20261029/ptx/ptx-sm80-40889979931-outputs.tgz",
+        "local_archive": "/Users/andrewhendel/mojolearn-evidence/github-sequence-refresh-bc11389-20261029/ptx/retention/ptx-sm80-40889979931-outputs.tgz",
+        "put_status": 200,
+        "readback_sha256": "738c78c8f6e78903bf5e4eb3daac796ab6b6f64239bc69fddaf65d84e914c1e8",
+        "run": 40889979931,
+        "runtime_qualified": false,
+        "sha256": "738c78c8f6e78903bf5e4eb3daac796ab6b6f64239bc69fddaf65d84e914c1e8",
+        "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+        "status": "retained-and-readback-verified",
+        "unique_contents": 335,
+        "verified_members": 372
+      },
+      "retention_receipt_sha256": "1a79c5a930cfc922ca6add497f1ccea7162c5eb4f4b1fc80d9624f52f3875b91",
+      "run": 40889979931
+    },
+    {
+      "controller_exit": 0,
+      "evidence_root": "/Users/andrewhendel/mojolearn-evidence/github-sequence-refresh-bc11389-20261029/amd",
+      "lane": "amd",
+      "retention": {
+        "all_member_readback_match": true,
+        "bytes": 296732288,
+        "compile_complete": true,
+        "elapsed_seconds": 97.38730795891024,
+        "exit_code": 0,
+        "expected_groups": 1,
+        "failed_jobs": [],
+        "files": 9714,
+        "get_status": 200,
+        "key": "measurements/github-sequence-refresh-bc11389-20261029/amd/amd-gfx942-40890311009-complete.tgz",
+        "local_archive": "/Users/andrewhendel/mojolearn-evidence/github-sequence-refresh-bc11389-20261029/amd/retention/amd-gfx942-40890311009-complete.tgz",
+        "put_status": 200,
+        "readback_sha256": "b0af2faf9c79bc661b507ffeca2a1f7f01fda7e1dc528b90d422082e0b826b19",
+        "runtime_qualified": false,
+        "sha256": "b0af2faf9c79bc661b507ffeca2a1f7f01fda7e1dc528b90d422082e0b826b19",
+        "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+        "unique_contents": 9677,
+        "workflow_run": 40890311009
+      },
+      "retention_receipt_sha256": "b1b3333f7b67bbbad5106739cfdd31bdadca4e880eefa9542cd5a9bf592c4366",
+      "run": 40890311009
+    }
+  ],
+  "reused_scope": "The other32 PTX groups and other3 AMD merged groups were not rebuilt. Their retained source/target evidence requires normal admission checks.",
+  "runtime_qualified": false,
+  "scope": "Two selected replacement groups only; compilation and retention, no runtime or formal reference admission.",
+  "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09"
+}
