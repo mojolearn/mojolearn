@@ -27,6 +27,7 @@ Adapters (``--adapter``):
   mac-host-family-build  custom Mac host-family receipts (original Apple toolchain witness required)
                           (--producer receipt=)
   linux-development-build Linux selected development groups (whole set may be incomplete)
+  gha-development-build   GHA selected development group (raw compilation only)
                           from a retained runpod_cpu_leg (--producer leg= --producer result=)
   apple-retained-device   compile-apple Metal bindings from an original production
                           device subset run (apple_retained_groups)   (--producer run=)
@@ -75,6 +76,7 @@ LIMITATION = ("No pre-run ledger fingerprint existed for this producer run. Requ
 ADAPTERS = {
     "mac-development-build": ("release_retained_compile_evidence", "compile"),
     "linux-development-build": ("release_linux_development_evidence", "compile"),
+    "gha-development-build": ("release_gha_development_evidence", "compile"),
     "mac-host-family-build": ("release_macos_host_family_evidence", "compile"),
     "apple-retained-device": ("release_retained_compile_evidence", "compile"),
     "linux-host-build": ("release_retained_compile_evidence", "compile"),

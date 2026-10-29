@@ -1,0 +1,78 @@
+{
+  "source_commit": "7e8f9a8c8a566bcf4484f89f2da80a7a90cd418a",
+  "scope": "GHA selected development compilation evidence only",
+  "tests": {
+    "count": 55,
+    "exit_code": 0
+  },
+  "guards": [
+    {
+      "name": "host-routes",
+      "argv": [
+        "python3",
+        "tools/hooks/no_host_routes.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "seconds": 20.64218783378601
+    },
+    {
+      "name": "python-execution",
+      "argv": [
+        "python3",
+        "tools/hooks/no_python_in_kernels.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "seconds": 0.6606130599975586
+    },
+    {
+      "name": "shell-compute",
+      "argv": [
+        "python3",
+        "tools/hooks/no_compute_in_shells.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "seconds": 0.6830799579620361
+    },
+    {
+      "name": "generation-boundary",
+      "argv": [
+        "python3",
+        "tools/check_generation_native_boundary.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.2776908874511719
+    },
+    {
+      "name": "package-connections",
+      "argv": [
+        "python3",
+        "tools/check_native_package_connections.py",
+        "--root",
+        "/Users/andrewhendel/mojolearn-wt/github-development-admission-20261029",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "seconds": 1.130237340927124
+    }
+  ],
+  "actual_producer_review": {
+    "groups": 33,
+    "valid": 33,
+    "refused": 0,
+    "seconds": 6.9838550090789795,
+    "file": "/Users/andrewhendel/mojolearn-evidence/github-development-admission-20261029/actual33.json",
+    "sha256": "d4f02aabc4f981b995788a345cd6c1880842455b28ee699f95ba7db12f3a0647"
+  },
+  "formal_ledger_admission": false,
+  "ledger_writes": false,
+  "runtime_executed": false,
+  "native_builds": false,
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/github-development-admission-20261029"
+}
