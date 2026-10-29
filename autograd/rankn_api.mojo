@@ -124,11 +124,21 @@ def rn_dims(s: ShapeN) -> List[Int]:
 
 def rn_with_batch(batch: Int, sample: ShapeN, what: String) raises -> ShapeN:
     """(batch,) + sample: a model's per-sample shape with its batch axis."""
-    var dims = List[Int](capacity=sample.ndim + 1)
-    dims.append(batch)
-    for k in range(sample.ndim):  # small-loop(ndim: tensor rank, at most 7): shape metadata, no data
-        dims.append(sample.d[k])
-    return rn_shape(dims, what)
+    # Match rn_shape's rank/positive-dimension checks and unused-slot ones,
+    # without allocating and then copying a temporary dimension List. Element
+    # count/storage validation remains at the existing tensor view boundary.
+    var rank = max(sample.ndim, 0) + 1
+    if rank > RN_MAX_RANK:
+        raise Error(what + ": tensors have at most " + String(RN_MAX_RANK) + " dimensions")
+    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    if batch < 1:
+        raise Error(what + ": every dimension must be positive")
+    d[0] = batch
+    for k in range(rank - 1):  # small-loop(ndim: tensor rank, at most 7): shape metadata, no data
+        if sample.d[k] < 1:
+            raise Error(what + ": every dimension must be positive")
+        d[k + 1] = sample.d[k]
+    return ShapeN(rank, d)
 
 
 def rn_resolve(s: ShapeN, dims: List[Int], what: String) raises -> ShapeN:

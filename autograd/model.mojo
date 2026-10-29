@@ -605,8 +605,33 @@ def model_forward[E: Exec](
     """Record the model's forward on the tape from input x (B, n_inputs).
     Dropout acts only when `train`; `step` (the optimizer step) and the
     layer index pick its masks."""
+    # Standalone callers may change their ModelSpec between calls. Only the
+    # fit/predict loops below retain this topology across forwards.
+    var topology = _ModelForwardTopology(spec)
+    return _model_forward_prepared(tape, ex, spec, P, Gr, x, train, seed, step, topology)
+
+
+struct _ModelForwardTopology(Movable):
+    """Fusion eligibility for one operation's immutable parsed description.
+
+    No parameters, shapes, execution options or borrowed addresses are cached.
+    Keep this owner private to the call that owns the matching ModelSpec.
+    """
+    var activations: List[Int]
+
+    def __init__(out self, spec: ModelSpec):
+        self.activations = List[Int](length=spec.n_layers(), fill=0)
+        for i in range(spec.n_layers()):  # driver-loop: operation setup over model topology
+            if spec.kinds[i] == LAYER_LINEAR:
+                self.activations[i] = _absorbed_activation(spec, i)
+
+
+def _model_forward_prepared[E: Exec](
+    mut tape: Tape, mut ex: E, spec: ModelSpec, P: FP, Gr: FP, x: Tensor, train: Bool,
+    seed: UInt64, step: Int, topology: _ModelForwardTopology,
+) raises -> Tensor:
     if spec.version == SPEC2_VERSION:
-        return _model_forward_v2(tape, ex, spec, P, Gr, x, train, seed, step)
+        return _model_forward_v2(tape, ex, spec, P, Gr, x, train, seed, step, topology)
     var outs = List[Tensor]()
     var h = x
     var i = 0
@@ -626,7 +651,7 @@ def model_forward[E: Exec](
                 var bias: Optional[Tensor] = None
                 if spec.arg1[i] == 1:
                     bias = Optional[Tensor](_param(tape, ex, P, Gr, off + fi * fo, 1, fo, train))
-                var act = _absorbed_activation(spec, i)
+                var act = topology.activations[i]
                 h = tape.linear(ex, h, w, bias, act)
                 if act != 0:
                     # the activation layer i + 1 rode in this node; layer i's
@@ -666,7 +691,7 @@ def model_forward[E: Exec](
 
 def _model_forward_v2[E: Exec](
     mut tape: Tape, mut ex: E, spec: ModelSpec, P: FP, Gr: FP, x: Tensor, train: Bool,
-    seed: UInt64, step: Int,
+    seed: UInt64, step: Int, topology: _ModelForwardTopology,
 ) raises -> Tensor:
     """model_forward of a version-2 description: x is the (B, n_inputs)
     batch, viewed as (B,) + the per-sample shape (free). Each layer's output
@@ -691,7 +716,7 @@ def _model_forward_v2[E: Exec](
             var bias: Optional[Tensor] = None
             if spec.arg1[i] == 1:
                 bias = Optional[Tensor](_param(tape, ex, P, Gr, off + fi * fo, 1, fo, train))
-            var act = _absorbed_activation(spec, i)
+            var act = topology.activations[i]
             h = tape.linear(ex, h, w, bias, act)
             h = rn_as_shape(tape, ex, h, rn_with_batch(B, spec.out_shape[i], "model"))
             if act != 0:
@@ -1073,6 +1098,7 @@ def model_fit_state[E: Exec](
         best = Float64(1.0e308)
         stall = 0
     var tape = Tape()
+    var topology = _ModelForwardTopology(spec)
     var epoch_tape = Tape()
     var word = List[Float32](length=1, fill=Float32(0))
     var inv_n = ftz(identical_div(Float32(1), Float32(N)))
@@ -1117,7 +1143,7 @@ def model_fit_state[E: Exec](
             tape.reset()
             var x = tape.variable(ex, xb, B, D, False)
             var target = tape.variable(ex, yb, B, TW, False)
-            var out = model_forward(tape, ex, spec, P, Gr, x, True, cfg.seed, step)
+            var out = _model_forward_prepared(tape, ex, spec, P, Gr, x, True, cfg.seed, step, topology)
             comptime if AUTOGRAD_CURVE_WORD:
                 # lane ag-pass6-fold (PASS6 idea H(1)): the loss's own fold
                 # launch stores the batch's curve word mul(loss, B), the word
@@ -1152,7 +1178,7 @@ def model_fit_state[E: Exec](
                 tape.reset()
                 var x = tape.variable(ex, vx + off * D, B, D, False)
                 var target = tape.variable(ex, vy + off * TW, B, TW, False)
-                var pred = model_forward(tape, ex, spec, P, Gr, x, False, cfg.seed, step)
+                var pred = _model_forward_prepared(tape, ex, spec, P, Gr, x, False, cfg.seed, step, topology)
                 var loss = model_loss(tape, ex, cfg, pred, target)
                 var weighted = tape.scale(ex, loss, Float32(B))
                 _copy(ex, vloss + vi, tape.value(weighted), 1)
@@ -1306,6 +1332,7 @@ def model_predict[E: Exec](
     ex.upload(P, Pin, spec.n_params)
     var dout = ex.alloc(N * O)
     var tape = Tape()
+    var topology = _ModelForwardTopology(spec)
     var b0 = 0
     while b0 < N:  # driver-loop: over row chunks (bounded tape scratch)
         var B = bs if b0 + bs <= N else N - b0
@@ -1313,7 +1340,7 @@ def model_predict[E: Exec](
         comptime if HAS_INFERENCE:
             tape.no_grad()  # depends on lane ag-forward (inference mode)
         var x = tape.variable(ex, dX + b0 * D, B, D, False)
-        var out = model_forward(tape, ex, spec, P, P, x, False, UInt64(0), 0)
+        var out = _model_forward_prepared(tape, ex, spec, P, P, x, False, UInt64(0), 0, topology)
         if transform == OUT_SOFTMAX:
             out = tape.softmax(ex, out)
         elif transform == OUT_SIGMOID or transform == OUT_PROBA2 or transform == OUT_THRESHOLD:
