@@ -14,7 +14,10 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-SCHEMA = 'mojolearn.installed-verifier-run.v1'
+LEGACY_SCHEMA = 'mojolearn.installed-verifier-run.v1'
+SCHEMA = 'mojolearn.installed-verifier-run.v2'
+DEFAULT_POLICY = dict(numeric_mode='identical', sampling_kv_upload_reuse='0',
+                      resident_sampling_fp32='0')
 
 
 def require(ok, message):
@@ -70,7 +73,9 @@ def execute(root, python, out, lanes, profile, cpu_threads, *, runner=subprocess
     env.pop('PYTHONPATH', None)
     # The release columns cover defaults. The sampling experiment needs its own
     # focused runtime/A-B evidence, never implicit promotion through this run.
-    env.update(MOJOLEARN_NUMERIC_MODE='identical', MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE='0')
+    env.update(MOJOLEARN_NUMERIC_MODE='identical',
+               MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE='0',
+               MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32='0')
     from release_identity_run import policy_environment
     policy_environment(env)  # Same full-fixture/no-sabotage policy as the existing recorder.
     source = source_state(root)
@@ -99,7 +104,9 @@ def execute(root, python, out, lanes, profile, cpu_threads, *, runner=subprocess
     receipt = dict(schema=SCHEMA, phase='before-execution', status='running',
                    started_at=datetime.now(timezone.utc).isoformat(), source=source,
                    install=dict(package=str(package), commit=commit, files=files, manifest_sha256=digest(files)),
-                   options=options, command=command, environment=dict(numeric_mode='identical', sampling_kv_upload_reuse='0'))
+                   options=options, command=command, environment=dict(DEFAULT_POLICY),
+                   producer=dict(source=source_state(Path(__file__).resolve().parent.parent),
+                                 file='tools/identity_verify_launch.py', sha256=sha(__file__)))
     path = out / 'verifier-run.json'
     save(path, receipt)
     try:
@@ -121,7 +128,13 @@ def execute(root, python, out, lanes, profile, cpu_threads, *, runner=subprocess
 
 
 def validate_run(receipt, report, report_sha):
+    # Legacy receipts remain retained observations, but never witnessed this
+    # newly selectable arithmetic policy. Do not infer a default from absence.
+    require(receipt.get('schema') != LEGACY_SCHEMA,
+            'legacy verifier receipt has unrecorded sampling policy; default qualification unavailable')
     require(receipt.get('schema') == SCHEMA and receipt.get('phase') == 'before-execution', 'missing pre-run verifier receipt')
+    require(receipt.get('environment') == DEFAULT_POLICY,
+            'verifier receipt does not witness the default sampling policy')
     require(receipt.get('status') == 'completed' and isinstance(receipt.get('exit_code'), int), 'verifier producer did not complete')
     require(receipt.get('report_sha256') == report_sha, 'verifier report differs from completed run')
     source, after = receipt.get('source', {}), receipt.get('after_source', {})

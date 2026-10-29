@@ -1,0 +1,71 @@
+{
+  "source_commit": "9540376b1ec6cf4c4ac85713f0e60b94bd1aa06f",
+  "numerical_source": "5abdda9d8dc9cdad007c581137623414e2168f8b",
+  "scope": "verifier launch/receipt/admission tools only",
+  "tests": {
+    "producer_transport": 43,
+    "admission": 49,
+    "exit_code": 0
+  },
+  "guards": [
+    {
+      "name": "host-routes",
+      "argv": [
+        "python3",
+        "tools/hooks/no_host_routes.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "seconds": 20.2539279460907
+    },
+    {
+      "name": "python-execution",
+      "argv": [
+        "python3",
+        "tools/hooks/no_python_in_kernels.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "seconds": 0.6822619438171387
+    },
+    {
+      "name": "shell-compute",
+      "argv": [
+        "python3",
+        "tools/hooks/no_compute_in_shells.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "seconds": 0.7306981086730957
+    },
+    {
+      "name": "generation-boundary",
+      "argv": [
+        "python3",
+        "tools/check_generation_native_boundary.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.2759850025177002
+    },
+    {
+      "name": "package-connections",
+      "argv": [
+        "python3",
+        "tools/check_native_package_connections.py",
+        "--root",
+        "/Users/andrewhendel/mojolearn-wt/default-sampling-evidence-20261029",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "seconds": 1.1727538108825684
+    }
+  ],
+  "runtime_executed": false,
+  "native_rebuild": false,
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/default-sampling-evidence-20261029",
+  "retained_setup_failure": "admission-tests.log: nonexistent test_identity_columns.py; no tests ran, corrected file selection passed49"
+}

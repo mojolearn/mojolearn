@@ -30,6 +30,7 @@ def setup_report(tmp_path):
     raw = json.dumps(report).encode()
     receipt = dict(schema=L.SCHEMA, phase='before-execution', status='completed', exit_code=1,
                    source=source, after_source=copy.deepcopy(source), options=options, command=command,
+                   environment=dict(L.DEFAULT_POLICY),
                    install=dict(package=str(package), commit='a'*40, files=files, manifest_sha256=L.digest(files)),
                    after_install_manifest_sha256=L.digest(files), report_sha256=hashlib.sha256(raw).hexdigest())
     report_path, launch_path = tmp_path/'verify.json', tmp_path/'run.json'
@@ -115,9 +116,15 @@ def test_launch_writes_before_execution_and_preserves_nonzero_report(tmp_path,mo
     monkeypatch.setattr(C,'harness',lambda:h)
     monkeypatch.setattr(C,'profile_lanes',lambda *a:['lane'])
     out=tmp_path/'run'
+    monkeypatch.setenv('MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32', '1')
+    monkeypatch.setenv('MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE', '1')
     def runner(command,**kwargs):
         before=json.loads((out/'verifier-run.json').read_text())
         assert before['phase']=='before-execution' and before['status']=='running'
+        assert before['environment'] == L.DEFAULT_POLICY
+        assert before['producer']['sha256'] == L.sha(L.__file__)
+        assert kwargs['env']['MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32'] == '0'
+        assert kwargs['env']['MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE'] == '0'
         assert kwargs['cwd']==out and 'PYTHONPATH' not in kwargs['env']
         (out/'verify.json').write_text(json.dumps(report))
         return SimpleNamespace(returncode=1)
@@ -164,3 +171,29 @@ def test_launch_reuses_existing_full_fixture_environment_policy(tmp_path,monkeyp
     with pytest.raises(ValueError):
         L.execute(tmp_path,'/env/python',tmp_path/'refused',['lane'],'routine',8,
                   runner=lambda *a,**k: pytest.fail('narrowed fixtures must never execute'))
+
+
+@pytest.mark.parametrize('damage', ['candidate', 'missing', 'upload_candidate', 'legacy'])
+def test_default_column_requires_explicit_current_policy(tmp_path, monkeypatch, damage):
+    def break_policy(report, receipt):
+        if damage == 'legacy':
+            receipt['schema'] = L.LEGACY_SCHEMA
+            receipt['environment'].pop('resident_sampling_fp32')
+        elif damage == 'missing':
+            receipt['environment'].pop('resident_sampling_fp32')
+        elif damage == 'upload_candidate':
+            receipt['environment']['sampling_kv_upload_reuse'] = '1'
+        else:
+            receipt['environment']['resident_sampling_fp32'] = '1'
+    with pytest.raises(ValueError, match='sampling policy'):
+        convert(tmp_path, monkeypatch, break_policy)
+
+
+def test_legacy_policy_refusal_does_not_rewrite_observation(tmp_path):
+    report, _, receipt, _, _ = setup_report(tmp_path)
+    receipt['schema'] = L.LEGACY_SCHEMA
+    receipt.pop('environment')
+    original = copy.deepcopy(receipt)
+    with pytest.raises(ValueError, match='legacy.*unrecorded'):
+        L.validate_run(receipt, report, receipt['report_sha256'])
+    assert receipt == original
