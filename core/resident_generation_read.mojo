@@ -8,6 +8,8 @@ struct ResidentGreedyRead(Movable):
     var eos: List[Int32]
     var pad: Int
     var wrote: Int
+    var consumed: Int
+    var progress_ready: Bool
     var position: Int
     var max_positions: Int
     var state_capacity: Int
@@ -26,6 +28,8 @@ struct ResidentGreedyRead(Movable):
             self.eos.append(Int32(value))
         self.pad = pad
         self.wrote = 0
+        self.consumed = 0
+        self.progress_ready = False
         self.position = position
         self.max_positions = max_positions
         self.state_capacity = state_capacity

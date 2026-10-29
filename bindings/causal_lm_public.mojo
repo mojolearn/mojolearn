@@ -1708,6 +1708,23 @@ def _read_engine(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int
 
 
 
+def _resident_read_cleanup(provider: PythonObject, lm: PythonObject, sessions: PythonObject) raises:
+    # Failure-only best effort: one failed close must not skip other owners.
+    # The caller preserves its original operation error, including if cleanup
+    # cannot inspect these already-admitted owners.
+    if lm is not None:
+        try:
+            transformer_resident_lm_close(provider, lm)
+        except cleanup:
+            _ = cleanup
+    if sessions is not None:
+        for i in range(len(sessions)):  # driver-loop: release every owned layer after failure
+            try:
+                _ = transformer_resident_decode_call(provider, sessions[i], 24, [], [])
+            except cleanup:
+                _ = cleanup
+
+
 def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int,
                    mut admission: NativeArrayAdmission) raises -> PythonObject:
     # One provider boundary owns the complete token block. Native session
@@ -1735,6 +1752,7 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
     var progress = List[ResidentGreedyRead]()
     progress.append(ResidentGreedyRead(s.finished, s.lengths, s.eos, s.pad, positions,
         -1 if s.model.max_positions is None else Int(py=s.model.max_positions), Int(py=s.state.max_tokens)))
+    var published = False
     if persist:
         causal_model_cache_set(mods, s.model, fields, "_resident_busy", True)
     try:
@@ -1755,6 +1773,12 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
             [_addr(s.current, keep), _addr(pending, keep), 0, Int(progress.unsafe_ptr())],
             [length, capacity, Int(py=s.state.layers[0].cached_tokens)])
         mods.released()
+        # Commit diagnostics before export/result allocation can fail. Forward
+        # positions include a completed forward whose later picker refused.
+        s.produced += progress[0].wrote
+        resident_greedy_publish(progress[0], s.finished, s.lengths)
+        published = True
+        py_setattr(s.state, "positions", PythonObject(positions + progress[0].consumed))
         admission.recheck(generation_array_context())
         # Export once per read, not once per token. The next public operation
         # may change or release its Array metadata, so no host address is cached.
@@ -1770,19 +1794,49 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
             admission.recheck(generation_array_context())
             py_setattr(st, "cached_tokens", PythonObject(cached))
         _writeback(copies)
-        py_setattr(s.state, "positions", PythonObject(positions + length + progress[0].wrote - 1))
+        if persist:
+            causal_model_cache_set(mods, s.model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
+            causal_model_cache_set(mods, s.model, fields, "_resident_busy", False)
+        else:
+            _resident_close(entries, lm, sessions)
+            mods.released()
+        var wrote = progress[0].wrote
+        var out = generation_array([batch, wrote], "i")
+        var current = generation_array([batch, 1], "i")
+        resident_greedy_outputs(i32_ptr(_addr(pending, keep)), i32_ptr(_addr(out, keep)),
+            i32_ptr(_addr(current, keep)), batch, capacity, wrote)
+        s.current = current
+        return out
     except error:
         mods.released()
-        py_setattr(s.state, "_usable", PythonObject(False))
+        if not published:
+            # wrote counts only completed selections. A synchronized failure
+            # readback also contains the failing step's earlier-row updates.
+            s.produced += progress[0].wrote
+            if progress[0].progress_ready:
+                resident_greedy_publish(progress[0], s.finished, s.lengths)
+        # Keep the first operation error even if metadata publication or any
+        # release fails. No failed resident stream/cache becomes reusable.
+        s.usable = False
+        try:
+            py_setattr(s.state, "_usable", PythonObject(False))
+            py_setattr(s.state, "positions", PythonObject(positions + progress[0].consumed))
+        except publication:
+            _ = publication
         if persist:
-            causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
-            causal_model_cache_set(mods, s.model, fields, "_resident_busy", False)
-        if lm is not None:
             try:
-                _resident_close(entries, lm, sessions)
-                mods.released()
-            except cleanup:
-                raise Error("resident read failed: " + String(error) + "; cleanup failed: " + String(cleanup))
+                causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
+            except publication:
+                _ = publication
+            try:
+                causal_model_cache_set(mods, s.model, fields, "_resident_busy", False)
+            except publication:
+                _ = publication
+        try:
+            _resident_read_cleanup(provider, lm, sessions)
+            mods.released()
+        except cleanup:
+            _ = cleanup
         raise error
     finally:
         _ = keep
@@ -1790,23 +1844,6 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
         _ = pending
         _ = sessions
         _ = lm
-    if persist:
-        causal_model_cache_set(mods, s.model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
-        causal_model_cache_set(mods, s.model, fields, "_resident_busy", False)
-    else:
-        _resident_close(entries, lm, sessions)
-        mods.released()
-    var wrote = progress[0].wrote
-    var out = generation_array([batch, wrote], "i")
-    var current = generation_array([batch, 1], "i")
-    resident_greedy_outputs(i32_ptr(_addr(pending, keep)), i32_ptr(_addr(out, keep)),
-        i32_ptr(_addr(current, keep)), batch, capacity, wrote)
-    resident_greedy_publish(progress[0], s.finished, s.lengths)
-    s.current = current
-    s.produced += wrote
-    _ = keep
-    _ = pending
-    return out
 
 
 

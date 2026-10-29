@@ -1982,13 +1982,12 @@ def _lm_last_argmax_kernel(
 def _lm_read_argmax_kernel(
     logits: MutPointer[Float32, MutAnyOrigin], next_ids: MutPointer[Int32, MutAnyOrigin],
     out_ids: MutPointer[Int32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
-    lengths: MutPointer[Int64, MutAnyOrigin], eos: MutPointer[Int32, MutAnyOrigin],
     batch_in: Int32, cur_l_in: Int32, vocab_in: Int32, capacity_in: Int32,
-    step_in: Int32, n_eos_in: Int32, pad: Int32,
+    step_in: Int32, pad: Int32,
 ):
     # One block per row: stable lowest-index maximum, first nonfinite refusal,
-    # EOS/length publication and next input all stay on the device. The host
-    # sees only the small stop/error status, never logits or prediction work.
+    # next input stays on device. Progress commits only after the next kernel
+    # knows the first failing row, matching source-ordered failure publication.
     var r = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var batch = Int(batch_in)
@@ -1996,7 +1995,6 @@ def _lm_read_argmax_kernel(
     var vocab = Int(vocab_in)
     var capacity = Int(capacity_in)
     var step = Int(step_in)
-    var n_eos = Int(n_eos_in)
     if status[r] != 0:
         if tid == 0:
             next_ids[r] = pad
@@ -2044,44 +2042,60 @@ def _lm_read_argmax_kernel(
         var pick = indices[0]
         next_ids[r] = pick
         out_ids[r * capacity + step] = pick
-        lengths[r] += 1
-        for i in range(n_eos):
-            if pick == eos[i]:
-                status[r] = 1
 
 
 
 
 def _lm_read_status_kernel(status: MutPointer[Int32, MutAnyOrigin],
-                           summary: MutPointer[Int32, MutAnyOrigin], batch_in: Int32):
-    # Summarize device progress once per token. Only two control words cross
-    # the boundary; the first failing row preserves generation_pick ordering.
+                           summary: MutPointer[Int32, MutAnyOrigin],
+                           lengths: MutPointer[Int64, MutAnyOrigin],
+                           next_ids: MutPointer[Int32, MutAnyOrigin],
+                           eos: MutPointer[Int32, MutAnyOrigin], batch_in: Int32, n_eos_in: Int32):
+    # First locate the first invalid active row. Then commit only earlier
+    # rows (all rows when valid), exactly as the source-ordered picker did.
+    # This uses the existing second launch and two-word control transfer.
     var batch = Int(batch_in)
     var tid = Int(thread_idx.x)
     var rows = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
     var pending = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
     var first_bad = _LM_ARGMAX_NONE
-    var active = Int32(0)
     var r = tid
     while r < batch:
         if status[batch + r] >= 0:
             first_bad = min(first_bad, Int32(r))
-        if status[r] == 0:
-            active = 1
         r += _LM_ARGMAX_TPB
     rows[tid] = first_bad
-    pending[tid] = active
     barrier()
     var width = _LM_ARGMAX_TPB // 2
     while width > 0:
         if tid < width:
             rows[tid] = min(rows[tid], rows[tid + width])
+        barrier()
+        width //= 2
+    var stop = Int(rows[0])
+    var active = Int32(0)
+    r = tid
+    while r < batch:
+        if status[r] == 0 and r < stop:
+            lengths[r] += 1
+            var pick = next_ids[r]
+            for i in range(Int(n_eos_in)):
+                if pick == eos[i]:
+                    status[r] = 1
+        if status[r] == 0:
+            active = 1
+        r += _LM_ARGMAX_TPB
+    pending[tid] = active
+    barrier()
+    width = _LM_ARGMAX_TPB // 2
+    while width > 0:
+        if tid < width:
             pending[tid] = max(pending[tid], pending[tid + width])
         barrier()
         width //= 2
     if tid == 0:
         summary[0] = pending[0]
-        summary[1] = -1 if rows[0] == _LM_ARGMAX_NONE else status[batch + Int(rows[0])]
+        summary[1] = -1 if rows[0] == _LM_ARGMAX_NONE else status[batch + stop]
 
 
 
@@ -2189,6 +2203,17 @@ def _lm_layers_run(
 
 
 
+def _lm_read_progress(ctx: DeviceContext, mut read: ResidentGreedyRead,
+                      lengths: DeviceBuffer[DType.int64], finished: DeviceBuffer[DType.int32]) raises:
+    # One normal or failure-only metadata publication. A failed copy must not
+    # expose partially refreshed lists as a coherent progress snapshot.
+    read.progress_ready = False
+    ctx.enqueue_copy(dst_ptr=read.lengths.unsafe_ptr(), src_buf=lengths)
+    ctx.enqueue_copy(dst_ptr=read.finished.unsafe_ptr(), src_buf=finished)
+    ctx.synchronize()
+    read.progress_ready = True
+
+
 def _lm_run(
     mut s: CausalLMSession, layers: List[Int], p_ids: Int, p_out: Int, p_logits: Int,
     l: Int, n_steps: Int, read_address: Int = 0,
@@ -2226,116 +2251,133 @@ def _lm_run(
         ctx.enqueue_copy(dst_buf=lengths_device.value(), src_ptr=read[].lengths.unsafe_ptr())
         if len(read[].eos) > 0:
             ctx.enqueue_copy(dst_buf=eos_device.value(), src_ptr=read[].eos.unsafe_ptr())
-    var cur_l = l
-    for step in range(n_steps):
-        if read_address != 0:
-            var consumed = l + step
-            var position = read[].position + consumed
-            if read[].max_positions >= 0 and position > read[].max_positions:
-                raise Error("CausalLM: max_tokens or sequence exceeds max_positions")
-            if position > read[].state_capacity:
-                raise Error("CausalLM: sequence exceeds allocated state capacity")
-            if consumed > read[].cache_remaining:
-                raise Error("causal lm resident: additional positions do not fit the cache")
-        var m = b * cur_l
-        var x = ctx.enqueue_create_buffer[DType.float32](m * d)
-        if step == 0:
-            identical_embedding_forward_into(ctx, x, s.embed.value(), ids0, m, emb_cfg)
-        else:
-            identical_embedding_forward_into(ctx, x, s.embed.value(), next_ids, m, emb_cfg)
-        _lm_layers_run(ctx, layers, x, b, cur_l)
-        var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
-        var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
-        if s.norm:
-            llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
-        else:
-            # No final norm (LM_RESIDENT_GENERATE): the head reads the stack
-            # output, as the per-layer route's head does; a copy, no arithmetic.
-            ctx.enqueue_copy(dst_buf=hn, src_buf=x)
-        var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
-        var ws_n = 1
-        if not s.head15:
-            ws_n = identical_gemm_workspace_max_floats(m, v, d)
-        var ws = ctx.enqueue_create_buffer[DType.float32](ws_n)
-        if s.head15:
-            llama_int15_proj(ctx, s.st15.value(), logits, hn, s.head15.value(), m, v, d)
-        elif s.tied:
-            identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
-        else:
-            identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
-        # lane cgr4-download-loop: the two refusals scan on the device (the
-        # first index by an integer minimum), not two m x d downloads walked
-        # on the host
-        if s.norm:
-            # Without a norm only the head's input scan applies (on `hn`, the
-            # copy of `x`), as on the per-layer route.
-            var bad_x = device_first_nonfinite(ctx, x, m * d)
-            if bad_x >= 0:
-                raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
-        var bad_hn = device_first_nonfinite(ctx, hn, m * d)
-        if bad_hn >= 0:
-            raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))
-        if read_address == 0:
-            ctx.enqueue_function[_lm_last_argmax_kernel](
-                logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
-                Int32(cur_l), Int32(v), Int32(n_steps), Int32(step),
-                grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
-            )
-        else:
-            ctx.enqueue_function[_lm_read_argmax_kernel](
-                logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
-                status_device.value().unsafe_ptr(), lengths_device.value().unsafe_ptr(), eos_device.value().unsafe_ptr(),
-                Int32(b), Int32(cur_l), Int32(v), Int32(n_steps), Int32(step), Int32(len(read[].eos)), Int32(read[].pad),
-                grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
-            )
-            ctx.enqueue_function[_lm_read_status_kernel](
-                status_device.value().unsafe_ptr(), summary_device.value().unsafe_ptr(), Int32(b),
-                grid_dim=(1, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(), src_buf=summary_device.value())
-        var rows = List[DeviceBuffer[DType.float32]]()
-        if p_logits != 0 and step == n_steps - 1:
-            var lp = _f32_ptr(p_logits)
-            for r in range(b):
-                rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
-                ctx.enqueue_copy(dst_ptr=lp + r * v, src_buf=rows[r])
-        ctx.synchronize()
-        _ = rows^
-        _ = x^
-        _ = sumsq^
-        _ = hn^
-        _ = logits^
-        _ = ws^
-        cur_l = 1
-        if read_address != 0:
-            if status[1] >= 0:
-                raise Error("generation: non-finite logit at token " + String(status[1]))
-            read[].wrote = step + 1
-            if status[0] == 0:
-                break
     var output_rows = List[DeviceBuffer[DType.int32]]()
-    if read_address == 0:
-        ctx.enqueue_copy(dst_ptr=out_i32, src_buf=out_dev)
-    else:
-        # A stopped read has unwritten trailing capacity. Copy only published
-        # tokens, retaining row views until the final device synchronization.
-        for r in range(b):  # driver-loop: completed output-row transfer spans, no token computation
-            output_rows.append(out_dev.create_sub_buffer[DType.int32](r * n_steps, read[].wrote))
-            ctx.enqueue_copy(dst_ptr=out_i32 + r * n_steps, src_buf=output_rows[r])
-    if read_address != 0:
-        ctx.enqueue_copy(dst_ptr=read[].lengths.unsafe_ptr(), src_buf=lengths_device.value())
-        ctx.enqueue_copy(dst_ptr=read[].finished.unsafe_ptr(), src_buf=finished_device.value())
-    ctx.synchronize()
-    _ = ids0^
-    _ = next_ids^
-    _ = out_dev^
-    _ = output_rows^
-    _ = finished_device^
-    _ = status_device^
-    _ = summary_device^
-    _ = lengths_device^
-    _ = eos_device^
-    _ = status^
+    var progress_synchronized = True
+    try:
+        var cur_l = l
+        for step in range(n_steps):
+            if read_address != 0:
+                var consumed = l + step
+                var position = read[].position + consumed
+                if read[].max_positions >= 0 and position > read[].max_positions:
+                    raise Error("CausalLM: max_tokens or sequence exceeds max_positions")
+                if position > read[].state_capacity:
+                    raise Error("CausalLM: sequence exceeds allocated state capacity")
+                if consumed > read[].cache_remaining:
+                    raise Error("causal lm resident: additional positions do not fit the cache")
+            var m = b * cur_l
+            var x = ctx.enqueue_create_buffer[DType.float32](m * d)
+            if step == 0:
+                identical_embedding_forward_into(ctx, x, s.embed.value(), ids0, m, emb_cfg)
+            else:
+                identical_embedding_forward_into(ctx, x, s.embed.value(), next_ids, m, emb_cfg)
+            _lm_layers_run(ctx, layers, x, b, cur_l)
+            var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
+            var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
+            if s.norm:
+                llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
+            else:
+                # No final norm (LM_RESIDENT_GENERATE): the head reads the stack
+                # output, as the per-layer route's head does; a copy, no arithmetic.
+                ctx.enqueue_copy(dst_buf=hn, src_buf=x)
+            var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
+            var ws_n = 1
+            if not s.head15:
+                ws_n = identical_gemm_workspace_max_floats(m, v, d)
+            var ws = ctx.enqueue_create_buffer[DType.float32](ws_n)
+            if s.head15:
+                llama_int15_proj(ctx, s.st15.value(), logits, hn, s.head15.value(), m, v, d)
+            elif s.tied:
+                identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
+            else:
+                identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
+            # lane cgr4-download-loop: the two refusals scan on the device (the
+            # first index by an integer minimum), not two m x d downloads walked
+            # on the host
+            if s.norm:
+                # Without a norm only the head's input scan applies (on `hn`, the
+                # copy of `x`), as on the per-layer route.
+                var bad_x = device_first_nonfinite(ctx, x, m * d)
+                if bad_x >= 0:
+                    raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
+            var bad_hn = device_first_nonfinite(ctx, hn, m * d)
+            if bad_hn >= 0:
+                raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))
+            if read_address != 0:
+                read[].consumed += cur_l
+            if read_address == 0:
+                ctx.enqueue_function[_lm_last_argmax_kernel](
+                    logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
+                    Int32(cur_l), Int32(v), Int32(n_steps), Int32(step),
+                    grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[_lm_read_argmax_kernel](
+                    logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
+                    status_device.value().unsafe_ptr(),
+                    Int32(b), Int32(cur_l), Int32(v), Int32(n_steps), Int32(step), Int32(read[].pad),
+                    grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
+                )
+                progress_synchronized = False
+                ctx.enqueue_function[_lm_read_status_kernel](
+                    status_device.value().unsafe_ptr(), summary_device.value().unsafe_ptr(),
+                    lengths_device.value().unsafe_ptr(), next_ids.unsafe_ptr(), eos_device.value().unsafe_ptr(),
+                    Int32(b), Int32(len(read[].eos)),
+                    grid_dim=(1, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
+                )
+                ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(), src_buf=summary_device.value())
+            var rows = List[DeviceBuffer[DType.float32]]()
+            if p_logits != 0 and step == n_steps - 1:
+                var lp = _f32_ptr(p_logits)
+                for r in range(b):
+                    rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
+                    ctx.enqueue_copy(dst_ptr=lp + r * v, src_buf=rows[r])
+            ctx.synchronize()
+            progress_synchronized = True
+            _ = rows^
+            _ = x^
+            _ = sumsq^
+            _ = hn^
+            _ = logits^
+            _ = ws^
+            cur_l = 1
+            if read_address != 0:
+                if status[1] >= 0:
+                    raise Error("generation: non-finite logit at token " + String(status[1]))
+                read[].wrote = step + 1
+                if status[0] == 0:
+                    break
+        if read_address == 0:
+            ctx.enqueue_copy(dst_ptr=out_i32, src_buf=out_dev)
+        else:
+            # A stopped read has unwritten trailing capacity. Copy only published
+            # tokens, retaining row views until the final device synchronization.
+            for r in range(b):  # driver-loop: completed output-row transfer spans, no token computation
+                output_rows.append(out_dev.create_sub_buffer[DType.int32](r * n_steps, read[].wrote))
+                ctx.enqueue_copy(dst_ptr=out_i32 + r * n_steps, src_buf=output_rows[r])
+        if read_address != 0:
+            _lm_read_progress(ctx, read[], lengths_device.value(), finished_device.value())
+        ctx.synchronize()
+    except original:
+        if read_address != 0 and progress_synchronized:
+            try:
+                _lm_read_progress(ctx, read[], lengths_device.value(), finished_device.value())
+            except recovery:
+                # Device/readback failure cannot replace the original model or
+                # policy error. progress_ready stays false after a partial copy.
+                _ = recovery
+        raise original
+    finally:
+        _ = ids0^
+        _ = next_ids^
+        _ = out_dev^
+        _ = output_rows^
+        _ = finished_device^
+        _ = status_device^
+        _ = summary_device^
+        _ = lengths_device^
+        _ = eos_device^
+        _ = status^
 
 
 
