@@ -620,6 +620,12 @@ struct _ModelForwardTopology(Movable):
     var activations: List[Int]
 
     def __init__(out self, spec: ModelSpec):
+        self.activations = List[Int]()
+        comptime if MODEL_UNFUSED:
+            # Version 2 historically still fuses; legacy v1 does not consume
+            # topology in an unfused build, so do not prepare unused metadata.
+            if spec.version != SPEC2_VERSION:
+                return
         self.activations = List[Int](length=spec.n_layers(), fill=0)
         for i in range(spec.n_layers()):  # driver-loop: operation setup over model topology
             if spec.kinds[i] == LAYER_LINEAR:
