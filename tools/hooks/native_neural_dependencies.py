@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Check explicit native execution closures, including registered ABI targets.
+"""Optionally audit native execution closures, including registered ABI targets.
+
+This is NOT a runtime policy gate. Owner 2026-10-28 permits direct CPython C API
+throughout execution. Findings describe dependencies, not forbidden behavior;
+Python compute/callbacks/user hooks need separate semantic review. Default
+exit status does not reject legal CPython. --require-native-only is an explicit
+research assertion for a root expected to build without Python, never a general
+source/push requirement.
 
 No provider/bindings exemption applies BELOW a native root. The public provider
 may admit objects, pin owners, release/reacquire the GIL and publish results;
 it may import a native root, never the reverse. std/max/layout/linalg are external compiler
 packages (not recursively inspected); explicit std.python is still forbidden.
-This is source enforcement, not runtime or identity verification. A declared
+This is source inventory, not runtime or identity verification. A declared
 indirect ABI edge is followed just like an import, preventing a pure-looking
 function-pointer facade from concealing a Python-dependent target.
 """
@@ -31,8 +38,8 @@ GENERATION_ROOTS = (
     "transformer/causal_lm_public_impl.mojo",
 )
 # This is a REAL current callback edge, not a permitted exception. Until its
-# implementation is extracted and the provider-only GIL lifecycle is outside
-# the execution loop, --scope all must fail on this target. Keep the mapping
+# implementation changes, --scope all reports this target. Its CPython GIL
+# lifecycle is allowed by the current owner rule. Keep the mapping
 # in sync with AdmittedNativeExecution.endpoint, not merely with filenames.
 INDIRECT_TARGETS = {
     "core/native_execution.mojo": ("providers/python/native_execution_pyapi.mojo",),
@@ -186,6 +193,8 @@ def main():
     parser.add_argument("--root", action="append", default=[])
     parser.add_argument("--json")
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--require-native-only", action="store_true",
+                        help="opt-in closure assertion, not library runtime policy")
     args = parser.parse_args()
     if args.self_test:
         self_test()
@@ -213,7 +222,7 @@ def main():
     if len(report["failures"]) > 30:
         print("Additional findings retained in --json report; none treated as passing.")
     print(report["scope"])
-    return 1 if report["failures"] else 0
+    return 1 if args.require_native_only and report["failures"] else 0
 
 
 if __name__ == "__main__":

@@ -46,3 +46,12 @@ contains full build/guard logs and exits, both binaries, retained source tar,
 source hashes, dependency JSON (including all broader failures), and nm output.
 compile.json records coverage, binary/source hashes and known limits. Required
 source guards run on committed source and their status is delivered separately.
+
+OWNER RULE UPDATE after this compile: direct CPython C API is permitted during
+execution, including loops. The dependency scanner is now an OPTIONAL inventory
+and defaults to exit0 even with dependency findings. --require-native-only is
+only an explicitly requested closure assertion, not product runtime policy.
+No source/push gate invokes this audit. The broad findings are not prohibited
+behavior by themselves. No session synchronization rewrite is required to
+erase allowed CPython; the uncompiled outer-GIL draft is separately parked.
+Python compute/callbacks/user hooks remain prohibited.
