@@ -1,0 +1,59 @@
+Public Mamba2 fixed-view preparation reuse (2026-10-29)
+Branch lane/mamba-preparation-20261029, base b3c3df877d.
+Frozen executable source e2ff645185b881da6443240f9ee04eed8ec655f0.
+
+Repeated work removed / selected route
+Default identical GPU already retains the MambaArena allocation. This batch
+retains its nine weight and four state view descriptors too, plus the fixed
+prefix offset/view count. Repeated calls no longer construct those thirteen
+sub-buffer descriptors, copy weight dims, or rebuild their two fixed size Lists.
+The arena used-size calculation uses cached prefix plus the current stage/input
+suffix; only q-dependent transient views/layout remain per call. The existing
+shared executor accepts prepared descriptors, keeping one arithmetic/upload/
+download implementation for one-shot and retained paths.
+
+Reuse/invalidation and mutable bytes
+This is descriptor reuse, NOT immutable data caching. All nine weights, four
+state buffers and input are still refreshed from this call's admitted live
+addresses. weights_checked resets before existing finite validation. buf_len
+is set to current q0; every public y/h_last_ remains fresh and independently
+owned. No provider/public ABI or boundary admission changes.
+B/d_model/device-plan-root changes call existing full clear before arena
+replacement. State/weight descriptors are destroyed before the underlying
+arena, with queue drains before and after buffer release while ctx lives.
+Existing atomic lease isolates cached storage; contention owns a temporary
+workspace. Any failing dispatch drops all workspace storage before releasing
+the lease, preserving the original operation error. New retained owners share
+that existing lifecycle and cannot refer to a replaced arena.
+
+Initialization / poison
+Production still zero-fills exactly the same current used arena prefix before
+uploads. It resumes transient carving at the retained fixed prefix. Maximum-q
+capacity is unchanged and covers every legal L1 q. Diagnostic MAMBA_POISON
+builds deliberately keep prior per-call fixed descriptor construction: each
+take still zero-fills its body and preserves poisoned guard bands, including
+zero-length dummy handling. No new poison initialization scheme or arithmetic.
+All transient stage/input views remain pinned through normal/failure drains.
+
+Review / compilation / limits
+Root reviewed the three-file diff: fixed view order matches the original prefix;
+key/capacity/refresh/checked flag and poison behavior preserved; retained state
+owners drop before arena. No blocker identified by that source review.
+Actual native workspace create/close/step descriptor + capsule factory compiled
+for Apple GPU identical O0: default exit 0, poison exit 0. Each invocation used
+compile_slot and 10 configured compiler workers, not a CPU numerical substitute;
+configured workers do not prove saturation. CPU host did not execute artifacts.
+Required source/push guards exit 0, no baseline growth. No failed compile in this
+batch. NVIDIA/AMD compilation, runtime, identity and performance unqualified.
+Provider source is unchanged; prior provider receipt is reused rather than
+building it again. Dynamic loading/dispatch is not qualified by these compiles.
+Arena-off unchanged, transient stage/input metadata remains repeated, all data
+transfers and production initialization remain. No measured speed claim.
+
+Evidence
+~/mojolearn-evidence/mamba-preparation-20261029/native/ and poison/ retain full
+compile.log, compile.json, source-bytes.tgz, source-manifest.json and binaries.
+Controllers and source/push guard complete logs are in the parent directory.
+compile_native.json/compile_poison.json retain exact commands, scope and hashes;
+evidence.json confirms all three changed source bytes match both build manifests.
+No main merge/push by lane; root integrates serially.

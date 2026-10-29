@@ -1,0 +1,40 @@
+{
+  "code_commit": "e2ff645185b881da6443240f9ee04eed8ec655f0",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "compile_exits": {
+    "native": 0,
+    "poison": 0
+  },
+  "source_byte_checks": {
+    "native": {
+      "mamba/impl/mamba_shell_impl.mojo": true,
+      "mamba/impl/modules/mamba2.mojo": true,
+      "mamba/impl/modules/afn_arena.mojo": true
+    },
+    "poison": {
+      "mamba/impl/mamba_shell_impl.mojo": true,
+      "mamba/impl/modules/mamba2.mojo": true,
+      "mamba/impl/modules/afn_arena.mojo": true
+    }
+  },
+  "source_push_guards_exit": 0,
+  "runtime_executed": false,
+  "artifact_hashes": {
+    "commit1.log": "ea5ce9e7fcc0ded4a947550b3bdb76d4f5261487bf2ac4f4603cb2c6812fc3ad",
+    "native/_mamba2_public_workspace.so": "9d9a2a6547dafd2609ace6eb5e14882ac74f892ca970483f4825184fb84da176",
+    "native/compile.json": "9956cadedb5e630abc3628eeadf499d50b86cc32176d40bd33982e8fd71b53d7",
+    "native/compile.log": "73d970a75b026e55721a1ab560a4a7d26a2340bdfb6a7bb21d042b66d5b37537",
+    "native/source-bytes.tgz": "6dd5dbe9b58ec17c530bf1563ce07501a5f2e434d86ec382ab18b4df0f65e23d",
+    "native/source-manifest.json": "ecf15937be532969fe1e9b5b657e12eea706cbb6d55a81245e07a94b7d3b9af2",
+    "native-controller.log": "ebf603867a492816f0162be1cdfc69a7eb1c38d32a6989fbe83199a83b1a7696",
+    "poison/_mamba2_public_workspace.so": "57f77e19579ee5afccb6f807cdc239f26adc1189e7f9f4c6bf5203b8565a624d",
+    "poison/compile.json": "937e33ebbb326b507ee63d70d84fe75b13af1e55a86250c2b135bc4413bc360f",
+    "poison/compile.log": "73d970a75b026e55721a1ab560a4a7d26a2340bdfb6a7bb21d042b66d5b37537",
+    "poison/source-bytes.tgz": "6dd5dbe9b58ec17c530bf1563ce07501a5f2e434d86ec382ab18b4df0f65e23d",
+    "poison/source-manifest.json": "ecf15937be532969fe1e9b5b657e12eea706cbb6d55a81245e07a94b7d3b9af2",
+    "poison-controller.log": "af227ae4edd2ef0c9278c325eafabe7ef2830d05d706ee50aeda157e7e1ce82c",
+    "source-push-guards.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "source-push-guards.log": "b47e0ad60fa5ad57ccd8fb6c467a745a0e17aa6ce6d1dfe7441f294363524f9c",
+    "worktree.log": "063550daf67d619b589d2343e76fc3d45e943b954b371514385940ff09780bd3"
+  }
+}
