@@ -1,0 +1,25 @@
+AMD sequence-only5ab compilation and retention
+
+Existing supported default recipe, only identical:gfx942 native_sequence group.
+Run40882485101 expected1/compiled1/failed0; controller0. Raw image27459336bytes
+SHA b76d2d975f153c67995753d1a3d1b8583ff52857c03b61f14ca3bde7fc48a60a.
+Compiler build1024.3s. Original full partial-tree route returned1; the existing
+shard protocol accepts only the selected successful build row. No complete
+package/stage/runtime qualification. All original failures/logs retained.
+
+Resources: nproc4 and guard affinity0,1,2,3; actual compilerjobs8, supported AMD
+recipe unchanged. Guard separately records thread_limit2 for surrounding
+phases; do not claim every phase used4cores or continuous full saturation.
+The retained full build log includes one start and two end/controller lines;
+removing exactly those3 reproduces the manifest subprocess log SHA. Both full
+and subprocess hashes are retained; no discarded diagnostics.
+
+All9714 retained members verified through R2GET. Archive296688297bytes SHA
+e1376eb00227173decb3946924bb1c30bfaff84b0f143c65b0f0134e229a6f07.
+ExactR2key/localpaths inreceipt.json. Three older unchanged AMD merged groups
+were not rebuilt. New be2 provider repair will invalidate this sequence group;
+retain5ab evidence and rebuild only affected group after accepted freeze.
+
+Formal merged compile-only admission remains pending; new GHA development
+adapter handles the different development producer, not this layout.
+Evidence: ~/mojolearn-evidence/github-amd-sequence-20261029/.
