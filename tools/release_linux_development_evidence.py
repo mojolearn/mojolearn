@@ -42,7 +42,8 @@ def _relative(base, value):
     return path
 
 
-def _group(row, result, result_path, leg, tree, stage):
+def group_facts(row, result, result_path, receipt_path, tree):
+    """Validate one original selected execution, independent of retention layout."""
     fields = row["fields"]
     stem, mode, key = row["stem"], row["mode"], row["key"]
     repo, cache = Path(result["plan"]["repo"]), Path(result["plan"]["cache"])
@@ -81,8 +82,6 @@ def _group(row, result, result_path, leg, tree, stage):
     for path, digest in source["files"].items():
         actual = common.generated_sha(tree, path, tree.root) if path in common.GENERATED else tree.sha256(path)
         require(actual == digest, "compiled source bytes differ: " + path)
-    retained = leg / "remote/leg_out"
-    receipt_path = retained / "development-cache/artifacts" / key / "receipt.json"
     receipt = load(receipt_path)
     require(receipt.get("fields") == fields and receipt.get("key") == key
             and receipt.get("stem") == stem and receipt.get("mode") == mode
@@ -104,19 +103,29 @@ def _group(row, result, result_path, leg, tree, stage):
     log = result_path.parent / Path(receipt["log"]).name
     binary = reference(receipt_path.parent / (stem + ".so"))
     require(binary["sha256"] == receipt.get("sha256"), "raw compiled binary differs")
-    staged = [r for r in stage if r.get("source_key") == key and r.get("group") == stem]
-    require(len(staged) == 1, "selected group has no unique retained stage witness")
-    staged_binary = reference(_relative(retained, staged[0]["staged_artifact"]))
-    require(staged_binary["sha256"] == staged[0].get("sha256") == binary["sha256"],
-            "staged binary differs from original compile bytes")
     require(not fields.get("link_environment"), "unrecognized linker environment")
     return dict(mode=mode, members=row["members"], environment=environment, source_files=source["files"],
                 canonical_entries=entries, root_sha256=fields["root_sha256"],
                 compiler_sha256=toolchain["compiler_sha256"], toolchain_locked=toolchain["locked"],
                 toolchain=toolchain, command=command, compiler_workers=int(workers),
                 receipt=reference(receipt_path), execution=reference(execution_path), log=reference(log),
-                binary=binary, staged_binary=staged_binary)
+                binary=binary)
 
+
+
+def _group(row, result, result_path, leg, tree, stage):
+    retained = leg / "remote/leg_out"
+    key, stem = row["key"], row["stem"]
+    receipt_path = retained / "development-cache/artifacts" / key / "receipt.json"
+    group = group_facts(row, result, result_path, receipt_path, tree)
+    binary = group["binary"]
+    staged = [r for r in stage if r.get("source_key") == key and r.get("group") == stem]
+    require(len(staged) == 1, "selected group has no unique retained stage witness")
+    staged_binary = reference(_relative(retained, staged[0]["staged_artifact"]))
+    require(staged_binary["sha256"] == staged[0].get("sha256") == binary["sha256"],
+            "staged binary differs from original compile bytes")
+    group["staged_binary"] = staged_binary
+    return group
 
 def facts(root, producer):
     leg, result_path = Path(producer["leg"]).resolve(), Path(producer["result"]).resolve()
@@ -141,7 +150,10 @@ def facts(root, producer):
 
 
 def collect(root, document, producer):
-    found = facts(root, producer)
+    return collect_facts(facts(root, producer))
+
+
+def collect_facts(found):
     units, flags, compilers, workers = {}, set(), set(), {}
     for stem, group in found["groups"].items():
         env = group["environment"]
@@ -167,7 +179,7 @@ def collect(root, document, producer):
                 spec_ids=sorted({rid.split("/", 1)[0] for rid in units}))
 
 
-def check_unit(requirement_id, wanted, found, unit):
+def check_group_unit(requirement_id, wanted, found, unit):
     require(supports_requirement(wanted), "unsupported Linux compile requirement")
     binding, declared = wanted["inputs"]["binding"], wanted["inputs"]["unit"]
     require(common.binding_key(binding) == unit["binding_key"] and requirement_id.endswith("/" + unit["binding_key"]),
@@ -193,7 +205,13 @@ def check_unit(requirement_id, wanted, found, unit):
             if actual is None:
                 actual = group["canonical_entries"].get(rel)
             require(actual is not None and actual == tree.sha256(rel), "required source was not compiled: " + rel)
-    return common.coverage_rows(wanted), [found["leg"], found["result"], found["stage"],
+    return common.coverage_rows(wanted)
+
+
+def check_unit(requirement_id, wanted, found, unit):
+    coverage = check_group_unit(requirement_id, wanted, found, unit)
+    group = found["groups"][unit["group"]]
+    return coverage, [found["leg"], found["result"], found["stage"],
         *[group[k] for k in ("receipt", "execution", "log", "binary", "staged_binary")]]
 
 
