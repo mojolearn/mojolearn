@@ -124,3 +124,39 @@ def test_host_availability_does_not_admit_replaced_descriptor(tmp_path, monkeypa
     base_rules = attributes._hierarchy_availability(ml)
     inherited = attributes._inherited_host_availability(ml, base_rules, missing)
     assert 'predict' not in inherited.get(host.HostAgglomerativeClustering, {})
+
+
+@pytest.mark.parametrize('name,entry_name', [
+    ('DBSCAN', 'labeled_reference_predict'),
+    ('AgglomerativeClustering', 'labeled_reference_predict'),
+    ('SpectralClustering', 'spectral_predict'),
+])
+def test_expected_cpu_execution_entry_is_reached(tmp_path, monkeypatch, name, entry_name):
+    """Native-only sabotage distinguishes executing CPU from GPU-vs-GPU equality.
+
+    Reconnect only this fixture's CPU export to a different compiled zero-arg
+    entry. Both prediction entries take two arguments. Its native arity refusal
+    must be observed by the public call; no Python callback computes or runs.
+    """
+    import mojolearn as ml
+    from mojolearn._native_family_bridge import shared_context
+    from mojolearn.tests.test_host_archive_native import _archive
+
+    model = ml.host_model(_archive(tmp_path, name))
+    context = shared_context()
+    rows = context['family_host_binding_connections']
+    row = next(row for row in rows if row[0] is type(model))
+    module = row[2]
+    replacement = vars(module)[row[4]]
+    with pytest.raises(TypeError) as expected:
+        replacement([], [])
+    monkeypatch.setattr(module, entry_name, replacement)
+    # This test deliberately reconnects the native export, so the expected
+    # failure occurs at execution rather than the export-identity guard above.
+    exports = tuple((key, replacement if key == entry_name else value) for key, value in row[3])
+    replacement_row = row[:3] + (exports, row[4])
+    monkeypatch.setitem(context, 'family_host_binding_connections',
+                        tuple(replacement_row if value is row else value for value in rows))
+    with pytest.raises(TypeError) as actual:
+        model.predict(np.array([[1, 2]], dtype=np.float32))
+    assert actual.value.args == expected.value.args
