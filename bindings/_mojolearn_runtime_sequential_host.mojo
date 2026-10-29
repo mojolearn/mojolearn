@@ -9,7 +9,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.sequential_native import sequential_c
-from bindings.native_identity_key import NativeIdentityKey
+from bindings.native_identity_type import native_identity_type
 from bindings.sequential_admission import SequentialAdmissions
 from bindings.sequential_description import SequentialDescription
 
@@ -41,7 +41,7 @@ def runtime_sequential_host_sabotage_binding() raises -> PythonObject:
 def build__mojolearn_runtime_sequential_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_sequential_host")
-        _ = module.add_type[NativeIdentityKey]("_NativeIdentityKey")
+        native_identity_type(module)
         _ = module.add_type[SequentialAdmissions]("_SequentialAdmissions")
         _ = module.add_type[SequentialDescription]("_SequentialDescription")
         module.def_py_c_function(sequential_c, "sequential_native_call")

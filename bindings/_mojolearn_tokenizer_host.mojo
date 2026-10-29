@@ -83,7 +83,7 @@ from bindings.native_json import native_json_parse, native_json_read, native_pat
 from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_operation_owner import CausalExecutionEntries
-from bindings.native_identity_key import NativeIdentityKey
+from bindings.native_identity_type import native_identity_type
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c, NativeBlockPlan
 from bindings.transformer_public_native import transformer_public_c, TransformerPublicTapeOwner
@@ -223,7 +223,6 @@ from providers.python.generation_session_pyapi import GenerationNativeProvider, 
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info
 from providers.python.operation_lock_pyapi import ProviderOperationLock, operation_lock_connect, operation_lock_c
 from bindings.causal_operation_owner import CausalExecutionEntries
-from bindings.native_identity_key import NativeIdentityKey
 from bindings.causal_lm_public import (
     GenerationHandle, PreparedGenerationLayer, causal_public_c, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
@@ -1431,7 +1430,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
         # causal_pin_entries stores PythonObject(alloc=CausalExecutionEntries(...)).
         _ = module.add_type[CausalExecutionEntries]("_CausalExecutionEntries")
-        _ = module.add_type[NativeIdentityKey]("_NativeIdentityKey")
+        native_identity_type(module)
         _ = module.add_type[NativeBlockPlan]("_NativeBlockPlan")
         # neural_block_owner pins PythonObject(alloc=PreparedGenerationLayer(...)).
         _ = module.add_type[PreparedGenerationLayer]("_PreparedGenerationLayer")
