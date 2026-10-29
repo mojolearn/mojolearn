@@ -512,6 +512,24 @@ def _selected_macos_cpu_toolchains(snapshot, configuration):
     return result
 
 
+def _snapshot_configuration(configuration):
+    """Separate selected-image witnesses from frozen source analysis inputs.
+
+    These three maps are validated/applied only by the two selection helpers
+    below, after frozen_snapshot. Keeping them in the worker request repeats
+    the same source scan for every separately compiled image. Retain all other
+    configuration, including compiler, target, environment and manifest inputs;
+    the complete original configuration still determines every final unit.
+    """
+    result = copy.deepcopy(configuration)
+    context = result.get("dependency_context", {})
+    if isinstance(context, dict):
+        for name in ("selected_binding_build_flags", "selected_binding_compile_jobs",
+                     "selected_macos_cpu_toolchains"):
+            context.pop(name, None)
+    return result
+
+
 def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None):
     """Replace compile/identity/performance rows with independently reusable units.
 
@@ -529,7 +547,7 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
     extra = sorted({p for rows in workloads.values() for row in rows for p in row.get("source_inputs", [])})
     request = dict(compile="compile" in kinds, lanes=bool(kinds & {"identity", "performance"}),
                    recipes="performance" in kinds,
-                   configuration=configuration, extra_paths=extra)
+                   configuration=_snapshot_configuration(configuration), extra_paths=extra)
     source_snapshot = frozen_snapshot(root, revision, request, log_dir=log_dir)
     snapshot = source_snapshot
     if kinds & {"compile", "identity", "performance"}:
