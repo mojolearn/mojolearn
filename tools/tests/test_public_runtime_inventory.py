@@ -778,6 +778,75 @@ def test_compiled_descriptor_factory_slot_is_its_entry():
         assert rows["__getattribute__"]["runtime_status"] == "unresolved", rows["__getattribute__"]
 
 
+
+def test_native_constructor_keyword_is_local_to_its_defining_class():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base = endpoint_fixture(root, """
+            from ._mode import NumericModeMixin
+            class Native(NumericModeMixin, _native_constructor=True):
+                def __init__(self, *, numeric_mode=None):
+                    return _NATIVE(self, numeric_mode)
+                def fit(self, X):
+                    return _NATIVE(self, X)
+            class Passive(Native):
+                pass
+            class Own(Native):
+                def __init__(self, *, numeric_mode=None):
+                    return _NATIVE(self, numeric_mode)
+            class Disabled(NumericModeMixin, _native_constructor=False):
+                def __init__(self, *, numeric_mode=None):
+                    return _NATIVE(self, numeric_mode)
+            class MissingMode(NumericModeMixin, _native_constructor=True):
+                def __init__(self):
+                    return _NATIVE(self)
+            class Unknown(NumericModeMixin, _native_constructor=True, metaclass=type):
+                def __init__(self, *, numeric_mode=None):
+                    return _NATIVE(self, numeric_mode)
+        """, exports=("Native", "Passive", "Own", "Disabled", "MissingMode", "Unknown"))
+        mode = textwrap.dedent("""
+            _OUTPUTS = ("predict",)
+            _FITS = ("fit",)
+            _NEEDS_FIT = ("predict",)
+            _LOADS = ("load",)
+            def _install_numeric_mode(cls, *, native_constructor=False):
+                if native_constructor:
+                    return
+                cls.__init__ = make_wrapper(cls.__init__)
+            class PublicOutputsMixin:
+                def __init_subclass__(cls, **kw):
+                    super().__init_subclass__(**kw)
+            class SklearnTagsMixin(PublicOutputsMixin):
+                def __init_subclass__(cls, **kw):
+                    super().__init_subclass__(**kw)
+            class NumericModeMixin(SklearnTagsMixin):
+                def __init_subclass__(cls, *, _native_constructor=False, **kw):
+                    super().__init_subclass__(**kw)
+                    _install_numeric_mode(cls, native_constructor=_native_constructor)
+        """)
+        (base / "_mode.py").write_text(mode)
+        rows = {row["endpoint"]: row for row in INV.endpoint_inventory(root)["endpoints"]}
+        for name in ("Native", "Passive"):
+            row = rows["mojolearn." + name + ".__init__"]
+            assert row["runtime_status"] == "native_boundary", row
+            assert "class_creation_wrapper" not in row, row
+        for name in ("Own", "Disabled", "MissingMode"):
+            row = rows["mojolearn." + name + ".__init__"]
+            assert row["runtime_status"] == "prohibited_source", row
+            assert row["class_creation_wrapper"] == "mojolearn.est." + name, row
+        assert rows["mojolearn.Native.fit"]["class_creation_wrapper"] == "mojolearn.est.Native"
+        for name in ("Native", "Passive", "Disabled"):
+            assert "mojolearn." + name + ".<class-construction>" not in rows
+        assert rows["mojolearn.Unknown.<class-construction>"]["runtime_status"] == "unresolved"
+        assert rows["mojolearn.MissingMode.<class-construction>"]["runtime_status"] == "unresolved"
+        # A matching keyword alone cannot exempt a constructor when the indexed
+        # hook does not implement/forward the skip protocol.
+        (base / "_mode.py").write_text(mode.replace(
+            "_install_numeric_mode(cls, native_constructor=_native_constructor)", "_install_numeric_mode(cls)"))
+        rows = {row["endpoint"]: row for row in INV.endpoint_inventory(root)["endpoints"]}
+        assert rows["mojolearn.Native.__init__"]["class_creation_wrapper"] == "mojolearn.est.Native"
+
+
 if __name__ == "__main__":
     for name, test in sorted(globals().items()):
         if name.startswith("test_") and callable(test):
