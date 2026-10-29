@@ -7,9 +7,10 @@
     "observation_classification.py": "27a1667239ae42cde8d964aaa32dd86c82b3e52f7a22e202273fee242aa3dd41",
     "run_frozen_chunks_v3.py": "360c1e086548a4339e87ed34dfa51d3ae6e693b07187363b28c22075a069bba9",
     "run_frozen_chunks_v4.py": "e137cc4a838a160faf48e31a561c6a5b6826fd50c286d330320849481f7eb73e",
-    "test_controller_lease_budget.py": "9080a1d43e5bed7ac3bc218d27b694e30f6f788f22b3e4fb534d9bf0e7c9b9ad",
+    "run_frozen_chunks_v5.py": "3b4b01f7c7103648a8328394b3120a4bebc13b3e6982851a6388a490f69be438",
+    "test_controller_lease_budget.py": "88e0350af173e677f96cdb4361f4172cb75d3a7da0d04d3db3e043d0226c1ed9",
     "test_controller_preflight_v2.py": "df45ee228c643c6accadbddaf3ba0cb15d70a710e13820bcb2fd9b7bd5ad8a16",
-    "test_controller_process.py": "88da085fd3998d1bbe28bd3b43b9f089907ff9c7f978b460138b6fb06da09952"
+    "test_controller_process.py": "06c954f417d4464bc0f499eb8f772ff2be0a24cfd1cf68bfc8e8d61a85bb9cbc"
   },
   "validation": {
     "tests": 22,
@@ -23,5 +24,10 @@
     "exit": 0,
     "log": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/full-bc11389/finite-controller-v4-final-tests.log"
   },
-  "recommended_executor": "run_frozen_chunks_v4.py"
+  "recommended_executor": "run_frozen_chunks_v5.py",
+  "validation_v5": {
+    "tests": 34,
+    "exit": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/current-main-verification-20261029/full-bc11389/finite-controller-v5-tests.log"
+  }
 }

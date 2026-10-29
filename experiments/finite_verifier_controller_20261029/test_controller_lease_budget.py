@@ -16,7 +16,7 @@ def test_bad_budget_refuses(args):
 def test_local_run_without_lease_is_unchanged():
     assert lease_budget(None,None,None,1) is None
 
-@pytest.mark.parametrize('name',['run_frozen_chunks_v3.py','run_frozen_chunks_v4.py'])
+@pytest.mark.parametrize('name',['run_frozen_chunks_v3.py','run_frozen_chunks_v4.py','run_frozen_chunks_v5.py'])
 def test_loop_declines_before_running_product(name):
     source=Path(__file__).with_name(name).read_text()
     tree=ast.parse(source)
