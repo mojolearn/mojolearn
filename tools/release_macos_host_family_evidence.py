@@ -4,8 +4,9 @@ Producer: --producer receipt=/absolute/path/to/original/receipt.json. The source
 archive, manifest, actual raw binary and complete compile log must remain. This
 adapter accepts both the family-controller and tokenizer-controller receipts;
 relative default artifact names are those original controllers' fixed layout.
-An absent original Apple auxiliary-toolchain witness remains unqualified. A
-later machine snapshot or another job's toolchain is not substituted for it.
+CPU link inputs are read from the original raw binary; unrelated Metal/host OS
+labels are not needed. No later machine snapshot or another job's toolchain is
+substituted. Missing original CPU metadata still refuses admission.
 """
 import hashlib
 from pathlib import Path, PurePosixPath
@@ -13,6 +14,7 @@ import re
 import tarfile
 
 import release_retained_compile_evidence as common
+import macos_cpu_compile_contract as cpu
 from release_ledger_admission import load, reference, require
 
 NAME = 'mac-host-family-build'
@@ -94,17 +96,18 @@ def _facts(root, producer):
             Path(binary['path']).stat().st_size == receipt.get('binary_bytes'), 'raw binary differs from receipt')
     log = reference(receipt.get('log', path.parent / 'compile.log'))
     require(Path(log['path']).stat().st_size > 0, 'complete compiler log is empty')
+    cpu_toolchain = cpu.contract(compiler, sources['pixi.lock'], cpu.read_image(binary['path']))
+    if receipt.get('sdk') is not None:
+        require(cpu.sdk_version(receipt['sdk']) == cpu_toolchain['image']['build']['sdk'],
+                'recorded SDK differs from original binary')
     apple = receipt.get('apple_toolchain')
-    apple_keys = {'build', 'developer_dir', 'metal', 'product', 'sdk', 'xcode'}
-    require(apple is None or isinstance(apple, dict) and apple_keys <= apple.keys() and
-            all(isinstance(apple[k], str) and apple[k] for k in apple_keys),
-            'incomplete original Apple toolchain witness')
-    require(apple is None or receipt.get('sdk', apple['sdk']) == apple['sdk'],
-            'original SDK witnesses disagree')
+    # Preserve any original auxiliary labels as history only. This CPU recipe
+    # does not consume the Metal/host-OS fields; their absence or partial capture
+    # must not replace the original raw-binary CPU contract above.
     return dict(producer=NAME, source_root=str(Path(root).resolve()), source_revision=revision,
-                family=family, environment=environment, compiler_sha256=compiler,
+                family=family, environment=environment, compiler_sha256=compiler, cpu_toolchain=cpu_toolchain,
                 source_files=sources, host_toolchain=apple, sdk=receipt.get('sdk'),
-                limitations=[] if apple else ['Original Apple auxiliary-toolchain witness was not captured'],
+                limitations=['Original linker/SDK executable/content hashes were not captured; original link-emitted versions are retained'],
                 evidence=[reference(path), reference(manifest_path), archive_ref, binary, log])
 
 
@@ -115,7 +118,7 @@ def _collect(root, document, producer):
     if (document or {}).get('configuration', {}).get('dependency_context', {}).get('cpu_target') == common.MAC:
         specs.append('compile-cpu')
     flags = common.derived_build_flags(facts['environment'], ROUTING)
-    context = dict(cpu_target=common.MAC, apple_toolchain=facts['host_toolchain'],
+    context = dict(cpu_target=common.MAC, selected_macos_cpu_toolchains={key: facts['cpu_toolchain']},
                    compiler_sha256={common.MAC: facts['compiler_sha256']},
                    selected_binding_compile_jobs={key: facts['environment']['MOJOLEARN_COMPILE_JOBS']},
                    selected_binding_build_flags={key: flags})
@@ -130,9 +133,10 @@ def _check(requirement_id, wanted, facts, unit):
     key = common.MAC + '/host/-/host/_mojolearn_' + facts['family'] + '_host'
     require(unit['binding_key'] == key == common.binding_key(binding) and requirement_id.endswith('/' + key),
             'admitted unit names another binding')
-    require(facts['host_toolchain'] is not None, 'missing original Apple auxiliary-toolchain witness')
-    require(binding.get('host_toolchain') == facts['host_toolchain'], 'Apple host toolchain differs')
-    require(declared.get('compiler_sha256') == facts['compiler_sha256'], 'compiler executable differs')
+    cpu.validate_contract(facts['cpu_toolchain'])
+    require(binding.get('host_toolchain') == facts['cpu_toolchain'], 'original CPU link toolchain differs')
+    require(binding['host_toolchain']['compiler_sha256'] == facts['compiler_sha256'],
+            'compiler executable differs from original CPU contract')
     expected_flags = dict(numeric_mode='identical', target_column='cpu', gpu_archs=None,
                           compile_jobs=facts['environment']['MOJOLEARN_COMPILE_JOBS'], package_byte_lm='1')
     # package_byte_lm selects included families in release packaging. This direct

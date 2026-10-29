@@ -10,6 +10,7 @@ import tarfile
 import pytest
 
 import release_macos_host_family_evidence as host
+from test_macos_cpu_compile_contract import image_bytes
 
 
 def sha(data):
@@ -47,7 +48,7 @@ def producer(tmp_path):
             member.size = len(data)
             output.addfile(member, io.BytesIO(data))
     binary = tmp_path / '_mojolearn_core_host.so'
-    binary.write_bytes(b'fixture raw binary bytes')
+    binary.write_bytes(image_bytes())
     (tmp_path / 'compile.log').write_text('retained complete compile output\n')
     receipt = dict(family='core', source_commit=git('rev-parse', 'HEAD'), cwd=str(root),
                    argv=['bash', 'tools/compile_slot.sh', 'sh', 'bindings/build_host_family.sh', 'core'],
@@ -67,7 +68,8 @@ def test_retains_original_revision_flags_and_missing_witness(producer):
     result = host._collect(root, {}, {'receipt': str(path)})
     assert result['spec_ids'] == ['compile-apple']
     assert result['facts']['host_toolchain'] is None
-    assert result['facts']['limitations'] == ['Original Apple auxiliary-toolchain witness was not captured']
+    assert result['facts']['cpu_toolchain']['image']['build']['sdk'] == [26,5,0]
+    assert 'original link-emitted versions' in result['facts']['limitations'][0]
     context = result['configuration']['dependency_context']
     assert set(context['selected_binding_compile_jobs'].values()) == {'10'}
     assert list(context['selected_binding_build_flags'].values()) == [{'MOJOLEARN_MOJO_BUILD_FLAGS': ''}]
@@ -81,7 +83,7 @@ def test_retains_original_revision_flags_and_missing_witness(producer):
     ({'binary_sha256': 'f'*64}, 'raw binary'),
     ({'source_archive_sha256': 'f'*64}, 'archive hash'),
     ({'family': 'tokenizer'}, 'family differs'),
-    ({'apple_toolchain': {'sdk': '26.5'}}, 'incomplete original Apple'),
+    ({'sdk': '26.6'}, 'SDK differs'),
 ])
 def test_rejects_inexact_or_failed_originals(producer, change, match):
     root, path, receipt = producer
@@ -112,14 +114,15 @@ def test_detects_manifest_and_archive_disagreement(producer):
         host._facts(root, {'receipt': str(path)})
 
 
-def test_missing_witness_cannot_qualify_an_otherwise_matching_unit(producer, monkeypatch):
+def test_missing_cpu_witness_cannot_qualify_an_otherwise_matching_unit(producer, monkeypatch):
     root, path, _ = producer
     result = host._collect(root, {}, {'receipt': str(path)})
     rid, unit = next(iter(result['units'].items()))
     wanted = {'inputs': {'binding': dict(target=host.common.MAC, vendor='host', arch=None,
                                        tier='host', name='_mojolearn_core_host'), 'unit': {}}}
     monkeypatch.setattr(host, 'supports_requirement', lambda _: True)
-    with pytest.raises(ValueError, match='missing original Apple auxiliary'):
+    result['facts']['cpu_toolchain'] = None
+    with pytest.raises(ValueError, match='invalid Mac CPU compile contract'):
         host._check(rid, wanted, result['facts'], unit)
 
 
@@ -144,7 +147,7 @@ def qualified(producer):
     flags = dict(numeric_mode='identical', target_column='cpu', gpu_archs=None, compile_jobs='10', package_byte_lm='1')
     semantic = {'MOJOLEARN_MOJO_BUILD_FLAGS': ''}
     binding = dict(target=host.common.MAC, vendor='host', arch=None, tier='host', name='_mojolearn_core_host',
-                   host_toolchain=receipt['apple_toolchain'], flags=flags, selected_build_flags=semantic,
+                   host_toolchain=facts['cpu_toolchain'], flags=flags, selected_build_flags=semantic,
                    toolchain={'pixi_lock_sha256': facts['source_files']['pixi.lock']},
                    closure={'scope':'closure', 'digest':host.common.closure_digest(tree, facts['source_files'])})
     wanted = dict(kind='compile', inputs=dict(binding=binding, unit=dict(kind='compile', vendor='apple',
@@ -182,3 +185,11 @@ def test_required_uncaptured_source_is_refused(producer):
     facts['source_files'].pop('bindings/_mojolearn_core_host.mojo')
     with pytest.raises(ValueError, match='required source was not captured'):
         host._check(rid, wanted, facts, unit)
+
+
+def test_partial_unconsumed_metal_labels_do_not_replace_cpu_witness(producer):
+    root,path,receipt=producer
+    receipt['apple_toolchain']={'sdk':'historical incomplete label'}
+    dump(path,receipt)
+    facts=host._facts(root,{'receipt':str(path)})
+    assert facts['cpu_toolchain']['image']['build']['sdk']==[26,5,0]

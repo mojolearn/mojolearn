@@ -480,6 +480,38 @@ def _selected_binding_flags(snapshot, configuration):
     return result
 
 
+def _selected_macos_cpu_toolchains(snapshot, configuration):
+    """Use exact original CPU link witnesses only for named macOS host images.
+
+    CPU build_host_family does not invoke Metal. Keep the full Apple toolchain
+    requirement for every GPU image and retain every other unresolved input.
+    The selected witness is validated again against original raw bytes by the
+    retained producer adapter before it can qualify compilation.
+    """
+    from macos_cpu_compile_contract import validate_contract
+    selected = configuration.get("dependency_context", {}).get("selected_macos_cpu_toolchains", {})
+    if not isinstance(selected, dict) or any(not isinstance(k, str) for k in selected):
+        raise ValueError("selected_macos_cpu_toolchains must be a binding-key mapping")
+    known = {b["key"]: b for b in snapshot.get("bindings", [])}
+    if set(selected) - known.keys():
+        raise ValueError("selected Mac CPU toolchain names unknown bindings")
+    result = copy.deepcopy(snapshot)
+    for binding in result.get("bindings", []):
+        if binding["key"] not in selected:
+            continue
+        identity = binding.get("identity")
+        if (not identity or identity.get("target") != "osx-arm64" or identity.get("tier") != "host"
+                or identity.get("vendor") != "host" or identity.get("flags", {}).get("target_column") != "cpu"):
+            raise ValueError("CPU link witness cannot replace a GPU/foreign toolchain")
+        witness = validate_contract(selected[binding["key"]])
+        if witness["pixi_lock_sha256"] != identity.get("toolchain", {}).get("pixi_lock_sha256"):
+            raise ValueError("CPU link witness package lock differs from frozen source")
+        identity["host_toolchain"] = copy.deepcopy(witness)
+        binding["unresolved"] = [message for message in binding.get("unresolved", [])
+                                  if message != "no record of the Apple toolchain"]
+    return result
+
+
 def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None):
     """Replace compile/identity/performance rows with independently reusable units.
 
@@ -502,6 +534,7 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
     snapshot = source_snapshot
     if kinds & {"compile", "identity", "performance"}:
         snapshot = _selected_binding_flags(snapshot, configuration)
+        snapshot = _selected_macos_cpu_toolchains(snapshot, configuration)
     expanded = []
     for spec in specs:
         kind = spec.get("kind")
