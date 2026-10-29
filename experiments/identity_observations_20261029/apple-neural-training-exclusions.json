@@ -1,0 +1,10 @@
+{
+  "byte-lm": {
+    "status": "failed",
+    "reason": "Actual nine RLPAIR failures from CPU host-inference context;54 successful numerical values preserved; repair pending"
+  },
+  "byte-lm-resident": {
+    "status": "not-run-blocked",
+    "reason": "Same _rlpair_byte_lm helper explicitly declared at harness11828; avoid repeating known context failure"
+  }
+}
