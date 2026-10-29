@@ -1,0 +1,80 @@
+Callback triage and Samba registry metadata reuse, 2026-10-28
+
+Source base: 27dcb1c6a4d2d52eba792ca6a0527b7fe698b6d9
+Branch: lane/callback-admission-review-20261028
+
+Audit findings and limits
+------------------------
+Read the existing CALLBACKS.tsv (not a fresh scanner campaign). It contains
+5,438 rows: 31 prohibited_user_object, 2,712 review_caller_admission,
+2,636 review_helper_result, and 59 review. The claimed 28/4,300 counts do not
+match this tracked table. The table itself and scanner documentation say these
+are lexical heuristic flags, not established reachable callbacks.
+
+flagged_site_review.tsv records targeted current-source provenance for all 31
+historical prohibited rows. No new unadmitted user callback defect was confirmed
+by this review. This is not clearance of the 5,407 unresolved entries, all public
+callers, direct private boundary misuse, or mutable package class metadata.
+Admitted PythonObject manipulation can still invoke package implementations;
+admission provenance is not a claim of Python-free execution.
+
+The two requested examples:
+* parallel_causal_native._parallel_causal_worker_request norm x.shape (now around
+  400): the sole worker caller receives the native process codec result, through
+  process_worker_next -> process_receive -> codec_unpack. _codec_array validates
+  dimensions and creates the native Array. The scanner loses that caller/helper
+  provenance. This is not an arbitrary user x passed directly to the helper.
+* hdbscan_public_lifecycle_pyapi._inference queries.shape (141/142): queries comes
+  from family_f32/family_view/classical_view/classical_admit_value or the fitted
+  raw buffer obtained through _buffer/classical_view. The helper result is
+  admitted before shape access. This does not audit every class mutation guard.
+
+Especially clear false positives: autograd_ops_frontend sh is native ShapeN;
+out from hvp and views from session_split are native List[Int]. Native Mojo
+field/len operations must not be counted as Python hooks. Several historical
+parallel-byte and Sequential protocol probes have already been replaced.
+
+Priorities for remaining source review: trace caller admission and mutation
+protection of actual user input protocols first; keep generated output and
+native Mojo values separate. The _no_fit_params len flag is on a builtin list
+result; upstream keyword-container admission is a distinct question. Do not
+replace its historical row with a claim that list(args[2]) is universally safe.
+No scanner/table changes were made; CALLBACKS.tsv and UNRESOLVED.tsv remain
+owned by their audit lane. No broad audit/build/runtime campaign ran.
+
+Implementation: Samba registry setup/reuse
+------------------------------------------
+Classical lane found per-row builtins.list imports in _samba_registry. The
+shared configuration registry also rebuilt the same per-kind shape/name
+schema, scalar configuration reads, and shape tuples for every model layer.
+
+samba_registry now lazily builds at most one Mamba and one attention schema
+inside the operation, captures config.layers once, and constructs the layer
+name prefix once per layer. Each output still has a distinct named registry
+record in the original order. Shared dimensions are immutable builtin tuples.
+Only a used kind is constructed; first-use errors remain ordered by layers.
+
+_samba_registry retains each row/shape while validating it, resolves the list
+constructor once, and still performs every dimension/overflow/offset check in
+row order. Each published mutable shape list is newly constructed as before.
+This removes repeated metadata work; it does not change numerical arithmetic.
+
+Ownership/invalidation: admission fixes native config values and guards class
+metadata before these GIL-held helpers. No GIL release/user callback is added.
+Local PythonObject owners retain both schemas, layer sequence, row, shape and
+constructor through their uses. There is no raw pointer or cross-call cache.
+Each later public operation re-admits configuration and rebuilds schemas, so
+changed configurations/layers are reflected. Mutable output lists do not alias
+between records. The reuse does not extend to model buffers.
+
+Qualification: focused Mac arm64 CPU identical compile exports samba_registry,
+samba_block_shapes and _samba_registry. It compiles both schema branches and
+flat registry validation/conversion; no model execution or public-operation
+runtime was performed. Full outputs, binary, provenance/source bytes and source
+push guard results are retained beside compile.json. No speed, runtime or
+cross-vendor identity claim is made. No rented machines.
+
+Remaining work: repeated registry construction across public calls and other
+PythonObject/native boundary metadata remain. A retained cache would need an
+explicit immutable admission/version owner. This batch deliberately keeps
+operation-local invalidation. Full callback inventory closure remains pending.

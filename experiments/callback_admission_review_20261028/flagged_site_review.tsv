@@ -1,0 +1,32 @@
+historical_file	historical_line	function	disposition	current_source_provenance_and_limits
+bindings/causal_lm_public.mojo	1746	_causal_owner_unusable	C argument envelope	_causal_owner_unusable wraps its C argument tuple via from_borrowed; not a direct arbitrary user receiver.
+bindings/cross_vendor_native.mojo	516	cross_vendor_feed_init	helper admission	cross_vendor_feed_init calls cv_buffer before choosing shape; cv_buffer admits exact Array/memoryview metadata and cv_sequence admits dimensions.
+bindings/family_native.mojo	61	_family_par_run	caller-created metadata	parallel_public_native._run supplies _modules result, a package-created tuple, as plan bindings.
+bindings/gp_kernel_public_native.mojo	455	_kernel_construct	helper admission	_kernel_sequence(nodes) precedes len(nodes).
+bindings/gp_kernel_public_native.mojo	458	_kernel_construct	helper admission	_kernel_sequence(node) precedes len(node).
+bindings/jl_native.mojo	129	jl_c	exact admission	jl_c checks call[2] is the builtin tuple before assigning args.
+bindings/linalg_ops_resample.mojo	178	_rs_bootstrap_unpaired	caller admission	rs_operation passes resample_arguments through classical_admit_value before bootstrap dispatch.
+bindings/linalg_ops_resample.mojo	179	_rs_bootstrap_unpaired	caller admission	Same admitted data as previous row; error-message len is not a separate unadmitted input.
+bindings/logistic_native.mojo	518	logistic_c	connected metadata	lr_host_contexts is the import-connected dict populated by _native_logistic_bridge, not a fit argument.
+bindings/msel_split.mojo	861	msel_lpgo_at	package iterator state	msel_lpgo_split creates _group_state and builtin combinations; msel_lpgo_at consumes that lazy internal state. Private direct boundary misuse not qualified.
+bindings/msel_split.mojo	866	msel_lpgo_at	package iterator state	combo is produced by builtin itertools.combinations in msel_lpgo_split. Same private-boundary limit.
+bindings/optimizer_public_door.mojo	675	refuse_kwargs	helper admission/result	opt_value(kwargs,context) precedes builtin list construction; keys is the resulting list.
+bindings/optimizer_public_door.mojo	1245	entry_args	C argument envelope	entry_args wraps the C packed argument tuple.
+bindings/parallel_byte_native.mojo	749	parallel_byte_call	replaced source	Current parallel_byte_call uses retained ParallelByteOwner/native execution; historical Python rows loop is absent.
+bindings/parallel_byte_native.mojo	757	parallel_byte_call	replaced source	Same replaced parallel-byte route.
+bindings/parallel_byte_native.mojo	759	parallel_byte_call	replaced source	Same replaced parallel-byte route.
+bindings/parallel_causal_native.mojo	162	_parallel_causal_worker_request	codec-created input	Only worker caller receives process_worker_next -> process_receive -> codec_unpack; _codec_array creates native Array and validates shape. Not raw arbitrary user x.
+bindings/parallel_causal_native.mojo	163	_parallel_causal_worker_request	codec-created input	Same admitted codec-created Array as previous row.
+bindings/parallel_causal_native.mojo	538	parallel_causal_call	captured owner state	release_layers uses _parallel_captured/causal_snapshot_fields with model_dict and saved admission-failure checks. No raw user layers variable is accepted at this helper.
+bindings/parallel_causal_native.mojo	557	parallel_causal_call	replaced source	Current run admits ids through generation_array_snapshot and reads captured native dimensions.
+bindings/prep_encode_native.mojo	2981	_no_fit_params	helper result; upstream limited	keys is the builtin list result, so flagged len is not a custom hook. This row alone does not establish safety of list(args[2]); public kwargs packing is a separate boundary.
+bindings/sequential_weights.mojo	62	sequential_load_weights	replaced source	sequential_load_weights now exact-admits path/mapping and recursive values; historical hasattr protocol probing removed.
+bindings/trees_constructor_native.mojo	55	tree_constructor_values	connected metadata	hooks comes from the registered tree constructor plan; user model/owner class and argument containers are admitted separately.
+bindings/trees_constructor_native.mojo	77	tree_constructor_values	connected metadata	rows comes from the registered constructor plan, not user constructor data.
+bindings/xcnn_graph_native.mojo	598	xcnn_sage_forward	admitted snapshot/result	xcnn_sage_forward snapshots host x through _snapshot/xcnn_f32, or uses admitted resident route. Projected xs comes from package forward result. Mutable class namespace protection remains its boundary concern.
+providers/python/autograd_ops_frontend_pyapi.mojo	214	ops_session_call_fields_py	native Mojo value	sh is native ShapeN returned by shape_nd; sh.ndim is not a Python attribute operation.
+providers/python/autograd_ops_frontend_pyapi.mojo	220	ops_session_call_fields_py	allocated output	out is created by output_array(shape_nd(...)); not user-supplied output. The flagged array interface is native allocated-output marshalling.
+providers/python/autograd_ops_frontend_pyapi.mojo	291	ops_session_call_fields_py	native Mojo value	out is native List[Int] from session hvp, not a Python object.
+providers/python/autograd_ops_frontend_pyapi.mojo	545	ops_session_call_fields_py	native Mojo value	views is native List[Int] from session_split, not a Python object.
+providers/python/hdbscan_public_lifecycle_pyapi.mojo	141	_inference	caller/helper admission	queries is family_f32 -> family_view -> classical_view -> classical_admit_value, or admitted fitted raw via _buffer; not raw unadmitted args[0].
+providers/python/hdbscan_public_lifecycle_pyapi.mojo	142	_inference	caller/helper admission	Same admitted queries as previous row.

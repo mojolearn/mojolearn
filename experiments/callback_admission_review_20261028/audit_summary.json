@@ -1,0 +1,25 @@
+{
+  "audited_source_base": "27dcb1c6a4d2d52eba792ca6a0527b7fe698b6d9",
+  "historical_table": "experiments/python_audit_20261028/CALLBACKS.tsv",
+  "historical_table_sha256": "254246920d6232ffd4380286d7174f6e9f771ed06109cc1a816a8823b9a82398",
+  "row_count": 5438,
+  "classifications": {
+    "review_caller_admission": 2712,
+    "review_helper_result": 2636,
+    "review": 59,
+    "prohibited_user_object": 31
+  },
+  "operation_counts": {
+    "len": 3233,
+    "iteration": 23,
+    "dunder_protocol": 6,
+    "array_attribute": 2124,
+    "hook_by_name": 34,
+    "array_protocol": 1,
+    "array_interface": 13,
+    "numbers_abc": 2,
+    "getattr": 2
+  },
+  "method": "Read existing historical table and targeted current definitions/callers. No scanner rerun, no runtime tests. Review does not clear unresolved inventory.",
+  "new_confirmed_unadmitted_callbacks": 0
+}

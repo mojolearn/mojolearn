@@ -128,19 +128,22 @@ def samba_schedule_from_state(config: PythonObject, context: PythonObject) raise
 def _samba_registry(config: PythonObject) raises -> PythonObject:
     var source = samba_registry(config)
     var result = Python.list()
+    var list_type = Python.import_module("builtins").list
     var offset = 0
     for i in range(len(source)):  # driver-loop: over the ordered parameter registry
+        var entry = source[i]
+        var shape = entry[1]
         var n = 1
-        for j in range(len(source[i][1])):  # driver-loop: over tensor shape metadata
-            var d = Int(py=source[i][1][j])
+        for j in range(len(shape)):  # driver-loop: over tensor shape metadata
+            var d = Int(py=shape[j])
             if d < 1 or n > 2147483647 // d:
                 raise Error("Samba: invalid tensor shape")
             n *= d
         if offset > 2147483647 - n:
             raise Error("Samba: flat parameter registry exceeds signed 32-bit indexing")
         var item = Python.dict()
-        py_setitem(item, "name", source[i][0])
-        py_setitem(item, "shape", py_call(Python.import_module("builtins").list, source[i][1]))
+        py_setitem(item, "name", entry[0])
+        py_setitem(item, "shape", py_call(list_type, shape))
         py_setitem(item, "offset", offset)
         py_setitem(item, "size", n)
         _ = py_call(result.append, item)

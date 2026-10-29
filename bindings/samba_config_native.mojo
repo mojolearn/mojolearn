@@ -125,10 +125,29 @@ def samba_registry(config: PythonObject) raises -> PythonObject:
     var dm = Int(py=config.d_model)
     var vocab = Int(py=config.vocab)
     var result = Python.list(_samba_registry_item("embed.weight", [vocab, dm]))
-    for i in range(len(config.layers)):  # driver-loop: over configured model layers
-        var entries = samba_block_shapes(config, String(config.layers[i]))
+    var layers = config.layers
+    # Admission fixes the native configuration for this GIL-held operation.
+    # Every layer of one kind has the same parameter schema; build each kind
+    # on first use, preserving first-use failures and avoiding unused schemas.
+    # Only immutable shape tuples escape into distinct per-layer records. A
+    # later public call builds new schemas from its newly admitted config.
+    var mamba_shapes = PythonObject(None)
+    var attention_shapes = PythonObject(None)
+    for i in range(len(layers)):  # driver-loop: over configured model layers
+        var kind = String(layers[i])
+        var entries = PythonObject(None)
+        if kind == "mamba3":
+            if mamba_shapes is None:
+                mamba_shapes = samba_block_shapes(config, kind)
+            entries = mamba_shapes
+        else:
+            if attention_shapes is None:
+                attention_shapes = samba_block_shapes(config, kind)
+            entries = attention_shapes
+        var prefix = "layers." + String(i) + "."
         for j in range(len(entries)):  # driver-loop: over per-layer tensor registry metadata
-            _ = py_call(result.append, Python.tuple(PythonObject("layers." + String(i) + "." + String(entries[j][0])), entries[j][1]))
+            var entry = entries[j]
+            _ = py_call(result.append, Python.tuple(PythonObject(prefix + String(entry[0])), entry[1]))
     _ = py_call(result.append, _samba_registry_item("norm_f.weight", [dm]))
     if not Bool(py=config.tie_embeddings):
         _ = py_call(result.append, _samba_registry_item("lm_head.weight", [vocab, dm]))
