@@ -36,8 +36,10 @@ loading/packaging/runtime coverage.
 Initial actual retained evidence read successfully: 16Linux host groups (56c source)
 and9sm89 groups (7b source),4 producer phases. Superseded scheduling-equivalence preparation accepted
 57 compile requirement units (48host acrossCPU/NVIDIA/AMD +9GPU),0refused.
-No central ledger mutation/admit was performed. Final exact-worker preparation
-awaits the shared selected-binding contract commit; old preparation is not final admission. At the reviewed b2 ledger all
+No central ledger mutation/admit was performed. Final exact-worker preparation with root helper9441a78991 completed exit0:
+57compile units accepted,0refused. Old preparation stays explicitly superseded.
+The final four admission-exact-* reports are ready for retrospective admission
+after root synchronization; compiler/job/changed-source differences are retained. At the reviewed b2 ledger all
 57 were not reusable because its Linux compiler SHA was not yet supplied;
 changed tokenizer/mamba/runtime_sequential closure fingerprints also stayed
 changed. Final synchronization must preserve those distinctions. Other13host
@@ -50,13 +52,16 @@ semantic flags and native-as-PTX refusals covered. Initial test invocations
 failed because default/system Python lacked pytest; a dedicated external test
 venv was created, no product dependency changed. All original logs retained.
 Source guards no_host_routes, no_python_in_kernels, no_compute_in_shells and
-rebuild_fence passed for09fa49d0a; final evidence-only follow-up receipt below.
+rebuild_fence passed for09fa49d0a; final exact-worker source855625e3c4 also passed all4guards (adapter-final-guards.json).
 
 External evidence root:
 ~/mojolearn-evidence/current-neural-nvidia-20261029/
   adapter-tests-exact-workers-final.log; adapter-tests-final-expanded.log (superseded design)
   adapter-guards.json; adapter-guard-*.log
-  adapter-actual-admission-summary.json
+  adapter-exact-admission-summary.json (final57/0)
+  linux-selected-compiler-context.json (exact compiler +25binding workers)
+  admission-exact-*/ (final originals/reconciliation/review/receipts)
+  adapter-actual-admission-summary.json (superseded scheduling comparison)
   admission-training-attempt1/review.json (original honest refusal)
   admission-training-attempt2/ (1GPU unit)
   admission-sm89-priority-cpu-neural-rest/ (8GPU units)

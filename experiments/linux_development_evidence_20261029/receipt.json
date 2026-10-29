@@ -1,0 +1,66 @@
+{
+  "tool_source_commit": "855625e3c4",
+  "dependency_contract_commit": "9441a78991cfee29df40b300c9fabcd8f0c65ac0",
+  "tests": {
+    "exit_code": 0,
+    "passed": 48,
+    "subtests_passed": 38
+  },
+  "guards": [
+    {
+      "guard": "no_host_routes",
+      "source_revision": "855625e3c4650ed83f66d0f5369758ed8eafc7ef",
+      "exit_code": 0
+    },
+    {
+      "guard": "no_python_in_kernels",
+      "source_revision": "855625e3c4650ed83f66d0f5369758ed8eafc7ef",
+      "exit_code": 0
+    },
+    {
+      "guard": "no_compute_in_shells",
+      "source_revision": "855625e3c4650ed83f66d0f5369758ed8eafc7ef",
+      "exit_code": 0
+    },
+    {
+      "guard": "rebuild_fence",
+      "source_revision": "855625e3c4650ed83f66d0f5369758ed8eafc7ef",
+      "exit_code": 0
+    }
+  ],
+  "actual_producer_prepare": {
+    "exit_code": 0,
+    "physical_host_groups": 16,
+    "physical_sm89_groups": 9,
+    "compile_units_accepted": 57,
+    "refused": 0,
+    "central_ledger_mutated": false
+  },
+  "evidence": {
+    "adapter-tests-exact-workers-final.log": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/adapter-tests-exact-workers-final.log",
+      "sha256": "648bf1a87bc02edefd2f67793c2f6413a63730df67eebdfddfe87769bd4a6fd8"
+    },
+    "adapter-final-guards.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/adapter-final-guards.json",
+      "sha256": "8ebefbae57fd860eba678096d2fdcc1fe0daa559f471b2be298f95a93933ef65"
+    },
+    "adapter-exact-admission-summary.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/adapter-exact-admission-summary.json",
+      "sha256": "88f17d43e0121764d697338dd7b36fadddcfeb87a747598aa69e5a37738b192a"
+    },
+    "linux-selected-compiler-context.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/linux-selected-compiler-context.json",
+      "sha256": "384be9a83a62a672fa8a4a2af1b38b264009479a514e9f4d06f5cf560400ea44"
+    },
+    "admission-exact-workers.log": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/current-neural-nvidia-20261029/admission-exact-workers.log",
+      "sha256": "96dbdf43a221e5e4bbd2b8b42e04561280c7d974d2421e869ef8a252f952472d"
+    }
+  },
+  "limits": [
+    "Compilation evidence only; no native build/runtime/identity/timing execution by adapter",
+    "Three changed host owners require new artifacts",
+    "Final ledger configuration must deep-merge exact compiler + selected per-binding workers; old ledger comparisons remain stale"
+  ]
+}
