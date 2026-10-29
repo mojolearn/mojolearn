@@ -1,0 +1,36 @@
+{
+  "scope": "focused HostExec train_program_control ordinary/conditional fit, prepared replay, and legacy one-shot replay_values wrapper; compile only",
+  "source_commit": "32fa61cbfca94120a43687a51d5b68610ea83bea",
+  "source_base": "249031017b",
+  "post_compile_change": "5accf1c215 changes helper ownership comments only",
+  "target": "Mac arm64 CPU, identical",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "command": "bash tools/compile_slot.sh pixi run mojo build -j 8 --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/training_replay_metadata_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/training-replay-metadata-20261028/replay.dylib",
+  "compiler_workers": 8,
+  "cpu_saturation_claimed": false,
+  "exit_code": 0,
+  "binary": "/Users/andrewhendel/mojolearn-evidence/training-replay-metadata-20261028/replay.dylib",
+  "binary_sha256": "48c6a3125346d602d319d621a56706b579a2d855e79d551e08c1045ab4daa71f",
+  "log": "/Users/andrewhendel/mojolearn-evidence/training-replay-metadata-20261028/compile.log",
+  "log_sha256": "d78ed58396d0471820c3322ff6f4ec2d5ddd5b3550547cc372d35f18c4a1509a",
+  "environment": "/Users/andrewhendel/mojolearn-evidence/training-replay-metadata-20261028/environment.json",
+  "source_retention": {
+    "archive": "/Users/andrewhendel/mojolearn-evidence/training-replay-metadata-20261028/source-envelope.tar.gz",
+    "archive_sha256": "f20b75f2b1ab937c9e9576066d4c0f1590bd2cbeb0cf01a52a484e5423b1565f",
+    "source_commit": "32fa61cbfca94120a43687a51d5b68610ea83bea",
+    "scope": "conservative superset: tracked Mojo sources, binding build scripts, compile-slot script and dependency manifests",
+    "file_count": 3940,
+    "manifest": "/Users/andrewhendel/mojolearn-evidence/training-replay-metadata-20261028/source-envelope.json",
+    "post_compile_comment_patch": "/Users/andrewhendel/mojolearn-evidence/training-replay-metadata-20261028/ownership-comments.patch"
+  },
+  "source_push_guards": {
+    "source_commit": "5accf1c215c9b40634deebcab0210cf54553f4de",
+    "exit_code": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/training-replay-metadata-20261028/source-push-guards.log",
+    "log_sha256": "43dcf072f51857d91809f4d235276eb9419283ac21947fe8660ea49736fed627"
+  },
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_executed": false,
+  "rented_boxes": []
+}

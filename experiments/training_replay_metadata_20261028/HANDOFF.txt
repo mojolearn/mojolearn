@@ -1,0 +1,74 @@
+Prepared captured-program training replay, 2026-10-28
+Branch: lane/training-replay-metadata-20261028
+Base: 249031017b
+Implementation: 32fa61cbfc
+Shared helper ownership-comment clarification: 5accf1c215
+
+Repeated work removed:
+- replay_values previously cleared and recopied each node's integer and float
+  argument slices on every replay/minibatch. PreparedProgramReplay captures
+  those native vectors once per admitted fit and passes them by borrow.
+- Dynamic handle/value containers retain capacity across minibatches instead
+  of allocating new scratch per replay. Handles still resolve from the current
+  inputs, parameters and earlier node results in original node order.
+- The repeated fallback dropout-stride selection is computed once per replay.
+
+Setup, reuse and invalidation:
+- train_program_control builds one body inventory and, when conditional, one
+  inventory each for predicate and otherwise graph after its existing public
+  validation, before acquired training buffers. They belong only to this fit's
+  immutable graph snapshots; no cross-call graph cache or mutation generation
+  is introduced by the training integration.
+- The legacy replay_values interface remains a one-shot wrapper that prepares
+  its own inventory. Other callers keep their behavior/interface; they do not
+  gain cross-call preparation reuse in this batch.
+- The standalone helper may also be owned by immutable inference program
+  lifecycle caches (root's separate ops_api batch), invalidated on drop/close
+  or replacement. This branch does not edit ops_api.mojo or program.mojo.
+- Predicate and branch selection, optimizer/epoch ordering and loss/backward
+  paths are unchanged. Preparing metadata does not execute unselected branches
+  or eagerly validate operation-specific arguments. Captured graph structural
+  offsets remain the existing admission contract.
+- Dropout's final integer is recomputed from original_last_int each replay:
+  original + (step * stride + random_offset + node). No prior minibatch offset
+  accumulates. Negative-step predicate/inference calls restore the original
+  key. Existing conditional stride/offset and persistent epoch/minibatch step
+  expressions are unchanged. Empty dropout argument vectors still fail at
+  the selected replay position, not during preparation.
+
+Ownership/errors:
+- Each inventory owns its integer/float metadata and scratch Lists. No raw
+  source pointer, Python object or callback is introduced. Dynamic handle words
+  are non-owning: existing temps/tape cleanup still owns their retirement.
+- The inventories remain alive throughout synchronous node dispatch. Separate
+  predicate/body/otherwise scratch cannot contaminate another component.
+  An exception exits through the existing training cleanup; native metadata
+  Lists are released by ordinary ownership. Concurrent replays must not share
+  one mutable scratch inventory.
+
+Compilation/guards:
+Focused compile-only shared library exports HostExec ordinary/conditional
+train_program_control and the existing one-shot replay_values signature.
+Compile exit 0 at 32fa61cbfc, identical CPU, optimization level 0, -j 8, held
+machine-wide compile slot. 5accf1c215 changes comments only; no rebuild needed.
+Source/push guards exit 0 at 5accf1c215. Exact compiler/flags, source envelope,
+artifact hash and complete log paths are in compile.json.
+No runtime, performance, identity or cross-vendor campaign ran. No GPU target,
+installed package, other executor or distributed/control public path was run.
+No rented boxes.
+
+Remaining work/limits:
+- One-shot non-training replay callers still prepare per invocation. Control
+  loops/distributed workers could retain an operation-local inventory over
+  their repeated replay lifetime; that requires their own ownership boundary.
+- Per-replay parameter slot/word-flag lookup and dynamic input/output handles
+  remain. Those are not treated as fixed node metadata by this change.
+- This is structural work elimination, not a measured speed claim. Preparation
+  stores an additional graph-sized native metadata copy for the owner lifetime;
+  workloads with only one replay do not amortize that copy.
+
+Complete logs, source bytes, binary and environment:
+/Users/andrewhendel/mojolearn-evidence/training-replay-metadata-20261028/
+The source envelope conservatively includes all tracked Mojo sources and build
+configuration; this does not claim all included sources compiled. The retained
+ownership-comments.patch records the comment-only source change after compile.
