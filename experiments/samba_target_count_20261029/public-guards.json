@@ -1,0 +1,8 @@
+{
+  "source_commit": "1f7ea0bde1430757eb71c67a91170b898d0d7017",
+  "exit_code": 0,
+  "elapsed_seconds": 60.27854099997785,
+  "log": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/guards-final.log",
+  "scope": "Final committed-ref source/push guards, no push",
+  "log_sha256": "c51b2c8b91a173c7d8b28498aff1e97741f03380680569ff28219d639c31fc1c"
+}

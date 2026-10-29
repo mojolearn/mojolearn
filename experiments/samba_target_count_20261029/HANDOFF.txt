@@ -36,3 +36,6 @@ verifier and Linux affected tokenizer build remain with their owners.
 
 Evidence: ~/mojolearn-evidence/samba-target-count-build-20261029/
 Public regression source and summaries are tracked beside this handoff.
+
+Final committed-ref source/push guards: exit0/60.28s at1f7ea0bde1.
+No native source changed after compiled20dbed0; subsequent commits tests/receipts only.
