@@ -1,0 +1,14 @@
+{
+  "key": "measurements/current-main-verification-20261029/apple2d775c-final-install-inputs.tgz",
+  "local_archive": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-neural-diagnostics-clean-install/apple2d775c-final-install-inputs.tgz",
+  "sha256": "17402a97ede199186df31a6c6c6b991f523bc4728fc8e17d2b545a445b422c22",
+  "bytes": 6524962,
+  "put_status": 200,
+  "retained_member_count": 157,
+  "source_commit": "2d775c63859991f415f2548e043a889650d0bb5a",
+  "scope": "Final Python source/payload/79sourceproof/receipts and exact archive mapping;83unchanged native/runtime bytes reused basearchive, tokenizerreplacement retained combineddiagnosticsarchive. No active install writes or product runtime.",
+  "get_status": 200,
+  "readback_sha256": "17402a97ede199186df31a6c6c6b991f523bc4728fc8e17d2b545a445b422c22",
+  "all_member_readback_sha256_match": true,
+  "exit_code": 0
+}
