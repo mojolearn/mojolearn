@@ -1,0 +1,25 @@
+GHA development compile producer admission
+
+New gha-development-build adapter reads the actual request.json, original
+development result/selected execution, raw binary, source archive, retained
+consumed/generated inputs and tooling hashes. A separately retained predispatch
+tooling directory is accepted only against the original hashes; this handles
+GHA upload-artifact omitting duplicate hidden workflow files without inventing
+missing bytes. No synthetic RunPod leg.txt or staged-install witness.
+
+Existing Linux selected-group source/recipe/compiler/worker/flags/execution/unit
+checks are shared through location-independent helpers. RunPod's original
+leg/stage requirements remain unchanged. GHA evidence explicitly qualifies raw
+compilation only; it does not claim installed loader/runtime/identity success.
+
+55 focused tests pass, including altered or missing source/generated root,
+logical member, target, worker setting, raw image, execution and tooling refusals.
+Allfive sourceguards pass. Actual retained5ab PTX producer review validates33/33
+groups with0refused in6.98seconds. This is producer-fact validation, not formal
+central-ledger admission: no ledger writes or reference runs occurred.
+
+No native rebuild. Formal selected-unit replay awaits the final release source
+and exact selected configuration. The separate original AMD merged compile-only
+producer layout is NOT supported by this adapter; its narrow intake remains
+pending. Full logs and actual33review: ~/mojolearn-evidence/
+github-development-admission-20261029/.
