@@ -1,0 +1,36 @@
+Frozen product source 2d775c63859991f415f2548e043a889650d0bb5a.
+Supported candidate producer assembled 79 retained native images, 2 adapter libraries,
+MAX package and 5 runtime dylibs from immutable input receipt 47e39ebc9305e2a10976055914cff0439c0d0dc75c64480d69f0ab7829323cd9.
+Original adapter full closure/toolchain still matches; no duplicate compilation.
+All 9 strict assembly phases exit0. Final wheel 103662787 bytes,
+SHA 06216ef5b1c794337a1716e24a730e08672162b285eabc8d8de438efd51afab4.
+R2 wheel PUT/GET and SHA256 readback verified, see wheel-retention.json.
+
+First canonical matrix exited 1 on all 5 versions because git archive excludes
+tracked Mamba corpus operands. It passed preceding NumPy-free, 46 host, installed
+payload and generalized LM checks but stopped at missing corpus, not product
+failure. Original full failure retained. Tools-only 2eae5af3dc adds existing
+release-provenance workflow's frozen git-blob restoration to candidate staging.
+Exactly 168 files from 3 qualification cases were restored; 16 producer tests and
+4 source guards pass. Existing wheel/native/Python bytes did not change; no repack.
+
+Corrected full canonical matrix: Python3.10/3.11/3.12/3.13/3.14 all PASS, exit 0,
+5 passed / 0 failed / 0 skipped, identical full device-fits mode. Includes Mamba 102,
+Transformer 116, Ordered model/save/load/query/refusal checks. Ordered alternate
+fast contrast explicitly NOT_EXERCISED because unavailable; it is not a pass.
+This is installed loader/API/dependency/surface qualification, not full identity.
+
+Subsequent installed adapter phase FAILED: pinned Torch 2.13 / MAX 26.5 dependency
+installs both 0, but Torch import calls _shipped.series(TorchVersion(...)); native
+framework metadata admits exact str only and rejects this genuine Unicode
+subclass. Zero adapter execution checks ran; MAX withheld by standard runner's
+Torch prerequisite. Failure preserved, new isolated native repair assigned.
+No publication or adapter qualification claimed. Runtime controllers all finished;
+GPU idle. Latest owner direction permits focused compile/guards only next.
+
+Complete logs/receipts/controllers/model bits/corpus input bytes, including
+originalfailure and finalmatrix:
+~/mojolearn-evidence/apple-candidate-wheel-20261029/
+~/mojolearn-evidence/python-wheel-matrix-20261029/final-repairs/
+~/mojolearn-evidence/python-wheel-matrix-20261029/final-corpus-restored/
+Combined evidence archived with R2 readback, see evidence-retention.json.

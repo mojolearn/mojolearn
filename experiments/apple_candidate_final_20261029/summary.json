@@ -1,0 +1,93 @@
+{
+  "source_commit": "2d775c63859991f415f2548e043a889650d0bb5a",
+  "wheel": {
+    "r2_key": "measurements/apple-candidate-wheel-20261029/final-2d775c/mojolearn-0.8.63-py3-none-macosx_26_0_arm64.whl",
+    "local": "/Users/andrewhendel/mojolearn-evidence/apple-candidate-wheel-20261029/assembly-final-repairs/source/python/dist/mojolearn-0.8.63-py3-none-macosx_26_0_arm64.whl",
+    "sha256": "06216ef5b1c794337a1716e24a730e08672162b285eabc8d8de438efd51afab4",
+    "bytes": 103662787,
+    "put_status": 200,
+    "readback_status": 200,
+    "readback_matches": true
+  },
+  "assembly_exit": 0,
+  "matrix": {
+    "exit_code": 0,
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0,
+    "versions": [
+      "3.10",
+      "3.11",
+      "3.12",
+      "3.13",
+      "3.14"
+    ],
+    "log": "/Users/andrewhendel/mojolearn-evidence/python-wheel-matrix-20261029/final-corpus-restored/matrix.log"
+  },
+  "original_missing_corpus_matrix": {
+    "exit_code": 1,
+    "passed": 0,
+    "failed": 5,
+    "skipped": 0,
+    "product_failure": false,
+    "log": "/Users/andrewhendel/mojolearn-evidence/python-wheel-matrix-20261029/final-repairs/matrix.log"
+  },
+  "adapters": {
+    "exit_code": 1,
+    "torch": "failed before execution at native TorchVersion metadata admission",
+    "max": "not run; requires passing Torch phase",
+    "log": "/Users/andrewhendel/mojolearn-evidence/apple-candidate-wheel-20261029/adapter-final-smoke/torch-compile/adapter-results.json"
+  },
+  "corpus_repair_commit": "2eae5af3dc",
+  "corpus_staging_tests": {
+    "exit_code": 0,
+    "passed": 16
+  },
+  "corpus_guards": [
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_host_routes.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/apple-candidate-wheel-20261029/final-preparation/corpus-guard-0.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_python_in_kernels.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/apple-candidate-wheel-20261029/final-preparation/corpus-guard-1.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_compute_in_shells.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/apple-candidate-wheel-20261029/final-preparation/corpus-guard-2.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/rebuild_fence.py",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/apple-candidate-wheel-20261029/final-preparation/corpus-guard-3.log"
+    }
+  ],
+  "whole_identity_campaign": false,
+  "current_controllers_active": false
+}

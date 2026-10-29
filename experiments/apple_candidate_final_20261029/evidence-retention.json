@@ -1,0 +1,9 @@
+{
+  "r2_key": "measurements/apple-candidate-wheel-20261029/final-2d775c/final-validation-evidence.tgz",
+  "local": "/Users/andrewhendel/mojolearn-evidence/apple-candidate-wheel-20261029/final-validation-evidence.tgz",
+  "sha256": "d8a0f327cd34b489880c98da98ff0ced1bc5bba0ba1e3045575768cb4cb4403e",
+  "bytes": 1171426,
+  "put_status": 200,
+  "readback_status": 200,
+  "readback_matches": true
+}

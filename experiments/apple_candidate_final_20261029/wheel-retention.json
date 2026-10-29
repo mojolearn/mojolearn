@@ -1,0 +1,9 @@
+{
+  "r2_key": "measurements/apple-candidate-wheel-20261029/final-2d775c/mojolearn-0.8.63-py3-none-macosx_26_0_arm64.whl",
+  "local": "/Users/andrewhendel/mojolearn-evidence/apple-candidate-wheel-20261029/assembly-final-repairs/source/python/dist/mojolearn-0.8.63-py3-none-macosx_26_0_arm64.whl",
+  "sha256": "06216ef5b1c794337a1716e24a730e08672162b285eabc8d8de438efd51afab4",
+  "bytes": 103662787,
+  "put_status": 200,
+  "readback_status": 200,
+  "readback_matches": true
+}
