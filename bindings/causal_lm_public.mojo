@@ -1117,6 +1117,93 @@ def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: Py
     return True
 
 
+def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, state: PythonObject) raises -> Bool:
+    # The multi-token resident program skips the legacy export/reload between
+    # tokens. Overlapping host KV spans would couple independent device caches
+    # through that export order, including K/V aliases within one layer. Admit
+    # only provably disjoint captured Array spans; unknown/foreign layouts keep
+    # the existing per-token route and its original validation/error position.
+    var starts = List[Int]()
+    var sizes = List[Int]()
+    var cls = GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls
+    try:
+        for i in range(len(state.layers)):  # driver-loop: one read's retained layer state admission
+            var fields = causal_snapshot_fields(mods, state.layers[i])
+            for name in [String("k_cache"), String("v_cache")]:  # small-loop(two KV storage spans)
+                var value = py_get(fields, name)
+                if py_type(value) is not cls:
+                    return False
+                var view = generation_array_snapshot(value)
+                if String(view.order) != "C" or String(view.dtype) != "<f4" or Bool(py=view._readonly):
+                    return False
+                var start = Int(py=view._addr)
+                var size = Int(py=view.nbytes)
+                if start <= 0 or size <= 0:
+                    return False
+                for j in range(len(starts)):  # driver-loop: native interval overlap, no Python element dispatch
+                    # Differences avoid address+length overflow at the span end.
+                    if (start <= starts[j] and starts[j] - start < size
+                            or starts[j] < start and start - starts[j] < sizes[j]):
+                        return False
+                starts.append(start)
+                sizes.append(size)
+                _ = view
+        var model_fields = _standalone_record_fields(mods, model)
+        if (Bool(py=py_get(model_fields, "_parameters_exposed", PythonObject(False)))
+                or Bool(py=py_get(model_fields, "_resident_busy", PythonObject(False)))):
+            # The legacy route reopens private sessions each token under this
+            # policy. A KV write into live weight storage would therefore feed
+            # changed weights into its next forward. Read-wide weights cannot
+            # preserve that coupling, even when all KV spans are disjoint.
+            var weights = List[PythonObject]()
+            weights.append(model._embed)
+            weights.append(model._norm)
+            var packed = model._head_int15 is not None
+            if packed:
+                for k in range(3):  # small-loop(consumed packed head planes)
+                    weights.append(model._head_int15[k])
+            else:
+                weights.append(model._head)
+            for i in range(len(model._blocks)):  # driver-loop: capture consumed weight spans once per read
+                var block = _block(mods, model, i)
+                var base = block["_w"]
+                for j in range(len(base)):  # driver-loop: same weight slots as _transformer_arg_words
+                    if not packed or j < 2:
+                        weights.append(base[j])
+                var optional = block["_wopt"]
+                for j in range(len(optional)):  # driver-loop: consumed optional layer weight slots
+                    weights.append(optional[j])
+                if packed:
+                    var planes = block["_int15"]
+                    for j in range(len(planes)):  # driver-loop: consumed packed layer planes
+                        if planes[j] is not None:
+                            for k in range(3):  # small-loop(int15 plane triple)
+                                weights.append(planes[j][k])
+            for value in weights:  # driver-loop: compare captured live weight spans against KV storage
+                if value is None:
+                    continue
+                if py_type(value) is not cls:
+                    return False
+                var view = generation_array_snapshot(value)
+                if String(view.order) != "C":
+                    return False
+                var start = Int(py=view._addr)
+                var size = Int(py=view.nbytes)
+                if start <= 0 or size <= 0:
+                    return False
+                for j in range(len(starts)):  # driver-loop: native byte-span overlap test
+                    if (start <= starts[j] and starts[j] - start < size
+                            or starts[j] < start and start - starts[j] < sizes[j]):
+                        return False
+                _ = view
+    except:
+        # Admission is only a route decision; the existing forward diagnoses
+        # malformed/released state at its original operation/layer position.
+        mods.released()
+        return False
+    return True
+
+
 def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject, output: PythonObject, prepared_key: PythonObject) raises -> PythonObject:
     """`(B, L, V)` logits of `forward` in one resident program: the kept (or
     newly opened) sessions take the state's caches, run the stack, and the
@@ -1566,7 +1653,13 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
     var l = Int(py=ids.shape[1])
     var state = supplied_state
     if state is None:
+        # This operation owns fresh, separately allocated caches, disjoint from
+        # captured weights. Only externally supplied state needs span admission.
         state = causal_lm_allocate_binding(mods, model, PythonObject(b), PythonObject(l + n))
+    elif n > 1 and not _resident_read_disjoint_state(mods, model, state):
+        # Same optional-resident eligibility sentinel used above. Complete
+        # generation then enters _read and keeps legacy alias coupling.
+        return PythonObject(None)
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var keep = List[PythonObject]()
     var out = generation_array([b, n], "i")
@@ -1975,6 +2068,7 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
     var capacity = min(count, s.max_new - s.produced)
     s.busy = True
     try:
+        var legacy_resident = False
         if capacity > 0 and not s.done() and s.greedy:
             var entries = s.model._native_entries
             if (Bool(py=py_get(entries, "resident_read_v1", PythonObject(False)))
@@ -1982,10 +2076,16 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
                     and py_get(entries, "parallel_call") is None
                     and _resident_forward_ok(mods, s.model, s.state)):
                 admission = NativeArrayAdmission(generation_array_context())
-                var result = _read_resident(mods, s, capacity, admission.value())
-                s.busy = False
-                return result
-        if capacity > 0 and not s.done() and _use_native_generation_engine(mods, s.model, s.state):
+                # With only one possible forward there is no skipped
+                # intermediate export/reload, so storage coupling is irrelevant.
+                if capacity == 1 or _resident_read_disjoint_state(mods, s.model, s.state):
+                    var result = _read_resident(mods, s, capacity, admission.value())
+                    s.busy = False
+                    return result
+                # Keep the original resident-forward host loop: another engine
+                # does not establish the missing cross-layer alias contract.
+                legacy_resident = True
+        if capacity > 0 and not s.done() and not legacy_resident and _use_native_generation_engine(mods, s.model, s.state):
             var result = _read_engine(mods, s, capacity)
             s.busy = False
             return result

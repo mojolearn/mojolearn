@@ -1,0 +1,50 @@
+Resident multi-token read alias admission (2026-10-29)
+
+Branch lane/legacy-read-plan-20261028, follow-up to ready54f9a69457.
+Only product file changed: bindings/causal_lm_public.mojo.
+
+Concrete correctness gap:
+Resident greedy/EOS admission checked layer/session metadata but did not reject
+shared host KV storage. Legacy resident-forward exports K then V for every layer
+and reloads those host buffers before the next token. Exact or partial overlap
+therefore couples the next step's independent device caches, within one layer or
+between layers. A read-wide resident program skips that intermediate coupling.
+
+A second supported case exists when parameters() exposed live weight Arrays or
+captured _resident_busy forces private sessions: the legacy route reopens and
+reloads weights each token. KV storage can overlap a writable view of those
+weights, so its intermediate export changes the next forward's weights. The
+read-wide route would instead keep the initial weight contents on device.
+
+Repair / admission boundary:
+Once per eligible multi-token read, compare the captured native Array byte spans
+for K/V overlaps, using address differences rather than overflowing end-address
+addition. Under the per-token reopen policy, also compare the KV spans with the
+actually consumed embedding/norm/head, base/optional layer weights and packed
+planes (same slot rules as _transformer_arg_words). Tied/overlapping weights are
+allowed; only their overlap with written KV matters. Normal captured views remain
+exact Array instances, not SimpleNamespace, and qualify without changing storage.
+Foreign/unknown layouts or uncertain/malformed spans retain the existing per-token
+resident-forward route, where original validation/errors occur. This is route
+admission, not a new public exception or new host implementation. A declined read
+cannot accidentally switch into another native engine lacking the alias contract.
+
+The optional resident-generation door uses the same admission for supplied state
+and its existing None eligibility sentinel. _generate_complete already handles
+that sentinel by continuing through _read. The diagnostic Python door supplies
+None state; its fresh internally allocated caches are disjoint and skip the scan.
+For one possible forward (capacity/max_new <=1), there is no skipped intermediate
+export/reload, so both doors skip alias scanning. This is operation-count reasoning,
+not a dimension or benchmark rule. Existing mandatory descriptor/GIL checks remain.
+
+Validation and limits:
+Final actual public C entries5(read) and10(optional resident) compiled on Mac CPU,
+identical O0, Mojo1.0.0(ed45d567), default2 slots. Dynamic GPU targets unchanged,
+not compiled here. Prior narrower successful builds retained as source evolved;
+no unchanged-source rebuild. Required source guards recorded after product commit.
+No runtime, bitwise identity or performance campaign ran. Transfers and arithmetic
+are unchanged on both admitted and retained legacy routes. No general cross-call
+or sampling KV ownership contract is introduced.
+
+Evidence: /Users/andrewhendel/mojolearn-evidence/resident-read-alias-20261028/
+Full logs/exits, binary/source bytes and hashes, compile scope and source guards.
