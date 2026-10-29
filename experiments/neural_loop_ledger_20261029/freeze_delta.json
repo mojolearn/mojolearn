@@ -1,0 +1,23 @@
+{
+  "from_tree": "748c43207eccf20880fec95d4652d3a6a6c80852",
+  "to_tree": "108f33e541ca2423b6f78509f80044b6f3660481",
+  "changed_scoped_sources": [
+    "bindings/causal_lm_public.mojo"
+  ],
+  "before_loops": 304,
+  "after_loops": 304,
+  "before_classes": {
+    "cpython_metadata_or_native_boundary": 123,
+    "native_compute": 27,
+    "native_orchestration_or_setup": 152,
+    "native_orchestration_provider_crossing": 2
+  },
+  "after_classes": {
+    "cpython_metadata_or_native_boundary": 123,
+    "native_compute": 27,
+    "native_orchestration_or_setup": 152,
+    "native_orchestration_provider_crossing": 2
+  },
+  "reason": "Sampling upload-reuse A/B merged. No new loop statements; conditional work inside existing repeated orchestration changed. Counts do not quantify runtime work or speed.",
+  "source_diff_command": "git diff 748c43207e 108f33e541 -- bindings/causal_lm_public.mojo"
+}

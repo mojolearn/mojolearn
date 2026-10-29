@@ -1,0 +1,35 @@
+{
+  "scope": "Selected native neural public orchestration, token/layer execution and Sequential program paths; not all repository loops or a runtime call graph",
+  "files": [
+    "bindings/causal_lm_public.mojo",
+    "bindings/neural_block_public.mojo",
+    "bindings/sequential_execution.mojo",
+    "bindings/samba_inference_native.mojo",
+    "bindings/samba_step_native.mojo",
+    "providers/python/generation_metadata_pyapi.mojo",
+    "providers/python/generation_session_pyapi.mojo",
+    "providers/python/transformer_resident_pyapi.mojo",
+    "providers/python/samba_execution_pyapi.mojo",
+    "providers/python/samba_resident_pyapi.mojo",
+    "providers/python/native_execution_pyapi.mojo",
+    "providers/python/neural_descriptor_pyapi.mojo",
+    "core/native_execution.mojo",
+    "core/generation_policy_impl.mojo",
+    "core/resident_generation_read.mojo",
+    "transformer/native_generation_engine.mojo",
+    "transformer/native_lm_resident_dispatch.mojo",
+    "transformer/causal_lm_public_impl.mojo",
+    "transformer/transformer_binding_impl.mojo",
+    "mamba/impl/mamba_shell_impl.mojo",
+    "mamba/impl/mamba_decode_plan.mojo",
+    "mamba/native_workspace_dispatch.mojo",
+    "autograd/model_execution.mojo",
+    "autograd/program_runtime.mojo",
+    "autograd/program_device_execution.mojo"
+  ],
+  "native_compute_roots": [
+    "core/generation_policy_impl.mojo",
+    "core/resident_generation_read.mojo",
+    "transformer/causal_lm_public_impl.mojo"
+  ]
+}

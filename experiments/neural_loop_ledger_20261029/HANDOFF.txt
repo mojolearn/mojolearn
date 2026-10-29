@@ -1,0 +1,61 @@
+NEURAL LOOP LEDGER — STATIC INVENTORY, 2026-10-29
+
+Branch: lane/neural-loop-ledger-20261029. No product files changed.
+Frozen inspected main: 108f33e541ca2423b6f78509f80044b6f3660481.
+Initial scan 748c43207eccf20880fec95d4652d3a6a6c80852 retained externally.
+Only bindings/causal_lm_public.mojo changed in this 25-file scope between scans;
+freeze_delta.json records the unchanged counts and changed conditional work.
+
+Result: 304 lexical loop statements across 25 selected native neural files.
+Local syntax classes: 123 CPython metadata/native boundary; 27 compute-root;
+152 native orchestration/setup; 2 provider-crossing without local CPython syntax.
+13 loop bodies contain local provider-crossing syntax (overlaps those classes).
+These are lexical triage classes, NOT forbidden-runtime counts, invocation
+counts, resolved call graphs or performance measurements. Direct CPython is legal.
+Nested loops count separately and enclosing-body feature matches overlap.
+
+Existing scanners reused: tools/hooks/no_compute_in_shells.py loop/docstring
+scanner, including tagged loops by disabling TAG exemption in the inventory's
+in-memory imported module only; tools/mojo_python_callback_audit.py for local
+call triage. Neither policy scanner nor any baseline/gate was changed.
+Scope and scanner/source hashes are in scope.json/summary.json. loops.tsv keeps
+all counted locations. reviewed_routes.json annotates 25 source-reviewed loops,
+including actual legacy/native read routes, layer dispatch, training replay,
+epoch/minibatch, public setup and Mamba/Samba plan construction.
+
+The raw callback scanner flags one prohibited_user_object candidate outside
+loops: causal_lm_public:2811, len(args) in _causal_owner_unusable. Source tracing
+shows args_ptr arrives directly from the C method argument-tuple ABI; this is
+native tuple length, not a confirmed arbitrary user hook. The 159 review/helper/
+caller-admission sites and indirect endpoint targets remain unproven by this
+inventory. No claim of a callback-free closure follows from zero loop hits.
+Some zero-loop helper files are called per token/layer and still do real work.
+Kernel loops and modules outside the explicit scope are not counted.
+
+Next source candidate, DEFERRED: causal_lm_public:1285 _resident_forward export
+loop repeats block/provider lookup and cap/cache shape preparation for each
+layer/token. An operation-owned export metadata plan could remove repeated
+invariant setup. Keep ordered exports, partial failure/state publication,
+owner pins, live-content behavior and mandatory post-GIL descriptor checks.
+Do not alter validation/error timing or retain unchecked raw pointers.
+This is separate from the already merged DEFAULT-OFF sampling upload-reuse
+experiment. That experiment retains every successful-step export and host
+selection; neither is full GPU residency. See next_candidate.json.
+Owner requires integrated build, verifier and first NVIDIA measurement before
+any next product-loop migration. This ledger starts no product repair or run.
+
+Validation: both frozen scans exit 0. Final artifact integrity check exit 0:
+304 unique IDs, class counts reconcile, reviewed IDs exist, source/scanner
+hashes match retained bytes, scope/script hashes match, and only the causal
+source changed within scope. No Mojo compile needed for inventory-only files;
+no product runtime, identity or performance campaign ran in this lane.
+Existing source/push policy guards are unchanged; root serializes integration.
+
+Evidence: /Users/andrewhendel/mojolearn-evidence/neural-loop-ledger-20261029/
+  scan.log / scan.exit (initial freeze)
+  scan-108f33e541.log / scan-108f33e541.exit (final freeze)
+  integrity.log / integrity.exit
+  748c43207e/ and 108f33e541/: complete loops.json, callbacks.json,
+  loops.tsv, summary.json and exact 27-source snapshots (25 scope +2 scanners).
+Final reviews, inventory script and scope also copied beside final snapshot.
+No boxes rented; no binaries produced by this inventory.

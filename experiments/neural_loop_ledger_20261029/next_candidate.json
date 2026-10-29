@@ -1,0 +1,23 @@
+{
+  "tree": "108f33e541ca2423b6f78509f80044b6f3660481",
+  "loop": "bindings/causal_lm_public.mojo:1285",
+  "function": "_resident_forward",
+  "status": "deferred source proposal only; no product edits or performance claim",
+  "proposal": "Retain per-layer export shape/owner metadata and selected native export provider in the existing operation read plan; avoid rebuilding immutable export shape and looking up the same provider for every layer/token.",
+  "why": "Source repeats _block, cap/cache_n, shape lists and provider lookup inside a layer loop invoked by the legacy read token loop.",
+  "scope": "Legacy resident-forward path used by supported host-selection sampling and fallback reads; native-engine/whole-resident read bypass it.",
+  "preserve": [
+    "Live buffer content and captured mutation rules; stable pointer is not immutable content.",
+    "Ordered export and cached_tokens publication; partial export errors retain previous publication semantics.",
+    "Owner/module pins across every native call and GIL release.",
+    "Mandatory post-GIL descriptor/admission rechecks; no unchecked retained pointer reuse.",
+    "Validation timing and original error precedence, especially later-layer invalid buffers.",
+    "Fresh/public result ownership and all successful-step KV exports."
+  ],
+  "not_this_candidate": [
+    "Merged default-off sampling A/B already covers repeated host-to-device KV upload reduction.",
+    "No sampler algorithm change, GPU FP64 workaround or new host fallback.",
+    "No reason yet to delete transfers or predict an end-to-end speedup."
+  ],
+  "promotion": "Owner requires integrated build, verifier and first NVIDIA measurement before any next product-loop migration. This inventory authorizes none."
+}

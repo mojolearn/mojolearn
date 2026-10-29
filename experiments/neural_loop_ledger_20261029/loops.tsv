@@ -1,0 +1,305 @@
+id	function	function_line	end	primary_static_class	local_cpython_syntax	local_provider_crossing	callback_candidate_count	gate_untagged	code
+bindings/causal_lm_public.mojo:170	_native_entry_fields	152	172	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(module_keys)):  # small-loop(module_keys: native binding record field names): admitted once per namespace
+bindings/causal_lm_public.mojo:183	_native_entry_fields	152	185	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(keys)):  # small-loop(native binding record field names before keyed reads)
+bindings/causal_lm_public.mojo:249	causal_lm_admit_binding	212	250	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:  # small-loop(primitive entry names)
+bindings/causal_lm_public.mojo:255	causal_lm_admit_binding	212	257	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh"), String("transformer_native_session_handle_v1")]:  # small-loop(optional entry names retained once at construction)
+bindings/causal_lm_public.mojo:275	causal_lm_admit_binding	212	278	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("transformer_decode_session_create"), String("transformer_decode_session_open"),  # small-loop(resident entry names)
+bindings/causal_lm_public.mojo:279	causal_lm_admit_binding	212	282	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("transformer_decode_session_load_state"), String("transformer_decode_session_export_state"),  # small-loop(optional resident entry names)
+bindings/causal_lm_public.mojo:398	causal_lm_parameters_binding	375	449	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(model._blocks)):  # driver-loop: over model layer metadata
+bindings/causal_lm_public.mojo:401	causal_lm_parameters_binding	375	404	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(p._layer_map)):  # driver-loop: over checkpoint tensor mappings
+bindings/causal_lm_public.mojo:409	causal_lm_parameters_binding	375	412	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(min(len(weight_names), len(blk["_w"]))):  # driver-loop: over block weight slots
+bindings/causal_lm_public.mojo:415	causal_lm_parameters_binding	375	418	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(optional_names)):  # driver-loop: over optional block weight slots
+bindings/causal_lm_public.mojo:421	causal_lm_parameters_binding	375	432	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(keys)):  # driver-loop: over checkpoint tensor names
+bindings/causal_lm_public.mojo:435	causal_lm_parameters_binding	375	449	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(fused_names)):  # driver-loop: over fused checkpoint tensor names
+bindings/causal_lm_public.mojo:440	causal_lm_parameters_binding	375	441	cpython_metadata_or_native_boundary	True	False	0	False	for k in range(len(pieces)):  # driver-loop: over projection slice metadata
+bindings/causal_lm_public.mojo:443	causal_lm_parameters_binding	375	448	cpython_metadata_or_native_boundary	True	False	0	False	for k in range(len(pieces)):  # driver-loop: over contiguous projection buffers
+bindings/causal_lm_public.mojo:552	causal_lm_allocate_binding	534	555	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(model._blocks)):  # driver-loop: over model layer state owners
+bindings/causal_lm_public.mojo:634	_writeback	632	637	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(copies)):  # driver-loop: over copied state buffer handles
+bindings/causal_lm_public.mojo:648	_transformer_arg_words	641	649	native_orchestration_or_setup	False	False	0	False	for j in range(len(weights)):  # driver-loop: over block weight slots
+bindings/causal_lm_public.mojo:654	_transformer_arg_words	641	655	native_orchestration_or_setup	False	False	0	False	for j in range(len(optional)):  # driver-loop: over optional block weight slots
+bindings/causal_lm_public.mojo:658	_transformer_arg_words	641	661	native_orchestration_or_setup	False	False	0	False	for j in range(len(packed)):  # driver-loop: over packed block weight slots
+bindings/causal_lm_public.mojo:660	_transformer_arg_words	641	661	native_orchestration_or_setup	False	False	0	False	for k in range(3):  # small-loop(int15 plane triple)
+bindings/causal_lm_public.mojo:670	_transformer_param_words	665	671	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(tail)):  # driver-loop: read the block's admitted options tail
+bindings/causal_lm_public.mojo:1097	_resident_forward_ok	1089	1100	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("causal_lm_session_forward"), String("transformer_decode_session_load_state"),  # small-loop(required resident entry names)
+bindings/causal_lm_public.mojo:1106	_resident_forward_ok	1089	1116	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(model._blocks)):  # driver-loop: over model layers
+bindings/causal_lm_public.mojo:1130	_resident_read_disjoint_state	1120	1150	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(state.layers)):  # driver-loop: one read's retained layer state admission
+bindings/causal_lm_public.mojo:1132	_resident_read_disjoint_state	1120	1150	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("k_cache"), String("v_cache")]:  # small-loop(two KV storage spans)
+bindings/causal_lm_public.mojo:1143	_resident_read_disjoint_state	1120	1147	native_orchestration_or_setup	False	False	0	False	for j in range(len(starts)):  # driver-loop: native interval overlap, no Python element dispatch
+bindings/causal_lm_public.mojo:1163	_resident_read_disjoint_state	1120	1164	native_orchestration_or_setup	False	False	0	False	for k in range(3):  # small-loop(consumed packed head planes)
+bindings/causal_lm_public.mojo:1167	_resident_read_disjoint_state	1120	1181	native_orchestration_or_setup	False	False	0	False	for i in range(len(model._blocks)):  # driver-loop: capture consumed weight spans once per read
+bindings/causal_lm_public.mojo:1170	_resident_read_disjoint_state	1120	1172	native_orchestration_or_setup	False	False	0	False	for j in range(len(base)):  # driver-loop: same weight slots as _transformer_arg_words
+bindings/causal_lm_public.mojo:1174	_resident_read_disjoint_state	1120	1175	native_orchestration_or_setup	False	False	0	False	for j in range(len(optional)):  # driver-loop: consumed optional layer weight slots
+bindings/causal_lm_public.mojo:1178	_resident_read_disjoint_state	1120	1181	native_orchestration_or_setup	False	False	0	False	for j in range(len(planes)):  # driver-loop: consumed packed layer planes
+bindings/causal_lm_public.mojo:1180	_resident_read_disjoint_state	1120	1181	native_orchestration_or_setup	False	False	0	False	for k in range(3):  # small-loop(int15 plane triple)
+bindings/causal_lm_public.mojo:1182	_resident_read_disjoint_state	1120	1198	cpython_metadata_or_native_boundary	True	False	0	False	for value in weights:  # driver-loop: compare captured live weight spans against KV storage
+bindings/causal_lm_public.mojo:1194	_resident_read_disjoint_state	1120	1197	native_orchestration_or_setup	False	False	0	False	for j in range(len(starts)):  # driver-loop: native byte-span overlap test
+bindings/causal_lm_public.mojo:1285	_resident_forward	1207	1300	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(sessions)):  # driver-loop: over layer decode sessions
+bindings/causal_lm_public.mojo:1368	_engine_admission	1355	1369	native_orchestration_or_setup	False	False	0	False	for i in range(len(model._blocks)):  # driver-loop: one operation's retained model owners
+bindings/causal_lm_public.mojo:1586	_run_prepared	1534	1587	native_orchestration_or_setup	False	False	0	False	for i in range(len(model._blocks)):  # driver-loop: capture layer owners once per operation
+bindings/causal_lm_public.mojo:1607	_run_snapshot	1602	1609	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(snapshot.layers)):  # driver-loop: over retained native layer descriptions
+bindings/causal_lm_public.mojo:1661	_resident_close	1655	1666	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(sessions)):  # driver-loop: over layer decode sessions
+bindings/causal_lm_public.mojo:1681	_resident_open_all	1669	1705	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(model._blocks)):  # driver-loop: over model layers
+bindings/causal_lm_public.mojo:1686	_resident_open_all	1669	1687	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(1, 12):  # driver-loop: over layer argument spans
+bindings/causal_lm_public.mojo:1688	_resident_open_all	1669	1689	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(13, len(a)):  # driver-loop: over layer argument spans
+bindings/causal_lm_public.mojo:1692	_resident_open_all	1669	1694	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(p)):  # driver-loop: over layer shape parameters
+bindings/causal_lm_public.mojo:1710	_resident_open_all	1669	1711	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(3):  # small-loop(int15 head plane triple)
+bindings/causal_lm_public.mojo:1737	_resident_key	1732	1738	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(state.layers)):  # driver-loop: over model layers
+bindings/causal_lm_public.mojo:1746	_resident_load_states	1743	1754	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(sessions)):  # driver-loop: over layer decode sessions
+bindings/causal_lm_public.mojo:1948	_options	1919	1954	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(values)):  # small-loop(eos token id arguments)
+bindings/causal_lm_public.mojo:2039	_resident_read_cleanup	2029	2043	native_orchestration_provider_crossing	False	True	0	False	for i in range(len(sessions)):  # driver-loop: release every owned layer after failure
+bindings/causal_lm_public.mojo:2109	_read_resident	2046	2119	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(sessions)):  # driver-loop: final owned layer-state publication
+bindings/causal_lm_public.mojo:2234	_read	2174	2269	cpython_metadata_or_native_boundary	True	False	0	False	while wrote < capacity and not s.done():  # driver-loop: over decode steps, one model forward each
+bindings/causal_lm_public.mojo:2518	_fingerprint	2506	2541	native_orchestration_or_setup	False	False	0	False	for i in range(len(model._blocks)):  # driver-loop: over model layers
+bindings/causal_lm_public.mojo:2526	_fingerprint	2506	2528	native_orchestration_or_setup	False	False	0	False	for j in range(len(blk["_wopt"])):  # driver-loop: over optional block weight slots
+bindings/causal_lm_public.mojo:2533	_fingerprint	2506	2536	native_orchestration_or_setup	False	False	0	False	for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
+bindings/causal_lm_public.mojo:2538	_fingerprint	2506	2541	native_orchestration_or_setup	False	False	0	False	for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
+bindings/causal_lm_public.mojo:2540	_fingerprint	2506	2541	native_orchestration_or_setup	False	False	0	False	for k in range(3):  # small-loop(int15 plane triple)
+bindings/causal_lm_public.mojo:2543	_fingerprint	2506	2544	native_orchestration_or_setup	False	False	0	False	for k in range(3):  # small-loop(int15 head plane triple)
+bindings/causal_lm_public.mojo:2561	_snapshot_hash	2558	2563	native_orchestration_or_setup	False	False	0	False	for name in [String("schema"), String("model"), String("options"), String("maximum"),  # small-loop(checkpoint scalar fields)
+bindings/causal_lm_public.mojo:2567	_snapshot_hash	2558	2578	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(checkpoint["layers"])):  # driver-loop: over checkpoint layers
+bindings/causal_lm_public.mojo:2570	_snapshot_hash	2558	2578	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(names)):  # driver-loop: over layer state field names
+bindings/causal_lm_public.mojo:2628	causal_lm_snapshot_binding	2592	2645	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(s[].state.layers)):  # driver-loop: over model layer states
+bindings/causal_lm_public.mojo:2636	causal_lm_snapshot_binding	2592	2637	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(arrays)):  # driver-loop: over layer state arrays
+bindings/causal_lm_public.mojo:2707	causal_lm_resume_binding	2657	2736	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(s[].state.layers)):  # driver-loop: over model layer states
+bindings/causal_lm_public.mojo:2715	causal_lm_resume_binding	2657	2720	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(arrays)):  # driver-loop: over layer state arrays
+bindings/causal_lm_public.mojo:2764	causal_state_init_binding	2760	2766	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(2):  # small-loop(public state dimension arguments)
+bindings/causal_lm_public.mojo:2784	causal_state_repr_binding	2781	2785	native_orchestration_or_setup	False	False	0	False	for name in ["batch_size", "max_tokens", "positions"]:  # small-loop(displayed scalar state metadata)
+bindings/causal_lm_public.mojo:2798	causal_lm_repr_binding	2794	2799	native_orchestration_or_setup	False	False	0	False	for name in ["n_layers", "d_model", "vocab_size", "weight_format", "device"]:  # small-loop(displayed native model metadata)
+bindings/neural_block_public.mojo:210	_neural_weights_retained	204	218	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(snaps)):  # driver-loop: over the block's weight slots, identity only
+bindings/neural_block_public.mojo:223	_neural_owner_reusable	222	226	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("_w"), String("_wopt")]:  # small-loop(weight slot lists)
+bindings/neural_block_public.mojo:230	_neural_owner_reusable	222	235	native_orchestration_or_setup	False	False	0	False	for i in range(len(packed)):  # driver-loop: over packed weight planes, identity only
+bindings/neural_block_public.mojo:296	neural_block_execution	245	299	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("_neural_weight_names"), String("dt_limit"), String("_opts_tail"), String("rope_scaling"),  # small-loop(setup-derived snapshot words)
+bindings/neural_block_public.mojo:341	neural_block_init_binding	307	342	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(names)):  # driver-loop: over transformer option keyword metadata
+bindings/neural_block_public.mojo:381	neural_block_set_params_binding	365	382	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(names)):  # driver-loop: fixed constructor configuration, no Python callbacks
+bindings/neural_block_public.mojo:384	neural_block_set_params_binding	365	387	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(keys)):  # driver-loop: validate all keys before constructing replacement
+bindings/neural_block_public.mojo:395	neural_block_set_params_binding	365	396	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(option_names)):  # driver-loop: native initializer's positional option schema
+bindings/neural_block_public.mojo:510	_neural_state_capture	494	517	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(ancestry)):  # small-loop(passive state access protocol)
+bindings/neural_block_public.mojo:514	_neural_state_capture	494	517	cpython_metadata_or_native_boundary	True	False	0	False	for name in ["__getattribute__", "__setattr__"]:  # driver-loop: native admission metadata and retained owner registry
+bindings/neural_block_public.mojo:519	_neural_state_capture	494	521	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(scalars)):  # small-loop(capture native state words before conversion)
+bindings/neural_block_public.mojo:531	_neural_state_capture	494	534	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(buffers)):  # small-loop(buffers: native state buffer names): compare owner identities
+bindings/neural_block_public.mojo:543	_neural_state_capture	494	544	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(buffers)):  # small-loop(buffers: native state buffer names): capture owner identities
+bindings/neural_block_public.mojo:550	_neural_state_capture	494	559	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(buffers)):  # small-loop(buffers: native state buffer names): retain stable state storage
+bindings/neural_block_public.mojo:567	_neural_state_capture	494	570	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(buffers)):  # small-loop(buffers: native state buffer names): recheck after capture
+bindings/neural_block_public.mojo:588	_neural_publish_state	583	590	cpython_metadata_or_native_boundary	True	False	0	False	for name in ["cached_tokens", "arithmetic_profile", "_numeric_profile", "absolute_position", "_nn34_usable", "buffered_tokens"]:  # driver-loop: native admission metadata and retained owner registry
+bindings/neural_block_public.mojo:595	_neural_publish_fields	593	599	cpython_metadata_or_native_boundary	True	False	0	False	for name in ["_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed",  # driver-loop: native admission metadata and retained owner registry
+bindings/neural_block_public.mojo:649	_neural_plain	618	650	native_orchestration_or_setup	False	False	0	False	for i in range(len(weights)):  # driver-loop: admit transformer weight slots once
+bindings/neural_block_public.mojo:661	_neural_plain	618	662	native_orchestration_or_setup	False	False	0	False	for i in range(len(optional)):  # driver-loop: admit optional transformer weight slots once
+bindings/neural_block_public.mojo:664	_neural_plain	618	665	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(options)):  # small-loop(block options integer span)
+bindings/neural_block_public.mojo:722	_neural_lengths	708	728	native_orchestration_or_setup	False	False	0	False	for i in range(b):  # small-loop(native integer length words from retained storage)
+bindings/neural_block_public.mojo:739	_neural_lengths	708	746	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(b):  # small-loop(one length argument word per batch row)
+bindings/neural_block_public.mojo:877	_neural_int_words	874	878	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(values)):  # small-loop(public operation descriptor words)
+bindings/neural_block_public.mojo:915	neural_mamba3_restore	903	916	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
+bindings/neural_block_public.mojo:945	_neural_derived_words	941	948	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("_neural_weight_names"), String("dt_limit"), String("_opts_tail"), String("rope_scaling"),  # small-loop(setup-derived snapshot words)
+bindings/neural_block_public.mojo:961	_neural_snapshot_matches	956	963	cpython_metadata_or_native_boundary	True	False	0	False	for name in _neural_snapshot_names():  # small-loop(snapshot input field names)
+bindings/neural_block_public.mojo:988	neural_block_snapshot_prepared	967	990	cpython_metadata_or_native_boundary	True	False	0	False	for name in _neural_snapshot_names():  # small-loop(snapshot input field names)
+bindings/neural_block_public.mojo:1035	_neural_backward_prepared	1029	1037	cpython_metadata_or_native_boundary	True	False	0	False	for key in ["norm", "mlp", "qkv_bias", "o_bias", "norm_bias", "mlp_bias", "qk_norm", "rope_scaling"]:  # driver-loop: over the named block options
+bindings/neural_block_public.mojo:1074	_neural_backward_prepared	1029	1075	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(names)):  # driver-loop: over the fixed block weight registry
+bindings/neural_block_public.mojo:1082	_neural_backward_prepared	1029	1087	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(weights)):  # driver-loop: over parameter buffers and their shapes
+bindings/neural_block_public.mojo:1085	_neural_backward_prepared	1029	1086	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(weights[i].shape)):  # driver-loop: over tensor shape metadata
+bindings/neural_block_public.mojo:1089	_neural_backward_prepared	1029	1090	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(gradients)):  # driver-loop: over gradient buffer addresses
+bindings/neural_block_public.mojo:1093	_neural_backward_prepared	1029	1094	cpython_metadata_or_native_boundary	True	False	0	False	for key in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # driver-loop: over transformer launch dimensions
+bindings/neural_block_public.mojo:1146	_neural_backward_prepared	1029	1147	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(10, len(addresses)):  # driver-loop: over input-gradient and result address slots
+bindings/neural_block_public.mojo:1189	_neural_backward_prepared	1029	1190	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(names)):  # driver-loop: over named gradient slots
+bindings/neural_block_public.mojo:1230	neural_block_getstate_binding	1196	1231	cpython_metadata_or_native_boundary	True	False	0	False	for name in transient_names:  # driver-loop: over operation owners excluded from serialized model state
+bindings/sequential_execution.mojo:201	sequential_fit	66	202	native_orchestration_or_setup	False	False	0	False	for scalar in native_table:  # driver-loop: reuse already admitted native layer options
+bindings/sequential_execution.mojo:289	sequential_forward	275	290	cpython_metadata_or_native_boundary	True	False	0	False	for k in range(1, rank):  # driver-loop: over the prediction input sample rank
+bindings/samba_inference_native.mojo:76	samba_allocate	55	89	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(config["layers"])):  # driver-loop: over persistent layer state owners
+bindings/samba_inference_native.mojo:85	samba_allocate	55	86	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(names)):  # driver-loop: over the fixed Mamba3 continuation buffer ABI
+bindings/samba_inference_native.mojo:131	_m3_state_call	103	135	native_orchestration_or_setup	False	False	0	False	for i in range(len(weights)):  # driver-loop: over existing Mamba3 parameter ABI slots
+bindings/samba_inference_native.mojo:136	_m3_state_call	103	137	native_orchestration_or_setup	False	False	0	False	for i in range(len(names)):  # driver-loop: over mutable continuation buffers
+bindings/samba_inference_native.mojo:143	_m3_state_call	103	145	native_orchestration_or_setup	False	False	0	False	for i in range(4):  # driver-loop: over the four reporting buffers
+bindings/samba_inference_native.mojo:186	_m3_state_forward	180	187	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(4):  # driver-loop: over reporting result metadata
+bindings/samba_inference_native.mojo:198	_samba_resident_forward	191	199	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over existing resident-model capability entries
+bindings/samba_inference_native.mojo:207	_samba_resident_forward	191	208	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(config["layers"])):  # driver-loop: over model layer metadata at session creation
+bindings/samba_inference_native.mojo:210	_samba_resident_forward	191	211	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate")]:  # driver-loop: over resident-session shape metadata
+bindings/samba_inference_native.mojo:304	samba_forward	258	313	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(config["layers"])):  # driver-loop: over native model layer execution owners
+bindings/samba_inference_native.mojo:317	samba_forward	258	318	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("samba_afn_norm_head_forward"), String("samba_afn_tail_train"), String("samba_afn_embedding_backward_tied")]:  # driver-loop: over the optional fused-tail ABI
+bindings/samba_step_native.mojo:27	_samba_moments	24	32	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("_m"), String("_v")]:  # driver-loop: over the optimizer's two moment owners
+bindings/samba_step_native.mojo:41	_samba_open_optimizer	36	42	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("optimizer_resident_open"), String("optimizer_resident_close"), String("optimizer_resident_download"), String("optimizer_resident_upload"), String("optimizer_resident_step")]:  # driver-loop: over the existing resident optimizer ABI
+bindings/samba_step_native.mojo:120	_samba_resident_step	112	121	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over the existing resident Samba ABI
+bindings/samba_step_native.mojo:138	_samba_resident_step	112	139	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(config["layers"])):  # driver-loop: over model layer kind metadata
+bindings/samba_step_native.mojo:141	_samba_resident_step	112	142	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate")]:  # driver-loop: over resident model shape metadata
+bindings/samba_step_native.mojo:183	_samba_parameter_pack	174	213	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(params)):  # driver-loop: over caller-owned optimizer parameter buffers
+bindings/samba_step_native.mojo:218	_samba_parameter_pack	174	221	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(views)):  # driver-loop: over replacement parameter buffers
+bindings/samba_step_native.mojo:228	_samba_parameter_publish	225	232	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(views)):  # driver-loop: over caller-owned parameter write-back buffers
+bindings/samba_step_native.mojo:280	samba_train_step	234	305	cpython_metadata_or_native_boundary	True	False	0	False	for k in range(a):  # driver-loop: over aligned microbatch gradient operations
+bindings/samba_step_native.mojo:283	samba_train_step	234	292	cpython_metadata_or_native_boundary	True	False	0	False	for which in range(2):  # driver-loop: over input and target buffer slices
+bindings/samba_step_native.mojo:299	samba_train_step	234	304	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(gradients)):  # driver-loop: over the ordered parameter gradients
+bindings/samba_step_native.mojo:390	samba_train_step	234	394	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(2):  # driver-loop: over caller-owned moment aliases
+providers/python/generation_metadata_pyapi.mojo:44	_generation_fields	21	45	native_orchestration_or_setup	False	False	0	False	for i in range(len(layer_classes)):  # small-loop(connected internal state classes)
+providers/python/generation_metadata_pyapi.mojo:49	_generation_fields	21	58	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(ancestry)):  # driver-loop: inspect state descriptor ancestry before storage reads
+providers/python/generation_metadata_pyapi.mojo:53	_generation_fields	21	55	cpython_metadata_or_native_boundary	True	False	0	False	for hook in ["__getattribute__", "__setattr__"]:  # small-loop(state access hooks)
+providers/python/generation_metadata_pyapi.mojo:56	_generation_fields	21	58	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(names)):  # small-loop(consumed state field names)
+providers/python/generation_metadata_pyapi.mojo:93	__init__	84	139	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(values)):  # driver-loop: admit each stable weight slot once
+providers/python/generation_metadata_pyapi.mojo:150	append_resolved	146	151	native_orchestration_or_setup	False	False	0	False	for address in self.addresses:  # driver-loop: retained native weight metadata
+providers/python/generation_metadata_pyapi.mojo:155	refresh_into	154	164	cpython_metadata_or_native_boundary	True	False	0	False	for k in range(len(self.refresh)):  # driver-loop: retained foreign-buffer copy compatibility
+providers/python/generation_metadata_pyapi.mojo:196	__init__	176	197	native_orchestration_or_setup	False	False	0	False	for j in range(len(tail)):  # driver-loop: admitted immutable transformer option words
+providers/python/generation_metadata_pyapi.mojo:202	__init__	176	209	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(triples)):  # driver-loop: packed weight plane registry
+providers/python/generation_metadata_pyapi.mojo:208	__init__	176	209	cpython_metadata_or_native_boundary	True	False	0	False	for k in range(3):  # small-loop(int15 plane triple)
+providers/python/generation_metadata_pyapi.mojo:267	__init__	249	268	cpython_metadata_or_native_boundary	True	False	0	False	for k in range(3):  # small-loop(int15 head plane triple)
+providers/python/generation_metadata_pyapi.mojo:298	__init__	285	299	native_orchestration_or_setup	False	False	0	False	for i in range(len(blocks)):  # driver-loop: capture stable layer metadata once per operation
+providers/python/generation_metadata_pyapi.mojo:321	_generation_engine_weights	315	331	native_orchestration_or_setup	False	False	0	False	for k in range(len(snapshot.refresh)):  # driver-loop: retained foreign weight descriptors, never recapture caller metadata
+providers/python/generation_metadata_pyapi.mojo:350	_generation_engine_state	335	353	native_orchestration_or_setup	False	False	0	False	for axis in range(len(expected)):  # small-loop(admitted state buffer shape)
+providers/python/generation_metadata_pyapi.mojo:420	__init__	377	544	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(snapshot.layers)):  # driver-loop: admit layer/state owners once before native execution
+providers/python/generation_metadata_pyapi.mojo:484	__init__	377	485	native_orchestration_or_setup	False	False	0	False	for address in weights:  # driver-loop: fixed Mamba weight descriptor vector
+providers/python/generation_metadata_pyapi.mojo:551	publish	548	569	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(self.states)):  # driver-loop: publish completed/partial native state at operation boundary
+providers/python/transformer_resident_pyapi.mojo:21	transformer_resident_words	19	22	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(values)):  # driver-loop: native boundary scalar/address metadata
+providers/python/transformer_resident_pyapi.mojo:56	_transformer_resident_lm_execute	50	57	native_orchestration_provider_crossing	False	True	0	False	for i in range(len(layers)):  # driver-loop: one exact typed owner admission per retained decoder
+providers/python/samba_execution_pyapi.mojo:110	__init__	82	318	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(kinds)):  # driver-loop: one metadata/lifetime admission per model layer
+providers/python/samba_execution_pyapi.mojo:121	__init__	82	122	native_orchestration_or_setup	False	False	0	False	for j in range(len(source_weights)):  # driver-loop: retain immutable weight owners at admission
+providers/python/samba_execution_pyapi.mojo:124	__init__	82	125	native_orchestration_or_setup	False	False	0	False	for j in range(len(names)):  # driver-loop: admit fixed named gradient metadata
+providers/python/samba_execution_pyapi.mojo:155	__init__	82	156	native_orchestration_or_setup	False	False	0	False	for address in weights:  # driver-loop: native transformer weight-address metadata
+providers/python/samba_execution_pyapi.mojo:193	__init__	82	194	native_orchestration_or_setup	False	False	0	False	for j in range(7):  # small-loop(seven fresh transformer shape words)
+providers/python/samba_execution_pyapi.mojo:196	__init__	82	197	native_orchestration_or_setup	False	False	0	False	for j in range(10, len(p)):  # small-loop(the admitted block-option tail)
+providers/python/samba_execution_pyapi.mojo:201	__init__	82	202	native_orchestration_or_setup	False	False	0	False	for address in optional:  # driver-loop: native optional transformer weight metadata
+providers/python/samba_execution_pyapi.mojo:204	__init__	82	205	native_orchestration_or_setup	False	False	0	False	for address in planes:  # driver-loop: native packed projection plane metadata
+providers/python/samba_execution_pyapi.mojo:216	__init__	82	219	native_orchestration_or_setup	False	False	0	False	for j in range(len(weights)):  # driver-loop: one admission of the Mamba3 weight slots
+providers/python/samba_execution_pyapi.mojo:250	__init__	82	251	native_orchestration_or_setup	False	False	0	False	for j in range(9):  # small-loop(unread owned weight pointer slots)
+providers/python/samba_execution_pyapi.mojo:259	__init__	82	260	native_orchestration_or_setup	False	False	0	False	for j in range(len(names)):  # driver-loop: one admission of each carried-state buffer
+providers/python/samba_execution_pyapi.mojo:279	__init__	82	284	native_orchestration_or_setup	False	False	0	False	for j in range(4):  # small-loop(four Mamba report pointer/size slots)
+providers/python/samba_execution_pyapi.mojo:282	__init__	82	283	native_orchestration_or_setup	False	False	0	False	for axis in range(len(publication.report_shapes[j])):  # small-loop(native report shape rank)
+providers/python/samba_execution_pyapi.mojo:298	__init__	82	301	native_orchestration_or_setup	False	False	0	False	for j in range(len(self.state_keys)):  # driver-loop: coalesce aliases of the same mutable continuation owner
+providers/python/samba_execution_pyapi.mojo:308	__init__	82	312	native_orchestration_or_setup	False	False	0	False	for j in range(len(publication.copies)):  # driver-loop: pin deferred foreign-buffer refresh/writeback once
+providers/python/samba_execution_pyapi.mojo:322	configure_training	320	408	cpython_metadata_or_native_boundary	True	True	0	False	for i in range(len(self.native.layers)):  # driver-loop: admit backward/tape owners before whole native execution
+providers/python/samba_execution_pyapi.mojo:342	configure_training	320	351	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(publication.weight_owners)):  # driver-loop: snapshot each parameter's gradient shape once
+providers/python/samba_execution_pyapi.mojo:346	configure_training	320	349	cpython_metadata_or_native_boundary	True	False	0	False	for axis in range(len(shape)):  # small-loop(parameter shape rank)
+providers/python/samba_execution_pyapi.mojo:354	configure_training	320	355	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # small-loop(five Transformer backward dimension words)
+providers/python/samba_execution_pyapi.mojo:381	configure_training	320	382	native_orchestration_or_setup	False	False	0	False	for address in publication.weight_addresses:  # driver-loop: immutable forward snapshot address slots
+providers/python/samba_execution_pyapi.mojo:426	gradients	410	430	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(self.native.layers)):  # driver-loop: completed native gradient result publication
+providers/python/samba_execution_pyapi.mojo:428	gradients	410	430	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(len(publication.gradient_names)):  # driver-loop: completed parameter gradient buffers
+providers/python/samba_execution_pyapi.mojo:432	gradients	410	433	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(names)):  # driver-loop: publish the model's admitted gradient registry order
+providers/python/samba_execution_pyapi.mojo:438	publish	436	465	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(self.native.layers)):  # driver-loop: completed native operation publication, never execution
+providers/python/samba_execution_pyapi.mojo:461	publish	436	465	cpython_metadata_or_native_boundary	True	False	0	False	for j in range(4):  # small-loop(four completed native reports)
+providers/python/samba_execution_pyapi.mojo:481	samba_provider_eligible	478	494	native_orchestration_or_setup	False	False	0	False	for i in range(len(blocks)):  # driver-loop: route eligibility at the single operation boundary
+providers/python/samba_execution_pyapi.mojo:568	samba_provider_accumulated_gradients	541	569	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(len(raw_offsets)):  # driver-loop: one admitted native parameter-registry offset span
+providers/python/samba_execution_pyapi.mojo:577	samba_provider_accumulated_gradients	541	606	native_orchestration_or_setup	False	False	0	False	for j in range(len(names)):  # driver-loop: resolve native gradient-registry locations once
+providers/python/samba_execution_pyapi.mojo:593	samba_provider_accumulated_gradients	541	601	native_orchestration_or_setup	False	False	0	False	for i in range(len(admitted.publications)):  # driver-loop: resolve one admitted named layer gradient
+providers/python/samba_execution_pyapi.mojo:595	samba_provider_accumulated_gradients	541	601	native_orchestration_or_setup	False	False	0	False	for k in range(len(publication.gradient_names)):  # driver-loop: fixed model parameter registry
+providers/python/samba_resident_pyapi.mojo:39	samba_resident_session	22	40	cpython_metadata_or_native_boundary	True	False	0	False	for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate")]:  # small-loop(resident model dimensions)
+providers/python/samba_resident_pyapi.mojo:44	samba_resident_session	22	45	native_orchestration_or_setup	False	False	0	False	for i in range(len(kinds)):  # small-loop(resident model layer kinds)
+providers/python/samba_resident_pyapi.mojo:95	samba_resident_native_step	81	96	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(4):  # small-loop(optimizer tensor count/kind/step/nesterov)
+providers/python/samba_resident_pyapi.mojo:98	samba_resident_native_step	81	99	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(4, 12):  # small-loop(optimizer eight floating settings)
+providers/python/samba_resident_pyapi.mojo:114	samba_optimizer_execute	107	115	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(4):  # small-loop(optimizer integer settings)
+providers/python/samba_resident_pyapi.mojo:118	samba_optimizer_execute	107	119	cpython_metadata_or_native_boundary	True	False	0	False	for i in range(4, 12):  # driver-loop: over eight optimizer floating settings
+providers/python/neural_descriptor_pyapi.mojo:323	neural_descriptor_info	318	324	cpython_metadata_or_native_boundary	True	False	0	False	for value in owner[].calls:  # small-loop(the admitted table's named native operations)
+providers/python/neural_descriptor_pyapi.mojo:378	neural_descriptor_resource_handle	374	380	native_orchestration_or_setup	False	False	0	False	for i in range(len(context)):  # driver-loop: over retained native resource identity words
+core/generation_policy_impl.mojo:51	generation_pick_row	38	55	native_compute	False	False	0	True	for i in range(n):
+core/generation_policy_impl.mojo:64	generation_pick_row	38	65	native_compute	False	False	0	True	for i in range(n):
+core/generation_policy_impl.mojo:67	generation_pick_row	38	84	native_compute	False	False	0	True	while width < n:
+core/generation_policy_impl.mojo:69	generation_pick_row	38	81	native_compute	False	False	0	True	while start < n:
+core/generation_policy_impl.mojo:74	generation_pick_row	38	80	native_compute	False	False	0	True	for dest in range(start, end):
+core/generation_policy_impl.mojo:82	generation_pick_row	38	83	native_compute	False	False	0	True	for i in range(n):
+core/generation_policy_impl.mojo:90	generation_pick_row	38	93	native_compute	False	False	0	True	for i in range(keep):
+core/generation_policy_impl.mojo:99	generation_pick_row	38	103	native_compute	False	False	0	True	while count < keep:
+core/generation_policy_impl.mojo:108	generation_pick_row	38	111	native_compute	False	False	0	True	for i in range(count):
+core/resident_generation_read.mojo:27	__init__	22	28	native_compute	False	False	0	True	for value in finished:
+core/resident_generation_read.mojo:29	__init__	22	30	native_compute	False	False	0	True	for value in lengths:
+core/resident_generation_read.mojo:31	__init__	22	32	native_compute	False	False	0	True	for value in eos:
+core/resident_generation_read.mojo:44	resident_greedy_publish	43	46	native_compute	False	False	0	True	for r in range(len(finished)):
+core/resident_generation_read.mojo:55	resident_greedy_outputs	49	57	native_compute	False	False	0	True	for r in range(batch):
+transformer/native_generation_engine.mojo:154	forward_into	142	155	native_orchestration_or_setup	False	False	0	False	for i in range(len(self.embedding_refresh)):  # driver-loop: admitted embedding copy descriptors
+transformer/native_generation_engine.mojo:163	forward_into	142	203	native_orchestration_or_setup	False	False	0	False	for i in range(len(self.layers)):  # driver-loop: ordered native layer descriptors
+transformer/native_generation_engine.mojo:168	forward_into	142	169	native_orchestration_or_setup	False	False	0	False	for j in range(len(layer.refresh_layouts)):  # driver-loop: ordered deferred weight/state byte copies
+transformer/native_generation_engine.mojo:198	forward_into	142	199	native_orchestration_or_setup	False	False	0	False	for j in range(len(layer.writeback_layouts)):  # driver-loop: successful layer publication before the next alias reads
+transformer/native_generation_engine.mojo:206	forward_into	142	207	native_orchestration_or_setup	False	False	0	False	for i in range(len(self.head_refresh)):  # driver-loop: preserve head snapshot copy before norm and projection
+transformer/native_generation_engine.mojo:239	__init__	233	240	native_orchestration_or_setup	False	False	0	False	for i in range(batch * length):  # driver-loop: copy admitted current-token storage once
+transformer/native_generation_engine.mojo:254	native_generation_read	247	267	native_orchestration_or_setup	False	False	0	False	while progress.wrote < count and progress.produced < maximum and not causal_lm_rows_done(finished):  # driver-loop: native autoregressive tokens
+transformer/native_lm_resident_dispatch.mojo:37	_lm_group_reserve	13	39	native_orchestration_or_setup	False	False	0	False	for token in progress[].eos:  # driver-loop: admitted generation policy token ids
+transformer/native_lm_resident_dispatch.mojo:41	_lm_group_reserve	13	62	native_orchestration_or_setup	False	False	0	False	for i in range(len(group.layers)):  # driver-loop: validate every original layer before setting any busy flag
+transformer/native_lm_resident_dispatch.mojo:63	_lm_group_reserve	13	64	native_orchestration_or_setup	False	False	0	False	for address in group.layers:  # driver-loop: original whole-model session reservation, no layer locks acquired
+transformer/native_lm_resident_dispatch.mojo:69	_lm_group_release	68	70	native_orchestration_or_setup	False	False	0	False	for address in group.layers:  # driver-loop: release original grouped decoder reservation
+transformer/native_lm_resident_dispatch.mojo:85	_lm_group_execute	74	86	native_orchestration_or_setup	False	False	0	False	for address in group.layers:  # driver-loop: original failure marks the complete session group unusable
+transformer/native_lm_resident_dispatch.mojo:90	_lm_group_execute	74	91	native_orchestration_or_setup	False	False	0	False	for address in group.layers:  # driver-loop: original last-layer cached-length return
+transformer/causal_lm_public_impl.mojo:12	causal_lm_rows_done	11	14	native_compute	False	False	0	True	for i in range(len(finished)):
+transformer/causal_lm_public_impl.mojo:22	causal_lm_join_resident	18	24	native_compute	False	False	0	True	for r in range(b):
+transformer/causal_lm_public_impl.mojo:31	causal_lm_join_continuation	27	34	native_compute	False	False	0	True	for r in range(b):
+transformer/causal_lm_public_impl.mojo:43	causal_lm_pick_step	37	53	native_compute	False	False	0	True	for r in range(b):
+transformer/causal_lm_public_impl.mojo:49	causal_lm_pick_step	37	51	native_compute	False	False	0	True	for i in range(len(eos)):
+transformer/causal_lm_public_impl.mojo:70	causal_lm_tokens_row_major	67	72	native_compute	False	False	0	True	for r in range(b):
+transformer/causal_lm_public_impl.mojo:71	causal_lm_tokens_row_major	67	72	native_compute	False	False	0	True	for t in range(wrote):
+transformer/causal_lm_public_impl.mojo:77	causal_lm_drop_eos	75	82	native_compute	False	False	0	True	for i in range(n):
+transformer/causal_lm_public_impl.mojo:79	causal_lm_drop_eos	75	80	native_compute	False	False	0	True	for j in range(len(eos)):
+transformer/causal_lm_public_impl.mojo:92	causal_lm_utf8_cut	86	93	native_compute	False	False	0	True	while lead > max(-1, size - 4) and (Int(pending[lead]) & 0xC0) == 0x80:
+transformer/causal_lm_public_impl.mojo:111	causal_lm_store_ids	108	112	native_compute	False	False	0	True	for i in range(n):
+transformer/causal_lm_public_impl.mojo:117	causal_lm_flags_as_ints	115	118	native_compute	False	False	0	True	for i in range(len(finished)):
+transformer/causal_lm_public_impl.mojo:126	causal_lm_restore_rows	122	130	native_compute	False	False	0	True	for i in range(b):
+transformer/transformer_binding_impl.mojo:269	_load_transformer_weights	251	271	native_orchestration_or_setup	False	False	0	False	for i in range(len(tail)):  # small-loop(tail: the 11 optional block addresses): checks address presence, not data
+transformer/transformer_binding_impl.mojo:307	_load_transformer_weights	251	308	native_orchestration_or_setup	False	False	0	True	while len(t) < BLOCK_OPTION_ADDRS:
+transformer/transformer_binding_impl.mojo:351	_tail_of	347	355	native_orchestration_or_setup	False	False	0	True	for i in range(BLOCK_OPTION_ADDRS):
+transformer/transformer_binding_impl.mojo:363	_check_base_addrs	360	365	native_orchestration_or_setup	False	False	0	False	for i in range(len(slots)):  # small-loop(slots: a handful of base address slots): null checks on addresses, not data
+transformer/transformer_binding_impl.mojo:399	_workspace_key	390	400	native_orchestration_or_setup	False	False	0	False	for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
+transformer/transformer_binding_impl.mojo:485	matches	482	487	native_orchestration_or_setup	False	False	0	False	for i in range(len(key)):  # small-loop(key: shape and option entries of the workspace key): compares cache keys, not data
+transformer/transformer_binding_impl.mojo:511	matches	508	513	native_orchestration_or_setup	False	False	0	False	for i in range(len(key)):  # small-loop(key: nine shape entries of the backward key): compares cache keys, not data
+transformer/transformer_binding_impl.mojo:635	_weights_key	630	636	native_orchestration_or_setup	False	False	0	False	for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
+transformer/transformer_binding_impl.mojo:660	_weights_same_bits	653	676	native_orchestration_or_setup	False	False	0	True	for s in range(9):
+transformer/transformer_binding_impl.mojo:666	_weights_same_bits	653	671	native_orchestration_or_setup	False	False	0	True	while i < body:
+transformer/transformer_binding_impl.mojo:672	_weights_same_bits	653	675	native_orchestration_or_setup	False	False	0	True	while i < n:
+transformer/transformer_binding_impl.mojo:684	_weights_host_copy	681	685	native_orchestration_or_setup	False	False	0	True	for s in range(9):
+transformer/transformer_binding_impl.mojo:688	_weights_host_copy	681	692	native_orchestration_or_setup	False	False	0	True	for s in range(9):
+transformer/transformer_binding_impl.mojo:754	_session_weights	742	756	native_orchestration_or_setup	False	False	0	False	for i in range(len(tail)):  # small-loop(tail: the 11 optional block addresses): checks address presence, not data
+transformer/transformer_binding_impl.mojo:775	_session_weights	742	777	native_orchestration_or_setup	False	False	0	False	for i in range(len(key)):  # small-loop(key: shape and option entries of the weights key): compares cache keys, not data
+transformer/transformer_binding_impl.mojo:1178	_transformer_run_session_int15	1160	1183	native_orchestration_or_setup	False	False	0	True	for i in range(3, 10):
+transformer/transformer_binding_impl.mojo:1190	_transformer_run_session_int15	1160	1191	native_orchestration_or_setup	False	False	0	True	for i in range(21):
+transformer/transformer_binding_impl.mojo:1194	_transformer_run_session_int15	1160	1196	native_orchestration_or_setup	False	False	0	False	for i in range(len(pkey)):  # small-loop(pkey: six shapes plus 21 plane addresses): compares cache keys, not data
+transformer/transformer_binding_impl.mojo:1585	_session_open_run_int15	1564	1590	native_orchestration_or_setup	False	False	0	True	for i in range(3, 10):
+transformer/transformer_binding_impl.mojo:1954	_lm_last_argmax_kernel	1924	1959	native_orchestration_or_setup	False	False	0	True	while c < v:
+transformer/transformer_binding_impl.mojo:1964	_lm_last_argmax_kernel	1924	1974	native_orchestration_or_setup	False	False	0	True	while active > 0:
+transformer/transformer_binding_impl.mojo:2013	_lm_read_argmax_kernel	1983	2021	native_orchestration_or_setup	False	False	0	True	while c < vocab:
+transformer/transformer_binding_impl.mojo:2027	_lm_read_argmax_kernel	1983	2038	native_orchestration_or_setup	False	False	0	True	while active > 0:
+transformer/transformer_binding_impl.mojo:2064	_lm_read_status_kernel	2050	2067	native_orchestration_or_setup	False	False	0	True	while r < batch:
+transformer/transformer_binding_impl.mojo:2071	_lm_read_status_kernel	2050	2075	native_orchestration_or_setup	False	False	0	True	while width > 0:
+transformer/transformer_binding_impl.mojo:2079	_lm_read_status_kernel	2050	2088	native_orchestration_or_setup	False	False	0	True	while r < batch:
+transformer/transformer_binding_impl.mojo:2083	_lm_read_status_kernel	2050	2085	native_orchestration_or_setup	False	False	0	True	for i in range(Int(n_eos_in)):
+transformer/transformer_binding_impl.mojo:2092	_lm_read_status_kernel	2050	2096	native_orchestration_or_setup	False	False	0	True	while width > 0:
+transformer/transformer_binding_impl.mojo:2245	_lm_layers_run	2234	2281	native_orchestration_or_setup	False	False	0	True	for i in range(len(layers)):
+transformer/transformer_binding_impl.mojo:2350	_lm_run	2306	2435	native_orchestration_or_setup	False	False	0	True	for step in range(n_steps):
+transformer/transformer_binding_impl.mojo:2423	_lm_run	2306	2425	native_orchestration_or_setup	False	False	0	True	for r in range(b):
+transformer/transformer_binding_impl.mojo:2441	_lm_run	2306	2443	native_orchestration_or_setup	False	False	0	False	for r in range(b):  # driver-loop: completed output-row transfer spans, no token computation
+mamba/impl/mamba_shell_impl.mojo:1472	_m3_session_open_run	1466	1496	native_orchestration_or_setup	False	False	0	True	for i in range(9): weight_addrs.append(a[i])
+mamba/impl/mamba_shell_impl.mojo:1478	_m3_session_open_run	1466	1496	native_orchestration_or_setup	False	False	0	True	for i in range(10): state_addrs.append(a[9 + i])
+mamba/impl/mamba_shell_impl.mojo:1672	_m3_weights_same_bits	1666	1688	native_orchestration_or_setup	False	False	0	True	for s in range(9):
+mamba/impl/mamba_shell_impl.mojo:1678	_m3_weights_same_bits	1666	1683	native_orchestration_or_setup	False	False	0	True	while i < body:
+mamba/impl/mamba_shell_impl.mojo:1684	_m3_weights_same_bits	1666	1687	native_orchestration_or_setup	False	False	0	True	while i < n:
+mamba/impl/mamba_shell_impl.mojo:1694	_m3_weights_host_copy	1692	1695	native_orchestration_or_setup	False	False	0	True	for s in range(9):
+mamba/impl/mamba_shell_impl.mojo:1698	_m3_weights_host_copy	1692	1702	native_orchestration_or_setup	False	False	0	True	for s in range(9):
+mamba/impl/mamba_shell_impl.mojo:1896	_m3_x_same_bits	1874	1901	native_orchestration_or_setup	False	False	0	True	while i < body:
+mamba/impl/mamba_shell_impl.mojo:1902	_m3_x_same_bits	1874	1905	native_orchestration_or_setup	False	False	0	True	while i < n:
+mamba/impl/mamba_decode_plan.mojo:45	step_addresses	36	46	native_orchestration_or_setup	False	False	0	False	for i in range(len(self.weights)):  # driver-loop: retained native weight buffers
+mamba/impl/mamba_decode_plan.mojo:48	step_addresses	36	49	native_orchestration_or_setup	False	False	0	False	for i in range(lead):  # driver-loop: native state pieces before output
+mamba/impl/mamba_decode_plan.mojo:51	step_addresses	36	52	native_orchestration_or_setup	False	False	0	False	for i in range(lead, len(self.parts)):  # driver-loop: native Mamba1 affine state pieces
+mamba/impl/mamba_decode_plan.mojo:53	step_addresses	36	54	native_orchestration_or_setup	False	False	0	False	for i in range(len(reports)):  # driver-loop: admitted output report addresses
+mamba/native_workspace_dispatch.mojo:64	mamba2_workspace_v1	21	67	native_orchestration_or_setup	False	False	0	False	for i in range(1, 17):  # small-loop(sixteen admitted native public-step addresses)
+autograd/model_execution.mojo:28	model_float_words	26	29	native_orchestration_or_setup	False	False	0	False	for i in range(start, len(values)):  # driver-loop: admitted native model scalar words
+autograd/program_runtime.mojo:26	parameter_buffers	22	34	native_orchestration_or_setup	False	False	0	False	for j in range(len(p.params)):  # driver-loop: over program parameters
+autograd/program_runtime.mojo:59	replay_values_prepared	51	62	native_orchestration_or_setup	False	False	0	False	for j in range(len(inputs)):  # driver-loop: over program inputs
+autograd/program_runtime.mojo:63	replay_values_prepared	51	68	native_orchestration_or_setup	False	False	0	False	for j in range(len(params)):  # driver-loop: over program parameters
+autograd/program_runtime.mojo:74	replay_values_prepared	51	90	native_orchestration_or_setup	False	False	0	False	for k in range(p.n_nodes()):  # driver-loop: over captured operations
+autograd/program_runtime.mojo:76	replay_values_prepared	51	78	native_orchestration_or_setup	False	False	0	False	for j in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over node arguments
+autograd/program_runtime.mojo:92	replay_values_prepared	51	94	native_orchestration_or_setup	False	False	0	False	for j in range(len(p.outs)):  # driver-loop: over program outputs
+autograd/program_runtime.mojo:122	release_training_buffers	118	123	native_orchestration_or_setup	False	False	0	False	for k in range(len(full)):  # driver-loop: over acquired full input buffers
+autograd/program_runtime.mojo:124	release_training_buffers	118	125	native_orchestration_or_setup	False	False	0	False	for k in range(len(batches)):  # driver-loop: over acquired minibatch buffers
+autograd/program_runtime.mojo:126	release_training_buffers	118	128	native_orchestration_or_setup	False	False	0	False	for buffer in [ty, yb, indices, batch_losses, losses]:  # driver-loop: over nullable setup buffer owners
+autograd/program_runtime.mojo:156	train_program_control	131	170	native_orchestration_or_setup	False	False	0	False	for i in range(len(parameters)):  # driver-loop: over chosen trainable parameters
+autograd/program_runtime.mojo:158	train_program_control	131	168	native_orchestration_or_setup	False	False	0	False	for j in range(len(p.params)):  # driver-loop: over captured parameters
+autograd/program_runtime.mojo:173	train_program_control	131	175	native_orchestration_or_setup	False	False	0	False	for k in range(len(srcs)):  # driver-loop: over input shape contracts
+autograd/program_runtime.mojo:193	train_program_control	131	194	native_orchestration_or_setup	False	False	0	False	for k in range(len(shapes)):  # driver-loop: over admitted input shape metadata once per fit
+autograd/program_runtime.mojo:210	train_program_control	131	219	native_orchestration_or_setup	False	False	0	False	for k in range(len(srcs)):  # driver-loop: over program input arrays
+autograd/program_runtime.mojo:224	train_program_control	131	227	native_orchestration_or_setup	False	False	0	False	for j in range(len(params)):  # driver-loop: over trainable parameter state
+autograd/program_runtime.mojo:235	train_program_control	131	328	native_orchestration_or_setup	False	False	0	False	for e in range(epochs):  # driver-loop: over epochs
+autograd/program_runtime.mojo:245	train_program_control	131	321	native_orchestration_or_setup	False	False	0	False	for bi in range(n_batches):  # driver-loop: over minibatches
+autograd/program_runtime.mojo:251	train_program_control	131	253	native_orchestration_or_setup	False	False	0	False	for k in range(len(full)):  # driver-loop: over program inputs
+autograd/program_runtime.mojo:258	train_program_control	131	260	native_orchestration_or_setup	False	False	0	False	for j in range(len(states)):  # driver-loop: over optimizer states
+autograd/program_runtime.mojo:282	train_program_control	131	283	native_orchestration_or_setup	False	False	0	False	for j in range(len(selected)):  # driver-loop: over chosen branch trainable parameters
+autograd/program_runtime.mojo:310	train_program_control	131	321	native_orchestration_or_setup	False	False	0	False	for j in range(len(params)):  # driver-loop: over optimizer parameter updates
+autograd/program_device_execution.mojo:82	program_device_execute	73	85	native_orchestration_or_setup	False	False	0	False	for k in range(len(shapes)):  # driver-loop: over the model's declared inputs
+autograd/program_device_execution.mojo:92	program_device_execute	73	95	native_orchestration_or_setup	False	False	0	False	for k in range(len(srcs)):  # driver-loop: over the model's declared inputs (device copies)
+autograd/program_device_execution.mojo:97	program_device_execute	73	98	native_orchestration_or_setup	False	False	0	False	for k in range(len(buffers)):  # driver-loop: over owners acquired before a failed copy
+autograd/program_device_execution.mojo:112	program_device_execute	73	123	native_orchestration_or_setup	False	False	0	False	for k in range(len(outs)):  # driver-loop: over the program's outputs (device copies, no data on the host)
+autograd/program_device_execution.mojo:130	program_device_execute	73	131	native_orchestration_or_setup	False	False	0	False	for k in range(len(buffers)):  # driver-loop: over input owners
+autograd/program_device_execution.mojo:136	program_device_execute	73	137	native_orchestration_or_setup	False	False	0	False	for k in range(len(buffers)):  # driver-loop: over input owners
+autograd/program_device_execution.mojo:153	_descriptor_dims	148	154	native_orchestration_or_setup	False	False	0	False	for _ in range(rank):  # driver-loop: over admitted tensor rank metadata, at most eight axes
+autograd/program_device_execution.mojo:172	program_device_request	158	187	native_orchestration_or_setup	False	False	0	False	for k in range(inputs):  # driver-loop: over admitted input descriptors
+autograd/program_device_execution.mojo:177	program_device_request	158	178	native_orchestration_or_setup	False	False	0	False	for _ in range(2 - len(dims)):  # driver-loop: over at most two leading shape metadata axes
+autograd/program_device_execution.mojo:179	program_device_request	158	180	native_orchestration_or_setup	False	False	0	False	for width in dims:  # driver-loop: over admitted shape metadata, at most eight axes
+autograd/program_device_execution.mojo:191	program_device_request	158	208	native_orchestration_or_setup	False	False	0	False	for k in range(outputs):  # driver-loop: over admitted output descriptors
+autograd/program_device_execution.mojo:195	program_device_request	158	199	native_orchestration_or_setup	False	False	0	False	for axis in range(len(dims)):  # driver-loop: over admitted output shape metadata, at most eight axes

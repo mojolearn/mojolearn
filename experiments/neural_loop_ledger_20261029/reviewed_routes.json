@@ -1,0 +1,216 @@
+{
+  "tree": "108f33e541ca2423b6f78509f80044b6f3660481",
+  "reviewed_loop_count": 25,
+  "reviews": [
+    {
+      "id": "bindings/causal_lm_public.mojo:2234",
+      "function": "_read",
+      "cadence": "token",
+      "route": "public read/generate -> _read legacy fallback -> _run_prepared",
+      "source_review": "Host selection remains native Mojo; CPython metadata and indirect native provider dispatch occur each token. Private read plan, logits and alternating next-token arrays already reused.",
+      "limits": "Resident greedy and native-engine routes return before this loop. Post-GIL Array admission is required."
+    },
+    {
+      "id": "bindings/causal_lm_public.mojo:1285",
+      "function": "_resident_forward",
+      "cadence": "layer per successful token forward",
+      "route": "_read -> _run_prepared -> _run_snapshot -> _resident_forward (baseline or experimental held group)",
+      "source_review": "Exports all layer KV to host, updates cached_tokens and then writebacks. Repeats captured block lookup, cap/cache_n shape construction, mutable-view admission and provider lookup.",
+      "limits": "Required export order and partial-failure publication cannot be removed by metadata caching."
+    },
+    {
+      "id": "bindings/causal_lm_public.mojo:1746",
+      "function": "_resident_load_states",
+      "cadence": "layer on resident forward without held experimental group",
+      "route": "_resident_forward -> _resident_load_states",
+      "source_review": "Uploads host KV to each retained native decode session.",
+      "limits": "Merged default-off MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE=1 skips repeated loads for eligible captured sampling reads. Every successful export remains; unmeasured and no default promotion."
+    },
+    {
+      "id": "bindings/causal_lm_public.mojo:1607",
+      "function": "_run_snapshot",
+      "cadence": "layer per fallback model forward",
+      "route": "_run_snapshot -> _causal_layer_run_prepared",
+      "source_review": "Retained typed layer plan dispatch with provider lifecycle/Array checks.",
+      "limits": "A typed descriptor invocation can still enter the native provider; import syntax is not transitive purity."
+    },
+    {
+      "id": "transformer/native_generation_engine.mojo:254",
+      "function": "native_generation_read",
+      "cadence": "token",
+      "route": "_read_engine -> native_generation_read",
+      "source_review": "Native token orchestration with operation-owned progress/logits/token/sampling buffers.",
+      "limits": "Dynamic layer endpoints still carry provider reserve/GIL/error lifecycles; no claim transitive CPython absence."
+    },
+    {
+      "id": "transformer/native_generation_engine.mojo:163",
+      "function": "forward_into",
+      "cadence": "layer per token",
+      "route": "native_generation_read -> NativeGenerationModel.forward_into",
+      "source_review": "Ordered native descriptor execution with retained operation addresses/parameters and ping-pong activations.",
+      "limits": "Deferred refresh/writeback copies preserve alias ordering; no new candidate based only on loop presence."
+    },
+    {
+      "id": "transformer/native_generation_engine.mojo:168",
+      "function": "forward_into",
+      "cadence": "deferred layout per layer",
+      "route": "NativeGenerationModel.forward_into",
+      "source_review": "Native buffer refresh/writeback; executes ordering-sensitive admitted layouts.",
+      "limits": "Do not remove copies using pointer identity as content immutability."
+    },
+    {
+      "id": "transformer/native_generation_engine.mojo:198",
+      "function": "forward_into",
+      "cadence": "deferred layout per layer",
+      "route": "NativeGenerationModel.forward_into",
+      "source_review": "Native buffer refresh/writeback; executes ordering-sensitive admitted layouts.",
+      "limits": "Do not remove copies using pointer identity as content immutability."
+    },
+    {
+      "id": "transformer/transformer_binding_impl.mojo:2245",
+      "function": "_lm_layers_run",
+      "cadence": "layer per native forward",
+      "route": "resident session forward/read -> _lm_layers_run",
+      "source_review": "Native GPU layer orchestration; compatible LlamaDeviceStages are already reused within the operation.",
+      "limits": "Kernel/imported lower-level loops outside this scope; no frequency or cost estimate."
+    },
+    {
+      "id": "transformer/transformer_binding_impl.mojo:2350",
+      "function": "_lm_run",
+      "cadence": "token",
+      "route": "resident native LM read -> _lm_run",
+      "source_review": "Native GPU decode orchestration.",
+      "limits": "Different from legacy host sampling route; selected sampler arithmetic support controls eligibility."
+    },
+    {
+      "id": "autograd/program_runtime.mojo:235",
+      "function": "train_program_control",
+      "cadence": "epoch / minibatch",
+      "route": "Sequential.fit -> captured program training -> train_program_control",
+      "source_review": "Native training orchestration over epochs and minibatches.",
+      "limits": "Scope identifies orchestration source, not all imported numerical kernels or runtime hot spots."
+    },
+    {
+      "id": "autograd/program_runtime.mojo:245",
+      "function": "train_program_control",
+      "cadence": "epoch / minibatch",
+      "route": "Sequential.fit -> captured program training -> train_program_control",
+      "source_review": "Native training orchestration over epochs and minibatches.",
+      "limits": "Scope identifies orchestration source, not all imported numerical kernels or runtime hot spots."
+    },
+    {
+      "id": "autograd/program_runtime.mojo:74",
+      "function": "replay_values_prepared",
+      "cadence": "program node per replay",
+      "route": "train_program_control -> replay_values_prepared",
+      "source_review": "Native captured program node execution and value transport.",
+      "limits": "Dynamic operations and endpoint implementations require separate source review."
+    },
+    {
+      "id": "bindings/sequential_execution.mojo:201",
+      "function": "sequential_fit",
+      "cadence": "public operation setup",
+      "route": "sequential_fit / sequential_forward",
+      "source_review": "Boundary word/rank preparation; these are not epoch or minibatch loops.",
+      "limits": "Counting them as Python training loops would misrepresent their role."
+    },
+    {
+      "id": "bindings/sequential_execution.mojo:289",
+      "function": "sequential_forward",
+      "cadence": "public operation setup",
+      "route": "sequential_fit / sequential_forward",
+      "source_review": "Boundary word/rank preparation; these are not epoch or minibatch loops.",
+      "limits": "Counting them as Python training loops would misrepresent their role."
+    },
+    {
+      "id": "bindings/samba_inference_native.mojo:304",
+      "function": "samba_forward",
+      "cadence": "layer per fallback public forward",
+      "route": "samba_forward fallback",
+      "source_review": "Mojo loop selects layer route using captured public metadata and calls native public block/state operations.",
+      "limits": "Native provider path may bypass this fallback; local PythonObject syntax does not imply Python algorithm execution."
+    },
+    {
+      "id": "providers/python/samba_execution_pyapi.mojo:193",
+      "function": "__init__",
+      "cadence": "admission / native plan construction",
+      "route": "NativeSambaModel construction",
+      "source_review": "Builds native layer parameters/addresses from admitted buffers and captured block metadata.",
+      "limits": "Constructor loops are not automatically per-token work; source callers determine reuse lifetime."
+    },
+    {
+      "id": "providers/python/samba_execution_pyapi.mojo:196",
+      "function": "__init__",
+      "cadence": "admission / native plan construction",
+      "route": "NativeSambaModel construction",
+      "source_review": "Builds native layer parameters/addresses from admitted buffers and captured block metadata.",
+      "limits": "Constructor loops are not automatically per-token work; source callers determine reuse lifetime."
+    },
+    {
+      "id": "providers/python/samba_execution_pyapi.mojo:201",
+      "function": "__init__",
+      "cadence": "admission / native plan construction",
+      "route": "NativeSambaModel construction",
+      "source_review": "Builds native layer parameters/addresses from admitted buffers and captured block metadata.",
+      "limits": "Constructor loops are not automatically per-token work; source callers determine reuse lifetime."
+    },
+    {
+      "id": "providers/python/samba_execution_pyapi.mojo:204",
+      "function": "__init__",
+      "cadence": "admission / native plan construction",
+      "route": "NativeSambaModel construction",
+      "source_review": "Builds native layer parameters/addresses from admitted buffers and captured block metadata.",
+      "limits": "Constructor loops are not automatically per-token work; source callers determine reuse lifetime."
+    },
+    {
+      "id": "providers/python/samba_execution_pyapi.mojo:216",
+      "function": "__init__",
+      "cadence": "admission / native plan construction",
+      "route": "NativeSambaModel construction",
+      "source_review": "Builds native layer parameters/addresses from admitted buffers and captured block metadata.",
+      "limits": "Constructor loops are not automatically per-token work; source callers determine reuse lifetime."
+    },
+    {
+      "id": "mamba/impl/mamba_decode_plan.mojo:45",
+      "function": "step_addresses",
+      "cadence": "address preparation per session step",
+      "route": "typed Mamba decode plan step_addresses",
+      "source_review": "Native address list assembly using retained weight/schema plan.",
+      "limits": "Public Mamba2Block.step has a distinct retained opaque GPU workspace route."
+    },
+    {
+      "id": "mamba/impl/mamba_decode_plan.mojo:48",
+      "function": "step_addresses",
+      "cadence": "address preparation per session step",
+      "route": "typed Mamba decode plan step_addresses",
+      "source_review": "Native address list assembly using retained weight/schema plan.",
+      "limits": "Public Mamba2Block.step has a distinct retained opaque GPU workspace route."
+    },
+    {
+      "id": "mamba/impl/mamba_decode_plan.mojo:51",
+      "function": "step_addresses",
+      "cadence": "address preparation per session step",
+      "route": "typed Mamba decode plan step_addresses",
+      "source_review": "Native address list assembly using retained weight/schema plan.",
+      "limits": "Public Mamba2Block.step has a distinct retained opaque GPU workspace route."
+    },
+    {
+      "id": "mamba/impl/mamba_decode_plan.mojo:53",
+      "function": "step_addresses",
+      "cadence": "address preparation per session step",
+      "route": "typed Mamba decode plan step_addresses",
+      "source_review": "Native address list assembly using retained weight/schema plan.",
+      "limits": "Public Mamba2Block.step has a distinct retained opaque GPU workspace route."
+    }
+  ],
+  "callback_review": [
+    {
+      "file": "bindings/causal_lm_public.mojo",
+      "line": 2811,
+      "scanner_class": "prohibited_user_object",
+      "review": "Native CPython ABI tuple length, not confirmed user hook",
+      "basis": "_causal_owner_unusable receives args_ptr directly from causal_public_c C method error handling; PythonObject borrows the ABI argument tuple. len(args) checks tuple size before exact record-field admission.",
+      "limits": "This resolves this lexical candidate only; 159 remaining review/review_caller_admission/review_helper_result sites and indirect calls are not established safe by this inventory."
+    }
+  ]
+}
