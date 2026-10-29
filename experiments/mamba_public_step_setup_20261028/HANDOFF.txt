@@ -1,0 +1,47 @@
+Public Mamba step preparation reuse (2026-10-28)
+
+Branch lane/mamba-public-step-setup-20261028; base5df7f0021b220e0eec49da9435e5edf0fd3123d5.
+Scope neural_block_public, causal_lm_public Mamba launch-vector construction,
+generation_metadata_pyapi GenerationWeightSnapshot append/refresh helpers.
+
+Actual public route: Mamba2Block.step -> neural_block_forward_binding ->
+_neural_plain -> _neural_layer_run -> causal_layer_run_fields ->
+_causal_layer_run_bound -> Mamba state descriptor operation3. This does not
+substitute the separate private Mamba2DecodeSession API.
+
+Removed repeated work: scalar/buffer/combined state schema tuples belong to
+the retained NativeBlockPlan, built once when that plan is admitted. Each call
+checks their union with one neural_record_fields pass instead of three separate
+dictionary/MRO captures. All descriptor failures share the same refusal text.
+The Mamba launch vector reserves its fixed ABI capacity once (including Mamba1
+optional affine tail) and appends captured weight addresses directly, avoiding
+a temporary weight-address List, a second vector copy and capacity growth.
+Foreign-buffer refresh stays in the existing shared refresh routine and occurs
+at the same execution position; no foreign buffer is assumed immutable.
+
+Mutation/lifetime: only immutable schema is newly retained. Plan reuse still
+uses existing model/binding/Array metadata invalidation. Every call checks live
+state class/descriptor/hooks, scalar values, buffer identities, Array metadata
+and released storage, and retains operation-private state snapshots and owners.
+State Array snapshots retain their existing cache/invalidation. Every output
+and report Array remains fresh because callers may retain y/h_last_. No skipped
+checks, model arithmetic, reductions or numerical order changed.
+
+Limits: this is bounded public preparation work. _mamba2_run still recreates
+host weights/device weight/state/stage/input buffers on its ordinary GPU path;
+classical lane owns that separate workspace repair. This batch does NOT claim
+those allocations or uploads are removed, or that the public step is fully
+optimized. No measured speedup is asserted. Allowed CPython calls remain where
+useful; no lexical purity gate is involved.
+
+Focused compile: full shared neural_block_forward_binding public forward/step
+boundary shared library exit0, CPU identical O0, Mojo1.0.0 on Mac via default2
+compile slots. This covers changed public path/helper compilation; it does not
+qualify changed GPU kernels (none changed), runtime behavior or bitwise identity.
+No runtime/identity/performance campaign. Existing warning output retained.
+
+Evidence /Users/andrewhendel/mojolearn-evidence/mamba-public-step-setup-20261028/
+full compile.log/.exit, binary, source archive/hashes, dependency inventory used
+only for source retention (legal CPython findings are not policy failures).
+compile.json records exact command, target, binary hash and actual scope.
+Required source guards follow commit; parent serializes integration.

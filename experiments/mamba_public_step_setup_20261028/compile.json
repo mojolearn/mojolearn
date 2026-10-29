@@ -1,0 +1,17 @@
+{
+  "base": "5df7f0021b220e0eec49da9435e5edf0fd3123d5",
+  "compiler": "Mojo1.0.0 ed45d567",
+  "target": "Mac arm64 CPU",
+  "mode": "identical",
+  "optimization": 0,
+  "compile_slots": "default2",
+  "command": "bash tools/compile_slot.sh pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml -e default mojo build --emit shared-lib --optimization-level 0 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I /Users/andrewhendel/mojolearn-wt/mamba-public-step-setup-20261028 -I /Users/andrewhendel/mojolearn-wt/mamba-public-step-setup-20261028/bindings experiments/mamba_public_step_setup_20261028/compile.mojo -o /Users/andrewhendel/mojolearn-evidence/mamba-public-step-setup-20261028/compile_public_step.dylib",
+  "exit": 0,
+  "coverage": "full neural_block_forward_binding public forward/step boundary including public Mamba2Block.step; native GPU numerical implementation unchanged/not built by this CPU root",
+  "binary_sha256": "3dd0a95d30d9768cab3a8d3007de46c2e761013a9d37d1112586999db54f79d6",
+  "retained_source_files": 159,
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/mamba-public-step-setup-20261028/source.tar.gz",
+  "runtime": "not run",
+  "measurement": "not run",
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/mamba-public-step-setup-20261028"
+}

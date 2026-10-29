@@ -40,6 +40,9 @@ struct NativeBlockPlan(Movable, Writable):
     var numeric_profile: PythonObject
     var packed: Bool
     var layer: PythonObject
+    var state_scalars: PythonObject
+    var state_buffers: PythonObject
+    var state_fields: PythonObject
 
     def __init__(out self, owner: PythonObject, layer: PythonObject) raises:
         self.context = owner._native_context
@@ -49,6 +52,12 @@ struct NativeBlockPlan(Movable, Writable):
         self.numeric_profile = owner.numeric_profile
         self.packed = owner._head_int15 is not None
         self.layer = layer
+        # Immutable schema belongs to the retained execution plan. Live class
+        # hooks, scalar values and Array metadata are still admitted each call.
+        self.state_scalars = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "cached_tokens",
+            "arithmetic_profile", "_numeric_profile", "profile_id", "absolute_position", "_nn34_usable", "buffered_tokens")
+        self.state_buffers = Python.tuple("k_cache", "v_cache", "conv_window", "h", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw")
+        self.state_fields = self.state_scalars + self.state_buffers + Python.tuple("_resident_session")
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("NativeBlockPlan(native)")
@@ -451,17 +460,18 @@ comptime _NEURAL_STATE_SLOT = "neural_state_capture_v1"
 
 def _neural_state_capture(mut mods: NativeModules, owner: NativeBlockExecution, state: PythonObject) raises -> PythonObject:
     var bi = mods.module("builtins")
-    var context = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].context
-    var kind = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].kind
+    ref plan = owner.plan.downcast_value_ptr[NativeBlockPlan]()[]
+    var context = plan.context
+    var kind = plan.kind
     var cls = context["generation_classes"][2][kind]
     if py_type(state) is not cls:
         raise Error("TypeError: neural state requires the exact connected state class")
-    var scalars = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "cached_tokens",
-        "arithmetic_profile", "_numeric_profile", "profile_id", "absolute_position", "_nn34_usable", "buffered_tokens")
-    var buffers = Python.tuple("k_cache", "v_cache", "conv_window", "h", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw")
-    var fields = neural_record_fields(mods, state, scalars)
-    _ = neural_record_fields(mods, state, buffers)
-    _ = neural_record_fields(mods, state, Python.tuple("_resident_session"))
+    var scalars = plan.state_scalars
+    var buffers = plan.state_buffers
+    # All three schema groups have the same descriptor refusal. Admit their
+    # union once, avoiding repeated dictionary/MRO capture while still checking
+    # every live field before any scalar or buffer access.
+    var fields = neural_record_fields(mods, state, plan.state_fields)
     var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
     from bindings.mode_metadata_native import _class_fields
     for i in range(len(ancestry)):  # small-loop(passive state access protocol)
