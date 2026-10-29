@@ -55,6 +55,7 @@ def test_resident_greedy_read_matches_legacy_forward_and_chunking(tmp_path, monk
         # Use the supported legacy-route switch. The constructed native entry
         # registry is immutable; altering its capability flag must be refused.
         patch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "0")
+        patch.setenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0")
         expected = np.asarray(model.stream(prompt, 5).read(5)).copy()
     whole = model.stream(prompt, 5)
     actual = np.asarray(whole.read(5)).copy()
