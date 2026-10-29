@@ -1,0 +1,48 @@
+{
+  "source_commit": "bc11389e6896f918b95a404b8cf2bb97ad2ace09",
+  "python": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/final-bc11389-venv/bin/python",
+  "scope": "One immutable current-source install assembled without new compilation or duplicate runtime;79image closures+154adapterinputs match, raw/staged bytes inherited from accepted focused qualification. Fresh default-policy references pending ledger begin; candidate observations separate.",
+  "counts": {
+    "python_files": 976,
+    "extensions": 79,
+    "runtime_libraries": 5,
+    "adapter_files": 4,
+    "verifier_payload": 143,
+    "source_mismatches": 0,
+    "raw_mismatches": 0
+  },
+  "references": {
+    "final-bc11389-install/receipt.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/final-bc11389-install/receipt.json",
+      "sha256": "972ed3094d94e1e4a5529c7db825e63ec97248364e28c0710e3de23791900e1d"
+    },
+    "frozen-bc11389-checked79.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/frozen-bc11389-checked79.json",
+      "sha256": "0458e47bd1e933d7bab96dbb5db89b28d9fc4980c11ef4a8708687d2ebd35094"
+    },
+    "frozen-bc11389-adapter-source-match.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/frozen-bc11389-adapter-source-match.json",
+      "sha256": "67713826945a8723e7305f8cb4409001fba435d20b35a93d0ca1a2bfb4535379"
+    },
+    "final-install-retention.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/final-install-retention.json",
+      "sha256": "f1b27c23703ba95a7caee771c79af98815104fa52530dada19d6e8358ecdfdd9"
+    },
+    "frozen-adapter-proof-retention.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/frozen-adapter-proof-retention.json",
+      "sha256": "6937382f72a799c1db328bb4d8a01797056c6fcfee332b8dce4ac7fe98cd9a2f"
+    },
+    "adapter-configuration-selected-fragment.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-configuration-selected-fragment.json",
+      "sha256": "308de3a1b6d729df7b40278f5fb2e9beeb35d9ec1e5df59fcb0b91eae018da96"
+    },
+    "adapter-configuration-cpu-contracts.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-configuration-cpu-contracts.json",
+      "sha256": "7dc6e041209a563b1e64e2e9cf78065709ac2b3d3c1112511f268827afe62eda"
+    },
+    "adapter-host-producers.json": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/adapter-host-producers.json",
+      "sha256": "9cd1cd40428c5bafe9d87fd61b7c71ce525f4b9731bfeaff73d03f584b269855"
+    }
+  }
+}
