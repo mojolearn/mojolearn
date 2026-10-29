@@ -10,7 +10,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import labels_cast, labels_reshape, labels_view, labels_check_rank, classical_decode_labels
-from bindings.family_common import family_call, family_entry, family_array, family_as_f32_dense
+from bindings.family_common import family_call, family_entry, family_array, family_as_f32_dense, family_f32_snapshot
 from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype
 from bindings.host_archive_native import host_archive_rbc_metric_object
 from bindings.neighbors_knn_native import (
@@ -80,43 +80,51 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
     if not integral:
         raise Error("TypeError: n_neighbors must be an int")
     var k = Int(py=k_obj)
-    var q = family_as_f32_dense(source, 2, "X", context)
+    # One operation-owned admission supplies the metric check, dimensions and
+    # dispatch address. In particular Jensen-Shannon must not recapture the
+    # same converted Array merely to read its minimum. No metadata is cached
+    # across public calls or shard requests; mutable/released inputs re-admit.
+    var query = family_f32_snapshot(source, 2, "X", context, True)
     var rbc = String(fields["algorithm"]) == "rbc"
     var params = PythonObject(None)
     if not rbc:
         params = _dist_params(model, context)
-        _check_metric_input(String(py_type(model).__name__), Int(py=params[0]), q, context)
-    if Int(py=q.shape[1]) != Int(py=fields["n_features_in_"]):
+        _check_metric_input(String(py_type(model).__name__), Int(py=params[0]), query)
+    if query.shape[1] != Int(py=fields["n_features_in_"]):
         raise Error("ValueError: input feature count differs from fit")
     if k < 1 or k > Int(py=fields["n_samples_fit_"]):
         raise Error("ValueError: n_neighbors must be in [1, reference rows]")
     var return_distance = _flag(distance_arg, "return_distance", context)
-    var nq = Int(py=q.shape[0])
+    var nq = query.shape[0]
     var dist = family_array(Python.tuple(nq, k), "<f4", context)
     var ids = family_array(Python.tuple(nq, k), "<i4" if rbc else "<u4", context)
-    if rbc:
-        var metric = host_archive_rbc_metric_object(String(py_type(model).__name__), fields["metric"], fields["p"], context)
-        var count = family_call(family_entry(binding, "rbc_knn_search", context),
-            classical_address(index), classical_address(q), classical_address(ids), classical_address(dist),
-            Python.list(index.shape[0], nq, index.shape[1], k, metric[0], metric[1]))
-        _report(fields, "n_candidate_distances_", count)
-        _report(fields, "used_query_tile_", PythonObject(None))
-        # The old Array.min() uses this same native int32 reduction helper.
-        if Int(py=_reduce(Int(py=classical_address(ids)), 2, nq * k, 0, context)) < 0:
-            raise Error("RuntimeError: RBC returned an unfilled neighbor slot")
-    else:
-        var handle = _resident_handle(model, binding, index)
-        var sizes = Python.list(index.shape[0], nq, index.shape[1], k, 1, fields["query_tile"])
-        var used: PythonObject
-        if handle is None:
-            used = family_call(family_entry(binding, "knn_search", context), classical_address(index), classical_address(q),
-                classical_address(dist), classical_address(ids), sizes, params)
+    try:
+        if rbc:
+            var metric = host_archive_rbc_metric_object(String(py_type(model).__name__), fields["metric"], fields["p"], context)
+            var count = family_call(family_entry(binding, "rbc_knn_search", context),
+                classical_address(index), PythonObject(query.source.addr), classical_address(ids), classical_address(dist),
+                Python.list(index.shape[0], nq, index.shape[1], k, metric[0], metric[1]))
+            _report(fields, "n_candidate_distances_", count)
+            _report(fields, "used_query_tile_", PythonObject(None))
+            # The old Array.min() uses this same native int32 reduction helper.
+            if Int(py=_reduce(Int(py=classical_address(ids)), 2, nq * k, 0, context)) < 0:
+                raise Error("RuntimeError: RBC returned an unfilled neighbor slot")
         else:
-            used = family_call(family_entry(binding, "knn_search_resident", context), handle,
-                classical_address(index), classical_address(q), classical_address(dist), classical_address(ids), sizes, params)
-        _report(fields, "used_query_tile_", used)
+            var handle = _resident_handle(model, binding, index)
+            var sizes = Python.list(index.shape[0], nq, index.shape[1], k, 1, fields["query_tile"])
+            var used: PythonObject
+            if handle is None:
+                used = family_call(family_entry(binding, "knn_search", context), classical_address(index), PythonObject(query.source.addr),
+                    classical_address(dist), classical_address(ids), sizes, params)
+            else:
+                used = family_call(family_entry(binding, "knn_search_resident", context), handle,
+                    classical_address(index), PythonObject(query.source.addr), classical_address(dist), classical_address(ids), sizes, params)
+            _report(fields, "used_query_tile_", used)
+    finally:
+        # family_call may release the GIL or raise; keep the admitted source
+        # owner alive until every consumer of its captured address has left.
+        _ = query.keep
     _ = index
-    _ = q
     _ = dist
     var wide = _wide(ids, Python.tuple(nq, k), context)
     return Python.tuple(dist, wide) if return_distance else wide

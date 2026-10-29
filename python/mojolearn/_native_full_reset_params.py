@@ -40,6 +40,25 @@ from ._mode import ParamsMixin as _ParamsMixin, _GENERIC_PARAMS_CONTEXT as _CONT
 _CONTEXT['generic_setter'] = _ParamsMixin.set_params
 # Instance lookup/assignment protocols a native constructor write must not bypass.
 _CONSTRUCTOR_HOOKS = ('__getattribute__', '__getattr__', '__setattr__')
+# Whole public neighbor operations have native validation, fitted-state,
+# dispatch and result owners. Publish this marker only after replacing their
+# constructors below: NumericModeMixin must first inject numeric_mode into the
+# original signature, which the native constructor plan retains verbatim.
+# Keep an explicit vetted inventory; field-only construction alone does not
+# establish that the remaining methods of every _CLASSES member are native.
+_NATIVE_PUBLIC_CLASSES = (
+    _m17.NearestNeighbors,
+    _m17.KNeighborsClassifier,
+    _m17.KNeighborsRegressor,
+    _m17.RadiusNeighbors,
+    _m1.LocalOutlierFactor,
+    _m1.NearestCentroid,
+    _m13.IVFIndex,
+    _m4.IVFPQIndex,
+    _m4.IVFSQIndex,
+    _m4.IVFRaBitQIndex,
+    _m4.CagraIndex,
+)
 _CLASSES = (
     _m0.AdaBoostClassifier,
     _m0.AdaBoostRegressor,
@@ -290,6 +309,8 @@ def _install(classes):
         function.__doc__ = original.__doc__
         function.__signature__ = _CONTEXT['plans'][cls]['signature']
         cls.__init__ = function
+        if cls in _NATIVE_PUBLIC_CLASSES:
+            cls._mojolearn_native_public = True
 
 
 def install():
