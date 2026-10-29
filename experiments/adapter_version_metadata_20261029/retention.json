@@ -1,0 +1,9 @@
+{
+  "r2_key": "measurements/adapter-version-metadata-20261029/retained-evidence.tgz",
+  "local": "/Users/andrewhendel/mojolearn-evidence/adapter-version-metadata-20261029/retained-evidence.tgz",
+  "sha256": "c699fe4bef6517e0241620ff89d1e391fd0cceafd6747f0f935d732198953c07",
+  "bytes": 3299177,
+  "put_status": 200,
+  "readback_status": 200,
+  "readback_matches": true
+}

@@ -1,0 +1,50 @@
+Branch lane/adapter-version-metadata-20261029
+Product fd57768c4d, based on c4ad543dfa (compiled product source after 2d775c;
+subsequent prior commits are proof/tools-only changes).
+
+Actual installed adapter failure: pinned Torch 2.13 exposes __version__ as its
+TorchVersion subclass of str. _shipped.series passes that object to the native
+framework metadata operation, which previously required exact str and refused
+before adapter loading. Original failed Apple adapter record is retained in
+apple-candidate-wheel-20261029/adapter-final-smoke/torch-compile/adapter-results.json.
+
+Repair in providers/python/framework_metadata_pyapi.mojo:
+- Native type/subtype metadata admits real Unicode subclasses. Nonstr objects
+  retain the same TypeError and are never coerced through __str__/__class__.
+- CPython Unicode storage APIs implement the existing '+' prefix and first two
+  dot components directly. No subclass __str__, split, indexing, __len__, or
+  attribute hooks run. Empty components, embedded NUL, non-ASCII, and surrogate
+  contents preserve the prior string-value semantics without UTF-8 conversion.
+- Removes split/join attribute lookup/calls and temporary Python lists from this
+  setup metadata operation. No performance claim or global cache is introduced.
+- Input owner remains pinned through the final read. Substring returns a new
+  owned exact Unicode reference; failures retain the original Python exception.
+
+Durable regression tests cover real optional TorchVersion, hostile str-subclass
+hooks (including __class__ via __getattribute__), nonstring __class__/__str__
+spoof refusal and Unicode/empty/delimiter cases. Syntax compilation only; no
+product runtime/tests executed under the current compile-only direction.
+
+Focused actual ops_import_model_c C-entry shared-library compile passes:
+CPU identical, Mac arm64, O0, Mojo 1.0.0 ed45d567, 10 workers through compile_slot.
+It includes the three-argument framework metadata branch used by both x_sequence
+owners. All 240 retained source files match compiled source. Exported symbol
+_adapter_metadata_compile is present. This is not a full x_sequence image build,
+GPU numerical compilation, installed adapter runtime, or identity qualification.
+Four source guards and package-connection guard all pass.
+
+First compile failed on direct raise(stash_python_error()) aliasing. Compiler
+requested a temporary; used the repository's existing temporary + raise transfer
+pattern. Full failed source/log preserved beside successful final source/output.
+No toolchain patch or compatibility fallback introduced.
+
+Actual rebuilt installed owner and Torch/MAX adapter checks remain pending.
+The existing green 3.10-3.14 Apple matrix was not repeated. Root serializes
+integration; subsequent fresh within-release identity work is separately owned.
+
+Complete output, both source archives, exact compiler/flags/command, compiled
+binary bytes, tests, guards, symbol evidence and verified R2 archive:
+~/mojolearn-evidence/adapter-version-metadata-20261029/
+See validation.json and retention.json. The dependency scanner is used only for
+source retention; its legal provider/CPython findings are not runtime failures
+or a purity gate.

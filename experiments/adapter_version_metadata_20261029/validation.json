@@ -1,0 +1,113 @@
+{
+  "base_commit": "c4ad543dfa1069fb50fb43d9877af76a1d94b557",
+  "command": [
+    "bash",
+    "tools/compile_slot.sh",
+    "pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/mojolearn-wt/apple-retained-candidate-20261029/pixi.toml",
+    "-e",
+    "default",
+    "mojo",
+    "build",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--optimization-level",
+    "0",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/adapter-version-metadata-20261029",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/adapter-version-metadata-20261029/bindings",
+    "experiments/adapter_version_metadata_20261029/compile.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/adapter-version-metadata-20261029/adapter_metadata_compile.dylib"
+  ],
+  "cwd": "/Users/andrewhendel/mojolearn-wt/adapter-version-metadata-20261029",
+  "compiler": "/Users/andrewhendel/mojolearn-wt/apple-retained-candidate-20261029/.pixi/envs/default/bin/mojo",
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "compiler_version": "Mojo 1.0.0 (ed45d567)",
+  "source_file_count": 240,
+  "source_hashes_sha256": "344f4e2a3838a4c63977f2aa70b642f7861a87125e7a7dfa4d4abfc62c57fcdd",
+  "source_archive_sha256": "27a27c75468a3e090d2704a6269537c3ce70b3856ed491854e5ffad1b80df4ec",
+  "coverage": "Actual ops_import_model_c C entry including three-argument framework_metadata_operation branch. CPU identical Mac shared-library compile; no full x_sequence image or GPU numerical kernel rebuild.",
+  "workers": 10,
+  "mode": "identical",
+  "optimization": 0,
+  "runtime": "not run",
+  "started": 1793274057.7484832,
+  "attempt": 2,
+  "exit_code": 0,
+  "elapsed_seconds": 9.952486753463745,
+  "binary_sha256": "ba9c25420b5abe550d19eedc055703a2dad83e6083faea122e2c109813a734e6",
+  "product_commit": "fd57768c4d8096fc2941fafe1dc0e8bad0fd4843",
+  "guards": [
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_host_routes.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/adapter-version-metadata-20261029/guard-0.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_python_in_kernels.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/adapter-version-metadata-20261029/guard-1.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/no_compute_in_shells.py",
+        "--tree",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/adapter-version-metadata-20261029/guard-2.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/hooks/rebuild_fence.py",
+        "HEAD",
+        "--branch"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/adapter-version-metadata-20261029/guard-3.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/check_native_package_connections.py",
+        "--tree",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/adapter-version-metadata-20261029/guard-4.log"
+    }
+  ],
+  "source_match": {
+    "checked_files": 240,
+    "mismatches": []
+  },
+  "regression_tests": "Added; syntax compiled only. Not executed under current compile-only scope.",
+  "original_runtime_failure": "~/mojolearn-evidence/apple-candidate-wheel-20261029/adapter-final-smoke/torch-compile/adapter-results.json",
+  "runtime_pending": "Actual rebuilt x_sequence owner and installed Torch/MAX adapter checks remain pending; existing green five-Python wheel matrix was not repeated.",
+  "initial_compile_failure": "attempt1: direct raise of stash_python_error result violates Mojo error-aliasing rule; fixed using existing temporary-plus-transfer pattern, full failed source/log retained."
+}
