@@ -67,3 +67,6 @@ the mounted output and exit1/statusfailed are preserved. Final focused tools
 suite122tests passed0/1.49s; Python/shell syntax and whitespace checks0. This is
 local tool testing, not an actual GHA build/timeout or runtime product campaign.
 Complete originals and final logs are retained; no cloud action dispatched.
+
+Failure-retention final source guards: all five exit 0; complete logs and
+argv/status/durations retained under failure-retention/. No dispatch performed.
