@@ -1821,8 +1821,6 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
     var b = len(s.finished)
     var v = Int(py=s.model.vocab_size)
     var capacity = min(count, s.max_new - s.produced)
-    var tokens = List[Int32](capacity=b * capacity)
-    var wrote = 0
     s.busy = True
     try:
         if capacity > 0 and not s.done() and s.greedy:
@@ -1839,6 +1837,10 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
             var result = _read_engine(mods, s, capacity)
             s.busy = False
             return result
+        # Only the legacy fallback needs host token staging. Resident/native
+        # engines return their final native result without this unused buffer.
+        var tokens = List[Int32](capacity=b * capacity)
+        var wrote = 0
         var snapshot: Optional[GenerationOperationSnapshot] = None
         while wrote < capacity and not s.done():  # driver-loop: over decode steps, one model forward each
             if not admission:
