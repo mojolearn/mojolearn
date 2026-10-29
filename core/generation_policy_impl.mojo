@@ -8,14 +8,11 @@ Chunk boundaries never enter the counter. No process RNG or vendor math is used.
 """
 from std.math import isfinite
 from checks.numerics import portable_expf
+from core.generation_sampling_f32 import sampling_pick_f32, sampling_random
 
 
 def generation_random(seed: UInt64, row: Int, position: Int) -> UInt64:
-    var x = seed + UInt64(row) * UInt64(0xD2B74407B1CE6E93)
-    x += UInt64(position + 1) * UInt64(0x9E3779B97F4A7C15)
-    x = (x ^ (x >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-    x = (x ^ (x >> 27)) * UInt64(0x94D049BB133111EB)
-    return x ^ (x >> 31)
+    return sampling_random(seed, row, position)
 
 
 struct GenerationSamplingScratch(Movable):
@@ -24,11 +21,19 @@ struct GenerationSamplingScratch(Movable):
     var order: List[Int]
     var merge: List[Int]
     var weights: List[Float64]
+    var use_f32_policy: Bool
+    var order_f32: List[Int32]
+    var merge_f32: List[Int32]
+    var weights_f32: List[Float32]
 
     def __init__(out self):
         self.order = List[Int]()
         self.merge = List[Int]()
         self.weights = List[Float64]()
+        self.use_f32_policy = False
+        self.order_f32 = List[Int32]()
+        self.merge_f32 = List[Int32]()
+        self.weights_f32 = List[Float32]()
 
 
 def _before(logits: MutPointer[Float32, MutUntrackedOrigin], a: Int, b: Int) -> Bool:
@@ -47,6 +52,22 @@ def generation_pick_row(
         raise Error("generation: temperature must be finite and positive")
     if top_k < 0 or top_k > n or top_p <= 0 or top_p > 1 or not isfinite(top_p):
         raise Error("generation: top_k must be in [0, vocabulary]; top_p in (0, 1]")
+    if workspace.use_f32_policy and not greedy:
+        if n > 2147483647:
+            raise Error("generation: vocabulary exceeds native sampler indexing")
+        workspace.order_f32.resize(n, 0)
+        workspace.merge_f32.resize(n, 0)
+        workspace.weights_f32.resize(n if top_k == 0 else top_k, 0)
+        var selected = sampling_pick_f32(
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(logits)),
+            MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(workspace.order_f32.unsafe_ptr())),
+            MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(workspace.merge_f32.unsafe_ptr())),
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(workspace.weights_f32.unsafe_ptr())),
+            n, temperature, top_k, Float32(top_p), seed, row, position)
+        _ = workspace
+        if selected[1] >= 0:
+            raise Error("generation: non-finite logit at token " + String(selected[1]))
+        return selected[0]
     var best = 0
     for i in range(n):
         if not isfinite(logits[i]):
