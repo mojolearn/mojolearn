@@ -2009,7 +2009,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var prepared = self.program_replays[pi].pop()
         try:
             prepared.clear_live()
-            for j in range(len(self.programs[pi].params)):  # driver-loop: refresh and validate live parameter ownership once per invocation
+            for j in range(len(self.programs[pi].params)):  # driver-loop: over program parameters; refresh and validate live ownership once per invocation
                 var h = self.programs[pi].params[j]
                 var slot = prepared.slots[j]
                 var gen = prepared.generations[j]
