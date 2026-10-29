@@ -84,3 +84,10 @@ Original compile logs, source and binary remain untouched at the parent path.
 
 Engine policy follow-up04e51d25b4287d7824b70ec8f8e7762bef80ddb9: all five
 source guards again exit 0 (complete logs in engine-policy/). No runtime run.
+
+Native-peer review added three unrun tiny-parameter cases: smallest positive
+Float32 temperature plus positive Float64 top_p rounding to zero, exercised
+through resident, exposed-parameter fallback, and forced native engine routes.
+Candidate retains one token for rounded-zero top_p; public options remain
+positive before rounding. Eleven prepared cases total, syntax checked only.
+No numerical source changed or duplicate compilation was performed.

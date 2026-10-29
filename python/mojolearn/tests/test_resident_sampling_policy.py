@@ -27,6 +27,7 @@ def candidate(monkeypatch):
 
 @pytest.mark.parametrize("uniform,temperature,top_k,top_p", [
     (False, 0.7, 0, 0.83), (False, 1.3, 17, 0.95), (True, 1.0, 4, 0.75),
+    (False, 1e-45, 0, 1e-320),
 ])
 def test_candidate_matches_host_policy_and_chunk_checkpoint(
         tmp_path, monkeypatch, uniform, temperature, top_k, top_p):
@@ -89,11 +90,12 @@ def test_candidate_failure_releases_lease_and_preserves_completed_count(tmp_path
                         greedy=False, seed=7, top_k=4).read(2).shape == (1, 2)
 
 
-def test_exposed_parameter_fallback_keeps_candidate_policy(tmp_path):
+@pytest.mark.parametrize("temperature,top_p", [(0.8, 0.83), (1e-45, 1e-320)])
+def test_exposed_parameter_fallback_keeps_candidate_policy(tmp_path, temperature, top_p):
     model = load_fixture(tmp_path, "llama", uniform=False)
     prompt = np.array([[1, 3], [2, 4]], dtype="i4")
     options = dict(greedy=False, seed=(1 << 64) - 1, top_k=17,
-                   top_p=0.83, temperature=0.8)
+                   top_p=top_p, temperature=temperature)
     expected = np.asarray(model.stream(prompt, 5, **options).read(5)).copy()
     owners = model.parameters()
     assert owners
@@ -121,10 +123,11 @@ def test_candidate_eos_and_padding_match_host_policy(tmp_path, monkeypatch):
     assert np.all(expected[0, 1:] == 9)
 
 
-def test_candidate_native_engine_uses_same_policy(tmp_path, monkeypatch):
+@pytest.mark.parametrize("temperature,top_p", [(0.7, 0.83), (1e-45, 1e-320)])
+def test_candidate_native_engine_uses_same_policy(tmp_path, monkeypatch, temperature, top_p):
     model = load_fixture(tmp_path, "llama", uniform=False)
     prompt = np.array([[1, 3], [2, 4]], dtype="i4")
-    options = dict(greedy=False, seed=123, top_k=17, top_p=0.83, temperature=0.7)
+    options = dict(greedy=False, seed=123, top_k=17, top_p=top_p, temperature=temperature)
     monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "0")
     monkeypatch.setenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0")
     expected = np.asarray(model.stream(prompt, 5, **options).read(5)).copy()
