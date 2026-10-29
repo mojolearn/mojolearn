@@ -1,0 +1,64 @@
+Structural reuse fifth integration, 2026-10-28
+Serial root integration. Base product integration1cd11dd607; owner CPython rule
+932b18b670 included. No runtime, identity, GPU or performance campaign.
+
+1. Neighbor public installation and query metadata
+   Eleven vetted classes receive native-public markers after native constructor
+   installation; five native loaders skip redundant Python post-load envelopes.
+   KNN native load constructs the final resident holder. One operation-owned query
+   snapshot supplies shape/address and metric validation instead of repeated
+   admission. Pins survive native dispatch and errors. Fresh calls re-admit input;
+   loader hook replacement/subclass hooks are refused before allocation. Existing
+   application override tracking remains unchanged. Actual eight-export affected
+   CPU compilation passed; import wiring and runtime behavior remain untested.
+   Detail: experiments/neighbor_native_public_20261028/HANDOFF.txt.
+
+2. Generation selection and private output buffers
+   Pointer-based selection removes each active row's vocabulary copy; per-operation
+   sort/merge/weight scratch, logits and current/next token buffers are retained.
+   Greedy does not size sampling scratch. Private Mamba2 report workspace swaps
+   with last-success storage only after success; escaping public outputs stay fresh.
+   Storage belongs to one admitted operation; changed extents resize, consumed
+   entries overwrite, token buffers swap after successful selection. Numerical
+   ordering/error/tie handling preserved by source review, not runtime evidence.
+   Independent native closure and actual causal_public_c[3,5,7] CPU builds passed.
+   Dynamic endpoint lifecycle still reaches CPython GIL handling; direct CPython
+   is allowed by the updated rule. Static closure is not whole-path purity proof.
+   Detail: experiments/generation_pick_buffers_20261028/HANDOFF.txt.
+
+3. Captured inference replay
+   Immutable parameter slot/generation decoding moves to lazy registered-program
+   plan setup. Live generation/ownership/shape checks refresh addresses and integer
+   flags once per invocation; replay no longer resolves the same parameter slot
+   again. Buffer/leaf/temporary/value/argument list capacity survives invocations;
+   live contents clear on success/error. program_free/session close discard plans.
+   Existing exclusivity, fresh leaves and per-node dispatch remain. Actual HostExec
+   run_program and registry/session lifecycle compiled after cleanup repair.
+   Source guard initially rejected malformed metadata-loop annotation; corrected
+   to its required 'driver-loop: over' grammar, no executable change or rebuild.
+   Detail: experiments/inference_handle_reuse_20261028/HANDOFF.txt.
+
+Compilation reuse: unchanged compiled product sources from these separate roots
+are integrated; no duplicate builds solely for merge. All are Apple CPU identical
+O0; per-batch compile.json receipts record compiler, source and exact scope.
+Only comment, source-fixture and owner-rule changes followed compilation.
+
+Source fixture work: updated the inert native-installer fixture for new archive
+connection globals and corrected three constructor source positions (ASTs same).
+Twenty-four affected installer/connection tests and three constructor proof tests
+passed. The optional full fixture run had22failures/83passes before those fixes;
+19 shared historical proof failures remain, including source positions/old schema
+proofs. A partial baseline export also lacked four binding artifacts; those four
+are fixture-export failures, not product failures. Full logs retained. This is
+not a green claim for the entire optional proof suite, nor product runtime tests.
+
+Direct CPython is permitted throughout execution. Pure import counts and moving
+files into providers are not optimization goals. Separate follow-on lane now owns
+bridge simplification; existing marker ordering is deliberately preserved here.
+
+Evidence: ~/mojolearn-evidence/structural-reuse-fifth-20261028/ and the three
+per-batch evidence directories named in their handoffs. Required source/push
+guards run without overrides; integration source receipt recorded separately.
+Remaining: resident GPU greedy/EOS, Mamba typed plan and smallMLP iterator repair
+have separate compiled batches awaiting root review. GPU sampling, dynamic
+metadata checks and broad library migration remain incomplete. No speed claims.
