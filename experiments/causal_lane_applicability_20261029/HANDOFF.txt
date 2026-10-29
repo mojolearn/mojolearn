@@ -35,3 +35,10 @@ Evidence:~/mojolearn-evidence/causal-lane-applicability-20261029/
 Complete before/after572lane snapshots, exact5lane difference, test/selfcheck/
 guard logs+exit statuses. Prior omitted GPU cells had NOT run; regenerated
 execution chunks must include them, followed by final frozen-source ledger sync.
+
+Review follow-up bf5a92013b345509ad395de146d5e7f4337ed032:
+Alias invalidation includes *args/**kwargs and loop/context/exception/import/
+definition/delete/match binding targets. Six expanded source tests, selfcheck,
+and all three guards pass. Full572-lane comparison adds no eligibility changes.
+Planned single-device chunks2010:500each Apple/NVIDIA/AMD,510CPU, all9fixtures;
+59physical-multidevice lanes remain separatelypending. No actualcellsbegun.
