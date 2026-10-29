@@ -121,3 +121,17 @@ reuse. Each cache ends before sorting/conversion/numerical dispatch; mixed/NaN/
 depth/error order preserved. Nested flatten captures container types/append once.
 Actual prep_owner_c and label accuracy CPU compile passed. Other label/input
 owners remain separate; every element still needs type inspection/native lookup.
+
+17. b4bf4996e3 shared attribute rows reused for one read, including leaf/property
+resolution. Class/instance metadata still rechecked per public read; no cross-call
+cache. Actual attribute owner compiled; descriptor scanning remains.
+18.6b9c55049d+68cfebba12+ee41bb5a1a private resident row plan: operation-owned native
+records retain prepared owners; repeat row gathers avoid public _Resident lookup
+and metadata scans. Release unpublishes before free; failed cleanup retry retained.
+Actual CV/predict/learning/permutation CPU closure compiled. Public DeviceRows and
+external _Resident retain their normal checks.
+19.38d1f56355 schedule list from native Float32 result storage; no Python array/
+buffer_info/tolist roundtrip. Affected schedule entry compiled.
+20.7965f31955 Huber outlier bytes publish directly as sized bool list; no tolist/
+map(bool)/list chain. Affected public owner compiled.
+Next integrated batch index: ../structural_reuse_fourth_20261028/HANDOFF.txt.

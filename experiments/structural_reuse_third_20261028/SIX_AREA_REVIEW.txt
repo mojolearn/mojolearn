@@ -1,3 +1,12 @@
+SNAPSHOT CORRECTION: the text below records an EARLIER checked-in audit table.
+A newer external callbacks.tsv was subsequently read (2026-10-28 20:12 snapshot):
+28 prohibited_user_object,2752 caller-admission reviews,2690 helper-result reviews.
+The earlier31-site review does not discharge those28 or the newer review tail.
+That external TSV later disappeared during disk cleanup; no current regenerated
+count is claimed. User's newer neural findings are retained separately under
+~/mojolearn-evidence/neural-loop-audit-20261028/FINDINGS.md. Repairs continue from
+actual current source, not a blanket reinterpretation of these audit labels.
+
 Review of requested six areas, source-based, 2026-10-28
 No measured ordering/cost ranking. Findings led directly to compiled repairs.
 

@@ -1,0 +1,45 @@
+[
+  {
+    "name": "no_host_routes",
+    "command": [
+      "python3",
+      "tools/hooks/no_host_routes.py",
+      "--tree",
+      "HEAD",
+      "--branch"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "no_python_in_kernels",
+    "command": [
+      "python3",
+      "tools/hooks/no_python_in_kernels.py",
+      "--tree",
+      "HEAD",
+      "--branch"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "no_compute_in_shells",
+    "command": [
+      "python3",
+      "tools/hooks/no_compute_in_shells.py",
+      "--tree",
+      "HEAD",
+      "--branch"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "rebuild_fence",
+    "command": [
+      "python3",
+      "tools/hooks/rebuild_fence.py",
+      "HEAD",
+      "--branch"
+    ],
+    "exit_code": 0
+  }
+]

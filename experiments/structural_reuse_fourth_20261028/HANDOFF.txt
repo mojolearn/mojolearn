@@ -1,0 +1,82 @@
+Structural reuse fourth integration, 2026-10-28
+Base main7965f31955; integration/structural-reuse-fourth-20261028.
+Root serial integration. No runtime, GPU, identity or timing campaign.
+
+Batches (per-batch details/source receipts in each named experiment HANDOFF):
+1. admitted_instance_lookup: one native dictionary probe replaces contains+getitem
+   and redundant temporary type-check dictionary. Existing exact key/dict admission
+   and descriptor precedence retained on every read. Native Bool distinguishes None.
+2. tokenizer_batch_decode: immutable codec policy once per batch, native byte
+   buffer decode and sized result publication; no per-row bytes copy/bound method/
+   argument tuple. Live handler identity still checked before each decode. Pins
+   survive decoding/errors. Scalar publication and ID admission remain.
+3. parameter_grid_direct: each value sequence prepared once per operation, direct
+   mixed-radix final candidate dictionaries instead of product/tuple/zip graph.
+   Public mutable originals retained; new operation sees edits. Sorted key and
+   rightmost-fastest/outer order retained. Final Python candidate objects remain.
+4. scorer_recipe_reuse: CV-slot native ABI template reuses recipe/default/mode/
+   selected binding setup; direct Float64 internal result. After prediction/GIL
+   boundary recheck mutable options, function/code/schema and selected binding
+   identities; changed inputs rebuild. No dynamic y/pred retained; fresh call tuple.
+5. samba_native_connections:55 runtime imports use existing native module
+   connections; recursive admission shares checked builtins for one GIL window.
+   Two posix imports and sys.byteorder setup remain; no unchecked global cache.
+6. distributed_replay_reuse: each replica lazily retains immutable node metadata,
+   parameter-leaf capacity/loss readback; dataset prepare retains widths/shapes.
+   Refresh live handles and row extent per microbatch, preserve dropout stream;
+   dataset release clears shape/widths; close clears replay. Inference separate.
+7. native_fit_keywords: native exact dict/string admission + PyDict_Next avoids
+   whole keyword list and import/iterator construction. First invalid name order
+   and sample_weight identity retained; custom key hooks refused before conversion.
+8. user_object_flatten: exact list/tuple walk uses native slots/append; native Array
+   metadata/buffer captured before scalar walk. Known extension conversion method
+   retained per exact type. Opaque leaves without conversion hooks keep identity;
+   opaque mutable class/instance metadata rechecked each occurrence. Custom hooks
+   refused. This does not repair the other user-object operations.
+9. user_object_array_walk: dtype/layout dispatch once per captured Array; linear
+   C storage skips per-element mixed-radix offset calculation. Nine dtype and
+   both layout branches compiled. Non-C logical order still computes offsets.
+
+Integration review: one import-only merge conflict in msel_search retained both
+ArenaResidentPlan and PreparedParameterGrid. Scorer/grid/resident closure compiled
+together. Root reviewed cache invalidation, opaque leaf semantics and result
+ownership; independent distributed source review retained beside scorer handoff.
+No arithmetic sequence changes intended; this is not runtime identity evidence.
+
+Compilation scope:
+- Linux x86-64-v3 identical O0, Mojo1.0.0(ed45d567): actual CV/learning-curve/scorer
+  and grid/sampler/candidate owners together; specialized+generic attribute C
+  entries; tokenizer public C dispatcher and standalone UTF8 helper. All exit0.
+  Actual affinity8, cgroup cpu.max=max; eight compiler workers, serial compiles.
+  CPU utilization/saturation unmeasured. No GPU or installed-package qualification.
+- Samba public/config C owners and helper signatures; actual HostExec distributed
+  fit/worker replay/scheduling/lifecycle: Apple CPU identical O0 exit0 after sparse
+  checkout restored checks/. Default2 machine slots; compiler default workers.
+- Prep keyword public owner, flatten dispatcher and all typed Array paths already
+  had successful affected Apple compiles retained in their per-batch directories.
+- Four normal source guards exit0 without overrides. Normal main push guards still
+  apply. Source checks establish no runtime result.
+
+Failed attempts retained:16vCPU provider capacity failure, then all-five Linux
+fixture parsing failure from missing Pixi activation (fixed in driver), then the
+corrected Linux attempt above had two missing-checks-source failures for Samba/
+distributed only. Those two paths alone recompiled locally after restoring source.
+No failed path was treated as passed. See BUILD_ATTEMPTS.txt and compile receipts.
+
+Evidence root: ~/mojolearn-evidence/structural-reuse-fourth-20261028/.
+RunPod complete source/logs/binaries/status were copied to Mac and R2 BEFORE each
+box deletion. R2 objects:
+measurements/runpod-cpu/mojolearn-cpu-structural-fourth8-20261029-012858/results-complete.tgz
+measurements/runpod-cpu/mojolearn-cpu-structural-fourth-fixed-20261029-013546/results-complete.tgz
+Pods h86tevwlz0yt8t and kn5bj0lwfdiez2 deletion verified; costs$0.0136/$0.0198.
+Initial unavailable16vCPU request name-keyed deadman retained (no CPU pod listed).
+Historical local evidence deleted during disk cleanup is explicitly recorded in
+scorer_recipe_reuse/EVIDENCE_AVAILABILITY.json. Committed receipts are historical,
+not claims that removed files remain available. Fresh integration evidence above
+qualifies only the paths compiled.
+
+Remaining high-priority work: residentGPU generation cache/session lifetime and
+GPU sampling/EOS; Python-free TRANSITIVE neural execution dependencies; Mamba
+public state/report reuse; inference parameter handles. Agents own disjoint areas.
+Application override wrappers remain pending user contract choice; no blanket
+removal of existing validation/tracking semantics. Whole migration incomplete.
