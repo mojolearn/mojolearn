@@ -1,0 +1,20 @@
+{
+  "base_install_receipt": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/repaired-42fbe96-clean-install/receipt.json",
+  "base_install_receipt_sha256": "13618c94a9f658a0592739a49e5d9d5b030e9b5e0e384d0f042f21d9e3c2a061",
+  "changed_native_members": [
+    "host/_mojolearn_tokenizer_host.so"
+  ],
+  "unchanged_native_runtime_count": 83,
+  "replacement": {
+    "member": "host/_mojolearn_tokenizer_host.so",
+    "old_sha256": "a30a5ecee9c7a0e24af677eca10abfdedc764376bfc096d3485d842d5a65905b",
+    "new_staged_path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/venv/lib/python3.13/site-packages/mojolearn/host/_mojolearn_tokenizer_host.so",
+    "new_staged_sha256": "cfe40d31de2cfd4067fba4e30ebedeb7386367e4a1c2aba1f2e77c22d93d4d60",
+    "raw_path": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/raw/_mojolearn_tokenizer_host.so",
+    "raw_sha256": "5ba1b0005c00980b9fb860c17ecfc0779d6ba36d2371474fc6f1cd096aebaa6a",
+    "compile_receipt": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/receipt.json",
+    "stage_receipt": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/stage/receipt.json",
+    "retention_receipt": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/retention/receipt.json"
+  },
+  "scope": "Prepared exact79extension+5runtime replacement mapping; final frozen Python/payload and source closure comparison await rootfreeze; no active install mutation"
+}

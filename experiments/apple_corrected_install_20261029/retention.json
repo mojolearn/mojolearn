@@ -1,0 +1,79 @@
+{
+  "final_install_inputs": {
+    "key": "measurements/current-main-verification-20261029/apple095ab-final-install-inputs.tgz",
+    "local_archive": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-corrected-clean-install/apple095ab-final-install-inputs.tgz",
+    "sha256": "4304dc14ac5cd22c2ff6001b5500367d596d71d01f9878055990831689255979",
+    "bytes": 6517113,
+    "put_status": 200,
+    "retained_member_count": 157,
+    "source_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+    "scope": "Final Python source/payload/79sourceproof/receipts and exact archive mapping;83unchanged native/runtime bytes reused basearchive, tokenizerreplacement retained Sambaarchive. No active install writes or product runtime.",
+    "get_status": 200,
+    "readback_sha256": "4304dc14ac5cd22c2ff6001b5500367d596d71d01f9878055990831689255979",
+    "all_member_readback_sha256_match": true,
+    "exit_code": 0
+  },
+  "tokenizer_bytes_and_full_build_evidence": {
+    "key": "measurements/samba-target-count-20261029/samba-target-count-20dbed0-apple.tgz",
+    "local_archive": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/retention/samba-target-count-20dbed0-apple.tgz",
+    "sha256": "3a2177f5c6ff14227732cce0a14526bac9347dfef0a84a3dc7036e470a03649c",
+    "bytes": 49162072,
+    "put_status": 200,
+    "source_members_verified": 654,
+    "retained_file_count": 42,
+    "raw_tokenizer_sha256": "5ba1b0005c00980b9fb860c17ecfc0779d6ba36d2371474fc6f1cd096aebaa6a",
+    "staged_tokenizer_sha256": "cfe40d31de2cfd4067fba4e30ebedeb7386367e4a1c2aba1f2e77c22d93d4d60",
+    "get_status": 200,
+    "readback_sha256": "3a2177f5c6ff14227732cce0a14526bac9347dfef0a84a3dc7036e470a03649c",
+    "elapsed_seconds": 17.256812416017056,
+    "all_member_readback_sha256_match": true,
+    "exit_code": 0
+  },
+  "composition": {
+    "source_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+    "base": {
+      "key": "measurements/current-main-verification-20261029/apple-3fa5-installed-inputs.tgz",
+      "sha256": "ef7a9e4442620862463efacea5db05db6c99223eb5d6b9aef8305993e4b32b62",
+      "bytes": 110183614
+    },
+    "replacement_archive": {
+      "key": "measurements/samba-target-count-20261029/samba-target-count-20dbed0-apple.tgz",
+      "local_archive": "/Users/andrewhendel/mojolearn-evidence/samba-target-count-build-20261029/retention/samba-target-count-20dbed0-apple.tgz",
+      "sha256": "3a2177f5c6ff14227732cce0a14526bac9347dfef0a84a3dc7036e470a03649c",
+      "bytes": 49162072,
+      "put_status": 200,
+      "source_members_verified": 654,
+      "retained_file_count": 42,
+      "raw_tokenizer_sha256": "5ba1b0005c00980b9fb860c17ecfc0779d6ba36d2371474fc6f1cd096aebaa6a",
+      "staged_tokenizer_sha256": "cfe40d31de2cfd4067fba4e30ebedeb7386367e4a1c2aba1f2e77c22d93d4d60",
+      "get_status": 200,
+      "readback_sha256": "3a2177f5c6ff14227732cce0a14526bac9347dfef0a84a3dc7036e470a03649c",
+      "elapsed_seconds": 17.256812416017056,
+      "all_member_readback_sha256_match": true,
+      "exit_code": 0
+    },
+    "replacement_member": "staged/_mojolearn_tokenizer_host.so",
+    "replacement_install_member": "host/_mojolearn_tokenizer_host.so",
+    "unchanged_native_runtime_count": 83,
+    "comparison": {
+      "old_source": "42fbe96d43a9e7e4bc435b4db67df1ba2f442069",
+      "new_source": "095ab328298973b2625cc7c2e189da73efb2b46f",
+      "changed_tracked_python": [
+        "_native_loaded_modules.py",
+        "_native_arena_rows.py"
+      ],
+      "added_tracked_python": [
+        "tests/test_numpy_free_cv_contract.py",
+        "tests/test_samba_target_count_contract.py"
+      ],
+      "removed_tracked_python": [],
+      "native_or_runtime_changed": [
+        "host/_mojolearn_tokenizer_host.so"
+      ],
+      "verifier_payload_changed": [],
+      "receipt_sha256": "854baf55a1ec28f4b3267ea2c121e9a8c0792f860d00d3b85270567497815fae",
+      "payload_commit": "095ab328298973b2625cc7c2e189da73efb2b46f"
+    },
+    "scope": "83actual unchanged native/runtime members reuse verified3fa5 installed archive; one tokenizer replacement from verified Samba archive; final tracked Python and verifierpayload retained separately. No product execution during assembly."
+  }
+}

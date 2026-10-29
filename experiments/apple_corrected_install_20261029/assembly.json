@@ -1,0 +1,42 @@
+{
+  "source_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+  "source_root": "/Users/andrewhendel/mojolearn-wt/verification-final-corrected-20261029",
+  "environment": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-corrected-venv",
+  "package": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-corrected-venv/lib/python3.13/site-packages/mojolearn",
+  "python_source_file_count": 969,
+  "native_extension_count": 79,
+  "runtime_library_count": 5,
+  "verifier_payload_member_count": 143,
+  "payload_commit": "095ab328298973b2625cc7c2e189da73efb2b46f",
+  "harness_sha256": "589a7441f72a535c8ef411d33003ed5c3b84c339c09e4675dd31c0499713e2f0",
+  "receipt_path": "/Users/andrewhendel/mojolearn-evidence/manifold-installed-integration-20261029/final-corrected-clean-install/receipt.json",
+  "receipt_sha256": "854baf55a1ec28f4b3267ea2c121e9a8c0792f860d00d3b85270567497815fae",
+  "source_archive_sha256": "29788589d3624dfc54257e6f58b42b612ff13b05e224d0cd93d7cf58c6354b59",
+  "source_match_counts": {
+    "host": 46,
+    "gpu": 33,
+    "unique_paths": 2698,
+    "source_mismatch_records": 0,
+    "raw_hash_failures": 0
+  },
+  "comparison": {
+    "old_source": "42fbe96d43a9e7e4bc435b4db67df1ba2f442069",
+    "new_source": "095ab328298973b2625cc7c2e189da73efb2b46f",
+    "changed_tracked_python": [
+      "_native_loaded_modules.py",
+      "_native_arena_rows.py"
+    ],
+    "added_tracked_python": [
+      "tests/test_numpy_free_cv_contract.py",
+      "tests/test_samba_target_count_contract.py"
+    ],
+    "removed_tracked_python": [],
+    "native_or_runtime_changed": [
+      "host/_mojolearn_tokenizer_host.so"
+    ],
+    "verifier_payload_changed": [],
+    "receipt_sha256": "854baf55a1ec28f4b3267ea2c121e9a8c0792f860d00d3b85270567497815fae",
+    "payload_commit": "095ab328298973b2625cc7c2e189da73efb2b46f"
+  },
+  "scope": "Read-only exact closure/raw checks and fresh isolated assembly; no product import, runtime, native compile or ledger writes. Existing active installs unchanged. Product freeze push confirmed by root; runtime/wheel qualification owned by separate lanes."
+}
