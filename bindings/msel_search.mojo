@@ -28,7 +28,7 @@ from bindings.family_common import (
 )
 from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
 from bindings.msel_common import (
-    msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool, msel_is_integral, msel_is_real,
+    msel_take_labels, msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool, msel_is_integral, msel_is_real,
     msel_int, msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr,
     msel_p64, msel_pf64, msel_new, msel_new2, msel_f64_list, msel_f64_block, msel_i64_list, msel_i32_list,
     msel_slice_i64, msel_index_i64, msel_resident_new, msel_resident_take, msel_resident_release,
@@ -587,7 +587,7 @@ def _take(res: PythonObject, values: PythonObject, idx: PythonObject, context: P
     """learning_curve's `take`: a list by index, else the resident gather."""
     var b = msel_b()
     if family_isinstance(values, b.list):
-        return py_call(b.list, py_call(b.map, py_call(b.getattr, values, PythonObject("__getitem__")), idx._mv))
+        return msel_take_labels(values, idx, context)
     return msel_resident_take(res, values, idx, context)
 
 

@@ -26,7 +26,7 @@ from bindings.family_common import (
     family_array, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str, family_type_name,
 )
 from bindings.msel_common import (
-    msel_b, msel_n_samples, msel_admit, msel_entry, msel_try, msel_missed, msel_catch, msel_is_bool, msel_is_integral, msel_is_real, msel_int,
+    msel_take_labels, msel_b, msel_n_samples, msel_admit, msel_entry, msel_try, msel_missed, msel_catch, msel_is_bool, msel_is_integral, msel_is_real, msel_int,
     msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr, msel_p64, msel_pf64,
     msel_new, msel_f64_list, msel_index_i64, msel_resident_new, msel_resident_op, msel_resident_take,
     msel_resident_release, msel_resident_close, msel_get_scorer, msel_score, msel_lazy,
@@ -287,7 +287,7 @@ struct MselFoldRows(Movable):
     def rows(self, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
         var b = msel_b()
         if family_isinstance(values, b.list):
-            return py_call(b.list, py_call(b.map, py_call(b.getattr, values, PythonObject("__getitem__")), idx._mv))
+            return msel_take_labels(values, idx, context)
         return msel_resident_take(self.res, values, idx, context)
 
     def take(mut self, i: Int, y_in: PythonObject, context: PythonObject) raises -> PythonObject:

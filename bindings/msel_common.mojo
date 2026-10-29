@@ -16,6 +16,8 @@ from bindings.family_common import (
 )
 from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
 from bindings.native_buffer_owner import native_storage_allocate
+from bindings.arena_materialize_native import _prepared_info, _slot
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from bindings.msel_inputs import msel_admit, msel_input, msel_input_count
 from bindings.sequential_admission import _one_of
 from bindings.classical_labels import _label_list, labels_encode_labels
@@ -808,13 +810,69 @@ def msel_resident_close(res: PythonObject, context: PythonObject) raises:
     _ = msel_resident_op(res, "msel_resident_close", Python.tuple(), context)
 
 
+def msel_take_labels(values: PythonObject, indices: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Gather admitted list/tuple references without boxed index iteration."""
+    # Public input admission already rejects list/tuple subclasses (including
+    # ordinary subclasses); do not bypass that policy with the C list APIs.
+    var b = msel_b()
+    var kind = py_type(values)
+    var tuple_input = kind is b.tuple
+    if kind is not b.list and not tuple_input:
+        raise Error("TypeError: model-selection label rows require an exact native list or tuple")
+    var row_context = context["family_msel_resident_context"]
+    # Generated folds and msel_indices produce prepared C int64 Arrays. Recheck
+    # mutable Array metadata and backing storage at each gather, never cache an
+    # address across fits. _prepared_info admits the exact native view/exporter.
+    var metadata = _prepared_info(indices, row_context)
+    if String(metadata["dtype"]) != "<i8" or Int(py=metadata["ndim"]) != 1:
+        raise Error("TypeError: model-selection label rows require one-dimensional int64 indices")
+    var view = _slot(indices, "_mv", row_context)
+    var pin = AdmittedBorrowedBuffer(view)
+    var out = PythonObject(None)
+    try:
+        var layout = pin.layout.value().copy()
+        if (len(layout.shape) != 1 or layout.itemsize != 8 or not layout.contiguous()
+                or layout.count != Int(py=metadata["size"]) or pin.format != "q"):
+            raise Error("ValueError: model-selection label index storage disagrees with its metadata")
+        ref cpy = Python().cpython()
+        var get_name = String("PyTuple_GetItem") if tuple_input else String("PyList_GetItem")
+        var size_name = String("PyTuple_Size") if tuple_input else String("PyList_Size")
+        var get_item = cpy.lib.get_function[PyObjectPtr](get_name)
+        var set_item = cpy.lib.get_function[Int32]("PyList_SetItem")
+        var count = cpy.lib.get_function[Int](size_name)(values._obj_ptr)
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(layout.count)
+        if not raw:
+            var failure = stash_python_error()
+            raise failure^
+        out = PythonObject(from_owned=raw)
+        var words = FAMILY_I64P(unsafe_from_address=layout.address)
+        for i in range(layout.count):  # driver-loop: native indices copy existing label references into sized output
+            var index = Int(words[i])
+            if index < 0:
+                index += count
+            # GetItem reports the original list/tuple IndexError for either
+            # bound. Py_NewRef supplies the owned reference SetItem steals,
+            # including on failure; out owns and cleans up any partial list.
+            var label = get_item(values._obj_ptr, index)
+            if not label:
+                var failure = stash_python_error()
+                raise failure^
+            if set_item(out._obj_ptr, i, cpy.Py_NewRef(label)) != 0:
+                var failure = stash_python_error()
+                raise failure^
+        _ = values  # borrowed labels remain owned through the final incref
+    finally:
+        pin.release()  # retain actual buffer export through the final index read
+    return out
+
+
 def msel_take_any(values: PythonObject, indices: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_take_any` / `_take_rows`: a list or tuple taken by index (a list),
     else one device gather out of a `_Resident` used once."""
     var b = msel_b()
     msel_admit(values, context)
     if py_type(values) is b.list or py_type(values) is b.tuple:
-        return py_call(b.list, py_call(b.map, py_call(b.getattr, values, PythonObject("__getitem__")), indices._mv))
+        return msel_take_labels(values, indices, context)
     var prepared = msel_materialize(values, "split data", context)
     var res = msel_resident_new(context)
     var out = PythonObject(None)

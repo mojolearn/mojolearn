@@ -1,0 +1,63 @@
+Native model-selection label row gathering, 2026-10-28
+
+Branch: lane/msel-native-list-gather-20261028; base 36394cd7a0.
+Separate prerequisite repair: 6f9efcd445 constructs omitted scorer memo in an
+explicit overload, avoiding compile-time construction of a PythonObject default.
+The first learning_curve root compile exposed this gap in the preceding memo
+batch: its earlier cross_validate-only compile passed because all its calls
+supplied a memo. Initial failure and source bytes retained, not discarded.
+
+Repeated work removed:
+msel_take_any, MselFoldRows.rows and learning_curve's _take now share native
+list/tuple label gathering. Each selected row formerly boxed its memoryview
+integer and called a bound __getitem__ through map, while list built the output
+incrementally. Native int64 index reads now feed retained CPython GetItem and
+SetItem entry points, with one sized output allocation and one owned reference
+transfer per selected label. No copied/converted label objects and no arithmetic
+change. Native CPython reference management remains, without Python callbacks.
+
+Setup/reuse boundary and invalidation:
+Each gather revalidates the prepared index Array using existing _prepared_info,
+then acquires an actual buffer export and captures native layout, index pointer,
+container length, and CPython entries once outside its row loop. There is no
+cache across gathers, fits, folds, candidates or public calls. Mutable Array
+shape/dtype/storage and released buffers therefore face fresh admission.
+Generated indices and checked explicit folds are canonical one-dimensional C
+int64 Arrays; helper checks that requirement and the pinned q-format/count.
+Malformed or changed metadata/storage is refused rather than read unchecked.
+
+Container/index behavior and ownership:
+Existing public classical/sequential admission rejects list/tuple subclasses,
+including ordinary subclasses, before materialization. msel_materialize_y emits
+an exact native list on the label fallback. Existing family_isinstance branches
+remain; the helper explicitly enforces established exact list/tuple admission,
+so it does not newly admit subclass overrides or silently bypass their hooks.
+Negative native int64 indices normalize once by container length. CPython
+PyList_GetItem/PyTuple_GetItem preserve first out-of-range IndexError and its
+container-specific message. CV's earlier range/duplicate checks remain intact.
+Every selected reference is increfed then transferred to PyList_SetItem (which
+steals on failure too). The output owns partial-list cleanup; input container
+remains live through the last incref. AdmittedBorrowedBuffer releases in finally,
+keeping actual storage pinned through every native read and error path. No raw
+pointer survives this operation. No concurrent mutation/snapshot promise added.
+
+Compilation and source checks:
+Final compile exit 0, 29.44 seconds, Apple CPU identical O0 with ten workers and
+compile_slot. Actual public native train_test_split, cross_validate and
+learning_curve roots instantiate all three affected gather callers plus the
+omitted-memo repair. Source bytes, compiler/flags/allocation and artifact hashes
+are retained in compile.json. This is compile qualification, not runtime proof.
+No runtime, identity, benchmark or GPU campaign. No measured speedup claim.
+Branch source guard logs/results are retained alongside full build evidence;
+root performs serialized main integration/push guards.
+
+Remaining limits:
+Boundary recursive input admission, prepared Array metadata scans, resident-row
+compiled-helper dispatch and per-label CPython GetItem/NewRef/SetItem remain.
+This removes boxed indexing/callback dispatch, not all Python-object transport.
+Fully native private resident metadata/direct row calls remain scout follow-ups.
+
+Evidence: ~/mojolearn-evidence/msel-native-list-gather-20261028/
+Final binary: _msel_native_list_gather.so; compile.log, compile.json,
+source-bytes.tgz, source-manifest.json, source-guards.json and individual guard
+logs. Initial failure: attempt-1-default-memo-failure/ (complete output/source).
