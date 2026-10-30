@@ -10,9 +10,19 @@ def classify(report, receipt):
  divergent=[r for r in rows if r.get('state')=='DIVERGENT']
  old_refs=report.get('reference_evidence',{}).get('columns',[])
  historical_only=bool(divergent and old_refs) and all(re.fullmatch(r'[0-9a-f]{40}',str(r.get('recorded_at_commit',''))) and r['recorded_at_commit'] in HISTORICAL_RELEASES and r['recorded_at_commit']!=report.get('device',{}).get('commit') for r in old_refs) and all(r.get('local_check')!='failed' and str(r.get('detail','')).startswith('this box ') and ', reference ' in str(r.get('detail','')) for r in divergent)
+ # A fresh-reference campaign can observe every required output before any
+ # committed reference exists. Preserve the verifier's OWED/exit4 report;
+ # recognize only its exact missing-reference reason with an actual digest.
+ # This is local observation completeness, never cross-vendor admission.
+ owed=[r for r in rows if r.get('state')=='OWED']
+ fresh_reference_only=bool(owed) and all(
+  r.get('detail')=='no committed record carries this cell part yet'
+  and re.fullmatch(r'[0-9a-f]{16}',str(r.get('value','')))
+  and r.get('local_check')!='failed' for r in owed
+ ) and (not divergent or historical_only)
  e=report.get('execution',{});ls=report.get('lanes_summary',{})
  expected={(l,f,p) for l in report.get('lanes',[]) for f in report.get('fixtures',[]) for p in ['train','infer','model','batch','batchgrad','batchscale','ragged','rlpair','stepfull']}
  actual={(r.get('lane'),r.get('fixture'),r.get('part')) for r in rows}
  rc=receipt.get('exit_code')
- complete=(rc==0 or (rc==1 and historical_only)) and not failures and len(expected)==len(rows) and actual==expected and len(report.get('fixtures',[]))==9 and not e.get('crashed_cells') and not e.get('interrupted') and e.get('completed_cells')==e.get('total_cells')==9 and ls.get('attempted')==1 and not ls.get('not_run') and report.get('native_provenance_complete') is True and report.get('self_test',{}).get('passed') is True
- return dict(observation_complete=bool(complete),local_property_failures=failures,historical_reference_only=bool(historical_only),original_exit_code=rc,identity_admission='pending')
+ complete=(rc==0 or (rc==1 and historical_only) or (rc==4 and fresh_reference_only)) and not failures and len(expected)==len(rows) and actual==expected and len(report.get('fixtures',[]))==9 and not e.get('crashed_cells') and not e.get('interrupted') and e.get('completed_cells')==e.get('total_cells')==9 and ls.get('attempted')==1 and not ls.get('not_run') and report.get('native_provenance_complete') is True and report.get('self_test',{}).get('passed') is True
+ return dict(observation_complete=bool(complete),local_property_failures=failures,historical_reference_only=bool(historical_only),fresh_reference_only=bool(fresh_reference_only),original_exit_code=rc,identity_admission='pending')
