@@ -32,11 +32,25 @@ def run(args):
     options=[dict(greedy=False,seed=7+4*i,temperature=.8,top_k=50,top_p=.9,eos_token_id=None,pad_token_id=None) for i in range(2)]
     count=16
     def stream(i):return model.stream(prompts[i],count,**options[i])
+    def retain_state(label,state):
+        arrays={}
+        def encode(value,path):
+            if isinstance(value,dict):return {str(k):encode(v,path+"/"+str(k)) for k,v in value.items()}
+            if isinstance(value,(list,tuple)):return [encode(v,path+"/"+str(i)) for i,v in enumerate(value)]
+            if isinstance(value,bytes):return {"bytes_hex":value.hex()}
+            if value is None or isinstance(value,(str,int,float,bool)):return value
+            data=np.asarray(value).copy()
+            if data.dtype.hasobject:raise TypeError("checkpoint object array cannot be retained safely: "+path)
+            key="array_"+str(len(arrays));arrays[key]=data
+            return {"array":key,"shape":list(data.shape),"dtype":str(data.dtype),"sha256":hashlib.sha256(data.tobytes()).hexdigest()}
+        metadata=encode(state,"state")
+        np.savez(out/(label+"-state.npz"),**arrays)
+        (out/(label+"-state.json")).write_text(json.dumps(metadata,indent=2))
     references=[];reference_info=[];reference_checksums=[]
     for i in range(2):
         serial=stream(i)
         references.append(np.asarray(serial.read(count),dtype=np.int32).copy())
-        reference_info.append(serial.info());reference_checksums.append(serial.state_dict()['checksum'])
+        reference_info.append(serial.info());serial_state=serial.state_dict();reference_checksums.append(serial_state['checksum']);retain_state('serial-'+str(i),serial_state)
         np.save(out/f'prompt-{i}.npy',prompts[i]);np.save(out/f'serial-{i}.npy',references[-1])
     results=[]
     for kind in ('independent-streams','same-stream'):
@@ -83,13 +97,16 @@ def run(args):
         # silently revive a stream invalidated by an earlier failed operation.
         recovery=np.asarray(stream(1).read(count),dtype=np.int32).copy();np.save(out/(kind+'-recovery.npy'),recovery)
         recovery_ok=bool(np.array_equal(recovery,references[1]))
-        info=first.info();state=first.state_dict()
+        info=first.info();state=first.state_dict();retain_state(kind+"-owner",state)
         result=dict(kind=kind,status=status,records=records,public_call_intervals_overlap=overlap,
                     native_busy_refusal_during_owner=refusal_during_owner,owner_info_after=info,
                     owner_checkpoint_schema=state.get('schema'),owner_checkpoint_checksum=state.get('checksum'),
                     owner_checkpoint_matches_serial=state.get('checksum')==reference_checksums[0],
                     owner_info_matches_serial=info==reference_info[0],fresh_stream_recovery_matches=recovery_ok,
                     model_busy_after=bool(fields.get('_resident_busy',False)),
+                    live_dictionary_same=object.__getattribute__(model,'__dict__') is fields,
+                    fresh_dictionary_busy_after=bool(object.__getattribute__(model,'__dict__').get('_resident_busy',False)),
+                    native_public_busy_after=bool(model._resident_busy),
                     limitation='No native instrumentation added; public-call overlap and busy ownership evidence do not prove simultaneous GPU kernel execution. Unobserved overlap is not a concurrency pass.')
         if not recovery_ok or result['model_busy_after'] or not result['owner_checkpoint_matches_serial'] or not result['owner_info_matches_serial']:result['status']='failed-ownership-recovery'
         results.append(result);(out/'result.json').write_text(json.dumps(dict(route=args.route,cases=results),indent=2,default=str))
