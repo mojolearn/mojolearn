@@ -39,6 +39,7 @@ from bindings.generation_buffers import (
 )
 from bindings.native_array_snapshot import native_array_slots, NativeArrayAdmission
 from core.generation_policy_impl import GenerationSamplingScratch
+from core.generation_kv_policy import GenerationReadControl
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
 from bindings.sha256_door import sha256_update, sha256_update_text
@@ -1259,6 +1260,7 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
         # native execution releases the GIL. Do not reuse or republish its old
         # session cache: release this loan and resume the ordinary per-step path.
         read_plan.value().resident_reuse = False
+        read_plan.value().resident_invalidated = True
         _legacy_resident_cancel(mods, model, read_plan.value())
         held = False
     var fields = read_plan.value().resident_fields if held else _standalone_record_fields(mods, model)
@@ -1282,6 +1284,7 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             # no host reload or immutable-weight re-admission is needed here.
             lm = read_plan.value().resident_lm
             sessions = read_plan.value().resident_sessions
+            read_plan.value().resident_uploads_skipped += 1
         elif kept is not None and Bool(py=kept[0] == key):
             lm = kept[1]
             sessions = kept[2]
@@ -1461,6 +1464,8 @@ struct LegacyGenerationReadPlan(Movable):
     var logits: PythonObject
     var logits_length: Int
     var resident_reuse: Bool
+    var resident_uploads_skipped: Int
+    var resident_invalidated: Bool
     var resident_active: Bool
     var resident_fields: PythonObject
     var resident_cache: PythonObject
@@ -1477,6 +1482,8 @@ struct LegacyGenerationReadPlan(Movable):
         self.logits = PythonObject(None)
         self.logits_length = -1
         self.resident_reuse = False
+        self.resident_uploads_skipped = 0
+        self.resident_invalidated = False
         self.resident_active = False
         self.resident_fields = PythonObject(None)
         self.resident_cache = PythonObject(None)
@@ -2099,6 +2106,36 @@ def _resident_read_cleanup(provider: PythonObject, lm: PythonObject, sessions: P
                 _ = cleanup
 
 
+def _resident_acquire_read(mut mods: NativeModules, model: PythonObject, state: PythonObject,
+                           entries: PythonObject, fields: PythonObject, kept: PythonObject,
+                           key: PythonObject, batch: Int, length: Int, int15: Bool,
+                           mut keep: List[PythonObject], mut lm: PythonObject,
+                           mut sessions: PythonObject, mut expected: PythonObject) raises:
+    # Shared by greedy and sampled reads: each PUBLIC read reloads mutable host
+    # KV, even when session identities/shape match. Residency removes only the
+    # intra-read transfers. Pointer identity never proves unchanged contents.
+    # Assign owners before a releasing call so caller failure cleanup retains
+    # every old session if load/close fails. Numerical selection is not involved.
+    if kept is not None and Bool(py=kept[0] == key):
+        lm = kept[1]
+        sessions = kept[2]
+        _resident_load_states(entries, sessions, state, keep)
+        mods.released()
+    else:
+        if kept is not None:
+            lm = kept[1]
+            sessions = kept[2]
+            causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
+            expected = PythonObject(None)
+            _resident_close(entries, lm, sessions)
+            mods.released()
+            lm = PythonObject(None)
+            sessions = PythonObject(None)
+        var opened = _resident_open_all(mods, model, entries, state, batch, length, int15, keep)
+        lm = opened[0]
+        sessions = opened[1]
+
+
 def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int,
                    mut admission: NativeArrayAdmission) raises -> PythonObject:
     # One provider boundary owns the complete token block. Native session
@@ -2116,6 +2153,7 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
     var key = _resident_key(mods, s.model, s.state, batch, int15)
     var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
+    var expected = kept
     var lm = PythonObject(None)
     var sessions = PythonObject(None)
     var keep = List[PythonObject]()
@@ -2130,25 +2168,8 @@ def _read_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: I
     if persist:
         causal_model_cache_set(mods, s.model, fields, "_resident_busy", True)
     try:
-        if kept is not None and Bool(py=kept[0] == key):
-            lm = kept[1]
-            sessions = kept[2]
-            _resident_load_states(entries, sessions, s.state, keep)
-            mods.released()
-        else:
-            if kept is not None:
-                # Retain every old owner for failure cleanup until all closes
-                # succeed; an early close refusal must not orphan later layers.
-                lm = kept[1]
-                sessions = kept[2]
-                causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
-                _resident_close(entries, lm, sessions)
-                mods.released()
-                lm = PythonObject(None)
-                sessions = PythonObject(None)
-            var opened = _resident_open_all(mods, s.model, entries, s.state, batch, length, int15, keep)
-            lm = opened[0]
-            sessions = opened[1]
+        _resident_acquire_read(mods, s.model, s.state, entries, fields, kept,
+            key, batch, length, int15, keep, lm, sessions, expected)
         var cached = transformer_resident_lm_read(provider, lm, sessions,
             [_addr(s.current, keep), _addr(pending, keep), 0, Int(progress.unsafe_ptr())],
             [length, capacity, Int(py=s.state.layers[0].cached_tokens)])
@@ -2265,16 +2286,21 @@ def _sampling_read_cache_valid(fields: PythonObject, expected: PythonObject) rai
     return py_get(live, "_resident_sessions") is expected
 
 
-def _generation_route_witness(route: String, capacity: Int, produced: Int, retained_kv: Bool):
-    # Diagnostic for the combined-generation experiment. Enable only for the
-    # excluded warmup; scored calls leave this off. One native record per
-    # completed public read, never a Python callback or per-token observer.
-    # The record names the executed branch, not merely requested env flags:
-    # resident sampling precedes native-engine selection, and KV-upload reuse
-    # belongs only to the legacy resident-forward path.
+def _generation_route_witness(route: String, capacity: Int, produced: Int,
+                              policy: GenerationReadControl, resident_forward: Bool = False,
+                              eligible: Bool = False, skipped: Int = 0, invalidated: Bool = False):
+    # Excluded-warmup diagnostic only, never a callback or per-token observer.
+    # retained_kv now proves an actual skipped reload, not merely eligibility.
     if getenv("MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE", "0") == "1":
         print("MOJOLEARN_GENERATION_ROUTE route=" + route + " capacity=" + String(capacity)
-            + " produced=" + String(produced) + " retained_kv=" + String(Int(retained_kv)))
+            + " produced=" + String(produced) + " retained_kv=" + String(Int(skipped > 0))
+            + " requested_route=" + policy.route
+            + " engine_requested=" + policy.engine_setting
+            + " sampling_policy=" + String(policy.sampling_policy)
+            + " greedy=" + String(Int(policy.greedy))
+            + " kv_requested=" + String(Int(policy.kv.requested))
+            + " kv_policy=" + policy.kv.status(route, resident_forward, eligible, skipped, invalidated)
+            + " kv_uploads_skipped=" + String(skipped))
 
 
 def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int,
@@ -2326,24 +2352,8 @@ def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, ca
     if persist:
         causal_model_cache_set(mods, s.model, fields, "_resident_busy", True)
     try:
-        if kept is not None and Bool(py=kept[0] == key):
-            lm = kept[1]
-            sessions = kept[2]
-            _resident_load_states(entries, sessions, s.state, keep)
-            mods.released()
-        else:
-            if kept is not None:
-                lm = kept[1]
-                sessions = kept[2]
-                causal_model_cache_set(mods, s.model, fields, "_resident_sessions", PythonObject(None))
-                expected = PythonObject(None)
-                _resident_close(entries, lm, sessions)
-                mods.released()
-                lm = PythonObject(None)
-                sessions = PythonObject(None)
-            var opened = _resident_open_all(mods, s.model, entries, s.state, batch, length, int15, keep)
-            lm = opened[0]
-            sessions = opened[1]
+        _resident_acquire_read(mods, s.model, s.state, entries, fields, kept,
+            key, batch, length, int15, keep, lm, sessions, expected)
         # Session opening/loading may release the GIL. Recheck the class
         # contract before preparing the final current-token span for execution.
         admission.recheck(generation_array_context())
@@ -2438,12 +2448,13 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
     var b = len(s.finished)
     var v = Int(py=s.model.vocab_size)
     var capacity = min(count, s.max_new - s.produced)
+    var read_control = GenerationReadControl(capacity, s.sampling_policy, s.greedy)
     s.busy = True
     var read_plan: Optional[LegacyGenerationReadPlan] = None
     var failed = False
     try:
         var legacy_resident = False
-        if capacity > 0 and not s.done() and s.greedy:
+        if (read_control.route == "auto" or read_control.route == "resident") and capacity > 0 and not s.done() and s.greedy:
             var entries = s.model._native_entries
             if (Bool(py=py_get(entries, "resident_read_v1", PythonObject(False)))
                     and py_get(entries, "native_block_operations") is not None
@@ -2454,11 +2465,12 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
                 # intermediate export/reload, so storage coupling is irrelevant.
                 if capacity == 1 or _resident_read_disjoint_state(mods, s.model, s.state):
                     var result = _read_resident(mods, s, capacity, admission.value())
+                    _generation_route_witness("resident_greedy", capacity, s.produced, read_control)
                     return result
                 # Keep the original resident-forward host loop: another engine
                 # does not establish the missing cross-layer alias contract.
                 legacy_resident = True
-        if capacity > 0 and not s.done() and not s.greedy and s.sampling_policy == 1:
+        if (read_control.route == "auto" or read_control.route == "resident") and capacity > 0 and not s.done() and not s.greedy and s.sampling_policy == 1:
             var entries = s.model._native_entries
             var fields = _standalone_record_fields(mods, s.model)
             if (Bool(py=py_get(entries, "resident_sampling_v1", PythonObject(False)))
@@ -2471,12 +2483,16 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
                 # still selects the stream's checksum-bound FP32 policy.
                 if capacity == 1 or _resident_read_disjoint_state(mods, s.model, s.state):
                     var result = _read_sampling_resident(mods, s, capacity, admission.value())
-                    _generation_route_witness("resident_sampling", capacity, s.produced, False)
+                    _generation_route_witness("resident_sampling", capacity, s.produced, read_control)
                     return result
                 legacy_resident = True
-        if capacity > 0 and not s.done() and not legacy_resident and _use_native_generation_engine(mods, s.model, s.state):
+        if capacity > 0 and not s.done() and read_control.route == "resident":
+            raise Error("generation: explicit resident route requires compatible private disjoint state and greedy or FP32 sampling")
+        if (capacity > 0 and not s.done() and not legacy_resident
+                and (read_control.route == "native_engine" or (read_control.route == "auto"
+                    and _use_native_generation_engine(mods, s.model, s.state)))):
             var result = _read_engine(mods, s, capacity)
-            _generation_route_witness("native_engine", capacity, s.produced, False)
+            _generation_route_witness("native_engine", capacity, s.produced, read_control)
             return result
         # Only the legacy fallback needs host token staging. Resident/native
         # engines return their final native result without this unused buffer.
@@ -2490,14 +2506,10 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         # never sizes it. Resident/native routes have already returned above.
         var sampling = GenerationSamplingScratch()
         sampling.use_f32_policy = s.sampling_policy == 1
-        # DEFAULT OFF, UNMEASURED A/B experiment (2026-10-29). Capture once per
-        # public read, never per token. Before promotion, measure both arms from
-        # the same source on supported sampling with EOS, streaming/read-call
-        # boundaries, and qualify failure/alias correctness. This only removes
-        # repeated KV uploads: successful-step exports and host selection remain,
-        # so it is not full GPU sampling residency or a claimed speedup.
-        var reuse_sampling_uploads = (not s.greedy and
-            getenv("MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE", "0") == "1")
+        # Upload retention is independent of greedy/Float64/FP32 selection.
+        # The resident fast path already retains KV; only this existing legacy
+        # forward path can remove a redundant upload, after ownership admission.
+        var reuse_sampling_uploads = read_control.kv.may_retain()
         # Stream prompts/current tokens are copied by generation_ids; state is
         # allocated privately and resume/checkpoint copy its buffers. The busy
         # stream owns those bytes for this operation. This follows the resident
@@ -2507,7 +2519,7 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
             if not admission:
                 admission = NativeArrayAdmission(generation_array_context())
             var l = Int(py=s.current.shape[1])
-            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, read_plan, s.produced > 0, True, reuse_sampling_uploads and capacity > 1 and not legacy_resident)
+            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, read_plan, s.produced > 0, True, reuse_sampling_uploads and not legacy_resident)
             # Post-release re-check for this forward's GIL-release window (not redundant).
             admission.value().recheck(generation_array_context())
             var raw = f32_ptr(Int(py=logits._addr))
@@ -2546,8 +2558,11 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         _ = out  # keep the Python object alive through the native call above
         causal_lm_tokens_row_major(tokens, dst, b, wrote)
         _ = out  # keep the Python object alive through the native call above
-        _generation_route_witness("legacy_forward", capacity, s.produced,
-            Bool(read_plan) and read_plan.value().resident_active and read_plan.value().resident_reuse)
+        _generation_route_witness("legacy_forward", capacity, s.produced, read_control,
+            Bool(read_plan) and read_plan.value().resident,
+            Bool(read_plan) and read_plan.value().resident_reuse,
+            read_plan.value().resident_uploads_skipped if read_plan else 0,
+            Bool(read_plan) and read_plan.value().resident_invalidated)
         return out
     except error:
         mods.released()

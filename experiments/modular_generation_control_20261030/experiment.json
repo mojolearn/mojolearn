@@ -1,0 +1,85 @@
+{
+  "schema": "mojolearn.generation-controls-experiment.v1",
+  "status": "Mac selected compiler completed exit0 before user stop; staging/tests interrupted before execution; RunPod Linux compilation/runtime pending",
+  "promoted": false,
+  "base_instrumentation_commit": "f048701e7c89530443c26d1b8a56aab9d9eec634",
+  "included_release_repair_commit": "c286a410cbc2fb970d9caabddc1c2d7604d6cdf0",
+  "controls": {
+    "MOJOLEARN_EXPERIMENT_GENERATION_ROUTE": {
+      "default": "auto",
+      "values": [
+        "auto",
+        "legacy",
+        "resident",
+        "native_engine"
+      ]
+    },
+    "MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32": {
+      "default": "0",
+      "values": [
+        "0",
+        "1"
+      ],
+      "binds": "stream/checkpoint numerical policy"
+    },
+    "MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE": {
+      "default": "0",
+      "values": [
+        "0",
+        "1"
+      ],
+      "binds": "one public read owned legacy resident-forward loan"
+    }
+  },
+  "affected_development_groups": [
+    "host:tokenizer"
+  ],
+  "native_boundary_scope": {
+    "resident_greedy_and_sampling": {
+      "group_call_operation": 32,
+      "group_reserve_operation": 30,
+      "group_release_operation": 31,
+      "inner_token_loop": "one GIL-released native group operation",
+      "outer_boundary": "CPython owner admission and publication remain",
+      "evidence_kind": "source path plus pending actual operation counters"
+    },
+    "native_engine": {
+      "inner_loop": "native Mojo",
+      "endpoint": "CPython GIL transition per admitted endpoint call; not eliminated",
+      "python_callbacks": "not implied by use of direct CPython C API"
+    },
+    "legacy_forward": {
+      "inner_loop": "native Mojo with CPython metadata/provider work between tokens"
+    }
+  },
+  "unsupported": [
+    {
+      "configuration": "resident + Float64 sampling",
+      "reason": "resident selector implements greedy/FP32 only"
+    },
+    {
+      "configuration": "resident + saved mojolearn-162m under unchanged compile flags",
+      "reason": "no final norm; separate MOJOLEARN_IDN_LM_RESIDENT_GENERATE remains disabled"
+    },
+    {
+      "configuration": "native_engine + resident-admissible model without existing resident-forward opt-out",
+      "reason": "existing engine admission refuses replacing resident path"
+    }
+  ],
+  "no_effect": [
+    "resident read KV toggle: already resident, no manufactured off-arm reload",
+    "native engine KV toggle: not this resident-forward loan",
+    "legacy read of one forward: no intervening reload",
+    "legacy model without applicable resident forward: no removable loan upload"
+  ],
+  "retention_policy": "Keep original failures and slower timings. Source, native images, raw outputs and receipts remain off-box before teardown. No vendor-specific references.",
+  "measurement_owner": "/root/neural_combined_ab",
+  "default_promotion_requirements": [
+    "full saved workload evidence",
+    "AMD qualification",
+    "quality preservation",
+    "within-release cross-vendor identity"
+  ],
+  "local_interruption_receipt": "~/mojolearn-evidence/modular-kv-reuse-20261030/interruption.json",
+  "runtime_qualified": false
+}
