@@ -9,7 +9,7 @@ on:
         required: true
       arch:
         type: choice
-        options: [host, sm_89, sm_80]
+        options: [host, sm_89, sm_80, gfx942, gfx950]
         required: true
       groups:
         description: Comma-separated exact development selectors; only missing groups

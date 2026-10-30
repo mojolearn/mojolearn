@@ -22,7 +22,7 @@ def require(ok, message):
 
 def workers_environment(environment, arch, cores):
     require(type(cores) is int and cores > 0, 'positive allocated CPU count required')
-    require(arch in ('host', 'sm_89', 'sm_80'), 'unsupported target')
+    require(arch in ('host', 'sm_89', 'sm_80', 'gfx942', 'gfx950'), 'unsupported target')
     env = dict(environment)
     env.update(MOJOLEARN_NUMERIC_MODE='identical', MOJOLEARN_COMPILE_JOBS=str(cores),
                MOJOLEARN_LINUX_CPU='x86-64-v3', MOJOLEARN_PACKAGE_BYTE_LM='1')
@@ -30,6 +30,12 @@ def workers_environment(environment, arch, cores):
         env.pop('MOJOLEARN_GPU_ARCHS', None)
         env.pop('MOJOLEARN_CUDA_CODE_FORMAT', None)
         env['MOJOLEARN_TARGET_COLUMN'] = 'cpu'
+    elif arch.startswith('gfx'):
+        # Use the supported Mojo target through the existing development
+        # builder. This selects compilation only; hardware runtime and
+        # cross-vendor admission still require their own retained evidence.
+        env.pop('MOJOLEARN_CUDA_CODE_FORMAT', None)
+        env.update(MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_TARGET_COLUMN='amd')
     else:
         env.update(MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_TARGET_COLUMN='nvidia',
                    MOJOLEARN_CUDA_CODE_FORMAT='ptx' if arch == 'sm_80' else 'native')
@@ -181,7 +187,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--root',type=Path,required=True);p.add_argument('--out',type=Path,required=True)
     p.add_argument('--commit',required=True);p.add_argument('--group',required=True)
-    p.add_argument('--arch',choices=('host','sm_89','sm_80'),required=True)
+    p.add_argument('--arch',choices=('host','sm_89','sm_80','gfx942','gfx950'),required=True)
     return run(p.parse_args())
 
 

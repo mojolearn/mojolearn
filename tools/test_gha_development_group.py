@@ -3,6 +3,8 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import os
+import subprocess
 
 import pytest
 
@@ -22,6 +24,33 @@ def test_ptx_and_host_routing_are_explicit():
     host=wrapper.workers_environment(env,'host',4)
     assert host['MOJOLEARN_TARGET_COLUMN']=='cpu'
     assert 'MOJOLEARN_GPU_ARCHS' not in host and 'MOJOLEARN_CUDA_CODE_FORMAT' not in host
+
+
+@pytest.mark.parametrize('arch', ['gfx942', 'gfx950'])
+def test_amd_routing_discards_cuda_state_and_uses_actual_allocation(arch):
+    inherited = {'MOJOLEARN_TARGET_COLUMN': 'nvidia',
+                 'MOJOLEARN_CUDA_CODE_FORMAT': 'ptx', 'MOJOLEARN_COMPILE_JOBS': '2'}
+    env = wrapper.workers_environment(inherited, arch, 8)
+    assert env['MOJOLEARN_GPU_ARCHS'] == arch
+    assert env['MOJOLEARN_TARGET_COLUMN'] == 'amd'
+    assert env['MOJOLEARN_COMPILE_JOBS'] == '8'
+    assert 'MOJOLEARN_CUDA_CODE_FORMAT' not in env
+    assert inherited['MOJOLEARN_CUDA_CODE_FORMAT'] == 'ptx'
+
+
+@pytest.mark.parametrize('mode,expected', [
+    ('development', 'MOJOLEARN_COMMIT must be a full SHA'),
+    ('shard', 'unknown arch gfx950'),
+])
+def test_gfx950_box_selection_is_limited_to_development(mode, expected):
+    # Fail at source admission before any directories, network or compiler
+    # work. This exercises the actual shell dispatcher, not a copied parser.
+    root = Path(wrapper.__file__).resolve().parents[1]
+    result = subprocess.run(['bash', str(root / 'tools/gha_release_box.sh'), mode, 'gfx950'],
+                            env=dict(os.environ, MOJOLEARN_COMMIT='not-a-commit'),
+                            text=True, capture_output=True)
+    assert result.returncode == 2
+    assert expected in result.stderr
 
 
 @pytest.mark.parametrize('cores',[0,-1,True,1.5,'4'])
