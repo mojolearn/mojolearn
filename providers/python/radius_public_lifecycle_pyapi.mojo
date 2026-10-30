@@ -4,10 +4,9 @@
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.native_loaded_module import NativeModules, native_loaded_module, _loaded_fields
+from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields, _class_fields
-from bindings.classical_attributes import classical_connect_numpy, _type_mro
-from bindings.public_attributes_native import _plan, _lookup
+from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute, _type_mro
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_values
 from bindings.classical_warnings import classical_warn_column
 from bindings.classical_arrays import classical_address
@@ -29,9 +28,14 @@ from core.native_scalar_decode import native_scalar_real
 def radius_settings(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = _fields(model)
-    var attributes = py_get(_loaded_fields(native_loaded_module("mojolearn._native_public_attributes")), "_CONTEXT")
-    var modules = NativeModules()
-    var plan = _plan(modules, model, attributes)
+    # RadiusNeighbors owns the native neighbor-query attribute descriptor, not
+    # the generic public-output descriptor. Use its import-connected context
+    # for both layout admission and setting reads; this also admits the saved
+    # CPU class registered by connect_host without invoking Python hooks.
+    var attributes = py_get(context, "family_xn_radius_attributes")
+    if attributes is None:
+        raise Error("RuntimeError: native RadiusNeighbors attribute context was not connected")
+    classical_check_layout(model, attributes)
     var ancestry = _type_mro(py_type(model))
     var setter_seen = False
     for i in range(len(ancestry)):  # driver-loop: native field writes and fit callbacks are admitted before mutation
@@ -47,7 +51,7 @@ def radius_settings(model: PythonObject, context: PythonObject) raises -> Python
     var settings = Python.dict()
     var names = Python.tuple("metric", "algorithm", "p", "radius")
     for i in range(len(names)):  # small-loop(four current radius settings)
-        var value = _lookup(model, names[i], fields, plan, attributes)
+        var value = classical_getattribute(model, names[i], attributes)
         host_inference_scalar(value, context)
         # NumPy primitives decode through retained native scalar buffers before
         # the shared archive refusal helper uses builtin float parsing. This
