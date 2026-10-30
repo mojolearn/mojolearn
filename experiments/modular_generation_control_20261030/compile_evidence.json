@@ -1,0 +1,68 @@
+{
+  "schema": "mojolearn.generation-controls-compile-evidence.v1",
+  "source_commit": "aea1d9a033431701e981d62d116e9c1e0867bbd6",
+  "selection": [
+    "host:tokenizer"
+  ],
+  "runtime_qualified": false,
+  "cross_vendor_identity_qualified": false,
+  "default_promotion": false,
+  "source": {
+    "key": "measurements/modular-kv-reuse-20261030/source-aea1d9a03343.tgz",
+    "sha256": "5b1d39e78aefd60d085b4956544ed79ffa0702cd7b9761776fef9b8f243dca5e",
+    "bytes": 153793776,
+    "put_status": 200,
+    "get_status": 200,
+    "verified": true,
+    "mac_readback_sha256": "5b1d39e78aefd60d085b4956544ed79ffa0702cd7b9761776fef9b8f243dca5e",
+    "mac_path": "/Users/andrewhendel/mojolearn-evidence/modular-kv-reuse-20261030/source-aea1d9a03343.tgz"
+  },
+  "linux": {
+    "native_exit_code": 0,
+    "builder_exit_code": 3,
+    "builder_scope": "45 unrelated host images missing; selected image and portable math dependency passed",
+    "compiler_workers": 16,
+    "available_memory_bytes": 63626481664,
+    "elapsed_seconds": 668.6656870709267,
+    "peak_rss_bytes": 20124450816,
+    "artifact_key": "d0d50d76d5634bcb2adb4a161b3d109cb00cc8eb59f18e44d801c1effe6cab63",
+    "retention": {
+      "key": "measurements/modular-kv-reuse-20261030/linux-aea1d9a-selected-tokenizer.tgz",
+      "sha256": "6c2b83975eb0d55606d00c687fd0d1a33ec809e9dda63a303608a7eee9d9503b",
+      "bytes": 18324101,
+      "put_status": 200,
+      "get_status": 200,
+      "readback_sha256": "6c2b83975eb0d55606d00c687fd0d1a33ec809e9dda63a303608a7eee9d9503b",
+      "verified": true,
+      "source_commit": "aea1d9a033431701e981d62d116e9c1e0867bbd6",
+      "scope": "Selected Linux tokenizer compile; installed runtime pending",
+      "utc": "2026-10-30T04:30:25.413507+00:00",
+      "mac_readback_sha256": "6c2b83975eb0d55606d00c687fd0d1a33ec809e9dda63a303608a7eee9d9503b",
+      "mac_path": "/Users/andrewhendel/mojolearn-evidence/modular-kv-reuse-20261030/linux-aea1d9a-selected-tokenizer.tgz"
+    }
+  },
+  "mac": {
+    "native_exit_code": 0,
+    "runtime": "controller stopped before staging/tests; no runtime pass",
+    "retention": {
+      "key": "measurements/modular-kv-reuse-20261030/mac-compile-interrupted-runtime.tar",
+      "sha256": "d799b2a654d3b984d917b08b2de7638e6439974aa6af32c1233e5734c4e22ee8",
+      "bytes": 28334080,
+      "put": 200,
+      "get": 200,
+      "verified": true,
+      "scope": "Mac selected compile completed before user stop; runtime tests not run",
+      "path": "/Users/andrewhendel/mojolearn-evidence/modular-kv-reuse-20261030/mac-compile-interrupted-runtime.tar"
+    }
+  },
+  "original_failures": [
+    "Python3.10 retention helper hashlib.file_digest unavailable; transport helper repaired without product changes",
+    "Pinned Unicode generator initially unavailable on PATH; selected build preflight failed before compilation, then pinned environment PATH repaired"
+  ],
+  "pending": [
+    "32 installed focused NVIDIA checks",
+    "actual concurrent/reentrant ownership coverage",
+    "frozen full-workload NVIDIA matrix",
+    "AMD qualification and within-release identity before promotion"
+  ]
+}

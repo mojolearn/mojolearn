@@ -1,6 +1,6 @@
 {
   "schema": "mojolearn.generation-controls-experiment.v1",
-  "status": "Mac selected compiler completed exit0 before user stop; staging/tests interrupted before execution; RunPod Linux compilation/runtime pending",
+  "status": "Optimized selected tokenizer compiles passed on Mac before stop and RunPod Linux; installed NVIDIA checks and full-workload matrix pending",
   "promoted": false,
   "base_instrumentation_commit": "f048701e7c89530443c26d1b8a56aab9d9eec634",
   "included_release_repair_commit": "c286a410cbc2fb970d9caabddc1c2d7604d6cdf0",
@@ -81,5 +81,7 @@
     "within-release cross-vendor identity"
   ],
   "local_interruption_receipt": "~/mojolearn-evidence/modular-kv-reuse-20261030/interruption.json",
-  "runtime_qualified": false
+  "runtime_qualified": false,
+  "compiled_source_commit": "aea1d9a033431701e981d62d116e9c1e0867bbd6",
+  "compile_evidence": "compile_evidence.json"
 }
