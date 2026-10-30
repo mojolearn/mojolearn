@@ -392,10 +392,21 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
     echo "$POD_ID" > "$D/deadman/pod_id.txt"
     COST_HR=$(rp_py cost)
     GPU=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); m=d.get("machine") or {}; print(m.get("gpuTypeId") or (d.get("gpu") or {}).get("id") or "?")' "$D/create_response.json" 2>/dev/null || echo "?")
-    _deadline=$(( $(now) + READY_TIMEOUT )); SSH_TARGET=""
+    _deadline=$(( $(now) + READY_TIMEOUT )); SSH_TARGET=""; _ready_attempt=0
     while [ "$(now)" -lt "$_deadline" ]; do
-        rp_call GET "$RP/pods/$POD_ID"; SSH_TARGET=$(rp_py ssh)
-        if [ -n "$SSH_TARGET" ] && with_timeout "$((10#$SSH_CONNECT_TIMEOUT + 20))" ssh $SSH_OPTS $SSH_TARGET 'echo SSH-OK' 2>/dev/null | grep -q SSH-OK; then break; fi
+        _ready_attempt=$((_ready_attempt + 1))
+        rp_call GET "$RP/pods/$POD_ID"
+        cp "$TMPD/rp.body" "$_request_evidence/readiness-$_ready_attempt.json"
+        SSH_TARGET=$(rp_py ssh)
+        printf '%s\t%s\tHTTP%s\n' "$(date -u +%FT%TZ)" "$_ready_attempt" "$RP_CODE" >> "$_request_evidence/readiness.tsv"
+        if [ -n "$SSH_TARGET" ]; then
+            # Keep the actual connection failure alongside its provider
+            # status. A timeout is not evidence that the image or job failed.
+            _ssh_log="$_request_evidence/ssh-$_ready_attempt.log"
+            if with_timeout "$((10#$SSH_CONNECT_TIMEOUT + 20))" ssh $SSH_OPTS $SSH_TARGET 'echo SSH-OK' > "$_ssh_log" 2>&1; then
+                if grep -qx SSH-OK "$_ssh_log"; then break; fi
+            fi
+        fi
         SSH_TARGET=""; sleep 10
     done
     [ -n "$SSH_TARGET" ] || { delete_pod "$POD_ID"; die "no ssh after ${READY_TIMEOUT}s; deleted"; }
