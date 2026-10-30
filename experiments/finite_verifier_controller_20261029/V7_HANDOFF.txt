@@ -33,9 +33,13 @@ needs SSL_CERT_FILE=/opt/homebrew/etc/openssl@3/cert.pem instead of its missing
 compiled-in certificate path. Request timeout is bounded at1200seconds after
 retained slow-upload/broken-pipe observations; it does not alter verifier inputs.
 
-Validation: 47 selected-Mac admission tests; 27 controller/local-failure/offsite
+Validation: 47 selected-Mac admission tests; 31 controller/local-failure/offsite
 tests. Four original Apple/CPU ARIMA crash reports validated without rerunning
 their algorithms. First Apple agglomerative raw archive has exact R2 readback;
 further finite snapshots remain independent of numerical collection. Product
 source freeze47508cfcd96771eee86b115739b2a83ddb0e43aa is unchanged by this tooling.
 Full logs and campaign packets: ~/mojolearn-evidence/release-evidence-prepare-20261029.
+
+Phase admission accepts only routine-all and training-all. A typo such as
+training is rejected at argument parsing; an empty registered phase also
+refuses completion. This prevents a successful empty training report.

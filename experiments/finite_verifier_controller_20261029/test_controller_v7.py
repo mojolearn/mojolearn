@@ -1,10 +1,12 @@
 """Exercise actual retained controller AST without launching native producers."""
 import ast
+import argparse
 import datetime
 import json
 from pathlib import Path
 from types import SimpleNamespace
 import time
+import sys
 
 import pytest
 from controller_local_failures import LocalObservationFailure
@@ -94,3 +96,29 @@ def test_retention_failure_prevents_local_failure_continuation(tmp_path):
     with pytest.raises(RuntimeError, match='retention failed'):
         scope['preserve_local_failure']({'vendor': 'apple', 'lane': 'broken'}, tmp_path,
                                         tmp_path / 'producer.log', {}, {'exit_code': 4})
+
+
+@pytest.mark.parametrize('phase', ['training', 'routine', 'unknown'])
+def test_phase_typo_is_rejected_before_reading_configuration(monkeypatch, phase):
+    monkeypatch.setattr(sys, 'argv', ['controller', '--configuration', '/missing.json',
+                                   '--vendor', 'cpu', '--phase', phase])
+    nodes = []
+    started = False
+    for node in TREE.body:
+        targets = [t.id for t in getattr(node, 'targets', []) if isinstance(t, ast.Name)]
+        if 'ap' in targets: started = True
+        if started: nodes.append(node)
+        if 'a' in targets: break
+    with pytest.raises(SystemExit) as error:
+        execute_nodes(nodes, dict(argparse=argparse, pathlib=__import__('pathlib')))
+    assert error.value.code == 2
+
+
+def test_empty_registered_phase_cannot_report_completion(tmp_path):
+    path = tmp_path / 'chunks.json'
+    path.write_text('{"chunks": []}')
+    start = next(i for i,n in enumerate(TREE.body) if isinstance(n, ast.Assign)
+                 and any(isinstance(t, ast.Name) and t.id == 'chunks' for t in n.targets))
+    with pytest.raises(ValueError, match='no registered units'):
+        execute_nodes(TREE.body[start:start+2], dict(CHUNKS=path,json=json,
+            a=SimpleNamespace(vendor='cpu',phase='training-all')))

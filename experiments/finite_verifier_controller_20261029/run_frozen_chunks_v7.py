@@ -1,7 +1,7 @@
 import argparse, collections, datetime, hashlib, json, os, pathlib, subprocess, sys, tarfile, time, shutil
 from controller_process import run_process
 from controller_lease_budget import lease_budget
-ap=argparse.ArgumentParser();ap.add_argument('--configuration',type=pathlib.Path,required=True);ap.add_argument('--vendor',required=True,choices=['apple','cpu','nvidia','amd']);ap.add_argument('--phase',required=True);ap.add_argument('--exclusions',type=pathlib.Path);ap.add_argument('--execute',action='store_true');ap.add_argument('--lease-deadline-epoch',type=float);ap.add_argument('--unit-budget-seconds',type=float);ap.add_argument('--retention-reserve-seconds',type=float);ap.add_argument('--max-units',type=int);ap.add_argument('--keep-going-local-failures',action='store_true');a=ap.parse_args()
+ap=argparse.ArgumentParser();ap.add_argument('--configuration',type=pathlib.Path,required=True);ap.add_argument('--vendor',required=True,choices=['apple','cpu','nvidia','amd']);ap.add_argument('--phase',required=True,choices=['routine-all','training-all']);ap.add_argument('--exclusions',type=pathlib.Path);ap.add_argument('--execute',action='store_true');ap.add_argument('--lease-deadline-epoch',type=float);ap.add_argument('--unit-budget-seconds',type=float);ap.add_argument('--retention-reserve-seconds',type=float);ap.add_argument('--max-units',type=int);ap.add_argument('--keep-going-local-failures',action='store_true');a=ap.parse_args()
 lease_budget(a.lease_deadline_epoch,a.unit_budget_seconds,a.retention_reserve_seconds,time.time())
 if a.max_units is not None and a.max_units <= 0:raise ValueError('max-units must be positive')
 CFG=json.loads(a.configuration.read_text())
@@ -145,6 +145,7 @@ def run(c):
  save(state,dict(status='chunk-complete',chunk=c))
 
 chunks=[c for c in json.loads(CHUNKS.read_text())['chunks'] if c['vendor']==a.vendor and c['phase']==a.phase]
+if not chunks:raise ValueError('configured phase has no registered units; no completion claim')
 excluded=json.loads(a.exclusions.read_text()) if a.exclusions else {}
 selected=[c for c in chunks if c['lane'] not in excluded]
 frozen_inputs(ROOT,PKG,LEDGER,REV)
