@@ -194,10 +194,17 @@ def test_tokenizer_native_unicode_specials_and_text_generation(tmp_path, monkeyp
     def forbidden(*args, **kwargs):
         raise AssertionError("Python tokenizer composition executed")
 
+    # Instance fields shadowing class descriptors are deliberately refused by
+    # tokenizer_public_native._owner before any callback. Keep that admission
+    # negative separate from proving the class's Python methods are not called.
     with monkeypatch.context() as patch:
         patch.setattr(tokenizer, "encode", forbidden)
-        patch.setattr(tokenizer, "decode", forbidden)
-        patch.setattr(tokenizer, "decode_bytes", forbidden)
+        with pytest.raises(TypeError, match="state field was replaced by a descriptor"):
+            model.generate_text("!", 3, tokenizer=tokenizer, eos_token_id=0)
+    with monkeypatch.context() as patch:
+        patch.setattr(Tokenizer, "encode", forbidden)
+        patch.setattr(Tokenizer, "decode", forbidden)
+        patch.setattr(Tokenizer, "decode_bytes", forbidden)
         assert model.generate_text("!", 3, tokenizer=tokenizer, eos_token_id=0) == ""
         stream = model.stream_text("!", 3, tokenizer=tokenizer)
         assert stream.read(1) == "\x00"
