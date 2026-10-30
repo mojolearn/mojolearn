@@ -118,6 +118,7 @@ def summarize(out):
                  qualify / "installed-modules.json", qualify / "tests.log")]
     return dict(schema=REPORT_SCHEMA, tool="tools/release_runtime_installed.py", vendor=vendor,
                 backend=BACKEND[vendor], numeric_mode="identical", source_revision=receipt.get("source_commit"),
+                test_revision=receipt.get("test_commit", receipt.get("source_commit")),
                 wheels=wheels, qualifier_status=receipt.get("status"), pytest_exit=receipt.get("pytest_exit"),
                 coverage=rows, coverage_without_tests=missing, cases=tests["total"],
                 status="passed" if passed else "failed", exit_code=0 if passed else 1, evidence=evidence)

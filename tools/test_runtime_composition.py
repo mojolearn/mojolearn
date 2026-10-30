@@ -211,3 +211,24 @@ def test_modified_original_controller_refused(composed):
 def test_helper_change_refused_even_if_selected_file_unchanged(composed):
     write(composed/'frozen-tests/shared_helper.py','changed helper\n')
     with pytest.raises(ValueError,match='frozen tests differ'):r.summarize(composed)
+
+
+def test_separate_test_revision_requires_explicit_ledger_policy(composed):
+    test_revision='d'*40
+    change(composed,c.MANIFEST,lambda d:d.update(test_commit=test_revision))
+    report=r.summarize(composed);report['qualifier_exit']=0;write(composed/r.REPORT,report)
+    producer={'report':str(composed/r.REPORT)}
+    configuration={'release_modes':['identical'],'build_flags':{},'artifacts:cpu':report['wheels']}
+    with pytest.raises(ValueError,match='exact ledger configuration'):
+        adapter._collect('runtime')(composed,{'configuration':configuration},producer)
+    configuration['runtime_test_source_revision']=test_revision
+    admitted=adapter._collect('runtime')(composed,{'configuration':configuration},producer)
+    assert admitted['facts']['test_revision']==test_revision
+    assert admitted['source_revision']==COMMIT
+    assert admitted['configuration']['runtime_test_source_revision']==test_revision
+    wanted={'kind':'runtime','coverage':list(r.COVERAGE_IDS),
+            'inputs':{'contract':{'id':'runtime-cpu'},'configuration':configuration}}
+    adapter._check('runtime')('runtime-cpu',wanted,admitted['facts'],{'vendor':'cpu'})
+    configuration['runtime_test_source_revision']='e'*40
+    with pytest.raises(ValueError,match='differs from the requirement'):
+        adapter._check('runtime')('runtime-cpu',wanted,admitted['facts'],{'vendor':'cpu'})

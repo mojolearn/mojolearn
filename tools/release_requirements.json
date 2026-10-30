@@ -94,7 +94,8 @@
       },
       "configuration": [
         "release_modes",
-        "build_flags"
+        "build_flags",
+        "runtime_test_source_revision"
       ],
       "kind": "runtime",
       "stage": "pre"
@@ -173,7 +174,8 @@
       },
       "configuration": [
         "release_modes",
-        "build_flags"
+        "build_flags",
+        "runtime_test_source_revision"
       ],
       "kind": "runtime",
       "stage": "pre"
@@ -252,7 +254,8 @@
       },
       "configuration": [
         "release_modes",
-        "build_flags"
+        "build_flags",
+        "runtime_test_source_revision"
       ],
       "kind": "runtime",
       "stage": "pre"
@@ -331,7 +334,8 @@
       },
       "configuration": [
         "release_modes",
-        "build_flags"
+        "build_flags",
+        "runtime_test_source_revision"
       ],
       "kind": "runtime",
       "stage": "pre"

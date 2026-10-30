@@ -59,3 +59,12 @@ reports. The existing `installed-runtime` ledger adapter uses that same path and
 revalidates original retained evidence. Only complete 73-file coverage across all
 five registered IDs can enter the runtime ledger gate. This is installed runtime
 coverage, not cross-vendor identity or physical multi-GPU qualification.
+
+When tests use a revision different from the product, explicitly set the release
+ledger configuration `runtime_test_source_revision` to that exact full commit.
+The runtime adapter retains `test_revision` separately from `source_revision`
+and refuses an override absent that configuration. Runtime requirements include
+this field in their fingerprints. A later test-policy change invalidates this
+runtime evidence; it does not by itself invalidate unchanged numerical binaries
+or cross-device identity observations. The default with no configured override
+continues to require tests at the product revision.
