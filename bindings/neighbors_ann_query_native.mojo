@@ -394,6 +394,11 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
                     Python.list(classical_address(distances), classical_address(indices), classical_address(mask),
                                 classical_address(filtered_distances), classical_address(filtered_indices)),
                     Python.list(m, n, selected, k))
+        # These owners are replaced below. Their raw addresses in the call's
+        # argument list do not retain the original candidate buffers; keep
+        # both alive until native filtering has consumed every candidate.
+        _ = distances
+        _ = indices
         distances = filtered_distances
         indices = filtered_indices
     if kind != 3:
