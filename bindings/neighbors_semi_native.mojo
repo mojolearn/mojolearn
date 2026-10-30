@@ -16,6 +16,7 @@
 # (MOJOLEARN_XN_OLD_ITEMS, MOJOLEARN_XN_UNFUSED_KNN) are read from the
 # context, where the module put them at its import.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -316,12 +317,14 @@ def _schi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     _ = py_call(fields.pop, PythonObject("_schi2_z"), PythonObject(None))
     var fit_idn = PythonObject(None)
     if usable:
-        fit_idn = family_call(b.getattr, args[0], PythonObject("x_neighbors_kfeat_schi2_fit_idn"), PythonObject(None))
+        # Admission may return a native capability snapshot. Optional exports
+        # belong to its retained module, not the snapshot object's attributes.
+        fit_idn = neural_descriptor_entry(xn_module(args[0]), "x_neighbors_kfeat_schi2_fit_idn", False)
     var entry = PythonObject(None)
     if fit_idn is not None:
         entry = fit_idn
     elif (flags & 2) != 0:
-        entry = family_call(b.getattr, args[0], PythonObject("x_neighbors_kfeat_schi2_fit"))
+        entry = neural_descriptor_entry(xn_module(args[0]), "x_neighbors_kfeat_schi2_fit")
     if entry is not None:
         var w = _semi_out(Python.tuple(d, nc), "<f4", context)
         var off = _semi_out(Python.tuple(nc), "<f4", context)
