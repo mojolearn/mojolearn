@@ -15,6 +15,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_instance_item import native_instance_item
 from bindings.native_array_storage import native_array_from_bytes
 from bindings.native_buffer_address import native_buffer_address
+from bindings.native_numpy_metadata import native_numpy_type
 from bindings.neural_block_admission import neural_array_slots, neural_array_snapshot
 from bindings.mode_metadata_native import _class_fields
 from bindings.causal_model_config import model_record_fields, model_dict, model_plain, model_string, model_integer, model_sequence
@@ -165,22 +166,30 @@ def _info_map(mut mods: NativeModules, value: PythonObject) raises -> PythonObje
     return value
 
 
+def _checkpoint_pinned_bytes(pin: AdmittedBorrowedBuffer) raises -> PythonObject:
+    var count = pin.layout.value().count * pin.layout.value().itemsize
+    var bytes = List[UInt8](length=count, fill=0)
+    pin.layout.value().copy_to(Int(bytes.unsafe_ptr()))
+    ref cpy = Python().cpython()
+    var raw = cpy.lib.get_function[PyObjectPtr]("PyBytes_FromStringAndSize")(bytes.unsafe_ptr(), count)
+    _ = bytes  # The C API copies from this native owner before it can be released.
+    _ = pin
+    if not raw:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=raw)
+
+
 def _checkpoint_bytes(value: PythonObject) raises -> PythonObject:
     admit_native_buffer_exporter(value)
     var pin = AdmittedBorrowedBuffer(value)
-    var count = pin.layout.value().count * pin.layout.value().itemsize
-    var bytes = List[UInt8](length=count, fill=0)
+    var raw = PythonObject(None)
     try:
-        pin.layout.value().copy_to(Int(bytes.unsafe_ptr()))
+        raw = _checkpoint_pinned_bytes(pin)
     except error:
         pin.release()
         raise error
     pin.release()
-    ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyBytes_FromStringAndSize")(bytes.unsafe_ptr(), count)
-    if not raw:
-        raise cpy.unsafe_get_error()
-    return PythonObject(from_owned=raw)
+    return raw
 
 
 def _checkpoint_read_bytes(mut mods: NativeModules, fd: PythonObject, count: Int) raises -> PythonObject:
@@ -642,13 +651,33 @@ def checkpoint_repr(mut mods: NativeModules, value: PythonObject, kind: PythonOb
 def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
     var context = _checkpoint_context()
     var cls = context["array_class"]
-    if py_type(value) is not cls:
-        raise Error("TypeError: widen_f16 requires a native Array of float16 or uint16 bits")
     var slots = neural_array_slots(context)
-    var names = py_call(mods.module("builtins").list, slots.keys())
-    var captured = py_call(mods.module("builtins").object.__new__, cls)
-    for i in range(len(names)):  # small-loop(capture caller Array slots once before dtype normalization)
-        _ = py_call(slots[names[i]].__set__, captured, py_call(slots[names[i]].__get__, value, cls))
+    var captured = PythonObject(None)
+    if py_type(value) is cls:
+        var names = py_call(mods.module("builtins").list, slots.keys())
+        captured = py_call(mods.module("builtins").object.__new__, cls)
+        for i in range(len(names)):  # small-loop(capture caller Array slots once before dtype normalization)
+            _ = py_call(slots[names[i]].__set__, captured, py_call(slots[names[i]].__get__, value, cls))
+    else:
+        # The pre-migration public operation also accepted ordinary NumPy
+        # float16/uint16 arrays. Capture their native buffer once and copy raw
+        # bits in C order; no ndarray conversion, Python hook, or arithmetic
+        # may execute while preparing the existing widening kernel's input.
+        if py_type(value) is not native_numpy_type("ndarray", context["linalg_context"]):
+            raise Error("TypeError: widen_f16 requires a native Array or exact ndarray of float16 or uint16 bits")
+        admit_native_buffer_exporter(value)
+        var pin = AdmittedBorrowedBuffer(value)
+        var code = pin.format
+        if (pin.layout.value().itemsize != 2 or
+                (code != "e" and code != "H" and code != "<e" and code != "<H"
+                 and code != "=e" and code != "=H" and code != "@e" and code != "@H")):
+            raise Error("TypeError: widen_f16 requires little-endian float16 or uint16 bit storage")
+        var shape = Python.list()
+        for axis in range(len(pin.layout.value().shape)):  # small-loop(captured native buffer shape)
+            _ = py_call(shape.append, PythonObject(pin.layout.value().shape[axis]))
+        var raw = _checkpoint_pinned_bytes(pin)
+        captured = checkpoint_array(mods, raw, shape, "H", cls)
+        pin.release()
     var dtype = model_string(mods, captured.dtype)
     if dtype != "<f2" and dtype != "<u2":
         raise Error("TypeError: widen_f16 requires float16 or uint16 bit storage")
