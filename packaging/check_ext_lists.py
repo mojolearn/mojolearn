@@ -349,7 +349,12 @@ def plugin_problems():
         print("  OK        tools/verify_linux_surface_qualification.py PLUGIN_ARCHES == gpu_plugins.py vendors")
     for rel, token in PLUGIN_READERS:
         text = _read_tree(rel)
-        if text is None or token not in text:
+        # `from . import gpu_plugins` also counts when the module is one name of a
+        # combined relative import (`from . import _rocm_runtime, gpu_plugins, ...`).
+        found = text is not None and (token in text or (
+            token.startswith("from . import ") and re.search(
+                r"^from \. import [^\n]*\b" + re.escape(token.split()[-1]) + r"\b", text, re.M)))
+        if not found:
             out.append(f"  MISSING   {rel} does not read gpu_plugins.py by {token!r}")
         else:
             print(f"  OK        {rel} reads the plugin table: {token!r}")
