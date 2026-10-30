@@ -1,0 +1,51 @@
+{
+  "schema": "mojolearn.focused-repair-evidence.v1",
+  "repair_commit": "fc1b5d371f6913f782cb5cd445911d840e9d6b28",
+  "validation": {
+    "status": "passed",
+    "native_selected_compile_exit": 0,
+    "development_builder_exit": 3,
+    "development_builder_scope": "Selected tokenizer compiled successfully; full host set intentionally incomplete.",
+    "unique_checks": 14,
+    "initial_passed": 13,
+    "initial_failed": 1,
+    "initial_failure": "Test fixture requested unsupported CPU seasonal MA Q=1; original report preserved.",
+    "corrected_fixture": "Seasonal AR Q=0 with exogenous regressor",
+    "retry_passed": 1,
+    "original_512_observation_reproduction_exit": 0,
+    "base_commit": "47508cfcd96771eee86b115739b2a83ddb0e43aa",
+    "native_source": "providers/python/arima_lifecycle_pyapi.mojo",
+    "native_source_sha256": "3ea8e0ef5353731d6e180a03184581d44f7f91bacb9467abfcad8ae0f0006719",
+    "evidence": [
+      "focused.xml",
+      "focused-controller.log",
+      "seasonal-supported.xml",
+      "seasonal-supported.log",
+      "original-reproduction-controller.log",
+      "stage-receipt.json"
+    ],
+    "full_release_identity": "pending root composed freeze; this is focused installed CPU correctness evidence"
+  },
+  "stage": {
+    "base": "/Users/andrewhendel/mojolearn-evidence/release-green-20261029/final-venv",
+    "clone": "/Users/andrewhendel/mojolearn-evidence/arima-cpu-repair-20261029/venv",
+    "source_root": "/Users/andrewhendel/mojolearn-wt/arima-cpu-repair-20261029",
+    "source_mismatches": [],
+    "compile_receipt": "/Users/andrewhendel/mojolearn-evidence/resident-sampling-runtime-repair-20261029/cache/artifacts/9d6490aa8859852bfa20c55d475aa2061acd899efbac17ba209f92bacda47f5d/receipt.json",
+    "raw_sha256": "9a9d95c7d1a6526fbcf16525d67610fbf89bcc28f8d4e28203ccd96284353fb4",
+    "installed_sha256": "9746fc24ea89223c8f609c883b002f7d0b9f67835e8a9e0bdb1c865937b328c5",
+    "changed_extensions": [
+      "host/_mojolearn_tokenizer_host.so"
+    ]
+  },
+  "retention": {
+    "key": "measurements/arima-cpu-repair-20261029/arima-repair-evidence.tgz",
+    "sha256": "2a4c429b7016c73c7d57fd3abff8f698260aaaa8487b52f37e35f04f065c2dab",
+    "bytes": 15691663,
+    "put_status": 200,
+    "get_status": 200,
+    "verified": true,
+    "commit": "fc1b5d371f6913f782cb5cd445911d840e9d6b28",
+    "utc": "2026-10-30T02:54:25.506418+00:00"
+  }
+}
