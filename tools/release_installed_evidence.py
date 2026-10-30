@@ -81,6 +81,7 @@ def _facts(kind):
             if local not in evidence:
                 evidence.append(local)
         return dict(producer=name, source_root=str(Path(root).resolve()), source_revision=revision,
+                    **({"test_revision": report.get("test_revision", revision)} if kind == "runtime" else {}),
                     vendor=vendor, wheels=dict(wheels), version=report.get("version"),
                     coverage=rows, evidence=evidence)
     return facts_of
@@ -105,6 +106,17 @@ def _collect(kind):
         require(configuration.get("release_modes") == ["identical"], "only the identical release is admitted")
         reconstruction = {"release_modes": ["identical"], "build_flags": configuration["build_flags"]}
         declared = ["release_modes", "build_flags"]
+        if kind == "runtime":
+            test_revision = facts["test_revision"]
+            require(isinstance(test_revision, str) and len(test_revision) == 40,
+                    "runtime test revision must be a full committed revision")
+            configured_tests = configuration.get("runtime_test_source_revision")
+            require((configured_tests is None and test_revision == facts["source_revision"])
+                    or configured_tests == test_revision,
+                    "runtime test source override needs the exact ledger configuration")
+            if configured_tests is not None:
+                reconstruction["runtime_test_source_revision"] = configured_tests
+                declared.append("runtime_test_source_revision")
         if kind == "published":
             artifacts = configuration.get("artifacts:" + vendor)
             require(isinstance(artifacts, dict) and artifacts, "ledger configuration lacks artifacts:" + vendor)
@@ -129,6 +141,9 @@ def _check(kind):
                 "installed evidence belongs to another requirement or vendor")
         configuration = wanted["inputs"].get("configuration", {})
         require(configuration.get("release_modes") == ["identical"], "release modes differ")
+        if kind == "runtime":
+            expected_tests = configuration.get("runtime_test_source_revision") or facts["source_revision"]
+            require(facts["test_revision"] == expected_tests, "runtime test revision differs from the requirement")
         if kind == "published":
             artifacts = configuration.get("artifacts:" + vendor) or {}
             require(all(artifacts.get(file) == digest for file, digest in facts["wheels"].items()),

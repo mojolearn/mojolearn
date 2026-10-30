@@ -905,6 +905,43 @@ class MergedLayoutRefusals(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "mixes the merged and per-binding layouts"):
             self.pack(dirs, "--profile", "generic")
 
+    def test_explicit_group_composition_can_parse_independent_host(self):
+        dirs = self.native()
+        for vendor, arch in NATIVE_SETS:
+            host = self.root / 'sets' / vendor / arch / 'host'
+            for path in host.iterdir():
+                path.unlink()
+            for name, data in dir_files(vendor, arch, 'host').items():
+                (host / name).write_bytes(data)
+        with self.assertRaisesRegex(SystemExit, 'mixes the merged and per-binding layouts'):
+            self.pack(dirs, '--profile', 'generic')
+        parsed = [s for d in dirs for s in pw.load_set(d, allow_independent_host=True)]
+        self.assertTrue(all(s.layout == 'merged' and set(s.hosts) == set(pw.HOST_NAMES) for s in parsed))
+        self.assertTrue(all('host/' + MERGED_INDEX not in s.indexes for s in parsed))
+        next(iter(parsed[0].hosts.values())).unlink()
+        with self.assertRaises(SystemExit):
+            pw.load_set(dirs[0], allow_independent_host=True)
+
+    def test_explicit_amd_group_override_parses_only_the_effective_index(self):
+        from release_linux_amd_overrides import effective_plan
+        dirs = self.native()
+        hip = next(Path(d) for d in dirs if Path(d).name == 'hip')
+        identical = hip / 'gfx942/identical'
+        path = identical / MERGED_INDEX
+        record = json.loads(path.read_text())
+        record['files'] = effective_plan(record['files'], ['_mojolearn'])
+        path.write_text(json.dumps(record))
+        (identical / '_mojolearn.so').write_bytes(b'inert current AMD override')
+        with self.assertRaisesRegex(SystemExit, 'merged_groups.json plan'):
+            pw.load_set(hip)
+        parsed = pw.load_set(hip, device_overrides_by_leg={'hip/gfx942': ['_mojolearn']})
+        self.assertEqual(len(parsed), 1)
+        self.assertIn('hip/gfx942/identical/_mojolearn.so', parsed[0].files)
+        with self.assertRaises(SystemExit):
+            pw.load_set(hip, device_overrides_by_leg={'cuda/sm_89': ['_mojolearn']})
+        with self.assertRaises(SystemExit):
+            pw.load_set(hip, device_overrides_by_leg={'hip/gfx942': ['_mojolearn_x_sequence']})
+
     def test_an_own_member_file_beside_the_index_is_refused(self):
         dirs = self.native()
         (self.root / "sets/cuda/sm_89/_mojolearn_gbdt.so").write_bytes(b"shadow")

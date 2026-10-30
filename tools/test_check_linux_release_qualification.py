@@ -136,6 +136,25 @@ class ReleaseAdmissionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 gate.inspect_wheel(wheel, root, index_out={})
 
+    def test_independent_host_requires_explicit_group_provenance_and_complete_files(self):
+        for origin, missing, accepted in [('compiled-group-composition', False, True),
+                                          ('built', False, False), ('compiled-group-composition', True, False)]:
+            with self.subTest(origin=origin, missing=missing), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                names = list(gate.HOST_NAMES)
+                host = {'mojolearn/host/' + n + '.so': ('host ' + n).encode()
+                        for n in (names[1:] if missing else names)}
+                host['mojolearn-0.6.0.dist-info/LINUX_PAYLOAD.json'] = json.dumps(dict(
+                    host_binding_layout='per-binding', sets={'hip/gfx942': {'origin': origin}})).encode()
+                wheel = make_wheel(root, vendors=('hip',), merged=True, extra=host)
+                if accepted:
+                    output = {}
+                    gate.inspect_wheel(wheel, root, vendors=('hip',), host_out=output)
+                    self.assertEqual(len(output), len(gate.HOST_NAMES))
+                else:
+                    with self.assertRaises(ValueError):
+                        gate.inspect_wheel(wheel, root, vendors=('hip',))
+
     def test_vendor_candidates_missing_modes_and_corrupt_record_refuse(self):
         cases = [dict(vendors=('hip',)), dict(vendors=('cuda',)),
                  dict(omit='mojolearn/hip/gfx942/identical/_mojolearn_gbdt.so'),

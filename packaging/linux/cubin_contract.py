@@ -189,12 +189,78 @@ def tool_version(tool):
     return r.stdout.strip().splitlines()[-1]
 
 
-def compile_ptx(text, arch, ptxas, fatbinary, diagnostics_dir=None):
+def _file_identity(path):
+    path = Path(path)
+    return {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size}
+
+
+def tool_identities(ptxas, fatbinary):
+    result = {}
+    for name, invocation in (("ptxas", ptxas), ("fatbinary", fatbinary)):
+        path = Path(shutil.which(str(invocation)) or invocation).resolve()
+        result[name] = dict(_file_identity(path), path=str(path), invocation=str(invocation),
+                            version=tool_version(str(path)))
+    return result
+
+
+def module_commands(arch, tools):
+    return [[tools["ptxas"]["invocation"], f"-arch={arch}", *PTXAS_FLAGS, "m.ptx", "-o", "m.cubin"],
+            [tools["fatbinary"]["invocation"], "--create=m.fatbin",
+             f"--image3=kind=elf,sm={arch[3:]},file=m.cubin", *FATBIN_FLAGS]]
+
+
+def retained_module(directory, text, arch, tools):
+    """Read an exact prior assembler execution, never infer it from output hashes."""
+    directory = Path(directory) / hashlib.sha256(text).hexdigest()
+    receipt = json.loads((directory / "receipt.json").read_text())
+    expected = {"schema": "mojolearn.cuda.module-compile.v1", "arch": arch,
+                "ptx_sha256": hashlib.sha256(text).hexdigest(), "tools": tools,
+                "commands": module_commands(arch, tools), "exit_codes": [0, 0]}
+    if any(receipt.get(k) != value for k, value in expected.items()):
+        raise ValueError("retained CUDA module compiler/recipe/source differs")
+    names = {"m.ptx", "m.cubin", "m.fatbin", "ptxas.stdout", "ptxas.stderr", "fatbinary.stdout", "fatbinary.stderr"}
+    if set(receipt.get("files", {})) != names:
+        raise ValueError("retained CUDA module output/log coverage differs")
+    for name, identity in receipt["files"].items():
+        if _file_identity(directory / name) != identity:
+            raise ValueError("retained CUDA module bytes differ: " + name)
+    if (directory / "m.ptx").read_bytes() != text:
+        raise ValueError("retained CUDA module PTX differs")
+    return (directory / "m.fatbin").read_bytes()
+
+
+def _retain_module(directory, text, arch, tools, executions, scratch):
+    directory = Path(directory); directory.mkdir(parents=True, exist_ok=True)
+    target = directory / hashlib.sha256(text).hexdigest()
+    pending = Path(tempfile.mkdtemp(prefix="pending-", dir=directory))
+    try:
+        for name in ("m.ptx", "m.cubin", "m.fatbin"):
+            shutil.copyfile(Path(scratch) / name, pending / name)
+        for name, execution in zip(("ptxas", "fatbinary"), executions):
+            (pending / (name + ".stdout")).write_text(execution.stdout)
+            (pending / (name + ".stderr")).write_text(execution.stderr)
+        receipt = dict(schema="mojolearn.cuda.module-compile.v1", arch=arch,
+                       ptx_sha256=hashlib.sha256(text).hexdigest(), tools=tools,
+                       commands=[r.args for r in executions], exit_codes=[r.returncode for r in executions],
+                       files={f.name: _file_identity(f) for f in pending.iterdir()})
+        (pending / "receipt.json").write_text(json.dumps(receipt, sort_keys=True, indent=2)+"\n")
+        pending.rename(target)
+    finally:
+        if pending.exists(): shutil.rmtree(pending)
+
+
+def compile_ptx(text, arch, ptxas, fatbinary, diagnostics_dir=None, retention_dir=None, tools=None):
     """PTX bytes -> compressed fatbin bytes holding the fmad=false cubin.
 
     ptxas and fatbinary run in a scratch directory on FIXED relative names, so
     no path reaches the image (the cubin's .note.nv.tkinfo records the command
     line) and the output depends on the PTX and the tools alone."""
+    if retention_dir is not None:
+        tools = tools or tool_identities(ptxas, fatbinary)
+        target = Path(retention_dir) / hashlib.sha256(text).hexdigest()
+        if target.exists():
+            return retained_module(retention_dir, text, arch, tools)
+    executions = []
     with tempfile.TemporaryDirectory() as d:
         with open(os.path.join(d, "m.ptx"), "wb") as f:
             f.write(text)
@@ -205,12 +271,16 @@ def compile_ptx(text, arch, ptxas, fatbinary, diagnostics_dir=None):
             _retain_tool_failure(diagnostics_dir, text, arch, command, r, d)
             raise RuntimeError(f"ptxas -arch={arch} failed (exit {r.returncode}, "
                                f"PTX sha256 {hashlib.sha256(text).hexdigest()}): {r.stderr[-800:]}")
+        executions.append(r)
         command = [fatbinary, "--create=m.fatbin", f"--image3=kind=elf,sm={arch[3:]},file=m.cubin",
                    *FATBIN_FLAGS]
         r = subprocess.run(command, capture_output=True, text=True, cwd=d)
         if r.returncode:
             _retain_tool_failure(diagnostics_dir, text, arch, command, r, d)
             raise RuntimeError(f"fatbinary failed (exit {r.returncode}): {r.stderr[-800:]}")
+        executions.append(r)
+        if retention_dir is not None:
+            _retain_module(retention_dir, text, arch, tools, executions, d)
         with open(os.path.join(d, "m.fatbin"), "rb") as f:
             return f.read()
 
@@ -312,7 +382,7 @@ def _patch_one(path, data, built, objdump):
     return bytes(buf), row
 
 
-def patch_files(paths, ptxas, fatbinary, jobs=None, arch=None, objdump=None, diagnostics_dir=None):
+def patch_files(paths, ptxas, fatbinary, jobs=None, arch=None, objdump=None, diagnostics_dir=None, retention_dir=None):
     """Convert every PTX module of every file; one JSON row per file.
 
     Distinct modules are compiled once across all files. `arch`, when given,
@@ -326,10 +396,14 @@ def patch_files(paths, ptxas, fatbinary, jobs=None, arch=None, objdump=None, dia
             if arch and a != arch:
                 raise ValueError(f"{p}: a module targets {a}, the set is {arch}")
             todo.setdefault(hashlib.sha256(text).hexdigest(), (text, a))
+    tools = tool_identities(ptxas, fatbinary) if retention_dir is not None else None
+    extra = (retention_dir, tools) if retention_dir is not None else ()
     with cf.ThreadPoolExecutor(jobs or os.cpu_count() or 1) as ex:
-        futs = {k: ex.submit(compile_ptx, t, a, ptxas, fatbinary, diagnostics_dir)
+        futs = {k: ex.submit(compile_ptx, t, a, ptxas, fatbinary, diagnostics_dir, *extra)
                 for k, (t, a) in todo.items()}
         built = {k: f.result() for k, f in futs.items()}
+    if tools is not None and tool_identities(ptxas, fatbinary) != tools:
+        raise ValueError("CUDA assembler tools changed during execution")
     rows = []
     for p, data in datas.items():
         new, row = _patch_one(p, data, built, objdump)
@@ -337,6 +411,28 @@ def patch_files(paths, ptxas, fatbinary, jobs=None, arch=None, objdump=None, dia
             Path(p).write_bytes(new)
         rows.append(row)
     return rows
+
+
+def replay_retained(path, directory, tools, arch, objdump):
+    """Replay the standard placement using retained exact compiler executions.
+
+    No assembler runs here. The caller validates the pinned tool archive and
+    retains the successful whole postcompile execution separately.
+    """
+    data = Path(path).read_bytes()
+    built = {}
+    for start, end in modules(data):
+        text = data[start:end]
+        if ptx_arch(text) != arch:
+            raise ValueError("retained placement target differs")
+        key = hashlib.sha256(text).hexdigest()
+        built[key] = retained_module(directory, text, arch, tools)
+    result, report = _patch_one(path, data, built, objdump)
+    if any(not row["jit_invariant"] for row in report["unplaced"]):
+        raise ValueError("retained placement leaves JIT-dependent modules")
+    if audit_bytes(result, arch)["errors"]:
+        raise ValueError("retained placement fails native CUDA audit")
+    return result, report
 
 
 # ------------------------------------------------------------------ audit
@@ -429,6 +525,8 @@ def main():
     ap.add_argument("--jobs", type=int, default=None)
     ap.add_argument("--diagnostics-dir", type=Path,
                     help="retain failed assembler inputs, exit codes and complete tool output")
+    ap.add_argument("--retention-dir", type=Path,
+                    help="retain/reuse exact successful module inputs, cubins, fatbins and tool receipts")
     a = ap.parse_args()
     if a.mode == "patch":
         if not a.objdump:
@@ -436,7 +534,7 @@ def main():
             return 2
         print(json.dumps({"ptxas": tool_version(a.ptxas), "fatbinary": tool_version(a.fatbinary),
                           "ptxas_flags": PTXAS_FLAGS, "fatbinary_flags": FATBIN_FLAGS}))
-        rows = patch_files(a.paths, a.ptxas, a.fatbinary, a.jobs, a.arch, a.objdump, a.diagnostics_dir)
+        rows = patch_files(a.paths, a.ptxas, a.fatbinary, a.jobs, a.arch, a.objdump, a.diagnostics_dir, a.retention_dir)
         for r in rows:
             print(json.dumps(r))
         return int(any(not u["jit_invariant"] for r in rows for u in r["unplaced"]))

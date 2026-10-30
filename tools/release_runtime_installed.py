@@ -69,6 +69,9 @@ def summarize(out):
     """Pure re-derivation from retained files: junit, qualifier receipt and coverage map."""
     import qualify_native_runtime_installed as q
     out = Path(out).resolve()
+    if (out / "composition.json").exists():
+        from release_runtime_composition import summarize as summarize_composition
+        return summarize_composition(out)
     qualify = out / QUALIFY_DIR
     coverage_doc = json.loads((out / "coverage.json").read_text())
     mapping = coverage_map(coverage_doc)
@@ -85,7 +88,7 @@ def summarize(out):
     require(junit.is_file(), "no junit report; the tests did not run")
     tests = q.junit_summary(junit)
     require(tests == receipt.get("tests"), "junit report differs from the qualifier receipt")
-    scope = q.test_scope_summary(tests, selected, BACKEND[vendor])
+    scope = q.test_scope_summary(tests, selected, BACKEND[vendor], interpreter=receipt.get("interpreter"))
     require(scope == receipt.get("test_scope_summary"), "test scope differs from the qualifier receipt")
     installed = json.loads((qualify / "installed-modules.json").read_text())
     require(installed.get("vendor") == BACKEND[vendor] and installed.get("numeric_mode") == "identical",
@@ -115,6 +118,7 @@ def summarize(out):
                  qualify / "installed-modules.json", qualify / "tests.log")]
     return dict(schema=REPORT_SCHEMA, tool="tools/release_runtime_installed.py", vendor=vendor,
                 backend=BACKEND[vendor], numeric_mode="identical", source_revision=receipt.get("source_commit"),
+                test_revision=receipt.get("test_commit", receipt.get("source_commit")),
                 wheels=wheels, qualifier_status=receipt.get("status"), pytest_exit=receipt.get("pytest_exit"),
                 coverage=rows, coverage_without_tests=missing, cases=tests["total"],
                 status="passed" if passed else "failed", exit_code=0 if passed else 1, evidence=evidence)
@@ -137,6 +141,8 @@ def run(args):
                "--python", args.python, "--out", str(out / QUALIFY_DIR), "--timeout", str(args.timeout)]
     if args.git_root:
         command += ["--git-root", str(args.git_root.resolve())]
+    if getattr(args, 'test_source_commit', None):
+        command += ['--test-source-commit', args.test_source_commit]
     for wheel in args.wheel:
         command += ["--wheel", str(Path(wheel).resolve())]
     for name in selected:
@@ -174,6 +180,7 @@ def main(argv=None):
     go.add_argument("--vendor", choices=sorted(BACKEND), required=True)
     go.add_argument("--source-root", type=Path, required=True)
     go.add_argument("--source-commit", required=True)
+    go.add_argument("--test-source-commit", help="committed test revision; the product/wheel source remains unchanged")
     go.add_argument("--git-root", type=Path)
     go.add_argument("--wheel", action="append", required=True)
     go.add_argument("--python", default=sys.executable)
@@ -181,9 +188,23 @@ def main(argv=None):
     go.add_argument("--out", type=Path, required=True)
     again = sub.add_parser("summarize")
     again.add_argument("--out", type=Path, required=True)
+    compose = sub.add_parser("compose", help="re-derive disjoint complete whole-file receipts")
+    compose.add_argument("--receipt", action="append", type=Path, required=True,
+                         help="original qualifier output directory, repeated per complete run")
+    compose.add_argument("--selection", type=Path, help="JSON mapping original absolute receipt directory to selected complete filenames")
+    compose.add_argument("--vendor", choices=sorted(BACKEND), required=True)
+    compose.add_argument("--source-root", type=Path, required=True)
+    compose.add_argument("--source-commit", required=True)
+    compose.add_argument("--test-source-commit")
+    compose.add_argument("--git-root", type=Path)
+    compose.add_argument("--wheel", action="append", type=Path, required=True)
+    compose.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "run":
         return run(args)
+    if args.command == "compose":
+        from release_runtime_composition import compose as compose_receipts
+        return compose_receipts(args)
     report = summarize(args.out)
     print(json.dumps({k: report[k] for k in ("status", "cases", "coverage_without_tests")}))
     return report["exit_code"]

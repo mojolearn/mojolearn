@@ -63,6 +63,67 @@ class QualificationWheels(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "RECORD mismatch"):
             qw.retained_payload(self.site)
 
+    def stage_manifest(self):
+        witness = self.site / "mojolearn/identity_columns/COMMIT"
+        witness.write_text(self.commit + "\n")
+        evidence = self.root / "retained-execution.json"
+        evidence.write_text('{"scope":"test fixture, not compiler evidence"}')
+        assets = []
+        for path in (self.site / "mojolearn").rglob("*"):
+            if path.is_file() and path.suffix != ".py":
+                name = path.relative_to(self.site).as_posix()
+                assets.append(dict(path=name, member=name, bytes=path.stat().st_size,
+                                   sha256=qw.digest(path)))
+        manifest = self.root / "stage.json"
+        document = dict(schema="mojolearn.retained-qualification-stage.v1",
+                        source_commit=self.commit, assets=assets,
+                        evidence=[dict(path=str(evidence), sha256=qw.digest(evidence))])
+        manifest.write_text(json.dumps(document))
+        return manifest, document
+
+    def test_stage_uses_real_split_writer_without_record_or_release_claim(self):
+        manifest, document = self.stage_manifest()
+        for path in self.site.glob("*.dist-info/RECORD"):
+            path.unlink()
+        report = qw.assemble(ROOT, self.commit, self.site, self.root / "stage-wheels",
+                             stage_manifest=manifest)
+        self.assertFalse(report["publishable"])
+        self.assertEqual(report["distributions"], [])
+        self.assertEqual(len(report["wheels"]), 2)
+        self.assertEqual(report["retained_stage_manifest"]["sha256"], qw.digest(manifest))
+        self.assertTrue(all(row["path"].endswith("linux_x86_64.whl") for row in report["wheels"]))
+
+    def test_stage_refuses_tampering_missing_native_and_bad_evidence(self):
+        manifest, document = self.stage_manifest()
+        original = json.loads(json.dumps(document))
+        mutations = (
+            lambda d: d["assets"].pop(next(i for i, a in enumerate(d["assets"]) if a["path"].endswith(".so"))),
+            lambda d: d["assets"][0].update(sha256="0" * 64),
+            lambda d: d.update(evidence=[]),
+            lambda d: d["evidence"][0].update(sha256="0" * 64),
+            lambda d: d.update(source_commit="0" * 40),
+            lambda d: d["assets"].append(d["assets"][0]),
+            lambda d: d["assets"][0].update(path="../outside"),
+            lambda d: d["assets"][0].update(member="mojolearn/../outside"),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutations.index(mutate)):
+                document = json.loads(json.dumps(original))
+                mutate(document)
+                manifest.write_text(json.dumps(document))
+                with self.assertRaises(ValueError):
+                    qw.retained_stage_payload(self.site, manifest, self.commit)
+
+    def test_stage_refuses_symlink_native_input(self):
+        manifest, document = self.stage_manifest()
+        row = next(row for row in document["assets"] if row["path"].endswith(".so"))
+        path = self.site / row["path"]
+        target = self.root / "external.so"
+        path.rename(target)
+        path.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            qw.retained_stage_payload(self.site, manifest, self.commit)
+
     def test_overlay_requires_evidence_and_rejects_non_elf(self):
         artifact = self.root / "new.so"
         artifact.write_bytes(b"not ELF")
@@ -103,7 +164,7 @@ class QualificationWheels(unittest.TestCase):
                     self.assertFalse(any("hip_native" in n for n in wheel.namelist()))
                 else:
                     self.assertEqual(metadata["Name"], "mojolearn-amd")
-                    self.assertIn("mojolearn-core==0.8.55", metadata.get_all("Requires-Dist"))
+                    self.assertIn("mojolearn-core==" + report["version"], metadata.get_all("Requires-Dist"))
                     self.assertEqual(wheel.read("mojolearn/hip_native/gfx942/identical/_mojolearn.so"), b"retained GPU")
                 # Independent wheel RECORD check, including generated metadata.
                 record_name = metadata_name.removesuffix("METADATA") + "RECORD"

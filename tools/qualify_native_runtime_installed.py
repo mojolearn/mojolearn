@@ -566,6 +566,28 @@ def installed_module_inventory(modules, prefix, payload, tests, native_artifacts
     prefix, tests = Path(prefix).resolve(), Path(tests).resolve()
     found = {}
     candidates = dict(modules)
+    observed = {}
+
+    def fingerprint(path):
+        stat = path.stat()
+        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+    def observed_digest(path):
+        # A native extension may appear through many module aliases. Hash its
+        # actual bytes once in this observation, preserving every alias/path/
+        # wheel/witness check. No hash survives into the next test teardown.
+        # Require a stable filesystem snapshot, including ctime and inode,
+        # rather than trusting a restored size or mtime after a mutation.
+        path = Path(path).resolve()
+        before = fingerprint(path)
+        if path in observed:
+            prior, value = observed[path]
+            require(before == prior, "installed product changed during inventory: " + str(path))
+            return value
+        value = digest(path)
+        require(fingerprint(path) == before, "installed product changed while hashing: " + str(path))
+        observed[path] = (before, value)
+        return value
     backend = modules.get("mojolearn._backend")
     placeholders = tuple(value for key in ("_HostBinding", "_NoGpuBinding", "_MissingUpperTier", "_IdenticalOnlyTier")
                          if isinstance(value := vars(backend).get(key) if backend else None, type))
@@ -577,7 +599,7 @@ def installed_module_inventory(modules, prefix, payload, tests, native_artifacts
         at = path.parts.index("site-packages")
         member = PurePosixPath(*path.parts[at + 1:]).as_posix()
         require(member in payload, "loaded product file absent from wheel: " + member)
-        require(digest(path) == payload[member]["sha256"], "installed product bytes differ: " + member)
+        require(observed_digest(path) == payload[member]["sha256"], "installed product bytes differ: " + member)
         row = dict(path=str(path), sha256=payload[member]["sha256"], native=native)
         if module:
             row.update(module=module, path_source=path_source)
@@ -591,7 +613,7 @@ def installed_module_inventory(modules, prefix, payload, tests, native_artifacts
                 "incomplete loaded native witness")
         path = Path(row["file"])
         require(path.suffix in (".so", ".dylib", ".pyd"), "native witness is not an extension")
-        require(path.stat().st_size == row["size"] and digest(path) == row["sha256"],
+        require(path.stat().st_size == row["size"] and observed_digest(path) == row["sha256"],
                 "loaded native witness bytes changed")
         admit(path, native=True, module=row["module"], path_source=row.get("path_source"))
     for name, module in list(modules.items()):
@@ -625,6 +647,8 @@ def installed_module_inventory(modules, prefix, payload, tests, native_artifacts
         admit(path, native=path.suffix in (".so", ".dylib", ".pyd"), module=actual_name,
               path_source="__file__" if file_path else "__spec__.origin")
     require("mojolearn/__init__.py" in found, "installed package was not observed")
+    for path, (before, _) in observed.items():
+        require(fingerprint(path) == before, "installed product changed during inventory: " + str(path))
     return found
 
 
@@ -690,7 +714,27 @@ class ExactNodeGuard:
             item.user_properties.append(("installed_exact_node", node))
 
 
-def test_scope_summary(summary, selected, vendor, exact_nodes=None):
+class WholeFileCollectionGuard(ExactNodeGuard):
+    """Record the complete requested-file collection before product execution."""
+    def __init__(self, tests, files):
+        super().__init__(tests, None)
+        self.files = list(files)
+        self.deselected = []
+
+    def pytest_deselected(self, items):
+        self.deselected.extend(item.nodeid for item in items)
+
+    def pytest_collection_finish(self, session):
+        self.collected = [Path(item.path).resolve().relative_to(self.tests.resolve()).as_posix()
+                          + "::" + item.nodeid.partition("::")[2] for item in session.items]
+        require(not self.deselected and bool(self.collected) and len(set(self.collected)) == len(self.collected)
+                and {n.partition("::")[0] for n in self.collected} == set(self.files),
+                "whole-file collection is empty, duplicated, missing, or outside requested files")
+        for item, node in zip(session.items, self.collected):
+            item.user_properties.append(("installed_exact_node", node))
+
+
+def test_scope_summary(summary, selected, vendor, exact_nodes=None, *, interpreter=None, supplemental_policy=True):
     """Only exact CPU resident cases are N/A; all other skips remain incomplete."""
     scopes = {name: dict(total=0, passed=0, failures=0, not_applicable=[], unexpected_skips=[])
               for name in selected}
@@ -724,6 +768,9 @@ def test_scope_summary(summary, selected, vendor, exact_nodes=None):
         result["exact_nodes"] = exact_node_summary(exact_nodes, [c.get("exact_node", "")
                                                                for c in summary.get("cases", [])])
         result["complete"] = result["complete"] and result["exact_nodes"]["complete"]
+    if supplemental_policy:
+        from runtime_test_applicability import supplement
+        return supplement(result, vendor, interpreter)
     return result
 
 
@@ -738,7 +785,7 @@ def selected_test_status(pytest_exit, summary, scope, receipt_exists):
 
 
 def test_environment(parent, vendor, numeric_mode):
-    env = {k: v for k, v in parent.items() if k not in ("PYTHONPATH", "PYTHONHOME")
+    env = {k: v for k, v in parent.items() if k not in ("PYTHONPATH", "PYTHONHOME", "PYTEST_ADDOPTS", "PYTEST_PLUGINS")
            and not k.startswith("MOJOLEARN_")}
     # These test fixtures pass an explicit device to CausalLM.load. Their CPU
     # default overrides MOJOLEARN_VENDOR unless this testing knob is also set.
@@ -759,6 +806,16 @@ def generation_test_devices(modules, expected):
             require(actual == expected, "generation fixture selected a different device: " + name)
             found[name] = actual
     return found
+
+
+def interpreter_identity():
+    """Identity of the actual worker, independent of its disposable venv path."""
+    import platform
+    import sysconfig
+    return dict(implementation=sys.implementation.name, version=sys.version,
+                cache_tag=sys.implementation.cache_tag, soabi=sysconfig.get_config_var("SOABI"),
+                platform=sysconfig.get_platform(), machine=platform.machine(),
+                executable_sha256=digest(Path(sys.executable).resolve()))
 
 
 def worker(request_path):
@@ -801,25 +858,28 @@ def worker(request_path):
     nodes = request.get("test_nodes")
     selected_files(request["test_files"] if nodes is None else None, nodes)
     exact_guard = ExactNodeGuard(tests, nodes) if nodes is not None else None
+    whole_guard = WholeFileCollectionGuard(tests, request["test_files"]) if nodes is None else None
     code, worker_error = None, None
     try:
         require(observe("initial"), "initial installed product inventory refused")
-        code = int(pytest.main(["--import-mode=importlib", "-q", "-ra", "--confcutdir=" + str(tests),
+        code = int(pytest.main(["-c", os.devnull, "--import-mode=importlib", "-q", "-ra", "--confcutdir=" + str(tests),
                                "--junitxml=" + str(out / "tests.xml"),
                                "--basetemp=" + str(out / "test-tmp")]
                               + [str(tests / name) for name in (nodes or request["test_files"])],
-                              plugins=[InstalledGuard()] + ([exact_guard] if exact_guard else [])))
+                              plugins=[InstalledGuard(), exact_guard or whole_guard]))
     except Exception as error:
         worker_error = type(error).__name__ + ": " + str(error)
     finally:
         observe("final", require_loaded=True)
         (out / "installed-modules.json").write_text(json.dumps(dict(
             package=str(Path(mojolearn.__file__).resolve()), prefix=sys.prefix,
+            interpreter=interpreter_identity(),
             vendor=mojolearn.vendor(), numeric_mode=_backend.default_mode(), modules=loaded,
             binding_provenance_protocol="loaded-native-v2", bindings=list(native.values()),
             generation_test_device=request["generation_device"],
             observed_generation_test_devices=test_devices, pytest_exit=code,
             inventory_errors=inventory_errors, worker_error=worker_error,
+            whole_file_collection=whole_guard.collected if whole_guard else None,
             exact_node_collection=exact_node_summary(nodes, exact_guard.collected)
             if exact_guard else None), indent=2) + "\n")
     return code if code is not None and not inventory_errors and worker_error is None else 1
@@ -832,10 +892,72 @@ def run_command(name, command, out, *, cwd, env=None, timeout=900):
     require(result.returncode == 0, name + " failed; see retained log")
 
 
+def freeze_committed_tests(git_root, revision, destination):
+    """Freeze test bytes independently of the immutable product/wheel witness.
+
+    Read Git blobs directly: an archive may honor export-ignore, and a working
+    checkout may have unrelated or uncommitted tests. Neither is an exact test
+    source receipt. This function never imports the tests or changes the checkout.
+    """
+    require(len(revision) == 40 and set(revision) <= set('0123456789abcdef'),
+            'test source must be a full commit SHA')
+    actual = subprocess.check_output(['git', '-C', str(git_root), 'rev-parse', '--verify',
+                                      revision + '^{commit}'], text=True).strip()
+    require(actual == revision, 'test source does not name that commit')
+    tree = subprocess.check_output(['git', '-C', str(git_root), 'ls-tree', '-r', '-z',
+                                    revision, '--', 'python/mojolearn/tests'])
+    prefix = 'python/mojolearn/tests/'
+    rows = []
+    for record in tree.split(b'\0'):
+        if not record:
+            continue
+        metadata, raw_name = record.split(b'\t', 1)
+        mode, kind, oid = metadata.decode().split()
+        name = raw_name.decode()
+        require(name.startswith(prefix), 'test source path escapes test tree')
+        rel = PurePosixPath(name[len(prefix):])
+        require(not rel.is_absolute() and '..' not in rel.parts and '\\' not in str(rel),
+                'unsafe committed test path')
+        require(kind == 'blob' and mode in ('100644', '100755'), 'test source must contain regular files')
+        if '__pycache__' not in rel.parts and rel.suffix != '.pyc':
+            rows.append((rel, mode, oid))
+    require(rows, 'committed test tree is empty')
+    destination = Path(destination)
+    destination.mkdir(parents=True, exist_ok=False)
+    process = subprocess.Popen(['git', '-C', str(git_root), 'cat-file', '--batch'],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    hashes = {}
+    try:
+        for rel, mode, oid in rows:
+            process.stdin.write((oid + '\n').encode()); process.stdin.flush()
+            header = process.stdout.readline().decode().strip().split()
+            require(len(header) == 3 and header[:2] == [oid, 'blob'], 'missing committed test blob')
+            size = int(header[2])
+            raw = process.stdout.read(size)
+            require(len(raw) == size and process.stdout.read(1) == b'\n'
+                    and hashlib.sha1(b'blob %d\0' % size + raw).hexdigest() == oid,
+                    'committed test blob differs')
+            path = destination / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw); path.chmod(int(mode, 8) & 0o777)
+            hashes[rel.as_posix()] = hashlib.sha256(raw).hexdigest()
+        process.stdin.close()
+        error = process.stderr.read().decode()
+        require(process.wait(timeout=30) == 0, 'cannot freeze committed tests: ' + error)
+    finally:
+        if process.poll() is None:
+            process.terminate(); process.wait(timeout=5)
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream and not stream.closed:
+                stream.close()
+    return hashes
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--test-source-commit", help="separate full committed test revision; defaults to the product source")
     parser.add_argument("--git-root", type=Path, help="authoritative object database for an archived frozen source tree")
     parser.add_argument("--wheel", type=Path, action="append", default=[])
     parser.add_argument("--installed-site", type=Path)
@@ -860,6 +982,7 @@ def main():
     require(args.numeric_mode != "fast" or args.vendor == "metal", "fast is Apple only")
     out.mkdir(parents=True)
     report = dict(schema="mojolearn.installed-public-native-audit.v1", source_commit=args.source_commit,
+                  test_commit=args.test_source_commit or args.source_commit,
                   vendor=args.vendor, numeric_mode=args.numeric_mode, release_qualified=False,
                   coverage_complete=False, native_source_reuse_qualified=False,
                   scope="Selected public operations only; no private-owner or whole-library qualification",
@@ -894,8 +1017,6 @@ def main():
         for i, path in enumerate(args.native_proof):
             shutil.copyfile(path, proofdir / (str(i) + "-" + path.name))
         tests = out / "frozen-tests"
-        shutil.copytree(source / "python/mojolearn/tests", tests,
-                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         tree = subprocess.check_output(["git", "-C", str(git_root), "ls-tree", "-r", "-z", args.source_commit])
         committed = {}
         for row in tree.split(b"\0"):
@@ -905,14 +1026,7 @@ def main():
         (report["requested_native_source_hashes"],
          report["archive_omitted_historical_native_sources"]) = native_source_inventory(
             source, args.source_commit, committed, git_root)
-        report["test_hashes"] = {}
-        for path in tests.rglob("*"):
-            if path.is_file():
-                rel = path.relative_to(tests).as_posix(); raw = path.read_bytes()
-                blob = hashlib.sha1(b"blob %d\0" % len(raw) + raw).hexdigest()
-                require(committed.get("python/mojolearn/tests/" + rel) == blob,
-                        "uncommitted frozen test: " + rel)
-                report["test_hashes"][rel] = hashlib.sha256(raw).hexdigest()
+        report["test_hashes"] = freeze_committed_tests(git_root, report["test_commit"], tests)
         report["test_selection_kind"] = "exact-nodes" if args.test_node else "whole-files"
         report["selected_test_nodes"] = args.test_node
         report["selected_public_scope"] = {name:PUBLIC_TESTS[name] for name in selected}
@@ -930,6 +1044,7 @@ def main():
         run_command("pip-freeze", [str(python), "-m", "pip", "freeze", "--all"], out, cwd=out, env=env)
         shutil.copyfile(__file__, out / "controller.py")
         request = dict(out=str(out), tests=str(tests), payload=payload, test_files=selected,
+                       test_commit=report["test_commit"],
                        test_nodes=args.test_node,
                        vendor=args.vendor, numeric_mode=args.numeric_mode,
                        generation_device=env["MOJOLEARN_GENERATION_DEVICE"])
@@ -943,6 +1058,8 @@ def main():
         receipt_path = out / "installed-modules.json"
         receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
         report["pytest_exit"] = receipt.get("pytest_exit")
+        report["interpreter"] = receipt.get("interpreter")
+        report["whole_file_collection"] = receipt.get("whole_file_collection")
         report["installed_guard_summary"] = dict(binding_count=len(receipt.get("bindings", [])),
                                                   inventory_errors=receipt.get("inventory_errors", []),
                                                   worker_error=receipt.get("worker_error"))
@@ -950,7 +1067,15 @@ def main():
             report["tests"] = junit_summary(out / "tests.xml")
         report["installed_guard_receipt"] = str(out / "installed-modules.json")
         tests_summary = report.get("tests", {})
-        report["test_scope_summary"] = test_scope_summary(tests_summary, selected, args.vendor, args.test_node)
+        report["test_scope_summary"] = test_scope_summary(tests_summary, selected, args.vendor, args.test_node,
+                                                         interpreter=report.get("interpreter"))
+        policy = Path(__file__).with_name("runtime_test_applicability.py")
+        shutil.copyfile(policy, out / policy.name)
+        report["applicability_policy_sha256"] = digest(policy)
+        if args.test_node is None:
+            require(exact_node_summary(receipt.get("whole_file_collection") or [],
+                    [c.get("exact_node", "") for c in tests_summary.get("cases", [])])["complete"]
+                    and receipt.get("whole_file_collection"), "executed JUnit differs from whole-file collection")
         scope = report["test_scope_summary"]
         report["status"] = selected_test_status(result.returncode, tests_summary, scope,
                                                (out / "installed-modules.json").is_file())

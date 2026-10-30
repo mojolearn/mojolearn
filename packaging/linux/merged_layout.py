@@ -119,12 +119,20 @@ def layout(directory, names, glob="_mojolearn*.so"):
     return "merged", index
 
 
-def check_plan(directory, dir_key, byte_lm, platform="linux"):
+def check_plan(directory, dir_key, byte_lm, platform="linux", overrides=()):
     """A merged directory's index must be exactly the manifest's plan."""
     index = read_index(directory)
     if index is None:
         return
     want = {f: sorted(m) for f, m in plan(dir_key, byte_lm, platform).items()}
+    if overrides:
+        if dir_key != 'identical' or platform != 'linux':
+            raise LayoutError('retained development overrides apply only to Linux identical groups')
+        from release_linux_amd_overrides import effective_plan
+        try:
+            want = {f: sorted(m) for f,m in effective_plan(want,overrides).items()}
+        except ValueError as error:
+            raise LayoutError(str(error)) from error
     got = {f: sorted(m) for f, m in index.items()}
     if want != got:
         raise LayoutError(f"{directory}/{INDEX} differs from the bindings/merged_groups.json plan "
