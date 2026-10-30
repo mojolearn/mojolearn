@@ -69,6 +69,9 @@ def summarize(out):
     """Pure re-derivation from retained files: junit, qualifier receipt and coverage map."""
     import qualify_native_runtime_installed as q
     out = Path(out).resolve()
+    if (out / "composition.json").exists():
+        from release_runtime_composition import summarize as summarize_composition
+        return summarize_composition(out)
     qualify = out / QUALIFY_DIR
     coverage_doc = json.loads((out / "coverage.json").read_text())
     mapping = coverage_map(coverage_doc)
@@ -184,9 +187,22 @@ def main(argv=None):
     go.add_argument("--out", type=Path, required=True)
     again = sub.add_parser("summarize")
     again.add_argument("--out", type=Path, required=True)
+    compose = sub.add_parser("compose", help="re-derive disjoint complete whole-file receipts")
+    compose.add_argument("--receipt", action="append", type=Path, required=True,
+                         help="original qualifier output directory, repeated per complete run")
+    compose.add_argument("--vendor", choices=sorted(BACKEND), required=True)
+    compose.add_argument("--source-root", type=Path, required=True)
+    compose.add_argument("--source-commit", required=True)
+    compose.add_argument("--test-source-commit")
+    compose.add_argument("--git-root", type=Path)
+    compose.add_argument("--wheel", action="append", type=Path, required=True)
+    compose.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "run":
         return run(args)
+    if args.command == "compose":
+        from release_runtime_composition import compose as compose_receipts
+        return compose_receipts(args)
     report = summarize(args.out)
     print(json.dumps({k: report[k] for k in ("status", "cases", "coverage_without_tests")}))
     return report["exit_code"]
