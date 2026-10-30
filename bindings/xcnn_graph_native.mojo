@@ -948,6 +948,9 @@ def _sage_backward(layer: PythonObject, gradient: PythonObject, context: PythonO
         dx = xcnn_host_f32([n, d], context)
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_graph_op"), xcnn_addr(fields["_xs"]), xcnn_addr(dagg), xcnn_addr(fields["_max_aux"]),
                           xcnn_addr(dx), xcnn_addr(graph["csr_t"]), Python.list(n, d, graph["nnz"], 1))
+        # The address argument borrows dagg's buffer through the native read.
+        # Its owner must outlive the call, even though later work only uses dx.
+        _ = dagg
     else:
         var ones = _ones(Int(py=graph["nnz"]), context)
         if aggr == "mean":

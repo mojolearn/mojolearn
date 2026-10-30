@@ -326,6 +326,9 @@ def _conv_backward_host(layer: PythonObject, grad: PythonObject, source: PythonO
         dx = xcnn_host_f32(xs, context)
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_pad2d_backward"), xcnn_addr(dxp), xcnn_addr(dx),
                           _pad_params(layer, fields, xs, -1))
+        # The raw address does not retain its padded-gradient buffer. Keep
+        # its owner through the native upload/read before returning new dx.
+        _ = dxp
     _set(fields, "_x", x)
     _set(fields, "_xp", xp)
     _save_gradients(fields, dw, db, context)
