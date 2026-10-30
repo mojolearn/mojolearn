@@ -1,0 +1,20 @@
+{
+  "verified_utc": "2026-10-30T04:02:36.931335+00:00",
+  "files": [
+    {
+      "local_path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/round2b.tgz",
+      "sha256": "28d98257f4305ad1873345e4753292a706bc371f545db157697f3158137687f6",
+      "bytes": 3408373854,
+      "r2_key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/results-round2b.tgz",
+      "verification": "Mac downloaded R2 bytes match on-pod SHA256 and exact byte length"
+    },
+    {
+      "local_path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/quality-recovery.tgz",
+      "sha256": "eb9a3fbd91f2d1055af613d6c30cdc1e97886362a92618a570b34e798b63e94c",
+      "bytes": 176933814,
+      "r2_key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/quality-recovery-round2.tgz",
+      "verification": "Mac downloaded R2 bytes match on-pod SHA256 and exact byte length"
+    }
+  ],
+  "scope": "Complete outputs, required installed package/new native binaries, source and recovery bytes retained; checkpoint/base input archives already retained Mac+R2 and identified in inputs receipt"
+}

@@ -1,0 +1,9 @@
+{
+  "sha256": "6bb8ba991b5d39d06ec46b93272627e3a53c9a40c353018a0b22e3048ffc0e33",
+  "bytes": 43497,
+  "local_path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/public-receipts.tgz",
+  "status": "verified",
+  "r2_key": "measurements/records/v1/6bb8ba991b5d39d06ec46b93272627e3a53c9a40c353018a0b22e3048ffc0e33.tar.gz",
+  "r2_bucket": "mojolearn-data",
+  "verification": "GET sha256"
+}
