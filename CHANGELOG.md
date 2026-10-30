@@ -4,7 +4,13 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
-- **Native execution.** Retain operation plans, metadata and private workspaces across supported neural, model-selection and metrics operations, reducing repeated setup, allocation and copying. Performance measurements remain pending.
+## 0.8.63 (published 2026-10-30)
+
+- **Model selection.** `StratifiedGroupKFold` accumulates in FP64 with a pinned operation order on every backend, so its folds are identical on Apple, NVIDIA, AMD and the CPU.
+- **Native buffer lifetimes.** Inputs and outputs stay alive through every native write in CNN backward, MoE backward, Prophet fit and predict, AutoARIMA selection and parameter extraction, byte-level language-model ragged token copies, CAGRA filtered search, radius neighbors, `SkewedChi2Sampler`, `NearestCentroid`, Samba moments and tree label outputs. These fix intermittent wrong results and crashes.
+- **Multi-GPU training.** Rank threads no longer share one pinned staging buffer and scratch pool, which made two-GPU MLP training diverge.
+- **IVF-PQ on the CPU.** Output addresses are taken while holding the GIL.
+- **Native execution.** Retain operation plans, metadata and private workspaces across supported neural, model-selection and metrics operations, reducing repeated setup, allocation and copying.
 - **Language-model generation.** Keep greedy/EOS KV state resident within reads, preserve failure progress and existing behavior when caches alias. Sampling KV upload reuse is available as a default-off experiment.
 - **Public API behavior.** Simplify manifold class setup and preserve native tensor iteration errors in SmallMLP instead of replacing them with a generic input refusal.
 - **Regression and verification evidence.** Separate API contract regressions from numerical identity checks, and retain installed verifier observations and their provenance for reference-table admission without repeating completed computations.
