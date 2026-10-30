@@ -98,6 +98,12 @@ def build_tree(lg, commit=COMMIT, host=b"same"):
 
 
 class FreezeTests(unittest.TestCase):
+    def test_maintenance_release_version(self):
+        for version in ("0.8.55", "0.8.55.1", "0.8.55.1rc1"):
+            self.assertIsNotNone(release.VERSION_RE.fullmatch(version))
+        for version in ("0.8.55.1.2", "0.8.55.post1", "0.8.55.1+local"):
+            self.assertIsNone(release.VERSION_RE.fullmatch(version))
+
     def test_set_version_and_changelog(self):
         with tempfile.TemporaryDirectory() as d:
             root = pathlib.Path(d)

@@ -14,8 +14,9 @@ from x_ann.filter_topk import filter_topk_host
 from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, tsne_first_components, tsne_init_y0
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import check_search
-from providers.python.x_ann_abi_pyapi import in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
+from providers.python.x_ann_abi_pyapi import a_int, in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
 from x_ann.ivf_pq_core import pq_len_of
+from x_ann.abi import out_f32_to, out_i32_to
 from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
 from x_ann.host.tsne_host import tsne_fit_host
 from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_pq_search_host, ivf_sq_build_host, ivf_sq_search_host, refine_host, ivf_rabitq_build_host, ivf_rabitq_search_host
@@ -34,13 +35,19 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var pq_dim = p_int(params, 5)
     var pq_bits = p_int(params, 6)
     var pq_iters = p_int(params, 7)
+    # Admit Python addresses while holding the GIL; released work uses native values.
+    var centers_addr = a_int(addrs, 1)
+    var offsets_addr = a_int(addrs, 2)
+    var indices_addr = a_int(addrs, 3)
+    var codebooks_addr = a_int(addrs, 4)
+    var codes_addr = a_int(addrs, 5)
     with GILReleased(Python()):
         var index = ivf_pq_build_host(x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters)
-        out_f32(index.centers, addrs, 1)
-        out_i32(index.offsets, addrs, 2)
-        out_i32(index.list_indices, addrs, 3)
-        out_f32(index.codebooks, addrs, 4)
-        out_i32(index.codes, addrs, 5)
+        out_f32_to(index.centers, centers_addr)
+        out_i32_to(index.offsets, offsets_addr)
+        out_i32_to(index.list_indices, indices_addr)
+        out_f32_to(index.codebooks, codebooks_addr)
+        out_i32_to(index.codes, codes_addr)
     return PythonObject(n)
 
 

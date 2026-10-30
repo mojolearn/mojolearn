@@ -295,7 +295,7 @@ def write_json(path, doc):
 
 
 # ---------------------------------------------------------------- freeze helpers
-VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?$")
+VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:\.\d+)?(?:(?:a|b|rc)\d+)?$")
 
 
 def set_version(root, version):
