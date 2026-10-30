@@ -486,18 +486,21 @@ def causal_model_publish(mut mods: NativeModules, model: PythonObject) raises:
     if live is None:
         return
     neural_string_keys(mods, live)
-    for name in ["_parameters_exposed", "_resident_busy", "_resident_sessions"]:  # small-loop(native lifecycle updates only)
-        if py_contains(fields, name):
-            py_setitem(live, name, fields[name])
+    # Lifecycle transitions already publish through causal_model_cache_set at
+    # the operation that owns them, before any GIL release. A captured value is
+    # not a pending write: another read may have cleared busy, replaced its
+    # sessions, or exposed parameters since this snapshot was admitted. Replaying
+    # the snapshot here restored busy=True after overlapping private reads.
+    # Preserve live-field admission, but never replay another operation's state.
     var blocks = py_get(fields, "_native_block_fields")
     if blocks is not None:
-        for i in range(len(blocks)):  # driver-loop: over publish admitted block session ownership
+        for i in range(len(blocks)):  # driver-loop: validate retained live block owners without replay
             var block = blocks[i]
             var original = block["_neural_live_fields"]
             neural_string_keys(mods, original)
-            for name in ["_native_session", "_session_binding", "_native_forward_owner", "h_last_"]:  # small-loop(block session lifecycle and report fields)
-                if py_contains(block, name):
-                    py_setitem(original, name, block[name])
+            # The causal forward writes these lifecycle/report fields through
+            # causal_block_cache_set. Replaying an untouched block snapshot can
+            # likewise replace a newer owner or report from another operation.
 
 
 comptime _CAUSAL_LAYER_SLOT = "causal_layer_buffers_v1"

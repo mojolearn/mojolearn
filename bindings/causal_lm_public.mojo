@@ -2607,7 +2607,7 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
 
 
 def _causal_stream_fields(mut mods: NativeModules, stream: PythonObject) raises -> PythonObject:
-    return model_record_fields(mods, stream, _causal_context()["generation_classes"][3], Python.tuple("_native", "_runtime"))
+    return model_record_fields(mods, stream, _causal_context()["generation_classes"][3], Python.tuple("_native", "_runtime", "_native_public_busy"))
 
 
 def causal_lm_read_binding(mut mods: NativeModules, stream: PythonObject, count: PythonObject) raises -> PythonObject:
@@ -3123,7 +3123,7 @@ def _causal_owner_unusable(mut mods: NativeModules, args_ptr: PyObjectPtr) -> Bo
         return False
 
 
-def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+def _causal_public_execute[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr, stream_fields: PythonObject) -> PyObjectPtr:
     var mods = NativeModules()
     var model = PythonObject(None)
     var state = PythonObject(None)
@@ -3145,7 +3145,7 @@ def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
             if args[3] is not None:
                 last_logits = generation_array_snapshot(args[3]) if py_type(args[3]) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else generation_buffer_view(args[3])
         elif operation == 5 or operation == 6 or operation == 11:
-            stream_native = _causal_stream_fields(mods, args[0])["_native"]
+            stream_native = stream_fields["_native"]
             comptime if operation == 5 or operation == 11:
                 var stream = stream_native.downcast_value_ptr[GenerationHandle]()
                 # Every public read/checkpoint captures current caller metadata
@@ -3222,3 +3222,51 @@ def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
         if _causal_owner_unusable(mods, args_ptr):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
+
+
+def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    comptime if operation != 5 and operation != 6 and operation != 11:
+        return _causal_public_execute[operation](py_self, args_ptr, PythonObject(None))
+    else:
+        # Claim the original stream while holding the GIL, BEFORE borrowing its
+        # GenerationHandle or capturing model/state metadata. Capture itself can
+        # release the GIL; a late _read busy check cannot protect those owners.
+        # Exact admitted dictionary/string/boolean operations execute no Python
+        # callbacks. The claim spans read, info, and checkpoint publication and
+        # text conversion; independent streams retain independent claims.
+        var mods = NativeModules()
+        var fields = PythonObject(None)
+        var busy_name = PythonObject(None)
+        var claimed = False
+        var result = PythonObject(None)
+        try:
+            var args = PythonObject(from_borrowed=args_ptr)
+            busy_name = PythonObject("_native_public_busy")
+            fields = _causal_stream_fields(mods, args[0])
+            if py_get(fields, busy_name, PythonObject(False)) is not PythonObject(False):
+                raise Error("generation: stream is busy")
+            py_setitem(fields, busy_name, PythonObject(True))
+            claimed = True
+            var raw = _causal_public_execute[operation](py_self, args_ptr, fields)
+            if raw:
+                result = PythonObject(from_owned=raw)
+            # On an inner ABI error, this exact-dict update preserves its active
+            # CPython exception. On success, retain the owned result until claim
+            # cleanup succeeds so a cleanup error cannot leak a stolen result.
+            py_setitem(fields, busy_name, PythonObject(False))
+            claimed = False
+            if not raw:
+                return raw
+            return result.steal_data()
+        except error:
+            var message = String(error)
+            if claimed:
+                try:
+                    py_setitem(fields, busy_name, PythonObject(False))
+                except cleanup:
+                    return raise_python_exception(Error(message + "; stream claim cleanup failed: " + String(cleanup)), ExceptionType("PyExc_RuntimeError"))
+            if message.startswith("TypeError:"):
+                return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+            if message.startswith("RuntimeError:"):
+                return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+            return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
