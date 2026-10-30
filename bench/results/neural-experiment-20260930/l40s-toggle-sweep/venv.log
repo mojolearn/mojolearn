@@ -1,1 +1,0 @@
-COMMAND ["/root/mojolearn-neural-toggle-sweep/.pixi/envs/default/bin/python3", "-m", "venv", "/root/neural-toggle-sweep/venv"]

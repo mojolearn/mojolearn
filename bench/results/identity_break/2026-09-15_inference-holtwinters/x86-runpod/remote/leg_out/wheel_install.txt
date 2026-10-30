@@ -1,1 +1,0 @@
-/root/mojolearn/.pixi/envs/default/bin/python3: No module named pip

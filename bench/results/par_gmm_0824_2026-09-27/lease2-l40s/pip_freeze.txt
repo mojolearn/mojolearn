@@ -1,4 +1,0 @@
-mojolearn==0.8.24
-mojolearn-amd==0.8.24
-mojolearn-nvidia==0.8.24
-numpy==2.4.6

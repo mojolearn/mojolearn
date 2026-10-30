@@ -1,2 +1,0 @@
-embedding before  ALGOS-REFUSED lane=embedding dataset=synthetic arm=ours stage=ready detail={"error": "ModuleNotFoundError(\"No module named 'torch'\")", "event": "error"
-embedding after  ALGOS-REFUSED lane=embedding dataset=synthetic arm=ours stage=ready detail={"error": "ModuleNotFoundError(\"No module named 'torch'\")", "event": "error"

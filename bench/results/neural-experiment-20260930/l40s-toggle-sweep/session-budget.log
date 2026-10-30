@@ -1,3 +1,0 @@
-COMMAND ["/root/neural-toggle-sweep/venv/bin/python", "/root/mojolearn-neural-toggle-sweep/tools/transformer_session_check.py", "--binding", "/root/neural-toggle-sweep/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_transformer.so", "--backend", "cuda", "--group", "budget", "--out", "/root/neural-toggle-sweep/session-budget.json"]
-3493 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x191b00000000, nodemask=2)
-{"backend": "cuda", "group": "budget", "reverse_order": false, "arrays": 2, "ownership": [1, 2, false, 0], "warm_baseline_median_ms": null, "warm_retained_median_ms": null, "binding_sha256": "b1b2bf829d5b4cb796d60f42610d2d400b58d2d03c9da0085d3ba67d64940163"}
