@@ -1,11 +1,21 @@
 import unittest
-from matrix import configurations, parse_witness, validate_witness
+from matrix import configurations, route_configurations, parse_witness, validate_witness
 
 class RouteEvidenceTests(unittest.TestCase):
     def test_complete_factorial(self):
         cases = configurations()
         self.assertEqual(len(cases), 8)
         self.assertEqual(len({(x['sampler'], x['kv_reuse'], x['engine']) for x in cases}), 8)
+
+    def test_supported_explicit_route_matrix(self):
+        rows=route_configurations()
+        self.assertEqual(len(rows),11)
+        self.assertTrue(all(x['resident_forward']==0 and x['engine']==1 for x in rows if x['route']=='native_engine'))
+        self.assertTrue(all(x['sampler']==1 for x in rows if x['route']=='resident'))
+
+    def test_applicability_is_preserved(self):
+        events=parse_witness('MOJOLEARN_GENERATION_ROUTE route=legacy_forward capacity=4 produced=4 retained_kv=1 kv_policy=applied kv_uploads_skipped=3')
+        self.assertEqual(events[0]['applicability'], {'kv_policy':'applied','kv_uploads_skipped':'3'})
 
     def test_observed_route_can_shadow_requested_flags(self):
         events = parse_witness('MOJOLEARN_GENERATION_ROUTE route=resident_sampling capacity=4 produced=4 retained_kv=0')
