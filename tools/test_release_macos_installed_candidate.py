@@ -99,6 +99,37 @@ class RetainedCandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate"):
             candidate.native_indexes(self.root, self.records)
 
+    def adapter_snapshot(self):
+        adapter = self.root / "_adapters/libmojolearn_adapter.so"
+        adapter.parent.mkdir()
+        adapter.write_bytes(b"retained adapter bytes")
+        return adapter, {"native_and_runtime_files": {}, "adapter_files": {
+            "_adapters/libmojolearn_adapter.so": {
+                "sha256": hashlib.sha256(adapter.read_bytes()).hexdigest()}}}
+
+    def test_separately_recorded_adapter_inventory(self):
+        _, receipt = self.adapter_snapshot()
+        candidate.validate_native_inventory(self.root, receipt)
+        self.assertEqual(receipt["native_and_runtime_files"], {})
+
+    def test_unrecorded_adapter_image_refused(self):
+        adapter, receipt = self.adapter_snapshot()
+        (adapter.parent / "unexpected.so").write_bytes(b"unrecorded")
+        with self.assertRaisesRegex(ValueError, "unrecorded native"):
+            candidate.validate_native_inventory(self.root, receipt)
+
+    def test_changed_recorded_adapter_refused(self):
+        adapter, receipt = self.adapter_snapshot()
+        adapter.write_bytes(b"different compiled bytes")
+        with self.assertRaisesRegex(ValueError, "differs"):
+            candidate.validate_native_inventory(self.root, receipt)
+
+    def test_adapter_inventory_cannot_admit_other_native_owners(self):
+        _, receipt = self.adapter_snapshot()
+        receipt["adapter_files"]["host/extra.so"] = {"sha256": "0" * 64}
+        with self.assertRaisesRegex(ValueError, "non-adapter path"):
+            candidate.validate_native_inventory(self.root, receipt)
+
     def test_matching_retained_bytes(self):
         (self.root / "image.so").write_bytes(b"compiled bytes")
         candidate.check_files(self.root, {"image.so": {"sha256": hashlib.sha256(b"compiled bytes").hexdigest()}})

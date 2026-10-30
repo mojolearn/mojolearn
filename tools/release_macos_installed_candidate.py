@@ -121,10 +121,23 @@ def validate_snapshot(root, commit, package, receipt):
     for name, digest in receipt["python_source_files"].items():
         content = subprocess.check_output(["git", "-C", str(root), "show", commit + ":python/mojolearn/" + name])
         common.require(common.hashlib.sha256(content).hexdigest() == digest, "snapshot Python differs from source: " + name)
-    expected = set(receipt["native_and_runtime_files"])
-    actual = {str(p.relative_to(package)) for p in package.rglob("*") if p.suffix in (".so", ".dylib")}
-    common.require(actual == expected, "snapshot has unrecorded native/runtime files")
+    validate_native_inventory(package, receipt)
     return native_indexes(root, receipt["native_and_runtime_files"])
+
+
+def validate_native_inventory(package, receipt):
+    # Installed snapshots retain adapters separately from the 79 numerical
+    # images. Keep that ownership split while checking every actual native
+    # file; the raw adapter build is still independently validated below.
+    adapters = receipt.get("adapter_files", {})
+    common.require(all(name.startswith("_adapters/") for name in adapters),
+                   "adapter receipt contains a non-adapter path")
+    check_files(package, adapters)
+    expected = set(receipt["native_and_runtime_files"]) | {
+        name for name in adapters if Path(name).suffix in (".so", ".dylib")}
+    actual = {str(p.relative_to(package)) for p in package.rglob("*")
+              if p.suffix in (".so", ".dylib")}
+    common.require(actual == expected, "snapshot has unrecorded native/runtime files")
 
 
 def validate_adapters(root, directory, before, result, commit):
