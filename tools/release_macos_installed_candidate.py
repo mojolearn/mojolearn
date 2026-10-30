@@ -177,6 +177,32 @@ def validate_adapters(root, directory, before, result, commit):
     return api
 
 
+
+def stage_frozen_source(root, commit, archive, stage):
+    """Retain every frozen source byte without duplicating non-build archives.
+
+    Documentation, recorded results and experiment data remain in the complete
+    compressed Git archive. Packaging consumes the other directories; the tiny
+    required smoke corpora are restored independently from committed blobs.
+    """
+    excluded = {"bench", "docs", "docs-site", "experiments", "release"}
+    with archive.open("wb") as stream:
+        subprocess.run(["git", "-C", str(root), "archive", "--format=tar.gz", commit],
+                       stdout=stream, check=True)
+    omitted = []
+    with tarfile.open(archive) as stream:
+        members = []
+        for member in stream.getmembers():
+            if member.name.split("/", 1)[0] in excluded:
+                omitted.append(member.name)
+            else:
+                members.append(member)
+        stream.extractall(stage, members=members, filter="data")
+    return {"complete_archive": common.reference(archive),
+            "unexpanded_nonbuild_members": omitted,
+            "excluded_top_level_directories": sorted(excluded)}
+
+
 def assemble(args):
     root, package, output, raw = (Path(p).resolve() for p in
                                  (args.source_root, args.package, args.output, args.adapters))
@@ -201,12 +227,9 @@ def assemble(args):
     try:
         stage = output / "source"
         stage.mkdir()
-        archive = output / "source.tar"
-        with archive.open("wb") as stream:
-            subprocess.run(["git", "-C", str(root), "archive", "--format=tar", commit], stdout=stream, check=True)
+        archive = output / "source.tar.gz"
+        document["source_staging"] = stage_frozen_source(root, commit, archive, stage)
         document["source_archive"] = common.reference(archive)
-        with tarfile.open(archive) as stream:
-            stream.extractall(stage, filter="data")
         document["smoke_corpora"] = stage_smoke_corpora(root, commit, stage)
         pkg = stage / "python/mojolearn"
         common.require(not list(pkg.rglob("*.so")), "source contains unadmitted native files")

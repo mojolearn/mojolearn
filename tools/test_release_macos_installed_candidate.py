@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 import tempfile
 import unittest
+import tarfile
 from unittest.mock import patch
 
 import release_macos_installed_candidate as candidate
@@ -41,6 +42,34 @@ class RetainedCandidateTests(unittest.TestCase):
         git('add', '.')
         git('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'corpus fixture')
         return repo, git('rev-parse', 'HEAD'), CORPUS_CASES
+
+    def test_compressed_source_preserves_unexpanded_nonbuild_bytes(self):
+        repo, _, _ = self.corpus_repository()
+        payloads = {"python/setup.py": b"build input", "packaging/build.py": b"packaging input",
+                    "bindings/entry.mojo": b"native source", "README.md": b"package readme",
+                    "bench/result.json": b"historical result", "docs/design.md": b"design",
+                    "experiments/input.bin": b"experiment bytes"}
+        for name, content in payloads.items():
+            path = repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "core.hooksPath=/dev/null",
+                        "commit", "-qm", "packaging inputs"], check=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
+        (repo / "bench/result.json").write_bytes(b"dirty result")
+        archive, stage = self.root / "source.tar.gz", self.root / "source"
+        stage.mkdir()
+        report = candidate.stage_frozen_source(repo, commit, archive, stage)
+        with tarfile.open(archive) as stream:
+            for name, content in payloads.items():
+                self.assertEqual(stream.extractfile(name).read(), content)
+                if name.split("/")[0] in report["excluded_top_level_directories"]:
+                    self.assertFalse((stage / name).exists())
+                    self.assertIn(name, report["unexpanded_nonbuild_members"])
+                else:
+                    self.assertEqual((stage / name).read_bytes(), content)
+        self.assertEqual(report["complete_archive"]["sha256"], hashlib.sha256(archive.read_bytes()).hexdigest())
 
     def test_export_ignored_operands_restored_from_frozen_blobs(self):
         repo, commit, cases = self.corpus_repository()
