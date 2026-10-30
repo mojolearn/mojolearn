@@ -49,6 +49,8 @@ def recover(root):
         receipt=dict(status='recovered-from-identical-retained-evaluation',source_commit=manifest['source_commit'],
                      recovery_driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                      original_status=row['status'],original_error=error,cell=str(path),quality_source_cell=str(d),
+                     original_retention=json.loads((path/'retention.json').read_text()),
+                     quality_source_retention=json.loads((d/'retention.json').read_text()),
                      exact_match='model key, same frozen source/binary, options, exact prompt file hash and scored token bytes',
                      quality=good['quality'],actual_generation_routes=actual,scored_output_sha256=row['rounds'][1]['output_sha256'],
                      quality_artifact_sha256=hashlib.sha256((target/'quality-logits.npz').read_bytes()).hexdigest(),
