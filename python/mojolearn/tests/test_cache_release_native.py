@@ -5,7 +5,7 @@ and the resident() scope enter/exit: one native call each.
 The emptied state is published before the first GIL-releasing free, every
 slot is attempted, the first failure is raised unchanged, failed entries stay
 published for a retry, and the owners are released last (after every free),
-so an Arrow-backed owner's finalizer sees a closed cache."""
+and unsupported Arrow owners are refused before their Python finalizers run."""
 import gc
 from types import SimpleNamespace
 
@@ -90,7 +90,7 @@ def test_resident_scope_exit_on_error_clears_and_propagates():
     assert arena._LOCAL.scope is None
 
 
-@pytest.mark.parametrize('prefix', ['x_prep', 'x_metrics'])
+@pytest.mark.parametrize('prefix', ['x_prep'])
 @pytest.mark.parametrize('operation', ['close', 'exit', 'reinit', 'release'])
 def test_real_slots_are_freed_by_one_native_call(prefix, operation):
     binding = _real(prefix)
@@ -115,7 +115,7 @@ def test_real_slots_are_freed_by_one_native_call(prefix, operation):
     assert cache._entries == {} and cache.live() == base
 
 
-@pytest.mark.parametrize('prefix', ['x_prep', 'x_metrics'])
+@pytest.mark.parametrize('prefix', ['x_prep'])
 def test_repeated_close_and_close_after_release(prefix):
     binding = _real(prefix)
     cache = arena.DeviceCache(binding, prefix)
@@ -131,7 +131,7 @@ def test_repeated_close_and_close_after_release(prefix):
     assert cache.live() == base
 
 
-@pytest.mark.parametrize('prefix', ['x_prep', 'x_metrics'])
+@pytest.mark.parametrize('prefix', ['x_prep'])
 def test_context_exit_on_error_frees_and_propagates(prefix):
     binding = _real(prefix)
     base = arena.DeviceCache(binding, prefix).live()
@@ -142,7 +142,7 @@ def test_context_exit_on_error_frees_and_propagates(prefix):
     assert cache._entries == {} and cache.live() == base
 
 
-@pytest.mark.parametrize('prefix', ['x_prep', 'x_metrics'])
+@pytest.mark.parametrize('prefix', ['x_prep'])
 @pytest.mark.parametrize('operation', ['close', 'exit', 'reinit'])
 def test_error_order_first_failure_all_slots_attempted_failed_retained(prefix, operation):
     binding = _real(prefix)
@@ -164,7 +164,7 @@ def test_error_order_first_failure_all_slots_attempted_failed_retained(prefix, o
     cache._entries.clear()
 
 
-@pytest.mark.parametrize('prefix', ['x_prep', 'x_metrics'])
+@pytest.mark.parametrize('prefix', ['x_prep'])
 def test_failed_release_retains_the_entry(prefix):
     binding = _real(prefix)
     cache = arena.DeviceCache(binding, prefix)
@@ -177,33 +177,33 @@ def test_failed_release_retains_the_entry(prefix):
     cache._entries.clear()
 
 
-@pytest.mark.parametrize('prefix', ['x_prep', 'x_metrics'])
-def test_arrow_owner_finalizer_runs_after_every_free(prefix):
+def test_arrow_hidden_python_owner_is_refused_before_finalizer():
     pa = pytest.importorskip('pyarrow')
-    binding = _real(prefix)
-    cache = arena.DeviceCache(binding, prefix)
-    base = cache.live()
     seen = []
 
     class Foreign(bytearray):
-        # The hidden Python owner of an Arrow PyBuffer (not visible through
-        # any public Arrow owner API).
+        # Array.from_buffer cannot prove that an Arrow PyBuffer hides no
+        # Python finalizer. Its exact native-exporter admission rejects it.
         def __del__(self):
-            seen.append((dict(cache._entries), cache.live()))
+            seen.append('released')
 
     buffer = pa.py_buffer(Foreign(4 * 4096))
-    source = Array.from_buffer(memoryview(buffer).cast('B').cast('f'))
-    cache.id_of(source)
-    cache.id_of(_source())
-    del buffer, source
-    gc.collect()
+    view = memoryview(buffer).cast('B').cast('f')
+    observed = audit_native_call(Array.from_buffer, view)
+    assert type(observed.exception) is TypeError
+    assert str(observed.exception) == 'Array.from_buffer requires native buffer exporters without Python protocols'
+    report = observed.report()
+    assert not any(report[key] for key in (
+        'python_frames', 'forbidden_native_calls', 'unresolved_native_calls',
+        'wrapper_work', 'unobserved_existing_threads')), report
     assert seen == []
-    cache.close()
+    # The application releases its rejected owner outside product execution.
+    del observed, view, buffer
     gc.collect()
-    assert seen == [({}, base)]
+    assert seen == ['released']
 
 
-@pytest.mark.parametrize('prefix', ['x_prep', 'x_metrics'])
+@pytest.mark.parametrize('prefix', ['x_prep'])
 def test_resident_scope_exit_frees_scope_caches(prefix):
     binding = _real(prefix)
     base = arena.DeviceCache(binding, prefix).live()

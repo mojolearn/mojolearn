@@ -203,9 +203,12 @@ def test_iforest_array_output_and_state_survive_input_lifetime(tmp_path):
     x = _input(2, "float32")
     outputs = []
     for method in METHODS:
-        expected, _ = _oracle(model, x, method, public=False)
-        out = getattr(model, method)(x)
-        assert type(out).__name__ == "Array" and _state(out) == _state(expected)
+        expected, _ = _oracle(model, x, method, public=True)
+        out = audit_native_call(getattr(model, method), x).assert_native()
+        # Enter the public boundary explicitly; pytest module names must not
+        # select the package-internal Array output policy.
+        # Keep every value, subsequent-call and owner-lifetime check below.
+        assert type(out) is np.ndarray and _state(out) == _state(expected)
         outputs.append((out, _state(expected)))
     del model, x
     gc.collect()

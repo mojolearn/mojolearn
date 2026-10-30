@@ -198,7 +198,7 @@ def _real_cache(prefix, cls=arena.DeviceCache):
     return cls(binding, prefix), binding
 
 
-@pytest.mark.parametrize("prefix", ["x_prep", "x_metrics"])
+@pytest.mark.parametrize("prefix", ["x_prep"])
 def test_cache_id_of_real_upload_hit_alias_and_owned_publication(prefix):
     cache, _ = _real_cache(prefix)
     storage = array.array("f", [1., -2., 3., -0.])
@@ -226,7 +226,7 @@ def test_cache_id_of_real_upload_hit_alias_and_owned_publication(prefix):
     assert owner() is None and cache.live() == base
 
 
-@pytest.mark.parametrize("prefix", ["x_prep", "x_metrics"])
+@pytest.mark.parametrize("prefix", ["x_prep"])
 @pytest.mark.parametrize("kind", ["null", "address_overflow", "size_overflow"])
 def test_cache_id_of_real_native_upload_failure_preserves_empty_state(prefix, kind):
     cache, _ = _real_cache(prefix)
@@ -255,7 +255,7 @@ def test_cache_id_of_real_native_upload_failure_preserves_empty_state(prefix, ki
     assert cache.live() == base
 
 
-@pytest.mark.parametrize("prefix", ["x_prep", "x_metrics"])
+@pytest.mark.parametrize("prefix", ["x_prep"])
 def test_cache_id_of_real_upload_uses_connected_store_entries(prefix, monkeypatch):
     cache, binding = _real_cache(prefix)
     source = Array.from_list([1., 2., 3.], "<f4")
@@ -273,7 +273,7 @@ def test_cache_id_of_real_upload_uses_connected_store_entries(prefix, monkeypatc
     assert cache.live() == base and touched == []
 
 
-@pytest.mark.parametrize("prefix", ["x_prep", "x_metrics"])
+@pytest.mark.parametrize("prefix", ["x_prep"])
 @pytest.mark.parametrize("change", ["replace_dictionary", "publish_competitor", "change_route",
                                     "delete_counter_slot", "foreign_dictionary"])
 def test_cache_id_of_real_concurrent_publication_cleanup(prefix, change):
@@ -284,8 +284,11 @@ def test_cache_id_of_real_concurrent_publication_cleanup(prefix, change):
         __slots__ = ("uploads",)
     cache, binding = _real_cache(prefix, Cache)
     original_free = getattr(binding, prefix + "_dev_free")
-    other_prefix = "x_metrics" if prefix == "x_prep" else "x_prep"
-    other, _ = _real_cache(other_prefix)
+    # The retired x_metrics store is not a second live upload provider. Use
+    # the already registered byte-store route only as changed metadata; it is
+    # never invoked. The in-flight x_prep allocation must be freed through its
+    # captured original provider before publication refuses the changed route.
+    other = _cache()
     # 16MiB gives the ready controller a useful upload window without changing
     # any product threshold, route, benchmark dimension or numerical setting.
     source = Array.from_buffer(memoryview(bytearray(16 * 1024 * 1024)).cast("f"))

@@ -355,7 +355,14 @@ def test_cache_native_errors_preserve_existing_exception_classes(kind):
 
 def test_cache_reads_preserve_numpy_free_startup():
     code = r'''
-import sys
+import sys, importlib.abc
+# Package dependencies may import installed NumPy. Model actual absence rather
+# than assuming a fresh subprocess makes an available optional dependency absent.
+class BlockNumPy(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'numpy' or fullname.startswith('numpy.'):
+            raise ModuleNotFoundError('NumPy intentionally unavailable', name='numpy')
+sys.meta_path.insert(0, BlockNumPy())
 from types import SimpleNamespace
 from mojolearn import _arena_io as a
 from mojolearn._buffer import _native

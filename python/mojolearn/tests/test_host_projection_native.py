@@ -102,8 +102,11 @@ def test_projection_preserves_existing_sparse_storage_refusals(tmp_path, format)
 def test_projection_internal_outputs_and_owners_survive_later_calls(tmp_path, case, method):
     model = _model(tmp_path, case)
     x = _query(method)
-    result = getattr(model, method)(x)
-    assert type(result).__name__ == "Array"
+    result = audit_native_call(getattr(model, method), x).assert_native()
+    # Enter the public boundary explicitly; pytest module names must not
+    # select the package-internal Array output policy.
+    # Keep every value, subsequent-call and owner-lifetime check below.
+    assert type(result) is np.ndarray
     expected = _state(_expected(model, x, case, method))
     assert _state(result) == expected
     other = audit_native_call(getattr(model, method), x + 2).assert_native()

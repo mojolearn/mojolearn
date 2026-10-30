@@ -94,7 +94,7 @@ def test_public_load_preserves_compressed_state_and_input_ownership(tmp_path, co
 
 @pytest.mark.parametrize("name", ["open", "sorted", "list", "int", "tuple", "memoryview",
                                   "bytes", "bytearray", "chr", "str", "object", "type"])
-def test_public_load_ignores_replaced_builtin_helpers(tmp_path, monkeypatch, name):
+def test_public_load_refuses_replaced_builtin_helpers_before_callbacks(tmp_path, monkeypatch, name):
     value = _input(tmp_path, _payload(), "str" if name == "open" else "bytesio")
     loader = HostLinearRegression.load
     original = getattr(builtins, name)
@@ -114,8 +114,14 @@ def test_public_load_ignores_replaced_builtin_helpers(tmp_path, monkeypatch, nam
                 patch.setattr(threading, "list", original, raising=False)
             patch.setattr(builtins, name, foreign)
             audit = audit_native_call(loader, value)
-        model = audit.assert_native()
+        # Connected module exports are identity-checked before execution.
+        # Restoring the export must recover the public operation and ownership.
+        _refused(audit, TypeError)
+        assert str(audit.exception) == "native module connection export changed: builtins." + name
         assert touched == []
+        if type(value) in (io.BytesIO, io.FileIO, io.BufferedReader):
+            assert not value.closed and value.tell() == 0
+        model = audit_native_call(loader, value).assert_native()
     finally:
         _close(value)
     _state(model)
@@ -137,9 +143,14 @@ def test_public_load_error_repr_preserves_standard_names_without_python(tmp_path
             patch.setattr(observer, "repr", original, raising=False)
             patch.setattr(builtins, "repr", foreign)
             audit = audit_native_call(loader, value)
-        _refused(audit, ValueError)
-        assert str(audit.exception) == expected
+        _refused(audit, TypeError)
+        assert str(audit.exception) == "native module connection export changed: builtins.repr"
         assert touched == []
+        if type(value) in (io.BytesIO, io.FileIO, io.BufferedReader):
+            assert not value.closed and value.tell() == 0
+        restored = audit_native_call(loader, value)
+        _refused(restored, ValueError)
+        assert str(restored.exception) == expected
         if type(value) in (io.BytesIO, io.FileIO, io.BufferedReader):
             assert not value.closed
     finally:
@@ -502,6 +513,13 @@ def test_public_load_malformed_state_preserves_refusal_and_borrowed_input(field,
 def test_public_load_without_numpy_preserves_native_owned_arrays(name):
     script = r'''
 import builtins,dis,io,json,sys
+# -S disables site initialization; it does not make installed NumPy absent.
+# Model a truly unavailable optional dependency, not a broken import.
+class MissingNumPy:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "numpy" or fullname.startswith("numpy."):
+            raise ModuleNotFoundError("NumPy deliberately unavailable", name="numpy")
+sys.meta_path.insert(0, MissingNumPy())
 from mojolearn._classical_host import HostLinearRegression
 from mojolearn._verify_native_runtime import audit_native_call
 import mojolearn._verify_native_runtime as observer

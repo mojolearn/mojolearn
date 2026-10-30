@@ -761,8 +761,11 @@ def test_kde_internal_output_owner_survives_model_and_input(tmp_path):
     model = _model(tmp_path)
     x = _input(2, "float32")
     expected = _state(legacy.kde(model, x))
-    out = model.score_samples(x)
-    assert type(out).__name__ == "Array" and _state(out) == expected
+    out = audit_native_call(model.score_samples, x).assert_native()
+    # Enter the public boundary explicitly; pytest module names must not
+    # select the package-internal Array output policy.
+    # Keep every value, subsequent-call and owner-lifetime check below.
+    assert type(out) is np.ndarray and _state(out) == expected
     audit_native_call(model.score_samples, x + 1).assert_native()
     del model, x
     gc.collect()

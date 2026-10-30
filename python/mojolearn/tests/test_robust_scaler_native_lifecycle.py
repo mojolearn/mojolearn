@@ -145,7 +145,10 @@ def test_quantile_storage_refuses_before_element_or_exporter_hooks(storage):
             calls.append('getitem')
             return super().__getitem__(key)
     if storage == 'foreign_buffer':
-        source = memoryview(Foreign())
+        if sys.version_info < (3, 12):
+            pytest.skip('Python-defined buffer exporters require Python 3.12')
+        exporter = Foreign()
+        source = memoryview(exporter)
     elif storage == 'ndarray_subclass':
         source = np.array([10., 90.]).view(Subclass)
     else:
@@ -156,6 +159,11 @@ def test_quantile_storage_refuses_before_element_or_exporter_hooks(storage):
     calls.clear()  # Construction by the application precedes product execution.
     _refused(audit_native_call(ml.RobustScaler(quantile_range=source).fit, _data()))
     assert not calls
+    if storage == 'foreign_buffer':
+        # Release outside the audited product call while the fixture class and
+        # exporter are still live; do not defer its callback to cyclic GC.
+        source.release()
+        assert calls == ['release']
 
 
 @pytest.mark.parametrize('metadata', ['name', 'key'])
@@ -263,6 +271,13 @@ def test_application_subclass_overrides_keep_guards_and_are_not_called_from_nati
 def test_numpy_free_public_lifecycle_does_not_import_numpy():
     script = '''
 import sys
+# Model an environment without the optional dependency before package import.
+import importlib.abc
+class BlockNumPy(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "numpy" or fullname.startswith("numpy."):
+            raise ModuleNotFoundError("NumPy is absent in this fixture", name="numpy")
+sys.meta_path.insert(0, BlockNumPy())
 from array import array
 import mojolearn as ml
 from mojolearn._verify_native_runtime import audit_native_call

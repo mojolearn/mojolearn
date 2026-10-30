@@ -154,7 +154,15 @@ def test_every_named_scorer_consumes_native_prediction_and_matches_public_metric
     methods = fields['_response_method']
     methods = (methods,) if isinstance(methods, str) else methods
     method = next(method for method in methods if hasattr(model, method))
-    pred = getattr(model, method)(x)
+    pred = audit_native_call(getattr(model, method), x).assert_native()
+    if kind == 'regression':
+        # Public predictions widen the original float32 kernel words. As in
+        # the make_scorer test above, the metric oracle consumes those words;
+        # passing the public float64 view directly is an unsupported metric
+        # dtype, not a scorer result. Prove narrowing loses no information.
+        public_prediction = np.asarray(pred)
+        pred = public_prediction.astype('f4')
+        np.testing.assert_array_equal(public_prediction, pred.astype(public_prediction.dtype))
     if method == 'predict_proba' and fields['_name'] in ms._BINARY_PROBA:
         array = np.asarray(pred)
         if array.ndim == 2 and array.shape[1] == 2:

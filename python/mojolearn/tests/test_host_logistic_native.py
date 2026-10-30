@@ -135,8 +135,11 @@ def test_logistic_internal_outputs_keep_owner_lifetimes(tmp_path, method):
     model = _model(tmp_path)
     x = _input(2, "float32")
     expected = _state(_expected(model, x, method))
-    result = getattr(model, method)(x)
-    assert type(result).__name__ == "Array"
+    result = audit_native_call(getattr(model, method), x).assert_native()
+    # Enter the public boundary explicitly; pytest module names must not
+    # select the package-internal Array output policy.
+    # Keep every value, subsequent-call and owner-lifetime check below.
+    assert type(result) is np.ndarray
     assert _state(result) == expected
     audit_native_call(getattr(model, method), x + 2).assert_native()
     del model, x

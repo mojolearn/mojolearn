@@ -1,33 +1,41 @@
 # SPDX-License-Identifier: Apache-2.0
 """The meta-estimators on the real public path (one native call per method;
 small inputs): a member that is not a mojolearn estimator is refused by name
-at fit, and mojolearn members fit and predict."""
+during native admission at fit, and mojolearn members fit and predict."""
 import numpy as np
 import pytest
 import mojolearn as ml
+from mojolearn._verify_native_runtime import audit_native_call
 
 
 class _OtherEstimator:
     """A scikit-learn-style estimator that is not a mojolearn class."""
     __module__ = "user_code"
+    calls = []
 
     def get_params(self, deep=True):
+        self.calls.append('get_params')
         return {}
 
     def set_params(self, **params):
+        self.calls.append('set_params')
         return self
 
     def fit(self, X, y, sample_weight=None):
+        self.calls.append('fit')
         self.classes_ = np.array([0, 1])
         return self
 
     def predict(self, X):
+        self.calls.append('predict')
         return np.zeros(len(X), dtype=np.int64)
 
     def predict_proba(self, X):
+        self.calls.append('predict_proba')
         return np.full((len(X), 2), 0.5)
 
     def decision_function(self, X):
+        self.calls.append('decision_function')
         return np.zeros(len(X))
 
 
@@ -63,8 +71,17 @@ def _refusing():
 def test_non_mojolearn_member_refused(case):
     model, classifier, outputs = _refusing()[case]
     X, y = _data(classifier, outputs)
-    with pytest.raises(NotImplementedError, match="is not a mojolearn estimator"):
-        model.fit(X, y)
+    _OtherEstimator.calls.clear()
+    observed = audit_native_call(model.fit, X, y)
+    # Native state admission rejects user objects before clone/get_params/fit;
+    # the older Python-level NotImplementedError is no longer this boundary.
+    assert type(observed.exception) is TypeError
+    assert str(observed.exception) == "Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+    report = observed.report()
+    assert not any(report[key] for key in (
+        "python_frames", "forbidden_native_calls", "unresolved_native_calls",
+        "wrapper_work", "unobserved_existing_threads")), report
+    assert _OtherEstimator.calls == []
 
 
 def test_mojolearn_members_fit_and_predict():

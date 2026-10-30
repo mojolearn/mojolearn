@@ -365,12 +365,22 @@ def test_iforest_fit_preserves_inherited_mode_before_finite_check(mode):
 
 
 _NUMPY_CHILD = r'''
-import json,sys
+import json,sys,importlib.abc
+# -S disables site initialization, but PYTHONPATH intentionally exposes the
+# installed package directory and therefore its optional NumPy neighbor too.
+# Model genuine absence until the explicit late-import arm enables NumPy.
+class BlockNumPy(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'numpy' or fullname.startswith('numpy.'):
+            raise ModuleNotFoundError('NumPy intentionally unavailable', name='numpy')
+block_numpy = BlockNumPy()
+sys.meta_path.insert(0, block_numpy)
 from mojolearn import _classical_host as host
 from mojolearn._verify_native_runtime import audit_native_call
 payload=json.loads(sys.argv[1])
 assert "numpy" not in sys.modules
 if payload["numpy"]:
+    sys.meta_path.remove(block_numpy)
     sys.path.extend(payload["site_paths"])
     import numpy
 model=host.HostIsolationForest(n_estimators=7,max_samples=3,max_depth=2,random_state=11,numeric_mode="identical")

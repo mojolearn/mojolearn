@@ -141,9 +141,12 @@ def test_svr_precomputed_support_array_storage_is_contiguous(tmp_path, kind):
 def test_svr_internal_prediction_and_coefficient_owners_survive_calls(tmp_path, kernel):
     model = _model(tmp_path, kernel)
     x = _input(2, "float32")
-    expected = _state(legacy.svr(model, x))
-    result = model.predict(x)
-    assert type(result).__name__ == "Array"
+    expected = _state(_expected(model, x))
+    result = audit_native_call(model.predict, x).assert_native()
+    # Enter the public boundary explicitly; pytest module names must not
+    # select the package-internal Array output policy.
+    # Keep every value, subsequent-call and owner-lifetime check below.
+    assert type(result) is np.ndarray
     assert _state(result) == expected
     audit_native_call(model.predict, x + 1).assert_native()
     del model, x

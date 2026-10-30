@@ -324,10 +324,12 @@ def test_kde_fit_refit_clears_old_cache_and_feature_names():
     old, model = _model(), _model()
     for item in (old, model):
         legacy.kde_fit(item, _x(), sample_weight=_weight("c"))
-        item._resident = ((123,), 7)
+        # Warm a real owned cache when this backend supports one. A fabricated
+        # integer handle is not a valid native residency ownership record.
+        item.score_samples(_x())
         item.feature_names_in_ = np.asarray(["old_a", "old_b"], dtype=object)
     _pair(_x() + 1, old=old, actual=model)
-    assert model._resident is None and "feature_names_in_" not in vars(model)
+    assert vars(model).get("_resident") is None and "feature_names_in_" not in vars(model)
 
 
 @pytest.mark.parametrize("slot", ["X", "y", "sample_weight", "_mojolearn_fitting", "numeric_mode", "_mojolearn_after_fit"])

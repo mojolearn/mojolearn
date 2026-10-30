@@ -137,8 +137,11 @@ def test_svc_internal_completed_outputs_keep_owner_lifetimes(tmp_path, multi, me
     model = _model(tmp_path, multi=multi)
     x = _input(2, "float32")
     expected = _state(_expected(model, x, method))
-    result = getattr(model, method)(x)
-    assert type(result) is (list if method == "predict" else Array)
+    result = audit_native_call(getattr(model, method), x).assert_native()
+    # Enter the public boundary explicitly; pytest module names must not
+    # select the package-internal Array output policy.
+    # Keep every value, subsequent-call and owner-lifetime check below.
+    assert type(result) is (list if method == "predict" else np.ndarray)
     assert _state(result) == expected
     audit_native_call(getattr(model, method), x + 3).assert_native()
     del model, x
