@@ -66,6 +66,25 @@ _LAZY_EXPORTS = {
 }
 
 
+def _connect_imported_module(loaded):
+    # glue: the first public-name import connects new class metadata once;
+    # preserve optional NumPy loading and every already-pinned native plan.
+    # A module with its own lifecycle snapshot uses this same ordering before
+    # capturing it, so a later lazy export cannot invalidate the snapshot.
+    import sys
+    from . import _mode
+    from ._native_params_metadata import connect_classes
+    if _mode._PARAMS_METADATA_CONTEXT['ready']:
+        from ._native_mode_reconstruction import connect_lazy
+        from ._native_full_reset_params import _CONTEXT as reset_context, NativeFullResetParams
+        connect_lazy(loaded, reset_context, NativeFullResetParams.set_params)
+        from ._native_public_attributes import connect_classes as connect_attributes
+        connect_attributes(sys.modules[__package__])
+        connect_classes(_mode._PARAMS_METADATA_CONTEXT, sys.modules[__package__])
+        from ._native_family_layouts import connect as connect_family_layouts
+        connect_family_layouts(sys.modules[__package__])
+
+
 def __getattr__(name):
     if name not in _LAZY_EXPORTS:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -73,20 +92,7 @@ def __getattr__(name):
     module, attribute = _LAZY_EXPORTS[name]
     try:
         loaded = import_module("." + module, __package__)
-        # glue: the first public-name import connects new class metadata once;
-        # preserve optional NumPy loading and every already-pinned native plan.
-        import sys
-        from . import _mode
-        from ._native_params_metadata import connect_classes
-        if _mode._PARAMS_METADATA_CONTEXT['ready']:
-            from ._native_mode_reconstruction import connect_lazy
-            from ._native_full_reset_params import _CONTEXT as reset_context, NativeFullResetParams
-            connect_lazy(loaded, reset_context, NativeFullResetParams.set_params)
-            from ._native_public_attributes import connect_classes as connect_attributes
-            connect_attributes(sys.modules[__package__])
-            connect_classes(_mode._PARAMS_METADATA_CONTEXT, sys.modules[__package__])
-            from ._native_family_layouts import connect as connect_family_layouts
-            connect_family_layouts(sys.modules[__package__])
+        _connect_imported_module(loaded)
         value = getattr(loaded, attribute)
     except ModuleNotFoundError as exc:
         if exc.name != "numpy":

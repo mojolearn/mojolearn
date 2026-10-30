@@ -365,15 +365,18 @@ def _cluster_first_rows(X, k, random_state=None):
 
 @lane("x-cluster-kmeans-init")
 def _(ml, X, yc, yr, Xh=None):
-    """KMeans and MiniBatchKMeans option parity: init as an array of
-    centers and init as a callable (called once on the host, its centers
-    then take the array path; python/mojolearn/_expansion_cluster.py
-    `_callable_init`)."""
+    """Explicit-center initialization parity for KMeans and MiniBatchKMeans.
+
+    Prepare first-row centers in the verifier: MiniBatchKMeans intentionally
+    refuses Python initialization callbacks during product execution. Historical
+    call_* part names remain stable; they now describe those explicit centers.
+    """
     Z = X[:3000, :8]
     c0 = np.ascontiguousarray(Z[100:106], dtype=np.float32)
     ka = ml.KMeans(n_clusters=6, init=c0, max_iter=50).fit(Z)
-    kc = ml.KMeans(n_clusters=6, init=_cluster_first_rows, max_iter=50).fit(Z)
-    mb = ml.MiniBatchKMeans(n_clusters=6, init=_cluster_first_rows, batch_size=256, max_iter=5,
+    first_centers = _cluster_first_rows(Z, 6)
+    kc = ml.KMeans(n_clusters=6, init=first_centers.copy(), max_iter=50).fit(Z)
+    mb = ml.MiniBatchKMeans(n_clusters=6, init=first_centers.copy(), batch_size=256, max_iter=5,
                             random_state=3).fit(Z)
     parts = dict(arr_centers=_h(ka.cluster_centers_), arr_labels=_h(ka.labels_),
                  call_centers=_h(kc.cluster_centers_), call_labels=_h(kc.labels_),

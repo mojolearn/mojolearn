@@ -331,7 +331,8 @@ import importlib.abc, json, sys
 class BlockNumPy(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname == "numpy" or fullname.startswith("numpy."):
-            raise ImportError("NumPy deliberately unavailable in this test")
+            # Model a missing optional dependency; a broken import must still propagate.
+            raise ModuleNotFoundError("NumPy deliberately unavailable in this test", name="numpy")
 blocker = BlockNumPy()
 sys.meta_path.insert(0, blocker)
 from mojolearn import _classical_host as host

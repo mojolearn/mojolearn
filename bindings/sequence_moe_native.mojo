@@ -289,6 +289,10 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
         _ = py_call_typed(entries["moe_backward"], Python.list(input.address, r.address, gu.address, dn.address,
             gradient.address, classical_address(dx), classical_address(dr), classical_address(dgu), classical_address(ddn),
             classical_address(y), classical_address(logits), classical_address(sel), classical_address(w)), ip)
+        # The native backward call also writes its forward output. Its raw
+        # address does not own the ndarray, and backward returns dx instead.
+        # Keep this otherwise unused output alive through the native download.
+        _ = y
         _ = gradient^
         py_setitem(fields, "router_grad_", dr)
         py_setitem(fields, "gate_up_proj_grad_", dgu)

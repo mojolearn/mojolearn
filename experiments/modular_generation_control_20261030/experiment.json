@@ -1,0 +1,124 @@
+{
+  "schema": "mojolearn.generation-controls-experiment.v1",
+  "status": "99c ownership repair compiled on Linux and passed43 installed NVIDIA checks plus4actual concurrency probes; frozen full-workload matrix running, other vendor qualification pending",
+  "promoted": false,
+  "base_instrumentation_commit": "f048701e7c89530443c26d1b8a56aab9d9eec634",
+  "included_release_repair_commit": "c286a410cbc2fb970d9caabddc1c2d7604d6cdf0",
+  "controls": {
+    "MOJOLEARN_EXPERIMENT_GENERATION_ROUTE": {
+      "default": "auto",
+      "values": [
+        "auto",
+        "legacy",
+        "resident",
+        "native_engine"
+      ]
+    },
+    "MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32": {
+      "default": "0",
+      "values": [
+        "0",
+        "1"
+      ],
+      "binds": "stream/checkpoint numerical policy"
+    },
+    "MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE": {
+      "default": "0",
+      "values": [
+        "0",
+        "1"
+      ],
+      "binds": "one public read owned legacy resident-forward loan"
+    }
+  },
+  "affected_development_groups": [
+    "host:tokenizer"
+  ],
+  "native_boundary_scope": {
+    "resident_greedy_and_sampling": {
+      "group_call_operation": 32,
+      "group_reserve_operation": 30,
+      "group_release_operation": 31,
+      "inner_token_loop": "one GIL-released native group operation",
+      "outer_boundary": "CPython owner admission and publication remain",
+      "evidence_kind": "source path plus pending actual operation counters"
+    },
+    "native_engine": {
+      "inner_loop": "native Mojo",
+      "endpoint": "CPython GIL transition per admitted endpoint call; not eliminated",
+      "python_callbacks": "not implied by use of direct CPython C API"
+    },
+    "legacy_forward": {
+      "inner_loop": "native Mojo with CPython metadata/provider work between tokens"
+    }
+  },
+  "unsupported": [
+    {
+      "configuration": "resident + Float64 sampling",
+      "reason": "resident selector implements greedy/FP32 only"
+    },
+    {
+      "configuration": "resident + saved mojolearn-162m under unchanged compile flags",
+      "reason": "no final norm; separate MOJOLEARN_IDN_LM_RESIDENT_GENERATE remains disabled"
+    },
+    {
+      "configuration": "native_engine + resident-admissible model without existing resident-forward opt-out",
+      "reason": "existing engine admission refuses replacing resident path"
+    }
+  ],
+  "no_effect": [
+    "resident read KV toggle: already resident, no manufactured off-arm reload",
+    "native engine KV toggle: not this resident-forward loan",
+    "legacy read of one forward: no intervening reload",
+    "legacy model without applicable resident forward: no removable loan upload"
+  ],
+  "retention_policy": "Keep original failures and slower timings. Source, native images, raw outputs and receipts remain off-box before teardown. No vendor-specific references.",
+  "measurement_owner": "/root/neural_combined_ab",
+  "default_promotion_requirements": [
+    "full saved workload evidence",
+    "AMD qualification",
+    "quality preservation",
+    "within-release cross-vendor identity"
+  ],
+  "local_interruption_receipt": "~/mojolearn-evidence/modular-kv-reuse-20261030/interruption.json",
+  "runtime_qualified": false,
+  "compiled_source_commit": "aea1d9a033431701e981d62d116e9c1e0867bbd6",
+  "compile_evidence": "compile_evidence.json",
+  "ownership_failure": {
+    "source_commit": "aea1d9a033431701e981d62d116e9c1e0867bbd6",
+    "shared_model": "live busy flag remains true despite correct outputs and checkpoint",
+    "same_stream": "both routes segfaulted after overlapping read capture; exit139",
+    "proof_key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/aea1d9a/concurrency-confirm-579e07924c9466702565bc5249efe29beab7df814d151943eef7dc0a2b53d5b6.tgz",
+    "proof_sha256": "579e07924c9466702565bc5249efe29beab7df814d151943eef7dc0a2b53d5b6",
+    "performance_timing": "withheld until ownership repair qualifies"
+  },
+  "ownership_repair": {
+    "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+    "linux_selected_groups": [
+      "host:tokenizer",
+      "host:runtime_classical"
+    ],
+    "native_compile_exit_codes": [
+      0,
+      0
+    ],
+    "nvidia_installed": {
+      "passed": 43,
+      "skipped": 0,
+      "failed": 0
+    },
+    "nvidia_concurrency": {
+      "passed": 4,
+      "failed": 0,
+      "scope": "legacy/resident independent-stream and same-stream probes; overlap of publiccalls, not proof of simultaneous GPU kernels"
+    },
+    "prerequisite_retention": {
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/prerequisites.tgz",
+      "sha256": "8ece2560f38ac44134bde7bf6435421ad2bc7cc442e5c65dd69be2e43a62af36",
+      "bytes": 16365041,
+      "put_get_verified": true
+    },
+    "full_workload": "running; no timing/default verdict yet",
+    "other_vendors": "pending"
+  }
+}

@@ -14,7 +14,7 @@ from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.generator_state_native import generator_next
-from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate
+from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view
 from bindings.samba_training_native import samba_ids, samba_gradients, _samba_count
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
@@ -390,7 +390,7 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
         for i in range(2):  # driver-loop: over caller-owned moment aliases
             var original = opt["_m" if i == 0 else "_v"]
             if moments[i] is not original:
-                var view = py_call(bi.memoryview, original)
+                var view = samba_moment_view(original, context)
                 py_setitem(view, py_call(bi.slice, PythonObject(None)), moments[i]._mv)
         _ = moments^
     if not device_parameters:

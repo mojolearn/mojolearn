@@ -1479,6 +1479,8 @@ _NATIVE_QUERY, _QUERY_CONTEXT = _connect_queries(
     {NearestNeighbors: "knn", KNeighborsClassifier: "knn", KNeighborsRegressor: "knn", RadiusNeighbors: "radius"},
     _NATIVE_CONTEXT, _ARCHIVE_CONTEXT, ("base", "sort"))
 _QUERY_CONTEXT["neighbor_query_classifier_classes"] = {KNeighborsClassifier: True}
+# Radius fit and query read settings through the same connected native owner.
+_native_family_bridge.tables(family_xn_radius_attributes=_QUERY_CONTEXT)
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from
 # the package at first use (`_sklearn_modules`), so `from mojolearn.neighbors import ...`

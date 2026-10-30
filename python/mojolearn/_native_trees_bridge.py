@@ -131,6 +131,9 @@ def connect():
     import numbers
     import types
     from ._labels import ClassLabels
+    from ._native_labels_bridge import label_context
+    # glue: public regressor outputs use the shared native label cast helpers.
+    context.update(label_context())
     from . import _backend
     _backend.default_mode()  # glue: settle the process default the native mode falls back to
     context.update(

@@ -6,6 +6,7 @@ refused before execution under the native-only public runtime contract.
 """
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.neural_block_admission import neural_array_snapshot
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
@@ -152,6 +153,18 @@ def _samba_registry(config: PythonObject) raises -> PythonObject:
     return result
 
 
+def samba_moment_view(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Native Array has retained storage even on CPython versions before the
+    # Python-level buffer protocol. Capture its admitted slots once; foreign
+    # writable buffers keep their original exporter and alias writeback.
+    if py_type(value) is context["neural"]["array_class"]:
+        var captured = neural_array_snapshot(value, context["neural"])
+        var view = captured._mv
+        _ = captured
+        return view
+    return py_call(native_loaded_module("builtins").memoryview, value)
+
+
 def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var bi = native_loaded_module("builtins")
@@ -172,10 +185,10 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
         # A caller may assign writable foreign buffers to the public moment
         # properties. Keep those aliases and write native download bytes back.
         if m is not opt["_m"]:
-            var m_view = py_call(bi.memoryview, opt["_m"])
+            var m_view = samba_moment_view(opt["_m"], context)
             py_setitem(m_view, py_call(bi.slice, PythonObject(None)), m._mv)
         if v is not opt["_v"]:
-            var v_view = py_call(bi.memoryview, opt["_v"])
+            var v_view = samba_moment_view(opt["_v"], context)
             py_setitem(v_view, py_call(bi.slice, PythonObject(None)), v._mv)
         py_setitem(opt, "_host_fresh", True)
     var flags = _model_native_buffer(opt["buf_initialized"], "i", context["neural"])
