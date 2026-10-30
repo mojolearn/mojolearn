@@ -181,6 +181,50 @@ def test_git_snapshot_ignores_docs_and_tracks_additions_deletions(tmp_path):
     assert R.changes(b["requirements"]["id"]["inputs"], c["requirements"]["id"]["inputs"]) == ["added input: arithmetic/b.mojo"]
 
 
+def test_frozen_revision_without_a_declared_checker_keeps_the_requirement_blocked(tmp_path):
+    # A maintenance release of a source cut before its checker existed: the
+    # category is kept, the gap is a named missing input, and the ledger
+    # blocks the requirement instead of aborting or shrinking its inputs.
+    def git(*args):
+        return subprocess.check_output(["git", "-C", str(tmp_path), *args], text=True).strip()
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.invalid")
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "a.mojo").write_text("a")
+    (tmp_path / "tools" / "lanes_a.py").write_text("lanes")
+    git("add", ".")
+    git("commit", "-qm", "historical")
+    old = git("rev-parse", "HEAD")
+    catalog = {"requirements": [
+        dict(id="runtime", scope="s", coverage=["c"], source_inputs={"checker": ["tools/inventory.py"]}),
+        dict(id="coverage", scope="s", coverage=["c"], source_inputs={"checker": ["tools/audit.py", "tools/lanes_*"]}),
+        dict(id="arith", scope="s", coverage=["c"], source_inputs={"arithmetic": ["*.mojo"]})]}
+    a = R.requirements(tmp_path, old, "v", catalog)["requirements"]
+    assert a["runtime"]["inputs"]["checker"] == {}
+    assert a["runtime"]["missing_inputs"] == [
+        "input category checker matches no tracked files at " + old,
+        "input checker: tools/inventory.py is not tracked at " + old]
+    assert list(a["coverage"]["inputs"]["checker"]) == ["tools/lanes_a.py"]
+    assert a["coverage"]["missing_inputs"] == ["input checker: tools/audit.py is not tracked at " + old]
+    assert a["arith"]["missing_inputs"] == []
+    led = R.RequirementsLedger(tmp_path / "ledger.json")
+    led.sync(dict(schema=R.SCHEMA, version="v", source_revision=old, requirements=a))
+    rows = led.plan()
+    assert rows["runtime"]["action"] == rows["coverage"]["action"] == "complete-provenance"
+    assert rows["runtime"]["required"] and rows["runtime"]["status"] != "passed"
+    with pytest.raises(ValueError, match="missing input"):
+        led.begin("runtime")
+    # The same catalog at a revision that has the checkers is unaffected.
+    (tmp_path / "tools" / "inventory.py").write_text("inventory")
+    (tmp_path / "tools" / "audit.py").write_text("audit")
+    git("add", ".")
+    git("commit", "-qm", "checkers")
+    b = R.requirements(tmp_path, "HEAD", "v", catalog)["requirements"]
+    assert all(row["missing_inputs"] == [] for row in b.values())
+    assert b["arith"]["fingerprint"] == a["arith"]["fingerprint"]
+
+
 def test_record_is_immutable(ledger, tmp_path):
     path = record(ledger, tmp_path)
     run = ledger.read()["runs"][0]["id"]

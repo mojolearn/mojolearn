@@ -139,18 +139,27 @@ def requirements(root, revision, version, catalog=None, configuration=None, *,
         for category in spec.get("drop_source_inputs", []):
             groups.pop(category, None)
         excluded = catalog.get("source_exclude", []) + spec.get("source_exclude", [])
+        absent = []
         for category, patterns in groups.items():
             selected = {p: blob for p, blob in files.items()
                         if any(fnmatch.fnmatchcase(p, pattern) for pattern in patterns)
                         and not any(fnmatch.fnmatchcase(p, pattern) for pattern in excluded)}
+            # A frozen revision can predate a declared input (a release cut
+            # before its checker or harness existed). Keep the requirement and
+            # name the gap: an empty category, or an exact path the revision
+            # lacks, is a missing input that blocks it, never a smaller
+            # fingerprint and never a dropped category.
             if not selected:
-                raise ValueError(f"{spec['id']}: input category {category} matches no tracked files")
+                absent.append(f"input category {category} matches no tracked files at {revision}")
+            absent += [f"input {category}: {pattern} is not tracked at {revision}" for pattern in patterns
+                       if not any(c in pattern for c in "*?[") and pattern not in files]
             inputs[category] = selected
         inputs["contract"] = {k: spec[k] for k in ("id", "scope", "coverage")}
         inputs["contract"].update(kind=spec.get("kind", "source"), stage=spec.get("stage", "pre"))
         inputs["configuration"] = {k: config[k] for k in spec.get("configuration", []) if k in config}
         missing = [k for k in spec.get("configuration", []) if k not in config or config[k] is None]
         missing += spec.get("unresolved_inputs", [])
+        missing += [gap for gap in absent if gap not in missing]
         result[spec["id"]] = dict(source_revision=revision, inputs=inputs,
                                   fingerprint=digest(inputs), scope=spec["scope"],
                                   coverage=spec["coverage"], missing_inputs=missing,
