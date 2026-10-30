@@ -259,6 +259,13 @@ def same_neural_input_bytes(race, ours, opp):
     return True
 
 
+def _same_spelling(a, b):
+    """FAIRNESS FIX (2026-10-30): one enumerated setting under two libraries' spellings ('Depthwise' in ours and
+    CatBoost, 'depthwise' in XGBoost; 'Lossguide' / 'lossguide') is the same setting. Text values compare without
+    case; every other value compares exactly."""
+    return isinstance(a, str) and isinstance(b, str) and a.strip().lower() == b.strip().lower()
+
+
 def _pair_problems(race, ours, opp):
     bad, missing = [], []
     if timed_not_scored(ours):
@@ -278,7 +285,7 @@ def _pair_problems(race, ours, opp):
             continue
         if po[key] is None or pt[key] is None:
             missing.append("unresolved setting: " + key)
-        elif po[key] != pt[key]:
+        elif po[key] != pt[key] and not _same_spelling(po[key], pt[key]):
             bad.append("setting %s differs: %r vs %r" % (key, po[key], pt[key]))
     for cell in (ours, opp):
         m = cell.get("measurement")

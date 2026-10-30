@@ -2473,7 +2473,10 @@ def enforce_board_params(lane, arms, skip=()):
                          "parameter check raised %s: %s" % (exc.__class__.__name__, exc))
             return False
     try:
-        BP.enforce(lane, objs, family="trees")
+        # FAIRNESS FIX (2026-10-30): pass the lane's own-arm pairing (tools/board_pairing.py), as
+        # bench/speed/forest_speed_arm.py does: each opponent is checked against the own arm it is paired
+        # with (ours-prebinned / ours-gain0 with XGBoost), never one own configuration against another.
+        BP.enforce(lane, objs, family="trees", pairing=board_pairing.lane_pairing(lane))
     except BP.ParamsRefused as exc:
         for name in objs:
             emit_refused(lane, name, "BOARD-PARAMS-REFUSED: %s" % exc)

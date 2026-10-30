@@ -112,7 +112,7 @@ def test_declared_scorer_gap_metrics(metric, a, b, verdict):
 
 
 def test_policy_version_moved():
-    assert Q.POLICY == "mojolearn.quality-parity.v8"
+    assert Q.POLICY == "mojolearn.quality-parity.v9"
     for metric in Q.SELF_REFERENCE:
         assert metric in Q.REFERENCE or metric in Q.AGREEMENT, metric
 
@@ -303,3 +303,20 @@ def test_independent_reference_is_bounded_by_the_race_deadline(monkeypatch, tmp_
     receipt = A.independent_quality_reference("lof", {}, {"ours": {"pred": np.ones(3)}}, str(tmp_path), timeout=1)
     assert receipt["status"] == "failed" and "exceeded" in receipt["error"]
     assert time.perf_counter() - t0 < 2.5
+
+
+def test_v9_rules_cover_every_recorded_metric_of_the_paper_boards():
+    """v9 (2026-10-30): metrics both arms recorded with no rule read INSUFFICIENT; each now has a declared rule."""
+    for metric in ("map", "ndcg5", "ndcg10", "r2_eval", "accuracy_eval"):
+        assert Q.ABSOLUTE[metric] == 0.01 and metric in Q.HIGHER_IS_BETTER
+    for metric in ("rmse_eval", "eval_inertia", "mlogloss"):
+        assert Q.RELATIVE[metric] == 0.05 and metric in Q.LOWER_IS_BETTER
+    assert Q.RELATIVE["loss"] == 0.05 and "loss" not in Q.LOWER_IS_BETTER
+    assert Q.REFERENCE["predict_max_rel_err_own_fp64"] == 1e-4
+    assert "silhouette" in Q.HIGHER_IS_BETTER
+    ours = dict(arm="ours", lane="gbdt-rank-pairlogit", quality=dict(map=0.0883, ndcg10=0.018))
+    theirs = dict(arm="catboost-gpu", lane="gbdt-rank-pairlogit", quality=dict(map=0.8539, ndcg10=0.7196))
+    assert Q.compare(ours, theirs)["verdict"] == "FAIL"          # a ranking model far below the opponent fails
+    better = dict(arm="ours", lane="kmeans", quality=dict(eval_inertia=48.0))
+    worse = dict(arm="cuml-gpu", lane="kmeans", quality=dict(eval_inertia=50.0))
+    assert Q.compare(better, worse)["verdict"] == "PASS"          # ours lower inertia: one-sided pass
