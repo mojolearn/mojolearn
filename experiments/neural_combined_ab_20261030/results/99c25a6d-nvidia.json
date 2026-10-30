@@ -1988,5 +1988,12 @@
         "status": "R2 PUT and GET verified"
       }
     }
-  ]
+  ],
+  "route_witness_scope": "Trace-enabled excluded warmup; scoring trace disabled, with unchanged frozen source and route controls and retained pre/post descriptor counters. This does not measure C API or GIL-transition counts.",
+  "checkpoint_input_retention": {
+    "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/results-round2b.tgz",
+    "sha256": "28d98257f4305ad1873345e4753292a706bc371f545db157697f3158137687f6",
+    "bytes": 3408373854,
+    "scope": "Exact saved mojolearn-162m and SmolLM2 checkpoint bytes retained in first frozen round and reused unchanged; individual current invocations retain checkpoint file hashes"
+  }
 }
