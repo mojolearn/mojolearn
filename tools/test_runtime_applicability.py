@@ -62,3 +62,13 @@ def test_cpu_device_near_matches_are_refused(filename,node,reason,changed):
     if changed=='node':node+='[unknown]'
     else:reason+=' unknown'
     assert not q.test_scope_summary(summary(filename,node,reason),[filename],'cpu',interpreter=PY311)['complete']
+
+
+@pytest.mark.parametrize('vendor',['cpu','metal','cuda','hip','unknown'])
+def test_only_cpu_cooperative_refusal_is_inapplicable_to_gpu(vendor):
+    filename='test_native_process_pool.py';node,reason=next(iter(policy.GPU[filename].items()))
+    result=q.test_scope_summary(summary(filename,node,reason),[filename],vendor,interpreter=PY311)
+    assert result['complete']==(vendor in ('metal','cuda','hip'))
+    assert result['applicable_passed']==0
+    for bad_node,bad_reason in ((node+'[other]',reason),(node,reason+' other')):
+        assert not q.test_scope_summary(summary(filename,bad_node,bad_reason),[filename],vendor,interpreter=PY311)['complete']

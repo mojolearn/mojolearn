@@ -69,11 +69,12 @@ runtime evidence; it does not by itself invalidate unchanged numerical binaries
 or cross-device identity observations. The default with no configured override
 continues to require tests at the product revision.
 
-The supplemental applicability policy records fifteen further exact limitations:
+The supplemental applicability policy records the following exact limitations:
 CPU `test_samba_step_native` resident-parameter cases `[None]` and `[0.3]`,
 the four explicitly enumerated device-loss scalar cases in
 `test_training_scalar_buffer_native`, eight explicitly enumerated native-store
-cases in `test_cache_lifecycle_native` on CPU, and
+cases in `test_cache_lifecycle_native` on CPU, the CPU-only cooperative-process
+refusal case on GPU backends, and
 `test_samba_native_admission`'s Python-defined buffer-exporter case on an actually
 recorded CPython 3.10/3.11 worker. Node names and skip reasons must match exactly.
 GPU resident skips, exporter skips on newer/unknown interpreters and any other

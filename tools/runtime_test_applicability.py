@@ -36,6 +36,11 @@ PRE_PY312 = {
         "test_python_buffer_exporter_is_refused_before_buffer_callback": "Python-defined buffer exporters require Python 3.12",
     },
 }
+GPU = {
+    "test_native_process_pool.py": {
+        "test_cpu_cooperative_multidevice_refusal_has_no_children": "host-only cooperative refusal",
+    },
+}
 
 
 def pre_py312(interpreter):
@@ -46,11 +51,13 @@ def pre_py312(interpreter):
 
 
 def supplement(scope, vendor, interpreter):
-    """Derive a new judgment; only the fifteen exact named limitations may move."""
+    """Derive a new judgment; only the explicitly named limitations may move."""
     result = copy.deepcopy(scope)
     accepted = []
     for filename, row in result["scopes"].items():
         allowed = dict(CPU.get(filename, {})) if vendor == "cpu" else {}
+        if vendor in ("metal", "cuda", "hip"):
+            allowed.update(GPU.get(filename, {}))
         if pre_py312(interpreter):
             allowed.update(PRE_PY312.get(filename, {}))
         remaining = []
@@ -58,7 +65,8 @@ def supplement(scope, vendor, interpreter):
             if case["name"] in allowed and case["skip_reason"] == allowed[case["name"]]:
                 row["not_applicable"].append(case)
                 accepted.append(dict(file=filename, node=case["name"], reason=case["skip_reason"],
-                                     basis="CPU has no native device store" if filename == "test_cache_lifecycle_native.py"
+                                     basis="CPU-only cooperative refusal is not a GPU operation" if filename == "test_native_process_pool.py"
+                                     else "CPU has no native device store" if filename == "test_cache_lifecycle_native.py"
                                      else "CPU has no training device pool" if filename == "test_training_scalar_buffer_native.py"
                                      else "CPU has no resident parameter entry" if case["name"] in CPU.get(filename, {})
                                      else "recorded CPython version predates Python-defined buffer exporters"))
