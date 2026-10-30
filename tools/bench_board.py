@@ -4354,7 +4354,15 @@ SMOKE_FILE_GLOBS = ("tools/bench_board*.py", "tools/speed_gbdt_arm.py", "tools/b
 PLANNED_REFUSALS = [
     # smoke-fixes (2026-10-14; trees/gbdt-lossguide/taxi): the reason named the old refusal; since the
     # 2026-10-13 audit the driver refuses every LightGBM tree arm by name whatever the build.
+    # FAIRNESS FIX (2026-10-30; AMD trees/gbdt-lossguide/taxi refused the whole race with "missing parameter/version
+    # probe: lightgbm-cuda" once AMD's ROCm LightGBM joined the AMD roster): the refusal is the driver's, by name, on
+    # every vendor that lists the arm (NVIDIA, and AMD with ROCm LightGBM), so it is planned on both; Apple has
+    # no CUDA/ROCm LightGBM arm, so an Apple refusal stays unplanned.
     ("nvidia", "trees/*", "lightgbm-cuda",
+     "the driver refuses every LightGBM tree arm by name (tools/speed_gbdt_arm.py lightgbm_arms "
+     "MIN-CHILD / ROW-SAMPLING / CATEGORICAL-ALGORITHM, lightgbm_rank_arms DIFFERENT-ALGORITHM): "
+     "LightGBM 4.7.0 aborts at the lanes' min_child_samples 1 and min_child_weight 0"),
+    ("amd", "trees/*", "lightgbm-cuda",
      "the driver refuses every LightGBM tree arm by name (tools/speed_gbdt_arm.py lightgbm_arms "
      "MIN-CHILD / ROW-SAMPLING / CATEGORICAL-ALGORITHM, lightgbm_rank_arms DIFFERENT-ALGORITHM): "
      "LightGBM 4.7.0 aborts at the lanes' min_child_samples 1 and min_child_weight 0"),
