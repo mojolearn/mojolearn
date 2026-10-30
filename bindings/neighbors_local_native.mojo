@@ -750,7 +750,10 @@ def _nc_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     var binding = args[0]
     var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
     var shape = py_call(b.tuple, dec.shape)
-    var wide = not xn_is_module(binding) or neural_descriptor_entry(binding, "xn_softmax64", False) is not None
+    # A shared native descriptor does not imply optional kernel availability.
+    # Query its admitted compiled owner just as for a direct module binding;
+    # identical bindings correctly omit the optional float64 softmax export.
+    var wide = neural_descriptor_entry(xn_module(binding), "xn_softmax64", False) is not None
     var out = _out(shape, "<f8" if wide else "<f4", context)
     _op(binding, "softmax64" if wide else "softmax", Python.list(classical_address(dec), classical_address(out)),
         Python.list(_i(_rows(dec)), _i(_cols(dec))), Python.list(), context)
