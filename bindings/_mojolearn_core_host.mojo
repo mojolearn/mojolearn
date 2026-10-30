@@ -109,7 +109,7 @@ from bindings.host_helpers import (
     gather_rows_bytes_binding,
     probability_rows_f32_binding,
 )
-from bindings.core_host_counts import bincount2_i32_host_binding
+from core.host_counts import bincount2_i32_host_binding
 from bindings.hotpath_helpers import (
     HOTPATH_SABOTAGE,
     cast_elements_binding,
