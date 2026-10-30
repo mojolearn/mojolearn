@@ -7,7 +7,8 @@ imports or modifies the existing installation, compiles a binding, changes a
 binary, patches the backend, or admits a release reuse proof.
 
 The output uses `linux_x86_64`, which PyPI does not admit. Every retained payload
-file is verified against its old installed RECORD. Package source, native source,
+file is verified against its old installed RECORD, or the explicit retained-stage
+manifest described below. Package source, native source,
 binary, build-evidence, metadata, and final wheel SHA256 inventories are retained
 in `qualification-inputs.json`. Native source hashes describe the checkout;
 individual binary records state their actual retained/replacement origin. They
@@ -97,3 +98,37 @@ checkout. If they differ, `ptx.current_source_admissible` is false and normal PT
 loading refuses. Do not change either witness to evade that check. A partial new
 native architecture directory does not supply missing model block bindings.
 Neither this controller nor its file-only tests claims complete target coverage.
+
+## Development stages without installed RECORD files
+
+An already retained development installation may use
+`--retained-stage-manifest /absolute/path/stage.json` instead of an installed
+distribution's RECORD. Do not create a synthetic RECORD or combine this input
+with `--native-overlay`. The manifest has this shape:
+
+```json
+{
+  "schema": "mojolearn.retained-qualification-stage.v1",
+  "source_commit": "FULL_FROZEN_SOURCE_COMMIT",
+  "evidence": [{"path": "/absolute/retained/stage-receipt.json", "sha256": "SHA256"}],
+  "assets": [{
+    "path": "mojolearn/identical/group.so",
+    "member": "mojolearn/hip_native/gfx942/identical/group.so",
+    "sha256": "SHA256",
+    "bytes": 123
+  }]
+}
+```
+
+The example is schematic: list **every** native library, Mojo package, loader
+index, adapter manifest and runtime dependency, plus
+`mojolearn/identity_columns/COMMIT`. Paths are relative to `--installed-site`;
+members are canonical wheel paths. Include the full retained assembly and
+source-closure evidence. The assembler checks source-witness agreement, exact
+asset/evidence bytes, native/index coverage, path containment and uniqueness.
+Python source still comes exclusively from the frozen committed checkout.
+
+The manifest records the caller's provenance; it does not admit compilation,
+release reuse, runtime success or a manylinux floor. Outputs remain explicitly
+`publishable=False`. Relocation can change native library discovery, so test the
+new installed loader and adapter boundary even when binary bytes are unchanged.
