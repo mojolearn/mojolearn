@@ -25,8 +25,9 @@ PAIRS_FIELD = "pairs_with"
 #: `opponents` are opponent arm-name globs (fnmatch).
 #: The driver (bench/speed/forest_speed_arm.py) builds every listed arm, the board
 #: (tools/bench_board.py our_arms) plans a cell for each, and every comparison pairs by this table.
-#: LightGBM is in no list: the driver refuses every boosted LightGBM arm by name
-#: (tools/speed_gbdt_arm.py lightgbm_arms), so it never has a cell to pair.
+#: LightGBM is listed on gbdt-lossguide only (FAIRNESS FIX 2026-10-30, with `ours-gain0` on the
+#: pre-binned input); the driver refuses every other boosted LightGBM arm by name
+#: (tools/speed_gbdt_arm.py lightgbm_arms), so it never has a cell to pair there.
 #: `prebinned` True: that own arm and its opponents take the same pre-binned input (decision 1
 #: below; tools/speed_gbdt_arm.py prebinned_data), the other arms the raw rows.
 #: Andrew 2026-10-14 (DECISIONS.md decision 1), the bin borders against XGBoost on gbdt-depthwise and
@@ -72,12 +73,19 @@ OUR_PAIRINGS = {
         "ours": {"opponents": ("catboost-gpu",), "settings": {"min_split_gain": None},
                  "why": "min_split_gain None: no gain check, CatBoost Lossguide's growth "
                         "(greedy_search_helper.cpp:297-309, 321-328)"},
-        # decision 1 too: the XGBoost pairing takes the pre-binned input on both arms
-        "ours-gain0": {"opponents": ("xgboost-*",),
+        # decision 1 too: the XGBoost pairing takes the pre-binned input on both arms.
+        # FAIRNESS FIX (2026-10-30): LightGBM pairs here too. Its split needs a strictly positive gain
+        # at min_gain_to_split 0 (current_gain > parent_gain + min_gain_to_split,
+        # src/treelearner/feature_histogram.hpp:509,563; CUDA cuda_best_split_finder.cu:152,232;
+        # LightGBM v4.7.0) and it stops a tree when the best leaf's gain is <= 0
+        # (serial_tree_learner.cpp:233), ours' min_split_gain 0.0; it takes the same pre-binned
+        # block, each bin id its own bin (tools/speed_gbdt_arm.py lightgbm_arms).
+        "ours-gain0": {"opponents": ("xgboost-*", "lightgbm-*"),
                        "settings": {"min_split_gain": 0.0, "border_build_max_samples": 0},
                        "prebinned": True,
                        "why": "min_split_gain 0.0: a strictly positive gain, XGBoost gamma 0 "
-                              "(src/tree/gpu_hist/expand_entry.cuh:34); pre-binned input on both arms"},
+                              "(src/tree/gpu_hist/expand_entry.cuh:34) and LightGBM min_split_gain 0 "
+                              "(feature_histogram.hpp:563); pre-binned input on both arms"},
     },
 }
 

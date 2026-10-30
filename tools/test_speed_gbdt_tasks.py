@@ -451,14 +451,17 @@ def test_querywise_recipe_explicitly_selects_supported_pointwise_searcher(lane):
 
 def test_lightgbm_lossguide_races_at_min_child_weight_1e_12():
     """FAIRNESS FIX (2026-10-30): LightGBM aborts a tree at min_child_weight exactly 0 (Check failed:
-    best_split_info.left_count > 0, reproduced on full taxi), so gbdt-lossguide races it at 1e-12 with
-    min_child_samples 1, both declared; the exceptions are scoped to this lane and LightGBM only."""
+    best_split_info.left_count > 0, reproduced on full taxi), and its min_data_in_leaf counts rows estimated
+    from the hessian, so gbdt-lossguide races it at min_child_samples 0 and min_child_weight 1e-12, both
+    declared; the exceptions are scoped to this lane and LightGBM only, each value-conditional.
+    tools/test_lgbm_lossguide_mapping.py checks them against a real LightGBM read-back."""
     import bench_board_params as bbp
     rows = [(lane, key, arm) for lane, key, arm, _why in bbp.EXCEPTIONS]
-    assert ("gbdt-lossguide", "min_child_weight", "lightgbm-*") in rows
-    assert ("gbdt-lossguide", "boosting_type", "lightgbm-*") in rows
-    assert not any(key == "min_child_weight" and arm.startswith("lightgbm") and lane != "gbdt-lossguide"
-                   for lane, key, arm in rows)
+    for key in ("min_child_weight", "boosting_type", "min_samples_leaf"):
+        assert ("gbdt-lossguide", key, "lightgbm-*") in rows
+        assert ("gbdt-lossguide", key, "lightgbm-*") in bbp.EXCEPTION_VALUES
+    assert not any(key in ("min_child_weight", "min_samples_leaf") and arm.startswith("lightgbm")
+                   and lane != "gbdt-lossguide" for lane, key, arm in rows)
     src = open(__file__.replace("test_speed_gbdt_tasks.py", "speed_gbdt_arm.py")).read()
-    assert "p.update(min_child_samples=1, min_child_weight=1e-12)" in src
+    assert "p.update(min_child_samples=0, min_child_weight=1e-12" in src
     assert 'if lane != "gbdt-lossguide":' in src

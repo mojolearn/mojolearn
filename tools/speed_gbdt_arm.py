@@ -2561,6 +2561,9 @@ def _blocking(name):
 BORDER_SAMPLE_ROWS = 200000
 #: the input_binning record both arms of an XGBoost pairing read back (tools/board_pairing.py)
 PREBIN_RECORD = "pre-binned input on both arms (GreedyLogSum, %d borders)"
+#: FAIRNESS FIX (2026-10-30): the record's training row count, the rows LightGBM's bin sample must cover
+#: (bench_board_params._semantic_lgbm_lossguide reads it back from the record)
+PREBIN_ROWS = "%d training rows"
 
 
 def prebinned_data(lane, data, cfg):
@@ -2603,10 +2606,12 @@ def prebinned_data(lane, data, cfg):
         pb.__dict__.pop(k, None)
     pb.X_train, pb.X_test = blk["x_train"], blk["x_test"]
     pb.bins_sha256 = blk["sha256"]
-    pb.input_binning = "%s; bins sha256 %s" % (PREBIN_RECORD % n_borders, blk["sha256"])
+    pb.input_binning = "%s; %s; bins sha256 %s" % (PREBIN_RECORD % n_borders,
+                                                   PREBIN_ROWS % int(np.asarray(blk["x_train"]).shape[0]),
+                                                   blk["sha256"])
     data._prebinned = pb
     emit_note(lane, ["*"], "input_binning", float(blk["widest"]),
-              "%s for the XGBoost pairing (CatBoost %s Pool.quantize, %d-row border sample, seed %d; "
+              "%s for the pre-binned pairings (XGBoost; LightGBM on gbdt-lossguide) (CatBoost %s Pool.quantize, %d-row border sample, seed %d; "
               "at most %d bins per feature; the CatBoost pairings take the raw rows)"
               % (pb.input_binning, blk["catboost_version"], BORDER_SAMPLE_ROWS, int(cfg["seed"]), blk["widest"]))
     return pb
@@ -3169,14 +3174,23 @@ def lightgbm_arms(lane, cfg, data, devices):
             "ROW-SAMPLING: LightGBM's rf boosting refuses bagging_fraction 1.0, so each tree would "
             "sample 63.2%% of rows without replacement where ours %s; another sample is another "
             "forest" % ("draws n rows with replacement" if lane == "rf" else "uses every row"))
-    # FAIRNESS FIX (2026-10-30): gbdt-lossguide races LightGBM (leaf-wise is its own algorithm) at the
-    # lane's min_child_samples 1 with min_child_weight 1e-12 instead of 0: at exactly 0 LightGBM aborts
-    # ("Check failed: (best_split_info.left_count) > (0)", reproduced on full taxi with LightGBM 4.7.0),
-    # while 1e-12 runs every tree. A floor of 1e-12 is far below one row's logloss hessian, so it does not
-    # change the stopping rule; it is declared (bench_board_params.EXCEPTIONS) and noted. Every other
-    # boosted lane keeps the refusal below.
+    # FAIRNESS FIX (2026-10-30): gbdt-lossguide races LightGBM (best-first leaf-wise growth is its only
+    # grower, the lane's Lossguide), paired with `ours-gain0` on the same pre-binned input
+    # (tools/board_pairing.py). The child rule: ours' min_samples_leaf 1 is "a non-empty child". LightGBM's
+    # min_data_in_leaf is checked on a count ESTIMATED from the hessian, RoundInt(hess * num_data /
+    # sum_hessian) (src/treelearner/feature_histogram.hpp:529-544; CUDA cuda_best_split_finder.cu:151,
+    # 219-225, LightGBM v4.7.0), so at 1 it refuses a non-empty child whose hessian share is under half a
+    # row's mean (a confidently-wrong row cannot be isolated): another rule, which changed the model in a
+    # CPU probe (~/mojolearn-evidence/lgbm-lossguide-mapping/probe/mincount.log). So LightGBM races
+    # min_child_samples 0 (the estimate never refuses) with min_child_weight 1e-12: an empty child holds
+    # hessian 0 (+kEpsilon 1e-15) and is refused, every non-empty child is admitted unless its rows' total
+    # logloss hessian is under 1e-12. LightGBM keeps min_data_in_leaf 0 only beside a hessian floor above
+    # kEpsilon (src/io/config.cpp:464-468), and at min_child_weight exactly 0 it aborts ("Check failed:
+    # (best_split_info.left_count) > (0)", reproduced on full taxi with LightGBM 4.7.0). Both values are
+    # declared (bench_board_params.EXCEPTIONS, value-conditional) and noted. Every other boosted lane keeps
+    # the refusal below.
     if lane != "gbdt-lossguide":
-      raise RuntimeError(
+        raise RuntimeError(
         "MIN-CHILD: LightGBM 4.7.0 aborts at the lane's min_child_samples 1 and min_child_weight 0, "
         "and its defaults 20 and 1e-3 are another stopping rule than every other arm's; %s"
         % ("it also has no oblivious grower for this loss" if cfg.get("lightgbm_leafwise")
@@ -3282,22 +3296,31 @@ def lightgbm_arms(lane, cfg, data, devices):
         # LightGBM arm keeps LightGBM's defaults, and a non-task lane says so
         # in a mismatch line (the task lanes carry it in TASK_LANES).
         if lane == "gbdt-lossguide":
-            p.update(min_child_samples=1, min_child_weight=1e-12)
+            # FAIRNESS FIX (2026-10-30), see the refusal comment above. The LightGBM-only knobs that
+            # change the work are set explicitly (read back and mapped value by value in
+            # bench_board_params._semantic_lgbm_lossguide): no random thresholds, no leaf-output clip,
+            # no path smoothing, full-precision gradients. The bin knobs (min_data_in_bin 1 and a bin
+            # sample of every training row) make every pre-binned id its own bin; they are set below,
+            # where the block is known.
+            p.update(min_child_samples=0, min_child_weight=1e-12, extra_trees=False, max_delta_step=0.0,
+                     path_smooth=0.0, use_quantized_grad=False)
             emit_note(lane, ["lightgbm-*"], "mismatch", 1.0,
-                      "LightGBM min_child_weight 1e-12 (the other arms' 0): at exactly 0 LightGBM aborts a "
-                      "tree (Check failed: best_split_info.left_count > 0); 1e-12 is far below one row's "
-                      "hessian, so the stopping rule is the same; min_child_samples 1 as every arm")
+                      "LightGBM min_child_samples 0 and min_child_weight 1e-12 (the other arms' 1 and 0): "
+                      "its min_data_in_leaf counts rows estimated from the hessian, so 0 drops that "
+                      "estimate and the 1e-12 floor refuses exactly the empty child (at a floor of 0 "
+                      "LightGBM aborts a tree); a non-empty child is admitted, as on every arm")
         else:
-          p.update(min_child_samples=20, min_child_weight=1e-3)
+            p.update(min_child_samples=20, min_child_weight=1e-3)
         if not cfg.get("task") and lane != "gbdt-lossguide":
             emit_note(lane, ["lightgbm-*"], "mismatch", 1.0,
                       "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its "
                       "defaults: at 0 (the other arms' value) LightGBM 4.7.0 aborts the "
                       "first tree (Check failed: best_split_info.left_count > 0)")
-        emit_note(lane, ["lightgbm-*"], "mismatch", 2.0,
-                  "LightGBM min_data_in_bin 3 (its default; ours, CatBoost and XGBoost have "
-                  "no minimum bin count) and a 200,000-row bin sample (ours "
-                  "border_build_max_samples 200000, CatBoost's 200000, XGBoost sketches every row)")
+        if lane != "gbdt-lossguide":
+            emit_note(lane, ["lightgbm-*"], "mismatch", 2.0,
+                      "LightGBM min_data_in_bin 3 (its default; ours, CatBoost and XGBoost have "
+                      "no minimum bin count) and a 200,000-row bin sample (ours "
+                      "border_build_max_samples 200000, CatBoost's 200000, XGBoost sketches every row)")
     # MOJOLEARN_SPEED_LGBM_PARAMS=name=value,... (lane trees-hotaisle,
     # 2026-09-11): LightGBM 4.7.0 refused every AMD cell with "Check failed:
     # (best_split_info.left_count) > (0)" under min_child_weight=0.0, so ONE
@@ -3329,6 +3352,26 @@ def lightgbm_arms(lane, cfg, data, devices):
     # reader of sample weights, is off on Logloss (boost_from_average False). CPU and CUDA run
     # this one data path. A fit that still ends with a single leaf is refused by name, so a model
     # that learned nothing is never scored as a quality cell.
+    # FAIRNESS FIX (2026-10-30): the gbdt-lossguide LightGBM arm fits and is scored on the pre-binned block
+    # of its own arm `ours-gain0` (tools/board_pairing.py, prebinned_data: once per dataset, outside every
+    # clock), as XGBoost does. Every feature holds at most 255 distinct bin ids. LightGBM's bin finder gives
+    # each distinct sampled value its own bin when there are at most max_bin of them and min_data_in_bin is
+    # 1 (src/io/bin.cpp:80-100 GreedyFindBin, the zero bin :164-200), and it samples
+    # min(subsample_for_bin, rows) rows, all of them at subsample_for_bin >= rows (src/c_api.cpp:987,
+    # include/LightGBM/utils/random.h:70-78 Sample(N, N)). So subsample_for_bin is the block's training row
+    # count: every bin id is its own bin, the split candidates of ours at border_build_max_samples 0.
+    if lane == "gbdt-lossguide" and (p.get("min_child_samples") != 0 or p.get("min_child_weight") != 1e-12):
+        # an override (MOJOLEARN_SPEED_LGBM_PARAMS) back to LightGBM's estimated-count child rule would read
+        # back "min_samples_leaf 1" equal to ours' by name while refusing other children: refused by name
+        raise RuntimeError(
+            "MIN-CHILD-ESTIMATE: LightGBM's min_data_in_leaf counts rows estimated from the hessian; only "
+            "min_child_samples 0 with min_child_weight 1e-12 is ours' non-empty-child rule (got %r and %r)"
+            % (p.get("min_child_samples"), p.get("min_child_weight")))
+    block = None
+    if board_pairing.prebinned_arm(lane, "lightgbm-cuda"):
+        block = prebinned_data(lane, data, cfg)
+        p.update(min_data_in_bin=1, subsample_for_bin=int(np.asarray(block.X_train).shape[0]))
+
     pos_weights = None
     if p.get("scale_pos_weight") is not None and data.task == "binary":
         y_bin = np.asarray(data.y_train)
@@ -3373,14 +3416,17 @@ def lightgbm_arms(lane, cfg, data, devices):
         # `opencl` is LightGBM's OpenCL learner (device_type 'gpu', a
         # USE_GPU=ON build), the GPU build that can run on an AMD box.
         device_type = {"cpu": "cpu", "opencl": "gpu"}.get(dev, "cuda")
-        out.append(Arm(
+        arm = Arm(
             "lightgbm-" + {"cpu": "cpu", "opencl": "opencl"}.get(dev, "cuda"),
             (lambda dt: (lambda: make(dt)))(device_type),
             _lgb_fit,
             _score_sklearn_like,
             sync=_cuda_sync,
             library="lightgbm",
-        ))
+        )
+        if block is not None and board_pairing.prebinned_arm(lane, arm.name):
+            attach_input(arm, block)
+        out.append(arm)
     return out
 
 

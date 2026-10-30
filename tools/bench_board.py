@@ -4795,8 +4795,16 @@ def select_opponent_arms(races, spec):
     return selected
 
 
+#: FAIRNESS FIX (2026-10-30): (race key glob, arm glob) the "trees/*" LightGBM rows above no longer cover:
+#: the driver builds LightGBM on gbdt-lossguide (tools/speed_gbdt_arm.py lightgbm_arms, paired with
+#: `ours-gain0`), so a missing probe or a refusal there is a failure, never a planned refusal.
+PLANNED_REFUSAL_EXEMPT = [("trees/gbdt-lossguide/*", "lightgbm-*")]
+
+
 def _planned_refusal(vendor, key, arm):
     import fnmatch
+    if any(fnmatch.fnmatch(key, kg) and fnmatch.fnmatch(arm, ag) for kg, ag in PLANNED_REFUSAL_EXEMPT):
+        return None
     for v, kg, ag, why in PLANNED_REFUSALS:
         if fnmatch.fnmatch(vendor, v) and fnmatch.fnmatch(key, kg) and fnmatch.fnmatch(arm, ag):
             return why

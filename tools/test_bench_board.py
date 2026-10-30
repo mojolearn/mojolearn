@@ -1719,8 +1719,10 @@ def test_smoke_verdict_pass_and_each_failure():
 
 
 def test_smoke_planned_refusal_passes_only_as_a_named_refusal():
-    race = {"id": "trees/gbdt-lossguide/taxi/rows=2000", "family": "trees",
-            "lane": "gbdt-lossguide", "dataset": "taxi", "arms": ["ours", "lightgbm-cuda"]}
+    # FAIRNESS FIX (2026-10-30): gbdt-lossguide races LightGBM now, so the planned refusal is shown on
+    # gbdt-depthwise (still refused by name, MIN-CHILD); on gbdt-lossguide a LightGBM refusal fails the smoke
+    race = {"id": "trees/gbdt-depthwise/taxi/rows=2000", "family": "trees",
+            "lane": "gbdt-depthwise", "dataset": "taxi", "arms": ["ours", "lightgbm-cuda"]}
     rec = {"status": "done", "params_check": "MATCHED",
            "cells": [_smoke_cell("ours"), _smoke_cell("lightgbm-cuda", "REFUSED(no CUDA build)")]}
     assert bb.smoke_verdict(race, rec, "nvidia") == []
@@ -1728,6 +1730,13 @@ def test_smoke_planned_refusal_passes_only_as_a_named_refusal():
     assert bb.smoke_verdict(race, rec, "apple")
     rec["cells"][1] = _smoke_cell("lightgbm-cuda", "UNKNOWN(not in log)")
     assert bb.smoke_verdict(race, rec, "nvidia")
+    lg = dict(race, id="trees/gbdt-lossguide/taxi/rows=2000", lane="gbdt-lossguide")
+    rec["cells"][1] = _smoke_cell("lightgbm-cuda", "REFUSED(no CUDA build)")
+    for vendor in ("nvidia", "amd"):
+        assert bb.smoke_verdict(lg, rec, vendor)
+        assert bb._planned_refusal(vendor, "trees/gbdt-lossguide/taxi", "lightgbm-cuda") is None
+        assert bb._planned_refusal(vendor, "trees/gbdt-lossguide/taxi", "lightgbm-cpu") is None
+        assert bb._planned_refusal(vendor, "trees/gbdt-depthwise/taxi", "lightgbm-cuda")
 
 
 def test_shards_split_the_plan_round_robin_by_id():
@@ -1882,19 +1891,24 @@ def test_paired_lossguide_plans_two_own_configurations_and_pairs_each_ratio():
     # (min_split_gain None) against catboost-gpu only and `ours-gain0` (0.0) against xgboost-* only
     race = bb.plan_races("nvidia", ["identical"], ["trees"], ["gbdt-lossguide"], ["taxi"], None)[0]
     assert race["our_arms"] == {"ours": "identical", "ours-gain0": "identical"}
-    assert race["our_pairing"] == {"ours": ["catboost-gpu"], "ours-gain0": ["xgboost-*"]}
+    # FAIRNESS FIX (2026-10-30): LightGBM pairs with `ours-gain0` (strictly positive gain, pre-binned input)
+    assert race["our_pairing"] == {"ours": ["catboost-gpu"], "ours-gain0": ["xgboost-*", "lightgbm-*"]}
     assert bb.arm_library("ours-gain0") == "mojolearn" and bb.arm_device("ours-gain0", "nvidia") == "gpu"
     ctx = {"vendor": "nvidia", "rounds": 1}
     ms = {"ours": 100.0, "ours-gain0": 60.0, "catboost-gpu": 50.0, "xgboost-gpu": 30.0, "lightgbm-cuda": 10.0}
     cells = [dict(bb.base_cell(ctx, race, a, race["our_arms"].get(a)), status="ok", median_ms=m,
                   times_ms=[m], rounds=1) for a, m in ms.items()]
     by = {c["arm"]: c for c in bb.add_ratios(cells)}
-    assert by["ours"]["pairs_with"] == ["catboost-gpu"] and by["ours-gain0"]["pairs_with"] == ["xgboost-*"]
+    assert by["ours"]["pairs_with"] == ["catboost-gpu"]
+    assert by["ours-gain0"]["pairs_with"] == ["xgboost-*", "lightgbm-*"]
     assert by["catboost-gpu"]["ratio_ours_identical_over"] == pytest.approx(2.0)
     assert by["xgboost-gpu"]["ratio_ours_identical_over"] == pytest.approx(2.0)
     assert by["xgboost-gpu"]["ratio_ours_arm"] == {"identical": "ours-gain0"}
-    assert by["lightgbm-cuda"]["ratio_ours_identical_over"] is None     # no own configuration lists it
+    assert by["lightgbm-cuda"]["ratio_ours_identical_over"] == pytest.approx(6.0)
+    assert by["lightgbm-cuda"]["ratio_ours_arm"] == {"identical": "ours-gain0"}
     assert "ours-gain0, vs xgboost-*" in bb._arm_label(by["ours-gain0"])
+    assert bb.PAIR.prebinned_arm("gbdt-lossguide", "lightgbm-cuda")
+    assert not bb.PAIR.prebinned_arm("gbdt-depthwise", "lightgbm-cuda")
     # an unpaired lane keeps the old rule and carries no pairing field
     sym = bb.plan_races("nvidia", ["identical"], ["trees"], ["gbdt-symmetric"], ["taxi"], None)[0]
     assert "our_pairing" not in sym and "pairs_with" not in bb.base_cell(ctx, sym, "ours", "identical")

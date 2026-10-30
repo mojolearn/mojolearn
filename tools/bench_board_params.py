@@ -58,6 +58,7 @@ import inspect
 import json
 import math
 import os
+import re
 import sys
 
 if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
@@ -315,13 +316,27 @@ EXCEPTIONS = [
      "subsample 1.0"),
     ("gbdt-*", "boosting_type", "xgboost-*", "different vocabularies: ours and CatBoost 'Plain' "
      "(not Ordered), XGBoost booster 'gbtree'; both plain gradient boosting"),
-    # FAIRNESS FIX (2026-10-30): gbdt-lossguide races LightGBM at min_child_samples 1 (equal) and
-    # min_child_weight 1e-12 (LightGBM aborts at exactly 0); see tools/speed_gbdt_arm.py lightgbm_arms.
-    ("gbdt-lossguide", "boosting_type", "lightgbm-*", "different vocabularies: ours and CatBoost "
-     "'Plain' (not Ordered), LightGBM boosting_type 'gbdt'; both plain gradient boosting"),
-    ("gbdt-lossguide", "min_child_weight", "lightgbm-*", "LightGBM aborts a tree at min_child_weight "
-     "exactly 0 (Check failed: best_split_info.left_count > 0); it races 1e-12, far below one row's "
-     "logloss hessian, so the minimum-hessian stopping rule is the same as the other arms' 0"),
+    # FAIRNESS FIX (2026-10-30): gbdt-lossguide races LightGBM against `ours-gain0` (tools/board_pairing.py)
+    # at min_child_samples 0 and min_child_weight 1e-12; see tools/speed_gbdt_arm.py lightgbm_arms. Each row
+    # is value-conditional (EXCEPTION_VALUES); the absent-field mappings are _semantic_lgbm_lossguide.
+    # Sources: LightGBM v4.7.0 on GitHub (the version the NVIDIA box reads back).
+    ("gbdt-lossguide", "boosting_type", "lightgbm-*", "different vocabularies: ours 'Plain' (not "
+     "Ordered), LightGBM boosting_type 'gbdt' (plain gradient boosting, src/boosting/gbdt.cpp; not "
+     "rf, dart or goss); both plain gradient boosting"),
+    ("gbdt-lossguide", "min_child_weight", "lightgbm-*", "LightGBM aborts a tree at "
+     "min_sum_hessian_in_leaf exactly 0 (Check failed: best_split_info.left_count > 0, reproduced on "
+     "full taxi with 4.7.0); at 1e-12 it refuses the empty child (hessian 0 up to kEpsilon 1e-15, "
+     "feature_histogram.hpp:515, cuda_best_split_finder.cu:210,279-282), as ours' 0 with min_samples_leaf "
+     "1 does. A non-empty child is refused only when the summed logloss hessian p(1-p) x weight of its "
+     "rows is under 1e-12, i.e. every row at |margin| > 27 (p within 1e-12 of 0 or 1); at learning rate "
+     "0.1 a Newton leaf moves a fitted row's margin by about 0.1 per tree, so no row gets there before "
+     "~270 trees"),
+    ("gbdt-lossguide", "min_samples_leaf", "lightgbm-*", "ours' 1 is 'a non-empty child'. LightGBM's "
+     "min_data_in_leaf is checked on a row count estimated from the hessian, RoundInt(hess * num_data / "
+     "sum_hessian) (feature_histogram.hpp:529-544, cuda_best_split_finder.cu:151,219-225), so at 1 it "
+     "refuses non-empty children whose hessian share is under half a row's mean; at 0 that estimate "
+     "never refuses and the hessian floor 1e-12 refuses the empty child alone. LightGBM keeps 0 only "
+     "beside a floor above kEpsilon (src/io/config.cpp:464-468)"),
     # FAIRNESS FIX (2026-10-13 audit, second pass): three LightGBM rows removed here
     # (boosting_type, min_child_weight and min_samples_leaf on gbdt-*). They excused LightGBM
     # racing min_child_samples 20 and min_child_weight 1e-3 against every other arm's 1 and 0,
@@ -547,6 +562,11 @@ EXCEPTION_VALUES = {
     ("gbdt-ordered", "permutation_count", "catboost-*"): [(4, None)],
     ("gbdt-*", "subsample", "*"): _no_row_sampling,
     ("gbdt-*", "boosting_type", "xgboost-*"): [("Plain", "gbtree")],
+    ("gbdt-lossguide", "boosting_type", "lightgbm-*"): [("Plain", "gbdt")],
+    ("gbdt-lossguide", "min_child_weight", "lightgbm-*"): [(0.0, 1e-12)],
+    ("gbdt-lossguide", "min_samples_leaf", "lightgbm-*"): lambda ours, theirs: (
+        _r6_is(ours.get("min_samples_leaf"), 1) and _r6_is(theirs.get("min_samples_leaf"), 0)
+        and _r6_is(ours.get("min_child_weight"), 0.0) and _r6_is(theirs.get("min_child_weight"), 1e-12)),
     ("pca", "tol", "cuml-gpu"): [(0.0, 1e-7)],
     ("tsvd", "algorithm", "cuml-gpu"): [("covariance_eigh", "full")],
     ("tsvd", "n_iter", "cuml-gpu"): [(5, 15)],
@@ -1532,6 +1552,148 @@ def _semantic_r6(lane, param, arm, ours, theirs, library):
         return "histogram growth on quantized features on both (bin count compared as max_bin)"
 
 
+#: FAIRNESS FIX (2026-10-30): the training row count the pre-binned record carries
+#: (tools/speed_gbdt_arm.py PREBIN_ROWS), which LightGBM's bin sample must cover.
+_PREBIN_ROWS_RE = re.compile(r"; (\d+) training rows;")
+
+
+def _semantic_lgbm_lossguide(lane, param, arm, ours, theirs, library):
+    """FAIRNESS FIX (2026-10-30; NVIDIA smoke ~/mojolearn-evidence/v0855-paper-20261029/final/lgbm-attempt/
+    nvlg.tgz, trees/gbdt-lossguide/taxi: "<knob> missing from lightgbm-cuda read-back", "<knob> missing from
+    ours read-back"). LightGBM on gbdt-lossguide, compared with `ours-gain0` only (tools/board_pairing.py).
+
+    Ours is python/mojolearn/ensemble.py GradientBoosting (get_params lists every constructor argument).
+    LightGBM 4.7.0's LGBMClassifier.get_params lists its scikit-learn names plus every keyword the driver
+    passed (read_params merges `kwargs`); the driver (tools/speed_gbdt_arm.py lightgbm_arms) passes the
+    LightGBM-only knobs that change the work explicitly, so each is read back and mapped here at the value
+    that turns it off. It fits on (X, y, sample_weight) with no eval set, no callbacks and no categorical
+    columns, on the same pre-binned block as `ours-gain0`. Sources read at LightGBM v4.7.0 on GitHub
+    (microsoft/LightGBM, the CPU serial learner and the CUDA learner the -cuda arm runs). Each row fires
+    only for library lightgbm on this lane, only when the absent side really lacks the field, and only at
+    the values named; any other value still refuses.
+    """
+    if lane != "gbdt-lossguide" or library != "lightgbm" or not arm.startswith("lightgbm-"):
+        return None
+    lacks_theirs = param in ours and param not in theirs
+    lacks_ours = param in theirs and param not in ours
+    if not (lacks_theirs or lacks_ours):
+        return None
+    lossguide = (_r6_is(ours.get("grow_policy"), "Lossguide") and _r6_is(ours.get("boosting_type"), "Plain")
+                 and _r6_is(theirs.get("boosting_type"), "gbdt"))
+    if not lossguide:
+        return None
+    binary = _r6_is(ours.get("loss"), "Logloss") and _r6_is(theirs.get("objective"), "binary")
+    # no row sampling: LightGBM bags only at bagging_freq > 0 with a fraction below 1
+    # (src/boosting/bagging.hpp:147-148); ours bootstrap 'No' samples none
+    no_sampling = (_r6_is(ours.get("bootstrap_type"), "No") and _r6_is(theirs.get("subsample"), 1.0)
+                   and _r6_is(theirs.get("subsample_freq"), 0))
+    # the plain Newton leaf: -G/(H+lambda) and gain G^2/(H+lambda) at lambda_l1 0, max_delta_step 0 and
+    # path_smooth 0 (feature_histogram.hpp:717-739, 801-817; CUDA cuda_leaf_splits.hpp:70-117, which has no
+    # max_delta_step at all)
+    plain_leaf = all(_r6_is(theirs.get(k), 0.0) for k in ("reg_alpha", "max_delta_step", "path_smooth"))
+    no_cats = (ours.get("cat_features") is None and ours.get("one_hot_features") is None)
+    no_od = all(ours.get(k) is None for k in ("use_best_model", "od_type", "od_pvalue", "od_wait"))
+    record = ours.get("input_binning")
+    rows = _PREBIN_ROWS_RE.search(record) if isinstance(record, str) else None
+    # the same pre-binned block on both arms, every bin id its own bin on LightGBM: at most max_bin distinct
+    # values each get a bin at min_data_in_bin 1 (src/io/bin.cpp:80-100 GreedyFindBin; the zero bin
+    # :164-200), over every training row at subsample_for_bin >= rows (src/c_api.cpp:987, sample count
+    # min(rows, bin_construct_sample_cnt); include/LightGBM/utils/random.h:70-78, Sample(N, N) is every row);
+    # ours 254 GreedyLogSum borders over every row (border_build_max_samples 0), max_bin compared. The block
+    # holds no NaN (prebinned_data refuses NaN by name, PREBIN NAN-INPUT).
+    prebinned = (isinstance(record, str) and record.startswith("pre-binned input on both arms")
+                 and theirs.get("input_binning") == record and rows is not None
+                 and _r6_is(ours.get("border_build_max_samples"), 0)
+                 and _r6_is(ours.get("feature_border_type"), "GreedyLogSum")
+                 and ours.get("max_bin") is not None and ours.get("max_bin") == theirs.get("max_bin")
+                 and _r6_is(theirs.get("min_data_in_bin"), 1)
+                 and isinstance(theirs.get("subsample_for_bin"), int)
+                 and not isinstance(theirs.get("subsample_for_bin"), bool)
+                 and theirs["subsample_for_bin"] >= int(rows.group(1)))
+    if lacks_theirs:
+        if param in ("bagging_temperature", "bootstrap_type") and no_sampling:
+            return ("no row sampling on either arm: ours bootstrap_type 'No'; LightGBM subsample 1.0, "
+                    "subsample_freq 0 (bagging.hpp:147-148 bags only at freq > 0 and fraction < 1)")
+        # the driver's _lgb_fit passes no eval_set and no callbacks, so LightGBM has nothing to stop on
+        # (its early stopping reads a validation set, src/boosting/gbdt.cpp)
+        if param in ("best_model_min_trees", "use_best_model", "od_type", "od_pvalue", "od_wait") and no_od \
+                and not any(k in theirs for k in ("early_stopping_round", "early_stopping_rounds",
+                                                   "early_stopping", "callbacks")):
+            return ("no eval set and no early stopping on either arm (tools/speed_gbdt_arm.py "
+                    "lightgbm_arms _lgb_fit); ours' od_*/use_best_model unset")
+        if param in ("border_build_max_samples", "feature_border_type") and prebinned:
+            return ("the same pre-binned input on both arms (%s): every bin id is its own bin on both "
+                    "(ours GreedyLogSum over every row; LightGBM min_data_in_bin 1 over %d >= %s rows, "
+                    "bin.cpp:80-100, c_api.cpp:987; max_bin %s on both)"
+                    % (record, theirs["subsample_for_bin"], rows.group(1), ours.get("max_bin")))
+        if param in ("cat_features", "one_hot_features", "ctr_estimation_permutation_id") and no_cats \
+                and ours.get(param) is None and prebinned:
+            return ("no categorical columns on either arm (the driver passes no categorical_feature and "
+                    "refuses declared ones by name, CATEGORICAL-ALGORITHM; the block is numeric bin ids)")
+        if param in ("fold_len_multiplier", "fold_permutation_block", "permutation_count") and no_cats \
+                and ours.get("permutation_count") is None:
+            return "ours boosting_type 'Plain' with no categorical columns: no Ordered folds to match"
+        # LightGBM grows best-first only: each step splits the leaf with the largest gain
+        # (serial_tree_learner.cpp:228-237 ArgMax over best_split_per_leaf_; CUDA
+        # cuda_single_gpu_tree_learner.cpp:300-322) up to num_leaves and max_depth, both compared
+        if param == "grow_policy" and ours.get("max_leaves") is not None \
+                and ours.get("max_leaves") == theirs.get("max_leaves") \
+                and ours.get("max_depth") == theirs.get("max_depth"):
+            return ("best-first (leaf-wise) growth on both: ours Lossguide; LightGBM's only grower "
+                    "(serial_tree_learner.cpp:228-237), max_leaves %s and max_depth %s on both"
+                    % (ours.get("max_leaves"), ours.get("max_depth")))
+        # one Newton step per leaf: the binary objective does not renew leaf outputs
+        # (include/LightGBM/objective_function.h:56 IsRenewTreeOutput false, not overridden in
+        # src/objective/binary_objective.hpp)
+        if param in ("leaf_estimation_method", "leaf_estimation_iterations") and plain_leaf and binary \
+                and _r6_is(ours.get("leaf_estimation_method"), "Newton") \
+                and _r6_is(ours.get("leaf_estimation_iterations"), 1):
+            return ("one Newton step per leaf on both: LightGBM -G/(H+lambda) at lambda_l1 0, max_delta_step "
+                    "0, path_smooth 0 (feature_histogram.hpp:717-739), no leaf renewal for 'binary'")
+        if param == "loss" and binary:
+            return "binary log loss on both: ours loss 'Logloss', LightGBM objective 'binary'"
+        if param in ("loss_alpha", "loss_border", "loss_delta", "loss_q", "loss_variance_power") \
+                and binary and ours.get(param) is None:
+            return ("binary log loss on both; ours' other-loss parameters unset and its Logloss border "
+                    "the default 0.5 (0/1 labels)")
+        if param == "nan_mode" and _r6_is(ours.get(param), "Min") and prebinned:
+            return ("no NaN in the pre-binned block (prebinned_data refuses NaN by name): neither "
+                    "missing-value rule is read")
+        # LightGBM's only split randomness is extra_trees (USE_RAND, feature_histogram.hpp:193-224;
+        # cuda_best_split_finder.cu:161-166); feature sampling is off (feature_fraction 1.0, compared)
+        if param == "random_strength" and _r6_is(ours.get(param), 0.0) and theirs.get("extra_trees") is False:
+            return "no split-score noise on either arm (ours random_strength 0.0, LightGBM extra_trees False)"
+        if param == "score_function" and _r6_is(ours.get(param), "NewtonL2") and plain_leaf:
+            return ("the Newton L2 gain on both: LightGBM G^2/(H+lambda) per child at lambda_l1 0, "
+                    "max_delta_step 0, path_smooth 0 (feature_histogram.hpp:801-817, "
+                    "cuda_leaf_splits.hpp GetLeafGain)")
+        if param == "use_pointwise_searcher" and ours.get(param) is False:
+            return "ours' greedy Lossguide searcher (the only one off SymmetricTree); LightGBM has one grower"
+        return None
+    # lacks_ours: LightGBM fields ours has no name for
+    if param == "objective" and binary:
+        return "binary log loss on both: LightGBM 'binary', ours 'Logloss'"
+    if param == "class_weight" and theirs.get(param) is None:
+        return ("no class weights on LightGBM (class_weight None); the positive-class weight is "
+                "scale_pos_weight, compared")
+    if param in ("reg_alpha", "max_delta_step", "path_smooth") and plain_leaf:
+        return ("%s 0: LightGBM's leaf output and gain are -G/(H+lambda) and G^2/(H+lambda), as ours "
+                "(feature_histogram.hpp:717-739, 801-817)" % param)
+    if param == "subsample_freq" and no_sampling:
+        return "no row sampling on either arm (LightGBM subsample 1.0 at subsample_freq 0, ours bootstrap 'No')"
+    if param in ("subsample_for_bin", "min_data_in_bin") and prebinned:
+        return ("every pre-binned id its own bin on LightGBM: min_data_in_bin 1, a bin sample of %d >= %s "
+                "training rows (every row, c_api.cpp:987); ours border_build_max_samples 0"
+                % (theirs["subsample_for_bin"], rows.group(1)))
+    if param == "extra_trees" and theirs.get(param) is False and _r6_is(ours.get("random_strength"), 0.0):
+        return "extra_trees False: LightGBM scans every threshold, no random one (ours random_strength 0.0)"
+    # use_quantized_grad False: full-precision gradients and hessians in the histograms (the CUDA learner
+    # discretizes them only when it is set, cuda_single_gpu_tree_learner.cpp:42-50)
+    if param == "use_quantized_grad" and theirs.get(param) is False:
+        return "use_quantized_grad False: full-precision gradient histograms, as ours"
+    return None
+
+
 #: smoke-fixes (2026-10-14) sub-lane r7: the trees lanes whose CatBoost GPU mappings live in
 #: _semantic_r7 (tools/speed_gbdt_arm.py lane_config, R7_SEARCHER_LANES).
 _R7_CATBOOST_LANES = frozenset({"gbdt-symmetric", "gbdt-symmetric-1000", "gbdt-multiclass", "gbdt-ordered"})
@@ -1927,7 +2089,8 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     if forecast_reason:
         return forecast_reason
     # smoke-fixes (2026-10-14): the per-sub-lane source-reviewed mappings, each value-conditional and lane-named
-    for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_querywise_pointwise, _semantic_r7, _semantic_r8, _semantic_r11, _semantic_r15, _semantic_r18):
+    for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_querywise_pointwise, _semantic_r7, _semantic_r8, _semantic_r11, _semantic_r15, _semantic_r18,
+                     _semantic_lgbm_lossguide):
         why = _mapping(lane, param, arm, ours, theirs, library)
         if why:
             return why
