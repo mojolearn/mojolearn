@@ -181,6 +181,12 @@ def main():
         if previous.exists():
             old=json.loads(previous.read_text())
             if old.get('status')=='measured' and old.get('route_witness',{}).get('validated') and old.get('smoke_only')==a.smoke:
+                invocation=json.loads((dest/'invocation.json').read_text())
+                if invocation.get('source_commit')!=manifest['source_commit']:
+                    raise RuntimeError('completed cell belongs to another source freeze: '+str(dest))
+                # Resume retention without executing a valid measurement again.
+                if not (dest/'retention.json').exists():
+                    retain_cell(dest,OUT.name+'/'+key+'/read'+str(chunk)+'/'+cfg['case'])
                 old['reused_unchanged_completed_cell']=True;rows.append(old);continue
             raise RuntimeError('preserve failed/incomplete cell and use a new attempt output: '+str(dest))
         remaining=deadline-time.monotonic()
