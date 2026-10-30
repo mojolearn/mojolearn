@@ -447,6 +447,10 @@ def main():
     # Native diagnostics may print to stdout. Reserve a duplicate fd for RPC
     # and redirect ordinary stdout (including native printf) to stderr.
     import os
+    if os.environ.get('MOJOLEARN_POOL_IMPORT_NUMPY') == '1':
+        # glue: the parent had NumPy loaded (DevicePool._start); load it
+        # before any request so native owners connect the same types.
+        import numpy  # noqa: F401
     channel = os.fdopen(os.dup(sys.stdout.fileno()), 'wb')
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     while True:
