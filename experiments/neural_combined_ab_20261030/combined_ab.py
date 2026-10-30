@@ -259,7 +259,8 @@ def main():
     complete=len(rows)==manifest['expected_cells'] and all(x.get('status')=='measured' and x.get('route_witness',{}).get('validated') for x in rows)
     write(OUT/'coverage.json',{'expected':manifest['expected_cells'],'recorded':len(rows),'measured':sum(x.get('status')=='measured' for x in rows),
                              'failed':sum(str(x.get('status','')).startswith('failed') for x in rows),'pending':sum(x.get('status')=='pending-budget' for x in rows),'unsupported':sum(x.get('status')=='unsupported' for x in rows),'complete':complete,
-                             'supported_complete':len(rows)==manifest['expected_cells'] and all(x.get('status') in ('measured','unsupported') for x in rows)})
+                             'supported_complete':len(rows)==manifest['expected_cells'] and all(x.get('status') in ('measured','unsupported') for x in rows),
+                             'status_counts':{status:sum(x.get('status')==status for x in rows) for status in sorted({x.get('status','unknown') for x in rows})}})
     return 0 if complete else 1
 
 if __name__=='__main__':sys.exit(main())
