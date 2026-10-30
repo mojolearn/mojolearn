@@ -74,10 +74,14 @@ def worker(a):
             'parallel_call_absent':e.get('parallel_call') is None,
             'parameters_exposed':bool(fields.get('_parameters_exposed',False)),
             'kind':model.kind,'resident_vendor':e.get('resident_vendor'),
+            'final_norm_present':fields.get('_norm') is not None,
             'required_resident_entries_present':all(k in e for k in ['causal_lm_session_forward','transformer_decode_session_load_state','transformer_decode_session_export_state','causal_lm_session_run']),
             'private_state':'new stream privately allocates state; no resume/parameter exposure/alias injection',
             'interpretation':'admission metadata plus actual completed native-branch witness in excluded warmup; raw witness retained in execution.log',
             'source':str(ROOT/'bindings/causal_lm_public.mojo')}
+        if a.route=='resident' and not rec['route_admission_evidence']['final_norm_present']:
+            rec.update(status='unsupported',executed=False,reason='Actual loaded model has no final norm required by resident admission; no generation was timed.')
+            write(dest/'result.json',rec);return 0
         def descriptor_counters():
             current=model._native_entries
             return {name:repr(current[name]) for name in ('native_block_operations','native_primitives') if name in current}
@@ -210,9 +214,6 @@ def main():
             raise RuntimeError('preserve failed/incomplete cell and use a new attempt output: '+str(dest))
         remaining=deadline-time.monotonic()
         row=dict(model_key=key,read_chunk=chunk,case=cfg['case'],requested_flags=cfg,source_commit=manifest['source_commit'])
-        if a.matrix=='routes' and key=='mojolearn-162m' and cfg.get('route')=='resident':
-            row.update(status='unsupported',executed=False,reason='Saved architecture has no final norm; resident admission requires one. No model modification or manufactured norm.')
-            write(previous,row);retain_cell(dest,OUT.name+'/'+key+'/read'+str(chunk)+'/'+cfg['case']);rows.append(row);continue
         if remaining<45:
             row.update(status='pending-budget',executed=False);rows.append(row);continue
         env.update(MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32=str(cfg['sampler']),
@@ -243,7 +244,7 @@ def main():
                 witness.update(actual_routes=validate_witness(events,row['generated_tokens'],chunk),validated=True)
                 witness['retained_kv_observed']=any(x['retained_kv'] for x in events)
                 expected=cfg.get('expected_route')
-                if cfg.get('route')=='auto' and key=='mojolearn-162m':expected='native_engine'
+                if cfg.get('route')=='auto' and not row.get('route_admission_evidence',{}).get('final_norm_present',True):expected='native_engine'
                 if expected and witness['actual_routes']!=[expected]:
                     raise ValueError('executed route differs from explicit compatible selection')
             except ValueError as exc:row.update(status='failed-route-witness',route_error=str(exc))
