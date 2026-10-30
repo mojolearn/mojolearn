@@ -171,3 +171,33 @@ exit "$code"
     response = json.loads((evidence/'response-1.json').read_text())
     assert response['error'].endswith('retained-detail-' * 80)
     assert json.loads((evidence/'request-1.json').read_text())['gpu']['minCudaVersion'] == '13.0'
+
+
+def test_slow_readiness_preserves_status_and_ssh_errors_without_restarting(tmp_path):
+    source = Path(__file__).with_name('dev_pod.sh').read_text()
+    start = source.index('    _deadline=$(( $(now) + READY_TIMEOUT )); SSH_TARGET=""; _ready_attempt=0')
+    end = source.index('    if [ "$4" = 1 ]; then', start)
+    body = source[start:end]
+    (tmp_path / 'evidence').mkdir()
+    env = dict(os.environ, TMPD=str(tmp_path), RP='https://invalid.test/v2', POD_ID='owned',
+               READY_TIMEOUT='900', SSH_CONNECT_TIMEOUT='120', SSH_OPTS='',
+               _request_evidence=str(tmp_path / 'evidence'))
+    fixture = r"""
+now() { date +%s; }
+rp_call() { RP_CODE=200; printf '{"id":"owned","status":"RUNNING"}' > "$TMPD/rp.body"; }
+rp_py() { echo '-p 23456 root@192.0.2.5'; }
+with_timeout() {
+    if [ ! -f "$TMPD/first" ]; then touch "$TMPD/first"; echo 'Connection timed out during banner exchange' >&2; return 255; fi
+    echo SSH-OK
+}
+sleep() { :; }
+delete_pod() { echo SHOULD_NOT_DELETE >&2; exit 91; }
+die() { echo SHOULD_NOT_FAIL >&2; exit 92; }
+"""
+    result = subprocess.run(['bash', '-c', fixture + body], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    evidence = tmp_path / 'evidence'
+    assert len(list(evidence.glob('readiness-*.json'))) == 2
+    assert 'banner exchange' in (evidence / 'ssh-1.log').read_text()
+    assert (evidence / 'ssh-2.log').read_text().strip() == 'SSH-OK'
+    assert len((evidence / 'readiness.tsv').read_text().splitlines()) == 2
