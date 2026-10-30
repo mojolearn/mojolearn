@@ -278,3 +278,105 @@ def test_compose_copies_legacy_components_without_optional_policy_file(composed,
     assert c.compose(args)==0
     assert c.read(out/c.MANIFEST)['applicability_policy_sha256']==r.sha256(out/'runtime_test_applicability.py')
     assert r.summarize(out)['completed_files']==73
+
+
+def retain_producer(out,module,field):
+    import shutil
+    p=Path(module.__file__);shutil.copyfile(p,out/p.name)
+    change(out,c.MANIFEST,lambda d:d.update({field:r.sha256(p)}))
+
+
+def test_unselected_test_change_has_rederived_partial_input_proof(composed):
+    import runtime_test_tree_reuse as reuse
+    change(composed,c.MANIFEST,lambda d:d['components'].pop())
+    m=c.read(composed/c.MANIFEST);old=c.read(composed/'components/0/receipt.json')
+    other=next(n for n in q.PUBLIC_TESTS if n not in old['selected_public_scope'])
+    write(composed/'frozen-tests'/other,'# changed unselected fixture\n')
+    change(composed,c.MANIFEST,lambda d:d['test_hashes'].update({other:r.sha256(composed/'frozen-tests'/other)}))
+    retain_producer(composed,reuse,'test_reuse_producer_sha256')
+    report=r.summarize(composed)
+    assert report['status']=='incomplete' and len(report['test_source_reuse'])==1
+    assert other not in report['test_source_reuse'][0]['proof']['closure']
+    report['qualifier_exit']=1;write(composed/r.REPORT,report)
+    with pytest.raises(ValueError,match='did not pass'):
+        adapter._facts('runtime')(composed,{'report':str(composed/r.REPORT)})
+    write(composed/'frozen-tests'/next(iter(old['selected_public_scope'])),'# changed relevant input\n')
+    # An edited retained tree is independently refused, before its proof is used.
+    with pytest.raises(ValueError,match='retained frozen tests differ'):r.summarize(composed)
+
+
+def failed_component_with_collection(out):
+    import xml.etree.ElementTree as ET
+    directory=out/'components/0'
+    receipt=c.read(directory/'receipt.json');selected=list(receipt['selected_public_scope'])
+    tree=ET.parse(directory/'tests.xml');nodes=[]
+    for filename,case in zip(selected,tree.getroot()):
+        node=filename+'::'+case.get('name');nodes.append(node)
+        prop=ET.SubElement(case,'properties');ET.SubElement(prop,'property',name='installed_exact_node',value=node)
+    ET.SubElement(tree.getroot()[-1],'failure',message='retained original failure').text='original failure'
+    tree.write(directory/'tests.xml')
+    tests=q.junit_summary(directory/'tests.xml');scope=q.test_scope_summary(tests,selected,'cpu')
+    receipt.update(tests=tests,test_scope_summary=scope,worker_exit=1,pytest_exit=1,
+                   whole_file_collection=nodes,status='failed-or-incomplete')
+    write(directory/'receipt.json',receipt)
+    change(directory,'installed-modules.json',lambda d:d.update(pytest_exit=1,whole_file_collection=nodes))
+    return selected
+
+
+def test_failed_batch_projection_preserves_raw_failure_and_requires_collection(composed):
+    import runtime_file_projection as projection
+    selected=failed_component_with_collection(composed)
+    original=(composed/'components/0/tests.xml').read_bytes()
+    change(composed,c.MANIFEST,lambda d:d.update(components=[dict(path='components/0',files=selected[:-1])]))
+    retain_producer(composed,projection,'projection_producer_sha256')
+    report=r.summarize(composed)
+    assert report['status']=='incomplete' and report['completed_files']==len(selected)-1
+    proof=report['whole_file_projections'][0]['proof']
+    assert proof['original_worker_exit']==1 and len(proof['original_failures'])==1
+    assert proof['excluded_files']==selected[-1:]
+    assert (composed/'components/0/tests.xml').read_bytes()==original
+    change(composed,'components/0/installed-modules.json',lambda d:d.pop('whole_file_collection'))
+    with pytest.raises(ValueError,match='collection evidence'):r.summarize(composed)
+
+
+@pytest.mark.parametrize('mutation',['missing','duplicate','wrong_node','failure_selected','timeout','worker_error','invented_collection'])
+def test_projection_cannot_hide_incomplete_or_failed_selected_work(composed,mutation):
+    import runtime_file_projection as projection
+    selected=failed_component_with_collection(composed)
+    change(composed,c.MANIFEST,lambda d:d.update(components=[dict(path='components/0',files=selected[:-1])]))
+    retain_producer(composed,projection,'projection_producer_sha256')
+    if mutation in ('missing','duplicate','wrong_node','invented_collection'):
+        for file in ('receipt.json','installed-modules.json'):
+            def edit(d):
+                nodes=d['whole_file_collection']
+                if mutation=='missing':nodes.pop()
+                if mutation=='duplicate':nodes.append(nodes[0])
+                if mutation=='wrong_node':nodes[0]+='[unknown]'
+                if mutation=='invented_collection':d.pop('whole_file_collection')
+            change(composed,'components/0/'+file,edit)
+    elif mutation=='failure_selected':
+        change(composed,c.MANIFEST,lambda d:d['components'][0].update(files=selected[1:]))
+    elif mutation=='timeout':change(composed,'components/0/receipt.json',lambda d:d.update(worker_exit=124))
+    else:change(composed,'components/0/installed-modules.json',lambda d:d.update(worker_error='timeout'))
+    with pytest.raises(ValueError):r.summarize(composed)
+
+
+def test_projected_union_is_rederived_by_supported_ledger_adapter(composed):
+    import runtime_file_projection as projection
+    selected=failed_component_with_collection(composed)
+    payload,wheels=q.wheel_inventory([composed/'core.whl'])
+    manifest=c.read(composed/c.MANIFEST)
+    repaired=component(composed,2,selected[-1:],payload,wheels,manifest['test_hashes'])
+    change(composed,c.MANIFEST,lambda d:d.update(components=[dict(path='components/0',files=selected[:-1]),'components/1',repaired]))
+    retain_producer(composed,projection,'projection_producer_sha256')
+    report=r.summarize(composed)
+    assert report['status']=='passed' and report['completed_files']==73
+    assert report['whole_file_projections'][0]['proof']['original_failures']
+    report['qualifier_exit']=0;write(composed/r.REPORT,report)
+    facts=adapter._facts('runtime')(composed,{'report':str(composed/r.REPORT)})
+    assert len(facts['coverage'])==5
+    # The original raw failing receipt is still part of required evidence.
+    assert c.read(composed/'components/0/receipt.json')['status']=='failed-or-incomplete'
+    change(composed,'components/0/installed-modules.json',lambda d:d.update(worker_error='native guard refusal'))
+    with pytest.raises(ValueError,match='guard failed'):
+        adapter._facts('runtime')(composed,{'report':str(composed/r.REPORT)})

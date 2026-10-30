@@ -191,6 +191,7 @@ def main(argv=None):
     compose = sub.add_parser("compose", help="re-derive disjoint complete whole-file receipts")
     compose.add_argument("--receipt", action="append", type=Path, required=True,
                          help="original qualifier output directory, repeated per complete run")
+    compose.add_argument("--selection", type=Path, help="JSON mapping original absolute receipt directory to selected complete filenames")
     compose.add_argument("--vendor", choices=sorted(BACKEND), required=True)
     compose.add_argument("--source-root", type=Path, required=True)
     compose.add_argument("--source-commit", required=True)

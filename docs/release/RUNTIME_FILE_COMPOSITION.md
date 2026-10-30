@@ -90,3 +90,34 @@ An original runtime failure, timeout or missing observation cannot be repaired
 by this classification step. Companion execution on a newer interpreter can
 cover its available protocol separately; it is not substituted for 3.11 lifetime
 coverage or silently mixed into a single-interpreter receipt union.
+
+### Reusing an unchanged selected test file
+
+A different committed test tree may reuse a whole-file observation only when
+`runtime_test_tree_reuse.py` proves the selected file and its static test-helper
+closure byte-identical. Ancestor `conftest.py` and package initializers are inputs;
+import resolution changes and changes to test data refuse reuse. Unresolved
+subprocess, dynamic code loading, reflection, and file discovery remain blocked.
+The composer retains the exact proof producer and rederives the proof from the
+original hash inventory and final frozen test bytes. This proof never equates
+different product wheels, native assets, interpreter binaries, or dependencies.
+
+### Selecting complete files from a failed batch
+
+New qualifier workers record complete whole-file collection before execution
+and annotate every JUnit case with its exact collected node. The composer accepts
+`--selection selection.json`, mapping original absolute receipt directories to
+lists of complete filenames. It retains the original complete JUnit and failure
+receipt; it does not write an aggregate or filtered JUnit. Selected files must
+have complete collected-node coverage and no failures or unrecognized skips.
+Only an ordinary pytest test-failure exit may accompany excluded failed files;
+worker errors, native inventory failures, missing collection, timeouts, and
+incomplete JUnit remain refusals. Reports state the original exit and failures,
+excluded files, and derived selected-file coverage separately. The ledger adapter
+rederives this evidence through the same supported summarizer.
+
+Older receipts lacking embedded collection cannot use this failed-batch
+projection. The retained c9 CPU collection-only packet lacks its complete process
+environment and is not substituted for an original worker collection. Original
+whole-file successful receipts remain subject to their original contract and all
+source, wheel, interpreter, native inventory, and helper-proof checks.

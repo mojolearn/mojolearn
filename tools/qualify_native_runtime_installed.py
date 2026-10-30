@@ -690,6 +690,22 @@ class ExactNodeGuard:
             item.user_properties.append(("installed_exact_node", node))
 
 
+class WholeFileCollectionGuard(ExactNodeGuard):
+    """Record the complete requested-file collection before product execution."""
+    def __init__(self, tests, files):
+        super().__init__(tests, None)
+        self.files = list(files)
+
+    def pytest_collection_finish(self, session):
+        self.collected = [Path(item.path).resolve().relative_to(self.tests.resolve()).as_posix()
+                          + "::" + item.nodeid.partition("::")[2] for item in session.items]
+        require(bool(self.collected) and len(set(self.collected)) == len(self.collected)
+                and {n.partition("::")[0] for n in self.collected} == set(self.files),
+                "whole-file collection is empty, duplicated, missing, or outside requested files")
+        for item, node in zip(session.items, self.collected):
+            item.user_properties.append(("installed_exact_node", node))
+
+
 def test_scope_summary(summary, selected, vendor, exact_nodes=None, *, interpreter=None, supplemental_policy=True):
     """Only exact CPU resident cases are N/A; all other skips remain incomplete."""
     scopes = {name: dict(total=0, passed=0, failures=0, not_applicable=[], unexpected_skips=[])
@@ -814,6 +830,7 @@ def worker(request_path):
     nodes = request.get("test_nodes")
     selected_files(request["test_files"] if nodes is None else None, nodes)
     exact_guard = ExactNodeGuard(tests, nodes) if nodes is not None else None
+    whole_guard = WholeFileCollectionGuard(tests, request["test_files"]) if nodes is None else None
     code, worker_error = None, None
     try:
         require(observe("initial"), "initial installed product inventory refused")
@@ -821,7 +838,7 @@ def worker(request_path):
                                "--junitxml=" + str(out / "tests.xml"),
                                "--basetemp=" + str(out / "test-tmp")]
                               + [str(tests / name) for name in (nodes or request["test_files"])],
-                              plugins=[InstalledGuard()] + ([exact_guard] if exact_guard else [])))
+                              plugins=[InstalledGuard(), exact_guard or whole_guard]))
     except Exception as error:
         worker_error = type(error).__name__ + ": " + str(error)
     finally:
@@ -834,6 +851,7 @@ def worker(request_path):
             generation_test_device=request["generation_device"],
             observed_generation_test_devices=test_devices, pytest_exit=code,
             inventory_errors=inventory_errors, worker_error=worker_error,
+            whole_file_collection=whole_guard.collected if whole_guard else None,
             exact_node_collection=exact_node_summary(nodes, exact_guard.collected)
             if exact_guard else None), indent=2) + "\n")
     return code if code is not None and not inventory_errors and worker_error is None else 1
@@ -1013,6 +1031,7 @@ def main():
         receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
         report["pytest_exit"] = receipt.get("pytest_exit")
         report["interpreter"] = receipt.get("interpreter")
+        report["whole_file_collection"] = receipt.get("whole_file_collection")
         report["installed_guard_summary"] = dict(binding_count=len(receipt.get("bindings", [])),
                                                   inventory_errors=receipt.get("inventory_errors", []),
                                                   worker_error=receipt.get("worker_error"))
@@ -1025,6 +1044,10 @@ def main():
         policy = Path(__file__).with_name("runtime_test_applicability.py")
         shutil.copyfile(policy, out / policy.name)
         report["applicability_policy_sha256"] = digest(policy)
+        if args.test_node is None:
+            require(exact_node_summary(receipt.get("whole_file_collection") or [],
+                    [c.get("exact_node", "") for c in tests_summary.get("cases", [])])["complete"]
+                    and receipt.get("whole_file_collection"), "executed JUnit differs from whole-file collection")
         scope = report["test_scope_summary"]
         report["status"] = selected_test_status(result.returncode, tests_summary, scope,
                                                (out / "installed-modules.json").is_file())

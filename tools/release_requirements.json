@@ -91,7 +91,9 @@
           "tools/release_runtime_coverage.json",
           "tools/release_installed_evidence.py",
           "tools/release_runtime_composition.py",
-          "tools/runtime_test_applicability.py"
+          "tools/runtime_test_applicability.py",
+          "tools/runtime_test_tree_reuse.py",
+          "tools/runtime_file_projection.py"
         ]
       },
       "configuration": [
@@ -173,7 +175,9 @@
           "tools/release_runtime_coverage.json",
           "tools/release_installed_evidence.py",
           "tools/release_runtime_composition.py",
-          "tools/runtime_test_applicability.py"
+          "tools/runtime_test_applicability.py",
+          "tools/runtime_test_tree_reuse.py",
+          "tools/runtime_file_projection.py"
         ]
       },
       "configuration": [
@@ -255,7 +259,9 @@
           "tools/release_runtime_coverage.json",
           "tools/release_installed_evidence.py",
           "tools/release_runtime_composition.py",
-          "tools/runtime_test_applicability.py"
+          "tools/runtime_test_applicability.py",
+          "tools/runtime_test_tree_reuse.py",
+          "tools/runtime_file_projection.py"
         ]
       },
       "configuration": [
@@ -337,7 +343,9 @@
           "tools/release_runtime_coverage.json",
           "tools/release_installed_evidence.py",
           "tools/release_runtime_composition.py",
-          "tools/runtime_test_applicability.py"
+          "tools/runtime_test_applicability.py",
+          "tools/runtime_test_tree_reuse.py",
+          "tools/runtime_file_projection.py"
         ]
       },
       "configuration": [

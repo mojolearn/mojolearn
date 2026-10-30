@@ -1,8 +1,8 @@
 """Re-derive runtime coverage from disjoint, complete installed whole-file runs.
 
 Original receipts and JUnit files are retained separately. No aggregate JUnit is
-manufactured. A different test commit is reusable only when its entire frozen
-test tree is byte-identical; absent historical interpreter evidence is refused.
+manufactured. A different test commit requires identical selected tests and closed helper
+inputs; unresolved dynamic inputs and absent interpreter evidence are refused.
 """
 import json
 import re
@@ -13,6 +13,8 @@ from urllib.parse import unquote, urlsplit
 
 import qualify_native_runtime_installed as q
 import release_runtime_installed as runtime
+import runtime_test_tree_reuse as test_reuse
+import runtime_file_projection as projection
 
 SCHEMA = "mojolearn.runtime-file-composition.v1"
 MANIFEST = "composition.json"
@@ -81,7 +83,7 @@ def installed_inventory(installed, payload):
                         and row.get("size") == asset["bytes"], "native witness differs from wheel")
 
 
-def component(directory, manifest, payload, wheels, expected_tests):
+def component(directory, manifest, payload, wheels, expected_tests, frozen_tests=None, selected_files=None):
     receipt, installed = read(directory / "receipt.json"), read(directory / "installed-modules.json")
     request = read(directory / "request.json")
     test_commit = receipt.get("test_commit", receipt.get("source_commit"))
@@ -101,7 +103,7 @@ def component(directory, manifest, payload, wheels, expected_tests):
                     "native asset inventory drift")
     runtime.require(receipt["package_source_hashes"] == manifest["package_source_hashes"],
                     "package source proof drift")
-    runtime.require(receipt.get("test_hashes") == expected_tests, "frozen test/helper bytes drift")
+
     runtime.require(receipt.get("controller_sha256") == runtime.sha256(directory / "controller.py"),
                     "original qualifier controller bytes differ")
     identity = installed.get("interpreter")
@@ -115,6 +117,16 @@ def component(directory, manifest, payload, wheels, expected_tests):
                     and receipt.get("test_selection_kind") == "whole-files"
                     and receipt.get("selected_test_nodes") is None and request.get("test_nodes") is None
                     and request.get("test_files") == selected, "incomplete or non-whole-file selection")
+    original_selected = selected
+    admitted_selected = selected if selected_files is None else selected_files
+    runtime.require(admitted_selected and len(admitted_selected) == len(set(admitted_selected))
+                    and set(admitted_selected) <= set(selected), "invalid whole-file projection")
+    reuse_proof = None
+    if receipt.get("test_hashes") != expected_tests:
+        runtime.require(frozen_tests is not None, "frozen test/helper bytes drift without a source proof")
+        reuse_proof = test_reuse.prove(receipt.get("test_hashes", {}), frozen_tests, admitted_selected, expected_tests)
+        runtime.require(reuse_proof["status"] == "proved", "frozen test/helper bytes drift: " +
+                        json.dumps(reuse_proof["unresolved"][:5]))
     runtime.require(receipt.get("test_dependencies") == q.test_dependencies(selected),
                     "test dependency policy drift")
     runtime.require(receipt.get("selected_test_applicability") == q.test_applicability(selected, backend),
@@ -137,16 +149,37 @@ def component(directory, manifest, payload, wheels, expected_tests):
                         and receipt.get("applicability_policy_sha256") == runtime.sha256(policy)
                         == runtime.sha256(Path(__file__).with_name(policy.name)),
                         "original applicability policy evidence differs")
-    runtime.require(scope["complete"], "whole-file case coverage incomplete")
     original_status = q.selected_test_status(receipt.get("worker_exit"), tests, original_scope, True)
-    expected_status = q.selected_test_status(receipt.get("worker_exit"), tests, scope, True)
-    runtime.require(original_status == receipt.get("status") and expected_status in
-                    ("selected-tests-passed", "selected-tests-not-applicable")
-                    and receipt.get("worker_exit") == receipt.get("pytest_exit") == installed.get("pytest_exit") == 0,
-                    "component failed or timed out")
+    worker_exit = receipt.get("worker_exit")
+    runtime.require(original_status == receipt.get("status")
+                    and worker_exit == receipt.get("pytest_exit") == installed.get("pytest_exit")
+                    and worker_exit in (0, 1), "component failed or timed out")
     runtime.require(sum(s["total"] for s in scope["scopes"].values()) == tests["total"],
                     "JUnit has cases outside selected files")
+    projection_proof = None
+    collection = installed.get("whole_file_collection")
+    if collection is not None:
+        runtime.require(collection == receipt.get("whole_file_collection"), "worker collection receipt drift")
+        projection.project(tests, selected, selected, collection)
+    if admitted_selected != selected:
+        runtime.require(worker_exit == 0 or tests["failures"], "nonzero worker without retained test failures")
+        derived = projection.project(tests, selected, admitted_selected, collection)
+        projection_proof = dict(original_files=selected, selected_files=admitted_selected,
+                                excluded_files=sorted(set(selected)-set(admitted_selected)),
+                                original_worker_exit=worker_exit, original_cases=tests["total"],
+                                original_failures=tests["failures"],
+                                collected_nodes=len(collection), selected_cases=derived["total"])
+        tests, selected = derived, admitted_selected
+        scope = q.test_scope_summary(tests, selected, backend, interpreter=identity)
+    else:
+        runtime.require(worker_exit == 0, "component failed or timed out")
+    runtime.require(scope["complete"], "whole-file case coverage incomplete")
+    # This is a derived selected-file judgment, never a replacement worker exit.
+    expected_status = q.selected_test_status(0, tests, scope, True)
+    runtime.require(expected_status in ("selected-tests-passed", "selected-tests-not-applicable"),
+                    "selected whole file failed or was incomplete")
     return dict(selected=selected, scope=scope, cases=tests["total"], interpreter=identity,
+                test_source_reuse=reuse_proof, whole_file_projection=projection_proof,
                 original_status=original_status, derived_status=expected_status,
                 native_source=receipt["requested_native_source_hashes"],
                 native_omitted=receipt["archive_omitted_historical_native_sources"],
@@ -177,9 +210,11 @@ def summarize(out):
     baseline = None
     raw_files = [out / MANIFEST, out / "coverage.json"] + wheel_paths
     raw_files += [out / "frozen-tests" / name for name in expected_tests]
-    for relative in manifest["components"]:
+    for entry in manifest["components"]:
+        relative = entry if isinstance(entry, str) else entry["path"]
+        selection = None if isinstance(entry, str) else entry["files"]
         directory = inside(out, relative)
-        result = component(directory, manifest, payload, wheels, expected_tests)
+        result = component(directory, manifest, payload, wheels, expected_tests, out / "frozen-tests", selection)
         runtime.require(not seen.intersection(result["selected"]), "overlapping whole-file receipts")
         seen.update(result["selected"])
         comparison = {key: result[key] for key in ("interpreter", "native_source", "native_omitted", "policy")}
@@ -197,6 +232,18 @@ def summarize(out):
                         == runtime.sha256(policy) == runtime.sha256(Path(__file__).with_name(policy.name)),
                         "applicability rederivation requires retained current policy bytes")
         raw_files.append(policy)
+    if any(row["test_source_reuse"] is not None for row in components):
+        producer = out / "runtime_test_tree_reuse.py"
+        runtime.require(producer.is_file() and manifest.get("test_reuse_producer_sha256")
+                        == runtime.sha256(producer) == runtime.sha256(Path(test_reuse.__file__)),
+                        "test-source reuse requires retained exact proof producer")
+        raw_files.append(producer)
+    if any(row["whole_file_projection"] is not None for row in components):
+        producer = out / "runtime_file_projection.py"
+        runtime.require(producer.is_file() and manifest.get("projection_producer_sha256")
+                        == runtime.sha256(producer) == runtime.sha256(Path(projection.__file__)),
+                        "whole-file projection requires retained exact producer")
+        raw_files.append(producer)
     # Dependencies differ by selected file; versions common to two environments
     # must agree. Preserve complete original pip freeze logs, not a merged one.
     dependencies = {}
@@ -237,6 +284,10 @@ def summarize(out):
                     derived_status=result["derived_status"], policy=result["scope"]["applicability_rederivations"])
                     for relative, result in zip(manifest["components"], components)
                     if "applicability_rederivations" in result["scope"]],
+                whole_file_projections=[dict(component=p, proof=c["whole_file_projection"])
+                                        for p,c in zip(manifest["components"],components) if c["whole_file_projection"]],
+                test_source_reuse=[dict(component=p, proof=c["test_source_reuse"])
+                                   for p,c in zip(manifest["components"],components) if c["test_source_reuse"]],
                 cases=sum(c["cases"] for c in components),
                 status="passed" if passed else "incomplete", exit_code=0 if passed else 1, evidence=evidence)
 
@@ -257,6 +308,13 @@ def compose(args):
     test_hashes = q.freeze_committed_tests(args.git_root or args.source_root, test_commit, out / "frozen-tests")
     composition_policy = Path(__file__).with_name("runtime_test_applicability.py")
     shutil.copyfile(composition_policy, out / composition_policy.name)
+    reuse_producer = Path(test_reuse.__file__)
+    shutil.copyfile(reuse_producer, out / reuse_producer.name)
+    projection_producer = Path(projection.__file__)
+    shutil.copyfile(projection_producer, out / projection_producer.name)
+    selections = read(args.selection) if getattr(args, "selection", None) else {}
+    runtime.require(isinstance(selections, dict) and set(selections) <= {str(p.resolve()) for p in args.receipt},
+                    "selection contains unknown original receipt paths")
     component_paths = []
     for number, original in enumerate(args.receipt):
         directory = out / "components" / str(number)
@@ -266,10 +324,14 @@ def compose(args):
         policy = original / "runtime_test_applicability.py"
         if policy.is_file():
             shutil.copyfile(policy, directory / policy.name)
-        component_paths.append(directory.relative_to(out).as_posix())
+        path = directory.relative_to(out).as_posix()
+        selected = selections.get(str(original.resolve()))
+        component_paths.append(path if selected is None else dict(path=path, files=selected))
     put(out / MANIFEST, dict(schema=SCHEMA, vendor=args.vendor, source_commit=args.source_commit,
                             test_commit=test_commit, test_hashes=test_hashes,
                             applicability_policy_sha256=runtime.sha256(composition_policy),
+                            test_reuse_producer_sha256=runtime.sha256(reuse_producer),
+                            projection_producer_sha256=runtime.sha256(projection_producer),
                             package_source_hashes=source_hashes,
                             wheels=[Path(r["path"]).relative_to(out).as_posix() for r in wheel_rows],
                             components=component_paths))
