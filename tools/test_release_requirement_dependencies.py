@@ -617,3 +617,78 @@ def test_scope_annotation_preserves_inputs_and_separate_multi_device_obligations
         deferred = d.scope_identity_manifest('.', old)
         assert deferred['requirements']['multi-gpu-amd']['required'] is False
         assert deferred['requirements']['identity-nvidia/two']['dependency_provenance']['identity_applicability']['separate_requirements'] == ['multi-gpu-nvidia', 'multi-gpu-amd']
+
+
+class _Row:
+    def __init__(self, tier, name):
+        self.tier, self.name = tier, name
+
+
+def test_frozen_bindings_uses_current_mode_registry():
+    calls = []
+
+    class Current:
+        @staticmethod
+        def bindings(target, modes=None):
+            calls.append((target, modes))
+            return [_Row("identical", "a"), _Row("host", "h")]
+    rows = d.frozen_bindings(Current, "linux-64")
+    assert calls == [("linux-64", ["identical"])]
+    assert [r.name for r in rows] == ["a", "h"]
+
+
+def test_frozen_bindings_filters_one_argument_historical_registry():
+    class Historical:
+        @staticmethod
+        def bindings(target):
+            return [_Row("fast", "f"), _Row("identical", "a"), _Row("host", "h"), _Row("fast", "g")]
+    assert [r.name for r in d.frozen_bindings(Historical, "linux-64")] == ["a", "h"]
+
+
+def test_frozen_bindings_refuses_unknown_registry_signature():
+    import pytest
+
+    class Unknown:
+        @staticmethod
+        def bindings(target, tiers):
+            return []
+    with pytest.raises(ValueError, match="unrecognized frozen binding registry"):
+        d.frozen_bindings(Unknown, "linux-64")
+
+
+# The published 0.8.55 source: its registry takes only target and lists fast,
+# identical and host rows. Its wheels ship 33 identical bindings per GPU set
+# and on Metal, and 42 host bindings per CPU target.
+HISTORICAL_0855 = "a8255828597a3bd19ac7bb5f657a38d09b8c732f"
+
+
+def test_frozen_bindings_reads_the_published_0855_registry(tmp_path):
+    import pytest
+    repo = Path(__file__).resolve().parents[1]
+    if subprocess.run(["git", "-C", str(repo), "cat-file", "-e", HISTORICAL_0855 + "^{commit}"],
+                      capture_output=True).returncode:
+        pytest.skip("published 0.8.55 source is not in this clone")
+    archive = subprocess.run(["git", "-C", str(repo), "archive", HISTORICAL_0855, "tools", "packaging",
+                              "python/mojolearn"], check=True, capture_output=True).stdout
+    subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=archive, check=True)
+    probe = (
+        "import collections, inspect, json, sys\n"
+        "sys.path[:0] = [sys.argv[1] + '/tools']\n"
+        "import release_reuse as rr\n"
+        "sys.path.insert(0, sys.argv[2])\n"
+        "import release_requirement_dependencies as d\n"
+        "out = dict(params=list(inspect.signature(rr.bindings).parameters))\n"
+        "for t in (rr.LINUX, rr.MACOS):\n"
+        "    rows = d.frozen_bindings(rr, t)\n"
+        "    allrows = [b for b in rr.bindings(t) if b.tier != 'fast']\n"
+        "    out[t] = dict(tiers=dict(collections.Counter('/'.join((b.vendor, b.arch, b.tier)) for b in rows)),\n"
+        "        same=[b.key for b in rows] == [b.key for b in allrows])\n"
+        "print(json.dumps(out))\n")
+    result = subprocess.run([sys.executable, "-I", "-c", probe, str(tmp_path), str(Path(__file__).resolve().parent)],
+                            check=True, capture_output=True, text=True, cwd=tmp_path)
+    out = json.loads(result.stdout)
+    assert out["params"] == ["target"]
+    assert out["linux-64"]["same"] and out["osx-arm64"]["same"]
+    assert out["linux-64"]["tiers"] == {"cuda/sm_89/identical": 33, "cuda/sm_80/identical": 33,
+                                        "hip/gfx942/identical": 33, "host//host": 42}
+    assert out["osx-arm64"]["tiers"] == {"metal/apple/identical": 33, "host//host": 42}

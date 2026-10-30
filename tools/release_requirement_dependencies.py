@@ -57,6 +57,24 @@ def _file_hash(root, path):
     return hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None
 
 
+def frozen_bindings(rr, target, modes=("identical",)):
+    """The frozen revision's own binding registry for MODES, plus host bindings.
+
+    Current registries select tiers with ``bindings(target, modes)``. Releases
+    up to 0.8.55 take only ``target`` and list every tier (fast and identical)
+    plus host. Filter that frozen list to the same rows; never substitute
+    today's module list for an older release.
+    """
+    import inspect
+    params = list(inspect.signature(rr.bindings).parameters)
+    if "modes" in params:
+        return list(rr.bindings(target, list(modes)))
+    if params != ["target"]:
+        raise ValueError("unrecognized frozen binding registry signature: bindings(" + ", ".join(params) + ")")
+    wanted = set(modes) | {"host"}
+    return [binding for binding in rr.bindings(target) if binding.tier in wanted]
+
+
 def _worker_snapshot(root, request):
     # Import the requested revision's tools, never another checkout's modules.
     root = Path(root).resolve()
@@ -98,7 +116,7 @@ def _worker_snapshot(root, request):
     if facts:
         # Only identical is authorized. Host bindings are included by bindings().
         for target in (rr.LINUX, rr.MACOS):
-            for binding in rr.bindings(target, ["identical"]):
+            for binding in frozen_bindings(rr, target):
                 ident = rr.identity(binding, facts, context.get("apple_toolchain"))
                 closure = facts["closures"].get(binding.script) or {}
                 missing = [rr.unreadable(ident)] if rr.unreadable(ident) else []
