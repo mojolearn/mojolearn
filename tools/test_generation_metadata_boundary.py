@@ -23,7 +23,8 @@ def test_native_metadata_dependency_closure_is_enforced():
 
 
 def test_layer_inner_execution_uses_native_dimensions_and_weight_addresses():
-    body = function('_causal_layer_run_prepared')
+    body = function('_causal_layer_run_bound')
+    assert 'return _causal_layer_run_bound(' in function('_causal_layer_run_prepared')
     for field in ('d_model', 'n_heads', 'n_kv_heads', 'head_dim', 'intermediate',
                   'window', '_opts_tail', '_w', '_wopt', '_int15', 'dt_limit',
                   'd_inner', 'nheads', 'conv_dim'):
@@ -52,16 +53,17 @@ def test_native_template_keeps_mutable_progress_out_of_snapshot():
 def test_snapshot_is_lazy_and_scoped_to_one_public_operation():
     run = function('_run_prepared')
     capture = run.index('snapshot = GenerationOperationSnapshot(')
-    assert capture > run.index('return py_call(parallel,')
+    assert capture > run.index('py_call(parallel,')
     assert capture > run.index('return logits')
-    assert run.index('_state(model, state, b, l)') < capture
+    assert run.index('_state(mods, model, state, b, l)') < capture
     read = function('_read')
     declaration = 'var snapshot: Optional[GenerationOperationSnapshot] = None'
     assert read.index('try:') < read.index(declaration) < read.index('while wrote')
     assert declaration in function('_run')
     handle = re.search(r'^struct GenerationHandle.*?(?=^def |\Z)', BINDING, re.M | re.S).group()
     assert 'GenerationOperationSnapshot' not in handle
-    assert 's.busy = False\n        s.usable = False' in read
+    assert 's.usable = False' in read.split('except error:', 1)[1]
+    assert 's.busy = False' in read.rsplit('finally:', 1)[1]
 
 
 def test_exact_array_owners_pin_addresses_and_foreign_copies_still_refresh():
@@ -94,8 +96,9 @@ def test_prepared_embedding_head_and_layer_loop_do_not_read_model_metadata():
 
 def test_existing_standalone_and_profile_routes_remain_available():
     layer = function('causal_layer_run')
-    assert 'GenerationLayerSnapshot(_block(model, i), kind, planes)' in layer
-    body = function('_causal_layer_run_prepared')
+    assert 'GenerationLayerSnapshot(_block(mods, model, i), kind, planes)' in layer
+    body = function('_causal_layer_run_bound')
+    assert 'return _causal_layer_run_bound(' in function('_causal_layer_run_prepared')
     for route in ('"forward15"', '"forward15_host"', '"forward_session"',
                   'generation_native_forward(', 'neural_descriptor_execute('):
         assert route in body

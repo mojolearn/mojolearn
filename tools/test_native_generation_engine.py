@@ -17,21 +17,22 @@ def test_native_engine_transitive_closure_has_no_provider_or_python():
 def test_token_loop_uses_native_state_and_original_sampling_policy():
     src = text('transformer/native_generation_engine.mojo')
     read = src.split('def native_generation_read(')[1]
-    assert 'model.forward(Int(progress.current.unsafe_ptr()), progress.length)' in read
+    assert 'model.forward_into(Int(progress.current.unsafe_ptr()), progress.length, progress.logits)' in read
     assert 'causal_lm_pick_step(' in read
     for forbidden in ('PythonObject', 'py_call', 'py_get', '._addr', '.shape', 'getenv', 'GILReleased'):
         assert forbidden not in src
-    assert 'progress.current = next^' in read
+    assert 'swap(progress.current, progress.next)' in read
     assert 'progress.produced += 1' in read and 'progress.wrote += 1' in read
 
 
 def test_numerical_order_and_native_cached_token_publication_are_explicit():
     src = text('transformer/native_generation_engine.mojo')
     body = src.split('def forward(mut self,')[1].split('struct NativeGenerationProgress')[0]
-    assert body.index('self.primitive_call(0,') < body.index('self.layers[i].endpoint.call(')
-    assert body.index('self.layers[i].endpoint.call(') < body.index('self.primitive_call(2,') < body.index('self.primitive_call(4,')
-    assert 'parameters[8] = self.layers[i].cached' in body
-    assert 'var result = self.layers[i].endpoint.call' in body
+    assert body.index('self.primitive_call(0,') < body.index('layer.endpoint.call(')
+    assert body.index('layer.endpoint.call(') < body.index('self.primitive_call(2,') < body.index('self.primitive_call(4,')
+    assert 'ref layer = self.layers[i]' in body
+    assert 'layer.parameters[8] = layer.cached' in body
+    assert 'var result = layer.endpoint.call' in body
     assert body.index('self.position += length') > body.index('self.primitive_call(4,')
 
 
@@ -72,8 +73,8 @@ def test_experiment_never_silently_relabels_unsupported_routes():
 def test_deferred_layer_refusals_keep_earlier_progress_and_profile_publication():
     src = text('transformer/native_generation_engine.mojo')
     forward = src.split('def forward(mut self,')[1].split('struct NativeGenerationProgress')[0]
-    assert forward.index('self.primitive_call(0,') < forward.index('self.layers[i].visited = True')
-    assert forward.index('raise Error(self.layers[i].failure)') < forward.index('self.layers[i].endpoint.call(')
+    assert forward.index('self.primitive_call(0,') < forward.index('layer.visited = True')
+    assert forward.index('raise Error(layer.failure)') < forward.index('layer.endpoint.call(')
     provider = text('providers/python/generation_metadata_pyapi.mojo')
     assert 'native_layer.failure = String(problem)' in provider
     assert 'self.native.layers[i].visited and self.native.layers[i].profile_admitted' in provider
@@ -82,14 +83,16 @@ def test_deferred_layer_refusals_keep_earlier_progress_and_profile_publication()
 def test_delayed_foreign_copies_preserve_layer_order_and_alias_counters():
     native=text('transformer/native_generation_engine.mojo')
     body=native.split('def forward(mut self,')[1].split('struct NativeGenerationProgress')[0]
-    assert body.index('refresh_layouts[j].copy_to(') < body.index('self.layers[i].endpoint.call(')
-    assert body.index('self.layers[i].endpoint.call(') < body.index('writeback_layouts[j].copy_from(')
-    assert 'self.state_counters[self.layers[i].state_index] = self.layers[i].cached' in body
+    assert body.index('refresh_layouts[j].copy_to(') < body.index('layer.endpoint.call(')
+    assert body.index('layer.endpoint.call(') < body.index('writeback_layouts[j].copy_from(')
+    assert 'self.state_counters[layer.state_index] = layer.cached' in body
     assert body.index('embedding_refresh[i].copy_to(') < body.index('self.primitive_call(0,')
     assert body.index('head_refresh[i].copy_to(') < body.index('self.primitive_call(2,')
     provider=text('providers/python/generation_metadata_pyapi.mojo')
     assert 'identity = py_get(fields, "_native_state_identity", py_get(fields, "_causal_original", st))' in provider
-    assert 'self.state_keys[index] is identity' in provider
+    assert 'var identity_key = Int(identity._obj_ptr)' in provider
+    assert 'state_indices.get(identity_key, -1)' in provider
+    assert 'state_indices[identity_key] = state_index' in provider
     assert 'self.state_keys.append(identity)' in provider
     weights = provider.split('def _generation_engine_weights(', 1)[1].split('def _generation_engine_state(', 1)[0]
     assert 'snapshot.layouts[k].copy()' in weights
@@ -105,13 +108,13 @@ def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     assert 'operation += 1' not in native
     assert 'parameters = decode' not in native
     public=text('bindings/causal_lm_public.mojo')
-    assert 'return _run_engine(model, ids, state)' in public
+    assert 'return _run_engine(mods, model, ids, state)' in public
     assert 'logits = owner.native.forward(address, length)' in public
     original=public.split('def _run_snapshot(')[1].split('\ndef ')[0]
-    assert 'x, state.layers[i], False)' in original
-    assert 'addresses[self.layers[i].output_slot]' in native
-    assert 'addresses[15] = Int(report.unsafe_ptr())' in native
-    assert 'self.layers[i].cached + length if kind == 1 else result' in native
+    assert 'x, state.layers[i], False, PythonObject(None))' in original
+    assert 'addresses[layer.output_slot]' in native
+    assert 'layer.addresses[15] = _generation_zero_workspace(layer.report_workspace, layer.report_size)' in native
+    assert 'layer.cached + length if kind == 1 else result' in native
     provider=text('providers/python/generation_metadata_pyapi.mojo')
     assert 'native_layer.floats = [layer.words.dt_low, layer.words.dt_high]' in provider
     assert '"absolute_position" if self.native.layers[i].kind == 1 else "buffered_tokens"' in provider
