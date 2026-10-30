@@ -89,7 +89,9 @@
           "tools/qualify_native_runtime_installed.py",
           "tools/release_runtime_installed.py",
           "tools/release_runtime_coverage.json",
-          "tools/release_installed_evidence.py"
+          "tools/release_installed_evidence.py",
+          "tools/release_runtime_composition.py",
+          "tools/runtime_test_applicability.py"
         ]
       },
       "configuration": [
@@ -169,7 +171,9 @@
           "tools/qualify_native_runtime_installed.py",
           "tools/release_runtime_installed.py",
           "tools/release_runtime_coverage.json",
-          "tools/release_installed_evidence.py"
+          "tools/release_installed_evidence.py",
+          "tools/release_runtime_composition.py",
+          "tools/runtime_test_applicability.py"
         ]
       },
       "configuration": [
@@ -249,7 +253,9 @@
           "tools/qualify_native_runtime_installed.py",
           "tools/release_runtime_installed.py",
           "tools/release_runtime_coverage.json",
-          "tools/release_installed_evidence.py"
+          "tools/release_installed_evidence.py",
+          "tools/release_runtime_composition.py",
+          "tools/runtime_test_applicability.py"
         ]
       },
       "configuration": [
@@ -329,7 +335,9 @@
           "tools/qualify_native_runtime_installed.py",
           "tools/release_runtime_installed.py",
           "tools/release_runtime_coverage.json",
-          "tools/release_installed_evidence.py"
+          "tools/release_installed_evidence.py",
+          "tools/release_runtime_composition.py",
+          "tools/runtime_test_applicability.py"
         ]
       },
       "configuration": [

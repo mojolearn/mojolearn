@@ -68,3 +68,23 @@ this field in their fingerprints. A later test-policy change invalidates this
 runtime evidence; it does not by itself invalidate unchanged numerical binaries
 or cross-device identity observations. The default with no configured override
 continues to require tests at the product revision.
+
+The supplemental applicability policy records seven further exact limitations:
+CPU `test_samba_step_native` resident-parameter cases `[None]` and `[0.3]`,
+the four explicitly enumerated device-loss scalar cases in
+`test_training_scalar_buffer_native`, and
+`test_samba_native_admission`'s Python-defined buffer-exporter case on an actually
+recorded CPython 3.10/3.11 worker. Node names and skip reasons must match exactly.
+GPU resident skips, exporter skips on newer/unknown interpreters and any other
+skip remain failures. These N/A cases never count as passed operations.
+
+Composition can re-derive an old classification affected solely by these rules:
+original pytest and worker exits must both be zero, installed guards clean,
+original JUnit and original scope/status internally consistent, and the new
+scope complete. The original `failed-or-incomplete` receipt remains untouched;
+the composed report records its original status, the derived status and every
+specific policy case. Current policy source bytes are retained and hash-bound.
+An original runtime failure, timeout or missing observation cannot be repaired
+by this classification step. Companion execution on a newer interpreter can
+cover its available protocol separately; it is not substituted for 3.11 lifetime
+coverage or silently mixed into a single-interpreter receipt union.

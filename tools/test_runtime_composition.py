@@ -232,3 +232,49 @@ def test_separate_test_revision_requires_explicit_ledger_policy(composed):
     configuration['runtime_test_source_revision']='e'*40
     with pytest.raises(ValueError,match='differs from the requirement'):
         adapter._check('runtime')('runtime-cpu',wanted,admitted['facts'],{'vendor':'cpu'})
+
+
+def test_legacy_skip_judgment_rederived_without_rewriting_original_receipt(composed):
+    import shutil
+    import runtime_test_applicability as policy
+    filename='test_samba_step_native.py';node,reason=next(iter(policy.CPU[filename].items()))
+    manifest=c.read(composed/c.MANIFEST)
+    for relative in manifest['components']:
+        directory=composed/relative;receipt=c.read(directory/'receipt.json')
+        selected=list(receipt['selected_public_scope'])
+        if filename not in selected:continue
+        path=directory/'tests.xml';text=path.read_text();old='<testcase classname="mojolearn.tests.test_samba_step_native" name="test_fixture"></testcase>'
+        new='<testcase classname="mojolearn.tests.test_samba_step_native" name="'+node+'"><skipped message="'+reason+'"/></testcase>'
+        assert old in text;path.write_text(text.replace(old,new))
+        tests=q.junit_summary(path);scope=q.test_scope_summary(tests,selected,'cpu',supplemental_policy=False)
+        receipt.update(tests=tests,test_scope_summary=scope,status='failed-or-incomplete')
+        write(directory/'receipt.json',receipt);original=(directory/'receipt.json').read_bytes()
+        original_path=directory/'receipt.json'
+    with pytest.raises(ValueError,match='retained current policy'):r.summarize(composed)
+    shutil.copyfile(Path(policy.__file__),composed/'runtime_test_applicability.py')
+    manifest['applicability_policy_sha256']=r.sha256(composed/'runtime_test_applicability.py');write(composed/c.MANIFEST,manifest)
+    report=r.summarize(composed)
+    assert report['status']=='passed' and len(report['applicability_rederivations'])==1
+    assert report['applicability_rederivations'][0]['original_status']=='failed-or-incomplete'
+    assert original_path.read_bytes()==original
+    report['qualifier_exit']=0;write(composed/r.REPORT,report)
+    adapter._facts('runtime')(composed,{'report':str(composed/r.REPORT)})
+    assert original_path.read_bytes()==original
+
+
+def test_compose_copies_legacy_components_without_optional_policy_file(composed,tmp_path,monkeypatch):
+    import shutil
+    from types import SimpleNamespace
+    manifest=c.read(composed/c.MANIFEST)
+    monkeypatch.setattr(q,'source_match',lambda *args: manifest['package_source_hashes'])
+    def freeze(root,revision,destination):
+        shutil.copytree(composed/'frozen-tests',destination)
+        return manifest['test_hashes']
+    monkeypatch.setattr(q,'freeze_committed_tests',freeze)
+    out=tmp_path/'new-composition'
+    args=SimpleNamespace(out=out,source_root=composed,source_commit=COMMIT,test_source_commit=COMMIT,
+                         git_root=None,vendor='cpu',wheel=[composed/'core.whl'],
+                         receipt=[composed/x for x in manifest['components']])
+    assert c.compose(args)==0
+    assert c.read(out/c.MANIFEST)['applicability_policy_sha256']==r.sha256(out/'runtime_test_applicability.py')
+    assert r.summarize(out)['completed_files']==73

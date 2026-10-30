@@ -128,17 +128,26 @@ def component(directory, manifest, payload, wheels, expected_tests):
     runtime.require(tests == receipt.get("tests"), "raw JUnit differs from receipt")
     cases = [(row["classname"], row["name"]) for row in tests["cases"]]
     runtime.require(len(cases) == len(set(cases)), "duplicate JUnit case")
-    scope = q.test_scope_summary(tests, selected, backend)
-    runtime.require(scope == receipt.get("test_scope_summary") and scope["complete"],
-                    "whole-file case coverage incomplete")
+    legacy_scope = q.test_scope_summary(tests, selected, backend, supplemental_policy=False)
+    scope = q.test_scope_summary(tests, selected, backend, interpreter=identity)
+    original_scope = receipt.get("test_scope_summary")
+    if original_scope != legacy_scope:
+        policy = directory / "runtime_test_applicability.py"
+        runtime.require(original_scope == scope and policy.is_file()
+                        and receipt.get("applicability_policy_sha256") == runtime.sha256(policy)
+                        == runtime.sha256(Path(__file__).with_name(policy.name)),
+                        "original applicability policy evidence differs")
+    runtime.require(scope["complete"], "whole-file case coverage incomplete")
+    original_status = q.selected_test_status(receipt.get("worker_exit"), tests, original_scope, True)
     expected_status = q.selected_test_status(receipt.get("worker_exit"), tests, scope, True)
-    runtime.require(expected_status == receipt.get("status") and expected_status in
+    runtime.require(original_status == receipt.get("status") and expected_status in
                     ("selected-tests-passed", "selected-tests-not-applicable")
                     and receipt.get("worker_exit") == receipt.get("pytest_exit") == installed.get("pytest_exit") == 0,
                     "component failed or timed out")
     runtime.require(sum(s["total"] for s in scope["scopes"].values()) == tests["total"],
                     "JUnit has cases outside selected files")
     return dict(selected=selected, scope=scope, cases=tests["total"], interpreter=identity,
+                original_status=original_status, derived_status=expected_status,
                 native_source=receipt["requested_native_source_hashes"],
                 native_omitted=receipt["archive_omitted_historical_native_sources"],
                 policy=receipt["test_device_overrides"],
@@ -179,7 +188,15 @@ def summarize(out):
         scopes.update(result["scope"]["scopes"])
         components.append(result)
         raw_files += [directory / name for name in RAW]
+        if (directory / "runtime_test_applicability.py").is_file():
+            raw_files.append(directory / "runtime_test_applicability.py")
     runtime.require(components, "no complete file receipts")
+    if any("applicability_rederivations" in row["scope"] for row in components):
+        policy = out / "runtime_test_applicability.py"
+        runtime.require(policy.is_file() and manifest.get("applicability_policy_sha256")
+                        == runtime.sha256(policy) == runtime.sha256(Path(__file__).with_name(policy.name)),
+                        "applicability rederivation requires retained current policy bytes")
+        raw_files.append(policy)
     # Dependencies differ by selected file; versions common to two environments
     # must agree. Preserve complete original pip freeze logs, not a merged one.
     dependencies = {}
@@ -216,6 +233,10 @@ def summarize(out):
                 wheels=wheels, interpreter=baseline["interpreter"], coverage=rows,
                 coverage_without_tests=[r["id"] for r in rows if not r["expected"]],
                 missing_files=missing, completed_files=len(seen), component_count=len(components),
+                applicability_rederivations=[dict(component=relative, original_status=result["original_status"],
+                    derived_status=result["derived_status"], policy=result["scope"]["applicability_rederivations"])
+                    for relative, result in zip(manifest["components"], components)
+                    if "applicability_rederivations" in result["scope"]],
                 cases=sum(c["cases"] for c in components),
                 status="passed" if passed else "incomplete", exit_code=0 if passed else 1, evidence=evidence)
 
@@ -234,15 +255,21 @@ def compose(args):
                                   sorted(wheel_dir.iterdir()), payload, args.git_root or args.source_root)
     test_commit = args.test_source_commit or args.source_commit
     test_hashes = q.freeze_committed_tests(args.git_root or args.source_root, test_commit, out / "frozen-tests")
+    composition_policy = Path(__file__).with_name("runtime_test_applicability.py")
+    shutil.copyfile(composition_policy, out / composition_policy.name)
     component_paths = []
     for number, original in enumerate(args.receipt):
         directory = out / "components" / str(number)
         directory.mkdir(parents=True)
         for name in RAW:
             shutil.copyfile(original / name, directory / name)
+        policy = original / "runtime_test_applicability.py"
+        if policy.is_file():
+            shutil.copyfile(policy, directory / policy.name)
         component_paths.append(directory.relative_to(out).as_posix())
     put(out / MANIFEST, dict(schema=SCHEMA, vendor=args.vendor, source_commit=args.source_commit,
                             test_commit=test_commit, test_hashes=test_hashes,
+                            applicability_policy_sha256=runtime.sha256(composition_policy),
                             package_source_hashes=source_hashes,
                             wheels=[Path(r["path"]).relative_to(out).as_posix() for r in wheel_rows],
                             components=component_paths))

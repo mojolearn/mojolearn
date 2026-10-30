@@ -690,7 +690,7 @@ class ExactNodeGuard:
             item.user_properties.append(("installed_exact_node", node))
 
 
-def test_scope_summary(summary, selected, vendor, exact_nodes=None):
+def test_scope_summary(summary, selected, vendor, exact_nodes=None, *, interpreter=None, supplemental_policy=True):
     """Only exact CPU resident cases are N/A; all other skips remain incomplete."""
     scopes = {name: dict(total=0, passed=0, failures=0, not_applicable=[], unexpected_skips=[])
               for name in selected}
@@ -724,6 +724,9 @@ def test_scope_summary(summary, selected, vendor, exact_nodes=None):
         result["exact_nodes"] = exact_node_summary(exact_nodes, [c.get("exact_node", "")
                                                                for c in summary.get("cases", [])])
         result["complete"] = result["complete"] and result["exact_nodes"]["complete"]
+    if supplemental_policy:
+        from runtime_test_applicability import supplement
+        return supplement(result, vendor, interpreter)
     return result
 
 
@@ -1017,7 +1020,11 @@ def main():
             report["tests"] = junit_summary(out / "tests.xml")
         report["installed_guard_receipt"] = str(out / "installed-modules.json")
         tests_summary = report.get("tests", {})
-        report["test_scope_summary"] = test_scope_summary(tests_summary, selected, args.vendor, args.test_node)
+        report["test_scope_summary"] = test_scope_summary(tests_summary, selected, args.vendor, args.test_node,
+                                                         interpreter=report.get("interpreter"))
+        policy = Path(__file__).with_name("runtime_test_applicability.py")
+        shutil.copyfile(policy, out / policy.name)
+        report["applicability_policy_sha256"] = digest(policy)
         scope = report["test_scope_summary"]
         report["status"] = selected_test_status(result.returncode, tests_summary, scope,
                                                (out / "installed-modules.json").is_file())

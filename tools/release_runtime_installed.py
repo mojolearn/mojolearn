@@ -88,7 +88,7 @@ def summarize(out):
     require(junit.is_file(), "no junit report; the tests did not run")
     tests = q.junit_summary(junit)
     require(tests == receipt.get("tests"), "junit report differs from the qualifier receipt")
-    scope = q.test_scope_summary(tests, selected, BACKEND[vendor])
+    scope = q.test_scope_summary(tests, selected, BACKEND[vendor], interpreter=receipt.get("interpreter"))
     require(scope == receipt.get("test_scope_summary"), "test scope differs from the qualifier receipt")
     installed = json.loads((qualify / "installed-modules.json").read_text())
     require(installed.get("vendor") == BACKEND[vendor] and installed.get("numeric_mode") == "identical",
