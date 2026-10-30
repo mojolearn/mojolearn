@@ -48,7 +48,7 @@ INVERSE_FIX_COMMIT = 'fc1d01c64daac8624540324328501fb7afe2fefd'
 
 def expected(base, base_name, version, source_root, source_commit, label_inverse_fix=False):
     project, old, tags = base_name.split('-', 2)
-    if project not in PROJECTS or not re.fullmatch(r'\d+\.\d+\.\d+(?:rc\d+)?', version):
+    if project not in PROJECTS or not re.fullmatch(r'\d+\.\d+\.\d+(?:\.\d+)?(?:rc\d+)?', version):
         raise ValueError('unsupported project/version')
     old_dist, dist = f'{project}-{old}.dist-info', f'{project}-{version}.dist-info'
     files = {n.replace(old_dist + '/', dist + '/', 1): raw for n, raw in base.items()

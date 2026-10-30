@@ -107,10 +107,10 @@ def facts():
         raise SystemExit("docs_facts: no __version__ in python/mojolearn/_version.py")
     out["version"] = m.group(1)
 
-    m = re.search(r"^## (\d+\.\d+\.\d+) \((?:published|unreleased) (\d{4}-\d{2}-\d{2})\)", _read("CHANGELOG.md"), re.M)
+    m = re.search(r"^## (\d+\.\d+\.\d+(?:\.\d+)?) \((?:published|unreleased) (\d{4}-\d{2}-\d{2})\)", _read("CHANGELOG.md"), re.M)
     out["changelog_version"] = m.group(1) if m else ""
     out["version_date"] = m.group(2) if m else ""
-    published = re.search(r"^## (\d+\.\d+\.\d+) \(published (\d{4}-\d{2}-\d{2})\)", _read("CHANGELOG.md"), re.M)
+    published = re.search(r"^## (\d+\.\d+\.\d+(?:\.\d+)?) \(published (\d{4}-\d{2}-\d{2})\)", _read("CHANGELOG.md"), re.M)
     out["published_version"] = published.group(1) if published else ""
     out["published_date"] = published.group(2) if published else ""
 
@@ -188,7 +188,7 @@ def check():
             elif got != f[name]:
                 problems.append(f"  {rel}: {name} marked {got!r}, tree says {f[name]!r}")
 
-        for m in re.finditer(r"mojolearn==(\d+\.\d+\.\d+)", text):
+        for m in re.finditer(r"mojolearn==(\d+\.\d+\.\d+(?:\.\d+)?)", text):
             if m.group(1) != f["version"]:
                 problems.append(
                     f"  {rel}: pins mojolearn=={m.group(1)}, current version is {f['version']}"
