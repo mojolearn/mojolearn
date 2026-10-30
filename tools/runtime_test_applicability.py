@@ -20,6 +20,16 @@ CPU = {
         "test_device_loss_scalar_conversion_and_failure_remain_native[num_items-g-3.75-swapped]": "training device pool requires GPU",
         "test_device_loss_scalar_conversion_and_failure_remain_native[num_items-g-nan-scalar]": "training device pool requires GPU",
     },
+    "test_cache_lifecycle_native.py": {
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_prep]': 'requires an actual native device store',
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_metrics]': 'requires an actual native device store',
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[1-x_prep]': 'requires an actual native device store',
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[1-x_metrics]': 'requires an actual native device store',
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[2-x_prep]': 'requires an actual native device store',
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[2-x_metrics]': 'requires an actual native device store',
+        'test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[x_prep]': 'requires an actual native device store',
+        'test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[x_metrics]': 'requires an actual native device store',
+    },
 }
 PRE_PY312 = {
     "test_samba_native_admission.py": {
@@ -36,7 +46,7 @@ def pre_py312(interpreter):
 
 
 def supplement(scope, vendor, interpreter):
-    """Derive a new judgment; only the seven exact named limitations may move."""
+    """Derive a new judgment; only the fifteen exact named limitations may move."""
     result = copy.deepcopy(scope)
     accepted = []
     for filename, row in result["scopes"].items():
@@ -48,7 +58,8 @@ def supplement(scope, vendor, interpreter):
             if case["name"] in allowed and case["skip_reason"] == allowed[case["name"]]:
                 row["not_applicable"].append(case)
                 accepted.append(dict(file=filename, node=case["name"], reason=case["skip_reason"],
-                                     basis="CPU has no training device pool" if filename == "test_training_scalar_buffer_native.py"
+                                     basis="CPU has no native device store" if filename == "test_cache_lifecycle_native.py"
+                                     else "CPU has no training device pool" if filename == "test_training_scalar_buffer_native.py"
                                      else "CPU has no resident parameter entry" if case["name"] in CPU.get(filename, {})
                                      else "recorded CPython version predates Python-defined buffer exporters"))
             else:
