@@ -437,6 +437,10 @@ def strat_group_plan_i32(
     else:
         for j in range(mm):
             order.append(j)
+    # IDENTICAL: pin contraction explicitly. The CPU host extension previously
+    # kept mul/add separate while GPU-package host helpers fused them, changing
+    # greedy fold choices on ordinary group distributions. Explicit fma preserves
+    # the existing Apple/NVIDIA/AMD policy on every package backend.
     # -std per group in `order`'s positions, stably sorted ascending
     var keys = List[Float64](capacity=mm)
     for j in range(mm):
@@ -448,7 +452,7 @@ def strat_group_plan_i32(
         var ss = Float64(0)
         for c in range(kk):
             var dv = Float64(dist[g * kk + c]) - mu
-            ss += dv * dv
+            ss = fma(dv, dv, ss)
         keys.append(-sqrt(ss / Float64(kk)))
     var pos = _stable_order_f64(keys)
     var fold_dist = List[Int](length=K * kk, fill=0)
@@ -471,7 +475,7 @@ def strat_group_plan_i32(
                 var ss = Float64(0)
                 for j in range(K):
                     var dv = col[j] - mu
-                    ss += dv * dv
+                    ss = fma(dv, dv, ss)
                 score += sqrt(ss / Float64(K))
             score = score / Float64(kk)
             if best < 0 or score < best_score or (score == best_score and fold_n[f] < best_n):
