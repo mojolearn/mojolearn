@@ -43,8 +43,8 @@ def worker(a):
     dest=OUT/a.key/('read'+str(a.chunk))/a.case;dest.mkdir(parents=True,exist_ok=True)
     shape=bench.GEN_SHAPES['small' if a.smoke else 'full'];prompt_len=shape['prompt'];new_tokens=shape['new_tokens']
     rec={'model_key':a.key,'arm':a.arm,'read_chunk':a.chunk,'status':'started','smoke_only':a.smoke,
-         'requested_flags':dict(sampler=a.arm,kv_reuse=a.kv_reuse,native_engine=a.engine,resident_forward=1),'case':a.case,
-         'options':dict(greedy=False,seed=7,temperature=0.8,top_k=50,top_p=0.9),
+         'requested_flags':dict(sampler=a.arm,kv_reuse=a.kv_reuse,native_engine=a.engine,resident_forward=a.resident_forward,route=a.route),'case':a.case,
+         'options':dict(greedy=False,seed=7,temperature=0.8,top_k=50,top_p=0.9,eos_token_id=None,pad_token_id=None),
          'saved_recipe':'tools/bench_board_neural.py GEN_SHAPES['+('small' if a.smoke else 'full')+'], LM_CHECKPOINTS',
          'batch':1,'prompt_tokens':prompt_len,'generated_tokens':new_tokens,
          'boundary':'stream creation plus all public reads, operation setup, KV loads/exports, synchronized host output conversion and concatenation; checkpoint load recorded separately',
@@ -129,7 +129,10 @@ def worker(a):
             limitations='one sample on the saved random-token prompt; descriptive output statistics, not real-text quality or statistical equivalence qualification')
         # Preserve full logits as quality evidence, outside every clock. A failure
         # cannot erase timing/output bytes or be misrepresented as a quality pass.
+        quality_env={name:os.environ.get(name) for name in ('MOJOLEARN_GENERATION_NATIVE_ENGINE','MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD','MOJOLEARN_EXPERIMENT_GENERATION_ROUTE')}
         try:
+            os.environ.update(MOJOLEARN_GENERATION_NATIVE_ENGINE='0',MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD='1',MOJOLEARN_EXPERIMENT_GENERATION_ROUTE='auto')
+            rec['quality_environment']={name:os.environ[name] for name in quality_env}
             full=np.concatenate([ids,output[:,:-1]],axis=1)
             logits=np.asarray(model.forward(full),dtype=np.float32)
             selected=logits[:,prompt_len-1:prompt_len-1+new_tokens,:].astype(np.float64)
@@ -142,6 +145,10 @@ def worker(a):
                 finite_logits=bool(np.isfinite(logits).all()),reference='same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle')
         except BaseException as exc:
             rec['quality']=dict(status='failed',error=repr(exc));(dest/'quality-error.log').write_text(traceback.format_exc())
+        finally:
+            for name,value in quality_env.items():
+                if value is None:os.environ.pop(name,None)
+                else:os.environ[name]=value
         rec['status']='measured' if rec['quality'].get('status')=='scored' and rec['quality'].get('finite_logits') and np.isfinite(rec['quality']['mean_model_nll']) else 'failed-quality';rec['qualification']='NVIDIA-only one-sample full-workload A/B; completed route witness is required by controller; AMD/Apple and independent quality pending, no default promotion'
     except BaseException as exc:
         rec.update(status='failed',error=repr(exc));(dest/'error.log').write_text(traceback.format_exc())
@@ -151,11 +158,13 @@ def worker(a):
 
 
 def main():
-    from matrix import configurations, parse_witness, validate_witness
+    from matrix import configurations, route_configurations, parse_witness, validate_witness
     p=argparse.ArgumentParser()
     p.add_argument('--worker',action='store_true');p.add_argument('--key')
     p.add_argument('--chunk',type=int);p.add_argument('--arm',type=int)
     p.add_argument('--kv-reuse',type=int);p.add_argument('--engine',type=int);p.add_argument('--case')
+    p.add_argument('--route',default='auto');p.add_argument('--resident-forward',type=int,default=1)
+    p.add_argument('--matrix',choices=('flags','routes'),default='flags')
     p.add_argument('--budget',type=int,default=1800);p.add_argument('--cell-seconds',type=int,default=250)
     p.add_argument('--smoke',action='store_true');p.add_argument('--models',default=','.join(bench.LM_CHECKPOINTS))
     a=p.parse_args()
@@ -166,12 +175,13 @@ def main():
                MOJOLEARN_BENCH_INSTALLED='1',PYTHONUNBUFFERED='1')
     env.pop('MOJOLEARN_TRANSFORMER_LEGACY_SETUP',None)
     deadline=time.monotonic()+a.budget;rows=[]
+    configs=route_configurations() if a.matrix=='routes' else configurations()
     models=a.models.split(',')
     if not all(x in bench.LM_CHECKPOINTS for x in models):raise ValueError('unregistered saved checkpoint')
     manifest={'schema':'mojolearn.combined-generation-ab.v1','source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
               'source_sha256':{f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest() for f in ['bindings/causal_lm_public.mojo','tools/bench_board_neural.py']},
-              'matrix':configurations(),'models':models,'read_chunks':[4,1] if a.smoke else [128,1],
-              'expected_cells':len(models)*2*8,'smoke_only':a.smoke,'numeric_mode':'identical',
+              'matrix':configs,'matrix_kind':a.matrix,'models':models,'read_chunks':[4,1] if a.smoke else [128,1],
+              'expected_cells':len(models)*2*len(configs),'smoke_only':a.smoke,'numeric_mode':'identical',
               'full_recipe':bench.GEN_SHAPES['small' if a.smoke else 'full'],
               'hardware':evidence.hardware_context('nvidia'),'promotion':'none; NVIDIA-only experiment',
               'clock':'one trace-enabled excluded warmup then one trace-disabled scored whole public stream/read operation',
@@ -181,11 +191,14 @@ def main():
     write(OUT/'source-retention.json',retain(pathlib.Path(source['local_path']),OUT.name+'/source'))
     for key in models:
       for chunk in manifest['read_chunks']:
-       for cfg in configurations():
+       for cfg in configs:
         dest=OUT/key/('read'+str(chunk))/cfg['case'];dest.mkdir(parents=True,exist_ok=True)
         previous=dest/'result.json'
         if previous.exists():
             old=json.loads(previous.read_text())
+            if old.get('status')=='unsupported' and old.get('source_commit')==manifest['source_commit']:
+                if not (dest/'retention.json').exists():retain_cell(dest,OUT.name+'/'+key+'/read'+str(chunk)+'/'+cfg['case'])
+                rows.append(old);continue
             if old.get('status')=='measured' and old.get('route_witness',{}).get('validated') and old.get('smoke_only')==a.smoke:
                 invocation=json.loads((dest/'invocation.json').read_text())
                 if invocation.get('source_commit')!=manifest['source_commit']:
@@ -196,14 +209,20 @@ def main():
                 old['reused_unchanged_completed_cell']=True;rows.append(old);continue
             raise RuntimeError('preserve failed/incomplete cell and use a new attempt output: '+str(dest))
         remaining=deadline-time.monotonic()
-        row=dict(model_key=key,read_chunk=chunk,case=cfg['case'],requested_flags=cfg)
+        row=dict(model_key=key,read_chunk=chunk,case=cfg['case'],requested_flags=cfg,source_commit=manifest['source_commit'])
+        if a.matrix=='routes' and key=='mojolearn-162m' and cfg.get('route')=='resident':
+            row.update(status='unsupported',executed=False,reason='Saved architecture has no final norm; resident admission requires one. No model modification or manufactured norm.')
+            write(previous,row);retain_cell(dest,OUT.name+'/'+key+'/read'+str(chunk)+'/'+cfg['case']);rows.append(row);continue
         if remaining<45:
             row.update(status='pending-budget',executed=False);rows.append(row);continue
         env.update(MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32=str(cfg['sampler']),
                    MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE=str(cfg['kv_reuse']),
-                   MOJOLEARN_GENERATION_NATIVE_ENGINE=str(cfg['engine']))
+                   MOJOLEARN_GENERATION_NATIVE_ENGINE=str(cfg['engine']),
+                   MOJOLEARN_EXPERIMENT_GENERATION_ROUTE=cfg.get('route','auto'),
+                   MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD=str(cfg.get('resident_forward',1)))
         cmd=[PY,__file__,'--worker','--key',key,'--chunk',str(chunk),'--arm',str(cfg['sampler']),
-             '--kv-reuse',str(cfg['kv_reuse']),'--engine',str(cfg['engine']),'--case',cfg['case']]
+             '--kv-reuse',str(cfg['kv_reuse']),'--engine',str(cfg['engine']),'--case',cfg['case'],
+             '--route',cfg.get('route','auto'),'--resident-forward',str(cfg.get('resident_forward',1))]
         if a.smoke:cmd+=['--smoke']
         write(dest/'invocation.json',dict(command=cmd,environment=evidence.runtime_environment(env),source_commit=manifest['source_commit']))
         with (dest/'execution.log').open('w') as log:
@@ -223,6 +242,10 @@ def main():
             try:
                 witness.update(actual_routes=validate_witness(events,row['generated_tokens'],chunk),validated=True)
                 witness['retained_kv_observed']=any(x['retained_kv'] for x in events)
+                expected=cfg.get('expected_route')
+                if cfg.get('route')=='auto' and key=='mojolearn-162m':expected='native_engine'
+                if expected and witness['actual_routes']!=[expected]:
+                    raise ValueError('executed route differs from explicit compatible selection')
             except ValueError as exc:row.update(status='failed-route-witness',route_error=str(exc))
         row['route_witness']=witness
         write(previous,row);rows.append(row);write(OUT/'summary.json',rows)
@@ -234,7 +257,8 @@ def main():
     write(OUT/'summary.json',rows)
     complete=len(rows)==manifest['expected_cells'] and all(x.get('status')=='measured' and x.get('route_witness',{}).get('validated') for x in rows)
     write(OUT/'coverage.json',{'expected':manifest['expected_cells'],'recorded':len(rows),'measured':sum(x.get('status')=='measured' for x in rows),
-                             'failed':sum(str(x.get('status','')).startswith('failed') for x in rows),'pending':sum(x.get('status')=='pending-budget' for x in rows),'complete':complete})
+                             'failed':sum(str(x.get('status','')).startswith('failed') for x in rows),'pending':sum(x.get('status')=='pending-budget' for x in rows),'unsupported':sum(x.get('status')=='unsupported' for x in rows),'complete':complete,
+                             'supported_complete':len(rows)==manifest['expected_cells'] and all(x.get('status') in ('measured','unsupported') for x in rows)})
     return 0 if complete else 1
 
 if __name__=='__main__':sys.exit(main())

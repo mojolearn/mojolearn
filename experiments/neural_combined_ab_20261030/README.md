@@ -69,3 +69,23 @@ Its complete failure archive is retained. The next attempt fixes PATH and
 reuses unchanged downloaded artifacts. Compiler, runtime and measurement
 outcomes are recorded separately in retained receipts; see the resulting
 handoff and coverage records rather than assuming this document is a pass.
+
+
+## Explicit route follow-up (separate freeze)
+
+`--matrix routes` records 44 requested cells: legacy FP64/FP32 × KV off/on,
+resident FP32 × KV off/on, native engine FP64/FP32 × KV off/on, and the complete
+auto configuration, each for two models and two read sizes. The saved 162m
+architecture has no final norm, while resident admission requires one: its four
+explicit resident cells remain unsupported and unexecuted. No norm is inserted.
+Native-engine arms explicitly disable resident-forward to satisfy admission;
+the complete auto arm records whichever branch actually runs for that model.
+Expected supported coverage is therefore 40 cells, separate from 44 requested.
+
+The first frozen matrix exposed a harness issue: forced engine-on could allow
+resident sampled generation but reject the separate full-prefix quality call.
+The follow-up performs the untimed quality forward with engine off,
+resident-forward enabled and route auto, and retains those settings. Original
+quality failures are preserved; missing quality can be recovered from retained
+output bytes without rerunning completed timings. Descriptor operation counters
+are captured immediately before and after timed calls, outside their clocks.
