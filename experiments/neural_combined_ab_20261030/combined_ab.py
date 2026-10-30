@@ -78,9 +78,13 @@ def worker(a):
             'private_state':'new stream privately allocates state; no resume/parameter exposure/alias injection',
             'interpretation':'admission metadata plus actual completed native-branch witness in excluded warmup; raw witness retained in execution.log',
             'source':str(ROOT/'bindings/causal_lm_public.mojo')}
+        def descriptor_counters():
+            current=model._native_entries
+            return {name:repr(current[name]) for name in ('native_block_operations','native_primitives') if name in current}
         rounds=[]
         for index in range(2):
             os.environ['MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE']='1' if index==0 else '0'
+            counters_before=descriptor_counters()
             started=time.perf_counter()
             stream=model.stream(ids,new_tokens,**rec['options'])
             chunks=[]
@@ -88,12 +92,14 @@ def worker(a):
                 chunks.append(np.asarray(stream.read(min(a.chunk,new_tokens-offset)),dtype=np.int32).copy())
             output=np.concatenate(chunks,axis=1)
             elapsed=(time.perf_counter()-started)*1000
+            counters_after=descriptor_counters()
             if output.shape!=(1,new_tokens):raise ValueError('incomplete sampled output shape '+str(output.shape))
             if not ((output>=0)&(output<int(model.vocab_size))).all():raise ValueError('out of vocabulary token')
             np.save(dest/('warmup.npy' if index==0 else 'scored.npy'),output)
             info=stream.info()
             rounds.append(dict(role='excluded-cold-warmup' if index==0 else 'scored-repeated-model',ms=elapsed,
-                               output_sha256=hashlib.sha256(output.tobytes()).hexdigest(),stream_info=info))
+                               output_sha256=hashlib.sha256(output.tobytes()).hexdigest(),stream_info=info,
+                               descriptor_counters_before=counters_before,descriptor_counters_after=counters_after))
             rec['rounds']=rounds;write(dest/'result.json',rec)
         if rounds[0]['output_sha256'] != rounds[1]['output_sha256']:
             raise ValueError('same-policy warmup/scored seeded outputs differ')
