@@ -137,26 +137,42 @@ def test_affected_python_surfaces():
         assert _max_features_fraction('log2', n) == math.log2(max(2, n))/n
 
 
-def test_existing_mojo_primitive_parity():
+def test_gp_theta_float32_policy():
     from mojolearn import _backend
     binding = _backend.binding('_mojolearn_gp', 'identical')
-    # The float64 log half went with the retired `gp_log64` entry (no live caller);
-    # owned.log is held to the stdlib in test_transcendental_accuracy_and_cross_host_digest.
+    # DEVIATION 2880 (gaussian_process/host/gp_theta.mojo) specifies
+    # ftz(identical_exp(ftz(Float32(theta)))). It is a float32 polynomial,
+    # not cast(owned.exp(theta)), which evaluates a different float64 polynomial.
+    # Check the public precision/FTZ contract and independent exp accuracy here;
+    # the supported GP verifier separately requires exact cross-vendor bits.
     theta = [i/32 for i in range(-2048, 2049)]
-    expected = binding.gp_theta_params(theta)
-    assert b''.join(struct.pack('<f', x) for x in expected) == b''.join(
-        struct.pack('<f', owned.exp(x)) for x in theta)
+    actual = binding.gp_theta_params(theta)
+    word = lambda x: struct.unpack('<I', struct.pack('<f', x))[0]
+    assert len(actual) == len(theta)
+    for x, value in zip(theta, actual):
+        assert math.isfinite(value) and value > 0
+        assert abs(word(value) - word(math.exp(x))) <= 2, (x, value, math.exp(x))
+    for direction in (-math.inf, math.inf):
+        nearby = binding.gp_theta_params([math.nextafter(x, direction) for x in theta])
+        assert list(map(word, nearby)) == list(map(word, actual))
+    assert list(binding.gp_theta_params([-100., -90., -88., 0.])) == [0., 0., 0., 1.]
 
 
 def test_schedule_scaling_avoids_float_power():
     from fractions import Fraction
-    from mojolearn._training_impl import _f32_round
-    for q in (Fraction(1, 3), Fraction(-1, 3), Fraction(123, 7), Fraction(2**100),
-              Fraction(1, 2**126), Fraction(1, 2**127)):
+    from mojolearn.training import ConstantLR
+    # Rounding moved into the native schedule implementation; exercise its
+    # public operation instead of requiring the retired Python helper.
+    for peak, warmup in ((1., 3), (123., 7), (float(2**100), 1),
+                         (2.**-126, 1), (2.**-126, 2)):
+        schedule = ConstantLR(peak, warmup_steps=warmup)
+        q = Fraction(peak) / warmup
         expected = struct.unpack('<f', struct.pack('<f', float(q)))[0]
         if abs(expected) < 2**-126:
             expected = 0.0
-        assert bits(_f32_round(q)) == bits(expected)
+        assert bits(schedule.lr_at(1)) == bits(expected)
+    with pytest.raises(ValueError):
+        ConstantLR(-1., warmup_steps=3)
 
 
 def test_runtime_log10_decimal_boundaries():
