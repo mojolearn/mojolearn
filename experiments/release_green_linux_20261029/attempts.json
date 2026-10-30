@@ -1,0 +1,121 @@
+{
+  "source_commit": "47508cfcd96771eee86b115739b2a83ddb0e43aa",
+  "workflow_run": 40965436795,
+  "workflow_url": "https://github.com/mojolearn/mojolearn/actions/runs/40965436795",
+  "scope": "Selected Linux host builds; both stopped at memory admission limit; no successful image or runtime claim. Original failed artifacts retained, no runtime/identity rows admitted.",
+  "builds": [
+    {
+      "group": "_mojolearn_dev_tokenizer_host",
+      "exit_code": 124,
+      "status": "rss-limit",
+      "reason": "rss limit 12884901888 bytes (12.00 GiB) exceeded: process group at 12887224320 bytes (12.00 GiB)",
+      "elapsed_seconds": 631.5382935240001,
+      "resource_budget": {
+        "available_bytes": 15614320640,
+        "compiler_workers": 4,
+        "cores": 4,
+        "jobs": 1,
+        "min_available_bytes": 2729418752,
+        "reservation_source": "group-floor",
+        "rss_bytes": 12884901888
+      },
+      "request": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/gha-artifacts/development-host-0/development/request.json",
+        "bytes": 2141,
+        "sha256": "979727d853e00b0505a260c5eaf489b5b2dee33282a76e191d314a7a79c026f4"
+      },
+      "result": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/gha-artifacts/development-host-0/development/evidence/result.json",
+        "bytes": 835601,
+        "sha256": "b4c1c59ff9e58757f20b8f56f5fda760729af32014c1dc5baf6da349e84aebd3"
+      },
+      "execution": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/gha-artifacts/development-host-0/development/evidence/host-_mojolearn_dev_tokenizer_host.log.execution.json",
+        "bytes": 874,
+        "sha256": "b1b5ff16fdb13bc892c4ae358430638ad626d321cd338bdd20dc6e7087251c9e"
+      },
+      "compiler_log": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/gha-artifacts/development-host-0/development/evidence/host-_mojolearn_dev_tokenizer_host.log",
+        "bytes": 560965,
+        "sha256": "6ae3e025cf60bd2859cb7c06f6054728f1843ee49ec5fabb4e9b75e518f9096f"
+      },
+      "runtime_executed": false,
+      "qualified": false
+    },
+    {
+      "group": "_mojolearn_dev_runtime_classical_host",
+      "exit_code": 124,
+      "status": "rss-limit",
+      "reason": "rss limit 12884901888 bytes (12.00 GiB) exceeded: process group at 12924780544 bytes (12.04 GiB)",
+      "elapsed_seconds": 808.745392645,
+      "resource_budget": {
+        "available_bytes": 15618899968,
+        "compiler_workers": 4,
+        "cores": 4,
+        "jobs": 1,
+        "min_available_bytes": 2733998080,
+        "reservation_source": "group-floor",
+        "rss_bytes": 12884901888
+      },
+      "request": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/gha-artifacts/development-host-1/development/request.json",
+        "bytes": 2161,
+        "sha256": "a28d5c14354476b2f058e4e4b285162c6798889c6617139885cf1a1f39064780"
+      },
+      "result": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/gha-artifacts/development-host-1/development/evidence/result.json",
+        "bytes": 835638,
+        "sha256": "925f78872bcd97935e9a17810825c287a11a8f124ed2c131a2cc8a486c7f5d0a"
+      },
+      "execution": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/gha-artifacts/development-host-1/development/evidence/host-_mojolearn_dev_runtime_classical_host.log.execution.json",
+        "bytes": 878,
+        "sha256": "f59f414d679c8bb5af064576767b43a2f67984446e3f5436b89115b2a642b61e"
+      },
+      "compiler_log": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/gha-artifacts/development-host-1/development/evidence/host-_mojolearn_dev_runtime_classical_host.log",
+        "bytes": 726437,
+        "sha256": "edb897663e27187b505d10174caeec08bc2160290f549a3f75177ed7e9d1128a"
+      },
+      "runtime_executed": false,
+      "qualified": false
+    }
+  ],
+  "provider_attempts": [
+    {
+      "id": "4b7oou9rze8a01",
+      "kind": "cpu",
+      "outcome": "SSH banner timeouts; no source execution; owner deleted and GET404 confirmed",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/empty-pod-gone.json",
+        "bytes": 81,
+        "sha256": "332be252208c1fd167ab61256bb6461d2b4ce1dd94b1585613961234a882dfd0"
+      }
+    },
+    {
+      "id": "j0y7kmmeedr3p6",
+      "kind": "2x NVIDIA GPU",
+      "outcome": "Provisioning timed out before execution; delete204",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/nvidia-rental.log",
+        "bytes": 292,
+        "sha256": "81bfb2193562d38a93e55f106e2a9c0825d12e635ee7a923da7a91c7c919458b"
+      }
+    },
+    {
+      "id": "3jh60d255yi415",
+      "kind": "2x L40S",
+      "outcome": "Provisioning timed out before execution with120sconnectionbound; delete204",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/nvidia2-rental.log",
+        "bytes": 293,
+        "sha256": "94c66ef9244beb21201b6ff0b86806286b1dfe1c04f03e575e79d3edd2382aed"
+      }
+    }
+  ],
+  "provider_final_listing": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/final-runpod-list.json",
+    "bytes": 70,
+    "sha256": "23da2b723b91b1be1417c243fd85f32b3096d58ef60965390698ba6dd9b40aea"
+  }
+}
