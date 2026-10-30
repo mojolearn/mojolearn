@@ -35,15 +35,6 @@ def native_numpy_type(name: String, context: PythonObject) raises -> PythonObjec
     if numpy is None or owner is None or py_type(numpy) is not module_type or py_type(owner) is not module_type:
         raise Error("TypeError: ndarray dtype requires NumPy's native extension metadata")
     var dtype = py_get(native_numpy_module_fields(owner), PythonObject(name))
-    if name == "str_" or name == "bytes_":
-        # The extension exports dtype/ndarray, but need not export its scalar
-        # classes (NumPy 2.5.4 does not export str_ or bytes_ here). Resolve
-        # these two identities through the admitted static dtype factory,
-        # not the replaceable public NumPy name. Fixed native dtype codes
-        # cannot invoke a caller's conversion or scalar construction hook.
-        var factory = native_numpy_type("dtype", context)
-        var descriptor = py_call(factory, "U" if name == "str_" else "S")
-        dtype = descriptor.type
     # The type descriptor itself refuses non-types without invoking them.
     # Python-created types/metaclasses carry HEAPTYPE; the supported NumPy
     # dtype constructor and its metaclass are static extension types.

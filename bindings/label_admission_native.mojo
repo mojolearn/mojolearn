@@ -4,7 +4,7 @@
 from std.collections import Dict
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_numpy_metadata import native_numpy_type, native_numpy_dtype
+from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_module_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.py_attr import py_attr
 
@@ -30,9 +30,18 @@ def labels_primitive_kind(cls: PythonObject, context: PythonObject) raises -> In
         for i in range(len(scalars)):  # driver-loop: remaining exact native real scalar classes
             if cls is scalars[i]:
                 return 4
-        if cls is native_numpy_type("str_", context):
-            return 1
+        # NumPy's extension exports dtype, but need not export scalar types
+        # (2.5.4 does not export str_). The admitted static dtype factory
+        # supplies the canonical text scalar identity without calling a
+        # replaceable public scalar constructor or a user's conversion hook.
         var factory = native_numpy_dtype(context)
+        var text_dtype = py_call(factory, "U")
+        var text_type = text_dtype.type
+        var numpy_fields = native_numpy_module_fields(context["modules"]["numpy"])
+        if py_get(numpy_fields, "str_") is not text_type:
+            raise Error("TypeError: np.str_ must remain NumPy's native type; Python callbacks cannot execute")
+        if cls is text_type:
+            return 1
         for code in ["q", "Q", "g"]:  # small-loop(native long-long and long-double scalar aliases)
             if cls is py_call(factory, code).type:
                 return 4 if code == "g" else 3
