@@ -211,7 +211,7 @@ def test_builder_requires_witnesses_repeats_and_standard_property_protocols(tmp_
         'missing_heldout':{'train'},'batch_protocol':{'train','infer','stepfull'},
         'decode_protocol':{'train','infer','batch'}}
     assert parts==expected[broken]
-    assert table['admission_policy']==vref.ADMISSION_POLICY
+    assert table['admission_policy']==dict(vref.ADMISSION_POLICY, cpu_host_only_witnesses=1)
 
 
 def scoped_tables():
@@ -381,7 +381,7 @@ def test_backend_witness_refuses_contradictory_or_unbound_metadata(broken):
     elif broken == 'commit': sig['provenance']['commit'] = '0'*40
     elif broken == 'fixtures': sig['provenance']['fixtures'] = {}
     elif broken == 'digest': sig['source_sha256'] = ''
-    elif broken == 'schema': sig['schema'] = 2
+    elif broken == 'schema': sig['schema'] = 999
     elif broken == 'incomplete': j['complete'] = False
     elif broken == 'unknown_backend': sig['options']['require_backend'] = 'mystery'
     elif broken == 'unknown_label': j['vendor'] = sig['provenance']['vendor'] = 'mystery'
@@ -576,3 +576,48 @@ def test_the_cpu_column_must_equal_the_gpu_reference(tmp_path, monkeypatch, case
         assert ent['ref'] == 'a' * 16 and ent['cols']['cpu'][1] == 'b' * 16
         assert problems == [f"x/base/train: cpu column older than the GPU reference "
                             f"(cpu@{'b' * 9} vs gpu@{'a' * 9}); re-record the cpu column"]
+
+
+def schema2_backend_column(backend='cuda', vendor='nvidia-ptx-a40-sm80'):
+    import hashlib, json
+    column = backend_witness_column(backend, vendor)
+    signature = column['resume_signature']
+    signature['schema'] = 2
+    signature['environment_digests'] = {'MOJOLEARN_VENDOR': hashlib.sha256(backend.encode()).hexdigest(),
+                                        'OMP_NUM_THREADS': hashlib.sha256(b'4').hexdigest()}
+    signature['environment_sha256'] = hashlib.sha256(
+        json.dumps(signature['environment_digests'], sort_keys=True).encode()).hexdigest()
+    return column
+
+
+@pytest.mark.parametrize('backend,vendor,expected', [('cuda','nvidia-ptx-a40-sm80','ptx'),
+    ('cuda','nvidia-a40','nvidia'), ('metal','arm64','apple'), ('hip','amd-mi300x','amd'),
+    ('cpu','cpu-amd-epyc','cpu')])
+def test_schema2_backend_witness_preserves_device_class_and_raw_record(backend, vendor, expected):
+    import copy
+    column = schema2_backend_column(backend, vendor)
+    before = copy.deepcopy(column)
+    assert vref.record_device_class(column, 'column.identical.json') == (expected, None)
+    assert vref.admit(column, 'column.identical.json') is None
+    assert column == before
+
+
+@pytest.mark.parametrize('broken', ['missing','not_dict','raw_value','bad_key','lease','aggregate',
+    'incomplete','vendor','commit','schema_type','future_schema'])
+def test_schema2_backend_witness_refuses_corruption(broken):
+    column = schema2_backend_column()
+    signature = column['resume_signature']
+    if broken == 'missing': signature.pop('environment_digests')
+    elif broken == 'not_dict': signature['environment_digests'] = []
+    elif broken == 'raw_value': signature['environment_digests']['OMP_NUM_THREADS'] = '4'
+    elif broken == 'bad_key': signature['environment_digests']['UNBOUND'] = 'a'*64
+    elif broken == 'lease': signature['environment_digests']['MOJOLEARN_SLOT_TOKEN'] = 'a'*64
+    elif broken == 'aggregate': signature['environment_sha256'] = '0'*64
+    elif broken == 'incomplete': column['complete'] = False
+    elif broken == 'vendor': signature['options']['vendor'] = 'amd-mi300x'
+    elif broken == 'commit': signature['provenance']['commit'] = '0'*40
+    elif broken == 'schema_type': signature['schema'] = True
+    elif broken == 'future_schema': signature['schema'] = 3
+    device, reason = vref.record_device_class(column, 'column.identical.json')
+    assert device is None and reason
+    assert vref.admit(column, 'column.identical.json') is not None

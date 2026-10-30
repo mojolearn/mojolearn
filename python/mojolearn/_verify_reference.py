@@ -357,8 +357,27 @@ def record_device_class(record, filename):
     cls = VENDOR_CLASS.get(backend) if isinstance(backend, str) else None
     if cls is None:
         return None, "backend witness names an unsupported backend"
-    if signature.get("schema") != 1 or record.get("complete") is not True:
-        return None, "backend witness requires a complete schema-1 record"
+    schema = signature.get("schema")
+    if type(schema) is not int or schema not in (1, 2) or record.get("complete") is not True:
+        return None, "backend witness requires a complete supported-schema record"
+    if schema == 2:
+        # identity_break schema 2 retains hashed execution settings while
+        # excluding only the nonsemantic scheduler lease. Validate the actual
+        # per-key witness and its aggregate; never rewrite historical records
+        # or drop their backend provenance to make a newer producer admissible.
+        environment = signature.get("environment_digests")
+        if not isinstance(environment, dict) or any(
+                not isinstance(key, str)
+                or key == "MOJOLEARN_SLOT_TOKEN"
+                or not key.startswith(("MOJO", "MODULAR", "OMP_", "MKL_", "OPENBLAS_",
+                                       "VECLIB_", "NUMEXPR_", "BLIS_"))
+                or not isinstance(value, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", value)
+                for key, value in environment.items()):
+            return None, "backend witness has invalid environment digests"
+        aggregate = hashlib.sha256(json.dumps(environment, sort_keys=True).encode()).hexdigest()
+        if signature.get("environment_sha256") != aggregate:
+            return None, "backend witness environment digests disagree with aggregate"
     for field in ("source_sha256", "environment_sha256"):
         if not re.fullmatch(r"[0-9a-f]{64}", str(signature.get(field, ""))):
             return None, f"backend witness has invalid {field}"
