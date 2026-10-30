@@ -178,7 +178,7 @@ def validate_adapters(root, directory, before, result, commit):
 
 
 
-def stage_frozen_source(root, commit, archive, stage):
+def stage_frozen_source(root, commit, archive, stage, required_members=()):
     """Retain every frozen source byte without duplicating non-build archives.
 
     Documentation, recorded results and experiment data remain in the complete
@@ -189,17 +189,19 @@ def stage_frozen_source(root, commit, archive, stage):
     with archive.open("wb") as stream:
         subprocess.run(["git", "-C", str(root), "archive", "--format=tar.gz", commit],
                        stdout=stream, check=True)
+    required = set(required_members)
     omitted = []
     with tarfile.open(archive) as stream:
         members = []
         for member in stream.getmembers():
-            if member.name.split("/", 1)[0] in excluded:
+            if member.name.split("/", 1)[0] in excluded and member.name not in required:
                 omitted.append(member.name)
             else:
                 members.append(member)
         stream.extractall(stage, members=members, filter="data")
     return {"complete_archive": common.reference(archive),
             "unexpanded_nonbuild_members": omitted,
+            "required_verification_members": sorted(required),
             "excluded_top_level_directories": sorted(excluded)}
 
 
@@ -228,7 +230,12 @@ def assemble(args):
         stage = output / "source"
         stage.mkdir()
         archive = output / "source.tar.gz"
-        document["source_staging"] = stage_frozen_source(root, commit, archive, stage)
+        # Some reference payloads live under bench/. They are build inputs,
+        # despite sharing a directory with non-build historical run archives.
+        from verification_repository import validate_payload
+        verification = validate_payload(root, commit, git_root=root)
+        required = {path.relative_to(root).as_posix() for path in verification.values()}
+        document["source_staging"] = stage_frozen_source(root, commit, archive, stage, required)
         document["source_archive"] = common.reference(archive)
         document["smoke_corpora"] = stage_smoke_corpora(root, commit, stage)
         pkg = stage / "python/mojolearn"

@@ -71,6 +71,23 @@ class RetainedCandidateTests(unittest.TestCase):
                     self.assertEqual((stage / name).read_bytes(), content)
         self.assertEqual(report["complete_archive"]["sha256"], hashlib.sha256(archive.read_bytes()).hexdigest())
 
+    def test_declared_verifier_input_under_bench_is_staged(self):
+        repo, _, _ = self.corpus_repository()
+        path = repo / "bench/results/accepted.json"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"frozen reference column")
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "core.hooksPath=/dev/null",
+                        "commit", "-qm", "required reference"], check=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
+        stage = self.root / "stage"
+        stage.mkdir()
+        report = candidate.stage_frozen_source(repo, commit, self.root / "source.tar.gz", stage,
+                                               {"bench/results/accepted.json"})
+        self.assertEqual((stage / "bench/results/accepted.json").read_bytes(), b"frozen reference column")
+        self.assertNotIn("bench/results/accepted.json", report["unexpanded_nonbuild_members"])
+        self.assertEqual(report["required_verification_members"], ["bench/results/accepted.json"])
+
     def test_export_ignored_operands_restored_from_frozen_blobs(self):
         repo, commit, cases = self.corpus_repository()
         # A dirty checkout must not replace the frozen expectation.
