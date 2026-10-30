@@ -7,6 +7,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 - Restore CPU stratified-group splitter helpers already present on main.
 - Read IVF-PQ output addresses while holding the GIL before native host work.
 - Support four-component maintenance versions in release tooling.
+- Two-GPU `DevicePool` workers load NumPy when the parent process has it, so cross-validation folds, neighbor and density queries and `RBFSampler` rows no longer refuse inputs the parent accepts.
+- `verify --par` keeps a worker error's root exception line in its report, and `--par --json-out` writes the par document.
 - Correct 36 stale verifier references for Adamax, NAdam and learning-rate schedules using agreeing retained Apple, NVIDIA, AMD and CPU executions; preserve the original reports and failures.
 - Reuse unchanged numerical implementations; qualify the repaired CPU bindings separately. Publication remains pending.
 
