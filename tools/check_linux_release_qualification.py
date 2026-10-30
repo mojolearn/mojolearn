@@ -515,8 +515,11 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
         proof_hashes[key] = digest_file(proof_path)
         expected_link = {'sha256': proof_hashes[key], 'source_sha256': source_sha}
         from staged_native_admission import SCHEMA as STAGED_SCHEMA
+        from release_linux_group_composition import SCHEMA as GROUP_SCHEMA
         if proof.get('schema') == STAGED_SCHEMA:
             expected_link.update(origin='staged-admission', reused=[])
+        elif proof.get('schema') == GROUP_SCHEMA:
+            expected_link.update(origin='compiled-group-composition', reused=[])
         require(payload['sets'][key] == expected_link, 'Assembly proof linkage differs')
     vendor, arch = runtime_key.split('/')
     audit = dict(sha256=wheel_sha or digest_file(wheel), wheel=str(wheel.resolve()), advertised_vendors=sorted(vendors),

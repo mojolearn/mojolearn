@@ -516,6 +516,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     proofs, inventories, commits = {}, [], set()
     staged_keys = set()
     retained_keys = set()
+    group_keys = set()
     for path in proof_paths:
         raw = pathlib.Path(path).read_bytes()
         proof = json.loads(raw)
@@ -600,6 +601,21 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                            source_sha256=proof['source_sha256'])
         from staged_native_admission import SCHEMA as STAGED_SCHEMA, decoded
         from retained_release_composition import SCHEMA as RETAINED_SCHEMA, validate_bytes
+        from release_linux_group_composition import SCHEMA as GROUP_SCHEMA, validate_bytes as validate_group_bytes
+        if proof['schema'] == GROUP_SCHEMA:
+            validate_group_bytes(proof, next(iter(the_set.hosts.values())).parent.parent)
+            group_keys.add(key)
+            for original_path, record in proof['artifact_origins'].items():
+                relative = original_path[len(prefix):]
+                member = 'mojolearn/' + relative if relative.startswith('host/') else original_path
+                origin[member].update(origin='compiled-group-composition', **record)
+                origin[member].pop('built_by', None)
+                origin[member]['admitted_by'] = sorted('/'.join(k) for k in keys) if relative.startswith('host/') else ['/'.join(key)]
+                if relative.startswith('host/'):
+                    for rec in (r for r in host_record.values() if r['archive_path'] == member):
+                        rec.update(origin='compiled-group-composition', **record)
+                        rec.pop('built_by', None)
+                        rec['admitted_by'] = sorted('/'.join(k) for k in keys)
         if proof['schema'] == RETAINED_SCHEMA:
             validate_bytes(proof, next(iter(the_set.hosts.values())).parent.parent)
             retained_keys.add(key)
@@ -652,7 +668,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     for s in sets:
         key = (s.vendor, s.arch)
         if key in proofs:
-            set_records['/'.join(key)] = dict(proofs[key], origin=('retained-composition' if key in retained_keys else 'staged-admission' if key in staged_keys else 'built') if not reused_of[key] else 'mixed',
+            set_records['/'.join(key)] = dict(proofs[key], origin=('compiled-group-composition' if key in group_keys else 'retained-composition' if key in retained_keys else 'staged-admission' if key in staged_keys else 'built') if not reused_of[key] else 'mixed',
                                               reused=sorted(reused_of[key]))
         else:
             set_records['/'.join(key)] = dict(origin='reused', from_release=s.reuse['origin'],
@@ -670,6 +686,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     n_reused = sum(1 for o in origin.values() if o['origin'] == 'reused')
     n_admitted = sum(1 for o in origin.values() if o['origin'] == 'staged-admission')
     n_composed = sum(1 for o in origin.values() if o['origin'] == 'retained-composition')
+    n_groups = sum(1 for o in origin.values() if o['origin'] == 'compiled-group-composition')
     return dict(schema='mojolearn.linux-payload.v1', version=version,
                 **({'host_composition': composition} if composition is not None else {}),
                 release_profile='alpha-api', assembly_profile=profile, release_modes=list(modes),
@@ -680,9 +697,10 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                 binding_layout=binding_layout,
                 binding_origin=origin,
                 adapters=adapter_records(sets),
-                reuse=dict(built=len(origin) - n_reused - n_admitted - n_composed, reused=n_reused,
+                reuse=dict(built=len(origin) - n_reused - n_admitted - n_composed - n_groups, reused=n_reused,
                            **({'staged_admitted': n_admitted} if n_admitted else {}),
                            **({'retained_composed': n_composed} if n_composed else {}),
+                           **({'group_composed': n_groups} if n_groups else {}),
                            from_release=next((s.reuse['origin'] for s in sets if s.reuse and s.reuse['origin']), None),
                            from_legs={k: v for s in sets if s.reuse for k, v in (s.reuse.get('legs') or {}).items()}),
                 optional_native={**{n: {
