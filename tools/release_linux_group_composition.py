@@ -70,6 +70,19 @@ def replay(raw, staged, runpath, patchelf, evidence):
     return hc.file_sha(staged)
 
 
+def host_environment_policy(env):
+    # group_facts has already reproduced the exact CPU compiler recipe and
+    # checked both recorded command lines. CUDA_CODE_FORMAT is inherited by
+    # mixed CPU/PTX builders but is not read by that host recipe. Preserve its
+    # original value in evidence; do not require a needless native rebuild.
+    require(not common.derived_build_flags(env, ROUTING)
+            and env.get('MOJOLEARN_NUMERIC_MODE') == 'identical'
+            and env.get('MOJOLEARN_TARGET_COLUMN') == 'cpu'
+            and env.get('MOJOLEARN_GPU_ARCHS') is None
+            and env.get('MOJOLEARN_LINUX_CPU', 'x86-64-v3') == 'x86-64-v3',
+            'host compile flags differ')
+
+
 def host_groups(rows, root, revision, site, compiler, patchelf, evidence):
     import verify_linux_surface_qualification as surface
     import release_reuse as rr
@@ -90,14 +103,9 @@ def host_groups(rows, root, revision, site, compiler, patchelf, evidence):
         require(facts['mode'] == 'host' and facts['members'] == [name]
                 and facts['compiler_sha256'] == compiler, 'host target/membership/compiler differs')
         env = facts['environment']
-        require(facts['toolchain_locked'] == rr.toolchain(root, common.LINUX)
-                and not common.derived_build_flags(env, ROUTING)
-                and env.get('MOJOLEARN_NUMERIC_MODE') == 'identical'
-                and env.get('MOJOLEARN_TARGET_COLUMN') == 'cpu'
-                and env.get('MOJOLEARN_GPU_ARCHS') is None
-                and env.get('MOJOLEARN_LINUX_CPU', 'x86-64-v3') == 'x86-64-v3'
-                and env.get('MOJOLEARN_CUDA_CODE_FORMAT', 'native') == 'native',
-                'host locked compiler/dependencies or compile flags differ')
+        require(facts['toolchain_locked'] == rr.toolchain(root, common.LINUX),
+                'host locked compiler/dependencies differ')
+        host_environment_policy(env)
         for field in ('receipt', 'execution', 'log', 'binary'):
             evidence.file(facts[field]['path'])
         raw = Path(facts['binary']['path'])

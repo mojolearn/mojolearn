@@ -186,3 +186,14 @@ def test_readback_refuses_unrelated_or_failed_observations(native_readbacks, cha
     p.write_text(json.dumps(report))
     with pytest.raises(ValueError):
         composition.readbacks(*native_readbacks, composition.Evidence())
+
+
+def test_host_recipe_can_inherit_unused_cuda_format():
+    env = {'MOJOLEARN_NUMERIC_MODE': 'identical', 'MOJOLEARN_TARGET_COLUMN': 'cpu',
+           'MOJOLEARN_LINUX_CPU': 'x86-64-v3', 'MOJOLEARN_CUDA_CODE_FORMAT': 'ptx'}
+    composition.host_environment_policy(env)
+    assert env['MOJOLEARN_CUDA_CODE_FORMAT'] == 'ptx'
+    for name, value in [('MOJOLEARN_TARGET_COLUMN', 'nvidia'), ('MOJOLEARN_GPU_ARCHS', 'sm_80'),
+                        ('MOJOLEARN_NUMERIC_MODE', 'fast'), ('MOJOLEARN_LINUX_CPU', 'native')]:
+        with pytest.raises(ValueError, match='host compile flags'):
+            composition.host_environment_policy(dict(env, **{name: value}))

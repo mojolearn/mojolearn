@@ -214,3 +214,14 @@ def test_noncanonical_worker_count_refused(producer, workers):
     put(Path(p['result']), d)
     with pytest.raises(ValueError, match='compiler worker count'):
         adapter.collect('/source', {}, p)
+
+
+@pytest.mark.parametrize('argument', ['--gpu-arch=sm_80', '--emit=ptx'])
+def test_injected_gpu_emission_command_is_not_an_environment_equivalence(producer, argument):
+    p, _, receipt_path, _ = producer
+    receipt = json.loads(receipt_path.read_text())
+    receipt['command'].append(argument)
+    receipt['execution']['command'] = list(receipt['command'])
+    put(receipt_path, receipt)
+    with pytest.raises(ValueError, match='successful exact execution'):
+        adapter.collect('/source', {}, p)
