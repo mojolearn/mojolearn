@@ -621,3 +621,35 @@ def test_schema2_backend_witness_refuses_corruption(broken):
     device, reason = vref.record_device_class(column, 'column.identical.json')
     assert device is None and reason
     assert vref.admit(column, 'column.identical.json') is not None
+
+
+@pytest.mark.parametrize('lane', ['x-cluster-minibatch-partial', 'x-prep-nb-partial'])
+def test_bound_registered_partial_fit_lane_directory_is_not_partial_scope(lane):
+    import copy
+    column = schema2_backend_column()
+    column['cells'] = {lane+'/base': next(iter(column['cells'].values()))}
+    column['resume_signature']['options']['lanes'] = lane
+    before = copy.deepcopy(column)
+    assert vref.admit(column, 'retained/'+lane+'/nvidia-ptx-a40.identical.json',
+                      known_lanes={lane: None}) is None
+    assert column == before
+
+
+@pytest.mark.parametrize('broken', ['unknown_lane','wrong_options','outer_probe','outer_partial',
+    'partial_flag','sabotage_flag','incomplete','unbound_backend'])
+def test_registered_lane_directory_never_masks_actual_partial_or_unbound_run(broken):
+    lane = 'x-prep-nb-partial'
+    column = schema2_backend_column()
+    column['cells'] = {lane+'/base': next(iter(column['cells'].values()))}
+    column['resume_signature']['options']['lanes'] = lane
+    known = {lane: None}
+    path = 'retained/'+lane+'/nvidia-ptx-a40.identical.json'
+    if broken == 'unknown_lane': known = {}
+    elif broken == 'wrong_options': column['resume_signature']['options']['lanes'] = 'ols'
+    elif broken == 'outer_probe': path = 'probe/'+path
+    elif broken == 'outer_partial': path = 'partial/'+path
+    elif broken == 'partial_flag': column['partial_column'] = True
+    elif broken == 'sabotage_flag': column['batch_sabotage'] = True
+    elif broken == 'incomplete': column['complete'] = False
+    elif broken == 'unbound_backend': column.pop('resume_signature')
+    assert vref.admit(column, path, known_lanes=known) is not None
