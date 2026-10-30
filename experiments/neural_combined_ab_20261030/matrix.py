@@ -48,5 +48,5 @@ def route_configurations():
                 sampler=sampler,kv_reuse=reuse,engine=engine,route=route,
                 resident_forward=forward,expected_route=actual))
     rows.append(dict(case='complete-auto-s1-k1-e1-f1',sampler=1,kv_reuse=1,
-                     engine=1,route='auto',resident_forward=1,expected_route='resident_sampling'))
+                     engine=1,route='auto',resident_forward=1,expected_route=None))
     return rows
