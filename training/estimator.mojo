@@ -772,6 +772,7 @@ def identical_optimizer_step_resident_io(
     max_norm: Float32,
     io: Int,
     negate: Bool = False,
+    isolated: Bool = False,
 ) raises -> Int:
     """lane fam2-neural: `io` names the transfers this call makes (OPT_IO_*:
     parameters up, gradient up, parameters down, clipped gradient down); a
@@ -836,7 +837,19 @@ def identical_optimizer_step_resident_io(
     # the uploads are raw host-pointer copies: measured on the M4, a fresh
     # 64 MB array uploads in 1.6-2.4 ms this way (only the process's first
     # upload pays ~9-20 ms), and the memcpy-plus-DMA stage took 4.3 ms
-    var piped = opt_pipe_on()
+    # `isolated`: this call shares no process-wide state with a concurrent
+    # call on another device (training/optimizer_multi_gpu.mojo runs one
+    # rank thread per GPU through here at the same time). The pinned
+    # transport stage (`_STAGE`) and the scratch pool (`AFN_SCRATCH`) are
+    # one per process: two rank threads staging through the same pinned
+    # halves upload each other's parameters, and a pool slot recreated by
+    # one rank (the ranks' registries differ in length) frees the buffer the
+    # other rank's kernels still read, on the wrong device's context (the
+    # par-mlp two-GPU cell, 0.8.55 on 2x L40S; both arrived after 0.8.10,
+    # whose two-GPU par-mlp read IDENTICAL). An isolated call takes the
+    # plain copies and fresh scratch: transport and allocation only, the
+    # same kernels on the same operands, so no bit moves.
+    var piped = opt_pipe_on() and not isolated
     var up_p = (io & OPT_IO_UP_P) != 0
     var up_g = (io & OPT_IO_UP_G) != 0
     var down_p = (io & OPT_IO_DOWN_P) != 0
@@ -887,7 +900,10 @@ def identical_optimizer_step_resident_io(
     var out2: DeviceBuffer[DType.float32]
     var ws: DeviceBuffer[DType.float32]
     var sab_partials: DeviceBuffer[DType.float32]
-    comptime if OPT_SCRATCH_POOL:
+    var pooled_scratch = not isolated
+    comptime if not OPT_SCRATCH_POOL:
+        pooled_scratch = False
+    if pooled_scratch:
         # lane afn-optim: views of pooled buffers, created once per shape;
         # the step allocates nothing here.
         denom_out = afn_scratch_view(ctx, AFN_SF_DENOM, record_n)
@@ -951,7 +967,7 @@ def identical_optimizer_step_resident_io(
         # flags below are host words; the step's kernels are in order)
         ctx.synchronize()
         _step_timing_tick(ctx, rton, rtk, "resident.download")
-    elif piped or TRAIN_OPT_PIPE_DOWN:
+    elif piped or (TRAIN_OPT_PIPE_DOWN and not isolated):
         var down = PipeSegs()
         if down_p:
             down.add(0, 0, Int(param_ptr), n_total)
@@ -1036,6 +1052,7 @@ def identical_optimizer_step_resident_host(
     dampening: Float32,
     max_norm: Float32,
     negate: Bool = False,
+    isolated: Bool = False,
 ) raises -> Int:
     """The resident step with all four transfers (parameters and gradient
     up, parameters and the clipped gradient down): the entry every caller
@@ -1044,7 +1061,7 @@ def identical_optimizer_step_resident_host(
     the step (lane migrate-neural-2; the same exact XOR the host round trip
     `negate_through_device` ran, so the same bits)."""
     return identical_optimizer_step_resident_io(
-        ctx, param_ptr, grad_ptr, m_state, v_state, p_buf, g_buf, p_stage, g_stage, offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening, max_norm, OPT_IO_ALL, negate,
+        ctx, param_ptr, grad_ptr, m_state, v_state, p_buf, g_buf, p_stage, g_stage, offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening, max_norm, OPT_IO_ALL, negate, isolated,
     )
 
 

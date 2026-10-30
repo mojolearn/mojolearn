@@ -146,7 +146,10 @@ def parallel_optimizer_step_host(
                 rebind[MutPointer[Int32, MutUntrackedOrigin]](sp[rank].flags.unsafe_ptr()),
                 rebind[MutPointer[Float32, MutUntrackedOrigin]](unused.unsafe_ptr()),
                 len(sp[rank].flags),kind,t,nesterov,lr,beta1,beta2,eps,
-                weight_decay,momentum,dampening,Float32(0),negate)
+                weight_decay,momentum,dampening,Float32(0),negate,
+                # isolated: the rank threads run at once; the process-wide
+                # pinned stage and scratch pool are not theirs to share
+                isolated=True)
             cp[rank].enqueue_copy(dst_ptr=mp+first,src_buf=m_state)
             cp[rank].enqueue_copy(dst_ptr=vp+first,src_buf=v_state)
             cp[rank].synchronize()
