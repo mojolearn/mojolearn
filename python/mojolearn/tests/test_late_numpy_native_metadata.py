@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Cold and late NumPy metadata connection is part of the public operation."""
+"""Native NumPy metadata admission covers both explicit import orders."""
 import json
 import subprocess
 import sys
@@ -15,8 +15,8 @@ import mojolearn
 from mojolearn import _arena_io
 from mojolearn._array import Array
 from mojolearn._verify_native_runtime import audit_native_call
-if order == 'numpy_later':
-    assert 'numpy' not in sys.modules
+# Package dependencies may import NumPy; explicit user import order does not
+# imply global absence. The fresh DeviceRows context is asserted below.
 base = Array.from_list([[1., 2.], [3., 4.]], '<f4')
 indices = Array.from_list([1], '<i8')
 assert _arena_io._ROWS_CONTEXT.get('ndarray') is None
@@ -108,21 +108,26 @@ def test_public_constructor_refuses_replaced_numpy_factories_without_callback(na
 
 @pytest.mark.parametrize("name", ["dtype", "ndarray"])
 @pytest.mark.parametrize("operation", ["fit", "getattr"])
-def test_late_numpy_factory_replacement_is_refused_before_callback(name, operation):
+def test_retained_numpy_factory_metadata_never_calls_later_replacement(name, operation):
     script = r'''
 import sys
 import mojolearn as ml
+from mojolearn import preprocessing
 from mojolearn._verify_native_runtime import audit_native_call
-assert "numpy" not in sys.modules, "test must start before optional NumPy connection"
 model = ml.StandardScaler()
-# Retain the callable while the optional NumPy connection is still absent.
+# Retain the callable before replacing the public NumPy factory.
 # Attribute access is itself a native operation and is audited separately.
 fit = model.fit
-assert "numpy" not in sys.modules
 import numpy as np
 values = np.arange(24, dtype="f4").reshape(8, 3)
 name = sys.argv[1]
 original = getattr(np, name)
+# The constructor and attribute lookup have already admitted canonical native
+# metadata. Later replacements must not become callbacks; cold admission
+# rejection is covered independently by the DeviceRows tests above.
+context = preprocessing._STANDARD_CONTEXT
+assert context["ndarray"] is np.ndarray
+retained_ndarray = context["ndarray"]
 calls = []
 def replacement(*args, **kwargs):
     calls.append(name)
@@ -135,13 +140,18 @@ try:
         result = audit_native_call(getattr, model, "fit")
 finally:
     setattr(np, name, original)
-assert type(result.exception) is TypeError, result.report()
+value = result.assert_native()
+assert context["ndarray"] is retained_ndarray
 assert not calls, calls
-assert "native" in str(result.exception), str(result.exception)
+if sys.argv[2] == "fit":
+    assert value is model
+    assert model.n_features_in_ == 3
+else:
+    assert value == fit
 report = result.report()
 for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
     assert not report[key], report
-print("late native metadata refusal:", name)
+print("retained native metadata without callback:", name)
 '''
     result = subprocess.run([sys.executable, "-c", script, name, operation], text=True,
                             capture_output=True, timeout=90)
