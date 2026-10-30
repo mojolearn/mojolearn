@@ -180,7 +180,9 @@ def test_fairness_fix_20261013_second_pass_refusals():
     other settings than ours are refused by name before any import. Results raced before this
     change were wrong for these lanes; apply extra scrutiny."""
     plain = types.SimpleNamespace(cat_idx=None)
-    for lane in ("gbdt-lossguide", "gbdt-multiclass", "rf", "et"):
+    # gbdt-lossguide races LightGBM since 2026-10-30 (min_child_weight 1e-12, a declared exception);
+    # see test_lightgbm_lossguide_races_at_min_child_weight_1e_12.
+    for lane in ("gbdt-multiclass", "rf", "et"):
         with pytest.raises(RuntimeError, match="MIN-CHILD|ROW-SAMPLING"):
             spec.lightgbm_arms(lane, spec.lane_config(lane, "shipped"), plain, ["cpu"])
     with pytest.raises(RuntimeError, match="DIFFERENT-GROWER"):
@@ -444,3 +446,19 @@ def test_querywise_recipe_explicitly_selects_supported_pointwise_searcher(lane):
     # This repair changes only the searcher, not the existing workload.
     assert (cfg['n_estimators'], cfg['max_depth']) == (100, 6)
     assert 'border_build_max_samples' not in cfg
+
+
+
+def test_lightgbm_lossguide_races_at_min_child_weight_1e_12():
+    """FAIRNESS FIX (2026-10-30): LightGBM aborts a tree at min_child_weight exactly 0 (Check failed:
+    best_split_info.left_count > 0, reproduced on full taxi), so gbdt-lossguide races it at 1e-12 with
+    min_child_samples 1, both declared; the exceptions are scoped to this lane and LightGBM only."""
+    import bench_board_params as bbp
+    rows = [(lane, key, arm) for lane, key, arm, _why in bbp.EXCEPTIONS]
+    assert ("gbdt-lossguide", "min_child_weight", "lightgbm-*") in rows
+    assert ("gbdt-lossguide", "boosting_type", "lightgbm-*") in rows
+    assert not any(key == "min_child_weight" and arm.startswith("lightgbm") and lane != "gbdt-lossguide"
+                   for lane, key, arm in rows)
+    src = open(__file__.replace("test_speed_gbdt_tasks.py", "speed_gbdt_arm.py")).read()
+    assert "p.update(min_child_samples=1, min_child_weight=1e-12)" in src
+    assert 'if lane != "gbdt-lossguide":' in src
