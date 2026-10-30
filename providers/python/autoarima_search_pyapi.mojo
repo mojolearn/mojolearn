@@ -86,6 +86,9 @@ def _where(words: PythonObject, want: Int, rows: Int, count: Int, context: Pytho
     var scratch = _array(rows, 3, context)
     var got = Int(py=py_call_typed(_base(context, "select_fold_i64"), classical_address(words), rows, want,
                                   classical_address(out), classical_address(scratch)))
+    # The native selection writes this scratch allocation through a raw
+    # address. Keep its ndarray owner alive until those writes finish.
+    _ = scratch
     if got != count:
         raise Error("RuntimeError: AutoARIMA: select_fold_i64 disagrees with the counts")
     return out
