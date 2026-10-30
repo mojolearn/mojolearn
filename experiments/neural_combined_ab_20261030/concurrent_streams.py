@@ -32,9 +32,11 @@ def run(args):
     options=[dict(greedy=False,seed=7+4*i,temperature=.8,top_k=50,top_p=.9,eos_token_id=None,pad_token_id=None) for i in range(2)]
     count=16
     def stream(i):return model.stream(prompts[i],count,**options[i])
-    references=[]
+    references=[];reference_info=[];reference_checksums=[]
     for i in range(2):
-        references.append(np.asarray(stream(i).read(count),dtype=np.int32).copy())
+        serial=stream(i)
+        references.append(np.asarray(serial.read(count),dtype=np.int32).copy())
+        reference_info.append(serial.info());reference_checksums.append(serial.state_dict()['checksum'])
         np.save(out/f'prompt-{i}.npy',prompts[i]);np.save(out/f'serial-{i}.npy',references[-1])
     results=[]
     for kind in ('independent-streams','same-stream'):
@@ -84,10 +86,12 @@ def run(args):
         info=first.info();state=first.state_dict()
         result=dict(kind=kind,status=status,records=records,public_call_intervals_overlap=overlap,
                     native_busy_refusal_during_owner=refusal_during_owner,owner_info_after=info,
-                    owner_checkpoint_schema=state.get('schema'),fresh_stream_recovery_matches=recovery_ok,
+                    owner_checkpoint_schema=state.get('schema'),owner_checkpoint_checksum=state.get('checksum'),
+                    owner_checkpoint_matches_serial=state.get('checksum')==reference_checksums[0],
+                    owner_info_matches_serial=info==reference_info[0],fresh_stream_recovery_matches=recovery_ok,
                     model_busy_after=bool(fields.get('_resident_busy',False)),
                     limitation='No native instrumentation added; public-call overlap and busy ownership evidence do not prove simultaneous GPU kernel execution. Unobserved overlap is not a concurrency pass.')
-        if not recovery_ok or result['model_busy_after']:result['status']='failed-ownership-recovery'
+        if not recovery_ok or result['model_busy_after'] or not result['owner_checkpoint_matches_serial'] or not result['owner_info_matches_serial']:result['status']='failed-ownership-recovery'
         results.append(result);(out/'result.json').write_text(json.dumps(dict(route=args.route,cases=results),indent=2,default=str))
     print(json.dumps(dict(route=args.route,statuses=[x['status'] for x in results])))
     return 1 if any(x['status'].startswith('failed') or x['status']=='unqualified-refusal' for x in results) else 0
