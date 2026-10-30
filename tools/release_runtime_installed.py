@@ -137,6 +137,8 @@ def run(args):
                "--python", args.python, "--out", str(out / QUALIFY_DIR), "--timeout", str(args.timeout)]
     if args.git_root:
         command += ["--git-root", str(args.git_root.resolve())]
+    if getattr(args, 'test_source_commit', None):
+        command += ['--test-source-commit', args.test_source_commit]
     for wheel in args.wheel:
         command += ["--wheel", str(Path(wheel).resolve())]
     for name in selected:
@@ -174,6 +176,7 @@ def main(argv=None):
     go.add_argument("--vendor", choices=sorted(BACKEND), required=True)
     go.add_argument("--source-root", type=Path, required=True)
     go.add_argument("--source-commit", required=True)
+    go.add_argument("--test-source-commit", help="committed test revision; the product/wheel source remains unchanged")
     go.add_argument("--git-root", type=Path)
     go.add_argument("--wheel", action="append", required=True)
     go.add_argument("--python", default=sys.executable)
