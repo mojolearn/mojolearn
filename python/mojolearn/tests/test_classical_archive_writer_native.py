@@ -198,6 +198,13 @@ def test_archive_fortran_array_without_numpy_matches_frozen_codec(poison):
     expected = _expected(model).hex()
     script = r'''
 import builtins,dis,io,json,sys
+# Model an environment without the optional dependency before package import.
+import importlib.abc
+class BlockNumPy(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "numpy" or fullname.startswith("numpy."):
+            raise ModuleNotFoundError("NumPy is absent in this fixture", name="numpy")
+sys.meta_path.insert(0, BlockNumPy())
 from array import array
 from mojolearn import Array
 from mojolearn._classical_host import HostLinearRegression

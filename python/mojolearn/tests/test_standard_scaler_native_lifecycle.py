@@ -197,6 +197,13 @@ def test_native_transform_override_and_state_refusals():
 def test_numpy_free_memoryview_writeback_and_state_are_native():
     script = r'''
 import io, json, sys
+# Model an environment without the optional dependency before package import.
+import importlib.abc
+class BlockNumPy(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "numpy" or fullname.startswith("numpy."):
+            raise ModuleNotFoundError("NumPy is absent in this fixture", name="numpy")
+sys.meta_path.insert(0, BlockNumPy())
 import mojolearn as ml
 from mojolearn._verify_native_runtime import audit_native_call
 from array import array

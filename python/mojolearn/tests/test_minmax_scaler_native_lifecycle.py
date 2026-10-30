@@ -231,6 +231,13 @@ def test_object_range_endpoint_refuses_python_numeric_hooks():
 def test_numpy_free_first_fit_transform_and_archive_are_native():
     script = r'''
 import io, json, sys
+# Model an environment without the optional dependency before package import.
+import importlib.abc
+class BlockNumPy(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "numpy" or fullname.startswith("numpy."):
+            raise ModuleNotFoundError("NumPy is absent in this fixture", name="numpy")
+sys.meta_path.insert(0, BlockNumPy())
 from array import array
 import mojolearn as ml
 from mojolearn._verify_native_runtime import audit_native_call

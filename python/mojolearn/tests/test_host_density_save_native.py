@@ -344,7 +344,14 @@ print(json.dumps({'refused':True,'calls':calls}))
 def test_density_save_without_numpy_preserves_frozen_archive(family):
     expected = _oracle(_prepared(family), family).hex()
     script = r'''
-import io,json,sys
+import io,json,sys,importlib.abc
+# -S does not hide NumPy when the installed package's site directory is
+# explicitly supplied through PYTHONPATH. Enforce actual optional absence.
+class BlockNumPy(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'numpy' or fullname.startswith('numpy.'):
+            raise ModuleNotFoundError('NumPy intentionally unavailable', name='numpy')
+sys.meta_path.insert(0, BlockNumPy())
 from array import array
 from mojolearn import Array
 from mojolearn._classical_host import HostKernelDensity,HostIsolationForest

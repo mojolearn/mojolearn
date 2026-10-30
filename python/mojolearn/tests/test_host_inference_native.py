@@ -153,10 +153,14 @@ def test_finite_float64_overflow_keeps_previous_prediction_semantics(tmp_path, n
 def test_internal_array_and_external_numpy_result_contract(tmp_path, name):
     model = _model(tmp_path, name)
     x = _input(model.n_features_in_, "float32")
-    internal = model.predict(x)
+    internal = audit_native_call(model.predict, x).assert_native()
     external = audit_native_call(model.predict, x).assert_native()
-    assert type(internal).__name__ == "Array"
+    # Enter the public boundary explicitly; pytest module names must not
+    # select the package-internal Array output policy.
+    # Keep every value, subsequent-call and owner-lifetime check below.
+    assert type(internal) is np.ndarray
     assert type(external) is np.ndarray
+    assert _state(internal) == _state(external)
     assert external.dtype == (np.dtype("int32") if name == "KMeans" else np.dtype("float64"))
 
 

@@ -126,7 +126,7 @@ def test_cache_live_refuses_unregistered_callbacks_before_invocation(kind):
         assert str(audit.exception) == "cache metadata keys must be native strings"
 
 
-@pytest.mark.parametrize("prefix", ["x_prep", "x_metrics"])
+@pytest.mark.parametrize("prefix", ["x_prep"])
 @pytest.mark.parametrize("slots", [0, 1, 2])
 def test_cache_live_matches_real_store_count_after_consumed_allocations(prefix, slots):
     binding = _backend.binding("_mojolearn_" + prefix, "identical")
@@ -149,7 +149,7 @@ def test_cache_live_matches_real_store_count_after_consumed_allocations(prefix, 
     assert audit_native_call(cache.live).assert_native() == before
 
 
-@pytest.mark.parametrize("prefix", ["x_prep", "x_metrics"])
+@pytest.mark.parametrize("prefix", ["x_prep"])
 def test_cache_live_uses_captured_native_entry_and_ignores_mutable_int(prefix, monkeypatch):
     binding = _backend.binding("_mojolearn_" + prefix, "identical")
     if not arena.DeviceCache.supports(binding, prefix):
@@ -173,3 +173,10 @@ def test_cache_live_uses_captured_native_entry_and_ignores_mutable_int(prefix, m
     audit = audit_native_call(cache.live)
     _refused(audit)
     assert touched == []
+
+
+def test_retired_metrics_store_is_not_reported_as_a_live_device_cache():
+    # The x_metrics store exports were removed as dead product entries. Keep
+    # their absence explicit; live allocation/consumption uses supported x_prep.
+    binding = _backend.binding("_mojolearn_x_metrics", "identical")
+    assert audit_native_call(arena.DeviceCache.supports, binding, "x_metrics").assert_native() is False

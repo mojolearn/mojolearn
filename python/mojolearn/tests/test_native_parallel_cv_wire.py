@@ -64,6 +64,14 @@ import json, os, sys
 from pathlib import Path
 if os.environ.get('MOJOLEARN_NATIVE_CV_NUMPY') == '1':
     import numpy
+else:
+    # Model an environment without the optional dependency before package import.
+    import importlib.abc
+    class BlockNumPy(importlib.abc.MetaPathFinder):
+        def find_spec(self, fullname, path=None, target=None):
+            if fullname == "numpy" or fullname.startswith("numpy."):
+                raise ModuleNotFoundError("NumPy is absent in this fixture", name="numpy")
+    sys.meta_path.insert(0, BlockNumPy())
 from mojolearn import model_selection as ms
 from mojolearn._verify_native_runtime import audit_native_call
 active = [False]
@@ -136,7 +144,12 @@ trace = ms._NATIVE(None, 'family_msel_parallel_last_run', (), ms._NATIVE_CONTEXT
 assert trace['closed'] and trace['status'] == 'COMPLETE'
 print(json.dumps({'scores': list(result.result), 'trace': trace}))
 '''
-    completed = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=120)
+    # The native worker is a fresh interpreter.  A fixture-owned startup module
+    # makes NumPy unavailable in both the parent and its inherited child env.
+    (tmp_path / 'sitecustomize.py').write_text('import sys\n# Model an environment without the optional dependency before package import.\nimport importlib.abc\nclass BlockNumPy(importlib.abc.MetaPathFinder):\n    def find_spec(self, fullname, path=None, target=None):\n        if fullname == "numpy" or fullname.startswith("numpy."):\n            raise ModuleNotFoundError("NumPy is absent in this fixture", name="numpy")\nsys.meta_path.insert(0, BlockNumPy())\n')
+    env = dict(os.environ)
+    env['PYTHONPATH'] = str(tmp_path) + os.pathsep + env.get('PYTHONPATH', '')
+    completed = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=120, env=env)
     (tmp_path / 'numpy-free.stdout').write_text(completed.stdout)
     (tmp_path / 'numpy-free.stderr').write_text(completed.stderr)
     assert completed.returncode == 0, completed.stderr
