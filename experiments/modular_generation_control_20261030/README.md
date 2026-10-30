@@ -132,3 +132,12 @@ versions, source and artifact hashes, and retention receipts must remain visible
 No NVIDIA-only timing result promotes a default without the required AMD,
 quality, and within-release identity evidence. Existing active frozen rounds
 are not mutated by this next-round implementation.
+
+The aea1d9a candidate passed 32 installed GPU checks, then failed actual
+concurrency checks: shared-model reads replayed a stale busy flag and overlapping
+reads of one stream segfaulted. Those sources, logs and state bytes remain
+retained; no candidate timings were started. The repair candidate removes stale
+lifecycle replay and claims the original stream before capturing its native
+owners. Read, info and checkpoint calls now refuse overlap on the same stream;
+independent streams retain separate claims. Optimized compilation and actual
+concurrent runtime checks remain required before qualification.

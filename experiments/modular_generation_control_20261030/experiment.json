@@ -1,6 +1,6 @@
 {
   "schema": "mojolearn.generation-controls-experiment.v1",
-  "status": "Optimized selected tokenizer compiles passed on Mac before stop and RunPod Linux; installed NVIDIA checks and full-workload matrix pending",
+  "status": "aea32 installed GPU checks passed; actual concurrent-owner and same-stream failures retained; ownership repair candidate awaiting optimized compile and runtime checks",
   "promoted": false,
   "base_instrumentation_commit": "f048701e7c89530443c26d1b8a56aab9d9eec634",
   "included_release_repair_commit": "c286a410cbc2fb970d9caabddc1c2d7604d6cdf0",
@@ -83,5 +83,13 @@
   "local_interruption_receipt": "~/mojolearn-evidence/modular-kv-reuse-20261030/interruption.json",
   "runtime_qualified": false,
   "compiled_source_commit": "aea1d9a033431701e981d62d116e9c1e0867bbd6",
-  "compile_evidence": "compile_evidence.json"
+  "compile_evidence": "compile_evidence.json",
+  "ownership_failure": {
+    "source_commit": "aea1d9a033431701e981d62d116e9c1e0867bbd6",
+    "shared_model": "live busy flag remains true despite correct outputs and checkpoint",
+    "same_stream": "both routes segfaulted after overlapping read capture; exit139",
+    "proof_key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/aea1d9a/concurrency-confirm-579e07924c9466702565bc5249efe29beab7df814d151943eef7dc0a2b53d5b6.tgz",
+    "proof_sha256": "579e07924c9466702565bc5249efe29beab7df814d151943eef7dc0a2b53d5b6",
+    "performance_timing": "withheld until ownership repair qualifies"
+  }
 }
