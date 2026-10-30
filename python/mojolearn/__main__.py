@@ -427,7 +427,7 @@ def build_parser():
                    default=None,
                    help="with --compare: the same, for the SECOND document")
     v.add_argument("--json-out", dest="json_out", metavar="PATH", default=None,
-                   help="with --all: also write the full evidence document "
+                   help="with --all (or --par, its report document): also write the full evidence document "
                         "(per-cell hashes computed here and expected, per-lane "
                         "timings, the sha256 of every binding loaded, and the "
                         "committed column each reference came from) to PATH")
