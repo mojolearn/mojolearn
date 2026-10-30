@@ -120,5 +120,85 @@
     "mac_verified": true,
     "r2_readback_verified": true
   },
-  "qualification": "failed; no defaults promoted; no cross-vendor identity claim"
+  "qualification": "failed; no defaults promoted; no cross-vendor identity claim",
+  "live_confirmation": {
+    "route": "legacy",
+    "cases": [
+      {
+        "kind": "independent-streams",
+        "status": "failed-ownership-recovery",
+        "records": {
+          "first": {
+            "status": "returned",
+            "start_ns": 896312637758949,
+            "end_ns": 896313376605795,
+            "shape": [
+              1,
+              16
+            ],
+            "matches_serial": true
+          },
+          "second": {
+            "status": "returned",
+            "start_ns": 896312653661316,
+            "end_ns": 896314425519831,
+            "shape": [
+              1,
+              16
+            ],
+            "matches_serial": true,
+            "native_model_busy_observed": true,
+            "owner_finished_before_attempt": false
+          }
+        },
+        "public_call_intervals_overlap": true,
+        "native_busy_refusal_during_owner": false,
+        "owner_info_after": {
+          "done": true,
+          "generated_tokens": 16,
+          "lengths": [
+            16
+          ],
+          "usable": true
+        },
+        "owner_checkpoint_schema": "mojolearn.generation.v2",
+        "owner_checkpoint_checksum": "a50412e3403839bd49931961a0ee71dfa049fe5fb5070631bcdb31b4a4b27ebe",
+        "owner_checkpoint_matches_serial": true,
+        "owner_info_matches_serial": true,
+        "fresh_stream_recovery_matches": true,
+        "model_busy_after": true,
+        "live_dictionary_same": true,
+        "fresh_dictionary_busy_after": true,
+        "native_public_busy_after": true,
+        "limitation": "No native instrumentation added; public-call overlap and busy ownership evidence do not prove simultaneous GPU kernel execution. Unobserved overlap is not a concurrency pass."
+      }
+    ]
+  },
+  "same_stream_admission": {
+    "legacy": {
+      "status": "crashed",
+      "exit_code": 139,
+      "completed_native_reads": [
+        1,
+        16
+      ]
+    },
+    "resident": {
+      "status": "crashed",
+      "exit_code": 139,
+      "completed_native_reads": [
+        1,
+        16
+      ]
+    },
+    "core_retention": "No core file produced; kernel core_pattern |/bin/false. Full logs and partial outputs retained.",
+    "claim": "Concurrent reads were not refused; no successful reentry qualification"
+  },
+  "confirmation_retention": {
+    "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/aea1d9a/concurrency-confirm-579e07924c9466702565bc5249efe29beab7df814d151943eef7dc0a2b53d5b6.tgz",
+    "sha256": "579e07924c9466702565bc5249efe29beab7df814d151943eef7dc0a2b53d5b6",
+    "bytes": 9520766,
+    "mac_verified": true,
+    "r2_readback_verified": true
+  }
 }
