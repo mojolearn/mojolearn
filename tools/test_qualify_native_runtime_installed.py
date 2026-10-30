@@ -79,6 +79,58 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "bytes differ"):
             q.installed_module_inventory(modules, prefix, payload, tests)
 
+    def test_native_aliases_hash_once_per_observation_but_never_reuse_across_tests(self):
+        prefix, payload, tests, modules = self.modules()
+        native = Path(modules["mojolearn"].runtime.__file__)
+        for index in range(32):
+            setattr(modules["mojolearn"], "alias" + str(index), modules["mojolearn"].runtime)
+        witness = dict(module="mojolearn._host._mojolearn_example", file=str(native),
+                       sha256=q.digest(native), size=native.stat().st_size)
+        original = q.digest
+        calls = []
+        def counted(path):
+            calls.append(Path(path).resolve())
+            return original(path)
+        with patch.object(q, "digest", side_effect=counted):
+            first = q.installed_module_inventory(modules, prefix, payload, tests, [witness])
+            self.assertEqual(len(calls), 2)  # one Python file and one native file
+            second = q.installed_module_inventory(modules, prefix, payload, tests, [witness])
+            self.assertEqual(len(calls), 4)
+        self.assertEqual(first, second)
+        native.write_bytes(b"X" * native.stat().st_size)
+        with self.assertRaisesRegex(ValueError, "witness bytes changed"):
+            q.installed_module_inventory(modules, prefix, payload, tests, [witness])
+
+    def test_native_mutation_with_restored_mtime_during_snapshot_refuses(self):
+        import os
+        prefix, payload, tests, modules = self.modules()
+        native = Path(modules["mojolearn"].runtime.__file__)
+        stat = native.stat()
+        witness = dict(module="mojolearn._host._mojolearn_example", file=str(native),
+                       sha256=q.digest(native), size=stat.st_size)
+        del modules["mojolearn"].runtime
+        original = q.digest
+        def mutate_after_native_witness(path):
+            value = original(path)
+            if Path(path).name == "__init__.py":
+                native.write_bytes(b"X" * stat.st_size)
+                os.utime(native, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+            return value
+        with patch.object(q, "digest", side_effect=mutate_after_native_witness):
+            with self.assertRaisesRegex(ValueError, "changed during inventory"):
+                q.installed_module_inventory(modules, prefix, payload, tests, [witness])
+
+    def test_artifact_mutated_while_hashing_refuses(self):
+        prefix, payload, tests, modules = self.modules()
+        original = q.digest
+        def mutate(path):
+            value = original(path)
+            Path(path).write_bytes(b"changed")
+            return value
+        with patch.object(q, "digest", side_effect=mutate):
+            with self.assertRaisesRegex(ValueError, "changed while hashing"):
+                q.installed_module_inventory(modules, prefix, payload, tests)
+
     def test_product_source_shadow_and_unshipped_native_module_refuse(self):
         prefix, payload, tests, modules = self.modules()
         source = self.root / "source.py";source.write_text("source\n")
