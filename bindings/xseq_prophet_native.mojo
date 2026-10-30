@@ -272,6 +272,10 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
                                   xseq_addr(cpts), xseq_addr(sig_a), xseq_addr(params), xseq_addr(info_out)),
                       Python.list(B, N, od[1], nh, K, S2, multiplicative, fields["max_iter"]),
                       Python.list(fields["changepoint_prior_scale"]))
+    # Raw addresses do not retain the arrays owned by these two tuples.
+    # Both feature buffers and Fourier orders must survive the native call.
+    _ = ft
+    _ = od
     _ = H  # keep the Python object alive through the native call above
     _ = Y  # keep the Python object alive through the native call above
     _ = info_out  # keep the Python object alive through the native call above
@@ -344,6 +348,9 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
                       Python.list(xseq_addr(params), xseq_addr(fields["info_"]), xseq_addr(ft[0]), xseq_addr(ft[1]),
                                   xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
                       Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative))
+    # Prediction has independently allocated feature and order owners too.
+    _ = ft
+    _ = od
     _ = params  # keep the Python object alive through the native call above
     _ = cpts  # keep the Python object alive through the native call above
     _ = trend  # keep the Python object alive through the native call above
