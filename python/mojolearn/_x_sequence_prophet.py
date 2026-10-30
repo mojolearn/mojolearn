@@ -183,6 +183,16 @@ class ProphetForecaster(ParamsMixin):
 from ._native_xseq_bridge import connect as _connect_xseq  # noqa: E402
 _XSEQ, _XSEQ_CONTEXT = _connect_xseq()
 
+# Install the same native attribute slot used by the public lazy-export door
+# before retaining its identity. Otherwise the direct-module constructor works,
+# but resolving mojolearn.ProphetForecaster later installs __getattribute__ and
+# the original lifecycle snapshot correctly refuses that changed class layout.
+# This is one-time import connection, not a refresh after arbitrary user edits.
+import sys as _prophet_sys
+from ._expansion_sequence import _connect_imported_module as _connect_prophet_module
+_connect_prophet_module(_prophet_sys.modules[__name__])
+del _connect_prophet_module, _prophet_sys
+
 # Fixed class/protocol metadata is connected only during module import.
 from ._native_xseq_bridge import register as _register_xseq
 _register_xseq(xseq_prophet_class=ProphetForecaster,
