@@ -1755,7 +1755,7 @@ FAMILIES = (
             "mean_std_f32", "first_seen_i32", "strat_fold_assign_i32",
             "strat_alloc_i64", "ocsvm_alpha_init_f32", "weighted_pick_i32",
             "draw_rows_without_replacement_i32", "weighted_draw_rows_i32", "group_fold_assign_i32",
-            "strat_group_assign_i32", "strided_copy_bytes", "check_lengths_i64",
+            "strat_group_assign_i32", "strat_group_plan_i32", "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
             "ragged_rows_bytes", "nsum_f64", "row_means_f64",
             "truncnorm_draws", "fsum_f64", "row_stds_f64",
             "lr_schedule_values", "lr_onecycle_fill", "lr_decide",

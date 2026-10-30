@@ -2,6 +2,13 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.55.1 (unreleased 2026-10-30)
+
+- Restore CPU stratified-group splitter helpers already present on main.
+- Read IVF-PQ output addresses while holding the GIL before native host work.
+- Support four-component maintenance versions in release tooling.
+- Reference refresh and cross-device qualification remain pending; this entry is not publication evidence.
+
 ## 0.8.55 (published 2026-10-20)
 
 - Import pretrained models: `mojolearn.import_model` takes a `torch.export.ExportedProgram` or an ONNX file (opset 13 or later) and returns a

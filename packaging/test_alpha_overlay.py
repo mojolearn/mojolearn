@@ -193,6 +193,20 @@ class AlphaOverlayTests(unittest.TestCase):
             self.assertEqual(provenance['current_numerical_qualification'],
                              'NOT INHERITED; requires separate root validation')
 
+    def test_maintenance_number_keeps_alpha_api_profile(self):
+        self.write()
+        result = overlay.assemble(self.wheel, self.python, '0.6.0.1', self.root / 'out',
+                                  allow_alpha_final_version=True)
+        self.assertIn("0.6.0.1", result.name)
+        with zipfile.ZipFile(result) as archive:
+            metadata = archive.read('mojolearn-0.6.0.1.dist-info/METADATA')
+            self.assertIn(b'Version: 0.6.0.1\n', metadata)
+            self.assertIn(b'Classifier: Development Status :: 3 - Alpha\n', metadata)
+            provenance = json.loads(archive.read('mojolearn-0.6.0.1.dist-info/ALPHA_PROVENANCE.json'))
+            self.assertEqual(provenance['release_profile'], 'alpha-api')
+            self.assertEqual(provenance['current_numerical_qualification'],
+                             'NOT INHERITED; requires separate root validation')
+
     def test_final_number_verification_requires_manifest_alpha_api_profile(self):
         spec = importlib.util.spec_from_file_location(
             'verify_alpha_artifacts', Path(__file__).with_name('verify_alpha_artifacts.py'))

@@ -36,27 +36,36 @@ def ptr_i32(addrs: PythonObject, i: Int) raises -> I32P:
     return rebind[I32P](i32_ptr(a_int(addrs, i)))
 
 
-def out_f32(values: List[Float32], addrs: PythonObject, i: Int) raises:
-    """Into the caller's array. Under `ANN3_HOST_PASSES` (lane ann-apple3)
-    one memcpy; one store per word otherwise (the IVF code arrays are
-    n x dim words)."""
-    var p = f32_ptr(a_int(addrs, i))
+def out_f32_to(values: List[Float32], addr: Int) raises:
+    """Into the caller's array at `addr`. Under `ANN3_HOST_PASSES` (lane
+    ann-apple3) one memcpy; one store per word otherwise (the IVF code
+    arrays are n x dim words)."""
+    var p = f32_ptr(addr)
     comptime if ANN3_HOST_PASSES:
         if len(values) > 0:
             memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
     else:
         for e in range(len(values)):
             p.unsafe_store(e, values[e])
+
+
+def out_i32_to(values: List[Int32], addr: Int) raises:
+    var p = i32_ptr(addr)
+    comptime if ANN3_HOST_PASSES:
+        if len(values) > 0:
+            memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
+    else:
+        for e in range(len(values)):
+            p.unsafe_store(e, values[e])
+
+
+def out_f32(values: List[Float32], addrs: PythonObject, i: Int) raises:
+    out_f32_to(values, a_int(addrs, i))
 
 
 def out_i32(values: List[Int32], addrs: PythonObject, i: Int) raises:
-    var p = i32_ptr(a_int(addrs, i))
-    comptime if ANN3_HOST_PASSES:
-        if len(values) > 0:
-            memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
-    else:
-        for e in range(len(values)):
-            p.unsafe_store(e, values[e])
+    out_i32_to(values, a_int(addrs, i))
+
 
 
 def check_search(n_lists: Int, m: Int, k: Int, n_probes: Int) raises:

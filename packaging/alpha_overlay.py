@@ -81,7 +81,7 @@ def native_sources(root, commit):
 
 def assemble(base, python_root, version, out, allow_alpha_final_version=False, source_commit=None):
     alpha_version = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)a(0|[1-9][0-9]*)', version)
-    final_version = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version)
+    final_version = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*))?', version)
     require(alpha_version or (allow_alpha_final_version is True and final_version),
             'version must be an explicit alpha, such as 0.6.0a1')
     require(base.is_file() and not base.is_symlink() and base.stat().st_size <= MAX_WHEEL,

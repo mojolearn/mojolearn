@@ -137,6 +137,8 @@ from bindings.hotpath_helpers import (
     threshold_labels_i64_binding,
     scale_shift_ftz_f32_binding,
     bincount_i64_binding,
+    bincount2_i32_host_binding,
+    strat_group_plan_i32_binding,
     compact_notnan_f32_binding,
     gather_keep_neg_i32_binding,
     dot_rows_f32_binding,
@@ -1523,6 +1525,8 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
         module.def_function[scale_shift_ftz_f32_binding]("scale_shift_ftz_f32")
         module.def_function[bincount_i64_binding]("bincount_i64")
+        module.def_function[bincount2_i32_host_binding]("bincount2_i32")
+        module.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
         module.def_function[compact_notnan_f32_binding]("compact_notnan_f32")
         module.def_function[gather_keep_neg_i32_binding]("gather_keep_neg_i32")
         module.def_function[dot_rows_f32_binding]("dot_rows_f32")
