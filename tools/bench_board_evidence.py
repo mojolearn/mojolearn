@@ -300,7 +300,13 @@ def _hardware_context(vendor):
             row["gpu_driver_identity"] = bench_board_provenance.hardware_receipt(
                 "cuda" if vendor == "nvidia" else "hip")
             if vendor == "amd":
-                row["rocm_version"] = Path("/opt/rocm/.info/version").read_text().strip()
+                # ROCm 7 board setup (2026-10-30): the DO "AMD AI/ML Ready" image (ROCm 7.14) has no
+                # /opt/rocm/.info/version; the version then comes from amd-smi or hipconfig, its source recorded
+                version, source = bench_board_provenance.rocm_version()
+                if not version:
+                    raise ValueError("ROCm version missing")
+                row["rocm_version"] = version
+                row["rocm_version_source"] = source
         elif vendor == "apple":
             devices = json.loads(subprocess.check_output(
                 ["system_profiler", "SPDisplaysDataType", "-json"], text=True, timeout=60))["SPDisplaysDataType"]

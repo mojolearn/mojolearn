@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -188,6 +189,38 @@ def _pinned_uuid(variable):
     if not value or ',' in value or not value.lower().startswith('gpu-'):
         return None
     return value.lower()
+
+
+ROCM_VERSION_FILE = '/opt/rocm/.info/version'
+#: ROCm 7 board setup (2026-10-30): the DigitalOcean "AMD AI/ML Ready" droplet image (ROCm 7.14.0 by `amd-smi version`)
+#: has no /opt/rocm/.info/version, so reading only that file failed the worker evidence row of every AMD arm ("missing
+#: worker GPU/driver/OS evidence") and the AMD package-index pick. These are the fallbacks, in order: the command and the
+#: pattern of its version.
+ROCM_VERSION_PROBES = ((['amd-smi', 'version'], r'ROCm version:\s*([0-9]+(?:\.[0-9]+)+)'),
+                       (['hipconfig', '--version'], r'([0-9]+\.[0-9]+(?:\.[0-9]+)?)'))
+
+
+def rocm_version(version_file=ROCM_VERSION_FILE):
+    """(version, source) of this box's ROCm, or (None, None): `version_file` first; when it is the default file and it
+    is missing or empty, the version `amd-smi version` reports ("ROCm version: 7.14.0"), then `hipconfig --version`.
+    `source` names where the version came from (the file path or the command)."""
+    try:
+        text = Path(version_file).read_text().strip()
+        if text:
+            return text, version_file
+    except OSError:
+        pass
+    if version_file != ROCM_VERSION_FILE:
+        return None, None
+    for cmd, pattern in ROCM_VERSION_PROBES:
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        m = re.search(pattern, out or '')
+        if m:
+            return m.group(1), ' '.join(cmd)
+    return None, None
 
 
 def hardware_receipt(vendor):
