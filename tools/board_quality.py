@@ -8,7 +8,7 @@ Unknown metrics require review; finite output alone is not equal quality.
 """
 import math
 
-POLICY = "mojolearn.quality-parity.v7"
+POLICY = "mojolearn.quality-parity.v9"
 # Absolute score units (one percentage point for bounded scores).
 ABSOLUTE = dict.fromkeys(("accuracy", "auc", "roc_auc", "r2", "recall_at_k",
     "recall_at_10", "trustworthiness_k15", "explained_variance_ratio_sum",
@@ -44,6 +44,37 @@ RELATIVE.update(nonzeros_per_row=0.0)
 # mean_llf (garch): the series' total log likelihood at the fitted parameters. A likelihood-ratio
 # test reads differences of total log likelihood directly; 0.05 nats is negligible at any length.
 ABSOLUTE.update(mean_llf=0.05)
+# v8 (lane gru-fit-quality, 2026-10-28): held-out task scores are judged one-sided, ours against the opponent.
+# Owner decision 2026-10-14 (docs/RACE_FAIRNESS_DECISIONS.md): "it is fine for mojolearn to be better"; the
+# quality rule is "no material drop against the opponent". v7 judged |ours - opponent|, so the Oct 27 board
+# marked neural gru-fit FAIL on NVIDIA and AMD for an AUC of 0.6824 against torch's 0.6689 (ours higher by
+# 0.0134, rmse 0.4736 against 0.4763, also ours lower). For the scores below, a check fails only when ours is
+# worse than the opponent by more than the margin; the signed difference is still recorded. Fairness is the
+# read-back of explicit parameters, never the size of a quality gap. Every other metric (reference bounds,
+# agreements, estimates with no better side such as pvalue or kurtosis) keeps the symmetric v7 rule.
+# v9 (2026-10-30, Andrew: "add the quality metric" for every INSUFFICIENT verdict of the 0.8.55 paper boards). Metrics
+# both arms already recorded with no declared rule, declared here before re-scoring (the margins follow the bounded-
+# score and estimate conventions above; nothing is tuned to a result):
+#   ranking (gbdt-rank-*): map, ndcg5, ndcg10 are bounded scores in [0, 1] -> absolute 0.01, higher is better.
+#   held-out evaluation sets (classical infer): r2_eval, accuracy_eval are bounded scores -> absolute 0.01, higher
+#   is better; rmse_eval and eval_inertia are errors -> relative 0.05, lower is better.
+#   multiclass log loss (gbdt-multiclass): mlogloss -> relative 0.05, lower is better, as logloss.
+#   predict_max_rel_err_own_fp64 (ols infer): the prediction against an FP64 evaluation of the arm's own fitted
+#   model, the same linear-algebra reference bound as transform_max_rel_err_own_fp64 (1e-4).
+#   loss (ops-session-step): one recorded step from the same weights and inputs; a training loss has no better
+#   side here (both arms take the same step) -> symmetric relative 0.05, as loss_last_step.
+#   silhouette is a bounded cluster score (already absolute 0.01): higher is better.
+ABSOLUTE.update(map=0.01, ndcg5=0.01, ndcg10=0.01, r2_eval=0.01, accuracy_eval=0.01)
+RELATIVE.update(rmse_eval=0.05, eval_inertia=0.05, mlogloss=0.05, loss=0.05)
+HIGHER_IS_BETTER = frozenset(("accuracy", "auc", "roc_auc", "r2", "mean_r2", "recall_at_k", "recall_at_10",
+                              "trustworthiness_k15", "mean_log_likelihood", "mean_log_predictive_density",
+                              # v9
+                              "map", "ndcg5", "ndcg10", "r2_eval", "accuracy_eval", "silhouette"))
+LOWER_IS_BETTER = frozenset(("rmse", "masked_rmse", "forecast_rmse", "logloss", "mean_nll", "perplexity",
+                             "inertia", "relative_reconstruction_error",
+                             "relative_reconstruction_error_100k_rows", "kernel_rel_error",
+                             # v9
+                             "rmse_eval", "eval_inertia", "mlogloss"))
 # A common reference bound, not a demand that fp32 and bf16 have equal errors.
 # This gate deliberately allows the opponent's native fast precision.
 REFERENCE = {"max_rel_err_vs_fp64": 0.01, "relative_residual": 1e-4,
@@ -86,6 +117,8 @@ REFERENCE = {"max_rel_err_vs_fp64": 0.01, "relative_residual": 1e-4,
              "l1_vs_networkx_over_stop_bound": 1.0,
              # connected components are exact: the same partition up to relabeling, or 1 - ARI.
              "partition_disagreement_vs_networkx": 0.0}
+# v9: ols infer prediction against an FP64 evaluation of the arm's own fitted model (see the v9 note above)
+REFERENCE["predict_max_rel_err_own_fp64"] = 1e-4
 # SCORER GAPS (2026-10-15): agreement fractions in [0, 1] with one named arm; 1 is that arm's own
 # output. Both arms' disagreement (1 - value) must be at most the margin (bounded-score policy).
 AGREEMENT = {"documents_equal_to_ours": 0.01, "jaccard_vs_ours": 0.01, "jaccard_vs_sklearn": 0.01,
@@ -184,20 +217,27 @@ def compare(ours, theirs):
                                reason="metric missing or nonfinite on one arm"))
             continue
         difference = abs(a - b)
+        # ours' shortfall against the opponent (0 when ours is at least as good) for the one-sided scores
+        shortfall = (max(0.0, b - a) if metric in HIGHER_IS_BETTER
+                     else max(0.0, a - b) if metric in LOWER_IS_BETTER else difference)
+        one_sided = metric in HIGHER_IS_BETTER or metric in LOWER_IS_BETTER
         if metric in ABSOLUTE:
-            kind, margin, observed = "absolute", ABSOLUTE[metric], difference
+            kind, margin, observed = ("one-sided-absolute" if one_sided else "absolute"), ABSOLUTE[metric], shortfall
         elif metric in RELATIVE:
-            kind, margin = "symmetric-relative", RELATIVE[metric]
+            kind, margin = ("one-sided-relative" if one_sided else "symmetric-relative"), RELATIVE[metric]
             scale = max(abs(a), abs(b))
-            observed = difference / scale if scale else 0.0
+            observed = shortfall / scale if scale else 0.0
         elif metric in AGREEMENT:
             kind, margin = "both-disagreements-at-most", AGREEMENT[metric]
             observed = max(1.0 - a, 1.0 - b)
         else:
             kind, margin, observed = "both-reference-errors-at-most", REFERENCE[metric], max(abs(a), abs(b))
-        checks.append(dict(metric=metric, ours=a, opponent=b, comparison=kind,
-                           margin=margin, observed=observed,
-                           verdict="PASS" if observed <= margin else "FAIL"))
+        check = dict(metric=metric, ours=a, opponent=b, comparison=kind,
+                     margin=margin, observed=observed,
+                     verdict="PASS" if observed <= margin else "FAIL")
+        if kind.startswith("one-sided"):
+            check["difference"] = a - b      # signed, ours minus opponent
+        checks.append(check)
     # FAIRNESS FIX (2026-10-13 audit): a one-cluster density result has no
     # silhouette. Exact partition equivalence with the same noise mask still
     # proves output-quality parity. Partial label agreement is neither an
