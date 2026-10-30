@@ -13,6 +13,30 @@ def write(p,v):
     p.parent.mkdir(parents=True,exist_ok=True)
     q=p.with_suffix('.tmp');q.write_text(json.dumps(v,indent=2,default=str)+'\n');q.replace(p)
 
+def retain(path, label):
+    """Presigned transport; verified bytes must land before the next cell."""
+    config=pathlib.Path(os.environ['MOJOLEARN_AB_RETENTION_CONFIG'])
+    settings=json.loads(config.read_text())[label]
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix='combined-retain-') as temp:
+        temp=pathlib.Path(temp)
+        for method in ('put','get'):
+            private=temp/(method+'.private')
+            private.write_text('url = '+json.dumps(settings[method])+'\n');private.chmod(0o600)
+            command=['curl','--config',str(private),'-f','--retry','2','--max-time','180']
+            command+=['-X','PUT','--upload-file',str(path)] if method=='put' else ['-o',str(temp/'verified')]
+            with (path.parent/'retention-transport.log').open('a') as log:
+                subprocess.run(command,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=210)
+        actual=evidence.file_hash(path)
+        if evidence.file_hash(temp/'verified')!=actual:raise RuntimeError('retained byte hash mismatch')
+    return dict(key=settings['key'],sha256=actual,bytes=path.stat().st_size,status='R2 PUT and GET verified')
+
+def retain_cell(dest, label):
+    archive=dest/'retained.tar.gz'
+    members={str(p.relative_to(dest)):p.read_bytes() for p in dest.rglob('*') if p.is_file() and p.name not in ('retained.tar.gz','retention.json','retention-transport.log')}
+    evidence.archive(archive,members)
+    write(dest/'retention.json',retain(archive,label))
+
 def worker(a):
     import numpy as np
     from mojolearn.models import CausalLM
@@ -147,6 +171,8 @@ def main():
               'clock':'one trace-enabled excluded warmup then one trace-disabled scored whole public stream/read operation',
               'route_precedence':'resident sampling returns before native engine; KV reuse only legacy branch; requested flags may be inactive'}
     write(OUT/'manifest.json',manifest)
+    source,inventory=evidence.source_snapshot(OUT/'source',repo=ROOT,drivers=[__file__])
+    write(OUT/'source-retention.json',retain(pathlib.Path(source['local_path']),OUT.name+'/source'))
     for key in models:
       for chunk in manifest['read_chunks']:
        for cfg in configurations():
@@ -188,6 +214,10 @@ def main():
             except ValueError as exc:row.update(status='failed-route-witness',route_error=str(exc))
         row['route_witness']=witness
         write(previous,row);rows.append(row);write(OUT/'summary.json',rows)
+        try:retain_cell(dest,OUT.name+'/'+key+'/read'+str(chunk)+'/'+cfg['case'])
+        except Exception as exc:
+            write(OUT/'retention-failure.json',dict(cell=str(dest),error=repr(exc),scope='Stop next cell; completed measurements preserved; retry retention without rerun'))
+            return 2
         print(json.dumps({k:row.get(k) for k in ['model_key','case','read_chunk','status','exit_code']}),flush=True)
     write(OUT/'summary.json',rows)
     complete=len(rows)==manifest['expected_cells'] and all(x.get('status')=='measured' and x.get('route_witness',{}).get('validated') for x in rows)
