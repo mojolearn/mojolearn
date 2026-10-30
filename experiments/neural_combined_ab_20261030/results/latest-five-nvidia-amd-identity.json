@@ -1,0 +1,119 @@
+{
+  "schema": "mojolearn.supported-vendor-comparison.v1",
+  "scope": "Five repaired units NVIDIA/AMD only; Apple and final source-closure/ledger admission separate.",
+  "comparisons": [
+    {
+      "lane": "safetensors-widen-f16",
+      "freeze": "5448",
+      "conversion_exit": 0,
+      "diff_exit": 0,
+      "scope": "NVIDIA/AMD pair only; Apple and central ledger admission separate",
+      "amd_archive_receipt": {
+        "lane": "safetensors-widen-f16",
+        "profile": "routine",
+        "local_complete": true,
+        "key": "verification/0.8.63/5448ba0482d0/amd/repair-a9f81994/runs/safetensors-widen-f16.tgz",
+        "sha256": "7c916d05898850b254d28732358a1851daed4b86509b9ee5df15d352f9339a8d",
+        "bytes": 2240580,
+        "status": "R2 PUT and GET verified",
+        "freeze": "5448",
+        "report": "5448/safetensors-widen-f16/safetensors-widen-f16/verify.json",
+        "launch": "5448/safetensors-widen-f16/safetensors-widen-f16/verifier-run.json"
+      },
+      "nvidia_column_sha256": "fdb661cf106a08888cf1822c90bd7a0e26d69eaa2e32b29ea8e69bdd63e74bb1",
+      "diff_sha256": "bc21443c5c0f3e3e4f18f65c49595b12d1e740ec669b778fc9f0b0a89fe5d730"
+    },
+    {
+      "lane": "sequence-autoarima",
+      "freeze": "5448",
+      "conversion_exit": 0,
+      "diff_exit": 0,
+      "scope": "NVIDIA/AMD pair only; Apple and central ledger admission separate",
+      "amd_archive_receipt": {
+        "lane": "sequence-autoarima",
+        "profile": "routine",
+        "local_complete": true,
+        "key": "verification/0.8.63/5448ba0482d0/amd/repair-a9f81994/runs/sequence-autoarima.tgz",
+        "sha256": "92883d063b7c05483887400eed54785940ef5a08a6111830d74f58cac322982c",
+        "bytes": 2240829,
+        "status": "R2 PUT and GET verified",
+        "freeze": "5448",
+        "report": "5448/sequence-autoarima/sequence-autoarima/verify.json",
+        "launch": "5448/sequence-autoarima/sequence-autoarima/verifier-run.json"
+      },
+      "nvidia_column_sha256": "e8cf8f615ed19a904b6f555906b3297238046ba1b89ca67fd39a06147493f5bb",
+      "diff_sha256": "6d4ed7fb304604d8760b0bce7b762720eddfea695c68019acc7c98f5ede6e5be"
+    },
+    {
+      "lane": "x-neighbors-nearest-centroid",
+      "freeze": "5448",
+      "conversion_exit": 0,
+      "diff_exit": 0,
+      "scope": "NVIDIA/AMD pair only; Apple and central ledger admission separate",
+      "amd_archive_receipt": {
+        "lane": "x-neighbors-nearest-centroid",
+        "profile": "routine",
+        "local_complete": true,
+        "key": "verification/0.8.63/5448ba0482d0/amd/repair-a9f81994/runs/x-neighbors-nearest-centroid.tgz",
+        "sha256": "858cb28ba520c82d6d4aeabd79fbe3de4637e531cbd99c7b9d5ce3325eece138",
+        "bytes": 2240792,
+        "status": "R2 PUT and GET verified",
+        "freeze": "5448",
+        "report": "5448/x-neighbors-nearest-centroid/x-neighbors-nearest-centroid/verify.json",
+        "launch": "5448/x-neighbors-nearest-centroid/x-neighbors-nearest-centroid/verifier-run.json"
+      },
+      "nvidia_column_sha256": "8d008ff3f0c3b232168199d5b05ef4b370bb48c4a270066fc5d4b7a3800b0f82",
+      "diff_sha256": "d0ca3ffca4a4375dee8fb92463113abef05948de3efb06266c51a516b7861378"
+    },
+    {
+      "lane": "x-neighbors-skewed-chi2",
+      "freeze": "5448",
+      "conversion_exit": 0,
+      "diff_exit": 0,
+      "scope": "NVIDIA/AMD pair only; Apple and central ledger admission separate",
+      "amd_archive_receipt": {
+        "lane": "x-neighbors-skewed-chi2",
+        "profile": "routine",
+        "local_complete": true,
+        "key": "verification/0.8.63/5448ba0482d0/amd/repair-a9f81994/runs/x-neighbors-skewed-chi2.tgz",
+        "sha256": "6b391edbc291d442b0af62d8676d774f253bcf3e128e5902f5eb9a34f172962f",
+        "bytes": 2241654,
+        "status": "R2 PUT and GET verified",
+        "freeze": "5448",
+        "report": "5448/x-neighbors-skewed-chi2/x-neighbors-skewed-chi2/verify.json",
+        "launch": "5448/x-neighbors-skewed-chi2/x-neighbors-skewed-chi2/verifier-run.json"
+      },
+      "nvidia_column_sha256": "a1d173e265145bc0efc91b1de852b64a42cc806b7485e0b1bb8cac980a668557",
+      "diff_sha256": "7431b87d9a642a63ff58a73a0165daa3b15797373aee0a1498aec639a31d0922"
+    },
+    {
+      "lane": "x-cluster-kmeans-init",
+      "freeze": "146",
+      "conversion_exit": 0,
+      "diff_exit": 0,
+      "scope": "NVIDIA/AMD pair only; Apple and central ledger admission separate",
+      "amd_archive_receipt": {
+        "lane": "x-cluster-kmeans-init",
+        "profile": "routine",
+        "local_complete": true,
+        "key": "verification/0.8.63/14691bc98fec/amd/repair-a9f81994/runs/x-cluster-kmeans-init.tgz",
+        "sha256": "e43cf171fee821bb7873c8a94510bd30d6181910cbfe4b7f295cfc440ce02339",
+        "bytes": 2241370,
+        "status": "R2 PUT and GET verified",
+        "freeze": "146",
+        "report": "146/x-cluster-kmeans-init/x-cluster-kmeans-init/verify.json",
+        "launch": "146/x-cluster-kmeans-init/x-cluster-kmeans-init/verifier-run.json"
+      },
+      "nvidia_column_sha256": "96a3bea9b7435e1dd856b553de0b5d8fcf9c1397f39c113fbb0430cc6d705ac5",
+      "diff_sha256": "20532dc8f97d60e64897c64b5866256a951c9562a7c6e97fe723b988afcc24c8"
+    }
+  ],
+  "retention": {
+    "key": "verification/0.8.63/nvidia-amd-repair-comparison-20261030/latest-five.tgz",
+    "sha256": "419e3a8c6e4528b59b0b28eea33d27edc0f784ec7ca6cbf3f7f407d01eb1a6c5",
+    "bytes": 14569728,
+    "status": "R2 PUT and GET verified",
+    "mac_verified": true,
+    "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/latest-five-vendor-comparison.tgz"
+  }
+}
