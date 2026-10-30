@@ -72,3 +72,16 @@ def test_only_cpu_cooperative_refusal_is_inapplicable_to_gpu(vendor):
     assert result['applicable_passed']==0
     for bad_node,bad_reason in ((node+'[other]',reason),(node,reason+' other')):
         assert not q.test_scope_summary(summary(filename,bad_node,bad_reason),[filename],vendor,interpreter=PY311)['complete']
+
+
+@pytest.mark.parametrize('filename,node,reason',[(f,n,r) for f,rows in policy.PRE_PY312.items() for n,r in rows.items()])
+@pytest.mark.parametrize('vendor',['cpu','metal','cuda','hip'])
+def test_each_buffer_exporter_limitation_is_exact(filename,node,reason,vendor):
+    tests=summary(filename,node,reason)
+    assert q.test_scope_summary(tests,[filename],vendor,interpreter=PY311)['complete']
+    for identity in (None,dict(PY311,version='3.12.0'),dict(PY311,implementation='pypy')):
+        assert not q.test_scope_summary(tests,[filename],vendor,interpreter=identity)['complete']
+    for n,r in ((node+'[other]',reason),(node,reason+' other')):
+        assert not q.test_scope_summary(summary(filename,n,r),[filename],vendor,interpreter=PY311)['complete']
+    tests['cases'][0]['outcome']='failed';tests['failures']=[dict(name=node)];tests['skipped']=[]
+    assert not q.test_scope_summary(tests,[filename],vendor,interpreter=PY311)['complete']

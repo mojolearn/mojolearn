@@ -32,6 +32,9 @@ CPU = {
     },
 }
 PRE_PY312 = {
+    "test_robust_scaler_native_lifecycle.py": {
+        "test_quantile_storage_refuses_before_element_or_exporter_hooks[foreign_buffer]": "Python-defined buffer exporters require Python 3.12",
+    },
     "test_samba_native_admission.py": {
         "test_python_buffer_exporter_is_refused_before_buffer_callback": "Python-defined buffer exporters require Python 3.12",
     },
