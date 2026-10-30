@@ -112,7 +112,7 @@ def worker(a):
                 finite_logits=bool(np.isfinite(logits).all()),reference='same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle')
         except BaseException as exc:
             rec['quality']=dict(status='failed',error=repr(exc));(dest/'quality-error.log').write_text(traceback.format_exc())
-        rec['status']='measured';rec['qualification']='NVIDIA-only one-sample full-workload A/B; completed route witness is required by controller; AMD/Apple and independent quality pending, no default promotion'
+        rec['status']='measured' if rec['quality'].get('status')=='scored' and rec['quality'].get('finite_logits') and np.isfinite(rec['quality']['mean_model_nll']) else 'failed-quality';rec['qualification']='NVIDIA-only one-sample full-workload A/B; completed route witness is required by controller; AMD/Apple and independent quality pending, no default promotion'
     except BaseException as exc:
         rec.update(status='failed',error=repr(exc));(dest/'error.log').write_text(traceback.format_exc())
     write(dest/'result.json',rec)
