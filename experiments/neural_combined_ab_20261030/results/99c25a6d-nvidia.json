@@ -1,0 +1,1992 @@
+{
+  "schema": "mojolearn.combined-generation-summary.v1",
+  "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+  "vendor": "nvidia",
+  "gpu": "L40S",
+  "numeric_mode": "identical",
+  "scope": "Two saved full checkpoint generation workloads, 128 prompt plus128 generated tokens, read128/read1; model load measured separately",
+  "samples": {
+    "excluded_warmup": 1,
+    "scored": 1,
+    "noise_estimate": false
+  },
+  "coverage": {
+    "smoke": {
+      "expected": 44,
+      "recorded": 44,
+      "measured": 40,
+      "failed": 0,
+      "pending": 0,
+      "unsupported": 4,
+      "complete": false,
+      "supported_complete": true,
+      "status_counts": {
+        "measured": 40,
+        "unsupported": 4
+      }
+    },
+    "full": {
+      "expected": 44,
+      "recorded": 44,
+      "measured": 40,
+      "failed": 0,
+      "pending": 0,
+      "unsupported": 4,
+      "complete": false,
+      "supported_complete": true,
+      "status_counts": {
+        "measured": 40,
+        "unsupported": 4
+      }
+    }
+  },
+  "prerequisites": {
+    "installed_tests": 43,
+    "failures": 0,
+    "skips": 0,
+    "concurrency": {
+      "legacy/independent-streams": "public-call-overlap-outputs-pass",
+      "legacy/same-stream": "native-busy-admission-observed",
+      "resident/independent-streams": "public-call-overlap-outputs-pass",
+      "resident/same-stream": "native-busy-admission-observed"
+    }
+  },
+  "retention": {
+    "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/final-bundle.tgz",
+    "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/fixed-final-bundle.tgz",
+    "bytes": 5226530399,
+    "sha256": "14679f69db6780a061a5a41a5f5260fe9dc43d037c6b271da8ef980d851f8f5b",
+    "status": "R2 object downloaded to Mac; aggregate SHA computed; per-cell receipts inside retained archive"
+  },
+  "within_vendor_policy_outputs": [
+    {
+      "model": "mojolearn-162m",
+      "sampling_policy": 0,
+      "measured_configurations": 8,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "scope": "Same NVIDIA frozen install only, all executed routes and both read sizes; not cross-vendor identity"
+    },
+    {
+      "model": "mojolearn-162m",
+      "sampling_policy": 1,
+      "measured_configurations": 10,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "scope": "Same NVIDIA frozen install only, all executed routes and both read sizes; not cross-vendor identity"
+    },
+    {
+      "model": "smollm2-135m",
+      "sampling_policy": 0,
+      "measured_configurations": 8,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "scope": "Same NVIDIA frozen install only, all executed routes and both read sizes; not cross-vendor identity"
+    },
+    {
+      "model": "smollm2-135m",
+      "sampling_policy": 1,
+      "measured_configurations": 14,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "scope": "Same NVIDIA frozen install only, all executed routes and both read sizes; not cross-vendor identity"
+    }
+  ],
+  "quality_scope": "Finite teacher-forced same-model logits/NLL for40 full supported cells; no independent quality oracle",
+  "promotion": "none; AMD, Apple within-release identity and full quality/default evidence remain pending",
+  "cpython_scope": "Native token loops and actual route witnesses validated; Python callback admission checked in installed prerequisites. Direct CPython C API calls remain allowed. No count of C API/GIL transitions or absolute CPython-free claim.",
+  "rows": [
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "legacy-s0-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 8141.550636966713,
+      "scored_ms": 6947.684870916419,
+      "ratio_to_same_model_read_legacy_s0_k0": 1.0,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1151.5387010294944,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "off",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/legacy-s0-k0-e0-f1.tgz",
+        "sha256": "6a022795e25531f90c24d1df79b0bf5cdee1dc0fbe032746b437662884a12ca9",
+        "bytes": 63305164,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "legacy-s0-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 8129.797019995749,
+      "scored_ms": 6982.681613066234,
+      "ratio_to_same_model_read_legacy_s0_k0": 1.0050371804133367,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1151.8709589727223,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "no_resident_forward",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/legacy-s0-k1-e0-f1.tgz",
+        "sha256": "f2c45659e7b4b992b25d6834a84dbacae034b504d65b6c8ccfb556f507f5b1e7",
+        "bytes": 63305221,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "legacy-s1-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 7769.591736025177,
+      "scored_ms": 6490.84728397429,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.9342460696721452,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1153.0751759419218,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "off",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/legacy-s1-k0-e0-f1.tgz",
+        "sha256": "b31a05df20e8fa3ae63656e8cd65554b04f04bbf4d5030bd980d545ea04d9327",
+        "bytes": 63305250,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "legacy-s1-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 9234.96312100906,
+      "scored_ms": 7349.559004069306,
+      "ratio_to_same_model_read_legacy_s0_k0": 1.0578428844456036,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1172.9894389864057,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "no_resident_forward",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/legacy-s1-k1-e0-f1.tgz",
+        "sha256": "b98e590bf0f171c80ab8ea84efd297c2d9abc5764636207a3a041971816942f2",
+        "bytes": 63305265,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "resident-s1-k0-e0-f1",
+      "status": "unsupported",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "resident"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537"
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "resident-s1-k1-e0-f1",
+      "status": "unsupported",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "resident"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537"
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "native_engine-s0-k0-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 0,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 7229.789023054764,
+      "scored_ms": 5881.512197083794,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.846542741410781,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1144.5950280176476,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/native_engine-s0-k0-e1-f0.tgz",
+        "sha256": "63db46a5ffe4ba9dd0176ed3a78393b56797a89ccd443830a418e574ec2bfc87",
+        "bytes": 63305250,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "native_engine-s0-k1-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 8072.98073801212,
+      "scored_ms": 6229.06979394611,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.8965676926455759,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1157.6078630750999,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/native_engine-s0-k1-e1-f0.tgz",
+        "sha256": "cab73085513d7a9e0f491b729791d1b83e20321fb1ab1241f0ef0a90051247fe",
+        "bytes": 63305303,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "native_engine-s1-k0-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 6813.405481050722,
+      "scored_ms": 5416.775644989684,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.7796518906124763,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1153.6476939218119,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/native_engine-s1-k0-e1-f0.tgz",
+        "sha256": "e948e4d89302d0ad88599650a818e82a597c591dddbbd8c3c0dcbd1d5fe7eafc",
+        "bytes": 63305298,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "native_engine-s1-k1-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 6743.708512047306,
+      "scored_ms": 5478.400810039602,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.7885217755014536,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1131.9709459785372,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/native_engine-s1-k1-e1-f0.tgz",
+        "sha256": "44c8960f0601d6fad76c0e7e55eb8d96f5e5d8d242414c82bf93cf0612563305",
+        "bytes": 63305317,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 128,
+      "case": "complete-auto-s1-k1-e1-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 1,
+        "route": "auto"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 6668.852825998329,
+      "scored_ms": 5584.027540055104,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.8037249305060313,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1217.6163530675694,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "auto",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/complete-auto-s1-k1-e1-f1.tgz",
+        "sha256": "50d3f962a841c3bbe419b03787c4ab49b7c8b81b8e262e7cf8d3ea69e537d5c2",
+        "bytes": 63305327,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "legacy-s0-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 10155.141295981593,
+      "scored_ms": 9223.054111003876,
+      "ratio_to_same_model_read_legacy_s0_k0": 1.0,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1245.039086905308,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "off",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/legacy-s0-k0-e0-f1.tgz",
+        "sha256": "117e343a7c8cf21c548067e7777078fd165c0c1a03fcb6f9ee3dd8db74d6da8e",
+        "bytes": 63306750,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "legacy-s0-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 10649.564948049374,
+      "scored_ms": 8653.875554096885,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.9382874099992634,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1186.7354229325429,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "single_step",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/legacy-s0-k1-e0-f1.tgz",
+        "sha256": "f6bad94c1f629cd6e02013f79f292a4f27734ebad26c4570b0bebc2778731604",
+        "bytes": 63306768,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "legacy-s1-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 10846.560589037836,
+      "scored_ms": 8795.667199068703,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.9536610208731982,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1202.71461608354,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "off",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/legacy-s1-k0-e0-f1.tgz",
+        "sha256": "c0c3c52932e17c66ddcdb68d5af52968f30307079b2e63d79bbcf7780934ca1f",
+        "bytes": 63306822,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "legacy-s1-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 10805.43171102181,
+      "scored_ms": 8790.154861984774,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.9530633514875928,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1195.1992249814793,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "single_step",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/legacy-s1-k1-e0-f1.tgz",
+        "sha256": "d927195c114e87b6dc9be928a1077782ca8cf16a02947f044d74d8347f726b20",
+        "bytes": 63306908,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "resident-s1-k0-e0-f1",
+      "status": "unsupported",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "resident"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537"
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "resident-s1-k1-e0-f1",
+      "status": "unsupported",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "resident"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537"
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "native_engine-s0-k0-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 0,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 9990.039003896527,
+      "scored_ms": 8330.347852082923,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.9032092571314442,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1197.9847330367193,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/native_engine-s0-k0-e1-f0.tgz",
+        "sha256": "90cb98b515c5a2a006dc954f150b1842a899e8b6cc5aabc7b92867887ae38a1d",
+        "bytes": 63306937,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "native_engine-s0-k1-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 8881.740303942934,
+      "scored_ms": 7794.969366048463,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.8451614044797169,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1136.3308290019631,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/native_engine-s0-k1-e1-f0.tgz",
+        "sha256": "8381b730091021dbbc744e69ec3ef035a8dc784423ca8435363f09fbffb99677",
+        "bytes": 63306915,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "native_engine-s1-k0-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 8550.83199904766,
+      "scored_ms": 7346.38931194786,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.7965245810694098,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1156.70599299483,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/native_engine-s1-k0-e1-f0.tgz",
+        "sha256": "33bd668779d85da0e40a7c1b11a4eb9978113719eb349a32d3a8260faca562c0",
+        "bytes": 63306974,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "native_engine-s1-k1-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 8552.74146492593,
+      "scored_ms": 8717.699122033082,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.9452074136301701,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1161.1120860325173,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/native_engine-s1-k1-e1-f0.tgz",
+        "sha256": "dfb705165a79ca7dca419da6ef969f43cb9d2bc1cfb49d27630e2867bfb424bc",
+        "bytes": 63306989,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "mojolearn-162m",
+      "read_chunk": 1,
+      "case": "complete-auto-s1-k1-e1-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 1,
+        "route": "auto"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 8503.997399006039,
+      "scored_ms": 7352.59224998299,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.7971971281411796,
+      "output_sha256": "aa4eeecfffef432bfa5d93ba1e508c1595d9a45f89309d92ebabd8d6796de811",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 2.124662047156862,
+        "max_model_nll": 6.502602565312948,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 1145.3038239851594,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "auto",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/complete-auto-s1-k1-e1-f1.tgz",
+        "sha256": "cc69b772a2fb519b8a6f933f7bdca025933708f6176f43264013214b7f60a495",
+        "bytes": 63306933,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "legacy-s0-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 5151.09137701802,
+      "scored_ms": 4040.482816984877,
+      "ratio_to_same_model_read_legacy_s0_k0": 1.0,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2630.0046500982717,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "off",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/legacy-s0-k0-e0-f1.tgz",
+        "sha256": "2c47f4186fdcb796acfc9c6cb7b4ddd0ab62cbf37f842e74d4807d8fdf050acc",
+        "bytes": 53257336,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "legacy-s0-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 4461.342803901061,
+      "scored_ms": 3323.128788964823,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.8224583396309642,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2669.343182002194,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "reused",
+        "kv_uploads_skipped": "127"
+      },
+      "retained_kv_observed": true,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/legacy-s0-k1-e0-f1.tgz",
+        "sha256": "0b9301aa55d0329f80b27cc507d9ac4567f49e564e0288bbb537199f59e0c1db",
+        "bytes": 53257348,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "legacy-s1-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 4744.5805330062285,
+      "scored_ms": 3614.148095017299,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.894484213575812,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2669.120516977273,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "off",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/legacy-s1-k0-e0-f1.tgz",
+        "sha256": "b35893b8cddbb6c179511d0b7239991b91171df911bd2f3748c592b942e60338",
+        "bytes": 53257375,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "legacy-s1-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 3992.986552999355,
+      "scored_ms": 2853.6882620537654,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.7062740744887683,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2697.7036900352687,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "reused",
+        "kv_uploads_skipped": "127"
+      },
+      "retained_kv_observed": true,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/legacy-s1-k1-e0-f1.tgz",
+        "sha256": "47053140c0065c03cfcfac695aaf834ef9787a5128c1d4d11da1efb02ae674f0",
+        "bytes": 53257350,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "resident-s1-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "resident"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 16507.964117918164,
+      "scored_ms": 15389.381121029146,
+      "ratio_to_same_model_read_legacy_s0_k0": 3.808797566552489,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2710.6259509455413,
+      "actual_routes": [
+        "resident_sampling"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "resident",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "already_resident",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/resident-s1-k0-e0-f1.tgz",
+        "sha256": "9e26c25ab30d683fd7e7ecd085244cc190f272fd2316d3e06cf757f8f592abf6",
+        "bytes": 53257316,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "resident-s1-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "resident"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 16466.473796986975,
+      "scored_ms": 15395.761455991305,
+      "ratio_to_same_model_read_legacy_s0_k0": 3.8103766686675478,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2793.8617951003835,
+      "actual_routes": [
+        "resident_sampling"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "resident",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "already_resident",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/resident-s1-k1-e0-f1.tgz",
+        "sha256": "b11c3d6856de26c462427e3abf4b54b4be685a5d983d74152760c82f0ea0c7ef",
+        "bytes": 53257342,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "native_engine-s0-k0-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 0,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 9592.04618493095,
+      "scored_ms": 8638.666234910488,
+      "ratio_to_same_model_read_legacy_s0_k0": 2.1380282075687447,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2701.9278779625893,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/native_engine-s0-k0-e1-f0.tgz",
+        "sha256": "387364bb0d4434e57df0e37b7191701f2c01b3559852ee25d02702c0cab1550f",
+        "bytes": 53257367,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "native_engine-s0-k1-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 9050.63669104129,
+      "scored_ms": 8224.607394076884,
+      "ratio_to_same_model_read_legacy_s0_k0": 2.0355506424883942,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2702.343682060018,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/native_engine-s0-k1-e1-f0.tgz",
+        "sha256": "5479e5a75f8582be16afca998feb75f4086e54227a2c8df157617a6d61dbe6d0",
+        "bytes": 53257351,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "native_engine-s1-k0-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 8613.73279907275,
+      "scored_ms": 7702.239855076186,
+      "ratio_to_same_model_read_legacy_s0_k0": 1.9062671972513958,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2727.1381489699706,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/native_engine-s1-k0-e1-f0.tgz",
+        "sha256": "3c5ef9d76dd50327a39b442b1c2684ace301a79413ef00aed2a080e8056e25d4",
+        "bytes": 53257411,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "native_engine-s1-k1-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 8653.174296021461,
+      "scored_ms": 7701.12631295342,
+      "ratio_to_same_model_read_legacy_s0_k0": 1.9059916009493685,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2723.4437849838287,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/native_engine-s1-k1-e1-f0.tgz",
+        "sha256": "240871a2af3efd4a415eb430db295b1b418ffaba0d1050595727de9538bb1dfa",
+        "bytes": 53257417,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 128,
+      "case": "complete-auto-s1-k1-e1-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 1,
+        "route": "auto"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 16529.806514969096,
+      "scored_ms": 15391.784908017144,
+      "ratio_to_same_model_read_legacy_s0_k0": 3.8093924922326314,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2750.6593860452995,
+      "actual_routes": [
+        "resident_sampling"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "auto",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "already_resident",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/complete-auto-s1-k1-e1-f1.tgz",
+        "sha256": "86f1955f3be163de177ab04450b795c1454fcc48a7a16612d3218922e1c7551e",
+        "bytes": 53257337,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "legacy-s0-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 5804.439216037281,
+      "scored_ms": 4660.507311928086,
+      "ratio_to_same_model_read_legacy_s0_k0": 1.0,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2712.3706289567053,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "off",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/legacy-s0-k0-e0-f1.tgz",
+        "sha256": "b8a0aa85d1aa41d3fd7a2dbaa9daa9ce44f4bac8a48286b93db828c2ecedac56",
+        "bytes": 53259022,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "legacy-s0-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 5800.274980021641,
+      "scored_ms": 4671.049816999584,
+      "ratio_to_same_model_read_legacy_s0_k0": 1.002262093880749,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2727.9502670280635,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "single_step",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/legacy-s0-k1-e0-f1.tgz",
+        "sha256": "0ad697967ed3669f1d5c9a32a1c84949ce8be9cc1e1758d8fc5af313a7d5d71a",
+        "bytes": 53259064,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "legacy-s1-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 5479.186026961543,
+      "scored_ms": 4255.862588062882,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.9131758204027366,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2709.6276079537347,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "off",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/legacy-s1-k0-e0-f1.tgz",
+        "sha256": "4f490792ddac95f0fbb38dd3a4023e973c3d38a1f7a96b5bc8e0b3df386f57f0",
+        "bytes": 53259049,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "legacy-s1-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "legacy"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 5382.656308007427,
+      "scored_ms": 4250.793325016275,
+      "ratio_to_same_model_read_legacy_s0_k0": 0.9120881141280069,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2719.5580329280347,
+      "actual_routes": [
+        "legacy_forward"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "legacy",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "single_step",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/legacy-s1-k1-e0-f1.tgz",
+        "sha256": "b10c37dbb98f35ab566042e19bde74f662793bf8ab6feca9ef0cb27511294ed8",
+        "bytes": 53259094,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "resident-s1-k0-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "resident"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 18806.115756044164,
+      "scored_ms": 17686.638682964258,
+      "ratio_to_same_model_read_legacy_s0_k0": 3.795002882561119,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2758.1447060219944,
+      "actual_routes": [
+        "resident_sampling"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "resident",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "already_resident",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/resident-s1-k0-e0-f1.tgz",
+        "sha256": "58b9507ff60e24bac288ac5ad2cfbb3c5a336deb0f465a3ccdcc81733dbf9db6",
+        "bytes": 53259029,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "resident-s1-k1-e0-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 0,
+        "resident_forward": 1,
+        "route": "resident"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 18781.36690496467,
+      "scored_ms": 17678.69361094199,
+      "ratio_to_same_model_read_legacy_s0_k0": 3.7932981170730504,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2729.7084379242733,
+      "actual_routes": [
+        "resident_sampling"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "resident",
+        "engine_requested": "0",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "already_resident",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/resident-s1-k1-e0-f1.tgz",
+        "sha256": "4041dcf3f889f4327ed4d410f5540814f64766d31507c23a24ef9ed3ab01791e",
+        "bytes": 53259026,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "native_engine-s0-k0-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 0,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 13372.427080990747,
+      "scored_ms": 12437.651593005285,
+      "ratio_to_same_model_read_legacy_s0_k0": 2.668733414744872,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2754.460591939278,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/native_engine-s0-k0-e1-f0.tgz",
+        "sha256": "9efba74f26a71c00c19f72f019a13d0829270809b7488239e566ecdd4ba0ffde",
+        "bytes": 53259133,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "native_engine-s0-k1-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 0,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 13194.401664892212,
+      "scored_ms": 12356.729988008738,
+      "ratio_to_same_model_read_legacy_s0_k0": 2.651370153713302,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2700.926020042971,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "0",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/native_engine-s0-k1-e1-f0.tgz",
+        "sha256": "dc76e721eb930ab4bf2b152be2a1911ec671b391351e55573e9e87769e807a48",
+        "bytes": 53259096,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "native_engine-s1-k0-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 0,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 12859.512966009788,
+      "scored_ms": 11996.491394005716,
+      "ratio_to_same_model_read_legacy_s0_k0": 2.574074149245928,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2715.8979260129854,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "0",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/native_engine-s1-k0-e1-f0.tgz",
+        "sha256": "ebad6c85c490533e9b0c23ec8567fd27ae3f9ca088db90adb68a5c9f4a55287b",
+        "bytes": 53259144,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "native_engine-s1-k1-e1-f0",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 0,
+        "route": "native_engine"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 12905.266352929175,
+      "scored_ms": 11989.891542005353,
+      "ratio_to_same_model_read_legacy_s0_k0": 2.572658026159184,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2747.720380080864,
+      "actual_routes": [
+        "native_engine"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "native_engine",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "inapplicable_engine",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/native_engine-s1-k1-e1-f0.tgz",
+        "sha256": "5a755cbf24f1518515802955a0c5404b02b64bcf7da372c2f120e6a0ad58bbeb",
+        "bytes": 53259137,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "model_key": "smollm2-135m",
+      "read_chunk": 1,
+      "case": "complete-auto-s1-k1-e1-f1",
+      "status": "measured",
+      "requested_flags": {
+        "sampler": 1,
+        "kv_reuse": 1,
+        "native_engine": 1,
+        "resident_forward": 1,
+        "route": "auto"
+      },
+      "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+      "warmup_ms": 18939.998443005607,
+      "scored_ms": 17662.069343030453,
+      "ratio_to_same_model_read_legacy_s0_k0": 3.789731065934864,
+      "output_sha256": "06781bb2bf15a6fb07687e3e4120fb3c658a13c3644ad3f01a6bb6a22e29eb7c",
+      "quality": {
+        "status": "scored",
+        "mean_model_nll": 0.984765503189004,
+        "max_model_nll": 6.337521289515969,
+        "finite_logits": true,
+        "reference": "same frozen model teacher-forced full-prefix logits, untimed; not an independent quality oracle"
+      },
+      "model_load_ms": 2755.092381965369,
+      "actual_routes": [
+        "resident_sampling"
+      ],
+      "route_witness_validated": true,
+      "route_applicability": {
+        "requested_route": "auto",
+        "engine_requested": "1",
+        "sampling_policy": "1",
+        "greedy": "0",
+        "kv_requested": "1",
+        "kv_policy": "already_resident",
+        "kv_uploads_skipped": "0"
+      },
+      "retained_kv_observed": false,
+      "retention": {
+        "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/complete-auto-s1-k1-e1-f1.tgz",
+        "sha256": "32501d27498971d62c977451a6386a182b053f1a26a5e4ec300b82a4314f6c61",
+        "bytes": 53259108,
+        "status": "R2 PUT and GET verified"
+      }
+    }
+  ]
+}

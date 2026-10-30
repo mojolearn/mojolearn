@@ -1,0 +1,50 @@
+{
+  "prerequisites": {
+    "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/prerequisites.tgz",
+    "sha256": "8ece2560f38ac44134bde7bf6435421ad2bc7cc442e5c65dd69be2e43a62af36",
+    "bytes": 16365041,
+    "status": "R2 PUT and GET verified"
+  },
+  "installed_package": {
+    "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/installed-package.tgz",
+    "sha256": "e5c69b2b175ca1c68e7842fda805d9a20fea304e58be499a1ea82e2c4926d437",
+    "bytes": 106258635,
+    "status": "R2 PUT and GET verified"
+  },
+  "source": {
+    "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/source-freeze.tgz",
+    "sha256": "5c3596ea144bef977a3d766450a7f29c1547ef931c90c09e7f2cf11abc521045",
+    "bytes": 153800739,
+    "status": "R2 PUT and GET verified"
+  },
+  "local": [
+    {
+      "label": "prerequisites",
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/fixed-prerequisites.tgz",
+      "sha256": "8ece2560f38ac44134bde7bf6435421ad2bc7cc442e5c65dd69be2e43a62af36",
+      "bytes": 16365041,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/prerequisites.tgz"
+    },
+    {
+      "label": "installed-package",
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/fixed-installed-package.tgz",
+      "sha256": "e5c69b2b175ca1c68e7842fda805d9a20fea304e58be499a1ea82e2c4926d437",
+      "bytes": 106258635,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/installed-package.tgz"
+    },
+    {
+      "label": "source-freeze",
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/fixed-source-freeze.tgz",
+      "sha256": "5c3596ea144bef977a3d766450a7f29c1547ef931c90c09e7f2cf11abc521045",
+      "bytes": 153800739,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/source-freeze.tgz"
+    }
+  ],
+  "aggregate": {
+    "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/final-bundle.tgz",
+    "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/fixed-final-bundle.tgz",
+    "bytes": 5226530399,
+    "sha256": "14679f69db6780a061a5a41a5f5260fe9dc43d037c6b271da8ef980d851f8f5b",
+    "status": "R2 object downloaded to Mac; aggregate SHA computed; per-cell receipts inside retained archive"
+  }
+}
