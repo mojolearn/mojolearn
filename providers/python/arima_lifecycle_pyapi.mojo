@@ -167,6 +167,13 @@ def arima_parameter(model: PythonObject, args: PythonObject, context: PythonObje
         dims.append(Int64(offset))
         dims.append(0)
         _ = py_call_typed(context["base_strided_copy_bytes"], source.source.addr, classical_address(result), Int(dims.unsafe_ptr()), 2, 4)
+        # The integer address does not retain the native dimension buffer.
+        # Keep its owner through the indirect compiled copy, as array_native's
+        # strided-copy boundary does for its metadata buffer. The installed
+        # 47508 CPU ARIMA fit returned successfully, but parameter extraction
+        # crashed in this path; retained public/direct-entry reproductions:
+        # ~/mojolearn-evidence/arima-cpu-repair-20261029/.
+        _ = dims
     _ = source
     return result
 
