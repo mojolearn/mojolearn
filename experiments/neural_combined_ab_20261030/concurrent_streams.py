@@ -53,7 +53,7 @@ def run(args):
         reference_info.append(serial.info());serial_state=serial.state_dict();reference_checksums.append(serial_state['checksum']);retain_state('serial-'+str(i),serial_state)
         np.save(out/f'prompt-{i}.npy',prompts[i]);np.save(out/f'serial-{i}.npy',references[-1])
     results=[]
-    for kind in ('independent-streams','same-stream'):
+    for kind in (('independent-streams','same-stream') if args.kind=='both' else (args.kind,)):
         if fields.get('_resident_busy',False):raise RuntimeError('owner busy after completed serial reference')
         first=stream(0);second=stream(1) if kind=='independent-streams' else first
         entered=threading.Event();finished=threading.Event();records={}
@@ -115,7 +115,7 @@ def run(args):
 
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--route',required=True,choices=('legacy','resident'));p.add_argument('--checkpoint',required=True);p.add_argument('--out',required=True)
+    p=argparse.ArgumentParser();p.add_argument('--route',required=True,choices=('legacy','resident'));p.add_argument('--checkpoint',required=True);p.add_argument('--out',required=True);p.add_argument('--kind',choices=('both','independent-streams','same-stream'),default='both')
     a=p.parse_args()
     try:raise SystemExit(run(a))
     except Exception:

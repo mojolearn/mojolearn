@@ -1,0 +1,124 @@
+{
+  "source_commit": "aea1d9a033431701e981d62d116e9c1e0867bbd6",
+  "installed_checks": {
+    "passed": 32,
+    "failed": 0,
+    "skipped": 0
+  },
+  "concurrency": [
+    {
+      "route": "legacy",
+      "cases": [
+        {
+          "kind": "independent-streams",
+          "status": "failed-ownership-recovery",
+          "records": {
+            "first": {
+              "status": "returned",
+              "start_ns": 896087845881182,
+              "end_ns": 896088535942844,
+              "shape": [
+                1,
+                16
+              ],
+              "matches_serial": true
+            },
+            "second": {
+              "status": "returned",
+              "start_ns": 896087861785660,
+              "end_ns": 896089551611235,
+              "shape": [
+                1,
+                16
+              ],
+              "matches_serial": true,
+              "native_model_busy_observed": true,
+              "owner_finished_before_attempt": false
+            }
+          },
+          "public_call_intervals_overlap": true,
+          "native_busy_refusal_during_owner": false,
+          "owner_info_after": {
+            "done": true,
+            "generated_tokens": 16,
+            "lengths": [
+              16
+            ],
+            "usable": true
+          },
+          "owner_checkpoint_schema": "mojolearn.generation.v2",
+          "owner_checkpoint_checksum": "a50412e3403839bd49931961a0ee71dfa049fe5fb5070631bcdb31b4a4b27ebe",
+          "owner_checkpoint_matches_serial": true,
+          "owner_info_matches_serial": true,
+          "fresh_stream_recovery_matches": true,
+          "model_busy_after": true,
+          "limitation": "No native instrumentation added; public-call overlap and busy ownership evidence do not prove simultaneous GPU kernel execution. Unobserved overlap is not a concurrency pass."
+        }
+      ]
+    },
+    {
+      "route": "resident",
+      "cases": [
+        {
+          "kind": "independent-streams",
+          "status": "failed-ownership-recovery",
+          "records": {
+            "first": {
+              "status": "returned",
+              "start_ns": 896117344051168,
+              "end_ns": 896121280269118,
+              "shape": [
+                1,
+                16
+              ],
+              "matches_serial": true
+            },
+            "second": {
+              "status": "returned",
+              "start_ns": 896117363317663,
+              "end_ns": 896121396197747,
+              "shape": [
+                1,
+                16
+              ],
+              "matches_serial": true,
+              "native_model_busy_observed": true,
+              "owner_finished_before_attempt": false
+            }
+          },
+          "public_call_intervals_overlap": true,
+          "native_busy_refusal_during_owner": false,
+          "owner_info_after": {
+            "done": true,
+            "generated_tokens": 16,
+            "lengths": [
+              16
+            ],
+            "usable": true
+          },
+          "owner_checkpoint_schema": "mojolearn.generation.v2",
+          "owner_checkpoint_checksum": "a50412e3403839bd49931961a0ee71dfa049fe5fb5070631bcdb31b4a4b27ebe",
+          "owner_checkpoint_matches_serial": true,
+          "owner_info_matches_serial": true,
+          "fresh_stream_recovery_matches": true,
+          "model_busy_after": true,
+          "limitation": "No native instrumentation added; public-call overlap and busy ownership evidence do not prove simultaneous GPU kernel execution. Unobserved overlap is not a concurrency pass."
+        }
+      ]
+    }
+  ],
+  "performance": {
+    "executed": 0,
+    "unexecuted": 88,
+    "reason": "Correctness gate: shared model busy owner remains set after actual overlapping reads;44smoke+44full requests pending repair"
+  },
+  "retention": {
+    "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/aea1d9a/final-bundle.tgz",
+    "sha256": "28658c4f78e781628c941c2739c687870c03c78e6efe76a4f555ca3127cde224",
+    "bytes": 306729368,
+    "mac": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/aea-original-failure.tgz",
+    "mac_verified": true,
+    "r2_readback_verified": true
+  },
+  "qualification": "failed; no defaults promoted; no cross-vendor identity claim"
+}
