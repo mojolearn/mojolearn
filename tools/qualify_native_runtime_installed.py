@@ -566,6 +566,28 @@ def installed_module_inventory(modules, prefix, payload, tests, native_artifacts
     prefix, tests = Path(prefix).resolve(), Path(tests).resolve()
     found = {}
     candidates = dict(modules)
+    observed = {}
+
+    def fingerprint(path):
+        stat = path.stat()
+        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+    def observed_digest(path):
+        # A native extension may appear through many module aliases. Hash its
+        # actual bytes once in this observation, preserving every alias/path/
+        # wheel/witness check. No hash survives into the next test teardown.
+        # Require a stable filesystem snapshot, including ctime and inode,
+        # rather than trusting a restored size or mtime after a mutation.
+        path = Path(path).resolve()
+        before = fingerprint(path)
+        if path in observed:
+            prior, value = observed[path]
+            require(before == prior, "installed product changed during inventory: " + str(path))
+            return value
+        value = digest(path)
+        require(fingerprint(path) == before, "installed product changed while hashing: " + str(path))
+        observed[path] = (before, value)
+        return value
     backend = modules.get("mojolearn._backend")
     placeholders = tuple(value for key in ("_HostBinding", "_NoGpuBinding", "_MissingUpperTier", "_IdenticalOnlyTier")
                          if isinstance(value := vars(backend).get(key) if backend else None, type))
@@ -577,7 +599,7 @@ def installed_module_inventory(modules, prefix, payload, tests, native_artifacts
         at = path.parts.index("site-packages")
         member = PurePosixPath(*path.parts[at + 1:]).as_posix()
         require(member in payload, "loaded product file absent from wheel: " + member)
-        require(digest(path) == payload[member]["sha256"], "installed product bytes differ: " + member)
+        require(observed_digest(path) == payload[member]["sha256"], "installed product bytes differ: " + member)
         row = dict(path=str(path), sha256=payload[member]["sha256"], native=native)
         if module:
             row.update(module=module, path_source=path_source)
@@ -591,7 +613,7 @@ def installed_module_inventory(modules, prefix, payload, tests, native_artifacts
                 "incomplete loaded native witness")
         path = Path(row["file"])
         require(path.suffix in (".so", ".dylib", ".pyd"), "native witness is not an extension")
-        require(path.stat().st_size == row["size"] and digest(path) == row["sha256"],
+        require(path.stat().st_size == row["size"] and observed_digest(path) == row["sha256"],
                 "loaded native witness bytes changed")
         admit(path, native=True, module=row["module"], path_source=row.get("path_source"))
     for name, module in list(modules.items()):
@@ -625,6 +647,8 @@ def installed_module_inventory(modules, prefix, payload, tests, native_artifacts
         admit(path, native=path.suffix in (".so", ".dylib", ".pyd"), module=actual_name,
               path_source="__file__" if file_path else "__spec__.origin")
     require("mojolearn/__init__.py" in found, "installed package was not observed")
+    for path, (before, _) in observed.items():
+        require(fingerprint(path) == before, "installed product changed during inventory: " + str(path))
     return found
 
 
