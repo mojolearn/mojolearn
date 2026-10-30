@@ -48,6 +48,10 @@ Pass the resulting complete document through the existing release packer's
 `--build-proof` argument, with the standard architecture set layout and actual
 readback files. The inventory labels its origins `compiled-group-composition`,
 retaining individual group keys, raw hashes and original producer references.
+It explicitly records `host_binding_layout: per-binding`: the common host can
+use its registered individual groups while the GPU uses its registered merged
+groups. This shape is enabled only for explicit group composition; ordinary
+mixed-layout and incomplete-host refusals remain in place.
 The ordinary source, loader, dependency, adapter and release qualification gates
 continue to apply. Qualification wheels remain non-publishable until those
 independent gates pass.

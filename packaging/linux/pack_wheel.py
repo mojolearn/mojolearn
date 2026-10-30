@@ -688,6 +688,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     n_composed = sum(1 for o in origin.values() if o['origin'] == 'retained-composition')
     n_groups = sum(1 for o in origin.values() if o['origin'] == 'compiled-group-composition')
     return dict(schema='mojolearn.linux-payload.v1', version=version,
+                **({'host_binding_layout': 'per-binding'} if group_keys else {}),
                 **({'host_composition': composition} if composition is not None else {}),
                 release_profile='alpha-api', assembly_profile=profile, release_modes=list(modes),
                 source_commit=commit, source_inventory=inventory,
@@ -997,7 +998,7 @@ def host_witnesses(set_paths):
     return out
 
 
-def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
+def load_set(path, include_byte_lm=False, host_witnesses_by_name=None, allow_independent_host=False):
     """Every (vendor, arch, files, libs, manifest) under one sets/<vendor>
     directory. One tuple per architecture subdirectory. `host_witnesses_by_name`
     (see `host_witnesses`) lets a set that reuses every GPU binding carry a
@@ -1197,7 +1198,10 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
             host_payload = {n: host_dir / f for f, m in hfiles.items() for n in m}
             indexes[f"host/{MERGED_INDEX}"] = host_dir / MERGED_INDEX
             host_layout = "merged"
-        kinds = {kind for kind, _ in tier_layouts.values()} | ({host_layout} if host_layout else set())
+        device_kinds = {kind for kind, _ in tier_layouts.values()}
+        independent_host = (allow_independent_host and device_kinds == {'merged'}
+                            and host_layout == 'per-binding')
+        kinds = device_kinds | ({host_layout} if host_layout and not independent_host else set())
         if len(kinds) != 1:
             raise SystemExit(f"pack_wheel: {adir} mixes the merged and per-binding layouts across its "
                              "fast, identical and host directories; a set is built in one layout")
@@ -1437,7 +1441,13 @@ def main(argv=None, _gates=True):
     if a.host_composition and not strict:
         raise SystemExit('--host-composition requires an explicit release profile')
     witnesses = host_witnesses(a.set)
-    sets = [t for s in a.set for t in load_set(s, include_byte_lm=strict, host_witnesses_by_name=witnesses)]
+    from release_linux_group_composition import SCHEMA as GROUP_SCHEMA
+    # Parsing is not admission: release_inventory subsequently validates every
+    # original producer, current closure, staged byte and actual readback.
+    independent_host = (a.profile == RELEASE_SPLIT_PROFILE and any(
+        json.loads(pathlib.Path(p).read_text()).get('schema') == GROUP_SCHEMA for p in a.build_proof))
+    sets = [t for s in a.set for t in load_set(s, include_byte_lm=strict, host_witnesses_by_name=witnesses,
+                                               allow_independent_host=independent_host)]
     keys = [(s.vendor, s.arch) for s in sets]
     if len(set(keys)) != len(keys):
         raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")

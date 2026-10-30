@@ -240,6 +240,12 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
                     and '\\' not in p for p in paths), 'Invalid wheel member path')
         records = [p for p in paths if p.endswith('.dist-info/RECORD')]
         require(len(records) == 1, 'Wheel requires one RECORD')
+        payloads = [p for p in paths if p.endswith('.dist-info/LINUX_PAYLOAD.json')]
+        payload = json.loads(archive.read(payloads[0])) if len(payloads) == 1 else {}
+        independent_host = payload.get('host_binding_layout') == 'per-binding'
+        if independent_host:
+            require(payload.get('sets') and all(row.get('origin') == 'compiled-group-composition'
+                    for row in payload['sets'].values()), 'independent host layout lacks explicit group provenance')
         declared = set()
         for row in csv.reader(io.StringIO(archive.read(records[0]).decode())):
             require(len(row) == 3, 'Invalid wheel RECORD row')
@@ -300,7 +306,11 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
             kind, _ = surface.set_layout('host/', hosts, indexes, HOST_NAMES)
             require(sorted(hosts) == sorted(surface.expected_set_files('host', byte_lm, kind)),
                     'Final wheel host set differs from the merged plan')
-            layouts.append(kind)
+            if independent_host:
+                require(kind == 'per-binding' and set(layouts) == {'merged'},
+                        'independent host declaration differs from actual layouts')
+            else:
+                layouts.append(kind)
             checked.add('host/' + surface.MERGED_INDEX)
         require(set(indexes) <= checked, 'Merged index outside a binding set: ' + ','.join(sorted(set(indexes) - checked)))
         surface.one_layout(layouts)
@@ -474,7 +484,8 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
                     and record.get('supported_modes') == ['identical']
                     and record.get('sha256') == host_extensions.get(member.removeprefix('mojolearn/')),
                     'Release payload host binding differs from the wheel: ' + name)
-        require(set(host_extensions) == {'host/' + f for f in surface.expected_set_files('host', True, layout)},
+        host_layout = payload.get('host_binding_layout', layout)
+        require(set(host_extensions) == {'host/' + f for f in surface.expected_set_files('host', True, host_layout)},
                 'Release wheel host binding inventory differs from the manifest')
         for field, select in [('python_sha256', lambda n: n.endswith('.py')),
                               ('runtime_sha256', lambda n: '/.libs/' in n)]:
