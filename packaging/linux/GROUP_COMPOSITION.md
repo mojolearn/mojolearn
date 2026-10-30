@@ -59,3 +59,19 @@ independent gates pass.
 This route currently covers the retained AMD native producer described above.
 It does not treat native NVIDIA execution as PTX execution, infer physical
 multi-GPU coverage, or waive cross-vendor identity requirements.
+
+CUDA development groups can use the same composition admission through
+`release_linux_cuda_groups.py`: 33 individual images, without a fabricated
+merged index. The original compiler command, source closure, flags and every
+raw image remain required. PTX staging replays the standard rounding contract.
+Native CUDA staging additionally requires the pinned CUDA 12.5.82 tools archive
+and successful per-module assembler receipts; raw development PTX is not a
+release-native image.
+
+`cubin_contract.py patch --retention-dir DIR` retains exact PTX, cubin, fatbin,
+full assembler output, tool identities and commands. An unchanged entry can be
+reused; changed inputs, tools, flags or retained bytes are refused. This leaves
+the existing assembler flags and placement algorithm unchanged. Admission can
+replay placement from those retained outputs and independently disassemble all
+moved references, avoiding another assembler run. Actual installed loading,
+runtime and identity remain separate requirements.

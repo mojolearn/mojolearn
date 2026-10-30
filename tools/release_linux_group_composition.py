@@ -83,7 +83,7 @@ def host_environment_policy(env):
             'host compile flags differ')
 
 
-def host_groups(rows, root, revision, site, compiler, patchelf, evidence):
+def host_groups(rows, root, revision, site, compiler, patchelf, evidence, prefix=PREFIX):
     import verify_linux_surface_qualification as surface
     import release_reuse as rr
     expected = set(surface.wheel_host_bindings())
@@ -110,7 +110,7 @@ def host_groups(rows, root, revision, site, compiler, patchelf, evidence):
             evidence.file(facts[field]['path'])
         raw = Path(facts['binary']['path'])
         target = site / 'host' / (name + '.so')
-        key = PREFIX + 'host/' + target.name
+        key = prefix + 'host/' + target.name
         outputs[key] = replay(raw, target, HOST_RUNPATH, patchelf, evidence)
         origins[key] = dict(kind='development-group', key=receipt['key'],
                             raw_sha256=facts['binary']['sha256'], sha256=outputs[key],
@@ -271,14 +271,16 @@ def adapter_group(directory, root, site, compiler, patchelf, evidence):
     return {PREFIX + '_adapters': dict(files=files, manifest_sha256=files['adapters.json'])}
 
 
-def adapter_commands(capture, build):
+def adapter_commands(capture, build, vendor='hip', arch='gfx942'):
+    require((vendor, arch) in (('hip', 'gfx942'), ('cuda', 'sm_89')), 'unsupported adapter target')
     command = capture['command']
     require(len(command) == 6 and command[:2] == ['bash', 'packaging/adapters/build.sh']
-            and command[-2:] == ['hip', 'gfx942'], 'unknown adapter producer')
+            and command[-2:] == [vendor, arch], 'unknown adapter producer')
     out, logs = command[2:4]
     expected_native = ['pixi', 'run', 'mojo', 'build', '--emit', 'shared-lib', '-j',
         str(capture['compiler_workers']), '-D', 'MOJOLEARN_NUMERIC_IDENTICAL=1',
-        '--target-cpu', 'x86-64-v3', '--target-accelerator', 'gfx942', '-D', 'MOJOLEARN_COLUMN_AMD',
+        '--target-cpu', 'x86-64-v3', '--target-accelerator', arch, '-D',
+        'MOJOLEARN_COLUMN_AMD' if vendor == 'hip' else 'MOJOLEARN_COLUMN_NVIDIA',
         '-I', '.', '-I', 'bindings', 'adapters/native/c_api.mojo', '-o', out + '/libmojolearn_adapter.so']
     require(build['commands']['native'] == expected_native, 'native adapter flags differ')
     require(build['commands']['max'] == ['pixi', 'run', 'mojo', 'precompile', 'adapters/max_ops',
@@ -375,6 +377,9 @@ def readbacks(directory, revision, site, hosts, extensions, indexes, evidence):
 
 
 def project(inputs, source_root, patchelf):
+    if inputs.get('leg') in ('cuda/sm_89', 'cuda/sm_80'):
+        from release_linux_cuda_groups import project as cuda_project
+        return cuda_project(inputs, source_root, patchelf)
     from check_linux_release_qualification import tracked_native_inventory
     root, site = Path(source_root).resolve(), Path(inputs['site']).resolve()
     revision, compiler = inputs['source_commit'], inputs['compiler_sha256']
@@ -424,6 +429,11 @@ def validate(proof, source_root=None):
 
 
 def validate_bytes(proof, root):
+    leg = proof.get('producer_inputs', {}).get('leg', LEG)
+    if leg in ('cuda/sm_89', 'cuda/sm_80'):
+        from release_linux_cuda_groups import validate_bytes as cuda_validate_bytes
+        return cuda_validate_bytes(proof, root)
+    require(leg == LEG, 'unsupported leg')
     root = Path(root)
     for field in ('extensions', 'host_extension'):
         for name, digest in proof[field].items():
