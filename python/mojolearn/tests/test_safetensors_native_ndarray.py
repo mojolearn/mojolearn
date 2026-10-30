@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from mojolearn._array import frombytes
+from mojolearn import Array
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.models.safetensors import widen_f16
 
@@ -52,7 +52,7 @@ def test_captured_ndarray_shape_and_strides(case):
 
 def test_native_array_input_still_keeps_its_descriptor():
     words = np.array([0, 1, 0x8000, 0x7c01], dtype=np.uint16)
-    bits = frombytes(words.tobytes(), '<u2', (2, 2))
+    bits = Array.from_buffer(words.reshape(2, 2))
     actual = np.asarray(widen_f16(bits))
     assert bits.dtype == '<u2' and bits.shape == (2, 2)
     np.testing.assert_array_equal(actual.view(np.uint32),
