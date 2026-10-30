@@ -99,6 +99,23 @@ class RetainedCandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate"):
             candidate.native_indexes(self.root, self.records)
 
+    def test_adapter_compiler_location_reuse_requires_same_complete_facts(self):
+        old = {"available": True, "compiler": "/old/worktree/mojo",
+               "compiler_sha256": "a" * 64, "version": "pinned",
+               "precompiled_packages": {"stdlib": "original"}}
+        current = dict(old, compiler="/current/worktree/mojo")
+        candidate.validate_adapter_toolchain(old, current)
+        for changed in [dict(current, compiler_sha256="b" * 64),
+                        dict(current, precompiled_packages={"stdlib": "changed"}),
+                        dict(current, version="other")]:
+            with self.subTest(changed=changed):
+                with self.assertRaisesRegex(ValueError, "toolchain changed"):
+                    candidate.validate_adapter_toolchain(old, changed)
+
+    def test_adapter_compiler_location_without_content_identity_refused(self):
+        with self.assertRaisesRegex(ValueError, "toolchain changed"):
+            candidate.validate_adapter_toolchain({"available": True}, {"available": True})
+
     def adapter_snapshot(self):
         adapter = self.root / "_adapters/libmojolearn_adapter.so"
         adapter.parent.mkdir()

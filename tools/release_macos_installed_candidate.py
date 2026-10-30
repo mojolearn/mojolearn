@@ -140,6 +140,20 @@ def validate_native_inventory(package, receipt):
     common.require(actual == expected, "snapshot has unrecorded native/runtime files")
 
 
+def validate_adapter_toolchain(original, current):
+    # A retained worktree may disappear after its outputs are archived. The
+    # invocation path is location metadata: the executable bytes, version,
+    # locked/installed packages, precompiled libraries and OS facts still
+    # must match exactly. Never discard any other toolchain field.
+    old, new = dict(original), dict(current)
+    old.pop("compiler", None)
+    new.pop("compiler", None)
+    digest = old.get("compiler_sha256", "")
+    common.require(original.get("available") is True and len(digest) == 64
+                   and all(c in "0123456789abcdef" for c in digest)
+                   and old == new, "adapter toolchain changed")
+
+
 def validate_adapters(root, directory, before, result, commit):
     common.require(result["exit_code"] == 0 and result["source_commit"] == before["source_commit"],
                    "adapter build did not complete for this source")
@@ -151,7 +165,7 @@ def validate_adapters(root, directory, before, result, commit):
     # Keep the original role closure and compiler identity, rather than accepting
     # the manifest's smaller list of direct source files as closure evidence.
     import development_build as dev
-    common.require(before["toolchain"] == dev.toolchain_facts(root), "adapter toolchain changed")
+    validate_adapter_toolchain(before["toolchain"], dev.toolchain_facts(root))
     for name, digest in result["artifacts"].items():
         path = directory / Path(name).name
         common.require(path.is_file() and common.sha(path) == digest, "adapter artifact differs: " + name)
