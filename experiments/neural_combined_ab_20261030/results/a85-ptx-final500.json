@@ -1,0 +1,164 @@
+{
+  "source": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47",
+  "validator_commit": "36668d5fd783e4fd03da3b99034e963df561320c",
+  "validator_sha256": "a927e5ae6a91e86c9ff2cda465e73bbaee57c7897a642cdc2429d2c526f1316c",
+  "producer": "tools/identity_break.py",
+  "producer_sha256": "589a7441f72a535c8ef411d33003ed5c3b84c339c09e4675dd31c0499713e2f0",
+  "hardware": {
+    "pod": "5ar9s257vrnn4b",
+    "gpus": 2,
+    "model": "NVIDIA A40",
+    "actual_compute_capability": "8.6",
+    "driver": "595.91.07",
+    "selected_arch": "sm_80",
+    "code_format": "ptx"
+  },
+  "coverage": {
+    "expected_algorithms": 500,
+    "completed": 500,
+    "passed_runtime": 500,
+    "failed": [],
+    "unexecuted": [],
+    "fixtures": [
+      "base",
+      "ties",
+      "hashed",
+      "wide",
+      "denormal",
+      "denormal_ftz",
+      "dupes",
+      "odd",
+      "negative"
+    ],
+    "cells": 4500,
+    "repeats": 1,
+    "full_default_parts": true,
+    "partial_column": false,
+    "parts_omitted": [],
+    "part_verdicts": {
+      "train": {
+        "STABLE": 4500
+      },
+      "infer": {
+        "STABLE": 3411,
+        "N/A": 1089
+      },
+      "model": {
+        "STABLE": 1683,
+        "N/A": 2817
+      },
+      "batch": {
+        "STABLE": 3555,
+        "N/A": 945
+      },
+      "rlpair": {
+        "ABSENT_BY_LANE_PROTOCOL": 4338,
+        "STABLE": 162
+      },
+      "batchgrad": {
+        "N/A": 4356,
+        "STABLE": 144
+      },
+      "batchscale": {
+        "N/A": 4257,
+        "STABLE": 243
+      },
+      "ragged": {
+        "N/A": 4338,
+        "STABLE": 162
+      },
+      "stepfull": {
+        "N/A": 4338,
+        "STABLE": 162
+      }
+    }
+  },
+  "identity": {
+    "compared": 500,
+    "passed": 500,
+    "failed": [],
+    "pending": [],
+    "columns": [
+      "ptx",
+      "nvidia",
+      "amd"
+    ],
+    "official_diff_require_columns": 3,
+    "admission_exit": 0
+  },
+  "scope": "Supported direct identity producer, nine canonical fixtures and all default parts. Separate installed runtime, physical multi-GPU, Apple and central publication gates are not credited here.",
+  "dependency_transition": {
+    "selected_common_core_sha256": "749cb743614cec642c05cfa66d0dab36111b2abe3abf16cf01c457de64508a05",
+    "selected_math_sha256": "9b82408bae1de718ed3150a8780e94e2e37225c5246376fdf7d6e8ad26a22ab3",
+    "original_native_nvidia_math_sha256": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+    "boundary_values": 402992,
+    "boundary_differences": 0,
+    "receipt": {
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia/portable-math-boundary-5639931f95000dacfb75b66e8d364e8f6925ddf3bfa5bf717c9aed9e6120b5bb.tgz",
+      "sha256": "5639931f95000dacfb75b66e8d364e8f6925ddf3bfa5bf717c9aed9e6120b5bb",
+      "bytes": 5163507,
+      "status": "R2 PUT and GET verified",
+      "mac_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/portable-math-boundary.tgz",
+      "mac_verified": true,
+      "checked_utc": "2026-10-30T17:57:56.246005+00:00"
+    },
+    "note": "Original nativeNVIDIA records retain original helper witnesses. PTX executes exact sharedAMD core; bounded dependency proof and actual500 comparisons support transition, not universal compiler equivalence."
+  },
+  "inputs": {
+    "nvidia": {
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia/final-source-selected-500-038bdb7a7388ffc040eb991aa8b8e0f2b782508639a767d5137b2dbf21053f21.json",
+      "sha256": "038bdb7a7388ffc040eb991aa8b8e0f2b782508639a767d5137b2dbf21053f21",
+      "bytes": 518057,
+      "status": "R2 PUT and GET verified",
+      "mac_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/final-source-selected-500.json",
+      "mac_verified": true,
+      "checked_utc": "2026-10-30T17:11:46.718031+00:00"
+    },
+    "amd": {
+      "key": "verification/0.8.63/a85b4a21cb3c/amd/final-selected-500-33f82b8cc2d32bb9fbe9bcfc91232d26662366e70d499bdc2fc7af446075b304.json",
+      "sha256": "33f82b8cc2d32bb9fbe9bcfc91232d26662366e70d499bdc2fc7af446075b304",
+      "bytes": 429685,
+      "put": 200,
+      "get": 200,
+      "readback_verified": true,
+      "local_path": "/Users/andrewhendel/mojolearn-evidence/amd-release-green-20261029/ha-final-source-selected-500.json"
+    },
+    "candidate_wheels": {
+      "key": "verification/0.8.63/a85b4a21cb3c/ptx/qualification-wheels-6702b1df1c6bfb1cf09161a5ed44a995a9dbb9e30516b7a1eb014843d1e4d12c.tgz",
+      "sha256": "6702b1df1c6bfb1cf09161a5ed44a995a9dbb9e30516b7a1eb014843d1e4d12c",
+      "bytes": 133677105,
+      "status": "R2 PUT and GET verified",
+      "mac_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/ptx-candidate-wheels.tgz",
+      "mac_verified": true,
+      "checked_utc": "2026-10-30T18:03:33.491533+00:00"
+    }
+  },
+  "checked_utc": "2026-10-30T18:45:52.094638+00:00",
+  "index_retention": {
+    "key": "verification/0.8.63/a85b4a21cb3c/ptx/selected500-e97fa36cdb5d6de935d1346a6f0e1dfbf901ccc32ef852ef99b2709a5d9fd452.json",
+    "sha256": "e97fa36cdb5d6de935d1346a6f0e1dfbf901ccc32ef852ef99b2709a5d9fd452",
+    "bytes": 16394178,
+    "status": "R2 PUT and GET verified",
+    "mac_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/ptx-completed-index.json",
+    "mac_verified": true,
+    "checked_utc": "2026-10-30T18:45:54.131251+00:00"
+  },
+  "comparisons_retention": {
+    "key": "verification/0.8.63/a85b4a21cb3c/ptx/final500-comparisons-4490bfc59009695aba08d11c58d0b3cebae3ae050e0810aff2629a9279d4c208.tgz",
+    "sha256": "4490bfc59009695aba08d11c58d0b3cebae3ae050e0810aff2629a9279d4c208",
+    "bytes": 12387157,
+    "status": "R2 PUT and GET verified",
+    "mac_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/ptx-final500-comparisons.tgz",
+    "mac_verified": true,
+    "checked_utc": "2026-10-30T18:45:56.711164+00:00"
+  },
+  "summary_retention": {
+    "key": "verification/0.8.63/a85b4a21cb3c/ptx/final500-summary-5cfd6c7e9bff46f85e339b73f2c750c3f8a47dd3694bfbbb8f7dbaa2ddc9e0d2.json",
+    "sha256": "5cfd6c7e9bff46f85e339b73f2c750c3f8a47dd3694bfbbb8f7dbaa2ddc9e0d2",
+    "bytes": 5833,
+    "status": "R2 PUT and GET verified",
+    "mac_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/ptx-final500-summary.json",
+    "mac_verified": true,
+    "checked_utc": "2026-10-30T18:45:57.105999+00:00"
+  }
+}

@@ -104,3 +104,28 @@ This does not qualify Apple, the separately required PTX route, physical
 multi-GPU execution, central ledger admission or publication. The native-only
 NVIDIA qualification wheel correctly refuses the missing required PTX slot;
 no packaging gate was relaxed. Historical numerical failures remain retained.
+
+
+## Required PTX route (2026-10-30)
+
+The same frozen `a85b4a21cb3c` source now has 500 passing PTX algorithms,
+4,500 canonical fixture cells, and 500 passing three-column comparisons with
+retained native NVIDIA and AMD observations. Execution used two A40 GPUs
+(actual SM86, driver 595.91.07) through the explicit SM80 PTX route. The
+changed `x_sequence` PTX group compiled successfully; 32 unchanged groups
+were reused with supported source/build proofs. All default identity parts
+were collected, with declared N/A coverage preserved. Exact counts, artifacts,
+dependency-transition evidence and Mac/R2 receipts are in
+`results/a85-ptx-final500.json`.
+
+The common core uses the exact AMD helper bytes after a bounded 402,992-value
+C-ABI comparison and the actual PTX/native/AMD campaign. Original native
+NVIDIA helper witnesses remain unchanged. Metadata tooling repairs admit the
+producer's schema 2 and exact registered lane directories while preserving
+partial-run and provenance refusals; 126 admission tests pass. Raw records
+and earlier admission failures remain retained.
+
+This completes this PTX identity scope, not the separate installed runtime,
+physical multi-GPU, Apple, strict packaging, central ledger or PyPI gates.
+The retained candidate wheels remain explicitly non-publishable qualification
+artifacts. No performance default changed.
