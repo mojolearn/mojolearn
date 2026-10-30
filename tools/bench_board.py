@@ -1084,6 +1084,8 @@ def opponent_pins(path=None):
 #: newest first. Results raced before this change were wrong for the AMD tree lanes; apply extra
 #: scrutiny.
 AMD_XGB_ROCM_INDEXES = ("7.2.3", "7.1.1", "7.0.2")
+#: read by amd_xgboost_index / amd_lightgbm_index; bench_board_provenance.rocm_version falls back when it is absent
+ROCM_VERSION_FILE = "/opt/rocm/.info/version"
 
 
 def _version_tuple(text):
@@ -1091,7 +1093,7 @@ def _version_tuple(text):
     return tuple(int(g or 0) for g in m.groups()) if m else None
 
 
-def amd_xgboost_index(default, version_file="/opt/rocm/.info/version"):
+def amd_xgboost_index(default, version_file=ROCM_VERSION_FILE):
     """The pypi.amd.com index whose amd_xgboost matches this box's ROCm: the newest of
     AMD_XGB_ROCM_INDEXES at or below the box's version, `default` when the version cannot be
     read, None when the box's ROCm is older than every index (no amd_xgboost 3.2.0 for it).
@@ -1102,11 +1104,9 @@ def amd_xgboost_index(default, version_file="/opt/rocm/.info/version"):
     over = os.environ.get("MOJOLEARN_AMD_XGB_INDEX", "").strip()
     if over:
         return over
-    try:
-        with open(version_file) as fh:
-            box = _version_tuple(fh.read())
-    except OSError:
-        box = None
+    # ROCm 7 board setup (2026-10-30): no /opt/rocm/.info/version on the DO "AMD AI/ML Ready" image (ROCm 7.14);
+    # bench_board_provenance.rocm_version falls back to amd-smi, then hipconfig
+    box = _version_tuple(_load_tool("bench_board_provenance").rocm_version(version_file)[0])
     if box is None:
         return default
     for v in AMD_XGB_ROCM_INDEXES:
@@ -1119,18 +1119,16 @@ def amd_xgboost_index(default, version_file="/opt/rocm/.info/version"):
 AMD_LGBM_ROCM_INDEXES = ("7.0.2", "6.4.4")
 
 
-def amd_lightgbm_index(default, version_file="/opt/rocm/.info/version"):
+def amd_lightgbm_index(default, version_file=ROCM_VERSION_FILE):
     """The pypi.amd.com index whose amd_lightgbm matches this box's ROCm (the newest of AMD_LGBM_ROCM_INDEXES at
     or below it), `default` when the version cannot be read, None below every index. MOJOLEARN_AMD_LGBM_INDEX
     overrides."""
     over = os.environ.get("MOJOLEARN_AMD_LGBM_INDEX", "").strip()
     if over:
         return over
-    try:
-        with open(version_file) as fh:
-            box = _version_tuple(fh.read())
-    except OSError:
-        box = None
+    # ROCm 7 board setup (2026-10-30): no /opt/rocm/.info/version on the DO "AMD AI/ML Ready" image (ROCm 7.14);
+    # bench_board_provenance.rocm_version falls back to amd-smi, then hipconfig
+    box = _version_tuple(_load_tool("bench_board_provenance").rocm_version(version_file)[0])
     if box is None:
         return default
     for v in AMD_LGBM_ROCM_INDEXES:
@@ -1233,6 +1231,81 @@ def run_logged(cmd, env, log_path, timeout, cwd=REPO, nice=0):
                 HOST_MEMORY_KILLS.extend(dog.stop())
 
 
+#: ROCm 7 board setup (2026-10-30): the libomp-only directory tree_cmd hands child_env for a race with a LightGBM arm
+LIBOMP_DIR_ENV = "MOJOLEARN_BOARD_LIBOMP_DIR"
+ROCM_LIBOMP = "/opt/rocm/llvm/lib/libomp.so"
+
+
+def _system_loader_has(soname):
+    """True when the system loader cache (ldconfig -p) lists `soname`; None when it cannot be read."""
+    ldconfig = shutil.which("ldconfig") or ("/sbin/ldconfig" if os.path.exists("/sbin/ldconfig") else None)
+    out = capture([ldconfig, "-p"], timeout=30) if ldconfig else None
+    return None if out is None else (soname in out)
+
+
+def amd_worker_lib_dirs(python):
+    """The loader directories every AMD worker (and the setup hipVS probe) gets on LD_LIBRARY_PATH."""
+    # FAIRNESS FIX (2026-10-13 audit): AMD's hipVS wheels put native
+    # libraries in package-local lib64 directories; retain their paths in
+    # worker receipts. A successful pip install alone did not prove import.
+    # (site-packages/{libcuvs,libraft,librmm}/lib64: libcuvs_c.so needs librmm.so too.)
+    prefix = os.path.dirname(os.path.dirname(os.path.abspath(python)))
+    dirs = sorted(glob.glob(os.path.join(prefix, "lib", "python*", "site-packages", "*", "lib64")))
+    # ROCm 7 board setup (2026-10-30): on the DO "AMD AI/ML Ready" image (ROCm 7.14) /opt/rocm/lib is not on the
+    # system loader path, so `import cuvs.neighbors` failed with "libamdhip64.so.7: cannot open shared object file".
+    # Setup registers it with the system loader when it runs as root (rocm_system_loader_path); this is the fallback
+    # for a box where it could not. Added only when the loader cache lacks the HIP runtime: on LD_LIBRARY_PATH,
+    # /opt/rocm/lib takes precedence over a wheel's own RUNPATH copies (torch's bundled ROCm libraries).
+    if dirs and os.path.isdir("/opt/rocm/lib") and _system_loader_has("libamdhip64.so") is False:
+        dirs.append("/opt/rocm/lib")
+    return dirs
+
+
+def rocm_system_loader_path(log):
+    """ROCm 7 board setup (2026-10-30): the DO "AMD AI/ML Ready" image (ROCm 7.14) leaves /opt/rocm/lib out of the
+    system loader path (hipVS: "libamdhip64.so.7: cannot open shared object file"). As root, register it the way
+    ROCm's own packages do (an /etc/ld.so.conf.d entry, then ldconfig): the cache ranks after every wheel's RUNPATH,
+    so no bundled ROCm library is shadowed. Returns True when the loader then finds the HIP runtime."""
+    if not os.path.isdir("/opt/rocm/lib") or _system_loader_has("libamdhip64.so") is not False:
+        return bool(_system_loader_has("libamdhip64.so"))
+    if os.geteuid() != 0:
+        print("bench_board: /opt/rocm/lib is not on the system loader path and setup is not root; AMD workers get "
+              "it on LD_LIBRARY_PATH instead (amd_worker_lib_dirs)", flush=True)
+        return False
+    try:
+        with open("/etc/ld.so.conf.d/zz-mojolearn-rocm.conf", "w") as fh:
+            fh.write("/opt/rocm/lib\n")
+    except OSError as exc:
+        print("bench_board: cannot register /opt/rocm/lib with the system loader (%s)" % exc, flush=True)
+        return False
+    ldconfig = shutil.which("ldconfig") or "/sbin/ldconfig"
+    run_logged([ldconfig], None, log, 600)
+    ok = bool(_system_loader_has("libamdhip64.so"))
+    print("bench_board: registered /opt/rocm/lib with the system loader (HIP runtime %s)"
+          % ("found" if ok else "STILL MISSING"), flush=True)
+    return ok
+
+
+def amd_libomp_dir(python):
+    """A directory holding one symlink, libomp.so -> ROCm's LLVM OpenMP runtime, beside the board venv; None when
+    ROCm ships no libomp.so. ROCm 7 board setup (2026-10-30): AMD's ROCm LightGBM (amd_lightgbm 4.6.0.99) failed to
+    import on the DO "AMD AI/ML Ready" image (ROCm 7.14) with "libomp.so: cannot open shared object file"; ROCm keeps
+    it in /opt/rocm/llvm/lib, which is not put on the loader path whole (it can shadow system libraries)."""
+    if not os.path.exists(ROCM_LIBOMP):
+        return None
+    shim = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(python))), "rocm-libomp")
+    link = os.path.join(shim, "libomp.so")
+    try:
+        os.makedirs(shim, exist_ok=True)
+        if os.path.realpath(link) != os.path.realpath(ROCM_LIBOMP):
+            if os.path.lexists(link):
+                os.remove(link)
+            os.symlink(ROCM_LIBOMP, link)
+    except OSError:
+        return None
+    return shim
+
+
 def child_env(ctx, extra=None):
     env = dict(os.environ)
     for k in THREAD_ENV:              # a cap inherited from a shell throttles CPU arms silently
@@ -1248,11 +1321,13 @@ def child_env(ctx, extra=None):
         # process. A later smoke/timing worker could not import HIP CuPy, so
         # every hipVS parameter probe refused despite an installed opponent.
         env.setdefault("ROCM_HOME", "/opt/rocm")
-        # FAIRNESS FIX (2026-10-13 audit): AMD's hipVS wheels put native
-        # libraries in package-local lib64 directories; retain their paths in
-        # worker receipts. A successful pip install alone did not prove import.
-        prefix = os.path.dirname(os.path.dirname(os.path.abspath(ctx["python"])))
-        native = sorted(glob.glob(os.path.join(prefix, "lib", "python*", "site-packages", "*", "lib64")))
+        native = amd_worker_lib_dirs(ctx["python"])
+        # ROCm 7 board setup (2026-10-30): AMD's ROCm LightGBM needs libomp.so, which the DO "AMD AI/ML Ready" image
+        # (ROCm 7.14) has only in /opt/rocm/llvm/lib; tree_cmd names a one-library directory for races with a
+        # LightGBM arm (amd_libomp_dir), never all of /opt/rocm/llvm/lib (it would shadow system libraries)
+        omp = (extra or {}).get(LIBOMP_DIR_ENV)
+        if omp:
+            native = [omp] + native
         # entries already on the path are not added again: the campaign smoke's worker starts with this
         # environment and its drivers' environments must not differ from it (tools/smoke_inproc.py)
         have = [p for p in (env.get("LD_LIBRARY_PATH") or "").split(os.pathsep) if p]
@@ -1385,8 +1460,8 @@ def gpu_info(vendor):
         if d:
             m = re.search(r"Driver version:\s*(\S+)", d)
             info["driver"] = m.group(1) if m else d.splitlines()[-1].strip()
-        v = capture(["cat", "/opt/rocm/.info/version"], timeout=10)
-        info["rocm"] = v
+        # ROCm 7 board setup (2026-10-30): the DO "AMD AI/ML Ready" image (ROCm 7.14) has no /opt/rocm/.info/version
+        info["rocm"], info["rocm_source"] = _load_tool("bench_board_provenance").rocm_version()
     elif vendor == "apple":
         s = capture(["system_profiler", "SPDisplaysDataType", "-json"], timeout=60)
         try:
@@ -1522,7 +1597,15 @@ def hipvs_system_libraries(python, log):
     only that library is missing, install the distribution's OpenBLAS (libopenblas0) and probe again. The
     outcome is logged; a failure leaves the hipvs-gpu arms refusing by name."""
     probe = [python, "-c", "import cuvs.neighbors"]
-    if run_logged(probe, None, log, 600) == 0:
+    # ROCm 7 board setup (2026-10-30): the probe runs under the workers' loader path (amd_worker_lib_dirs: the
+    # wheels' libcuvs/libraft/librmm lib64 and, when the system loader lacks it, /opt/rocm/lib). Without it, on the
+    # DO "AMD AI/ML Ready" image (ROCm 7.14) the probe failed on libcuvs_c.so, librmm.so and libamdhip64.so.7 and
+    # never reached the libopenblas.so.0 case below.
+    env = dict(os.environ)
+    dirs = amd_worker_lib_dirs(python) + [p for p in (env.get("LD_LIBRARY_PATH") or "").split(os.pathsep) if p]
+    if dirs:
+        env["LD_LIBRARY_PATH"] = os.pathsep.join(dirs)
+    if run_logged(probe, env, log, 600) == 0:
         return True
     try:
         with open(log, errors="replace") as fh:
@@ -1533,13 +1616,31 @@ def hipvs_system_libraries(python, log):
         print("bench_board: hipVS does not import (see %s); the hipvs-gpu arms will refuse by name" % log,
               flush=True)
         return False
-    env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
-    run_logged(["apt-get", "install", "-y", "--no-install-recommends", "libopenblas0"], env, log, 1800)
-    if run_logged(probe, None, log, 600) == 0:
+    run_logged(["apt-get", "install", "-y", "--no-install-recommends", "libopenblas0"],
+               dict(os.environ, DEBIAN_FRONTEND="noninteractive"), log, 1800)
+    if run_logged(probe, env, log, 600) == 0:
         print("bench_board: hipVS imports after installing the system OpenBLAS (libopenblas0)", flush=True)
         return True
     print("bench_board: hipVS still does not import after libopenblas0 (see %s); the hipvs-gpu arms will "
           "refuse by name" % log, flush=True)
+    return False
+
+
+def amd_lightgbm_import(python, log):
+    """ROCm 7 board setup (2026-10-30): probe AMD's ROCm LightGBM import at setup, under the environment its tree
+    races get (amd_libomp_dir on the loader path), so a failure is logged by name instead of only refusing inside
+    a race. On the DO "AMD AI/ML Ready" image (ROCm 7.14) it failed with "libomp.so: cannot open shared object file"."""
+    env = dict(os.environ)
+    omp = amd_libomp_dir(python)
+    dirs = ([omp] if omp else []) + amd_worker_lib_dirs(python)
+    have = [p for p in (env.get("LD_LIBRARY_PATH") or "").split(os.pathsep) if p and p not in dirs]
+    if dirs:
+        env["LD_LIBRARY_PATH"] = os.pathsep.join(dirs + have)
+    if run_logged([python, "-c", "import lightgbm; print('lightgbm', lightgbm.__version__)"], env, log, 600) == 0:
+        print("bench_board: AMD ROCm LightGBM imports (libomp from %s)" % (omp or "the system loader path"), flush=True)
+        return True
+    print("bench_board: AMD ROCm LightGBM does not import (see %s; libomp shim %s); the lightgbm arms will refuse "
+          "by name" % (log, omp or "absent: no %s" % ROCM_LIBOMP), flush=True)
     return False
 
 
@@ -1635,6 +1736,8 @@ def setup_python(args, vendor, out, log):
         # A failed opponent install is NOT fatal: that arm then refuses by
         # name inside its race, which is visible on the board.
         rc = run_logged(cmd + reqs, None, log, 3600)
+        if rc == 0 and vendor == "amd" and any(r.lower().startswith("amd_lightgbm") for r in reqs):
+            amd_lightgbm_import(python, log)    # ROCm 7 board setup (2026-10-30): libomp.so, logged by name
         if rc != 0:
             print("bench_board: opponent install rc %d for %s (their arms will refuse by name)"
                   % (rc, " ".join(reqs)), flush=True)
@@ -1664,6 +1767,7 @@ def setup_python(args, vendor, out, log):
             print("bench_board: hipVS install failed (%s); the hipvs-gpu arms will refuse by name"
                   % " ".join(AMD_HIPVS), flush=True)
         else:
+            rocm_system_loader_path(log)    # ROCm 7 board setup (2026-10-30): libamdhip64.so.7
             hipvs_system_libraries(python, log)
     if "classical2" in (args.families or ""):
         cmd = list(pip)
@@ -2134,6 +2238,12 @@ def tree_cmd(ctx, race):
            "MOJOLEARN_SPEED_SIZE": "shipped",
            "MOJOLEARN_SPEED_BUDGET_S": str(ctx["arm_budget_s"]),
            "MOJOLEARN_SPEED_DEADLINE_S": str(ctx["race_deadline_s"])}
+    # ROCm 7 board setup (2026-10-30): AMD's ROCm LightGBM loads libomp.so, absent from the loader path on the DO
+    # "AMD AI/ML Ready" image (ROCm 7.14); child_env puts this one-library directory first for races with that arm
+    if ctx["vendor"] == "amd" and any(a.startswith("lightgbm-") for a in (race["opponents"] or ())):
+        omp = amd_libomp_dir(ctx["python"])
+        if omp:
+            env[LIBOMP_DIR_ENV] = omp
     return cmd, env
 
 
