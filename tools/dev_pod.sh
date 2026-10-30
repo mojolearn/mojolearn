@@ -209,8 +209,8 @@ arm_mac_deadman() {  # seconds; replaces any earlier dead-man for this lane
     fi
     write_deadman "$D/deadman" "$1" || die "the dead-man did not compose"
     [ -z "${POD_ID:-}" ] || printf '%s\n' "$POD_ID" > "$D/deadman/pod_id.txt"
-    nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$D/deadman/deadman.sh" > /dev/null 2>&1 < /dev/null &
-    echo $! > "$D/deadman.pid"
+    python3 "$ROOT/tools/deadman_session.py" "$D/deadman/deadman.sh" > "$D/deadman.pid" \
+        || die "the Mac dead-man did not start"
     sleep 1; kill -0 "$(cat "$D/deadman.pid")" 2>/dev/null || die "the Mac dead-man did not start"
 }
 
@@ -221,8 +221,9 @@ ha_rearm_mac_deadman() {  # seconds from now
     _new="$D/ha-deadman-$(now)"
     ha_write_deadman "$_new" $(( $(now) + $1 )) "$D/hotaisle.record" || die "the Hot Aisle dead-man did not compose"
     printf '%s\n' "$HA_VMREF" > "$_new/vm_ref.txt"; printf '%s\n' "$HA_DESC" > "$_new/desc.txt"
-    nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$_new/deadman.sh" > /dev/null 2>&1 < /dev/null &
-    _pid=$!; sleep 1; kill -0 "$_pid" 2>/dev/null || die "the new Hot Aisle dead-man did not start; the old one stays armed"
+    _pid=$(python3 "$ROOT/tools/deadman_session.py" "$_new/deadman.sh") \
+        || die "the new Hot Aisle dead-man did not start; the old one stays armed"
+    sleep 1; kill -0 "$_pid" 2>/dev/null || die "the new Hot Aisle dead-man did not start; the old one stays armed"
     echo "$_pid" > "$D/deadman.pid"
     if [ -n "$_old" ] && [ "$_old" != "$_pid" ]; then pkill -P "$_old" 2>/dev/null || true; kill "$_old" 2>/dev/null || true; fi
     [ -z "$_olddir" ] || [ "$_olddir" = "$_new" ] || rm -rf "$_olddir"

@@ -460,8 +460,8 @@ ha_rent() {
     HA_DEADMAN_DIR="${TMPDIR:-/tmp}/mojolearn-hotaisle-release-deadman-$$"
     ha_write_deadman "$HA_DEADMAN_DIR" "$HA_DEADLINE" "$HA_RECORD" || { ha_refuse "the Mac dead-man did not compose"; return 1; }
     printf '%s\n' "$HA_DESC" > "$HA_DEADMAN_DIR/desc.txt"
-    nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$HA_DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null &
-    HA_DEADMAN_PID=$!
+    HA_DEADMAN_PID=$(python3 "$(dirname "${BASH_SOURCE[0]}")/deadman_session.py" "$HA_DEADMAN_DIR/deadman.sh") \
+        || { HA_DEADMAN_PID=""; ha_refuse "the Mac dead-man did not start"; return 1; }
     disown "$HA_DEADMAN_PID" 2>/dev/null || true
     sleep 1
     kill -0 "$HA_DEADMAN_PID" 2>/dev/null || { HA_DEADMAN_PID=""; ha_refuse "the Mac dead-man did not start"; return 1; }
