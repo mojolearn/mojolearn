@@ -109,6 +109,7 @@ from bindings.host_helpers import (
     gather_rows_bytes_binding,
     probability_rows_f32_binding,
 )
+from bindings.core_host_counts import bincount2_i32_host_binding
 from bindings.hotpath_helpers import (
     HOTPATH_SABOTAGE,
     cast_elements_binding,
@@ -137,7 +138,6 @@ from bindings.hotpath_helpers import (
     threshold_labels_i64_binding,
     scale_shift_ftz_f32_binding,
     bincount_i64_binding,
-    bincount2_i32_host_binding,
     strat_group_plan_i32_binding,
     compact_notnan_f32_binding,
     gather_keep_neg_i32_binding,
