@@ -75,3 +75,28 @@ the existing assembler flags and placement algorithm unchanged. Admission can
 replay placement from those retained outputs and independently disassemble all
 moved references, avoiding another assembler run. Actual installed loading,
 runtime and identity remain separate requirements.
+
+## Current AMD member overrides
+
+`device_overrides` may list selected gfx942 development groups using the same
+`binding`, `result`, and `receipt` fields as individual CUDA groups. Every listed
+group must have a successful retained optimized execution, current source
+closure, exact locked compiler/dependencies, and canonical raw-to-stage ELF
+replay. A name alone never exempts a changed source closure.
+
+Keep the original four merged images and their original compile evidence.
+Validate every member not replaced against the current source. Record replaced
+exports as inactive in those origins, and record the independently compiled
+current images as their active owners. The effective merged index removes each
+replaced member from its old group and adds `<member>.so: [member]`; the existing
+loader already prefers that own image. This also prevents falling back to the
+older merged export if the current image is missing. Reject unknown or duplicate
+members, stale untouched closures, missing current images, and fully unused old
+merged groups.
+
+The strict split packer parses this effective plan only when an explicit AMD
+group-composition proof names the overrides. Full producer, source, binary and
+readback rederivation still occurs before packing. Generic packing and arbitrary
+own files beside an unmodified merged index remain refused. Actual metadata
+readbacks must name the current image for each replaced binding; installed
+runtime and cross-vendor identity remain separate requirements.

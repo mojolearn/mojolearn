@@ -142,11 +142,13 @@ def device_recipe(fields, recipe, stem):
             and fields['os']['machine'] == 'x86_64', 'device compile flags/platform differ')
 
 
-def device_groups(rows, root, site, compiler, patchelf, evidence):
+def device_groups(rows, root, site, compiler, patchelf, evidence, overrides=()):
     import merged_bindings
     import release_reuse as rr
     from release_ptx_assembly import source_recipe
     plan = {stem: names for stem, _, names in merged_bindings.plan('identical', 'linux', True)}
+    from release_linux_amd_overrides import effective_plan
+    effective = effective_plan({k+'.so':v for k,v in plan.items()}, overrides)
     require(len(rows) == len(plan) and {r['stem'] for r in rows} == set(plan),
             'device group coverage differs')
     facts = rr.tree_facts(root)
@@ -201,7 +203,7 @@ def device_groups(rows, root, site, compiler, patchelf, evidence):
         for member in plan[stem]:
             ident = 'linux-64/hip/gfx942/identical/' + member
             before = capture['binding_identities'][ident]
-            require(before == identities[ident] and before['toolchain'] == fields['toolchain'],
+            require((member in overrides or before == identities[ident]) and before['toolchain'] == fields['toolchain'],
                     'current device source/compiler/flags/dependency identity differs: ' + member)
         with tempfile.TemporaryDirectory(prefix='mojolearn-raw-group-') as directory:
             raw = Path(directory) / (stem + '.so')
@@ -216,9 +218,12 @@ def device_groups(rows, root, site, compiler, patchelf, evidence):
         origins[name] = dict(kind='compiled-merged-shard', source_commit=revision, key=key,
                              raw_sha256=rawsha, sha256=value, compiler_workers=8,
                              archive=str(archive), producer_capture=str(report / 'compile-inputs.json'))
+        if overrides:
+            origins[name].update(active_members=[n for n in plan[stem] if n not in overrides],
+                                 overridden_members=[n for n in plan[stem] if n in overrides])
     index_path = site / 'identical/_mojolearn_merged.json'
     index = evidence.json(index_path)
-    require(index['files'] == {k + '.so': v for k, v in plan.items()}, 'merged index membership differs')
+    require(index['files'] == effective, 'merged index membership differs')
     indexes = {PREFIX + 'identical/_mojolearn_merged.json':
                dict(sha256=hc.file_sha(index_path), files=index['files'])}
     return outputs, origins, indexes
@@ -388,7 +393,13 @@ def project(inputs, source_root, patchelf):
     require(actual == revision and inputs['leg'] == LEG, 'wrong source checkout or unsupported leg')
     evidence = Evidence()
     hosts, origins = host_groups(inputs['hosts'], root, revision, site, compiler, patchelf, evidence)
-    extensions, device_origins, indexes = device_groups(inputs['devices'], root, site, compiler, patchelf, evidence)
+    override_rows = inputs.get('device_overrides', [])
+    from release_linux_amd_overrides import device_groups as override_groups
+    override_extensions, override_origins = override_groups(override_rows, root, revision, site, compiler, patchelf, evidence)
+    override_names = [row['binding'] for row in override_rows]
+    extensions, device_origins, indexes = device_groups(inputs['devices'], root, site, compiler, patchelf, evidence, override_names)
+    extensions.update(override_extensions)
+    device_origins.update(override_origins)
     adapters = adapter_group(inputs['adapter_directory'], root, site, compiler, patchelf, evidence)
     runtime = runtime_group(inputs, root, site, evidence)
     expected = {'host/' + Path(p).name for p in hosts} | {'identical/' + Path(p).name for p in extensions}
@@ -405,7 +416,8 @@ def project(inputs, source_root, patchelf):
                 compiler_sha256=compiler, binding_layout='merged', release_modes=['identical'],
                 host_extension=hosts, extensions=extensions, merged_indexes=indexes, adapters=adapters,
                 runtime_libraries=runtime, artifact_origins={**origins, **device_origins},
-                evidence=evidence.files, readback_complete=readback_complete)
+                evidence=evidence.files, readback_complete=readback_complete,
+                **(dict(device_overrides=override_names) if override_names else {}))
 
 
 def validate(proof, source_root=None):

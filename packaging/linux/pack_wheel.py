@@ -539,8 +539,15 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
         # Per-binding: one file per binding; merged: the planned files, their
         # members checked through the proof's merged_indexes below.
         if binding_layout == 'merged':
+            plans = {mode: merged_layout.plan(mode, True) for mode in modes}
+            if proof.get('device_overrides'):
+                from release_linux_group_composition import SCHEMA as GROUP_SCHEMA
+                from release_linux_amd_overrides import effective_plan
+                if proof.get('schema') != GROUP_SCHEMA or key != ('hip', 'gfx942'):
+                    raise SystemExit('Own-file overrides require current AMD development-group proof')
+                plans['identical'] = effective_plan(plans['identical'], proof['device_overrides'])
             required = {f'mojolearn/{key[0]}/{key[1]}/' + ('' if mode == 'fast' else mode + '/') + f
-                        for mode in modes for f in merged_layout.plan(mode, True)}
+                        for mode in modes for f in plans[mode]}
         else:
             required = {f'mojolearn/{key[0]}/{key[1]}/' +
                         ('' if mode == 'fast' else mode + '/') + name + '.so'
@@ -907,7 +914,7 @@ def _layout_error(exc):
     return SystemExit(f"pack_wheel: undeclared or missing native payload: {exc}")
 
 
-def set_dir_layout(directory, names, glob="_mojolearn*.so", plan_key=None, byte_lm=False):
+def set_dir_layout(directory, names, glob="_mojolearn*.so", plan_key=None, byte_lm=False, overrides=()):
     """("merged" | "per-binding", {file.so: [members]}) of one set directory
     that must serve exactly `names` (merged_layout.layout). A merged
     directory's index must also be the bindings/merged_groups.json plan for
@@ -915,7 +922,7 @@ def set_dir_layout(directory, names, glob="_mojolearn*.so", plan_key=None, byte_
     try:
         kind, files = merged_layout.layout(directory, names, glob)
         if kind == "merged" and plan_key:
-            merged_layout.check_plan(directory, plan_key, byte_lm)
+            merged_layout.check_plan(directory, plan_key, byte_lm, overrides=overrides)
     except merged_layout.LayoutError as exc:
         raise _layout_error(exc) from exc
     return kind, files
@@ -998,7 +1005,7 @@ def host_witnesses(set_paths):
     return out
 
 
-def load_set(path, include_byte_lm=False, host_witnesses_by_name=None, allow_independent_host=False):
+def load_set(path, include_byte_lm=False, host_witnesses_by_name=None, allow_independent_host=False, device_overrides_by_leg=None):
     """Every (vendor, arch, files, libs, manifest) under one sets/<vendor>
     directory. One tuple per architecture subdirectory. `host_witnesses_by_name`
     (see `host_witnesses`) lets a set that reuses every GPU binding carry a
@@ -1049,7 +1056,8 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None, allow_ind
         for tier in modes:
             d = adir if tier == "fast" else adir / tier
             tier_layouts[tier] = set_dir_layout(d, tier_names(tier, carry_byte_lm),
-                                                plan_key=tier, byte_lm=carry_byte_lm)
+                                                plan_key=tier, byte_lm=carry_byte_lm,
+                                                overrides=(device_overrides_by_leg or {}).get(vendor+"/"+arch, ()) if tier=="identical" else ())
         host_dir = adir / "host"
         host_index = read_set_index(host_dir)
 
@@ -1446,8 +1454,19 @@ def main(argv=None, _gates=True):
     # original producer, current closure, staged byte and actual readback.
     independent_host = (a.profile == RELEASE_SPLIT_PROFILE and any(
         json.loads(pathlib.Path(p).read_text()).get('schema') == GROUP_SCHEMA for p in a.build_proof))
+    override_members = {}
+    for path in a.build_proof:
+        proof = json.loads(pathlib.Path(path).read_text())
+        if proof.get('device_overrides'):
+            if not strict or proof.get('schema') != GROUP_SCHEMA or proof.get('producer_inputs', {}).get('leg') != 'hip/gfx942':
+                raise SystemExit('Development overrides require a strict AMD group-composition proof')
+            if 'hip/gfx942' in override_members:
+                raise SystemExit('Duplicate AMD override composition')
+            override_members['hip/gfx942'] = proof['device_overrides']
+    # Only parse the proposed layout here. release_inventory must rederive all
+    # current group receipts, unchanged member closures, bytes and readbacks.
     sets = [t for s in a.set for t in load_set(s, include_byte_lm=strict, host_witnesses_by_name=witnesses,
-                                               allow_independent_host=independent_host)]
+                                               allow_independent_host=independent_host, device_overrides_by_leg=override_members)]
     keys = [(s.vendor, s.arch) for s in sets]
     if len(set(keys)) != len(keys):
         raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")

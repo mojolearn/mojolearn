@@ -197,3 +197,15 @@ def test_host_recipe_can_inherit_unused_cuda_format():
                         ('MOJOLEARN_NUMERIC_MODE', 'fast'), ('MOJOLEARN_LINUX_CPU', 'native')]:
         with pytest.raises(ValueError, match='host compile flags'):
             composition.host_environment_policy(dict(env, **{name: value}))
+
+
+def test_readback_follows_effective_own_image_and_refuses_stale_merged_bytes(native_readbacks):
+    directory, revision, site, hosts, extensions, indexes = native_readbacks
+    own = composition.PREFIX + 'identical/two.so'
+    extensions[own] = sha(b'two')
+    extensions[composition.PREFIX + 'identical/group.so'] = sha(b'older merged bytes')
+    indexes['index']['files'] = {'two.so': ['two']}
+    assert composition.readbacks(directory,revision,site,hosts,extensions,indexes,composition.Evidence())
+    extensions[own] = sha(b'older merged bytes')
+    with pytest.raises(ValueError,match='another binary'):
+        composition.readbacks(directory,revision,site,hosts,extensions,indexes,composition.Evidence())
