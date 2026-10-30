@@ -46,5 +46,13 @@
     "bytes": 5226530399,
     "sha256": "14679f69db6780a061a5a41a5f5260fe9dc43d037c6b271da8ef980d851f8f5b",
     "status": "R2 object downloaded to Mac; aggregate SHA computed; per-cell receipts inside retained archive"
+  },
+  "contained_archives_validation": {
+    "verified_archives": 91,
+    "per_cell_archives": 88,
+    "source_package_prerequisites": 3,
+    "proof_sha256": "944745ebbd2487de5d7678f785092c4c129e95c1ded1f66e2d08e8c7cf79e9ab",
+    "proof_file": "99c25a6d-contained-retention.json",
+    "scope": "Every contained archive hash and size matches its original preexisting R2 PUT/GET receipt"
   }
 }

@@ -1,0 +1,552 @@
+{
+  "verified_archives": 91,
+  "scope": "88 per-cell archives plus frozen package/source/prerequisites inside recovered aggregate match their preexisting R2 PUT/GET receipts",
+  "entries": [
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/complete-auto-s1-k1-e1-f1/retained.tar.gz",
+      "sha256": "cc69b772a2fb519b8a6f933f7bdca025933708f6176f43264013214b7f60a495",
+      "bytes": 63306933,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/complete-auto-s1-k1-e1-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/legacy-s0-k0-e0-f1/retained.tar.gz",
+      "sha256": "117e343a7c8cf21c548067e7777078fd165c0c1a03fcb6f9ee3dd8db74d6da8e",
+      "bytes": 63306750,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/legacy-s0-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/legacy-s0-k1-e0-f1/retained.tar.gz",
+      "sha256": "f6bad94c1f629cd6e02013f79f292a4f27734ebad26c4570b0bebc2778731604",
+      "bytes": 63306768,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/legacy-s0-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/legacy-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "c0c3c52932e17c66ddcdb68d5af52968f30307079b2e63d79bbcf7780934ca1f",
+      "bytes": 63306822,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/legacy-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/legacy-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "d927195c114e87b6dc9be928a1077782ca8cf16a02947f044d74d8347f726b20",
+      "bytes": 63306908,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/legacy-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/native_engine-s0-k0-e1-f0/retained.tar.gz",
+      "sha256": "90cb98b515c5a2a006dc954f150b1842a899e8b6cc5aabc7b92867887ae38a1d",
+      "bytes": 63306937,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/native_engine-s0-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/native_engine-s0-k1-e1-f0/retained.tar.gz",
+      "sha256": "8381b730091021dbbc744e69ec3ef035a8dc784423ca8435363f09fbffb99677",
+      "bytes": 63306915,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/native_engine-s0-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/native_engine-s1-k0-e1-f0/retained.tar.gz",
+      "sha256": "33bd668779d85da0e40a7c1b11a4eb9978113719eb349a32d3a8260faca562c0",
+      "bytes": 63306974,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/native_engine-s1-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/native_engine-s1-k1-e1-f0/retained.tar.gz",
+      "sha256": "dfb705165a79ca7dca419da6ef969f43cb9d2bc1cfb49d27630e2867bfb424bc",
+      "bytes": 63306989,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/native_engine-s1-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/resident-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "ac7178e4b614d9e94c4a487e7dd26d8e0d037d5004f32abb14bf4b39895eb2c5",
+      "bytes": 2994,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/resident-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read1/resident-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "6e5c3bf41d4bdeb9cefe4ac048f3736f33a908dba2ba50fbd82ec695f4099e5b",
+      "bytes": 2969,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read1/resident-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/complete-auto-s1-k1-e1-f1/retained.tar.gz",
+      "sha256": "50d3f962a841c3bbe419b03787c4ab49b7c8b81b8e262e7cf8d3ea69e537d5c2",
+      "bytes": 63305327,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/complete-auto-s1-k1-e1-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/legacy-s0-k0-e0-f1/retained.tar.gz",
+      "sha256": "6a022795e25531f90c24d1df79b0bf5cdee1dc0fbe032746b437662884a12ca9",
+      "bytes": 63305164,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/legacy-s0-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/legacy-s0-k1-e0-f1/retained.tar.gz",
+      "sha256": "f2c45659e7b4b992b25d6834a84dbacae034b504d65b6c8ccfb556f507f5b1e7",
+      "bytes": 63305221,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/legacy-s0-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/legacy-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "b31a05df20e8fa3ae63656e8cd65554b04f04bbf4d5030bd980d545ea04d9327",
+      "bytes": 63305250,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/legacy-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/legacy-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "b98e590bf0f171c80ab8ea84efd297c2d9abc5764636207a3a041971816942f2",
+      "bytes": 63305265,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/legacy-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/native_engine-s0-k0-e1-f0/retained.tar.gz",
+      "sha256": "63db46a5ffe4ba9dd0176ed3a78393b56797a89ccd443830a418e574ec2bfc87",
+      "bytes": 63305250,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/native_engine-s0-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/native_engine-s0-k1-e1-f0/retained.tar.gz",
+      "sha256": "cab73085513d7a9e0f491b729791d1b83e20321fb1ab1241f0ef0a90051247fe",
+      "bytes": 63305303,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/native_engine-s0-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/native_engine-s1-k0-e1-f0/retained.tar.gz",
+      "sha256": "e948e4d89302d0ad88599650a818e82a597c591dddbbd8c3c0dcbd1d5fe7eafc",
+      "bytes": 63305298,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/native_engine-s1-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/native_engine-s1-k1-e1-f0/retained.tar.gz",
+      "sha256": "44c8960f0601d6fad76c0e7e55eb8d96f5e5d8d242414c82bf93cf0612563305",
+      "bytes": 63305317,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/native_engine-s1-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/resident-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "4723e0a919049382aa0c5f3db04bc437cf8385020300487cdcb121b587b4dfdb",
+      "bytes": 2980,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/resident-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/mojolearn-162m/read128/resident-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "da99a157c9ef56a2f376d473da0273f9e84febc7a1eb01a88b7f5a82a6c66d0f",
+      "bytes": 2981,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/mojolearn-162m/read128/resident-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/complete-auto-s1-k1-e1-f1/retained.tar.gz",
+      "sha256": "32501d27498971d62c977451a6386a182b053f1a26a5e4ec300b82a4314f6c61",
+      "bytes": 53259108,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/complete-auto-s1-k1-e1-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/legacy-s0-k0-e0-f1/retained.tar.gz",
+      "sha256": "b8a0aa85d1aa41d3fd7a2dbaa9daa9ce44f4bac8a48286b93db828c2ecedac56",
+      "bytes": 53259022,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/legacy-s0-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/legacy-s0-k1-e0-f1/retained.tar.gz",
+      "sha256": "0ad697967ed3669f1d5c9a32a1c84949ce8be9cc1e1758d8fc5af313a7d5d71a",
+      "bytes": 53259064,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/legacy-s0-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/legacy-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "4f490792ddac95f0fbb38dd3a4023e973c3d38a1f7a96b5bc8e0b3df386f57f0",
+      "bytes": 53259049,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/legacy-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/legacy-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "b10c37dbb98f35ab566042e19bde74f662793bf8ab6feca9ef0cb27511294ed8",
+      "bytes": 53259094,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/legacy-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/native_engine-s0-k0-e1-f0/retained.tar.gz",
+      "sha256": "9efba74f26a71c00c19f72f019a13d0829270809b7488239e566ecdd4ba0ffde",
+      "bytes": 53259133,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/native_engine-s0-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/native_engine-s0-k1-e1-f0/retained.tar.gz",
+      "sha256": "dc76e721eb930ab4bf2b152be2a1911ec671b391351e55573e9e87769e807a48",
+      "bytes": 53259096,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/native_engine-s0-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/native_engine-s1-k0-e1-f0/retained.tar.gz",
+      "sha256": "ebad6c85c490533e9b0c23ec8567fd27ae3f9ca088db90adb68a5c9f4a55287b",
+      "bytes": 53259144,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/native_engine-s1-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/native_engine-s1-k1-e1-f0/retained.tar.gz",
+      "sha256": "5a755cbf24f1518515802955a0c5404b02b64bcf7da372c2f120e6a0ad58bbeb",
+      "bytes": 53259137,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/native_engine-s1-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/resident-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "58b9507ff60e24bac288ac5ad2cfbb3c5a336deb0f465a3ccdcc81733dbf9db6",
+      "bytes": 53259029,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/resident-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read1/resident-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "4041dcf3f889f4327ed4d410f5540814f64766d31507c23a24ef9ed3ab01791e",
+      "bytes": 53259026,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read1/resident-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/complete-auto-s1-k1-e1-f1/retained.tar.gz",
+      "sha256": "86f1955f3be163de177ab04450b795c1454fcc48a7a16612d3218922e1c7551e",
+      "bytes": 53257337,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/complete-auto-s1-k1-e1-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/legacy-s0-k0-e0-f1/retained.tar.gz",
+      "sha256": "2c47f4186fdcb796acfc9c6cb7b4ddd0ab62cbf37f842e74d4807d8fdf050acc",
+      "bytes": 53257336,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/legacy-s0-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/legacy-s0-k1-e0-f1/retained.tar.gz",
+      "sha256": "0b9301aa55d0329f80b27cc507d9ac4567f49e564e0288bbb537199f59e0c1db",
+      "bytes": 53257348,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/legacy-s0-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/legacy-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "b35893b8cddbb6c179511d0b7239991b91171df911bd2f3748c592b942e60338",
+      "bytes": 53257375,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/legacy-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/legacy-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "47053140c0065c03cfcfac695aaf834ef9787a5128c1d4d11da1efb02ae674f0",
+      "bytes": 53257350,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/legacy-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/native_engine-s0-k0-e1-f0/retained.tar.gz",
+      "sha256": "387364bb0d4434e57df0e37b7191701f2c01b3559852ee25d02702c0cab1550f",
+      "bytes": 53257367,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/native_engine-s0-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/native_engine-s0-k1-e1-f0/retained.tar.gz",
+      "sha256": "5479e5a75f8582be16afca998feb75f4086e54227a2c8df157617a6d61dbe6d0",
+      "bytes": 53257351,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/native_engine-s0-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/native_engine-s1-k0-e1-f0/retained.tar.gz",
+      "sha256": "3c5ef9d76dd50327a39b442b1c2684ace301a79413ef00aed2a080e8056e25d4",
+      "bytes": 53257411,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/native_engine-s1-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/native_engine-s1-k1-e1-f0/retained.tar.gz",
+      "sha256": "240871a2af3efd4a415eb430db295b1b418ffaba0d1050595727de9538bb1dfa",
+      "bytes": 53257417,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/native_engine-s1-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/resident-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "9e26c25ab30d683fd7e7ecd085244cc190f272fd2316d3e06cf757f8f592abf6",
+      "bytes": 53257316,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/resident-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/full/smollm2-135m/read128/resident-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "b11c3d6856de26c462427e3abf4b54b4be685a5d983d74152760c82f0ea0c7ef",
+      "bytes": 53257342,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/full/smollm2-135m/read128/resident-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/installed-package.tgz",
+      "sha256": "e5c69b2b175ca1c68e7842fda805d9a20fea304e58be499a1ea82e2c4926d437",
+      "bytes": 106258635,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/installed-package.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/prerequisites.tgz",
+      "sha256": "8ece2560f38ac44134bde7bf6435421ad2bc7cc442e5c65dd69be2e43a62af36",
+      "bytes": 16365041,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/prerequisites.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/complete-auto-s1-k1-e1-f1/retained.tar.gz",
+      "sha256": "6ff94d3a55c165aa4707566dedce7b25a35eddf0a5b08d8cf61807ac72ec5c67",
+      "bytes": 2741999,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/complete-auto-s1-k1-e1-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/legacy-s0-k0-e0-f1/retained.tar.gz",
+      "sha256": "0737e5e24a5ac378b3176c86335084df095a285185c0f3d7b19f7083faf9068a",
+      "bytes": 2741833,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/legacy-s0-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/legacy-s0-k1-e0-f1/retained.tar.gz",
+      "sha256": "b5ce29eb5f69355dfff96feb0d406e5372a1693cf197a21a9cee381491f0ed3e",
+      "bytes": 2741899,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/legacy-s0-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/legacy-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "f266c9f307ae4f913a22e0990118cd11fce72a9ab03b4252c02530cc0822a1fe",
+      "bytes": 2741895,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/legacy-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/legacy-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "0918e394f578703a18553eaf35501da2a447c5c476105644d0939ae8fb2b5776",
+      "bytes": 2741918,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/legacy-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/native_engine-s0-k0-e1-f0/retained.tar.gz",
+      "sha256": "95e6a1d31b6c2735a4def74059db08935c13465bf3e06e7a13b8bf3bbb634da5",
+      "bytes": 2741957,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/native_engine-s0-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/native_engine-s0-k1-e1-f0/retained.tar.gz",
+      "sha256": "d79a0771c8056efabb0f20e553b52de78a4b6cda6eb2b21eed584b343e81f984",
+      "bytes": 2741950,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/native_engine-s0-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/native_engine-s1-k0-e1-f0/retained.tar.gz",
+      "sha256": "f1c6997486412c3dda50587ce9efa3686647af8bc24013cc81d03b8382c81034",
+      "bytes": 2741989,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/native_engine-s1-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/native_engine-s1-k1-e1-f0/retained.tar.gz",
+      "sha256": "ffacc5b8cde6aa6e9e7be1f2a13c9291c08aaf2838b2a2d60653a22b2502e31c",
+      "bytes": 2741985,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/native_engine-s1-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/resident-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "375aaec39b9e37afde3f5e084bf1aa5a120d3b53f5edb96c1c2f5dae47594ef6",
+      "bytes": 2525,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/resident-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read1/resident-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "ef9108553ad8d2e09b45983db93a030a44c51bc68220c5cf8801ee78601be2f2",
+      "bytes": 2528,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read1/resident-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/complete-auto-s1-k1-e1-f1/retained.tar.gz",
+      "sha256": "f04a276858be741faa20e30c6333413769dc39150b13a2120fe927c6bd1a0cf5",
+      "bytes": 2741907,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/complete-auto-s1-k1-e1-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/legacy-s0-k0-e0-f1/retained.tar.gz",
+      "sha256": "1bd44609fdef986ac93672f3b10de9a95d4ad112a5cee7b86557a3837ab9f9e5",
+      "bytes": 2741788,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/legacy-s0-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/legacy-s0-k1-e0-f1/retained.tar.gz",
+      "sha256": "8d045fee0a73b4b5add71d1c1c6a52244ed1dcf85f5735aa47232570bdaace71",
+      "bytes": 2741814,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/legacy-s0-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/legacy-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "7d6178bd8d3ae17ce35b4427ea2bf690fb7ac0539b7e930abd4757520a075081",
+      "bytes": 2741857,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/legacy-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/legacy-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "f234b0cb76de2310401e8cdcdd1c0daddc35ca2f6c853e3ef3b1a29b524fbe88",
+      "bytes": 2741879,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/legacy-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/native_engine-s0-k0-e1-f0/retained.tar.gz",
+      "sha256": "52a38f96974bb6a8ae2ef7b8593eabe72f3ab66be7f5ca58051bf3f127fb17af",
+      "bytes": 2741884,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/native_engine-s0-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/native_engine-s0-k1-e1-f0/retained.tar.gz",
+      "sha256": "a098ef648709eedf4f896e3306dadacba5f6504a0b6bb302d1e2777f13a0e145",
+      "bytes": 2741909,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/native_engine-s0-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/native_engine-s1-k0-e1-f0/retained.tar.gz",
+      "sha256": "566d6943f055009718c541129411659e930408e75ef79d6f9b5d38a8a35dfd36",
+      "bytes": 2741939,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/native_engine-s1-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/native_engine-s1-k1-e1-f0/retained.tar.gz",
+      "sha256": "2a23bebea053599f1671e60d4d08eb0584abb598e174b00ea6cd93beba582a8b",
+      "bytes": 2741917,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/native_engine-s1-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/resident-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "6c3603e444a9978c3be2bca4f861f872a48b7dda42b861ac70bd07f7233182fd",
+      "bytes": 2533,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/resident-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/mojolearn-162m/read4/resident-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "e340877c0470363a15348438e606a860444edc3884ea732fda94cb60bef11525",
+      "bytes": 2553,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/mojolearn-162m/read4/resident-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/complete-auto-s1-k1-e1-f1/retained.tar.gz",
+      "sha256": "e6189857dfa13aba976ec940b25b4a37cf8de36397ac52bde7ff2219186b1919",
+      "bytes": 2365414,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/complete-auto-s1-k1-e1-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/legacy-s0-k0-e0-f1/retained.tar.gz",
+      "sha256": "064f0006fae25b89f3472ecf61723c8d76797aaff501531b00619848e05ba3dd",
+      "bytes": 2365351,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/legacy-s0-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/legacy-s0-k1-e0-f1/retained.tar.gz",
+      "sha256": "146ea1ea5d105ddbcb22fb658da0211a26737182b7dd4cd0b02e470684df64ba",
+      "bytes": 2365410,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/legacy-s0-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/legacy-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "74d29d5767227dea9522f958e58b746b24a3425b17cc1364745321fc5b656cd9",
+      "bytes": 2365410,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/legacy-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/legacy-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "ba390f2f35e39137aa57e731160972c18b815812ee5615e5da1d181ef2444baa",
+      "bytes": 2365438,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/legacy-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/native_engine-s0-k0-e1-f0/retained.tar.gz",
+      "sha256": "c509b36d58931b77b1f00c1c7da123da036bcfc8147fa761bcbce4de97be0f99",
+      "bytes": 2365394,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/native_engine-s0-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/native_engine-s0-k1-e1-f0/retained.tar.gz",
+      "sha256": "d967df115cb2cbd426bf21d1d92cf9857507198f1177559221cf9dda394ab6c8",
+      "bytes": 2365391,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/native_engine-s0-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/native_engine-s1-k0-e1-f0/retained.tar.gz",
+      "sha256": "8c0b5bb98c208442eb6274869b21fbd7aa7ac6add0204aa754ee439bcb584706",
+      "bytes": 2365433,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/native_engine-s1-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/native_engine-s1-k1-e1-f0/retained.tar.gz",
+      "sha256": "c6e0697e3c431f737f72852c88fc72dcd41b992f2c0bdab81c8c1cd4354f3130",
+      "bytes": 2365430,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/native_engine-s1-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/resident-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "fe411481791998a0ef658339d46461c46a3095fb7524bdc41d1b9db8f3b15ab5",
+      "bytes": 2365394,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/resident-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read1/resident-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "fb9db066cabfba0dd6c120463a7445a82f4a4aec6249c7dd7fa6fa35eae3d73b",
+      "bytes": 2365414,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read1/resident-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/complete-auto-s1-k1-e1-f1/retained.tar.gz",
+      "sha256": "093271f3ca9a8d5fb72bcf5d8391eddacc40162bd2c4fdd64ca1df4be97e71d6",
+      "bytes": 2365334,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/complete-auto-s1-k1-e1-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/legacy-s0-k0-e0-f1/retained.tar.gz",
+      "sha256": "34466d5c7f3505dc4e13959cd3f35b72f7fd74731653719d505320d6c5f8270a",
+      "bytes": 2365321,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/legacy-s0-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/legacy-s0-k1-e0-f1/retained.tar.gz",
+      "sha256": "6739bed13397c95397b6fde855320304bad9eac33ba8ceb78fefaca67ed5d301",
+      "bytes": 2365341,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/legacy-s0-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/legacy-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "41e07f906699c7a0eb91641e6cda0d1d93ef4400df0693528980b203e534ccd3",
+      "bytes": 2365350,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/legacy-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/legacy-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "6e6b26f8117c075e9c46ce9927a97b16a0919218a6e237b3a83b448f98966419",
+      "bytes": 2365344,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/legacy-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/native_engine-s0-k0-e1-f0/retained.tar.gz",
+      "sha256": "541fdf048d79606c2b1386cfd8918fdb1c96a81df2dd36669d1a98ddb8050df4",
+      "bytes": 2365340,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/native_engine-s0-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/native_engine-s0-k1-e1-f0/retained.tar.gz",
+      "sha256": "9a0169ef6e5e435f8f39fc07627ea21601f76f2398cfdd52e67b9e950fdaaba8",
+      "bytes": 2365323,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/native_engine-s0-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/native_engine-s1-k0-e1-f0/retained.tar.gz",
+      "sha256": "b69d8a748ab0ff4b1968900116958a6c84bb4288154192b41e2497f9b67200b8",
+      "bytes": 2365365,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/native_engine-s1-k0-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/native_engine-s1-k1-e1-f0/retained.tar.gz",
+      "sha256": "24f562e5e8d11e3b294d0fc88596c9ab1520a5a99520517d5de2ab75e6c9edd2",
+      "bytes": 2365370,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/native_engine-s1-k1-e1-f0.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/resident-s1-k0-e0-f1/retained.tar.gz",
+      "sha256": "012511cc423a2cf3f59184456c075a4a3a5e32242e9abed9c120628022c52c34",
+      "bytes": 2365313,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/resident-s1-k0-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/smoke/smollm2-135m/read4/resident-s1-k1-e0-f1/retained.tar.gz",
+      "sha256": "c15315e515930397dcfceb1f987951604c272a6ae7abea2cc16f0f555f373fa4",
+      "bytes": 2365331,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/smoke/smollm2-135m/read4/resident-s1-k1-e0-f1.tgz"
+    },
+    {
+      "member": "results-fixed-nvidia/source.tgz",
+      "sha256": "5c3596ea144bef977a3d766450a7f29c1547ef931c90c09e7f2cf11abc521045",
+      "bytes": 153800739,
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/source-freeze.tgz"
+    }
+  ]
+}

@@ -1,0 +1,1395 @@
+{
+  "schema": "mojolearn.nvidia-focused-repair-summary.v1",
+  "source_commit": "002ad07ba544165b133f86ec65e0ed63ea6a7119",
+  "pod": "ynafb31c214etf",
+  "selected_groups": [
+    "host:tokenizer",
+    "host:runtime_classical",
+    "host:runtime_model_selection",
+    "host:runtime_manifold"
+  ],
+  "stage": {
+    "source_commit": "002ad07ba544165b133f86ec65e0ed63ea6a7119",
+    "selected": [
+      {
+        "target": "host/_mojolearn_tokenizer_host.so",
+        "raw_sha256": "555f70af78b795d4d0e6055fd06bcbeb4c824f9497e13f257fbdfa9f0d0afdf1",
+        "receipt": "/root/results-nvidia-repair/selected/artifacts/ac31da5f61a7901bdf01fa38f99eedb7c5d9269956b83a9bb354631986b96a1a/receipt.json",
+        "source_closure_mismatches": [],
+        "toolchain_path_metadata": {
+          "compiler": [
+            "/root/ownership-source/.pixi/envs/default/bin/mojo",
+            "/root/ownership-source/.pixi/envs/default/bin/mojo"
+          ],
+          "pixi": [
+            "pixi 0.77.0",
+            "pixi 0.77.0"
+          ]
+        },
+        "installed_sha256": "ee2abe7335b4f09fa1b119e3d9b2a386e9e1b7994aa1691bbf230a79de79cc02"
+      },
+      {
+        "target": "host/_mojolearn_runtime_classical_host.so",
+        "raw_sha256": "2ac1975470bd5292c89e401db20aa09b3e9768637cbcc0d9fe2ff2acc694251d",
+        "receipt": "/root/results-nvidia-repair/selected/artifacts/e38c06642262c9f4118fbea6de3d77d8b74740f8582ca259910094c5d2427d18/receipt.json",
+        "source_closure_mismatches": [],
+        "toolchain_path_metadata": {
+          "compiler": [
+            "/root/ownership-source/.pixi/envs/default/bin/mojo",
+            "/root/ownership-source/.pixi/envs/default/bin/mojo"
+          ],
+          "pixi": [
+            "pixi 0.77.0",
+            "pixi 0.77.0"
+          ]
+        },
+        "installed_sha256": "66c6c0a16b56eb2415ce8c0f4b4360d41497f108ef31f3122ba61176a5d7f81e"
+      },
+      {
+        "target": "host/_mojolearn_runtime_model_selection_host.so",
+        "raw_sha256": "d6e429f9a66c535414a12c4a6fa52fe8327cd7f0252e7c329de93ff60b98c626",
+        "receipt": "/root/results-nvidia-repair/extra/artifacts/20f3f4c3e264144aa9ef17b365f957dd8cb825a75106712e4ac80c861b66f1f2/receipt.json",
+        "source_closure_mismatches": [],
+        "toolchain_path_metadata": {
+          "compiler": [
+            "/root/ownership-source/.pixi/envs/default/bin/mojo",
+            "/root/ownership-source/.pixi/envs/default/bin/mojo"
+          ],
+          "pixi": [
+            "pixi 0.77.0",
+            "pixi 0.77.0"
+          ]
+        },
+        "installed_sha256": "2e6b161714a743fb463545c38e27fcf700b50effef5e88e35370b84e23454c21"
+      },
+      {
+        "target": "host/_mojolearn_runtime_manifold_host.so",
+        "raw_sha256": "5fcac1b7a36c031c3ffe85110277fe87c1c96183dc4fe828b645900759c8d632",
+        "receipt": "/root/results-nvidia-repair/extra/artifacts/4c4be1f81731a87da43777035a6bb0d05ae9b1d876bec0585ec736fd59bb2a47/receipt.json",
+        "source_closure_mismatches": [],
+        "toolchain_path_metadata": {
+          "compiler": [
+            "/root/ownership-source/.pixi/envs/default/bin/mojo",
+            "/root/ownership-source/.pixi/envs/default/bin/mojo"
+          ],
+          "pixi": [
+            "pixi 0.77.0",
+            "pixi 0.77.0"
+          ]
+        },
+        "installed_sha256": "210f02f965ab76096324b3322cec6fbf85bf578ed4b486bc1014552bbe57f729"
+      }
+    ],
+    "changed_extensions": [
+      "host/_mojolearn_runtime_classical_host.so",
+      "host/_mojolearn_runtime_manifold_host.so",
+      "host/_mojolearn_runtime_model_selection_host.so",
+      "host/_mojolearn_tokenizer_host.so"
+    ],
+    "unchanged_extensions": 75,
+    "base_source": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+    "package": "/root/nvidia-repair-venv/lib/python3.14/site-packages/mojolearn",
+    "python": "/root/nvidia-repair-venv/bin/python",
+    "scope": "Four compiled repaired groups assembled; installed checks and affected verifier pending"
+  },
+  "focus": {
+    "required_new_tests": 10,
+    "passed": 10,
+    "failed": 0,
+    "skipped": 0
+  },
+  "extra_baseline_suite": {
+    "total": 20,
+    "passed": 6,
+    "failed_precondition": 14,
+    "note": "Existing tests require NumPy absent after importing mojolearn. Exact unchanged c286 package also imports NumPy; failure preserved, not a repaired002ad numerical-regression claim."
+  },
+  "controller_screen": {
+    "helper_sha256": "dbb0a24fce2d1a1d5500a0893990e70550799c29a4e09b6b8924c6671e3cb0bf",
+    "counts": {
+      "tests": 42,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "actual_report_validation": {
+      "lane": "x-neighbors-skewed-chi2",
+      "vendor": "nvidia",
+      "report_sha256": "cf1e41d07e70271ff1c735c537d9c01c31f7fb39d677ca89f760056f52e3bc44",
+      "exit_code": 4,
+      "worker_signals": [],
+      "property_failures": 0,
+      "native_operation_errors": 81,
+      "state": "failed-pending-repair",
+      "numerical_mismatch_asserted": false,
+      "release_qualified": false
+    }
+  },
+  "coverage": {
+    "expected": 31,
+    "attempted": 31,
+    "complete": 30,
+    "failed": 1,
+    "pending": 0
+  },
+  "units": [
+    {
+      "lane": "sequence-moe-backward",
+      "profile": "neural-training",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "6b48c239b65cb6ed559dd9bc985c066e886b1c5905af36aaab76edb058045db1",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/sequence-moe-backward.tgz",
+        "sha256": "98d04045c5867207fb4e2ecdad2ffd60c4cdade025ec89435755c6dc8a11696f",
+        "bytes": 2245137,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-ridge-cv-sw",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "8f62ba2fb14b4e896d985fa2481d6ad7acf551cf04bb97998bb038ffa17a19a5",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-ridge-cv-sw.tgz",
+        "sha256": "e1d3cc79ac2bfd990056342251276ad04f2368ab890b31db17a34651157b00f4",
+        "bytes": 2246727,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-prep-nb-partial",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "1d4c3917cfeeaac15740f70e29bc5b2be6a58c8a5bc367c8caf59f2c4e11047c",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-prep-nb-partial.tgz",
+        "sha256": "9075ae9444974fe9f1f8236293da714cf46d1bf5fc99e8d2d90238222fc742e1",
+        "bytes": 2246450,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-ann-cagra-filter",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "9ca5b63e70969430940d4a86658de3a30c9f90ca022ce42d6fcbf5e9dd8cebcd",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-ann-cagra-filter.tgz",
+        "sha256": "d32eecacd048e840e59c2b3cd66f7c5fa172420f017e1cedfdf283eb8e6076ae",
+        "bytes": 2247012,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-ridge-clf-w",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "c6d4208d3594df0bf285701575ba0ab31b79f52f4f4f912026d862516a65945c",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-ridge-clf-w.tgz",
+        "sha256": "940744ecf4ee191a9763252a7d12faf6f08866cc56b52c89e475b69da42f36ee",
+        "bytes": 2246867,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-huber-sw",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "3f4ecffcb98db96c1d69a5b8312aa4f898fbd08a39cc89d7dfbfe7229bdcc970",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-huber-sw.tgz",
+        "sha256": "ead213765e76d1a3bbc441890ccb89483c2afab53780b29a122cb9c522dd219a",
+        "bytes": 2246320,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-enet-cv",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "e4d98db52407b6344c50106f3b36cebae32f9f45e7f5b2559d0153d98043eb9b",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-enet-cv.tgz",
+        "sha256": "88b1e47bf592282290cecaab5b1a829e8403c6c0a0b254ecda50b0c916f20a51",
+        "bytes": 2246863,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-quantile-sw",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "ac3534651a91dd47b9f4d1e3c3ee4ba4cc71839537602856bd9151a50566ef30",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-quantile-sw.tgz",
+        "sha256": "4321fdaad998b74def60c6a50cf297c4bd428f80be02ea00b0da35a4b6605287",
+        "bytes": 2247034,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-logistic-cv-w",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "fbe035e944d3becea94ae5341c9d83061559f7ab7f9205d33e3f99c987322d39",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-logistic-cv-w.tgz",
+        "sha256": "a69dec48a0e47d7c47ec356bfd06328eb13e634427687181d0274f702a3899bf",
+        "bytes": 2246961,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-sgd-clf-w",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "0db2418c3326c72c2f5c29eb0c04ca8c8819b2891a40c9ab2d2c1f07fd9dc9d2",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-sgd-clf-w.tgz",
+        "sha256": "7880475e45e2a9c22e4caa2bfc1da300c8aeb700af33d874ec44874ac55a83ce",
+        "bytes": 2246729,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-glm-poisson-sw",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "14c5c862846c873df38eb6ffd4cb8d123a92eb019363abe2f8b49a282f1d907b",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-glm-poisson-sw.tgz",
+        "sha256": "e4f75798bfc33e794eb6ef48328c06853907544824867ef18cbf0d97d3b08a32",
+        "bytes": 2246677,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-prep-nb-weights",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "bd370e9cf0475fadfdd9e94e96c515ad5365c66509a31934f872b101dbca9ef9",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-prep-nb-weights.tgz",
+        "sha256": "78050c520aaf7d354badd14dd804722737b88a1bf0ecf0433b507c1765730bca",
+        "bytes": 2246840,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "radius",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "87b00beb37bf031528f7fc5ced5d29787e6faf5ade30dada392ef052e83abd3d",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/radius.tgz",
+        "sha256": "2b2ba347ced71ac5072f7952bc11fb3c9cbe7b54ec92a8d8535f12c2fd6131e0",
+        "bytes": 2248944,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-lasso-cv",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "caa2741df775eb80386681449d97d0937cfdb34cfe7ab9f382f72faed4674cef",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-lasso-cv.tgz",
+        "sha256": "aa66745616ca2f62cf66628262eabcde6b19810dc51f4c101e7873d25ee618e6",
+        "bytes": 2246916,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-bayes-ridge-sw",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "30a652753df9e716032bef0d9ecd96a0836df45842807d2b0bd718d3999cc108",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-bayes-ridge-sw.tgz",
+        "sha256": "9f9dba1a4669aced1432d7acdeaf9cb70f3262e78751f73171d12bd78c7dc1e6",
+        "bytes": 2247149,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "radius-chebyshev",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "e0983a2892b31bcdca2d92661e8452b1f740aac3e288f882cb38f15746318d0a",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/radius-chebyshev.tgz",
+        "sha256": "d11ceb194f352b0cd6c8a874c47a4c11ef4f46542b219116ce7a79fc5d7f97a4",
+        "bytes": 2249443,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "radius-manhattan",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "ebbf8c1196e9e4be370acfe540edb6a1de062546a392753a43311b7c1f3bf211",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/radius-manhattan.tgz",
+        "sha256": "1f845c69a6bc95f9a7865f92e9438540c285951a67b2634fb6f48f07a1e0c268",
+        "bytes": 2248578,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "radius-minkowski-p3",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "b3fb729238448fca5b339b8ad36f47901495846cb181888152196f1506609db1",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/radius-minkowski-p3.tgz",
+        "sha256": "817fcf7b021c37d27b2fd62a50b17de64a538e5306446dd8e5d600c3c8204fa3",
+        "bytes": 2248444,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-sgd-reg-sw",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "0032ebc62880eb83224b3e0a8e24979df8940f4a45c79996b89ecdead319ce43",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-sgd-reg-sw.tgz",
+        "sha256": "787f671bfb70dee2b5f27bc7144496c30b636d967d664641a1fa68e24c16ba13",
+        "bytes": 2247054,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-lasso-cv-pos",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "ce2e6c5d83cd8289024e2d082cf8fa5e8730820bee9f19b7f6b4657380f5ef25",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-lasso-cv-pos.tgz",
+        "sha256": "4be7496e3114967109f4ffbb46943d110327710abfe72f91740f32fadf2d21df",
+        "bytes": 2246489,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-neighbors-skewed-chi2",
+      "profile": "routine",
+      "local_complete": false,
+      "exit_code": 4,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 0,
+        "N/A": 0,
+        "OWED": 0,
+        "REFUSED": 81
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": false,
+        "local_property_failures": 81,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 4,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "cf1e41d07e70271ff1c735c537d9c01c31f7fb39d677ca89f760056f52e3bc44",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-neighbors-skewed-chi2.tgz",
+        "sha256": "d640d30044df73fc8654a3190de41e8128b4341cdb764ba2ed457d908061759f",
+        "bytes": 2252902,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-neighbors-svc-multiclass",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "79b68fe79fb9ef53de2644ba52527dc45a8bb1b7351f6500b4367f1f16c2e10b",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-neighbors-svc-multiclass.tgz",
+        "sha256": "0282c11002ecec4e0a497135982cd58dfa07385d60731a79c166dde654c2b777",
+        "bytes": 2246223,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-neighbors-svc-probability",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "e4fb5e8a7e080a99899f90c91478ca33216b886c642c5dccbe45cab57fa0189e",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-neighbors-svc-probability.tgz",
+        "sha256": "92f775c67ec5b0cd13ee4d9cd742653e17a2cd3314b8f20cbd1cf1f6bd8e663b",
+        "bytes": 2246738,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-neighbors-svc-sigmoid",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "ff4f6003c6b805c6fa1faf0b0fbe9b4cc141f03cf75cb348d5dbe5b608c9d88d",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-neighbors-svc-sigmoid.tgz",
+        "sha256": "2ffee9dff612d93f3b953aceef2ed163603b34c186564af5ddf815b6f43e14ee",
+        "bytes": 2247174,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-neighbors-svgp",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "4b021376e50e99aea95490148ce7fc86c60419e840f900554e1de54edd1edf5e",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-neighbors-svgp.tgz",
+        "sha256": "f6509d77724b7d846be9a1b7a39ebddaecd5b6173b9f0950f2b2a0674e703443",
+        "bytes": 2247099,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-neighbors-svm-precomputed",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "34f2bb74033a792ffe99d6d7a837c2c815b272f90ea75209bf61a1f77e9459d2",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-neighbors-svm-precomputed.tgz",
+        "sha256": "f7e9b1caa062b5fe6458665ad3e5e4dfebb4b65c0433174674426b9817460927",
+        "bytes": 2246800,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-neighbors-svm-weights",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "3d82cf74857443921e78ac302b7192150a7b8d8b93581bb67f1f7ab26ea698c1",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-neighbors-svm-weights.tgz",
+        "sha256": "e87cb5126bf5e604bd4629d0e749afe999ad21b8bf04d16c687804b4bc24927d",
+        "bytes": 2246747,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-neighbors-svr-kernels",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "e35cb7fdb94f35ad3e607e3a5fd59ec79f0f92c548c87154a69956d49a685034",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-neighbors-svr-kernels.tgz",
+        "sha256": "ba6dad1f4a75a054581fabde73d5dd99a628683fa99316295d4463fef123fa8b",
+        "bytes": 2247091,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-pa-clf",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "656e9c9f2f275d577250043c3f8356011ac7d0747e9236ed993313dd9e9529d8",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-pa-clf.tgz",
+        "sha256": "794f67e5262c0035e2c19ae48492d9ef0686059067dfa1585e74e62284b147ae",
+        "bytes": 2246717,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-pa-reg",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "ed07349033b3065c8658d6de21e1a133cdaad228699294b200cc4804b8b0a57d",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-pa-reg.tgz",
+        "sha256": "5cf918de777f6b53d562aed72f7d2cb2b4b4c5bef06c8dc448a70abbbf173b9a",
+        "bytes": 2247084,
+        "status": "R2 PUT and GET verified"
+      }
+    },
+    {
+      "lane": "x-perceptron",
+      "profile": "routine",
+      "local_complete": true,
+      "exit_code": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "validation": "Supported producer receipt validated; local completeness or scoped native failure gate required provenance and selftest",
+      "requested_fixtures": [
+        "base",
+        "ties",
+        "hashed",
+        "wide",
+        "denormal",
+        "denormal_ftz",
+        "dupes",
+        "odd",
+        "negative"
+      ],
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "report_sha256": "20b5cf672c048194adb46cf620404ff23c416dc83fa9a44ea219726d1fd8d20e",
+      "retention": {
+        "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/runs/x-perceptron.tgz",
+        "sha256": "f5dc344e8afa258b9c2f519c4652abc45401d0411349de5d421c226bbf0fb5f2",
+        "bytes": 2246407,
+        "status": "R2 PUT and GET verified"
+      }
+    }
+  ],
+  "retention": [
+    {
+      "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/final.tgz",
+      "sha256": "19c9880ffdbce1dec3b2cc4d4d841ea5651f868b840e9146d6fac3fd6b28013a",
+      "bytes": 697363320,
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/repair-final-retained.tgz",
+      "extracted": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/repair-final-retained"
+    },
+    {
+      "key": "verification/0.8.63/002ad07ba544/nvidia/repair-ynafb31c214etf/classifier-screen.tgz",
+      "sha256": "4f0c0e0fc04034b8bcfba43522a425f51c2f18214c772de237027944cdb45040",
+      "bytes": 33258,
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/repair-screen-retained.tgz",
+      "extracted": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/repair-screen-retained"
+    }
+  ],
+  "scope": "Focused installed/runtime and full bounded9fixture observations only. No central ledger mutation, cross-vendor admission or full release green claim.",
+  "remaining": "SkewedChi2 original missing native export retained; repair queued next freeze. Other release owners retain Prophet/AutoARIMA/centroid/safetensors/KMeans work."
+}
