@@ -657,6 +657,49 @@ def refuse_to_run(vendor, devices):
 # the report
 # --------------------------------------------------------------------------
 
+def error_brief(text, limit=400):
+    """A refused part's error for the report: its head (the stage and the
+    exception the driver raised) and, always, its LAST lines, where a worker
+    traceback carried inside the message ends with the root exception.
+
+    NEVER A HEAD CUT (2026-10-30). This was `str(error)[:400]`, and a 0.8.55
+    two-L40S `--par quick` printed four cells as `RuntimeError: GPU worker
+    failed:` followed by the outermost frames of the worker's own traceback:
+    the root error was cut away. The JSON document (`--json`, `--json-out`)
+    carries the full text."""
+    text = str(text)
+    if len(text) <= limit:
+        return text
+    lines = [l for l in text.splitlines() if l.strip()]
+    head = lines[0] if lines else text
+    tail = []
+    budget = limit // 2
+    for line in reversed(lines[1:]):
+        if tail and sum(len(t) + 3 for t in tail) + len(line) > budget:
+            break
+        tail.insert(0, line.strip())
+    if not tail and len(lines) > 1:
+        tail = [lines[-1].strip()[-budget:]]
+    if not tail:
+        return text[:limit - budget - 5] + " ... " + text[-budget:]
+    return head[:limit - budget] + " ... " + " | ".join(tail)
+
+
+def _write_json_out(args, document):
+    """`--json-out PATH`: the same document `--json` prints, written
+    atomically. Returns an error sentence, or None."""
+    path = getattr(args, "json_out", None)
+    if not path:
+        return None
+    try:
+        from ._verify_worker import atomic_json
+        atomic_json(path, document)
+    except OSError as exc:
+        return f"cannot write {path}: {exc}"
+    _emit(f"# evidence written to {path}", sys.stderr)
+    return None
+
+
 def format_par_check(r):
     lines = ["# python -m mojolearn verify --par", ""]
     if not r["ran"]:
@@ -684,7 +727,7 @@ def format_par_check(r):
                      f"one={c['one']}  two={c['two']}")
         for side in ("one", "two"):
             if c[f"{side}_error"]:
-                lines.append(f"      {side}-device error: {str(c[f'{side}_error'])[:400]}")
+                lines.append(f"      {side}-device error: {error_brief(c[f'{side}_error'])}")
     if r["counts"].get("CPU-ROUTE-LIMIT"):
         lines.append(f"{r['counts']['CPU-ROUTE-LIMIT']} part(s) read CPU-ROUTE-LIMIT: the "
                      "two-device side refused with the CPU route's own by-name sentence "
@@ -771,6 +814,7 @@ def cmd_par_check(args, ml):
     refusal = refuse_to_run(vendor, devices)
     if refusal:
         result = dict(ran=False, vendor=vendor, devices=list(devices), reason=refusal)
+        _write_json_out(args, dict(format="mojolearn.verify-par.v1", **result))
         if json_out:
             _emit(json.dumps(dict(format="mojolearn.verify-par.v1", **result), indent=1, sort_keys=True))
         else:
@@ -820,10 +864,16 @@ def cmd_par_check(args, ml):
         result["self_test_passed"] = bool(compared) and all(
             c["verdict"] == "DIVERGENT" for c in compared)
         result["self_test_compared"] = len(compared)
+    write_error = _write_json_out(args, dict(format="mojolearn.verify-par.v1", **result))
     if json_out:
         _emit(json.dumps(dict(format="mojolearn.verify-par.v1", **result), indent=1, sort_keys=True))
     else:
         _emit(format_par_check(result))
+    if write_error:
+        # the run happened, but the evidence document the caller asked for
+        # does not exist: never exit as if it did
+        _emit(f"CANNOT WRITE: {write_error}", sys.stderr)
+        return EXIT_CANNOT_RUN
     if result["witness_refusal"] or not result["cells"]:
         return EXIT_CANNOT_RUN
     if perturb:
