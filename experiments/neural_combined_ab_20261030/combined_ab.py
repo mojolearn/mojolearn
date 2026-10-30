@@ -79,9 +79,6 @@ def worker(a):
             'private_state':'new stream privately allocates state; no resume/parameter exposure/alias injection',
             'interpretation':'admission metadata plus actual completed native-branch witness in excluded warmup; raw witness retained in execution.log',
             'source':str(ROOT/'bindings/causal_lm_public.mojo')}
-        if a.route=='resident' and not rec['route_admission_evidence']['final_norm_present']:
-            rec.update(status='unsupported',executed=False,reason='Actual loaded model has no final norm required by resident admission; no generation was timed.')
-            write(dest/'result.json',rec);return 0
         def descriptor_counters():
             current=model._native_entries
             return {name:repr(current[name]) for name in ('native_block_operations','native_primitives') if name in current}
@@ -156,9 +153,11 @@ def worker(a):
         rec['status']='measured' if rec['quality'].get('status')=='scored' and rec['quality'].get('finite_logits') and np.isfinite(rec['quality']['mean_model_nll']) else 'failed-quality';rec['qualification']='NVIDIA-only one-sample full-workload A/B; completed route witness is required by controller; AMD/Apple and independent quality pending, no default promotion'
     except BaseException as exc:
         rec.update(status='failed',error=repr(exc));(dest/'error.log').write_text(traceback.format_exc())
+        if a.route=='resident' and 'explicit resident route requires compatible private disjoint state and greedy or FP32 sampling' in str(exc) and not rec.get('rounds'):
+            rec.update(status='unsupported',executed=False,reason='Actual native admission refused this explicit resident request before any scored call; original refusal retained.')
     write(dest/'result.json',rec)
     print(json.dumps({k:rec.get(k) for k in ['model_key','arm','read_chunk','status','error','rounds','quality']}),flush=True)
-    return 0 if rec['status']=='measured' else 1
+    return 0 if rec['status'] in ('measured','unsupported') else 1
 
 
 def main():
@@ -244,7 +243,6 @@ def main():
                 witness.update(actual_routes=validate_witness(events,row['generated_tokens'],chunk),validated=True)
                 witness['retained_kv_observed']=any(x['retained_kv'] for x in events)
                 expected=cfg.get('expected_route')
-                if cfg.get('route')=='auto' and not row.get('route_admission_evidence',{}).get('final_norm_present',True):expected='native_engine'
                 if expected and witness['actual_routes']!=[expected]:
                     raise ValueError('executed route differs from explicit compatible selection')
             except ValueError as exc:row.update(status='failed-route-witness',route_error=str(exc))
