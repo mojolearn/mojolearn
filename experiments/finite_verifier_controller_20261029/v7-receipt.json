@@ -1,0 +1,25 @@
+{
+  "product_source_revision": "47508cfcd96771eee86b115739b2a83ddb0e43aa",
+  "scope": "Finite verifier orchestration only; no numerical source changes",
+  "sha256": {
+    "run_frozen_chunks_v7.py": "02ffc22f1d275913cb05b8378972d81aeda5ff6b69c5338b926ab22b2f438b5d",
+    "controller_offsite.py": "785cdfc32abd5cd6c1785352b3b2ed9319308e274591cb4ef4653056824bcd3a",
+    "controller_local_failures.py": "beaf41dcc51188d19f52ea292486404ac15bb2c6096d8975c96ea483559ab774",
+    "upload_offsite_snapshot.py": "b3e6bd5b49e86b1a704531568cba39f798eb892ea733431ec99b05666628cf58",
+    "test_controller_v7.py": "8b94dc421e897dfe10353d0105abd59f11596868f146063645b05bf08d2222cf",
+    "test_controller_local_failures.py": "8194a1a9844613ab3d10ba2540df2763baf1e76b6a715dea8ddc0b00af3fd3db",
+    "test_controller_offsite.py": "dac319cd5c99a75e56901ad8077fdf4036fe5a9d2ecaa6bc7677dd4ba2c74d1f"
+  },
+  "actual_failure_validation": {
+    "vendor_lanes": [
+      "apple/arima",
+      "apple/arima-011",
+      "cpu/arima",
+      "cpu/arima-011"
+    ],
+    "provenance_checked": true,
+    "rerun": false
+  },
+  "retention": "LocalMac owner-authorized deferredoffsite queue; strict remote retention unchanged",
+  "release_admission": "pending allrequiredruntime,columns,controls,artifact and offsite evidence"
+}
