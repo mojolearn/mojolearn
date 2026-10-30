@@ -556,8 +556,11 @@ def seal(ctx, directory, recipe, rec):
     # An arm whose every cell the board refused (e.g. the pure-PyTorch twin of mamba1-forward, not an
     # opponent) never runs a timed call, so it has no timed read-back to retain. Without this exemption its
     # absence marked the measured arms' cells incomplete and stopped the 0.8.49 AMD race (2026-10-16).
+    # An arm refused at fit never runs inference, so its infer cells read UNKNOWN("no inference lines") rather than
+    # REFUSED; judging the arm by its fit cells keeps such an arm exempt (2026-10-30: AMD trees/gbdt-lossguide/taxi,
+    # where the by-name refused lightgbm-cuda arm marked the xgboost-gpu comparison INSUFFICIENT).
     refused = {}
-    for cell in (rec.get("cells") or []) + (rec.get("infer_cells") or []):
+    for cell in rec.get("cells") or []:
         arm = cell.get("arm")
         refused[arm] = refused.get(arm, True) and str(cell.get("status") or "").startswith("REFUSED")
     for arm in rec.get("arms", []):
