@@ -139,5 +139,13 @@ reads of one stream segfaulted. Those sources, logs and state bytes remain
 retained; no candidate timings were started. The repair candidate removes stale
 lifecycle replay and claims the original stream before capturing its native
 owners. Read, info and checkpoint calls now refuse overlap on the same stream;
-independent streams retain separate claims. Optimized compilation and actual
-concurrent runtime checks remain required before qualification.
+independent streams retain separate claims. Frozen repair `99c25a6d` passed
+both selected optimized Linux compilations, all 43 installed NVIDIA checks
+(zero skips), and four isolated concurrency probes. Independent streams on
+legacy/resident routes preserved serial outputs, checkpoint/info and cleared
+ownership. Overlapping reads on the same stream were refused while the owning
+read remained correct. This proves overlapping public-call ownership, not
+simultaneous GPU kernels. The raw prerequisite archive (including state arrays)
+is recorded in `experiment.json`. The full-workload frozen matrix is running;
+AMD/Apple qualification and promotion evidence remain pending. Defaults have
+not changed, and the original aea failures remain retained.

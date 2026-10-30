@@ -1,6 +1,6 @@
 {
   "schema": "mojolearn.generation-controls-experiment.v1",
-  "status": "aea32 installed GPU checks passed; actual concurrent-owner and same-stream failures retained; ownership repair candidate awaiting optimized compile and runtime checks",
+  "status": "99c ownership repair compiled on Linux and passed43 installed NVIDIA checks plus4actual concurrency probes; frozen full-workload matrix running, other vendor qualification pending",
   "promoted": false,
   "base_instrumentation_commit": "f048701e7c89530443c26d1b8a56aab9d9eec634",
   "included_release_repair_commit": "c286a410cbc2fb970d9caabddc1c2d7604d6cdf0",
@@ -91,5 +91,34 @@
     "proof_key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/aea1d9a/concurrency-confirm-579e07924c9466702565bc5249efe29beab7df814d151943eef7dc0a2b53d5b6.tgz",
     "proof_sha256": "579e07924c9466702565bc5249efe29beab7df814d151943eef7dc0a2b53d5b6",
     "performance_timing": "withheld until ownership repair qualifies"
+  },
+  "ownership_repair": {
+    "source_commit": "99c25a6dc8162e9629f85ee3408222d2348e2537",
+    "linux_selected_groups": [
+      "host:tokenizer",
+      "host:runtime_classical"
+    ],
+    "native_compile_exit_codes": [
+      0,
+      0
+    ],
+    "nvidia_installed": {
+      "passed": 43,
+      "skipped": 0,
+      "failed": 0
+    },
+    "nvidia_concurrency": {
+      "passed": 4,
+      "failed": 0,
+      "scope": "legacy/resident independent-stream and same-stream probes; overlap of publiccalls, not proof of simultaneous GPU kernels"
+    },
+    "prerequisite_retention": {
+      "key": "measurements/neural-combined-ab-20261030/75noc9xdhlul62/99c25a6d/prerequisites.tgz",
+      "sha256": "8ece2560f38ac44134bde7bf6435421ad2bc7cc442e5c65dd69be2e43a62af36",
+      "bytes": 16365041,
+      "put_get_verified": true
+    },
+    "full_workload": "running; no timing/default verdict yet",
+    "other_vendors": "pending"
   }
 }
