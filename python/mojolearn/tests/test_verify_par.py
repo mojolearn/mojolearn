@@ -684,3 +684,33 @@ def test_identical_reexec_preserves_parallel_candidate_path(monkeypatch):
         return types.SimpleNamespace(returncode=5)
     monkeypatch.setattr(va.subprocess,'run',child)
     assert va._reexec_identical(argv)==5
+
+
+def test_the_par_report_keeps_the_worker_root_error():
+    """A refused part's error in the report keeps its LAST line, where a
+    worker traceback carried in the message names the root exception; the
+    old `[:400]` head cut printed only the outermost worker frames."""
+    frames = "".join('  File "worker.py", line %d, in step\n    call()\n' % i for i in range(40))
+    text = ("RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n" + frames
+            + "ValueError: MOJOLEARN_TEST_ROOT_CAUSE")
+    assert "MOJOLEARN_TEST_ROOT_CAUSE" not in text[:400]
+    brief = vpar.error_brief(text)
+    assert len(brief) <= 400
+    assert brief.startswith("RuntimeError: GPU worker failed:")
+    assert brief.endswith("ValueError: MOJOLEARN_TEST_ROOT_CAUSE")
+    assert vpar.error_brief("short") == "short"
+
+
+def test_par_json_out_writes_the_refusal_document(tmp_path, monkeypatch):
+    """`verify --par --json-out PATH` writes its document (0.8.55 wrote none)."""
+    import json
+    import types
+    from mojolearn import _backend
+    path = tmp_path / "par.json"
+    monkeypatch.setattr(vpar, "load_harness", lambda **kw: None)
+    monkeypatch.setattr(vpar, "refuse_to_run", lambda vendor, devices: "MOJOLEARN_TEST_REFUSAL")
+    monkeypatch.setattr(_backend, "vendor", lambda: "cuda")
+    args = types.SimpleNamespace(par="quick", par_devices="0,1", json=False, json_out=str(path))
+    assert vpar.cmd_par_check(args, None) == va.EXIT_CANNOT_RUN
+    doc = json.loads(path.read_text())
+    assert doc["format"] == "mojolearn.verify-par.v1" and doc["reason"] == "MOJOLEARN_TEST_REFUSAL"
