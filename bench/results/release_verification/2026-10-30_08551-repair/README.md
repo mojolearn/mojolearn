@@ -1,6 +1,6 @@
 # 0.8.55.1 maintenance repair candidate
 
-Source freeze: `4c2df6b91148aee7f5733fcfb5ffdac87d18494d`, based on the actual published 0.8.55 source `a8255828597a3bd19ac7bb5f657a38d09b8c732f`. Not yet published to PyPI.
+Source freeze: `e7f7417a6abdb51f62bf81e2e601e8c9b1a391f6`, based on the actual published 0.8.55 source `a8255828597a3bd19ac7bb5f657a38d09b8c732f`. Not yet published to PyPI.
 
 ## Changes
 
@@ -12,7 +12,7 @@ Source freeze: `4c2df6b91148aee7f5733fcfb5ffdac87d18494d`, based on the actual p
 
 ## Validation and scope
 
-Both Arm/macOS and x86/Linux compiled both repaired host bindings successfully. On each CPU, the three affected regular lanes pass all nine selected fixtures: 197 applicable cell parts, zero divergent/refused/owed, 162 not applicable. The three selected neural-training lanes pass 54 applicable parts, zero divergent/refused/owed, 189 not applicable. Seven installed regression/optimizer tests pass on each CPU. Verifier self-test and reference coverage checks pass. Reference admission checks 243 parts (54 numerical), with no problems.
+Both Arm/macOS and x86/Linux compiled both repaired host bindings successfully, including the final algorithm-module layout required by the source guard. On each CPU, the three affected regular lanes pass all nine selected fixtures: 197 applicable cell parts, zero divergent/refused/owed, 162 not applicable. The three selected neural-training lanes pass 54 applicable parts, zero divergent/refused/owed, 189 not applicable. Seven installed regression/optimizer tests pass on each CPU. Verifier self-test and reference coverage checks pass. Reference admission checks 243 parts (54 numerical), with no problems.
 
 These are installed development overlays, not final 0.8.55.1 wheels. Existing GPU evidence and binaries are retained, not described as new executions. No performance measurements were rerun. Complete logs, original failures, source and binary bytes are retained locally and in R2; see qualification.json for hashes and locations.
 

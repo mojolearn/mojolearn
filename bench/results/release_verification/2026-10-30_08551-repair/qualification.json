@@ -1,11 +1,121 @@
 {
-  "source_commit": "4c2df6b91148aee7f5733fcfb5ffdac87d18494d",
+  "source_commit": "e7f7417a6abdb51f62bf81e2e601e8c9b1a391f6",
   "base_release": "0.8.55",
   "base_commit": "a8255828597a3bd19ac7bb5f657a38d09b8c732f",
   "candidate_version": "0.8.55.1",
   "published": false,
   "runtime_kind": "published 0.8.55 installed package with two compiled host bindings, host_surface and admitted reference table overlaid; not final wheel qualification",
   "reports": {
+    "mac-layout-cpu.json": {
+      "sha256": "1337e50264de6cd079f290a16feede2c1688fe5452a9225919f5e8b6507f12a7",
+      "exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 197,
+        "N/A": 162,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/release-08551/mac-layout-cpu.json"
+    },
+    "mac-final-neural.json": {
+      "sha256": "f3b2b891eb6739950fc889f197e889137daac56b803d0acb9273ba2318a3baad",
+      "exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 54,
+        "N/A": 189,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/release-08551/mac-final-neural.json"
+    },
+    "x86-repaired.json": {
+      "sha256": "a0f18024fb3246586ef26984004dd8028fd1d52847cf3393f7c3b9bf1b7e420d",
+      "exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 197,
+        "N/A": 162,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "archive_member": "results-08551-build/repaired.json"
+    },
+    "x86-neural.json": {
+      "sha256": "a75716a1f48083d423014fc897a30c68ae5bb13d887b3786957727e2433e935a",
+      "exit": 0,
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 54,
+        "N/A": 189,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "archive_member": "results-08551-build/neural.json"
+    }
+  },
+  "reference_admission": {
+    "admissible": true,
+    "checked_parts": 243,
+    "lanes": 3,
+    "numerical_parts": 54,
+    "problems": []
+  },
+  "retention": {
+    "source_commit": "e7f7417a6abdb51f62bf81e2e601e8c9b1a391f6",
+    "objects": [
+      {
+        "file": "/Users/andrewhendel/mojolearn-evidence/release-08551/source-e7f7417a6abd.tgz",
+        "key": "measurements/release-08551/final-layout/source-e7f7417a6abd.tgz",
+        "bytes": 32348913,
+        "sha256": "0e3a4a41b65c9e05b80b98e965b82555225a3a109d0dca9132c3b783ebe61e89",
+        "readback_verified": true
+      },
+      {
+        "file": "/Users/andrewhendel/mojolearn-evidence/release-08551/mac-layout-retained.tgz",
+        "key": "measurements/release-08551/final-layout/mac-layout-retained.tgz",
+        "bytes": 2953477,
+        "sha256": "1179f3da56b4a554abb3cb6d7aced09889157bd770e960e0ea0205ac756cb1c5",
+        "readback_verified": true
+      },
+      {
+        "file": "/Users/andrewhendel/mojolearn-evidence/release-08551/linux-layout-retained.tgz",
+        "key": "measurements/release-08551/final-layout/linux-layout-retained.tgz",
+        "bytes": 1163614,
+        "sha256": "151a04c54f45c88778ca3d98e20b29f6689a28cc3d93a771ca64cfb513e73dfc",
+        "readback_verified": true
+      }
+    ]
+  },
+  "previous_source_commit": "4c2df6b91148aee7f5733fcfb5ffdac87d18494d",
+  "previous_retention": {
+    "source_commit": "4c2df6b91148aee7f5733fcfb5ffdac87d18494d",
+    "objects": [
+      {
+        "file": "/Users/andrewhendel/mojolearn-evidence/release-08551/source-4c2df6b91148.tgz",
+        "key": "measurements/release-08551/frozen/source-4c2df6b91148.tgz",
+        "bytes": 32348721,
+        "sha256": "1310c49e60e5884d041b568f3da03bd6ac990ed8a6a1292b20774a5370c0b84d",
+        "readback_verified": true
+      },
+      {
+        "file": "/Users/andrewhendel/mojolearn-evidence/release-08551/mac-frozen-retained.tgz",
+        "key": "measurements/release-08551/frozen/mac-frozen-retained.tgz",
+        "bytes": 2954749,
+        "sha256": "5db5055b8313ecf10c8c784ae3d743fadac450963b8666cc16eb4782a150f0c3",
+        "readback_verified": true
+      },
+      {
+        "file": "/Users/andrewhendel/mojolearn-evidence/release-08551/linux-frozen-retained.tgz",
+        "key": "measurements/release-08551/frozen/linux-frozen-retained.tgz",
+        "bytes": 2330512,
+        "sha256": "883ca0b218d99fa081916007241c85e6182cafad17403eb49bcf7a14a3779228",
+        "readback_verified": true
+      }
+    ]
+  },
+  "previous_reports": {
     "mac-frozen-cpu.json": {
       "sha256": "7cf2af641a90535aed6a19b5ae19d1e92fd0bc857f028dd65c5cc266d1bd6a74",
       "exit": 0,
@@ -54,38 +164,5 @@
       },
       "archive_member": "results-08551-build/final-neural.json"
     }
-  },
-  "reference_admission": {
-    "admissible": true,
-    "checked_parts": 243,
-    "lanes": 3,
-    "numerical_parts": 54,
-    "problems": []
-  },
-  "retention": {
-    "source_commit": "4c2df6b91148aee7f5733fcfb5ffdac87d18494d",
-    "objects": [
-      {
-        "file": "/Users/andrewhendel/mojolearn-evidence/release-08551/source-4c2df6b91148.tgz",
-        "key": "measurements/release-08551/frozen/source-4c2df6b91148.tgz",
-        "bytes": 32348721,
-        "sha256": "1310c49e60e5884d041b568f3da03bd6ac990ed8a6a1292b20774a5370c0b84d",
-        "readback_verified": true
-      },
-      {
-        "file": "/Users/andrewhendel/mojolearn-evidence/release-08551/mac-frozen-retained.tgz",
-        "key": "measurements/release-08551/frozen/mac-frozen-retained.tgz",
-        "bytes": 2954749,
-        "sha256": "5db5055b8313ecf10c8c784ae3d743fadac450963b8666cc16eb4782a150f0c3",
-        "readback_verified": true
-      },
-      {
-        "file": "/Users/andrewhendel/mojolearn-evidence/release-08551/linux-frozen-retained.tgz",
-        "key": "measurements/release-08551/frozen/linux-frozen-retained.tgz",
-        "bytes": 2330512,
-        "sha256": "883ca0b218d99fa081916007241c85e6182cafad17403eb49bcf7a14a3779228",
-        "readback_verified": true
-      }
-    ]
   }
 }
