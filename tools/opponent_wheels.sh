@@ -75,8 +75,13 @@ setspec() {
     printf '%s\n' \
 "trees-linux-x86_64-cp311	-	catboost==1.2.10 xgboost==3.2.0 lightgbm==4.7.0 scikit-learn==1.7.2" \
 "rapids-linux-x86_64-cp311	https://pypi.nvidia.com	cuml-cu12==26.8.0 cuvs-cu12==26.8.1" \
-"rocm-xgboost-linux-x86_64-cp312	https://pypi.amd.com/rocm-7.1.1/simple	amd_xgboost==3.2.0"
+"rocm-xgboost-linux-x86_64-cp312	https://pypi.amd.com/rocm-7.1.1/simple	amd_xgboost==3.2.0" \
+"rocm-lightgbm-linux-x86_64-cp312	https://pypi.amd.com/rocm-7.0.2/simple	amd_lightgbm==4.6.0.99"
 }
+# FAIRNESS FIX (2026-10-30, Andrew: "for AMD isn't there a lightgbm that AMD has?"): AMD's ROCm build of LightGBM,
+# amd_lightgbm 4.6.0.99 (rocm.docs.amd.com/projects/lightgbm), published on the ROCm 7.0.2 and 6.4.4 indexes;
+# tools/bench_board.py amd_lightgbm_index picks the one matching the box. NVIDIA races lightgbm 4.7.0 (a CUDA
+# source build); AMD's newest ROCm build is 4.6.0, one minor release older, recorded on every cell.
 
 # The interpreter and platform tags a set resolves for, derived from its name
 # so the name cannot drift from what is inside it.

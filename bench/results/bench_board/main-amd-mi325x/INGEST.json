@@ -1,18 +1,16 @@
 {
- "generated": "2026-10-27T11:20:48Z",
+ "generated": "2026-10-30T12:17:19Z",
  "inputs": {
   "branch": "main",
-  "gate_boards": [
-   "amd=/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mutual-info-score.taxi.rows=full.json"
-  ],
-  "generated": "2026-10-27T11:20:48Z",
+  "gate_boards": null,
+  "generated": "2026-10-30T12:17:19Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
    "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
    "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-grid-logs.txt"
   ],
-  "json_dir": null,
+  "json_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/d49454cd-b043-4b65-846f-bcd4618e7251/scratchpad/emptyjson",
   "paired_boards": null,
   "results": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
@@ -30,13 +28,12 @@
   "input file missing: /Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
   "input file missing: /Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
   "input file missing: /Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-grid-logs.txt",
-  "gate: own cell only, opponents from the stored boards (paired board has incomplete or mixed worker evidence): algos/metric-mutual-info-score/taxi/rows=full",
+  "opponent board missing: nvidia-l40s /Users/andrewhendel/mojolearn-evidence/board-resume-r2/nvidia-l40s/board/board.json",
   "opponent board missing: amd-mi325x /Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json"
  ],
  "skipped": {
-  "gate: own cell only, opponents from the stored boards (paired board has incomplete or mixed worker evidence)": 1,
   "input file missing": 8,
-  "opponent board missing": 1
+  "opponent board missing": 2
  },
- "summary": "MAINBOARD column=amd-mi325x label=main@de0876621 races=404 add=1 change=0 drop=0 failed=20 ledger=20 withheld_opponents=8 identity=n/a:404"
+ "summary": "MAINBOARD column=amd-mi325x label=main@de0876621 races=404 add=0 change=0 drop=0 failed=20 ledger=20 withheld_opponents=8 identity=MATCH:57,n/a:347"
 }

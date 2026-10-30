@@ -415,3 +415,12 @@ class RaceFairness(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_enumerated_setting_spelling_is_not_a_difference():
+    """FAIRNESS FIX (2026-10-30): 'Depthwise' (ours, CatBoost) and 'depthwise' (XGBoost) are one setting."""
+    import race_fairness as RF
+    assert RF._same_spelling("Depthwise", "depthwise")
+    assert RF._same_spelling("Lossguide", "lossguide")
+    assert not RF._same_spelling("Depthwise", "Lossguide")
+    assert not RF._same_spelling(1, 1.0)
