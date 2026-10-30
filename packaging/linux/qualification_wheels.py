@@ -178,14 +178,61 @@ def apply_native_overlay(entries, provenance, overlay):
     return replaced
 
 
-def assemble(source, commit, site, out, overlay=()):
+def retained_stage_payload(site, manifest, commit):
+    """Inventory a retained development install without inventing a pip RECORD.
+
+    This is an explicit local qualification input, never compile or release
+    admission. Every native asset/index and its evidence must retain exact bytes.
+    Canonical destination ownership is checked again by the split writer/audit.
+    """
+    site = site.resolve()
+    document = json.loads(regular(manifest).read_text())
+    require(document.get("schema") == "mojolearn.retained-qualification-stage.v1",
+            "unsupported retained stage schema")
+    require(document.get("source_commit") == commit, "retained stage source differs")
+    evidence = []
+    for row in document.get("evidence", []):
+        path = regular(Path(row["path"]))
+        require(digest(path) == row["sha256"], "retained stage evidence changed")
+        evidence.append(dict(path=str(path.resolve()), sha256=row["sha256"]))
+    require(evidence, "retained stage requires byte-checked evidence")
+    entries, provenance, supplied = {}, {}, set()
+    for row in document.get("assets", []):
+        relative = safe_member(row["path"])
+        member = safe_member(row["member"])
+        require(member.startswith("mojolearn/"), "stage asset is outside package")
+        require(member not in entries and relative not in supplied, "duplicate stage asset")
+        path = regular(site / relative)
+        require(path.resolve().is_relative_to(site), "stage asset escapes retained site")
+        require(path.stat().st_size == row["bytes"] and digest(path) == row["sha256"],
+                "retained stage asset changed: " + relative)
+        require(not member.endswith((".py", ".pyc")) and "__pycache__" not in member,
+                "source code must come from committed source")
+        entries[member] = path
+        supplied.add(relative)
+        provenance[member] = dict(origin="retained-development-stage", path=str(path),
+                                  sha256=row["sha256"], build_evidence=evidence)
+    native = {p.relative_to(site).as_posix() for p in (site / "mojolearn").rglob("*")
+              if p.is_file() and (p.suffix in (".so", ".mojoc", ".mojopkg")
+                                  or p.name == "_mojolearn_merged.json")}
+    require(native and native <= supplied, "retained stage native/index coverage is incomplete")
+    witness = entries.get("mojolearn/identity_columns/COMMIT")
+    require(witness is not None and witness.read_text().strip() == commit,
+            "retained stage source witness differs")
+    require(any("/.libs/" in member for member in entries), "retained stage runtime missing")
+    return entries, provenance, []
+
+
+def assemble(source, commit, site, out, overlay=(), stage_manifest=None):
     source, site, out = source.resolve(), site.resolve(), out.resolve()
     require(re.fullmatch("[0-9a-f]{40}", commit), "invalid package source commit")
     require(git(source, "rev-parse", "HEAD").decode().strip() == commit, "source checkout is not the requested freeze")
     require(not out.exists(), "output directory already exists")
     require(not out.is_relative_to(site) and not out.is_relative_to(source), "output must be outside input trees")
     pw = load_writer(source)
-    entries, provenance, distributions = retained_payload(site)
+    require(not (stage_manifest and overlay), "stage input cannot be combined with native overlays")
+    entries, provenance, distributions = (retained_stage_payload(site, stage_manifest, commit)
+        if stage_manifest else retained_payload(site))
     retained_commit = entries["mojolearn/identity_columns/COMMIT"].read_text().strip()
     current = source_payload(source, pw)
     # All shipped source/resource bytes and packaging inputs are committed;
@@ -242,6 +289,9 @@ def assemble(source, commit, site, out, overlay=()):
                   packaging_inputs_sha256={p: digest(v) for p, v in packaging_inputs.items()},
                   controller_sha256=digest(Path(__file__)), ptx=ptx,
                   numerical_qualification="pending; not inherited", publishable=False)
+    if stage_manifest:
+        report["retained_stage_manifest"] = dict(path=str(Path(stage_manifest).resolve()),
+                                                  sha256=digest(stage_manifest))
     raw = (json.dumps(report, indent=2, sort_keys=True) + "\n").encode()
     generated = {
         f"{dist}/METADATA": pw.metadata_text(config, NOTICE).encode(),
@@ -280,11 +330,14 @@ def main():
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--installed-site", type=Path, required=True)
     parser.add_argument("--native-overlay", type=Path)
+    parser.add_argument("--retained-stage-manifest", type=Path,
+                        help="byte-checked raw development stage; local qualification only")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     overlay = json.loads(args.native_overlay.read_text()) if args.native_overlay else []
     require(isinstance(overlay, list), "native overlay must be a JSON list")
-    report = assemble(args.source_root, args.source_commit, args.installed_site, args.out, overlay)
+    report = assemble(args.source_root, args.source_commit, args.installed_site, args.out, overlay,
+                      stage_manifest=args.retained_stage_manifest)
     print(json.dumps(dict(wheels=len(report["wheels"]), assets=len(report["assets"]),
                           evidence=str(args.out / "qualification-inputs.json"), ptx=report["ptx"])))
 
