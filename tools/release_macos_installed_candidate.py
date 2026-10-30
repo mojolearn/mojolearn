@@ -121,10 +121,37 @@ def validate_snapshot(root, commit, package, receipt):
     for name, digest in receipt["python_source_files"].items():
         content = subprocess.check_output(["git", "-C", str(root), "show", commit + ":python/mojolearn/" + name])
         common.require(common.hashlib.sha256(content).hexdigest() == digest, "snapshot Python differs from source: " + name)
-    expected = set(receipt["native_and_runtime_files"])
-    actual = {str(p.relative_to(package)) for p in package.rglob("*") if p.suffix in (".so", ".dylib")}
-    common.require(actual == expected, "snapshot has unrecorded native/runtime files")
+    validate_native_inventory(package, receipt)
     return native_indexes(root, receipt["native_and_runtime_files"])
+
+
+def validate_native_inventory(package, receipt):
+    # Installed snapshots retain adapters separately from the 79 numerical
+    # images. Keep that ownership split while checking every actual native
+    # file; the raw adapter build is still independently validated below.
+    adapters = receipt.get("adapter_files", {})
+    common.require(all(name.startswith("_adapters/") for name in adapters),
+                   "adapter receipt contains a non-adapter path")
+    check_files(package, adapters)
+    expected = set(receipt["native_and_runtime_files"]) | {
+        name for name in adapters if Path(name).suffix in (".so", ".dylib")}
+    actual = {str(p.relative_to(package)) for p in package.rglob("*")
+              if p.suffix in (".so", ".dylib")}
+    common.require(actual == expected, "snapshot has unrecorded native/runtime files")
+
+
+def validate_adapter_toolchain(original, current):
+    # A retained worktree may disappear after its outputs are archived. The
+    # invocation path is location metadata: the executable bytes, version,
+    # locked/installed packages, precompiled libraries and OS facts still
+    # must match exactly. Never discard any other toolchain field.
+    old, new = dict(original), dict(current)
+    old.pop("compiler", None)
+    new.pop("compiler", None)
+    digest = old.get("compiler_sha256", "")
+    common.require(original.get("available") is True and len(digest) == 64
+                   and all(c in "0123456789abcdef" for c in digest)
+                   and old == new, "adapter toolchain changed")
 
 
 def validate_adapters(root, directory, before, result, commit):
@@ -138,7 +165,7 @@ def validate_adapters(root, directory, before, result, commit):
     # Keep the original role closure and compiler identity, rather than accepting
     # the manifest's smaller list of direct source files as closure evidence.
     import development_build as dev
-    common.require(before["toolchain"] == dev.toolchain_facts(root), "adapter toolchain changed")
+    validate_adapter_toolchain(before["toolchain"], dev.toolchain_facts(root))
     for name, digest in result["artifacts"].items():
         path = directory / Path(name).name
         common.require(path.is_file() and common.sha(path) == digest, "adapter artifact differs: " + name)
@@ -148,6 +175,34 @@ def validate_adapters(root, directory, before, result, commit):
                    "adapter build manifest source/mode differs")
     common.require(record["sources"] == api.source_digests(root), "adapter direct inputs changed")
     return api
+
+
+
+def stage_frozen_source(root, commit, archive, stage, required_members=()):
+    """Retain every frozen source byte without duplicating non-build archives.
+
+    Documentation, recorded results and experiment data remain in the complete
+    compressed Git archive. Packaging consumes the other directories; the tiny
+    required smoke corpora are restored independently from committed blobs.
+    """
+    excluded = {"bench", "docs", "docs-site", "experiments", "release"}
+    with archive.open("wb") as stream:
+        subprocess.run(["git", "-C", str(root), "archive", "--format=tar.gz", commit],
+                       stdout=stream, check=True)
+    required = set(required_members)
+    omitted = []
+    with tarfile.open(archive) as stream:
+        members = []
+        for member in stream.getmembers():
+            if member.name.split("/", 1)[0] in excluded and member.name not in required:
+                omitted.append(member.name)
+            else:
+                members.append(member)
+        stream.extractall(stage, members=members, filter="data")
+    return {"complete_archive": common.reference(archive),
+            "unexpanded_nonbuild_members": omitted,
+            "required_verification_members": sorted(required),
+            "excluded_top_level_directories": sorted(excluded)}
 
 
 def assemble(args):
@@ -174,12 +229,14 @@ def assemble(args):
     try:
         stage = output / "source"
         stage.mkdir()
-        archive = output / "source.tar"
-        with archive.open("wb") as stream:
-            subprocess.run(["git", "-C", str(root), "archive", "--format=tar", commit], stdout=stream, check=True)
+        archive = output / "source.tar.gz"
+        # Some reference payloads live under bench/. They are build inputs,
+        # despite sharing a directory with non-build historical run archives.
+        from verification_repository import validate_payload
+        verification = validate_payload(root, commit, git_root=root)
+        required = {path.relative_to(root).as_posix() for path in verification.values()}
+        document["source_staging"] = stage_frozen_source(root, commit, archive, stage, required)
         document["source_archive"] = common.reference(archive)
-        with tarfile.open(archive) as stream:
-            stream.extractall(stage, filter="data")
         document["smoke_corpora"] = stage_smoke_corpora(root, commit, stage)
         pkg = stage / "python/mojolearn"
         common.require(not list(pkg.rglob("*.so")), "source contains unadmitted native files")

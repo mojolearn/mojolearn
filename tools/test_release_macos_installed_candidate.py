@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 import tempfile
 import unittest
+import tarfile
 from unittest.mock import patch
 
 import release_macos_installed_candidate as candidate
@@ -41,6 +42,51 @@ class RetainedCandidateTests(unittest.TestCase):
         git('add', '.')
         git('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'corpus fixture')
         return repo, git('rev-parse', 'HEAD'), CORPUS_CASES
+
+    def test_compressed_source_preserves_unexpanded_nonbuild_bytes(self):
+        repo, _, _ = self.corpus_repository()
+        payloads = {"python/setup.py": b"build input", "packaging/build.py": b"packaging input",
+                    "bindings/entry.mojo": b"native source", "README.md": b"package readme",
+                    "bench/result.json": b"historical result", "docs/design.md": b"design",
+                    "experiments/input.bin": b"experiment bytes"}
+        for name, content in payloads.items():
+            path = repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "core.hooksPath=/dev/null",
+                        "commit", "-qm", "packaging inputs"], check=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
+        (repo / "bench/result.json").write_bytes(b"dirty result")
+        archive, stage = self.root / "source.tar.gz", self.root / "source"
+        stage.mkdir()
+        report = candidate.stage_frozen_source(repo, commit, archive, stage)
+        with tarfile.open(archive) as stream:
+            for name, content in payloads.items():
+                self.assertEqual(stream.extractfile(name).read(), content)
+                if name.split("/")[0] in report["excluded_top_level_directories"]:
+                    self.assertFalse((stage / name).exists())
+                    self.assertIn(name, report["unexpanded_nonbuild_members"])
+                else:
+                    self.assertEqual((stage / name).read_bytes(), content)
+        self.assertEqual(report["complete_archive"]["sha256"], hashlib.sha256(archive.read_bytes()).hexdigest())
+
+    def test_declared_verifier_input_under_bench_is_staged(self):
+        repo, _, _ = self.corpus_repository()
+        path = repo / "bench/results/accepted.json"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"frozen reference column")
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "core.hooksPath=/dev/null",
+                        "commit", "-qm", "required reference"], check=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"]).decode().strip()
+        stage = self.root / "stage"
+        stage.mkdir()
+        report = candidate.stage_frozen_source(repo, commit, self.root / "source.tar.gz", stage,
+                                               {"bench/results/accepted.json"})
+        self.assertEqual((stage / "bench/results/accepted.json").read_bytes(), b"frozen reference column")
+        self.assertNotIn("bench/results/accepted.json", report["unexpanded_nonbuild_members"])
+        self.assertEqual(report["required_verification_members"], ["bench/results/accepted.json"])
 
     def test_export_ignored_operands_restored_from_frozen_blobs(self):
         repo, commit, cases = self.corpus_repository()
@@ -98,6 +144,54 @@ class RetainedCandidateTests(unittest.TestCase):
         self.write_manifest()
         with self.assertRaisesRegex(ValueError, "duplicate"):
             candidate.native_indexes(self.root, self.records)
+
+    def test_adapter_compiler_location_reuse_requires_same_complete_facts(self):
+        old = {"available": True, "compiler": "/old/worktree/mojo",
+               "compiler_sha256": "a" * 64, "version": "pinned",
+               "precompiled_packages": {"stdlib": "original"}}
+        current = dict(old, compiler="/current/worktree/mojo")
+        candidate.validate_adapter_toolchain(old, current)
+        for changed in [dict(current, compiler_sha256="b" * 64),
+                        dict(current, precompiled_packages={"stdlib": "changed"}),
+                        dict(current, version="other")]:
+            with self.subTest(changed=changed):
+                with self.assertRaisesRegex(ValueError, "toolchain changed"):
+                    candidate.validate_adapter_toolchain(old, changed)
+
+    def test_adapter_compiler_location_without_content_identity_refused(self):
+        with self.assertRaisesRegex(ValueError, "toolchain changed"):
+            candidate.validate_adapter_toolchain({"available": True}, {"available": True})
+
+    def adapter_snapshot(self):
+        adapter = self.root / "_adapters/libmojolearn_adapter.so"
+        adapter.parent.mkdir()
+        adapter.write_bytes(b"retained adapter bytes")
+        return adapter, {"native_and_runtime_files": {}, "adapter_files": {
+            "_adapters/libmojolearn_adapter.so": {
+                "sha256": hashlib.sha256(adapter.read_bytes()).hexdigest()}}}
+
+    def test_separately_recorded_adapter_inventory(self):
+        _, receipt = self.adapter_snapshot()
+        candidate.validate_native_inventory(self.root, receipt)
+        self.assertEqual(receipt["native_and_runtime_files"], {})
+
+    def test_unrecorded_adapter_image_refused(self):
+        adapter, receipt = self.adapter_snapshot()
+        (adapter.parent / "unexpected.so").write_bytes(b"unrecorded")
+        with self.assertRaisesRegex(ValueError, "unrecorded native"):
+            candidate.validate_native_inventory(self.root, receipt)
+
+    def test_changed_recorded_adapter_refused(self):
+        adapter, receipt = self.adapter_snapshot()
+        adapter.write_bytes(b"different compiled bytes")
+        with self.assertRaisesRegex(ValueError, "differs"):
+            candidate.validate_native_inventory(self.root, receipt)
+
+    def test_adapter_inventory_cannot_admit_other_native_owners(self):
+        _, receipt = self.adapter_snapshot()
+        receipt["adapter_files"]["host/extra.so"] = {"sha256": "0" * 64}
+        with self.assertRaisesRegex(ValueError, "non-adapter path"):
+            candidate.validate_native_inventory(self.root, receipt)
 
     def test_matching_retained_bytes(self):
         (self.root / "image.so").write_bytes(b"compiled bytes")
