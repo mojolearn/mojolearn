@@ -1,0 +1,165 @@
+{
+  "schema": "mojolearn.nvidia-focused-repair-summary.v1",
+  "source_commit": "07d79b485e2ace49de5e4cf31f09f210a978f8d8",
+  "stage": {
+    "source_commit": "07d79b485e2ace49de5e4cf31f09f210a978f8d8",
+    "compiled_inputs": {
+      "selected": {
+        "key": "verification/0.8.63/07d79b485e2a/compile/tokenizer-74a3c9dbf7fb581d64ce8b5d0b5cd9f7882ac847ff035af3e691519f6b873e26.tgz",
+        "sha256": "74a3c9dbf7fb581d64ce8b5d0b5cd9f7882ac847ff035af3e691519f6b873e26",
+        "bytes": 9347283
+      },
+      "prior": {
+        "key": "measurements/modular-kv-ownership-20261030/linux-99c25a6d-selected-host-groups.tgz",
+        "sha256": "70eba21621e17c83a3413bebee0a0d812aa3a802fe81c5b16834610016530bee"
+      }
+    },
+    "selected": [
+      {
+        "target": "host/_mojolearn_tokenizer_host.so",
+        "raw_sha256": "e782e9f3680c8f804516db5aeba053dde121e2cf69760537cb1f7f02e999a95e",
+        "receipt": "/root/results-nvidia-prophet/selected/artifacts/01832b8a46270bdcb0a39e96fe09f02a094a1fe04556f7631ee155998a1e82d9/receipt.json",
+        "source_closure_mismatches": [],
+        "toolchain_path_metadata": {
+          "compiler": [
+            "/root/ownership-source/.pixi/envs/default/bin/mojo",
+            "/root/ownership-source/.pixi/envs/default/bin/mojo"
+          ],
+          "pixi": [
+            "pixi 0.77.0",
+            "pixi 0.77.0"
+          ]
+        },
+        "installed_sha256": "1b82aff53ca8a4c2301268766f50cdd33fca28293217e5d597720eda4040603d"
+      }
+    ],
+    "changed_extensions": [
+      "host/_mojolearn_tokenizer_host.so"
+    ],
+    "unchanged_extensions": 78,
+    "base_source": "14691bc98fec62d5b5fcaf47a137f441381fb5da",
+    "package": "/root/nvidia-prophet-venv/lib/python3.14/site-packages/mojolearn",
+    "python": "/root/nvidia-prophet-venv/bin/python",
+    "scope": "One repaired tokenizer group assembled; other groups reused from qualified146 install; installed checks and affected verifier pending"
+  },
+  "focused": {
+    "counts": {
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "source_commit": "07d79b485e2ace49de5e4cf31f09f210a978f8d8"
+  },
+  "coverage": {
+    "expected": 1,
+    "attempted": 1,
+    "complete": 1,
+    "failed": 0,
+    "pending": 0
+  },
+  "units": [
+    {
+      "lane": "sequence-prophet",
+      "profile": "routine",
+      "source": "07d79b485e2ace49de5e4cf31f09f210a978f8d8",
+      "exit_code": 0,
+      "local_complete": true,
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 18,
+        "N/A": 63,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "cross_vendor_admission": "pending; root owns central ledger"
+    }
+  ],
+  "retention": [
+    {
+      "name": "prophet",
+      "label": "package",
+      "key": "verification/0.8.63/07d79b485e2a/nvidia/repair-ynafb31c214etf/package.tgz",
+      "sha256": "a071292f32cb2f47d463393036d9cd56a5f0fa430722899b9ed385c9b848e48e",
+      "bytes": 107962485,
+      "status": "R2 PUT and GET verified",
+      "mac_verified": true,
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/prophet-package.tgz"
+    },
+    {
+      "name": "prophet",
+      "label": "source",
+      "key": "verification/0.8.63/07d79b485e2a/nvidia/repair-ynafb31c214etf/source.tgz",
+      "sha256": "fb4519a1730b7ca818d8f220a65cd29c18bbdc471bf1207490498ea0b3ad7918",
+      "bytes": 153806738,
+      "status": "R2 PUT and GET verified",
+      "mac_verified": true,
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/prophet-source.tgz"
+    },
+    {
+      "name": "prophet",
+      "label": "prerequisites",
+      "key": "verification/0.8.63/07d79b485e2a/nvidia/repair-ynafb31c214etf/prerequisites.tgz",
+      "sha256": "4ca623c10540d7b515ee2c03abc51e7e961d86f5330e28857ab1b0b40c2861e2",
+      "bytes": 27919,
+      "status": "R2 PUT and GET verified",
+      "mac_verified": true,
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/prophet-prerequisites.tgz"
+    },
+    {
+      "name": "prophet",
+      "label": "final",
+      "key": "verification/0.8.63/07d79b485e2a/nvidia/repair-ynafb31c214etf/final.tgz",
+      "sha256": "16a46dceb1920c70091ff3afabf6eab0769e73a24020534bca2fc3f8584d28e6",
+      "bytes": 371552702,
+      "status": "R2 PUT and GET verified",
+      "mac_verified": true,
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/prophet-final.tgz"
+    },
+    {
+      "name": "prophet",
+      "label": "columns",
+      "key": "verification/0.8.63/07d79b485e2a/nvidia/repair-ynafb31c214etf/columns.tgz",
+      "sha256": "2b36256165cc5417b237e36c56150487a16950d7b03b1eac4cfe2529977dbe2c",
+      "bytes": 677291,
+      "status": "R2 PUT and GET verified",
+      "mac_verified": true,
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/prophet-columns.tgz"
+    }
+  ],
+  "paired_comparison": {
+    "lane": "sequence-prophet",
+    "source_commit": "07d79b485e2ace49de5e4cf31f09f210a978f8d8",
+    "conversion_exit": 0,
+    "diff_exit": 0,
+    "diff_command": [
+      "/root/nvidia-prophet-venv/bin/python",
+      "/root/prophet-source/tools/identity_break.py",
+      "--diff",
+      "/root/results-nvidia-prophet/columns/sequence-prophet.identical.json",
+      "/root/results-nvidia-prophet-comparison/amd.identical.json",
+      "--require-columns",
+      "2",
+      "--lanes",
+      "sequence-prophet"
+    ],
+    "scope": "NVIDIA/AMD pair only; Apple and central admission separate"
+  },
+  "paired_retention": {
+    "key": "verification/0.8.63/07d79b485e2a/nvidia-amd/prophet-comparison.tgz",
+    "sha256": "8c3f2de34ef0c7896735d6ff61548ce3bc6cf92eff6bd165239282fc57d39e15",
+    "bytes": 2912320,
+    "status": "R2 PUT and GET verified",
+    "mac_verified": true,
+    "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/prophet-vendor-comparison.tgz"
+  },
+  "scope": "Prophet NVIDIA installed/runtime qualification and NVIDIA/AMD pair; Apple/final source-closure/ledger admission separate. Two unrelated CNN mismatches remain preserved."
+}

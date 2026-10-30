@@ -1,0 +1,5969 @@
+{
+  "schema": "mojolearn.supported-vendor-comparison.v1",
+  "scope": "Retained single-device NVIDIA/AMD observations, no numerical reruns.5latest pairs andProphet compared in separate receipts.500total:498agree,2CNNdiverge. Finalsourceclosure/Apple/PTX/physicalmulti/ledger admission are separate.",
+  "coverage": {
+    "expected": 494,
+    "attempted": 494,
+    "passed": 492,
+    "failed": [
+      "x-cnn-conv-options",
+      "x-cnn-gnn-options"
+    ],
+    "unexecuted": 0,
+    "scope": "NVIDIA/AMD retained single-device outputs. Five latest already compared separately. Prophet pending. Final source-closure reuse, Apple, PTX, physicalmulti and central admission remain separate."
+  },
+  "units": [
+    {
+      "lane": "agglomerative",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "arima",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "arima-011",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "arima-exog",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "arima-exog-seasonal",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "arima-seasonal-c",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "bootstrap",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "cholesky",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "classical-float16-sequences",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "cross-val",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "dbscan",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "dbscan-brute-l1",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "dbscan-weighted",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "elasticnet",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "elasticnet-l2end-no-intercept",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "et-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "et-clf-entropy-bestfirst",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "et-clf-weighted",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "et-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "et-reg-bootstrap-parallel",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "et-reg-weighted",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-adapter-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-adapter-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-adapter-score-weighted",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-bfa-quantile",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-binary-columns",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-border-types",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-catboost-defaults",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-categorical-ctr",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-class-weights",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-depthwise",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-exact-mae",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-feature-freq",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-lossguide",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-lossguide-newtoncosine",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-multiclass",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-multiclass-defaults",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-multiclass-offgrid",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-nan-modes",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-onevsall",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-ordered",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-ordered-bayesian-noise",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-ordered-rmse",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-pair-logit",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-pair-logit-pointwise",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-parametric-losses",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-pointwise-l2-bayesian-eval",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-query-rmse",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-query-rmse-pointwise",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-ranking-defaults",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-rmse",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-stochastic-arms",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-symmetric",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-symmetric-eval",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-tensor-ctr-tables",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-yeti-rank",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gbdt-yeti-rank-pointwise",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gemm-bf16",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gemm-int15",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gemm-int8",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gemm-pinned",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gemm-transposed",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gmm",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gmm-random-init",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gmm-random-init-sample",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gmm-sample",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp-lml-theta",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp-matern12",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp-matern32",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp-matern52-ard",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp-normalize-y",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp-optimize",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp-optimize-restarts",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp-sample-y",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gp-sample-y-normalize",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gpc",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "gpc-multiclass",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "hdbscan",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "hdbscan-leaf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "hf-causal-lm",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "hf-causal-lm-stream",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "hf-causal-lm-text",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "hf-checkpoint",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "hf-model-surface",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "hf-tokenizer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "holtwinters",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "holtwinters-multiplicative",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "iforest",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "iforest-tuned",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ivf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ivf-euclidean",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ivf-extend",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ivf-filter",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ivf-short-fill",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kde",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kde-cosine-minkowski",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kde-epanechnikov-l1",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kde-exponential-chebyshev",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kde-linear-cosine",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kde-tophat-sqeuclidean",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kde-weighted",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kernel-ridge",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kernel-ridge-laplacian",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kernel-ridge-poly",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kernel-ridge-sigmoid",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kmeans",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kmeans-array",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kmeans-classic-pp",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kmeans-random",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kmeans-sqrt",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kmeans-weighted",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-chebyshev",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-clf-distance",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-cosine",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-manhattan",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-minkowski-p3",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-rbc",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-reg-distance",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "knn-sqeuclidean",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "kpss",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "lasso",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "linalg-eigh",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "linalg-qr",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "linalg-svdvals",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "linear-svc",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "linear-svc-squared-hinge",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "linear-svr",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "linear-svr-squared",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "logistic",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "logistic-elasticnet",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "logistic-l1",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "logistic-multiclass",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "logistic-unpenalized-no-intercept",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "lowbit-conversions",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba2-decode-session",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba3-decode-session",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "metrics",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "metrics-classification",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "metrics-fowlkes-mallows",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "metrics-homogeneity-completeness",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "minmax-scaler",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "minmax-scaler-clip",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "monte-carlo",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "multioutput-ridge",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "native-schedule-series",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "nystroem",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "nystroem-laplacian",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "nystroem-poly",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "nystroem-sigmoid",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ols",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ols-no-intercept",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ols-weighted",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "optim-resident-io",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "pca",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "pca-full-whiten",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "pca-inverse",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "pca-whiten",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "pca-whiten-inverse",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "permutation-test",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-randomized-search",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-scorer-factories",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-set-params",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-sparse-encode",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-validation-learning-curves",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "qn-absolute",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "qn-squared",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "radius",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "radius-chebyshev",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "radius-manhattan",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "radius-minkowski-p3",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "rbf-sampler",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "resample-bca",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "resample-perm-samples",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "resample-unpaired",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "resample-utils",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "rf-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "rf-clf-balanced-parallel",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "rf-clf-entropy-log2-noboot",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "rf-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "rf-reg-gamma-ig",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "rf-reg-poisson",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "rf-score-weighted",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ridge",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ridge-no-intercept",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "scaler-fit-transform",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "select-d",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-croston",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-device-release",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-ets",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-garch",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-stl",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-tape-program",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-tape-sequential",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-theta",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-var",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "spectral",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "spectral-embedding",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "spectral-precomputed",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "standard-scaler",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "standard-scaler-no-mean",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "standard-scaler-no-std",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "svc",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "svc-gamma-scale",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "svc-linear",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "svc-poly",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "svr",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "svr-linear",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "training-device-cross-entropy",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "training-mlp-sessions",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-adaboost-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-adaboost-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-bagging-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-bagging-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-calibrated",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-dart-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-dart-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-dart-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-dt-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-dt-random",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-dt-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-et-deviance",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-gbdt-multirmse",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-multioutput",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-onevsrest",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-oob-cv-link",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-random-embedding",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-rf-weighted",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-shap-kernel",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-shap-permutation",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-shap-tree",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-stacking-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-stacking-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-voting-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "trees-voting-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "tsvd",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "tsvd-inverse",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "umap",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ann-cagra",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ann-cagra-filter",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-ann-filter",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ann-ivf-pq",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ann-ivf-rabitq",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ann-ivf-sq",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ann-refine",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ann-refine-euclidean",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ann-tsne",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ann-tsne-pca",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-ard",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-bayes-ridge",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-bayes-ridge-sw",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-cluster-affinity-propagation",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-agglo-connectivity",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-agglo-linkages",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-ap-precomputed",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-bgmm",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-bgmm-covtypes",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-bgmm-inits",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-bisecting-kmeans",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-bisecting-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-dbscan-metrics",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-gmm-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-hdbscan-epsilon",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-meanshift",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-meanshift-binned",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-minibatch-kmeans",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-minibatch-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-minibatch-partial",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-optics",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-optics-metrics",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cluster-spectral-affinities",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-als",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-dict-learning",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-eigh-wide-factor-analysis",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-eigh-wide-fastica",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-eigh-wide-kpca",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-eigh-wide-linalg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-eigh-wide-mincovdet",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-eigh-wide-rotation",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-factor-analysis",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-fastica",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-grp",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-ipca",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-lda",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-lstsq-rsvd",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-lu",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-manifold",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-nmf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-pca-randomized",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-pls",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-robust-cov",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-rsvd-rank-deficient",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-sparse-pca",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-spectral-rbf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-srp",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-decomp-umap-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-enet-cv",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-glm-gamma",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-glm-poisson",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-glm-poisson-sw",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-glm-tweedie",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-huber",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-huber-outliers",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-huber-sw",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-isotonic",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-lars",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-lasso-cv",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-lasso-cv-pos",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-lasso-lars",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-lasso-lars-pos",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-logistic-cv",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-logistic-cv-proba",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-logistic-cv-w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-metrics-classification",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-metrics-classification-report",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-metrics-cluster",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-metrics-permutation-test-score",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-metrics-ranking",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-metrics-regression",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-metrics-search",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-metrics-splitters",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-additive-chi2",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-connected-components",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-gamma-scale",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-gp-cov",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-km-kernels",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-knn-imputer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-kpca",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-krr-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-label-propagation",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-label-spreading",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-lof",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-louvain",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-metrics",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-ocsvm",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-pagerank",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-poly-sketch",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-neighbors-svc-multiclass",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-neighbors-svc-probability",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-neighbors-svc-sigmoid",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-neighbors-svgp",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-neighbors-svm-precomputed",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-neighbors-svm-weights",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-neighbors-svr-kernels",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-pa-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-pa-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-perceptron",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-bernoulli-nb",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-binarizer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-categorical-nb",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-complement-nb",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-da-solvers",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-encoder-categories",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-encoder-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-gaussian-nb",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-infrequent",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-inverse-transforms",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-iterative-imputer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-iterative-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-kbins",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-kbins-methods",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-kbins-weights",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-label-binarizer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-label-binarizer-multilabel",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-label-encoder",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-lda",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-maxabs-scaler",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-mi-discrete",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-multilabel-binarizer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-multinomial-nb",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-mutual-info",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-nb-partial",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-nb-weights",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-normalizer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-onehot-encoder",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-ordinal-encoder",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-polynomial-features",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-power-transformer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-priors",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-qda",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-quantile-transformer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-rfe",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-robust-scaler",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-robust-scaler-unit-variance",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-scaler-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-score-edges",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-select-kbest",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-simple-imputer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-simple-imputer-indicator",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-spline-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-spline-transformer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-target-encoder",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-user-objects",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-prep-variance-threshold",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-quantile",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-quantile-sw",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-ridge-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-ridge-clf-w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-ridge-cv",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-ridge-cv-kfold",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-ridge-cv-sw",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-sgd-clf",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-sgd-clf-proba",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-sgd-clf-w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-sgd-ocsvm",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-sgd-reg",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "x-sgd-reg-sw",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "byte-lm",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "byte-lm-resident",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "cross-entropy-arms",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "embedding",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "embedding-sort",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "grad-accumulation",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba1",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba1-bf16w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba1-decode-session",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba1-int8w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba2",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba2-bf16w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba2-dtlimit",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba2-int8w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba3",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba3-bf16w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mamba3-int8w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mlp",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mlp-bf16w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "mlp-int8w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "neural-trainer-unfused",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "optim-adam-clip",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "optim-io-capability",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "optim-maximize",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "optim-owner-lifecycle",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "optim-sgd",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "ordered-gradient-sum",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-cnn-classifier-predict",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-cnn-layer-fit",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-numeric-metadata",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-residual-dropout",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "public-theta-variants",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "samba",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "samba-bf16w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "samba-int8w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "samba-optimizer-state",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "samba-untied-dropout-accum",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-adafactor",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-adafactor-device",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-adagrad",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-adamax",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-device-tensor",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-export-roundtrip",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-gru",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-lamb",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-lamb-device",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-layernorm",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-layernorm-backward",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-lion",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-lr-schedulers",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-lstm",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-mlp",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-moe",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-moe-backward",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "002ad",
+        "amd": "002ad"
+      }
+    },
+    {
+      "lane": "sequence-nadam",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-onnx-import",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-optimizer-state",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-program-save-load",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-rmsprop",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "sequence-rnn",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "training-chunked-lm-head",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "training-primitives",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "transformer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "transformer-bf16w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "transformer-decode-load-state",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "transformer-decode-session",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "transformer-forward-tape",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "transformer-int8w",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "transformer-window",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-batchnorm",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-bn-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-conv-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 1,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-conv1d",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-conv2d",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-dropout2d",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-gcn",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-globalpool",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-gnn-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 1,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-pool",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-pool-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-resnet-block",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-sage",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-trainer",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    },
+    {
+      "lane": "x-cnn-trainer-options",
+      "conversion_exits": {
+        "nvidia": 0,
+        "amd": 0
+      },
+      "diff_exit": 0,
+      "source_scopes": {
+        "nvidia": "c286",
+        "amd": "c286"
+      }
+    }
+  ],
+  "retention": [
+    {
+      "name": "all-comparison",
+      "label": "inputs",
+      "key": "verification/0.8.63/nvidia-amd-repair-comparison-20261030/all-494-inputs.tgz",
+      "sha256": "1a9e5777d2734d35f20a2263c01c7731cf475434daa444af22c222a92a9da70e",
+      "bytes": 955106155,
+      "status": "R2 PUT and GET verified",
+      "mac_verified": true,
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/all-vendor-comparison-inputs.tgz"
+    },
+    {
+      "name": "all-comparison",
+      "label": "results",
+      "key": "verification/0.8.63/nvidia-amd-repair-comparison-20261030/all-494-results.tgz",
+      "sha256": "fc148b4706371cd11dd4bb614ea06876d5304bac41749c739f530eeaeb57c4ed",
+      "bytes": 616197963,
+      "status": "R2 PUT and GET verified",
+      "mac_verified": true,
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/all-comparison-results.tgz"
+    }
+  ],
+  "original_failure_status": "x-cnn-conv-options andx-cnn-gnn-options preserved asDIVERGENT; no expectedhash edits or vendor-specificreference columns",
+  "repair_source_pending": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47"
+}
