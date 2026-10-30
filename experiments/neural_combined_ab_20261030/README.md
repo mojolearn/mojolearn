@@ -89,3 +89,18 @@ resident-forward enabled and route auto, and retains those settings. Original
 quality failures are preserved; missing quality can be recovered from retained
 output bytes without rerunning completed timings. Descriptor operation counters
 are captured immediately before and after timed calls, outside their clocks.
+
+## Final native NVIDIA/AMD observations (2026-10-30)
+
+The frozen `a85b4a21cb3c` bounded campaign now has 500 selected native
+observations per vendor and 500 passing NVIDIA/AMD column comparisons. NVIDIA
+uses 472 fresh observations, 26 with supported source-equivalence proofs and
+two direct current-source CNN observations. AMD uses 429 fresh, 69 proven
+reusable and two direct CNN observations. All selected archive bytes and full
+comparison evidence are retained on the Mac and R2. See
+`results/a85-final-native-500.json` for exact receipts and remaining gates.
+
+This does not qualify Apple, the separately required PTX route, physical
+multi-GPU execution, central ledger admission or publication. The native-only
+NVIDIA qualification wheel correctly refuses the missing required PTX slot;
+no packaging gate was relaxed. Historical numerical failures remain retained.

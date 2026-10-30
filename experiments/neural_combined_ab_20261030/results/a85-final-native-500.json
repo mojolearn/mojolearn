@@ -1,0 +1,79 @@
+{
+  "schema": "mojolearn.final-native-vendor-observations.v1",
+  "source": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47",
+  "recorded_utc": "2026-10-30T17:16:16.728273+00:00",
+  "scope": "Bounded correctness/identity observations, not a performance campaign or central ledger admission",
+  "nvidia": {
+    "fresh": 472,
+    "source_equivalent": 26,
+    "direct_current_cnn": 2,
+    "total": 500,
+    "failed": 0,
+    "pending": 0
+  },
+  "amd": {
+    "fresh": 429,
+    "source_equivalent": 69,
+    "direct_current_cnn": 2,
+    "total": 500,
+    "failed": 0,
+    "pending": 0
+  },
+  "cross_vendor": {
+    "vendors": [
+      "nvidia",
+      "amd"
+    ],
+    "expected": 500,
+    "passed": 500,
+    "failed": [],
+    "pending": []
+  },
+  "retention": {
+    "nvidia_inventory": {
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia/final-source-selected-500-038bdb7a7388ffc040eb991aa8b8e0f2b782508639a767d5137b2dbf21053f21.json",
+      "sha256": "038bdb7a7388ffc040eb991aa8b8e0f2b782508639a767d5137b2dbf21053f21",
+      "bytes": 518057,
+      "status": "R2 PUT and GET verified",
+      "mac_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/final-source-selected-500.json",
+      "mac_verified": true,
+      "checked_utc": "2026-10-30T17:11:46.718031+00:00"
+    },
+    "complete_comparison": {
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia-amd/final500-summary-2bec7a3d5fbae9347f37053520ab4c355c52cb00b2d8b82172e6336faaf2ec73.json",
+      "sha256": "2bec7a3d5fbae9347f37053520ab4c355c52cb00b2d8b82172e6336faaf2ec73",
+      "bytes": 1748827,
+      "status": "R2 PUT and GET verified",
+      "mac_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/final-source-native500-pair-summary.json",
+      "mac_verified": true,
+      "checked_utc": "2026-10-30T17:12:22.855518+00:00"
+    },
+    "last150_comparisons": {
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia-amd/final-source-pairs-local-776b388a1fe8c28b47bf574b1892ad300bd08bb6a3103b895fd3da8edfa725e3.tgz",
+      "sha256": "776b388a1fe8c28b47bf574b1892ad300bd08bb6a3103b895fd3da8edfa725e3",
+      "bytes": 221407617,
+      "status": "R2 PUT and GET verified",
+      "mac_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/final-source-pairs-local.tgz",
+      "mac_verified": true,
+      "checked_utc": "2026-10-30T17:12:22.053655+00:00"
+    },
+    "local_archive_byte_audit": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/final-native-teardown-byte-audit.json",
+      "archives": 42,
+      "bytes": 9667316197
+    }
+  },
+  "remaining": {
+    "apple": "owned by Linux/Apple lane; not complete in this receipt",
+    "nvidia_ptx": "all500 required by frozen release manifest; compiled raw33sm80 groups retained, source reuse/packaging/runtime pending",
+    "physical_multi": "separate actual2-device requirements unexecuted",
+    "central_ledger": "parent-owned; no admission or reference replacement performed here",
+    "pypi": "not published"
+  },
+  "preserved_failures": [
+    "Original c286/earlier repair algorithm failures remain retained.",
+    "Original two cross-vendor CNN mismatches remain retained beside the corrected a85 observations.",
+    "Native-only qualification-wheel assembly refused missing requiredsm80 PTX slot; the packaging gate was not relaxed."
+  ],
+  "defaults": "No neural performance defaults changed; completed99c experiment remains NVIDIA-only."
+}
