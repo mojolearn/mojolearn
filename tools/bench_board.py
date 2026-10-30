@@ -187,7 +187,8 @@ TREE_OPPONENTS = {
         "gbdt-symmetric": ("catboost-cpu",),
         "gbdt-symmetric-1000": ("catboost-cpu",),
         "gbdt-depthwise": ("catboost-cpu", "xgboost-gpu", "xgboost-cpu"),
-        "gbdt-lossguide": ("catboost-cpu", "xgboost-gpu", "xgboost-cpu", "lightgbm-cpu"),
+        # FAIRNESS FIX (2026-10-30): AMD's ROCm LightGBM (amd_lightgbm) races on the GPU, as lightgbm-cuda on NVIDIA
+        "gbdt-lossguide": ("catboost-cpu", "xgboost-gpu", "xgboost-cpu", "lightgbm-cuda", "lightgbm-cpu"),
         "rf": ("sklearn-rf-cpu", "lightgbm-cpu"),
         "et": ("sklearn-et-cpu", "lightgbm-cpu"),
         "iforest": ("sklearn-iforest-cpu",),
@@ -1114,6 +1115,30 @@ def amd_xgboost_index(default, version_file="/opt/rocm/.info/version"):
     return None
 
 
+#: FAIRNESS FIX (2026-10-30): the pypi.amd.com indexes that publish amd_lightgbm 4.6.0.99, newest first.
+AMD_LGBM_ROCM_INDEXES = ("7.0.2", "6.4.4")
+
+
+def amd_lightgbm_index(default, version_file="/opt/rocm/.info/version"):
+    """The pypi.amd.com index whose amd_lightgbm matches this box's ROCm (the newest of AMD_LGBM_ROCM_INDEXES at
+    or below it), `default` when the version cannot be read, None below every index. MOJOLEARN_AMD_LGBM_INDEX
+    overrides."""
+    over = os.environ.get("MOJOLEARN_AMD_LGBM_INDEX", "").strip()
+    if over:
+        return over
+    try:
+        with open(version_file) as fh:
+            box = _version_tuple(fh.read())
+    except OSError:
+        box = None
+    if box is None:
+        return default
+    for v in AMD_LGBM_ROCM_INDEXES:
+        if _version_tuple(v) <= box:
+            return "https://pypi.amd.com/rocm-%s/simple" % v
+    return None
+
+
 def amd_xgboost_fallback(pins):
     """The PyPI xgboost pin installed when amd_xgboost cannot be: its CPU arm still races and
     its GPU arm refuses by name (NO ROCm BUILD, speed_gbdt_arm._xgb_gpu_refusal)."""
@@ -1133,13 +1158,20 @@ def opponent_requirements(vendor, pins):
     trees = next((v for k, v in pins.items() if k.startswith("trees-")), None)
     rapids = next((v for k, v in pins.items() if k.startswith("rapids-")), None)
     rocm_xgb = next((v for k, v in pins.items() if k.startswith("rocm-xgboost-")), None)
+    rocm_lgbm = next((v for k, v in pins.items() if k.startswith("rocm-lightgbm-")), None)
     groups = []
     if trees:
         idx = amd_xgboost_index(rocm_xgb[0]) if (vendor == "amd" and rocm_xgb) else None
-        if idx:
-            groups.append((trees[0], [r for r in trees[1]
-                                      if not r.lower().startswith("xgboost==")]))
-            groups.append((idx, list(rocm_xgb[1])))
+        lidx = amd_lightgbm_index(rocm_lgbm[0]) if (vendor == "amd" and rocm_lgbm) else None
+        drop = (("xgboost==",) if idx else ()) + (("lightgbm==",) if lidx else ())
+        if drop:
+            groups.append((trees[0], [r for r in trees[1] if not r.lower().startswith(drop)]))
+            if idx:
+                groups.append((idx, list(rocm_xgb[1])))
+            if lidx:
+                # FAIRNESS FIX (2026-10-30): AMD's ROCm LightGBM, so lightgbm-cuda races on the AMD GPU
+                # (device_type='cuda' is the ROCm build's device string too)
+                groups.append((lidx, list(rocm_lgbm[1])))
         else:
             groups.append(trees)
     if vendor == "nvidia" and rapids:
