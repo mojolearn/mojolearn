@@ -143,20 +143,32 @@ def test_native_sequential_refuses_model_subclasses_without_attribute_hooks():
     assert entered == []
 
 
-def test_native_sequential_uses_cached_native_array_slots_when_properties_are_poisoned(monkeypatch):
+def test_native_sequential_refuses_replaced_array_storage_slots_without_callbacks(monkeypatch):
     x = np.arange(12, dtype="f4").reshape(4, 3) / 20
     y = np.arange(4, dtype="f4")
     supplied = Array.from_list(x.tolist(), "<f4")
     expected = Sequential().linear(1).compile(optimizer="sgd", lr=0.03).fit(x, y, epochs=1, seed=7)
     out = Sequential().linear(1).compile(optimizer="sgd", lr=0.03)
 
+    entered = []
+
     def forbidden(*args, **kwargs):
+        entered.append("Array storage callback")
         raise AssertionError("Python Array metadata property entered native execution")
 
     with monkeypatch.context() as patch:
         for name in ("_mv", "shape", "dtype", "order"):
             patch.setattr(Array, name, property(forbidden))
-        audit_native_call(out.fit, supplied, y, epochs=1, seed=7).assert_native()
+        # Input snapshots may retain admitted descriptors, but public output
+        # views require the connected live Array storage layout. Replacement
+        # must refuse before calling the new Python properties.
+        trace = audit_native_call(out.fit, supplied, y, epochs=1, seed=7)
+        assert type(trace.exception) is TypeError
+        assert "connected Array storage slots" in str(trace.exception)
+        for field in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
+            assert not trace.report()[field], trace.report()
+    assert entered == []
+    audit_native_call(out.fit, supplied, y, epochs=1, seed=7).assert_native()
     assert out.params_.tobytes() == expected.params_.tobytes()
 
 
