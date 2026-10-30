@@ -3169,7 +3169,14 @@ def lightgbm_arms(lane, cfg, data, devices):
             "ROW-SAMPLING: LightGBM's rf boosting refuses bagging_fraction 1.0, so each tree would "
             "sample 63.2%% of rows without replacement where ours %s; another sample is another "
             "forest" % ("draws n rows with replacement" if lane == "rf" else "uses every row"))
-    raise RuntimeError(
+    # FAIRNESS FIX (2026-10-30): gbdt-lossguide races LightGBM (leaf-wise is its own algorithm) at the
+    # lane's min_child_samples 1 with min_child_weight 1e-12 instead of 0: at exactly 0 LightGBM aborts
+    # ("Check failed: (best_split_info.left_count) > (0)", reproduced on full taxi with LightGBM 4.7.0),
+    # while 1e-12 runs every tree. A floor of 1e-12 is far below one row's logloss hessian, so it does not
+    # change the stopping rule; it is declared (bench_board_params.EXCEPTIONS) and noted. Every other
+    # boosted lane keeps the refusal below.
+    if lane != "gbdt-lossguide":
+      raise RuntimeError(
         "MIN-CHILD: LightGBM 4.7.0 aborts at the lane's min_child_samples 1 and min_child_weight 0, "
         "and its defaults 20 and 1e-3 are another stopping rule than every other arm's; %s"
         % ("it also has no oblivious grower for this loss" if cfg.get("lightgbm_leafwise")
@@ -3274,8 +3281,15 @@ def lightgbm_arms(lane, cfg, data, devices):
         # Ultra board 2026-09-29, both cells REFUSED). So every boosted
         # LightGBM arm keeps LightGBM's defaults, and a non-task lane says so
         # in a mismatch line (the task lanes carry it in TASK_LANES).
-        p.update(min_child_samples=20, min_child_weight=1e-3)
-        if not cfg.get("task"):
+        if lane == "gbdt-lossguide":
+            p.update(min_child_samples=1, min_child_weight=1e-12)
+            emit_note(lane, ["lightgbm-*"], "mismatch", 1.0,
+                      "LightGBM min_child_weight 1e-12 (the other arms' 0): at exactly 0 LightGBM aborts a "
+                      "tree (Check failed: best_split_info.left_count > 0); 1e-12 is far below one row's "
+                      "hessian, so the stopping rule is the same; min_child_samples 1 as every arm")
+        else:
+          p.update(min_child_samples=20, min_child_weight=1e-3)
+        if not cfg.get("task") and lane != "gbdt-lossguide":
             emit_note(lane, ["lightgbm-*"], "mismatch", 1.0,
                       "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its "
                       "defaults: at 0 (the other arms' value) LightGBM 4.7.0 aborts the "
