@@ -456,6 +456,12 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
         mods.released()
         var padded = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
         neural_copy_row_prefixes(Int(py=classical_address(padded)), token_address, sizes, batch, length, 1)
+        # token_address only borrows the old Array's storage. Keep its owner
+        # alive through the prefix copy before replacing it with padded.
+        # Installed CPU verifier failures and both threaded/unthreaded public
+        # regressions are retained in byte-lm-ragged-20261030. The output copy
+        # below already keeps its corresponding source owner alive this way.
+        _ = tokens
         tokens = padded
         token_address = Int(py=classical_address(tokens))
     var bad = neural_first_bad_id(_I32P(unsafe_from_address=token_address), batch, length, vocab,
