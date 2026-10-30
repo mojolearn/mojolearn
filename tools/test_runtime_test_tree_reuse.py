@@ -99,3 +99,15 @@ def test_indirect_loading_requires_separate_proof(tmp_path,body):
     before=setup(tmp_path,{'test_one.py':body,'test_other.py':'pass'})
     (tmp_path/'test_other.py').write_text('assert True')
     assert reuse.prove(before,tmp_path,['test_one.py'])['status']=='blocked'
+
+
+def test_whole_file_collection_refuses_pytest_deselection(tmp_path):
+    from types import SimpleNamespace
+    import qualify_native_runtime_installed as q
+    item=SimpleNamespace(path=tmp_path/'test_one.py',nodeid='test_one.py::test_a',user_properties=[])
+    guard=q.WholeFileCollectionGuard(tmp_path,['test_one.py'])
+    guard.pytest_deselected([SimpleNamespace(nodeid='test_one.py::test_b')])
+    with pytest.raises(ValueError,match='whole-file collection'):
+        guard.pytest_collection_finish(SimpleNamespace(items=[item]))
+    env=q.test_environment({'PYTEST_ADDOPTS':'-k hidden','PYTEST_PLUGINS':'external'},'cpu','identical')
+    assert 'PYTEST_ADDOPTS' not in env and 'PYTEST_PLUGINS' not in env

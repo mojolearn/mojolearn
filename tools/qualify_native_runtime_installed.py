@@ -719,11 +719,15 @@ class WholeFileCollectionGuard(ExactNodeGuard):
     def __init__(self, tests, files):
         super().__init__(tests, None)
         self.files = list(files)
+        self.deselected = []
+
+    def pytest_deselected(self, items):
+        self.deselected.extend(item.nodeid for item in items)
 
     def pytest_collection_finish(self, session):
         self.collected = [Path(item.path).resolve().relative_to(self.tests.resolve()).as_posix()
                           + "::" + item.nodeid.partition("::")[2] for item in session.items]
-        require(bool(self.collected) and len(set(self.collected)) == len(self.collected)
+        require(not self.deselected and bool(self.collected) and len(set(self.collected)) == len(self.collected)
                 and {n.partition("::")[0] for n in self.collected} == set(self.files),
                 "whole-file collection is empty, duplicated, missing, or outside requested files")
         for item, node in zip(session.items, self.collected):
@@ -781,7 +785,7 @@ def selected_test_status(pytest_exit, summary, scope, receipt_exists):
 
 
 def test_environment(parent, vendor, numeric_mode):
-    env = {k: v for k, v in parent.items() if k not in ("PYTHONPATH", "PYTHONHOME")
+    env = {k: v for k, v in parent.items() if k not in ("PYTHONPATH", "PYTHONHOME", "PYTEST_ADDOPTS", "PYTEST_PLUGINS")
            and not k.startswith("MOJOLEARN_")}
     # These test fixtures pass an explicit device to CausalLM.load. Their CPU
     # default overrides MOJOLEARN_VENDOR unless this testing knob is also set.
@@ -858,7 +862,7 @@ def worker(request_path):
     code, worker_error = None, None
     try:
         require(observe("initial"), "initial installed product inventory refused")
-        code = int(pytest.main(["--import-mode=importlib", "-q", "-ra", "--confcutdir=" + str(tests),
+        code = int(pytest.main(["-c", os.devnull, "--import-mode=importlib", "-q", "-ra", "--confcutdir=" + str(tests),
                                "--junitxml=" + str(out / "tests.xml"),
                                "--basetemp=" + str(out / "test-tmp")]
                               + [str(tests / name) for name in (nodes or request["test_files"])],
