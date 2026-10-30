@@ -315,6 +315,13 @@ EXCEPTIONS = [
      "subsample 1.0"),
     ("gbdt-*", "boosting_type", "xgboost-*", "different vocabularies: ours and CatBoost 'Plain' "
      "(not Ordered), XGBoost booster 'gbtree'; both plain gradient boosting"),
+    # FAIRNESS FIX (2026-10-30): gbdt-lossguide races LightGBM at min_child_samples 1 (equal) and
+    # min_child_weight 1e-12 (LightGBM aborts at exactly 0); see tools/speed_gbdt_arm.py lightgbm_arms.
+    ("gbdt-lossguide", "boosting_type", "lightgbm-*", "different vocabularies: ours and CatBoost "
+     "'Plain' (not Ordered), LightGBM boosting_type 'gbdt'; both plain gradient boosting"),
+    ("gbdt-lossguide", "min_child_weight", "lightgbm-*", "LightGBM aborts a tree at min_child_weight "
+     "exactly 0 (Check failed: best_split_info.left_count > 0); it races 1e-12, far below one row's "
+     "logloss hessian, so the minimum-hessian stopping rule is the same as the other arms' 0"),
     # FAIRNESS FIX (2026-10-13 audit, second pass): three LightGBM rows removed here
     # (boosting_type, min_child_weight and min_samples_leaf on gbdt-*). They excused LightGBM
     # racing min_child_samples 20 and min_child_weight 1e-3 against every other arm's 1 and 0,
