@@ -1,0 +1,222 @@
+{
+  "schema": "mojolearn.repaired-vendor-qualification.v1",
+  "source_commit": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47",
+  "stage": {
+    "source_commit": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47",
+    "compiled_inputs": {
+      "selected": {
+        "key": "verification/0.8.63/a85b4a21cb3c/compile/tokenizer-e85b2115a4cbcd77ed33401b1ae383fbcf5aab43c59eaa648c7e4190e7c4e5c8.tgz",
+        "sha256": "e85b2115a4cbcd77ed33401b1ae383fbcf5aab43c59eaa648c7e4190e7c4e5c8",
+        "bytes": 9346808
+      },
+      "prior": {
+        "key": "measurements/modular-kv-ownership-20261030/linux-99c25a6d-selected-host-groups.tgz",
+        "sha256": "70eba21621e17c83a3413bebee0a0d812aa3a802fe81c5b16834610016530bee"
+      }
+    },
+    "selected": [
+      {
+        "target": "host/_mojolearn_tokenizer_host.so",
+        "raw_sha256": "16800b4e18b5678e5bbd05dded20b3a4d3d28af650107a04e38b160a9eec6831",
+        "receipt": "/root/results-nvidia-cnn/selected/artifacts/2ba8038c7b37f9874b343c9ebf07ce4a66ae73f323237db611998e754323448c/receipt.json",
+        "source_closure_mismatches": [],
+        "toolchain_path_metadata": {
+          "compiler": [
+            "/root/ownership-source/.pixi/envs/default/bin/mojo",
+            "/root/ownership-source/.pixi/envs/default/bin/mojo"
+          ],
+          "pixi": [
+            "pixi 0.77.0",
+            "pixi 0.77.0"
+          ]
+        },
+        "installed_sha256": "deafbed6cc070f555559424ce535a053f459aa1214d0cfddef584bec44dc66a8"
+      }
+    ],
+    "changed_extensions": [
+      "host/_mojolearn_tokenizer_host.so"
+    ],
+    "unchanged_extensions": 78,
+    "base_source": "07d79b485e2ace49de5e4cf31f09f210a978f8d8",
+    "package": "/root/nvidia-cnn-venv/lib/python3.14/site-packages/mojolearn",
+    "python": "/root/nvidia-cnn-venv/bin/python",
+    "scope": "One repaired tokenizer group assembled; other groups reused from qualified07d install; installed checks and affected verifier pending"
+  },
+  "focused": {
+    "counts": {
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "source_commit": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47"
+  },
+  "units": [
+    {
+      "lane": "x-cnn-conv-options",
+      "profile": "neural-training",
+      "source": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47",
+      "exit_code": 0,
+      "local_complete": true,
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "cross_vendor_admission": "pending; root owns central ledger"
+    },
+    {
+      "lane": "x-cnn-gnn-options",
+      "profile": "neural-training",
+      "source": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47",
+      "exit_code": 0,
+      "local_complete": true,
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 18,
+        "N/A": 63,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "cross_vendor_admission": "pending; root owns central ledger"
+    }
+  ],
+  "retention": [
+    {
+      "label": "source",
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia/repair-ynafb31c214etf/source.tgz",
+      "sha256": "3621f8bc96c20ef4e6548daed58a875439a0082427b413654dab9eedfebe33a3",
+      "bytes": 153802319,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/cnn-source.tgz",
+      "mac_verified": true
+    },
+    {
+      "label": "package",
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia/repair-ynafb31c214etf/package.tgz",
+      "sha256": "b1d14c25908a26716245dbbb424f6fbdc71770b170955195bb74f599f1c9283c",
+      "bytes": 107964216,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/cnn-package.tgz",
+      "mac_verified": true
+    },
+    {
+      "label": "prerequisites",
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia/repair-ynafb31c214etf/prerequisites.tgz",
+      "sha256": "0e9be2a014fcd773ef1c3cce8fd534a152e9234e8340fe9628234893282367e0",
+      "bytes": 28670,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/cnn-prerequisites.tgz",
+      "mac_verified": true
+    },
+    {
+      "label": "final",
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia/repair-ynafb31c214etf/final.tgz",
+      "sha256": "3f683ed65b1106bcfe261253b1a099c410e4d4ccce5f5141f5ab79ba8382caac",
+      "bytes": 375974821,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/cnn-final.tgz",
+      "mac_verified": true
+    },
+    {
+      "label": "columns",
+      "key": "verification/0.8.63/a85b4a21cb3c/nvidia/repair-ynafb31c214etf/columns.tgz",
+      "sha256": "e963a3b37271efe3c83f25c07994c3e65dafb6dbeb6b477d76f64ff67436da50",
+      "bytes": 1351740,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/cnn-columns.tgz",
+      "mac_verified": true
+    }
+  ],
+  "paired_comparison": [
+    {
+      "lane": "x-cnn-conv-options",
+      "source_commit": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47",
+      "conversion_exit": 0,
+      "diff_exit": 0,
+      "diff_command": [
+        "/root/nvidia-cnn-venv/bin/python",
+        "/root/cnn-source/tools/identity_break.py",
+        "--diff",
+        "/root/results-nvidia-cnn/columns/x-cnn-conv-options.identical.json",
+        "/root/results-nvidia-cnn-comparison/x-cnn-conv-options/amd.identical.json",
+        "--require-columns",
+        "2",
+        "--lanes",
+        "x-cnn-conv-options"
+      ],
+      "amd_receipt": {
+        "lane": "x-cnn-conv-options",
+        "profile": "neural-training",
+        "local_complete": true,
+        "key": "verification/0.8.63/a85b4a21cb3c/amd/repair-a9f81994-attempt3/runs/x-cnn-conv-options.tgz",
+        "sha256": "601d8feee073f51d74a22304723ccf3a7a746d418d374ebed66ebbc36e7cc4a9",
+        "bytes": 2240704,
+        "status": "R2 PUT and GET verified"
+      },
+      "scope": "NVIDIA/AMD pair only; Apple/finalsourceclosure/ledger admission separate"
+    },
+    {
+      "lane": "x-cnn-gnn-options",
+      "source_commit": "a85b4a21cb3cba6abf20cc6a94910737f9e07d47",
+      "conversion_exit": 0,
+      "diff_exit": 0,
+      "diff_command": [
+        "/root/nvidia-cnn-venv/bin/python",
+        "/root/cnn-source/tools/identity_break.py",
+        "--diff",
+        "/root/results-nvidia-cnn/columns/x-cnn-gnn-options.identical.json",
+        "/root/results-nvidia-cnn-comparison/x-cnn-gnn-options/amd.identical.json",
+        "--require-columns",
+        "2",
+        "--lanes",
+        "x-cnn-gnn-options"
+      ],
+      "amd_receipt": {
+        "lane": "x-cnn-gnn-options",
+        "profile": "neural-training",
+        "local_complete": true,
+        "key": "verification/0.8.63/a85b4a21cb3c/amd/repair-a9f81994-attempt3/runs/x-cnn-gnn-options.tgz",
+        "sha256": "e970010775f2d8d04e77c24a344e62bac24ed9c9988e6e8ece469ef8d6f54c73",
+        "bytes": 2241268,
+        "status": "R2 PUT and GET verified"
+      },
+      "scope": "NVIDIA/AMD pair only; Apple/finalsourceclosure/ledger admission separate"
+    }
+  ],
+  "paired_retention": {
+    "key": "verification/0.8.63/a85b4a21cb3c/nvidia-amd/cnn-comparison.tgz",
+    "sha256": "d5ee1bcee431bcb2769bd6bd3c14bac9d711042d66d4afb15b4c51394f1e3235",
+    "bytes": 5828051,
+    "status": "R2 PUT and GET verified",
+    "mac_verified": true,
+    "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/cnn-vendor-comparison.tgz"
+  },
+  "original_failure_retention": {
+    "key": "measurements/neural-combined-ab-20261030/ynafb31c214etf/cnn-gnn-pre-a85-diagnostics.tgz",
+    "sha256": "5b4c21b4111eb091cb8f33574efc7ec72768637aa072a3f94e73c686cc1b5965",
+    "bytes": 492471,
+    "status": "R2 PUT and GET verified",
+    "mac_verified": true,
+    "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/cnn-gnn-pre-a85-diagnostics.tgz"
+  },
+  "scope": "Twelve installed tests and two full nine-fixture NVIDIA units passed; both repaired NVIDIA/AMD comparisons passed. Historical failures retained. Final frozen-source equivalence, Apple agreement, PTX/physical-multi coverage and central release ledger admission are separate and not established here."
+}
