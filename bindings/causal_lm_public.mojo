@@ -2265,6 +2265,18 @@ def _sampling_read_cache_valid(fields: PythonObject, expected: PythonObject) rai
     return py_get(live, "_resident_sessions") is expected
 
 
+def _generation_route_witness(route: String, capacity: Int, produced: Int, retained_kv: Bool):
+    # Diagnostic for the combined-generation experiment. Enable only for the
+    # excluded warmup; scored calls leave this off. One native record per
+    # completed public read, never a Python callback or per-token observer.
+    # The record names the executed branch, not merely requested env flags:
+    # resident sampling precedes native-engine selection, and KV-upload reuse
+    # belongs only to the legacy resident-forward path.
+    if getenv("MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE", "0") == "1":
+        print("MOJOLEARN_GENERATION_ROUTE route=" + route + " capacity=" + String(capacity)
+            + " produced=" + String(produced) + " retained_kv=" + String(Int(retained_kv)))
+
+
 def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int,
                             mut admission: NativeArrayAdmission) raises -> PythonObject:
     # DEFAULT OFF, UNMEASURED: one device sampling read, with the same policy
@@ -2458,10 +2470,13 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
                 # Alias refusal changes transport only. The fallback below
                 # still selects the stream's checksum-bound FP32 policy.
                 if capacity == 1 or _resident_read_disjoint_state(mods, s.model, s.state):
-                    return _read_sampling_resident(mods, s, capacity, admission.value())
+                    var result = _read_sampling_resident(mods, s, capacity, admission.value())
+                    _generation_route_witness("resident_sampling", capacity, s.produced, False)
+                    return result
                 legacy_resident = True
         if capacity > 0 and not s.done() and not legacy_resident and _use_native_generation_engine(mods, s.model, s.state):
             var result = _read_engine(mods, s, capacity)
+            _generation_route_witness("native_engine", capacity, s.produced, False)
             return result
         # Only the legacy fallback needs host token staging. Resident/native
         # engines return their final native result without this unused buffer.
@@ -2531,6 +2546,8 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admi
         _ = out  # keep the Python object alive through the native call above
         causal_lm_tokens_row_major(tokens, dst, b, wrote)
         _ = out  # keep the Python object alive through the native call above
+        _generation_route_witness("legacy_forward", capacity, s.produced,
+            Bool(read_plan) and read_plan.value().resident_active and read_plan.value().resident_reuse)
         return out
     except error:
         mods.released()
