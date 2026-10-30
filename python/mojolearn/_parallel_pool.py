@@ -330,6 +330,17 @@ class DevicePool:
             groups = [self.devices] if self.cooperative else [(d,) for d in self.devices]  # glue: multi-device worker setup over device ids and request tuples
             for group in groups:  # glue: multi-device worker setup over device ids and request tuples
                 env = dict(os.environ, MOJOLEARN_NUMERIC_MODE='identical')
+                # The worker computes under the parent's optional dependency
+                # set: `import mojolearn` no longer loads NumPy, and a worker
+                # that never imported it refused what the parent accepts
+                # ('Array.__array__ needs NumPy loaded' in the input checks of
+                # cross-val folds, neighbor/density queries and RBFSampler
+                # rows: 0.8.55 two-L40S verify --par quick). Same fix as main
+                # b3832bd5c9.
+                if 'numpy' in sys.modules:
+                    env['MOJOLEARN_POOL_IMPORT_NUMPY'] = '1'
+                else:
+                    env.pop('MOJOLEARN_POOL_IMPORT_NUMPY', None)
                 from . import _backend
                 vendor = _backend.vendor()
                 if vendor == 'cuda':
