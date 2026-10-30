@@ -449,8 +449,11 @@ def main():
     import os
     if os.environ.get('MOJOLEARN_POOL_IMPORT_NUMPY') == '1':
         # glue: the parent had NumPy loaded (DevicePool._start); load it
-        # before any request so native owners connect the same types.
-        import numpy  # noqa: F401
+        # before any request so native owners connect the same types. Through
+        # the optional-NumPy guard, the only NumPy import the wheel audit
+        # (packaging/portable_math/wheel.py) admits outside the verifiers.
+        from ._optional_numpy import require_numpy
+        require_numpy("a DevicePool worker of a NumPy parent")
     channel = os.fdopen(os.dup(sys.stdout.fileno()), 'wb')
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     while True:

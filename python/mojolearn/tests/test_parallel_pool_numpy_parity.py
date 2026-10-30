@@ -50,3 +50,16 @@ def test_pooled_gram_pca_fits_in_a_fresh_worker():
     plain = ml.PCA(n_components=4).fit(X)
     assert np.asarray(par.components_).tobytes() == np.asarray(plain.components_).tobytes()
     assert np.asarray(par.transform(X)).tobytes() == np.asarray(plain.transform(X)).tobytes()
+
+
+def test_worker_loads_numpy_through_the_optional_guard():
+    # The shipped worker must pass the wheel's NumPy audit: its only NumPy
+    # load is mojolearn._optional_numpy.require_numpy, never a bare import.
+    import ast
+    from pathlib import Path
+    from mojolearn import _parallel_worker
+    tree = ast.parse(Path(_parallel_worker.__file__).read_text())
+    bare = [n for n in ast.walk(tree) if isinstance(n, ast.Import) and any(a.name.split(".")[0] == "numpy" for a in n.names)]
+    assert not bare
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "require_numpy"]
+    assert len(calls) == 1
