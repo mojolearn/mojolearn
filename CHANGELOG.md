@@ -7,7 +7,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 - Restore CPU stratified-group splitter helpers already present on main.
 - Read IVF-PQ output addresses while holding the GIL before native host work.
 - Support four-component maintenance versions in release tooling.
-- Reference refresh and cross-device qualification remain pending; this entry is not publication evidence.
+- Correct 36 stale verifier references for Adamax, NAdam and learning-rate schedules using agreeing retained Apple, NVIDIA, AMD and CPU executions; preserve the original reports and failures.
+- Reuse unchanged numerical implementations; qualify the repaired CPU bindings separately. Publication remains pending.
 
 ## 0.8.55 (published 2026-10-20)
 

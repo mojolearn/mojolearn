@@ -19,10 +19,11 @@ for _ in range(2):
     model = ml.IVFPQIndex(n_lists=8, n_probes=4, pq_dim=2, pq_bits=2,
         n_neighbors=5, pq_kmeans_n_iters=3, random_state=3).fit(x)
     distances, indices = model.search(q, filter=keep)
+    distances, indices = np.asarray(distances), np.asarray(indices)
     assert np.isfinite(distances).all()
     assert (indices >= 0).all()
     assert keep[indices].all()
-    outputs.append((model.codes_.copy(), distances.copy(), indices.copy()))
+    outputs.append((np.asarray(model.codes_).copy(), distances.copy(), indices.copy()))
 for a, b in zip(*outputs):
     assert a.dtype == b.dtype and a.shape == b.shape and a.tobytes() == b.tobytes()
 print("CPU_IVFPQ_GIL_OK")

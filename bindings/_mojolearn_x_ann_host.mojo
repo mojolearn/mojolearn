@@ -14,7 +14,7 @@ from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, X_ANN_PY2MOJO, ts
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import a_int, check_search, in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
 from x_ann.ivf_pq_core import pq_len_of
-from x_ann.abi import out_f32_to, out_i32_to
+from bindings.x_ann_host_output import out_f32_to, out_i32_to
 from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
 from x_ann.host.tsne_host import tsne_fit_host
 from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_pq_search_host, ivf_sq_build_host, ivf_sq_search_host, refine_host, ivf_rabitq_build_host, ivf_rabitq_search_host
