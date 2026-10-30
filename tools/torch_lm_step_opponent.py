@@ -145,6 +145,13 @@ COLUMNS = {
                        nondeterministic_label=True),
     'compile_bf16': dict(tf32=False, compile=True, autocast='bfloat16', role='extra',
                          nondeterministic_label=True),
+    # FAIRNESS FIX (2026-10-30, Andrew: opponents on their fastest supported path): the eager module
+    # captured once into a CUDA graph (HIP graph on ROCm) in the untimed warm-up and replayed per call;
+    # bench_board_neural.py plans it on inference lanes only (GRAPH_LANES).
+    'graph_fp32': dict(tf32=False, compile=False, autocast=None, graph=True, role='extra',
+                       nondeterministic_label=True),
+    'graph_tf32': dict(tf32=True, compile=False, autocast=None, graph=True, role='extra',
+                       nondeterministic_label=True),
 }
 # Profiler event keys naming an SDPA kernel, most specific first.
 SDPA_KERNEL_TAGS = (('cudnn_attention', 'cudnn'), ('efficient_attention', 'efficient'),

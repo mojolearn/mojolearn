@@ -387,6 +387,9 @@ DATA_OF = {lane: (GEN_LANES[lane] if lane in GEN_LANES else "synthetic" if lane 
 #: torch settings, in tools/torch_lm_step_opponent.py COLUMNS order.
 TORCH_SETTINGS = ("eager-fp32", "eager-tf32", "compile-fp32", "compile-tf32",
                   "eager-bf16", "compile-bf16")
+#: FAIRNESS FIX (2026-10-30): inference lanes that also race torch's CUDA-graph replay (graph-fp32/tf32)
+GRAPH_LANES = ("transformer-decode", "transformer-forward", "samba-forward", "lm-forward")
+GRAPH_SETTINGS = ("graph-fp32", "graph-tf32")
 #: The GPU settings planned per vendor. TF32 is an NVIDIA CUDA matmul mode:
 #: on ROCm torch accepts the flag and does nothing (torch_lm_step_opponent.py
 #: writes NOT APPLICABLE), and MPS has no such mode.
@@ -428,6 +431,12 @@ VENDORS = ("apple", "nvidia", "amd")
 MAMBA_SSM_ARMS = ("mamba-ssm-fp32", "mamba-ssm-tf32")
 MAMBA_SSM_LANES = ("mamba1-forward", "mamba2-forward", "mamba3-forward")
 MAMBA_SSM_VENDOR_ARMS = {"nvidia": MAMBA_SSM_ARMS, "amd": ("mamba-ssm-fp32",)}
+#: FAIRNESS FIX (2026-10-30, ported from main's 2026-10-22 decode peer and made graph-replayed): mamba1/2-decode
+#: race mamba_ssm's own carried-state step over InferenceParams, the whole token loop captured once into a
+#: CUDA graph (HIP graph on ROCm) in the untimed warm-up and replayed per call, as mamba_ssm's own generation
+#: replays its decode step from a captured graph. mamba3-decode and samba-decode have no mamba_ssm step peer.
+MAMBA_SSM_DECODE_LANES = ("mamba1-decode", "mamba2-decode")
+MAMBA_SSM_ARM_LANES = MAMBA_SSM_LANES + MAMBA_SSM_DECODE_LANES
 MAMBA_SSM_VENDORS = tuple(MAMBA_SSM_VENDOR_ARMS)
 
 #: Our arms: `ours` IDENTICAL, `ours-fast` the Apple FAST neural tier.
@@ -437,7 +446,7 @@ OUR_MODE = {"ours": "identical", "ours-fast": "fast"}
 MLX_ARMS = ("mlx-fp32",)
 ARMS = OUR_ARMS + tuple("torch-" + s for s in TORCH_SETTINGS) \
     + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8") \
-    + MAMBA_SSM_ARMS + MLX_ARMS
+    + MAMBA_SSM_ARMS + MLX_ARMS + tuple("torch-" + s for s in GRAPH_SETTINGS)
 #: gemm-int8's torch settings: torch._int_mm (int8 x int8 -> int32), no autocast, no TF32
 INT8_COLUMNS = {"eager_int8": dict(tf32=False, compile=False, autocast=None),
                 "compile_int8": dict(tf32=False, compile=True, autocast=None)}
@@ -734,6 +743,8 @@ def opponents(vendor, lane):
         return ("torch-eager-int8", "torch-compile-int8") if vendor == "nvidia" else ()
     if lane == "gemm-bf16":
         return tuple("torch-" + s for s in GPU_SETTINGS[vendor] if s.endswith("bf16"))
+    if lane in MAMBA_SSM_DECODE_LANES:
+        return tuple(MAMBA_SSM_VENDOR_ARMS.get(vendor, ()))
     if lane in DECODE_LANES and lane not in DECODE_TORCH_TWIN:
         return ()
     if lane in PREDICT_LANES:
@@ -754,6 +765,11 @@ def opponents(vendor, lane):
     # scrutiny.
     if lane in MAMBA_SSM_LANES:
         arms += list(MAMBA_SSM_VENDOR_ARMS.get(vendor, ()))
+    # FAIRNESS FIX (2026-10-30, Andrew: the opponent runs its fastest supported path): on inference lanes
+    # whose torch twin is a per-token loop or whose compile can fail, torch also races its CUDA-graph
+    # replay (graph-*), the documented way to remove Python and launch overhead from inference.
+    if lane in GRAPH_LANES and DEVICE_OF[lane] == "gpu":
+        arms += ["torch-graph-fp32"] + (["torch-graph-tf32"] if vendor == "nvidia" else [])
     return tuple(arms)
 
 
@@ -1075,7 +1091,11 @@ def lane_settings(lane):
         if lane in FORWARD_REFERENCE_LANES:
             s["quality"] += ", untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)"
     s["torch_settings"] = {a: precision_text(arm_setting(a)[1]) for a in
-                           ["torch-" + x for x in TORCH_SETTINGS]}
+                           ["torch-" + x for x in TORCH_SETTINGS + (GRAPH_SETTINGS if lane in GRAPH_LANES else ())]}
+    if lane in GRAPH_LANES:
+        s["torch_graph"] = ("torch-graph-*: the eager module captured once into a CUDA graph (HIP graph on ROCm) "
+                            "in the untimed warm-up and replayed per call; host inputs copied into the captured "
+                            "buffers inside the clock, the result back on the host")
     # FAIRNESS FIX (2026-10-13 audit): the reference-twin refusal is part of the lane's
     # settings, so the opponent store's settings key changes and no reference cell stored
     # before is reused as an opponent. Results raced before this change were wrong for this
@@ -3296,6 +3316,10 @@ class TorchArm:
                                    % (arm, dev.type, col["autocast"], json.dumps(probe)[:600]))
             self.autocast = getattr(torch, col["autocast"])
         self.compile = bool(col["compile"])
+        self.graph = bool(col.get("graph"))
+        self._graph = None
+        if self.graph and (where != "gpu" or kind not in ("cuda",)):
+            raise RuntimeError("REFUSED: %s: CUDA/HIP graph replay needs a CUDA or ROCm GPU, not %s" % (arm, kind))
         self.info = {"library": "torch", "version": torch.__version__,
                      "torch_version_cuda": torch.version.cuda, "torch_version_hip": hip,
                      "torch_backend": kind, "device": where, "device_name": name,
@@ -3824,6 +3848,27 @@ class TorchArm:
             self.opt.step()
             self.losses.append(float(loss.item()))
             self.k += 1
+        elif self.graph:
+            # FAIRNESS FIX (2026-10-30): capture once (the first call is the untimed warm-up round), then
+            # every call: host inputs into the captured device buffers, one graph replay, result to the host.
+            torch = self.torch
+            if self._graph is None:
+                self._static_in = [t.to(self.dev) for t in self.host]
+                side = torch.cuda.Stream()
+                side.wait_stream(torch.cuda.current_stream())
+                with torch.cuda.stream(side):
+                    for _ in range(3):
+                        with self._ctx():
+                            self.fn(*self._static_in)
+                torch.cuda.current_stream().wait_stream(side)
+                self._graph = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(self._graph):
+                    with self._ctx():
+                        self._static_out = self.fn(*self._static_in)
+            for buf, host in zip(self._static_in, self.host):
+                buf.copy_(host)
+            self._graph.replay()
+            self.out = self._static_out.float().cpu().numpy()
         else:
             inputs = [t.to(self.dev) for t in self.host]
             with self._ctx():
@@ -4796,7 +4841,23 @@ def _mamba_ssm_fused_path(model, mixer_mod, arm):
     return "mamba_split_conv1d_scan_combined (causal_conv1d + SSD Triton kernels, gated RMSNorm)"
 
 
-def mamba_ssm_block(torch, dev, model, corpus, dm, weights, arm):
+def _mamba_ssm_step_path(model, mixer_mod, arm):
+    """The step kernels or nothing (ported from main, 2026-10-22): a decode arm whose mixer would leave
+    mamba_ssm's kernel step refuses by name instead."""
+    if model not in ("mamba1", "mamba2"):
+        raise RuntimeError("REFUSED: %s: mamba_ssm's %s step is not a planned decode peer (NOT_PLANNED)"
+                           % (arm, model))
+    missing = [n for n in ("causal_conv1d_update", "selective_state_update")
+               if getattr(mixer_mod, n, None) is None]
+    if missing:
+        raise RuntimeError("REFUSED: %s: %s does not import in mamba_ssm's %s, so its step would leave the "
+                           "kernel path" % (arm, " and ".join(missing), mixer_mod.__name__))
+    return ("%s.step: causal_conv1d_update + selective_state_update (Triton)%s"
+            % ({"mamba1": "Mamba", "mamba2": "Mamba2"}[model],
+               ", gated RMSNorm (Triton)" if model == "mamba2" else ""))
+
+
+def mamba_ssm_block(torch, dev, model, corpus, dm, weights, arm, layer_idx=None):
     """mamba_ssm's own Block(norm = Triton RMSNorm, mixer, fused_add_norm, residual in fp32)
     holding ours' float32 weights `weights` (our names), read back bit for bit. Returns (block,
     structural read-back, eps read-back, fused path, eps). Raises REFUSED when mamba_ssm does
@@ -4815,8 +4876,11 @@ def mamba_ssm_block(torch, dev, model, corpus, dm, weights, arm):
     mixer_mod = importlib.import_module(mod_name)
     mixer_cls = getattr(mixer_mod, cls_name)
     fused = _mamba_ssm_fused_path(model, mixer_mod, arm)
+    if layer_idx is not None:
+        fused = _mamba_ssm_step_path(model, mixer_mod, arm)
     f32 = torch.float32
-    block = Block(dm, partial(mixer_cls, device=dev, dtype=f32, **cfg), torch.nn.Identity,
+    extra = {} if layer_idx is None else {"layer_idx": layer_idx}
+    block = Block(dm, partial(mixer_cls, device=dev, dtype=f32, **dict(cfg, **extra)), torch.nn.Identity,
                   norm_cls=partial(RMSNorm, eps=eps, device=dev, dtype=f32),
                   fused_add_norm=True, residual_in_fp32=True).to(dev)
     sd = {}
@@ -4868,9 +4932,11 @@ class MambaSsmArm:
     extra scrutiny."""
 
     def __init__(self, lane, shape, data, arm):
-        if lane not in MAMBA_SSM_LANES:
-            raise RuntimeError("REFUSED: %s races the Mamba forward lanes only (%s), not %s"
-                               % (arm, ", ".join(MAMBA_SSM_LANES), lane))
+        if lane not in MAMBA_SSM_ARM_LANES:
+            raise RuntimeError("REFUSED: %s races the Mamba forward and decode lanes only (%s), not %s"
+                               % (arm, ", ".join(MAMBA_SSM_ARM_LANES), lane))
+        self.decode = lane in MAMBA_SSM_DECODE_LANES
+        self._graph = None
         import numpy as np
         self.np, self.lane = np, lane
         setting = mamba_ssm_setting(arm)
@@ -4893,10 +4959,27 @@ class MambaSsmArm:
         model = MODEL_OF[lane]
         d = _dims_of(lane, shape)
         block, readback, eps_back, fused, cfg, eps = mamba_ssm_block(
-            torch, dev, model, corpus, d["d_model"], _weights(data), arm)
+            torch, dev, model, corpus, d["d_model"], _weights(data), arm,
+            layer_idx=0 if self.decode else None)
         block.eval()
         self.block = block
         self.host = [torch.from_numpy(np.ascontiguousarray(data["x"]))]
+        self.cache = self.params = None
+        if self.decode:
+            # Before the clock: the decode cache, allocated once (weights and cache resident, as ours'
+            # session). seqlen_offset > 0 routes every Block call, the first token's too, to the mixer's
+            # step from the zeroed state: a zero-state token-by-token decode, the work ours' decode does.
+            try:
+                from mamba_ssm.utils.generation import InferenceParams
+            except Exception as exc:  # noqa: BLE001
+                raise RuntimeError("REFUSED: %s: mamba_ssm.utils.generation.InferenceParams does not import "
+                                   "(%r)" % (arm, exc))
+            batch, length = int(data["x"].shape[0]), int(data["x"].shape[1])
+            self.length = length
+            self.params = InferenceParams(max_seqlen=length, max_batch_size=batch)
+            self.cache = block.allocate_inference_cache(batch, length, dtype=torch.float32)
+            self.params.key_value_memory_dict[0] = self.cache
+            self.params.seqlen_offset = 1
         self.info = dict(info)
         self.info.update(_mamba_ssm_info(torch, arm, setting))
         self.info.update({
@@ -4918,6 +5001,18 @@ class MambaSsmArm:
             "input_home": "host",
             "call": "mamba_ssm Block(%s).forward(x) on %s; h + residual; .cpu()"
                     % (MAMBA_SSM_MIXER[model].rsplit(".", 1)[1], dev)})
+        if self.decode:
+            self.info.update({
+                "decode_path": fused, "decode_cache": "InferenceParams(max_seqlen=L, max_batch_size=B), "
+                "key_value_memory_dict[0] = Block.allocate_inference_cache(B, L, float32), seqlen_offset 1",
+                "decode_graph": "the whole zero-state token loop captured once into a CUDA graph (HIP graph on "
+                                "ROCm) in the untimed warm-up, replayed per call (mamba_ssm's generation replays "
+                                "its decode step from a captured graph)",
+                "call": "per round: x copied into the captured input buffer; one graph replay of: cache states "
+                        "zeroed; for t < L: h, r = mamba_ssm Block(%s)(x[:, t:t+1], inference_params); h + r; "
+                        "torch.cat over t; .cpu() once" % MAMBA_SSM_MIXER[model].rsplit(".", 1)[1],
+                "operation_scope": "zero-state token-by-token decode of the whole input, one Block step per "
+                                   "token, graph-replayed"})
         # preflight-smoke (2026-10-14): the library class constructed (mamba_ssm.modules.block.Block), so the
         # preflight's real-implementation check reads it back
         self.record = {"__library__": "mamba-ssm", "seed": SEED, "__implementation__": type(block)}
@@ -4926,12 +5021,43 @@ class MambaSsmArm:
         sync()
 
     def call(self):
+        if self.decode:                          # the input copy happens inside the replay path, once
+            self._decode_replay()
+            return
         torch = self.torch
         x = self.host[0].to(self.dev)
         with torch.no_grad():
             h, r = self.block(x)
             out = h + r
         self.out = out.float().cpu().numpy()
+
+    def _decode_once(self, x):
+        torch = self.torch
+        for state in self.cache:              # the zero-state reset (ours' load_state)
+            state.zero_()
+        outs = []
+        for t in range(self.length):
+            h, r = self.block(x[:, t:t + 1, :], inference_params=self.params)
+            outs.append(h + r)
+        return torch.cat(outs, dim=1)
+
+    def _decode_replay(self):
+        torch = self.torch
+        with torch.no_grad():
+            if self._graph is None:              # the untimed warm-up round captures
+                self._static_x = self.host[0].to(self.dev)
+                side = torch.cuda.Stream()
+                side.wait_stream(torch.cuda.current_stream())
+                with torch.cuda.stream(side):
+                    for _ in range(2):
+                        self._decode_once(self._static_x)
+                torch.cuda.current_stream().wait_stream(side)
+                self._graph = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(self._graph):
+                    self._static_out = self._decode_once(self._static_x)
+            self._static_x.copy_(self.host[0])
+            self._graph.replay()
+        self.out = self._static_out.float().cpu().numpy()
 
     def sync(self):
         self._sync()
