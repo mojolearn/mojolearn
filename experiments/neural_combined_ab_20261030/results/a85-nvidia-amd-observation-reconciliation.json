@@ -1,0 +1,3049 @@
+{
+  "schema": "mojolearn.retained-paired-observation-reconciliation.v1",
+  "scope": "Supported NVIDIA/AMD comparisons of retained observations only. Historical source reuse, Apple agreement, PTX/physical-multi coverage and final ledger admission remain separate; no final-release green claim.",
+  "counts": {
+    "expected": 500,
+    "passed": 500,
+    "failed": 0,
+    "missing": 0
+  },
+  "source_equivalence_status": "pending supported final-a85 proofs; GPU retained until proofs or missing current-source executions complete",
+  "source_summaries": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/all-comparison-results-retained/results-nvidia-amd-all-comparison/summary.json",
+      "sha256": "60f64578e78fa7311bceceec85973ac509ebeeda971c4a5b0156e8d4ca6cfcd0",
+      "units": 494
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/latest-five-vendor-comparison/results-nvidia-vendor-comparison/summary.json",
+      "sha256": "aea689c81bbcd6ccab2ae7de8c9afeb02c32f6884283adfb7897317c3f64b730",
+      "units": 5
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/prophet-vendor-comparison-retained/results-nvidia-prophet-comparison/summary.json",
+      "sha256": "7452f7313408b6d68f7e12134b464e7d5dac44b7bcf67846314ca42896e1060c",
+      "units": 1
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/cnn-vendor-comparison-retained/results-nvidia-cnn-comparison/summary.json",
+      "sha256": "ec53e398029179b5f04242b4dcc2e376fdcbb89a313d0b4096e1d901051dcc51",
+      "units": 2
+    }
+  ],
+  "superseded_failures": [
+    {
+      "lane": "x-cnn-conv-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 1
+    },
+    {
+      "lane": "x-cnn-gnn-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 1
+    }
+  ],
+  "units": [
+    {
+      "lane": "agglomerative",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "arima",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "arima-011",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "arima-exog",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "arima-exog-seasonal",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "arima-seasonal-c",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "bootstrap",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "byte-lm",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "byte-lm-resident",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "cholesky",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "classical-float16-sequences",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "cross-entropy-arms",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "cross-val",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "dbscan",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "dbscan-brute-l1",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "dbscan-weighted",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "elasticnet",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "elasticnet-l2end-no-intercept",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "embedding",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "embedding-sort",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "et-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "et-clf-entropy-bestfirst",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "et-clf-weighted",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "et-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "et-reg-bootstrap-parallel",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "et-reg-weighted",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-adapter-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-adapter-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-adapter-score-weighted",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-bfa-quantile",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-binary-columns",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-border-types",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-catboost-defaults",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-categorical-ctr",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-class-weights",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-depthwise",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-exact-mae",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-feature-freq",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-lossguide",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-lossguide-newtoncosine",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-multiclass",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-multiclass-defaults",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-multiclass-offgrid",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-nan-modes",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-onevsall",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-ordered",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-ordered-bayesian-noise",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-ordered-rmse",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-pair-logit",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-pair-logit-pointwise",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-parametric-losses",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-pointwise-l2-bayesian-eval",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-query-rmse",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-query-rmse-pointwise",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-ranking-defaults",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-rmse",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-stochastic-arms",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-symmetric",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-symmetric-eval",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-tensor-ctr-tables",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-yeti-rank",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gbdt-yeti-rank-pointwise",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gemm-bf16",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gemm-int15",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gemm-int8",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gemm-pinned",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gemm-transposed",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gmm",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gmm-random-init",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gmm-random-init-sample",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gmm-sample",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp-lml-theta",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp-matern12",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp-matern32",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp-matern52-ard",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp-normalize-y",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp-optimize",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp-optimize-restarts",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp-sample-y",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gp-sample-y-normalize",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gpc",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "gpc-multiclass",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "grad-accumulation",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "hdbscan",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "hdbscan-leaf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "hf-causal-lm",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "hf-causal-lm-stream",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "hf-causal-lm-text",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "hf-checkpoint",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "hf-model-surface",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "hf-tokenizer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "holtwinters",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "holtwinters-multiplicative",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "iforest",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "iforest-tuned",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ivf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ivf-euclidean",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ivf-extend",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ivf-filter",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ivf-short-fill",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kde",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kde-cosine-minkowski",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kde-epanechnikov-l1",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kde-exponential-chebyshev",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kde-linear-cosine",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kde-tophat-sqeuclidean",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kde-weighted",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kernel-ridge",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kernel-ridge-laplacian",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kernel-ridge-poly",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kernel-ridge-sigmoid",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kmeans",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kmeans-array",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kmeans-classic-pp",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kmeans-random",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kmeans-sqrt",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kmeans-weighted",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-chebyshev",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-clf-distance",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-cosine",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-manhattan",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-minkowski-p3",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-rbc",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-reg-distance",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "knn-sqeuclidean",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "kpss",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "lasso",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "linalg-eigh",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "linalg-qr",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "linalg-svdvals",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "linear-svc",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "linear-svc-squared-hinge",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "linear-svr",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "linear-svr-squared",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "logistic",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "logistic-elasticnet",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "logistic-l1",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "logistic-multiclass",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "logistic-unpenalized-no-intercept",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "lowbit-conversions",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba1",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba1-bf16w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba1-decode-session",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba1-int8w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba2",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba2-bf16w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba2-decode-session",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba2-dtlimit",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba2-int8w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba3",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba3-bf16w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba3-decode-session",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mamba3-int8w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "metrics",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "metrics-classification",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "metrics-fowlkes-mallows",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "metrics-homogeneity-completeness",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "minmax-scaler",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "minmax-scaler-clip",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mlp",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mlp-bf16w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "mlp-int8w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "monte-carlo",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "multioutput-ridge",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "native-schedule-series",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "neural-trainer-unfused",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "nystroem",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "nystroem-laplacian",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "nystroem-poly",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "nystroem-sigmoid",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ols",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ols-no-intercept",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ols-weighted",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "optim-adam-clip",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "optim-io-capability",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "optim-maximize",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "optim-owner-lifecycle",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "optim-resident-io",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "optim-sgd",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ordered-gradient-sum",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "pca",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "pca-full-whiten",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "pca-inverse",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "pca-whiten",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "pca-whiten-inverse",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "permutation-test",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-cnn-classifier-predict",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-cnn-layer-fit",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-numeric-metadata",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-randomized-search",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-residual-dropout",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-scorer-factories",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-set-params",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-sparse-encode",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-theta-variants",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "public-validation-learning-curves",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "qn-absolute",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "qn-squared",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "radius",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "radius-chebyshev",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "radius-manhattan",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "radius-minkowski-p3",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "rbf-sampler",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "resample-bca",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "resample-perm-samples",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "resample-unpaired",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "resample-utils",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "rf-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "rf-clf-balanced-parallel",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "rf-clf-entropy-log2-noboot",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "rf-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "rf-reg-gamma-ig",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "rf-reg-poisson",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "rf-score-weighted",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ridge",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "ridge-no-intercept",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "safetensors-widen-f16",
+      "comparison_group": "latest-five-vendor-comparison",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "samba",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "samba-bf16w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "samba-int8w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "samba-optimizer-state",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "samba-untied-dropout-accum",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "scaler-fit-transform",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "select-d",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-adafactor",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-adafactor-device",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-adagrad",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-adamax",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-autoarima",
+      "comparison_group": "latest-five-vendor-comparison",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-croston",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-device-release",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-device-tensor",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-ets",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-export-roundtrip",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-garch",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-gru",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-lamb",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-lamb-device",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-layernorm",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-layernorm-backward",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-lion",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-lr-schedulers",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-lstm",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-mlp",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-moe",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-moe-backward",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-nadam",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-onnx-import",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-optimizer-state",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-program-save-load",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-prophet",
+      "comparison_group": "prophet-vendor-comparison-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-rmsprop",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-rnn",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-stl",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-tape-program",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-tape-sequential",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-theta",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "sequence-var",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "spectral",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "spectral-embedding",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "spectral-precomputed",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "standard-scaler",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "standard-scaler-no-mean",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "standard-scaler-no-std",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "svc",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "svc-gamma-scale",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "svc-linear",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "svc-poly",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "svr",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "svr-linear",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "training-chunked-lm-head",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "training-device-cross-entropy",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "training-mlp-sessions",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "training-primitives",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "transformer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "transformer-bf16w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "transformer-decode-load-state",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "transformer-decode-session",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "transformer-forward-tape",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "transformer-int8w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "transformer-window",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-adaboost-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-adaboost-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-bagging-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-bagging-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-calibrated",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-dart-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-dart-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-dart-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-dt-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-dt-random",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-dt-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-et-deviance",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-gbdt-multirmse",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-multioutput",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-onevsrest",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-oob-cv-link",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-random-embedding",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-rf-weighted",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-shap-kernel",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-shap-permutation",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-shap-tree",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-stacking-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-stacking-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-voting-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "trees-voting-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "tsvd",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "tsvd-inverse",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "umap",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-cagra",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-cagra-filter",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-filter",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-ivf-pq",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-ivf-rabitq",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-ivf-sq",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-refine",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-refine-euclidean",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-tsne",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ann-tsne-pca",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ard",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-bayes-ridge",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-bayes-ridge-sw",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-affinity-propagation",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-agglo-connectivity",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-agglo-linkages",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-ap-precomputed",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-bgmm",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-bgmm-covtypes",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-bgmm-inits",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-bisecting-kmeans",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-bisecting-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-dbscan-metrics",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-gmm-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-hdbscan-epsilon",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-kmeans-init",
+      "comparison_group": "latest-five-vendor-comparison",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-meanshift",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-meanshift-binned",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-minibatch-kmeans",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-minibatch-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-minibatch-partial",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-optics",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-optics-metrics",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cluster-spectral-affinities",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-batchnorm",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-bn-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-conv-options",
+      "comparison_group": "cnn-vendor-comparison-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-conv1d",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-conv2d",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-dropout2d",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-gcn",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-globalpool",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-gnn-options",
+      "comparison_group": "cnn-vendor-comparison-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-pool",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-pool-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-resnet-block",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-sage",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-trainer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-cnn-trainer-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-als",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-dict-learning",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-eigh-wide-factor-analysis",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-eigh-wide-fastica",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-eigh-wide-kpca",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-eigh-wide-linalg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-eigh-wide-mincovdet",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-eigh-wide-rotation",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-factor-analysis",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-fastica",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-grp",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-ipca",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-lda",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-lstsq-rsvd",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-lu",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-manifold",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-nmf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-pca-randomized",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-pls",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-robust-cov",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-rsvd-rank-deficient",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-sparse-pca",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-spectral-rbf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-srp",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-decomp-umap-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-enet-cv",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-glm-gamma",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-glm-poisson",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-glm-poisson-sw",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-glm-tweedie",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-huber",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-huber-outliers",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-huber-sw",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-isotonic",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-lars",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-lasso-cv",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-lasso-cv-pos",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-lasso-lars",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-lasso-lars-pos",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-logistic-cv",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-logistic-cv-proba",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-logistic-cv-w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-metrics-classification",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-metrics-classification-report",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-metrics-cluster",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-metrics-permutation-test-score",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-metrics-ranking",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-metrics-regression",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-metrics-search",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-metrics-splitters",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-additive-chi2",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-connected-components",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-gamma-scale",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-gp-cov",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-km-kernels",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-knn-imputer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-kpca",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-krr-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-label-propagation",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-label-spreading",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-lof",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-louvain",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-metrics",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-nearest-centroid",
+      "comparison_group": "latest-five-vendor-comparison",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-ocsvm",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-pagerank",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-poly-sketch",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-skewed-chi2",
+      "comparison_group": "latest-five-vendor-comparison",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-svc-multiclass",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-svc-probability",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-svc-sigmoid",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-svgp",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-svm-precomputed",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-svm-weights",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-neighbors-svr-kernels",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-pa-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-pa-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-perceptron",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-bernoulli-nb",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-binarizer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-categorical-nb",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-complement-nb",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-da-solvers",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-encoder-categories",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-encoder-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-gaussian-nb",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-infrequent",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-inverse-transforms",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-iterative-imputer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-iterative-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-kbins",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-kbins-methods",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-kbins-weights",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-label-binarizer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-label-binarizer-multilabel",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-label-encoder",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-lda",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-maxabs-scaler",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-mi-discrete",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-multilabel-binarizer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-multinomial-nb",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-mutual-info",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-nb-partial",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-nb-weights",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-normalizer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-onehot-encoder",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-ordinal-encoder",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-polynomial-features",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-power-transformer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-priors",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-qda",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-quantile-transformer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-rfe",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-robust-scaler",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-robust-scaler-unit-variance",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-scaler-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-score-edges",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-select-kbest",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-simple-imputer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-simple-imputer-indicator",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-spline-options",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-spline-transformer",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-target-encoder",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-user-objects",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-prep-variance-threshold",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-quantile",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-quantile-sw",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ridge-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ridge-clf-w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ridge-cv",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ridge-cv-kfold",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-ridge-cv-sw",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-sgd-clf",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-sgd-clf-proba",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-sgd-clf-w",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-sgd-ocsvm",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-sgd-reg",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    },
+    {
+      "lane": "x-sgd-reg-sw",
+      "comparison_group": "all-comparison-results-retained",
+      "conversion_exit": 0,
+      "diff_exit": 0
+    }
+  ]
+}
