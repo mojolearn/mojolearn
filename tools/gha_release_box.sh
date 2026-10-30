@@ -92,7 +92,7 @@ case "$MODE:$ARCH" in
     host:host|development:host) VENDOR=none ;;
     host:*) echo "host mode takes the arch 'host'" >&2; exit 2 ;;
     *:sm_90a|*:sm_89|*:sm_80) VENDOR=cuda ;;
-    *:gfx942) VENDOR=hip ;;
+    *:gfx942|development:gfx950) VENDOR=hip ;;
     *) echo "unknown arch $ARCH" >&2; exit 2 ;;
 esac
 [[ "${MOJOLEARN_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || { echo "MOJOLEARN_COMMIT must be a full SHA" >&2; exit 2; }
