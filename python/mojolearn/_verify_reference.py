@@ -357,8 +357,27 @@ def record_device_class(record, filename):
     cls = VENDOR_CLASS.get(backend) if isinstance(backend, str) else None
     if cls is None:
         return None, "backend witness names an unsupported backend"
-    if signature.get("schema") != 1 or record.get("complete") is not True:
-        return None, "backend witness requires a complete schema-1 record"
+    schema = signature.get("schema")
+    if type(schema) is not int or schema not in (1, 2) or record.get("complete") is not True:
+        return None, "backend witness requires a complete supported-schema record"
+    if schema == 2:
+        # identity_break schema 2 retains hashed execution settings while
+        # excluding only the nonsemantic scheduler lease. Validate the actual
+        # per-key witness and its aggregate; never rewrite historical records
+        # or drop their backend provenance to make a newer producer admissible.
+        environment = signature.get("environment_digests")
+        if not isinstance(environment, dict) or any(
+                not isinstance(key, str)
+                or key == "MOJOLEARN_SLOT_TOKEN"
+                or not key.startswith(("MOJO", "MODULAR", "OMP_", "MKL_", "OPENBLAS_",
+                                       "VECLIB_", "NUMEXPR_", "BLIS_"))
+                or not isinstance(value, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", value)
+                for key, value in environment.items()):
+            return None, "backend witness has invalid environment digests"
+        aggregate = hashlib.sha256(json.dumps(environment, sort_keys=True).encode()).hexdigest()
+        if signature.get("environment_sha256") != aggregate:
+            return None, "backend witness environment digests disagree with aggregate"
     for field in ("source_sha256", "environment_sha256"):
         if not re.fullmatch(r"[0-9a-f]{64}", str(signature.get(field, ""))):
             return None, f"backend witness has invalid {field}"
@@ -465,6 +484,7 @@ def admit(j, path, par_axis=False, *, known_lanes=()):
         return "quarantined Metal incident (2026-09-15_gp-sample-y/README.md)"
     base = os.path.basename(low)
     name_for_markers = base
+    directory_for_markers = os.path.dirname(low)
     # A lane's API name can legitimately contain "partial" (partial_fit).
     # Exempt only the exact, registered one-lane filename emitted by the
     # lane runner, backed by its bound scope and enforced backend metadata.
@@ -480,10 +500,20 @@ def admit(j, path, par_axis=False, *, known_lanes=()):
             runner_name = ((suffix == "gpu.json" and backend in ("metal", "cuda", "hip"))
                            or (re.fullmatch(r"cpu(?:default|[1-9][0-9]*)\.json", suffix)
                                and backend == "cpu"))
-            if (lane in known_lanes and options.get("lanes") == lane
-                    and runner_name and record_device_class(j, path)[1] is None):
+            bound_lane = (lane in known_lanes and options.get("lanes") == lane
+                          and backend in ("metal", "cuda", "hip", "cpu")
+                          and record_device_class(j, path)[1] is None)
+            if bound_lane and runner_name:
                 name_for_markers = suffix
-    path_for_markers = os.path.join(os.path.dirname(low), name_for_markers)
+            if bound_lane and os.path.basename(directory_for_markers) == lane:
+                # Per-algorithm retention uses the exact registered lane as
+                # its immediate directory. "partial_fit" in that API name
+                # is not a partial-column request. Mask only this bound
+                # segment; outer probe/unfixed/partial directories and the
+                # record's own partial/sabotage metadata still refuse.
+                directory_for_markers = os.path.join(
+                    os.path.dirname(directory_for_markers), "registered-lane")
+    path_for_markers = os.path.join(directory_for_markers, name_for_markers)
     if any(tok in path_for_markers for tok in _EXCLUDED_PATH_TOKENS) or any(
             tok in base for tok in _EXCLUDED_BASENAME_TOKENS):
         return "sabotage, partial, probe, unfixed or smoke run (by name)"
