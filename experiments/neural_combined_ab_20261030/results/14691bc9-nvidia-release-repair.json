@@ -1,0 +1,244 @@
+{
+  "schema": "mojolearn.nvidia-focused-repair-summary.v1",
+  "source_commit": "14691bc98fec62d5b5fcaf47a137f441381fb5da",
+  "pod": "ynafb31c214etf",
+  "scope": "Installed NVIDIA correctness and retained observations; final source-closure reuse, cross-vendor identity and ledger admission remain separate.",
+  "stage": {
+    "source_commit": "14691bc98fec62d5b5fcaf47a137f441381fb5da",
+    "base_source": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+    "base_package_sha256": "c4e5023e8e7fb6d670e4916440c4ffb7fbf2a3ad52552afb41ec79b3e9aabd45",
+    "source_changed_files": [
+      "python/mojolearn/tests/test_late_numpy_native_metadata.py",
+      "python/mojolearn/tests/test_safetensors_native_ndarray.py",
+      "tools/identity_lanes/cluster.py"
+    ],
+    "changed_payload_assets": [
+      {
+        "path": "mojolearn/_identity_lane_cluster.py",
+        "prior_sha256": "ee42d22554232812fcc04600615a36be1811fa1df4e9738c0faa67d08e3194be",
+        "sha256": "c29aeaf103d7647b6ce4b1c97c9dba6549859bc0903d21fb9150f576a6143ac2"
+      }
+    ],
+    "unchanged_native_files": 86,
+    "native_sha256": {
+      ".libs/libAsyncRTMojoBindings.so": "b987b33023842a1936d5929307085a23cbe972ea89a16a398c3a92f67cc1f094",
+      ".libs/libAsyncRTRuntimeGlobals.so": "e979384b486e7632abb1667720e055235c9f772973424eaebe9477789ddb85f9",
+      ".libs/libKGENCompilerRTShared.so": "d8759513cd99a71799e1b819bd8b0cda5e8569569b46c8889ba370454d89ea0c",
+      ".libs/libMSupportGlobals.so": "85b9a294fd4110b859130717e675d7e0bc9fcdd9a5817415bf737ba4cd7acdf7",
+      ".libs/libMojolearnMath.so": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+      "_adapters/libmojolearn_adapter.so": "f11e856886a8666d71b84ffe76c7d3ef920cdc1572b619be0f1ca5b4c57c8d23",
+      "_adapters/mojolearn_torch.so": "aa8f381b090486c5af2f47de47dc3bf04ddcfc444bda14e09a7e5ce78e4eb5f9",
+      "host/_mojolearn_arima_host.so": "75eff0b66e93bef545dc98a546e6129487ed7ac61437738f4912e43031852146",
+      "host/_mojolearn_byte_lm_host.so": "299c951f488692f4922f1840caef33f92c8f7764a6be446a256545cb79a7a2a7",
+      "host/_mojolearn_core_host.so": "ca3a9b35768907b4429edcdbb71a2b092e7e9ba6f42d92aa14861da9cd33d758",
+      "host/_mojolearn_embedding_host.so": "6855f9faf73a22d7b11297e1aca88b919da9d1c5fc59d4bd466fd55f6a4d1e6d",
+      "host/_mojolearn_embedding_infer_host.so": "e28f10328d93de0995614e5f46b3c24de5cf44af633fec5812289b8f5648248f",
+      "host/_mojolearn_estimators_host.so": "953abebef9671594338d64484b5ace08490b0ed2f77f8f353b741fe75e72dab9",
+      "host/_mojolearn_forecast_host.so": "1fac3eace46696e97aae8c444cd4980d60739687a3a175d8d3bbb1d33df12304",
+      "host/_mojolearn_forest_host.so": "7d64d8059768651e36f34dde2fe608949d7c256bc501cba3320b0ba2e558a25f",
+      "host/_mojolearn_gbdt_host.so": "e48228ee55044444f45c0687eeb5ea80f324af583e42b811897299b27cb5e104",
+      "host/_mojolearn_gp_host.so": "482e1ad922fccaaddf4d21762e85e8bdc1fac9d276793f9409623da66600641d",
+      "host/_mojolearn_gp_infer_host.so": "9aa1b5af07846a1a8584063cdc85a80f8fcb133fe19b9eefaabf84d0a846d2f4",
+      "host/_mojolearn_hdbscan_host.so": "2e5c56626892c07a2289d86317232e1001cb5b9e6f8a565747e4c5af579523a3",
+      "host/_mojolearn_hdbscan_infer_host.so": "3a81e70b3cab093b648307b782fe1aa044fce908bec75ae3c46e47fefcbc9115",
+      "host/_mojolearn_ivf_host.so": "2875472d7db0ef00d5fcac20f34f4d98d4a0ef223ad5ec004c29fcac1ad99ed4",
+      "host/_mojolearn_ivf_search_host.so": "09e4b812edf7de4085faf70843c06aaebc5d2d32b8070e8700f05c3dca1e8946",
+      "host/_mojolearn_kernel_methods_host.so": "6d20579ea8dd604242fc205d4c3855b40d57e36989dc68dc74cea04e1bfcdbda",
+      "host/_mojolearn_linalg_host.so": "67055e48ff3c40a8792190e6ceef72dc8e387abcfb451d88ed2667929fbcf8a8",
+      "host/_mojolearn_mamba_host.so": "696309a4892112aab276279f9efb175979a783e5d781891bf25f04f6257ef128",
+      "host/_mojolearn_metrics_host.so": "a27eac18523ce79891d0f2cfb22a6045f880cc1ce89d026ff8b01122e91f584c",
+      "host/_mojolearn_mixture_host.so": "1b718186e1196cc43cf6f7a87219d4256096b5575236e165973bf1c458dcc3d4",
+      "host/_mojolearn_mixture_infer_host.so": "6a5d45efe3d7cafe3bb2f54db3da310cf09201903453ab4459239d8e855654ed",
+      "host/_mojolearn_neural_host.so": "e3d3b92cc375721015c6dcfcedcef8094b7947a4ad4612e58ae4c265b8c37606",
+      "host/_mojolearn_preprocessing_host.so": "e07b7ce09e3f7c112185bcd5751e4ce6515bda5d606bb106263d7a22b80f26ef",
+      "host/_mojolearn_resample_host.so": "e3cbf7f07bf9a8de36a710aea07ea2d43b2b6c1bf403733c0e27db3c4d7e6adb",
+      "host/_mojolearn_rf_host.so": "6ec2c70e2e24f79c12b1a684e0222969640d3363c68e963d414e44bbf5cc0f27",
+      "host/_mojolearn_runtime_classical_host.so": "c0c980f4cc506578fcb712fefa52647fcaa41435ece95e22caffc6e3a9eba04a",
+      "host/_mojolearn_runtime_manifold_host.so": "210f02f965ab76096324b3322cec6fbf85bf578ed4b486bc1014552bbe57f729",
+      "host/_mojolearn_runtime_model_selection_host.so": "2e6b161714a743fb463545c38e27fcf700b50effef5e88e35370b84e23454c21",
+      "host/_mojolearn_runtime_sequential_host.so": "72df8c7bc095d1735fdfe8187874ad0d2944339c0cb0fbd8ab59447d6d0362b3",
+      "host/_mojolearn_solver_host.so": "2fce906295e9f6865f8da89ae4ad9192c8abb82e0f76d73a88f60bf717db7f49",
+      "host/_mojolearn_svm_host.so": "06a6ebf2653d5ed0a7981912426dfe04e5df39864d4c8c39d4c894e695ff798a",
+      "host/_mojolearn_tokenizer_host.so": "211f48db77f9361140274f1d9325e284d3305919745adb5fb8aa8537a1275465",
+      "host/_mojolearn_training_host.so": "5e40b7502a81ea6b70aa3271d24d0d04b1b883f45d4293b11bbd339bb578b909",
+      "host/_mojolearn_transformer_host.so": "86c460827def5a8ec488a38650b5438e0ffda88c6035287cc56b99863592dcc1",
+      "host/_mojolearn_trees_host.so": "521e6a058506331a56c7b7cd44d3874b5cde18e25d9d14defeff3bbbc00fb93c",
+      "host/_mojolearn_tsa_host.so": "994e2a502336a4991dbfafad15b3a0c68a48d81194f64bc216b45d6d060051da",
+      "host/_mojolearn_x_ann_host.so": "c8fe251e4a413ce6b5d93b753ca1ab31d47cad57aa821aa7252b9b5b314a9144",
+      "host/_mojolearn_x_cluster_host.so": "f2f7c3ae46396e4295f67647e19d6597b112121a071258833224209ed8bff7c2",
+      "host/_mojolearn_x_cnn_host.so": "d22da6fb43ca6b15ee8b8d6cccacfa065521bde5ecaa8a42e9eebf0584b2d4c4",
+      "host/_mojolearn_x_decomp_host.so": "914532c086dca1bcc00b90ee895106a65ce68744d76e7b039570943292937a46",
+      "host/_mojolearn_x_linear_host.so": "23922586d5c01fadbc70af29abbd74500963fc08b7de0a3edb7fef4802e9b048",
+      "host/_mojolearn_x_metrics_host.so": "e026d8797e1de31773f57ee154b0eb7991b2472188085d53c23d7efe88b6ad3d",
+      "host/_mojolearn_x_neighbors_host.so": "7430d9a617aeb8cb51c7cc4cc18e32a65ce2eebcc02ddc43401d24877e4c8ea6",
+      "host/_mojolearn_x_prep_host.so": "70a118b84e262add75262fb4437880ce54475c9ef7de9be4d8b84c4fc630b0ed",
+      "host/_mojolearn_x_sequence_host.so": "0992fec386caaa34ff5ec6c1d504d3e57db061e64e4091b9e2df766d34b2f3a3",
+      "host/_mojolearn_x_trees_host.so": "2df1b2cf39d8aa8dcc253c53f778fc0fb45155d44132a42a2820e6f37167c9da",
+      "identical/_mojolearn.so": "9dbaef99e2ef5151b40934f9d1c750236a38bbc82720332e3d718e851ef521e1",
+      "identical/_mojolearn_arima.so": "db26798b082a03901dd8a4d616528984dde5ac4ce3f5768c344d385106b248d2",
+      "identical/_mojolearn_byte_lm.so": "3d454ac3a8b5abae91ef542a45bf8a7803a607d8189664985a46f90980dbe485",
+      "identical/_mojolearn_embedding.so": "7bdc01c043ef92d7b61c431e49b7a352a7812fed3a433bf68ff60a4c99b530c6",
+      "identical/_mojolearn_estimators.so": "6002d347c3d6916f8375836a583525ef71d8c782321082798171cb96f9f97f26",
+      "identical/_mojolearn_gbdt.so": "3e8733dea124234243af7acf6ecc3a3b78c1f19c90c0716edffc78d2e9199a46",
+      "identical/_mojolearn_gp.so": "3d22d0872489ba9d493cf5ed65d03b396b948d0d71b6327bc6dd2eb7f631e1a1",
+      "identical/_mojolearn_hdbscan.so": "fb308caa6ca983cc5002390bbec6c73bb92e417791f90f6400e06aaeec604d17",
+      "identical/_mojolearn_ivf.so": "e60d3ad035bd67400f574a3d896758e665c53f9517e5a449df2ce51b8836592e",
+      "identical/_mojolearn_kernel_methods.so": "e6aca07832c3132d6b06d7f0c266b428125aee4f2520a19286ba7013d9165aa6",
+      "identical/_mojolearn_linalg.so": "f68aceae9acd3a94302b4e962d57fc6895415398e06aeba87e622859527e0508",
+      "identical/_mojolearn_mamba.so": "e02c35b6f5d20d1532350e92c9664acf47649d1dda2db64bd26286893a4ef706",
+      "identical/_mojolearn_metrics.so": "71bb48bc0546b2a40ec7683c0eed1a391882e91179aba6f0e349bd9b524e97b5",
+      "identical/_mojolearn_mixture.so": "3fb68b78a85529e4007a804ae6dfa34bcb6f0d80edbbe95d889d41e7f8a309c6",
+      "identical/_mojolearn_preprocessing.so": "8b968c0f215113134be7ba8c38d01b4fc349a9d873f51fb70af6a70c6df76fbf",
+      "identical/_mojolearn_resample.so": "59507eab9aec19dddb32182c1e690b2f2888834f2006e9ff09331e2311e221b4",
+      "identical/_mojolearn_rf.so": "9f9cb294e74b9a944fd06205024d0be23e04b9466c76af173473d7ce0ae86592",
+      "identical/_mojolearn_solver.so": "db38399a15f4df043a5768ceada39a948a5b5c59f7b7065543e702b873ef6ef3",
+      "identical/_mojolearn_svm.so": "03e5577096cc07ad36503891dd4d3c235e8176364611d6143fb4edfdda3913fc",
+      "identical/_mojolearn_training.so": "064b1d675d46147760185b2ba7042f360f60f2827fedfddbdbec6d543ed4b184",
+      "identical/_mojolearn_transformer.so": "6db751758e4bbc7600d11e9ad621ca5511e8f3cc55fa473138b539e4f0980f7d",
+      "identical/_mojolearn_trees.so": "cd6ba2809c33c5b3fe1263867c7142b857961385d15220184d60873ad0de740a",
+      "identical/_mojolearn_tsa.so": "8d7cfc9da4de5f03672de5e4fca46c9e96fc669d2487cd88af062f3e25b5ce96",
+      "identical/_mojolearn_x_ann.so": "7aa074fb122d71f9eb51e3c6ae14a85d1b11cbc8df7b444505af74d0826425a7",
+      "identical/_mojolearn_x_cluster.so": "4d3bc00c45dd45b9d61762848b95780740937ed053276c7f2960350ccb8cbe05",
+      "identical/_mojolearn_x_cnn.so": "365275addb721b21f61cc02ffa97fc1443ad75c2ff135b9a265a526d7241a0f4",
+      "identical/_mojolearn_x_decomp.so": "240d3f9f4d03aeb5c369d36a2820a4c7acb7ed4a1d59b38f5acb6ea7ea1f92ce",
+      "identical/_mojolearn_x_linear.so": "2890ff9467f55bd73280793a35afc3d6c911ddfeb1f012fb31425024d5a0be65",
+      "identical/_mojolearn_x_metrics.so": "6c8c20c98e95c756344d7000f5e06320bb9c765c0b449f8d8c69715fa3776711",
+      "identical/_mojolearn_x_neighbors.so": "30eb8a9f90e6a4312d0b3aa6aefd0d88b374c145ad576fa3500570c9c63f80b0",
+      "identical/_mojolearn_x_prep.so": "6f0247fd8542be75bcbec8fd7f0b5e3a4bc226dbab4545c4ce2b652a1727661d",
+      "identical/_mojolearn_x_sequence.so": "a12c2f59a906ddddd37b798f9ec2eb7bdf07f6bcdcb7e1979bf3ef7487fdede3",
+      "identical/_mojolearn_x_trees.so": "cdf359238b528612e95279ab8569ef4edf27d861863dde5dd3a41352a2fda131"
+    },
+    "package": "/root/nvidia-source146-venv/lib/python3.14/site-packages/mojolearn",
+    "python": "/root/nvidia-source146-venv/bin/python",
+    "reuse": "5448 compiled source closures unchanged; its17focused tests and4affected full units reused. Only corrected KMeans fixture requires new execution."
+  },
+  "coverage": {
+    "expected": 1,
+    "attempted": 1,
+    "complete": 1,
+    "failed": 0,
+    "pending": 0
+  },
+  "units": [
+    {
+      "lane": "x-cluster-kmeans-init",
+      "profile": "routine",
+      "source": "14691bc98fec62d5b5fcaf47a137f441381fb5da",
+      "exit_code": 0,
+      "local_complete": true,
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 36,
+        "N/A": 45,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "cross_vendor_admission": "pending; root owns central ledger"
+    }
+  ],
+  "column_conversion": {
+    "supported_tool": "tools/identity_columns.py from-verify --launch",
+    "numeric_reruns": 0,
+    "columns": [
+      {
+        "lane": "x-cluster-kmeans-init",
+        "local_complete": true,
+        "file": "x-cluster-kmeans-init.identical.json",
+        "sha256": "96a3bea9b7435e1dd856b553de0b5d8fcf9c1397f39c113fbb0430cc6d705ac5"
+      }
+    ]
+  },
+  "retention": [
+    {
+      "name": "source146",
+      "label": "package",
+      "key": "verification/0.8.63/14691bc98fec/nvidia/repair-ynafb31c214etf/package.tgz",
+      "sha256": "20e0bb1f8202bb0bbb6ef9200e33b1b48f88410fc64173f12d8f54ec078ee4fc",
+      "bytes": 107960498,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/source146-package.tgz",
+      "local_sha256": "20e0bb1f8202bb0bbb6ef9200e33b1b48f88410fc64173f12d8f54ec078ee4fc",
+      "mac_verified": true
+    },
+    {
+      "name": "source146",
+      "label": "source",
+      "key": "verification/0.8.63/14691bc98fec/nvidia/repair-ynafb31c214etf/source.tgz",
+      "sha256": "da7d3b06be808fa32abdf5e70e82d4ed489173c4d7bb5106253d94bb79d1736f",
+      "bytes": 153800262,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/source146-source.tgz",
+      "local_sha256": "da7d3b06be808fa32abdf5e70e82d4ed489173c4d7bb5106253d94bb79d1736f",
+      "mac_verified": true
+    },
+    {
+      "name": "source146",
+      "label": "prerequisites",
+      "key": "verification/0.8.63/14691bc98fec/nvidia/repair-ynafb31c214etf/prerequisites.tgz",
+      "sha256": "7d42c2b569d937a5ec00c767b1dfd83e0b353451817f42412aa86f18e2589ef0",
+      "bytes": 18715,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/source146-prerequisites.tgz",
+      "local_sha256": "7d42c2b569d937a5ec00c767b1dfd83e0b353451817f42412aa86f18e2589ef0",
+      "mac_verified": true
+    },
+    {
+      "name": "source146",
+      "label": "final",
+      "key": "verification/0.8.63/14691bc98fec/nvidia/repair-ynafb31c214etf/final.tgz",
+      "sha256": "8ce8a4812d31269fd8523dc9b8bf173f41315439ecad317bdbcc3a314e7c3107",
+      "bytes": 264672126,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/source146-final.tgz",
+      "local_sha256": "8ce8a4812d31269fd8523dc9b8bf173f41315439ecad317bdbcc3a314e7c3107",
+      "mac_verified": true
+    },
+    {
+      "name": "source146",
+      "label": "columns",
+      "key": "verification/0.8.63/14691bc98fec/nvidia/repair-ynafb31c214etf/columns.tgz",
+      "sha256": "28259bd450bdf10881d3728b54a8be1d6e7eb75a5de527b402df8b508debc5c0",
+      "bytes": 675000,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/source146-columns.tgz",
+      "local_sha256": "28259bd450bdf10881d3728b54a8be1d6e7eb75a5de527b402df8b508debc5c0",
+      "mac_verified": true
+    }
+  ],
+  "reused_validation": {
+    "source": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+    "focused": {
+      "counts": {
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "original_collection_failure": "focused.xml preserved",
+      "corrected_test_source": {
+        "test_source_commit": "2f59ed9e808c90142f34ab92709b07eaefaa25e1",
+        "test_path": "python/mojolearn/tests/test_safetensors_native_ndarray.py",
+        "sha256": "6e6da99662909d53dbdfb6bc360ac8d0c55a2eb1c6c41c57c6c65027d8b43f8f",
+        "compiled_product_source": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+        "change": "Test-only nonexistent constructor import replaced with existing public Array.from_buffer; native product unchanged; original collection failure preserved"
+      }
+    },
+    "verifier_units": 4,
+    "reason": "Source diff contains only two test files and KMeans fixture; all86 native files identical",
+    "source_package_retention": {
+      "key": "verification/0.8.63/5448ba0482d0/nvidia/repair-ynafb31c214etf/package.tgz",
+      "sha256": "c4e5023e8e7fb6d670e4916440c4ffb7fbf2a3ad52552afb41ec79b3e9aabd45",
+      "bytes": 107960581,
+      "status": "R2 PUT and GET verified"
+    }
+  },
+  "failure_preservation": "Historical c286 KMeans unsupported-callback fixture failure is retained.146 uses the repaired public explicit-center fixture; all86 native/runtime files are byte-identical to5448."
+}

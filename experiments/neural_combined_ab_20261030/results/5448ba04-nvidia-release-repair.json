@@ -1,0 +1,250 @@
+{
+  "schema": "mojolearn.nvidia-focused-repair-summary.v1",
+  "source_commit": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+  "pod": "ynafb31c214etf",
+  "scope": "Installed NVIDIA correctness and retained observations; final source-closure reuse, cross-vendor identity and ledger admission remain separate.",
+  "stage": {
+    "source_commit": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+    "compiled_inputs": {
+      "selected": {
+        "key": "measurements/cpu-recovery-build-20261030/5448ba0482d0-artifact.tgz",
+        "sha256": "698f774418af754503849c489918584f749a20eda473684c51f6c1c68fd33f85",
+        "bytes": 17722219
+      },
+      "prior": {
+        "key": "measurements/modular-kv-ownership-20261030/linux-99c25a6d-selected-host-groups.tgz",
+        "sha256": "70eba21621e17c83a3413bebee0a0d812aa3a802fe81c5b16834610016530bee"
+      }
+    },
+    "selected": [
+      {
+        "target": "host/_mojolearn_tokenizer_host.so",
+        "raw_sha256": "734ba91960ac55b7e6ebfd6544203d82c25bcab6884a7b48d966724a1faafbab",
+        "receipt": "/root/results-nvidia-followup/selected/artifacts/fdec7988c360069c509d644845f25da03465655ac45e142d31051b0f3cacc51f/receipt.json",
+        "source_closure_mismatches": [],
+        "toolchain_path_metadata": {
+          "compiler": [
+            "/root/ownership-source/.pixi/envs/default/bin/mojo",
+            "/root/ownership-source/.pixi/envs/default/bin/mojo"
+          ],
+          "pixi": [
+            "pixi 0.77.0",
+            "pixi 0.77.0"
+          ]
+        },
+        "installed_sha256": "211f48db77f9361140274f1d9325e284d3305919745adb5fb8aa8537a1275465"
+      },
+      {
+        "target": "host/_mojolearn_runtime_classical_host.so",
+        "raw_sha256": "4a346ab2fea100ce59f370abdc919dd67825c18aaccd600150b32452a04dc123",
+        "receipt": "/root/results-nvidia-followup/selected/artifacts/ba89bcaea5763967ac01ca76ab0844793222ad4b632d8977c96259a5cb7671da/receipt.json",
+        "source_closure_mismatches": [],
+        "toolchain_path_metadata": {
+          "compiler": [
+            "/root/ownership-source/.pixi/envs/default/bin/mojo",
+            "/root/ownership-source/.pixi/envs/default/bin/mojo"
+          ],
+          "pixi": [
+            "pixi 0.77.0",
+            "pixi 0.77.0"
+          ]
+        },
+        "installed_sha256": "c0c980f4cc506578fcb712fefa52647fcaa41435ece95e22caffc6e3a9eba04a"
+      }
+    ],
+    "changed_extensions": [
+      "host/_mojolearn_runtime_classical_host.so",
+      "host/_mojolearn_tokenizer_host.so"
+    ],
+    "unchanged_extensions": 77,
+    "base_source": "002ad07ba544165b133f86ec65e0ed63ea6a7119",
+    "package": "/root/nvidia-followup-venv/lib/python3.14/site-packages/mojolearn",
+    "python": "/root/nvidia-followup-venv/bin/python",
+    "scope": "Two new repaired groups assembled; other groups reused from qualified002ad install; installed checks and affected verifier pending"
+  },
+  "coverage": {
+    "expected": 4,
+    "attempted": 4,
+    "complete": 4,
+    "failed": 0,
+    "pending": 0
+  },
+  "units": [
+    {
+      "lane": "safetensors-widen-f16",
+      "profile": "routine",
+      "source": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+      "exit_code": 0,
+      "local_complete": true,
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 9,
+        "N/A": 72,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "cross_vendor_admission": "pending; root owns central ledger"
+    },
+    {
+      "lane": "x-neighbors-nearest-centroid",
+      "profile": "routine",
+      "source": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+      "exit_code": 0,
+      "local_complete": true,
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "cross_vendor_admission": "pending; root owns central ledger"
+    },
+    {
+      "lane": "x-neighbors-skewed-chi2",
+      "profile": "routine",
+      "source": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+      "exit_code": 0,
+      "local_complete": true,
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 27,
+        "N/A": 54,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "cross_vendor_admission": "pending; root owns central ledger"
+    },
+    {
+      "lane": "sequence-autoarima",
+      "profile": "routine",
+      "source": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+      "exit_code": 0,
+      "local_complete": true,
+      "observation_classification": {
+        "observation_complete": true,
+        "local_property_failures": 0,
+        "historical_reference_only": false,
+        "fresh_reference_only": false,
+        "original_exit_code": 0,
+        "identity_admission": "pending"
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 18,
+        "N/A": 63,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "cross_vendor_admission": "pending; root owns central ledger"
+    }
+  ],
+  "column_conversion": {
+    "supported_tool": "tools/identity_columns.py from-verify --launch",
+    "numeric_reruns": 0,
+    "columns": [
+      {
+        "lane": "safetensors-widen-f16",
+        "local_complete": true,
+        "file": "safetensors-widen-f16.identical.json",
+        "sha256": "fdb661cf106a08888cf1822c90bd7a0e26d69eaa2e32b29ea8e69bdd63e74bb1"
+      },
+      {
+        "lane": "x-neighbors-nearest-centroid",
+        "local_complete": true,
+        "file": "x-neighbors-nearest-centroid.identical.json",
+        "sha256": "8d008ff3f0c3b232168199d5b05ef4b370bb48c4a270066fc5d4b7a3800b0f82"
+      },
+      {
+        "lane": "x-neighbors-skewed-chi2",
+        "local_complete": true,
+        "file": "x-neighbors-skewed-chi2.identical.json",
+        "sha256": "a1d173e265145bc0efc91b1de852b64a42cc806b7485e0b1bb8cac980a668557"
+      },
+      {
+        "lane": "sequence-autoarima",
+        "local_complete": true,
+        "file": "sequence-autoarima.identical.json",
+        "sha256": "e8cf8f615ed19a904b6f555906b3297238046ba1b89ca67fd39a06147493f5bb"
+      }
+    ]
+  },
+  "retention": [
+    {
+      "name": "followup",
+      "label": "columns",
+      "key": "verification/0.8.63/5448ba0482d0/nvidia/repair-ynafb31c214etf/columns.tgz",
+      "sha256": "02fcceb9827a7c591b2301f3093fa6415a7f99d35107834147d5c148f3f9d677",
+      "bytes": 2700884,
+      "status": "R2 PUT and GET verified",
+      "local_file": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/followup-columns.tgz",
+      "local_sha256": "02fcceb9827a7c591b2301f3093fa6415a7f99d35107834147d5c148f3f9d677",
+      "mac_verified": true
+    },
+    {
+      "key": "verification/0.8.63/5448ba0482d0/nvidia/repair-ynafb31c214etf/package.tgz",
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/followup-package.tgz",
+      "sha256": "c4e5023e8e7fb6d670e4916440c4ffb7fbf2a3ad52552afb41ec79b3e9aabd45",
+      "bytes": 107960581
+    },
+    {
+      "key": "verification/0.8.63/5448ba0482d0/nvidia/repair-ynafb31c214etf/prerequisites.tgz",
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/followup-prerequisites.tgz",
+      "sha256": "cae0b19d6d09b7c77915d2843302afedc4c0e95e6a75c9c514cceb475feaf5f3",
+      "bytes": 41654
+    },
+    {
+      "key": "verification/0.8.63/5448ba0482d0/nvidia/repair-ynafb31c214etf/source.tgz",
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/followup-source.tgz",
+      "sha256": "0b7c2da496fa3b0664afb6755ab6d6d0af37c9a8f81e448460fdcc19c854aff7",
+      "bytes": 153806795
+    },
+    {
+      "key": "verification/0.8.63/5448ba0482d0/nvidia/repair-ynafb31c214etf/final.tgz",
+      "path": "/Users/andrewhendel/mojolearn-evidence/neural-combined-ab-20261030/followup-final.tgz",
+      "sha256": "efe677529612f40c59221dd8baec86d31538a54f1c13f1e7ccf98b16b26ed9f5",
+      "bytes": 384830467
+    }
+  ],
+  "focused": {
+    "counts": {
+      "tests": 17,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "original_collection_failure": "focused.xml preserved",
+    "corrected_test_source": {
+      "test_source_commit": "2f59ed9e808c90142f34ab92709b07eaefaa25e1",
+      "test_path": "python/mojolearn/tests/test_safetensors_native_ndarray.py",
+      "sha256": "6e6da99662909d53dbdfb6bc360ac8d0c55a2eb1c6c41c57c6c65027d8b43f8f",
+      "compiled_product_source": "5448ba0482d0d0a155da81b8fbce384f747f8eb3",
+      "change": "Test-only nonexistent constructor import replaced with existing public Array.from_buffer; native product unchanged; original collection failure preserved"
+    }
+  },
+  "failure_preservation": "Original safetensors test collection failure is retained. Test-only2f59 correction was copied separately; product source/native binaries remain5448."
+}
