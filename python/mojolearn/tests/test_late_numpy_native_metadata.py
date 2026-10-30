@@ -114,11 +114,13 @@ import sys
 import mojolearn as ml
 from mojolearn import preprocessing
 from mojolearn._verify_native_runtime import audit_native_call
+# Explicitly load NumPy before warming metadata; package import order varies
+# with installed optional dependencies.
+import numpy as np
 model = ml.StandardScaler()
 # Retain the callable before replacing the public NumPy factory.
 # Attribute access is itself a native operation and is audited separately.
 fit = model.fit
-import numpy as np
 values = np.arange(24, dtype="f4").reshape(8, 3)
 name = sys.argv[1]
 original = getattr(np, name)
