@@ -646,7 +646,7 @@ def test_record_producer_validation_receives_original_input_configuration(ledger
                for args, kwargs in seen for value in (*args, *kwargs.values()))
 
 
-@pytest.mark.parametrize('kind', ['compile', 'runtime', 'identity', 'adapters', 'multi', 'performance', 'published'])
+@pytest.mark.parametrize('kind', ['compile', 'runtime', 'identity', 'adapters', 'performance', 'published'])
 def test_unsupported_producers_require_evidence_admission_before_new_execution(tmp_path, monkeypatch, kind):
     monkeypatch.setattr(R, 'producer_admission_available', PRODUCTION_PRODUCER_ADMISSION)
     target = manifest()

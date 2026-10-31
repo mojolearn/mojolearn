@@ -169,7 +169,7 @@ def test_native_registry_may_connect_only_exact_math_exports(tmp_path):
         assert audit.python_math_errors(path, rel), bad
 
 
-@pytest.mark.parametrize("relative", ["mojolearn/_identity_break.py", "mojolearn/_verify_par.py"])
+@pytest.mark.parametrize("relative", ["mojolearn/_identity_break.py", "mojolearn/_verify_all.py"])
 def test_numpy_remains_available_to_independent_verification(tmp_path, relative):
     path = tmp_path / '_identity_break.py'
     path.write_text('import numpy as np\n')

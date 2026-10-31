@@ -18,15 +18,6 @@ class CoverageTests(unittest.TestCase):
             self.assertIn(name, surface)
         self.assertIn("parallel_classical", modules)
 
-    def test_reference_shards_reached_through_helper_are_counted(self):
-        names = ("par-reference-knn", "par-reference-knn-reg")
-        harness = types.SimpleNamespace(LANES={n: identity.LANES[n] for n in names})
-        row = dict(gpu=["apple"], cpu="training", sabotage="declared", batch="part")
-        name = "parallel_neighbors_reference.ReferenceShardedNeighbors"
-        result = matrix.algorithm_rows(harness, {n: row for n in names},
-            {name: ("class", "parallel_neighbors_reference.py", "ReferenceShardedNeighbors")}, set(), {})
-        self.assertEqual(result[name]["lanes"], list(names))
-
     def test_refused_or_moved_cells_are_not_backend_coverage(self):
         cells = {"refused/base": {"verdict": "REFUSED", "hashes": []},
                  "moved/base": {"verdict": "MOVED", "hashes": ["a", "b"]},

@@ -8,8 +8,7 @@ lane/cpu-verifier-par-samba (wave 3, 2026-09-16) the Samba stack's gradient
 shards (par-samba and par-samba-clip), the same ParallelNeuralTrainer route
 par-mlp takes.
 
-Source checks (run on a box with nothing built): the manifest declares each
-lane on the family whose host binding serves its shard fits; every
+Source checks (run on a box with nothing built): every
 Python-sharded driver is one native call whose owner runs its shards on the
 native local pool (bindings/parallel_shard_common.mojo `shard_run`, one
 worker process per device index on the CPU route); every cooperative driver
@@ -35,32 +34,10 @@ from pathlib import Path
 
 import mojolearn
 from mojolearn._cpu_reference import reference_training
-from mojolearn import _backend, host_surface
+from mojolearn import _backend
 
 ROOT = Path(__file__).resolve().parents[3]
 
-LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters": "tsa",
-         # lane/lm-attention-fallback (2026-09-19): the prediction half of the
-         # same series partition, the four parallel_forecasting drivers
-         "par-forecast-arima": "arima", "par-forecast-holtwinters": "tsa",
-         # wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor drivers
-         "par-queries-knn": "core", "par-queries-radius": "core", "par-queries-kde": "estimators",
-         "par-reference-knn": "core", "par-reference-knn-reg": "core",
-         "par-forest": "rf", "par-forest-et": "trees", "par-mlp": "training",
-         # wave 3 (lane/cpu-verifier-par-samba, 2026-09-16): the Samba stack's
-         # gradient shards, the same driver as par-mlp on the same family
-         "par-samba": "training", "par-samba-clip": "training",
-         "par-rbf-sampler": "kernel_methods",
-         # lane/unlaned-public-algorithms (2026-09-20): the GaussianProcess
-         # CLASSIFIER's class-level shards, the two public entries
-         # tools/verification_matrix.py reported with no identity lane at all
-         "par-gpc-fit": "gp", "par-gpc-predict": "gp",
-         # lane/cpu-routes-gpu-only-four (2026-09-20): the two drivers that
-         # checked `_backend.vendor()` before they built a layer or prepared
-         # a fold. On a CPU-only install a device index is one worker
-         # PROCESS, and everything either driver does with it is its own
-         # Python; the shards are the neural and gbdt host families'.
-         "par-causal-lm": "neural", "par-cross-val": "gbdt"}
 #: The Python-sharded drivers: {module: (its native owner entry, the operations it calls)}.
 DRIVERS = {
     "python/mojolearn/parallel_preprocessing.py": ("_native_parallel_shard", ("fit_scaler", "transform_scaler")),
@@ -77,14 +54,6 @@ DRIVERS = {
 
 def _read(rel):
     return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def test_manifest_declares_the_par_lanes():
-    covered = host_surface.covered_lanes()
-    for lane, family in LANES.items():
-        assert lane in covered, f"{lane} is not a covered training lane"
-        assert lane in host_surface.family(family)["training_lanes"], f"{lane} is not a {family} training lane"
-        assert host_surface.TRAINING_LANE_NAMES[lane] in host_surface.training_sentence()
 
 
 def test_python_sharded_drivers_are_native_pools():

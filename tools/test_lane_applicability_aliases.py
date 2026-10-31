@@ -46,13 +46,6 @@ class RegisteredLanes(unittest.TestCase):
             for column in ("apple-metal", "nvidia-1gpu", "amd-1gpu", "cpu-host"):
                 self.assertTrue(scopes[name].applicable(column)[0], (name, column))
 
-    def test_parallel_causal_model_retains_two_device_requirement(self):
-        scope = la.scopes()["par-causal-lm"]
-        for column in ("nvidia-2gpu", "amd-2gpu"):
-            self.assertTrue(scope.applicable(column)[0])
-        for column in ("nvidia-1gpu", "amd-1gpu", "apple-metal", "cpu-host"):
-            self.assertFalse(scope.applicable(column)[0])
-
     def test_explicit_host_contracts_stay_host_only(self):
         for name in ("tokenizer", "bpe-trainer", "bpe-vocabulary", "tokenized-corpus", "language-model-config", "byte-lm-host-infer", "saved-model-host-infer", "saved-model-host-infer-trees", "gbdt-categorical-ctr-tables"):
             scope = la.scopes()[name]

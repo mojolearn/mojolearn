@@ -143,24 +143,6 @@ def test_docs_name_the_surfaces():
     assert "faster" not in matrix.lower(), "no speed word in the support matrix"
 
 
-def test_every_staged_lane_body_reached_the_harness():
-    """The eight `LANE_BODY_*.py` staging files are gone (2026-09-19),
-    and this is what replaced the test that parsed them.
-
-    They were lane definitions held outside `tools/identity_break.py` while
-    they were written. Every one had already been merged -- checked lane by
-    lane before the delete -- so the files were duplicates of harness code,
-    and a test asserting a duplicate still parses was checking the copy, not
-    the thing that runs. What is worth holding is the property that made
-    deleting them safe: each staged lane is IN the harness.
-    """
-    src = _read("tools/identity_break.py")
-    for lane in ("par-cholesky", "par-kernel-ridge", "par-gmm", "par-hdbscan",
-                 "par-resample", "par-ivf", "par-scaler", "par-kmeans"):
-        assert f'@lane("{lane}")' in src, (
-            f"{lane} was staged in a LANE_BODY_ file that has been deleted and is not in the harness")
-
-
 def test_embedding_sabotage_script_names_every_arm():
     src = _read("embedding/checks/embedding_identical.mojo")
     arms = set(re.findall(r'is_defined\[\s*"MOJOLEARN_EMB_SABOTAGE_(\w+)"', src))

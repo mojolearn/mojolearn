@@ -73,9 +73,6 @@ def _wants_suite(args):
                 or getattr(args, "emit_models", None)
                 or getattr(args, "self_test", False)
                 or getattr(args, "cross_check", None)
-                # the two-device column is a run on this box, not a card check
-                or getattr(args, "par", None)
-                or getattr(args, "par_self_test", False)
                 or getattr(args, "compare", None)
                 # sealing a document is a pure function over one JSON file, the
                 # same as comparing two, and must not fall through to the
@@ -268,8 +265,7 @@ def build_parser():
     v.add_argument("--coverage", action="store_true",
                    help="inspect all appendix variants, lane availability and batch contracts without fitting")
     v.add_argument("--smoke", action="store_true",
-                   help="for lanes this box can run but cannot judge (the par-* multi-GPU "
-                        "drivers on one device), fit each TWICE on the base fixture and report "
+                   help="for lanes this box can run but cannot judge, fit each TWICE on the base fixture and report "
                         "whether it ran, kept its shape, stayed finite and gave the same bits "
                         "both times. SMOKE is never VERIFIED and is counted separately; a FAILED "
                         "smoke is a real defect and fails the run. Off by default because two "
@@ -334,35 +330,11 @@ def build_parser():
                         "--lanes and --fixtures explicitly select a custom "
                         "scope. Missing or failed checks exit nonzero. On a CPU-only "
                         "install it says so rather than silently skipping")
-    v.add_argument("--par", nargs="?", const="default",
-                   choices=("quick", "default", "all"), default=None,
-                   help="THE TWO-DEVICE COLUMN, on this box, against the "
-                        "recorded one-device values. A `par-*` driver lane's "
-                        "whole claim is that sharding its work across devices "
-                        "does not move a bit. This runs each par-* lane ONCE, "
-                        "with MOJOLEARN_PAR_DEVICES=0,1, and compares it cell "
-                        "for cell with the one-device values the shipped "
-                        "reference table records. The two-device column is "
-                        "WITNESSED: every device plan it binds and every worker "
-                        "pool it starts is inventoried, "
-                        "and a column that never sharded is refused instead of "
-                        "reported as agreement. 'quick' is one lane per family, "
-                        "the default is all 59 par-* lanes on the base fixture, "
-                        "'all' runs the same lanes over all nine fixtures. "
-                        "--fixtures overrides the fixtures in every mode. Apple is "
-                        "refused structurally: the native drivers admit metal only "
-                        "at device zero")
-    v.add_argument("--par-devices", dest="par_devices", default="",
-                   help="with --par: the device group the second column runs "
-                        "on, comma separated, at least two distinct indices "
-                        "(default 0,1). The first index is also the one-device "
-                        "column")
-    v.add_argument("--par-self-test", dest="par_self_test", action="store_true",
-                   help="SHOW THAT --par CAN FAIL. Runs one par-* lane's two "
-                        "columns with every value of the two-device arm's "
-                        "first input column moved up by one ULP, and requires "
-                        "every compared part to read DIVERGENT. A comparison "
-                        "never seen to fail is not a comparison")
+    # `--par`, `--par-devices` and `--par-self-test` (the two-device column
+    # of the par-* lanes) were removed when multi-GPU verification was
+    # retired (owner, 2026-10-31); argparse refuses them as unknown options.
+    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by a417309926; code recoverable at a417309926^.
+    # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
     v.add_argument("--compare", nargs=2, metavar=("A", "B"), default=None,
                    help="DIFF TWO EVIDENCE DOCUMENTS, with us out of the loop. "
                         "Two people on different hardware each run "
@@ -427,13 +399,13 @@ def build_parser():
                    default=None,
                    help="with --compare: the same, for the SECOND document")
     v.add_argument("--json-out", dest="json_out", metavar="PATH", default=None,
-                   help="with --all (or --par, its report document): also write the full evidence document "
+                   help="with --all: also write the full evidence document "
                         "(per-cell hashes computed here and expected, per-lane "
                         "timings, the sha256 of every binding loaded, and the "
                         "committed column each reference came from) to PATH")
     v.add_argument("--reference-table", dest="reference_table", metavar="PATH",
                    default=None,
-                   help="with --all or --par: compare against this table instead of "
+                   help="with --all: compare against this table instead of "
                         "the one shipped in the wheel; with --emit-reference "
                         "and --lanes, update only those lanes in this base table")
     v.add_argument("--records", action="append", metavar="DIR", default=None,

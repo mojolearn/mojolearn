@@ -208,10 +208,10 @@ def test_manifest_covers_the_scalers():
     fam = host_surface.family("preprocessing")
     assert fam["routes"] == "_mojolearn_preprocessing"
     # The three parameter lanes joined on lane/cpu-training-batch2-declare,
-    # par-scaler on lane/cpu-training-par-classical, scaler-fit-transform
-    # (fit_transform's one-upload entries) in eecd2d2a7.
+    # scaler-fit-transform (fit_transform's one-upload entries) in eecd2d2a7;
+    # the par-scaler lanes left with multi-GPU verification (2026-10-31).
     assert fam["training_lanes"] == ("standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
-                                     "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler", "par-scaler-minmax",
+                                     "standard-scaler-no-std", "minmax-scaler-clip",
                                      "scaler-fit-transform")
     assert SCALER_ORACLE in fam["host_modules"] and (ROOT / SCALER_ORACLE).is_file()
     assert (ROOT / "bindings/build_preprocessing_host.sh").is_file()

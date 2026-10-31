@@ -123,10 +123,10 @@ def test_inapplicable_cpu_lane_refuses_before_staging_or_running(monkeypatch, tm
     import json
     monkeypatch.setattr(iterate, "cpu_package", lambda *a: pytest.fail("staged inapplicable job"))
     monkeypatch.setattr(iterate, "run_job", lambda *a: pytest.fail("ran inapplicable job"))
-    iterate.main(["--lane", "par-forest", "--plan"])
-    assert "par-forest" in json.loads(capsys.readouterr().out)["inapplicable"]
+    iterate.main(["--lane", "training-device-cross-entropy", "--plan"])
+    assert "training-device-cross-entropy" in json.loads(capsys.readouterr().out)["inapplicable"]
     with pytest.raises(SystemExit):
-        iterate.main(["--lane", "par-forest", "--out", str(tmp_path / "out")])
+        iterate.main(["--lane", "training-device-cross-entropy", "--out", str(tmp_path / "out")])
     assert not (tmp_path / "out").exists()
 
 

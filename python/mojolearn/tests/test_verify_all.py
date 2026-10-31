@@ -1261,6 +1261,16 @@ def test_gpu_parallel_diagnostics_remain_explicitly_selectable():
     assert "physical multi-device identity" in exposure["par-forest"]["reason"]
 
 
+@pytest.mark.parametrize("argv", [["verify", "--par"], ["verify", "--par", "quick"],
+                                  ["verify", "--par-devices", "0,1"], ["verify", "--par-self-test"]])
+def test_retired_two_device_flags_are_usage_errors(argv):
+    # Multi-GPU verification was retired (2026-10-31): `verify --par` and its
+    # companions are unknown options, not a deprecation shim.
+    with pytest.raises(SystemExit) as exc:
+        cli.build_parser().parse_args(argv)
+    assert exc.value.code == 2
+
+
 def test_flags_route_to_the_suite_or_the_card():
     p = cli.build_parser()
     for argv in (["verify", "--all"], ["verify", "--quick"], ["verify", "--full"], ["verify", "--lanes", "ols"],
@@ -1548,31 +1558,23 @@ def test_the_printed_verdict_carries_its_own_scope_end_to_end():
     A check on a helper nobody is required to call is not a check on the
     output. This runs the command and reads the printed line.
 
-    Both halves matter. A pass must say how much of the harness it covered,
-    and a run that covered nothing must not say VERIFIED at all."""
+    A pass must say how much of the harness it covered. The other half, that
+    a run which covered nothing does not say VERIFIED, ran on the par-* lanes
+    (NOT APPLICABLE on one device) until multi-GPU verification was retired
+    on 2026-10-31; it stays unit-tested through `lane_accounting` above."""
     build = _identical_build()
     if not build:
         pytest.skip("no importable identical build")
-    if build[-1] == "cpu":
-        pytest.skip("GPU diagnostic selection; CPU excludes par-* unless --include-pending (unit-tested)")
     # The CLI bounds each cell itself (120 s worker limit, _verify_worker.py)
     # and reports a timeout as its own verdict. The outer guard only catches
-    # a hung CLI, so it exceeds the three cells' own limits plus startup: a
-    # first GPU process on a fresh pod (par-forest's sharded workers on the
-    # L4) can take most of a cell budget before 180 s of wall time ran out.
-    ok = _run_cli(["verify", "--lanes", "ols,ridge,par-forest", "--fixtures", "base", "--no-models"],
-                  timeout=3 * 120 + 60)
+    # a hung CLI, so it exceeds the two cells' own limits plus startup.
+    ok = _run_cli(["verify", "--lanes", "ols,ridge", "--fixtures", "base", "--no-models"],
+                  timeout=2 * 120 + 60)
     assert ok.returncode == 0, ok.stdout[-2000:] + ok.stderr[-2000:]
     result = [l for l in ok.stdout.splitlines() if l.startswith("RESULT:")][-1]
     assert "VERIFIED" in result, result
-    assert "2 verified" in result and "of 3 lanes" in result, (
+    assert "2 verified" in result and "of 2 lanes" in result, (
         "a pass that does not say its own scope overstates itself: " + result)
-    assert "1 not applicable" in result, result
-
-    nothing = _run_cli(["verify", "--lanes", "par-forest,par-kmeans", "--fixtures", "base", "--no-models"])
-    result = [l for l in nothing.stdout.splitlines() if l.startswith("RESULT:")][-1]
-    assert nothing.returncode == va.EXIT_CANNOT_RUN, result
-    assert "CANNOT RUN" in result and "0 verified" in result and "of 2 lanes" in result, result
 
 
 @pytest.mark.skipif(ROOT is None, reason="needs tools/identity_break.py beside the package")

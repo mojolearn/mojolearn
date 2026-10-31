@@ -1,7 +1,5 @@
 """Required saved-model evidence cannot silently become a no-save declaration."""
-from types import SimpleNamespace, ModuleType
-import gc
-import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -9,9 +7,12 @@ import pytest
 import identity_break as identity
 
 
-@pytest.mark.parametrize('lane', tuple(identity.REQUIRED_NUMERIC_PARTS))
 @pytest.mark.parametrize('absence', ['missing-methods', 'not-implemented', 'explicit-na'])
-def test_required_model_failure_is_recorded_instead_of_na(monkeypatch, lane, absence):
+def test_required_model_failure_is_recorded_instead_of_na(monkeypatch, absence):
+    # The lanes that declared a required model part were par-* lanes, retired
+    # with multi-GPU verification; the rule itself is held on a declared lane.
+    lane = 'required-model-lane'
+    monkeypatch.setattr(identity, 'REQUIRED_NUMERIC_PARTS', {lane: ('model',)})
     monkeypatch.delenv(identity.HOST_INFER_ENV, raising=False)
 
     class UnsupportedSave:
@@ -37,57 +38,3 @@ def test_function_lane_retains_its_declared_absence():
     fit = identity._fit({'value': 'a' * 16})
     assert identity._probe_fit(fit, 'function-only') == (
         'n/a:function', 'n/a:no-save', None, None)
-
-
-@pytest.mark.parametrize('fail_forward', [False, True])
-def test_parallel_causal_batch_closes_worker_without_garbage_collection(monkeypatch, fail_forward):
-    instances = []
-
-    class ParallelModel:
-        @classmethod
-        def load(cls, root, layer_devices, numeric_profile):
-            # the identity lane pins fp32_v1 since fixed15_v1 became the
-            # transformer inference default (9567aaa50)
-            assert numeric_profile == 'fp32_v1'
-            model = cls()
-            model.closed = 0
-            model.cycle = model
-            instances.append(model)
-            return model
-
-        def forward(self, rows):
-            assert not self.closed
-            if fail_forward:
-                raise ValueError('forward failed')
-            return np.asarray(rows, dtype=np.float32)
-
-        def close(self):
-            self.closed += 1
-
-    package = ModuleType('mojolearn')
-    package._causal_lm_fixtures = SimpleNamespace(
-        family_fixture=lambda *args: ({}, {}),
-        _write_checkpoint=lambda root, *args: root)
-    models = ModuleType('mojolearn.models')
-    models.ParallelCausalLM = ParallelModel
-    monkeypatch.setitem(sys.modules, 'mojolearn', package)
-    monkeypatch.setitem(sys.modules, 'mojolearn.models', models)
-    monkeypatch.setattr(identity, '_BATCH_CLOSE', [])
-    monkeypatch.setattr(identity, '_par_devices', lambda: (0,))
-    ml = SimpleNamespace(Array=SimpleNamespace(from_buffer=np.asarray),
-        models=SimpleNamespace(causal_lm=SimpleNamespace(CausalLM=SimpleNamespace(
-            load=lambda _, numeric_profile: SimpleNamespace(plan=SimpleNamespace(n_layers=2))))))
-    was_enabled = gc.isenabled()
-    gc.disable()
-    try:
-        value, error = identity._probe_batch(SimpleNamespace(est=None), 'par-causal-lm', ml,
-            np.zeros((128, 4), dtype=np.float32), alone=2, sabotage=False)
-        assert instances and instances[0].closed == 1
-        assert identity._BATCH_CLOSE == []
-        if fail_forward:
-            assert value is None and 'forward failed' in error
-        else:
-            assert len(value) == 16 and error is None
-    finally:
-        if was_enabled:
-            gc.enable()
