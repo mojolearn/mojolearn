@@ -261,8 +261,29 @@ if [ "$ncommits" != 1 ]; then
         "${PY[@]}" tools/identity_columns.py reuse-check --commit "$C" "${files[@]}" > "$EVID/reuse-check.txt" 2>&1
         rrc=$?
         grep -m 20 -E 'REUSE-' "$EVID/reuse-check.txt" | cut -c1-300
+        if [ $rrc != 0 ] && [ -n "${MOJOLEARN_IDENTITY_REUSE_WAIVER:-}" ]; then
+            # OWNER WAIVER (Andrew 2026-10-31): a committed JSON file under docs/release/ naming
+            # approved_by, reason and the sha256 of EVERY incoming record admits records whose lane
+            # closures the selector cannot prove unchanged. It never skips the cross-vendor table
+            # build below, which still refuses any disagreeing cell.
+            W=$MOJOLEARN_IDENTITY_REUSE_WAIVER
+            case $W in docs/release/*.json) ;; *) die "reuse waiver must be a committed docs/release/*.json file";; esac
+            git ls-files --error-unmatch "$W" >/dev/null 2>&1 || die "reuse waiver $W is not committed"
+            python3 - "$W" "${files[@]}" <<'EOF' || die "reuse waiver $W does not cover these exact records"
+import hashlib, json, sys
+waiver = json.load(open(sys.argv[1]))
+assert waiver.get("approved_by") and waiver.get("reason"), "waiver needs approved_by and reason"
+covered = set(waiver.get("records_sha256", []))
+for path in sys.argv[2:]:
+    digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    assert digest in covered, f"{path} ({digest}) is not named by the waiver"
+EOF
+            cp "$W" "$EVID/reuse-waiver.json"
+            echo "REUSE-WAIVED by $W: older records admitted beside newer ones; cross-vendor comparison still applies"
+            rrc=0
+        fi
         [ $rrc = 0 ] || die "records name more than one commit and an older record's lane closure changed since its commit ($(head -n 3 "$TMP_CODEDIFF" | tr '\n' ' ')...); see $EVID/reuse-check.txt"
-        echo "records name $ncommits commits; every older row is superseded or its lane closure is unchanged; admitting under the newest"
+        echo "records name $ncommits commits; every older row is superseded or its lane closure is unchanged (or owner-waived); admitting under the newest"
     fi
 fi
 git cat-file -e "$C^{commit}" 2>/dev/null || die "commit $C is not in this repository (git fetch origin first)"
