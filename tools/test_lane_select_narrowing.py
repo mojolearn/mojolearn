@@ -683,6 +683,24 @@ def test_the_max_ops_package_is_attributed_to_no_lane_and_refuses_otherwise():
     finally:
         ls._named_by_the_corpus, ls._mojo_importers = saved
 
+
+def test_a_docstring_edit_is_docstring_only_and_a_deleted_or_added_one_is_not():
+    """bindings/classical_exceptions.mojo admits NotFittedError's doc only as a
+    str, so a docstring's presence is read at run time; its text is not."""
+    path = "ns_test/doc_only.py"
+    old = 'class A:\n    """one"""\n    def f(self):\n        return 1\n'
+    saved = ls._SOURCE_HASHED
+    try:
+        ls._SOURCE_HASHED = set()
+        with _Seeded({path: (old, old.replace('"""one"""', '"""two"""'))}):
+            assert ls.docstring_only(REF, path)
+        with _Seeded({path: (old, old.replace('    """one"""\n', ''))}):
+            assert not ls.docstring_only(REF, path)
+        with _Seeded({path: (old, old.replace('return 1', '"""new"""\n        return 1'))}):
+            assert not ls.docstring_only(REF, path)
+    finally:
+        ls._SOURCE_HASHED = saved
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):

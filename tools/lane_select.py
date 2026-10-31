@@ -5234,7 +5234,24 @@ def docstring_only(ref, path):
     except OSError:
         return False
     a, b = code_dump(old), code_dump(new)
-    return a is not None and b is not None and a == b
+    # A DOCSTRING'S PRESENCE IS READ (lane identity-attribution, 2026-10-31):
+    # bindings/classical_exceptions.mojo admits the NotFittedError bridge's
+    # doc (`not_fitted_doc`) only as a str, so deleting or adding a docstring
+    # can raise where editing one cannot. Only edits that keep every
+    # docstring where it was are docstring-only.
+    return a is not None and b is not None and a == b and _docstring_presence(old) == _docstring_presence(new)
+
+
+def _docstring_presence(text):
+    """Which module, class and function bodies open with a docstring, in
+    walk order (aligned whenever the code dumps are equal)."""
+    out = []
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = node.body
+            out.append(bool(body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
+                            and isinstance(body[0].value.value, str)))
+    return out
 
 
 _TRACKED = None
