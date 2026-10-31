@@ -454,10 +454,15 @@ def reset_caches():
     _PYTHON_FILES = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
-    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LANE_DEVICE_CALLS
     _LANE_SEED_CALLS = None
     _LANE_PRECISION_PATHS = None
     _LANE_CPU_ROUTE_ONLY = None
+    _LANE_DEVICE_CALLS = None
+    global _DISPATCH_VOCAB, _MOJO_CALLERS
+    _DISPATCH_VOCAB = None
+    _MOJO_CALLERS = None
+    _HOST_ROUTE_CLASSES.clear()
     _SOURCE_HASHED = None
     _CONSTANTS = None
     _EXTENDERS = None
@@ -3781,7 +3786,7 @@ def _mojo_node_label(node):
     return f"{node[1]}:{node[2]}" if node[0] == "t" else f"{node[1]}:{node[2]}.{node[3]}"
 
 
-def mojo_edit_lanes(ref, path, hit, graph):
+def mojo_edit_lanes(ref, path, hit, graph, backend=None):
     """(changed definition labels, selected lanes, lane -> chain, kept lanes)
     for one Mojo source's diff against `ref`, or None (whole file, with the
     reason in MOJO_EDIT_WHY) when the edit is not confined to named
@@ -3790,7 +3795,12 @@ def mojo_edit_lanes(ref, path, hit, graph):
     A lane in `hit` is SELECTED when an export it calls reaches a changed
     definition (the chain says how), KEPT by the old whole-file rule when it
     reaches the file in a way no export explains (`kept`), and dropped
-    otherwise."""
+    otherwise.
+
+    On a device column (`backend` in DEVICE_BACKENDS) a lane's contributions
+    are those of an install WITH a GPU set (`_LANE_DEVICE_CALLS`): no CPU-only
+    route, and a binding loaded only for `host_model` with the exports its
+    route calls (`device_column_lanes`)."""
     key = f"{ref}:{path}"
     MOJO_EDIT_WHY.pop(key, None)
     if _LANE_SEED_CALLS is None:
@@ -3816,8 +3826,11 @@ def mojo_edit_lanes(ref, path, hit, graph):
     nodes = {(u[0], path) + u[1:] for u in changed}
     labels = sorted(_mojo_node_label(n) for n in nodes)
     lanes, chains, kept = set(), {}, set()
+    device = backend in DEVICE_BACKENDS and _LANE_DEVICE_CALLS is not None
     for lane in sorted(hit):
         calls = _LANE_SEED_CALLS.get(lane)
+        if device and calls is not None:
+            calls = _LANE_DEVICE_CALLS.get(lane, calls)
         if calls is None:
             lanes.add(lane)                  # kept = still selected: the fallback never drops a lane
             kept.add(lane)
@@ -4091,8 +4104,58 @@ def host_class_routes():
                 bname = getattr(base, "id", None)
                 if bname and bname not in classes:
                     routes.setdefault(bname, set()).add(host)
+                    _HOST_ROUTE_CLASSES.setdefault(host, set()).add((rel, name, bname))
     _HOST_CLASS_ROUTES = routes
     return routes
+
+
+#: host binding -> {(file, Host class, public base)} behind `host_class_routes`.
+_HOST_ROUTE_CLASSES = {}
+
+
+def host_route_files(host):
+    """The package Python files that can hold the module object of the host
+    binding `host` on an install WITH a GPU set, read from code: every file
+    whose syntax names it (`_binding_names`: `load_host_module("...")`,
+    `_BINDING`, a basename table) and every file defining a `Host<Class>` that
+    `host_class_routes` routes to it. `_backend` hands out a host binding
+    while a GPU set is loaded only by name (`load_host_module`,
+    `host_module_path`); its routing tables are read only by the CPU-only
+    selector (`tools/test_lane_select_narrowing.py`
+    ::test_cpu_only_route_tables_have_no_reader_but_the_cpu_only_selector)."""
+    host_class_routes()
+    out = {rel for rel, _cls, _base in _HOST_ROUTE_CLASSES.get(host, ())}
+    for rel in _python_files():
+        if host in _binding_names(rel):
+            out.add(rel)
+    return out
+
+
+def host_route_names(host):
+    """What the `host_model` route of `host` can call on it on a GPU install
+    (`device_column_lanes`): the attribute names and identifier-shaped string
+    constants of `host_route_files(host)`, and of every class body in the MRO
+    of a routed public base (within the package) that calls `_bind`, the
+    one method a public class uses to reach its binding object, which
+    `_HostBound._bind` answers with the host binding."""
+    symbols = _python_symbols(_python_files())
+    names = set()
+    for rel in host_route_files(host):
+        names |= _file_called_names(rel)
+    seen, todo = set(), [base for _rel, _cls, base in _HOST_ROUTE_CLASSES.get(host, ())]
+    while todo:
+        cname = todo.pop()
+        if cname in seen:
+            continue
+        seen.add(cname)
+        for rel in sorted(symbols.get(cname, ())):
+            tree = _parse(rel)
+            for node in (tree.body if tree else ()):
+                if isinstance(node, ast.ClassDef) and node.name == cname:
+                    if any(isinstance(n, ast.Attribute) and n.attr == "_bind" for n in ast.walk(node)):
+                        names |= _names_in_nodes([node])
+                    todo.extend(getattr(b, "id", None) for b in node.bases if getattr(b, "id", None))
+    return names
 
 
 def resolved_bindings(doors):
@@ -4196,8 +4259,13 @@ def device_column_lanes(path, lanes, backend):
     (`_LANE_SEED_CALLS`) carrying `path` is a binding the lane does not load on
     a GPU install (`device_loaded_bindings`), and no binding it does load,
     no conformer the map added, and none of its Python files carries it
-    (`_LANE_CPU_ROUTE_ONLY`). A lane that loads a holder by name (a
-    `host_model` route, a door host) is kept, whatever it calls."""
+    (`_LANE_CPU_ROUTE_ONLY`). A lane that loads a holder by name (a door
+    host) is kept, whatever it calls. A holder it loads ONLY for `host_model`
+    (a class route no door names by syntax) carries what its route calls
+    (`host_route_names`, `lane_sources`' `route_use`), never the export names
+    the lane's own code hands the GPU set, and `mojo_edit_lanes` reads it the
+    same way (lane identity-attribution, 2026-10-31: 32 lanes per GPU column
+    for a k-means seeding edit no GPU install runs)."""
     if backend not in DEVICE_BACKENDS or not path.endswith(".mojo") or _LANE_CPU_ROUTE_ONLY is None:
         return set(lanes)
     return {lane for lane in lanes if path not in _LANE_CPU_ROUTE_ONLY.get(lane, ())}
@@ -4209,6 +4277,10 @@ _LANE_PRECISION_PATHS = None
 #: lane -> the files that lane reaches ONLY through a CPU-only route
 #: (`cpu_only_routes`); see `device_column_lanes`.
 _LANE_CPU_ROUTE_ONLY = None
+#: lane -> its binding contributions on an install WITH a GPU set: CPU-only
+#: routes left out, a binding loaded only for `host_model` read for what its
+#: route calls (`lane_sources`, `mojo_edit_lanes`).
+_LANE_DEVICE_CALLS = None
 
 
 @_by_path
@@ -4445,7 +4517,7 @@ def lane_sources():
     # PASS ONE: each lane's Python doors and the bindings they resolve. Held
     # first because the next pass needs to know which bindings EVERY lane
     # resolves, and that is a measurement over all the lanes, not a list.
-    reach, seeds_of, seed_members = {}, {}, {}
+    reach, seeds_of, seed_members, syntax_of = {}, {}, {}, {}
     door_bindings = resolved_bindings
     class_routes = host_class_routes()
 
@@ -4469,6 +4541,9 @@ def lane_sources():
         reach[lane] = (matched, files, doors, bindings)
         seeds_of[lane] = seeds
         seed_members[lane] = members
+        # The bindings a door names BY SYNTAX, without the `host_model` class
+        # routes `resolved_bindings` adds (`route_only` below).
+        syntax_of[lane] = {b for rel in doors for b in _binding_names(rel)} & bindings
     ubiquitous = set.intersection(*[b for _, _, _, b in reach.values()]) if reach else set()
     # THE PYTHON FILES EVERY LANE REACHES: the shared helpers (`_buffer.py`,
     # `_array.py`) and the host doors they import for their native helpers.
@@ -4570,7 +4645,36 @@ def lane_sources():
         """Is `binding` resolved by a door this lane runs whole (see `_own`)."""
         return binding in _own(lane)[2]
 
-    seed_calls, precision_paths, cpu_route_only = {}, {}, {}
+    seed_calls, precision_paths, cpu_route_only, device_calls = {}, {}, {}, {}
+    route_cache = {}
+    alias_sources = sorted(os.path.join("bindings", b + ".mojo") for b in alias_targets)
+
+    def route_use(host):
+        """(the exports of `host` its `host_model` route can call, the files
+        those calls compile) on a GPU install: `host_route_names`, closed over
+        the native definitions the route's own operations reach through the
+        host binding and the import-alias owners (`classical_native_call`),
+        read for the route's operations alone (`dispatch_view`)."""
+        if host not in route_cache:
+            src = os.path.join("bindings", host + ".mojo")
+            names = set(host_route_names(host))
+            op_names = names | ubiquitous_ops
+            srcs = [src] + [a for a in alias_sources if a != src]
+            exports_of = {a: set(_binding_exports(a)) | set(_delegated_exports(a)) for a in srcs}
+            while True:
+                ops = OperationSet(op_names)
+                spelled = set()
+                for a in srcs:
+                    binding_seeds(a, names, "narrow", mark=False, ops=ops)
+                    spelled |= native_names[(a, tuple(sorted(names & exports_of[a])), "narrow", ops)]
+                fresh = {n for n in spelled if any(n in e for e in exports_of.values())} - names
+                if not fresh and OperationSet(op_names | spelled) == ops:
+                    break
+                names |= fresh
+                op_names |= spelled | fresh
+            got = binding_seeds(src, names, "narrow", mark=False, ops=ops)
+            route_cache[host] = (tuple(sorted(names & exports_of[src])), frozenset(got))
+        return route_cache[host]
     for lane in reach:
         matched, files, doors, bindings = reach[lane]
         # THE NAMES THIS LANE'S OWN DOORS CALL (2026-09-23; this was every
@@ -4757,10 +4861,31 @@ def lane_sources():
         # lane loads on a GPU install contributes, a conformer the fixed point
         # above added, or a Python file.
         on_device = device_loaded_bindings(bindings, hs)
+        # A HOST BINDING A GPU INSTALL LOADS ONLY FOR `host_model` (lane
+        # identity-attribution, 2026-10-31): reached through a class route
+        # (`host_class_routes`: `KMeans` -> `_mojolearn_core_host` through
+        # `HostKMeans`) and named by no door's syntax. The lane's own calls of
+        # an export name go to the binding `_backend` resolves, which on a GPU
+        # install is the GPU set (`estimator_binding`: the mode set, never a
+        # host twin, unless `_CPU_ONLY`), so `kmeans_fit` named by the k-means
+        # owner runs `_mojolearn.kmeans_fit` there, not the host one. What runs
+        # in the host binding is what its route can call (`route_use`).
+        route_only = on_device - device_loaded_bindings(syntax_of[lane], hs)
         device_got, cpu_got = set(), set()
-        for src_path, _wide, _exports, got in calls:
+        dev_calls = device_calls[lane] = []
+        for src_path, wide_, exports_, got in calls:
             name = os.path.basename(src_path)[:-len(".mojo")]
-            (device_got if name in on_device else cpu_got).update(got)
+            if name not in on_device:
+                cpu_got.update(got)
+                continue
+            if name in route_only:
+                r_exports, r_got = route_use(name)
+                cpu_got.update(got)
+                dev_calls.append((src_path, "narrow", r_exports, r_got))
+                device_got.update(r_got)
+                continue
+            dev_calls.append((src_path, wide_, exports_, got))
+            device_got.update(got)
         cpu_route_only[lane] = frozenset(cpu_got - device_got - (mojo - before_conformance) - files)
         declared = {b for b, use in binding_use.items() if use["wide"] is True}
         declared |= {h for b in bindings for h in routed.get(b, ()) if _whole(lane, h)}
@@ -4770,8 +4895,9 @@ def lane_sources():
                          families=sorted(fams), mojo=len(mojo), exports=len(used),
                          ubiquitous=sorted(ubiquitous), binding_use=binding_use,
                          precision_limitations=[limitations[key] for key in limitation_keys])
-    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LANE_DEVICE_CALLS
     _LANE_SEED_CALLS = seed_calls
+    _LANE_DEVICE_CALLS = device_calls
     _LANE_PRECISION_PATHS = precision_paths
     _LANE_CPU_ROUTE_ONLY = cpu_route_only
     _LANE_SOURCES = (sources, why)
@@ -4796,7 +4922,7 @@ _LS_NOT_INPUTS = {"_ENUMERATORS", "_LANE_SOURCES", "_SOURCE_HASHED", "_TRACKED",
                   "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PYTHON_FILES", "_PKG_IMPORT_CLOSURE",
                   "_HOST_CLASS_ROUTES", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS",
                   "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY",
-                  "_HOOK_CLASSES", "_LS_MEMO"}
+                  "_HOOK_CLASSES", "_LS_MEMO", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS"}
 
 
 def _ls_digest(text):
@@ -4852,7 +4978,8 @@ def _remember_lane_sources():
     if git is None:
         return
     entry = dict(
-        result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY)),
+        result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY,
+                              _LANE_DEVICE_CALLS)),
         reads={path: _ls_digest(text) for path, text in _read.cache.items()},
         tree=_ls_tree_state(), git=git, ids=_ls_identities(),
         tracked=frozenset(_TRACKED) if _TRACKED is not None else None,
@@ -4898,6 +5025,7 @@ def _ls_memo_matches(memo, ids, git, tree):
 def _reuse_lane_sources():
     """Restore a remembered map when nothing it was derived from changed."""
     global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LS_MEMO
+    global _LANE_DEVICE_CALLS
     if not _LS_MEMO:
         return False
     ids, git, tree = _ls_identities(), _ls_git_state(), _ls_tree_state()
@@ -4905,8 +5033,8 @@ def _reuse_lane_sources():
         memo = _LS_MEMO[index]
         if _ls_memo_matches(memo, ids, git, tree):
             import copy
-            _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY = \
-                copy.deepcopy(memo["result"])
+            _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, \
+                _LANE_DEVICE_CALLS = copy.deepcopy(memo["result"])
             _LS_MEMO = _LS_MEMO[:index] + _LS_MEMO[index + 1:] + [memo]
             return True
     return False
@@ -5416,6 +5544,10 @@ def unreachable(path):
         return _package_file_unreachable(path)
     if path.startswith("bindings" + os.sep):
         return None
+    if path.endswith(".mojo"):
+        why = _precompiled_package_only(path)
+        if why:
+            return why
     if path.endswith(".mojo") and not _mojo_importers(path):
         why = _unimported_mojo_unreachable(path)
         if why:
@@ -5626,6 +5758,79 @@ def _unimported_mojo_unreachable(path):
         return None
     return ("nothing reaches it: a Mojo source that no tracked Mojo source imports, so it is in no "
             "binding, and that nothing a lane reaches names by path, basename, stem or module path")
+
+
+_PRECOMPILE_RE = re.compile(r"\bmojo\s+precompile\b(?P<args>[^\n]*)")
+
+
+def _precompiled_packages():
+    """[(script, package directory, output basename)] for every tracked shell
+    script outside bindings/ that compiles a whole directory into a Mojo
+    package (`mojo precompile DIR -o OUT`), read literally: DIR a tracked
+    directory, OUT a literal basename or a variable the same script assigns
+    one (`MOJOC="$OUT/mojolearn_ops.mojoc"`). A line that cannot be read so
+    is left out, and its files keep the other rules."""
+    out = []
+    for rel in sorted(tracked_files()):
+        if not rel.endswith(".sh") or rel.startswith("bindings" + os.sep):
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if "precompile" not in text:
+            continue
+        for m in _PRECOMPILE_RE.finditer(text.replace("\\\n", " ")):
+            words = [w.strip("\"'()") for w in m.group("args").split()]
+            if "-o" not in words:
+                continue
+            k = words.index("-o")
+            target = words[k + 1] if k + 1 < len(words) else ""
+            dirs = [w for w in words[:k] if not w.startswith("-") and "$" not in w
+                    and os.path.isdir(os.path.join(ROOT, w)) and not w.startswith("/")]
+            if len(dirs) != 1:
+                continue
+            var = re.fullmatch(r"\$\{?([A-Za-z_]\w*)\}?", target)
+            if var:
+                assigned = re.findall(r"^\s*%s=([^\s;]+)" % re.escape(var.group(1)), text, re.M)
+                target = assigned[0].strip("\"'") if len(assigned) == 1 else ""
+            base = os.path.basename(target)
+            if not base or "$" in base:
+                continue
+            out.append((rel, dirs[0].rstrip("/"), base))
+    return out
+
+
+def _precompiled_package_only(path):
+    """A Mojo source compiled ONLY into a Mojo package that no lane loads
+    (lane identity-attribution, 2026-10-31: adapters/max_ops/__init__.mojo,
+    which packaging/adapters/build.sh precompiles into the MAX custom-op
+    package `mojolearn_ops.mojoc`).
+
+    Reached only when the path is under a directory a script outside
+    bindings/ precompiles (`_precompiled_packages`), every tracked Mojo source
+    importing a file of that directory is itself in it (no binding compiles
+    any of it), and nothing a lane reaches names the package's output file,
+    its stem, the directory or its dotted module path. The stem test of
+    `_mojo_named` is not used for a package `__init__.mojo`: `__init__` is in
+    every Python file. Anything else returns None and the other rules
+    decide."""
+    for script, pkg, base in _precompiled_packages():
+        if not path.startswith(pkg + os.sep):
+            continue
+        members = {rel for rel in tracked_files() if rel.startswith(pkg + os.sep) and rel.endswith(".mojo")}
+        if path not in members:
+            continue
+        if any(not set(_mojo_importers(m)) <= members for m in members):
+            return None
+        stem = base.rsplit(".", 1)[0]
+        for token in (base, stem, pkg + os.sep, pkg.replace(os.sep, ".")):
+            if len(token) >= 4 and _named_by_the_corpus(token, skip=members):
+                return None
+        return (f"nothing a lane runs compiles it: it is in the Mojo package {pkg}/, which only {script} "
+                f"builds (`mojo precompile` into {base}), no binding imports any file of it, and nothing a "
+                "lane reaches names that package or its output")
+    return None
 
 
 def _mojo_named(path):
@@ -9914,7 +10119,7 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
         if hit and ref and path.endswith(".mojo") and sources is lane_sources()[0]:
             if mojo_graph is None:
                 mojo_graph = _MojoDefGraph()
-            edited = mojo_edit_lanes(ref, path, hit, mojo_graph)
+            edited = mojo_edit_lanes(ref, path, hit, mojo_graph, backend)
             if edited is not None:
                 labels, users, lane_chains, kept = edited
                 lanes.update(users)
