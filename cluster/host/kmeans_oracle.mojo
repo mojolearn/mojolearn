@@ -826,8 +826,8 @@ def _candidate_distance(
     return dd
 
 
-# DIAGNOSTIC (lane cpu-identity-0863, 2026-10-31): MOJOLEARN_KMEANS_PP_TRACE=<file>
-# appends the classic seeding's intermediate words (draws, the scan total, the
+# DIAGNOSTIC (lane cpu-identity-0863, 2026-10-31): under MOJOLEARN_IDENTITY_TRACE the
+# stage card also receives `# pp` comment lines with the classic seeding's intermediate words (draws, the scan total, the
 # picked rows, the candidate norms, z, the costs) so a host column whose seeding
 # disagrees can be compared step by step. Writes only; no value depends on it.
 def _pp_fnv(v: List[Float32]) -> UInt64:
@@ -846,7 +846,7 @@ def _pp_trace(path: String, line: String):
         return
     try:
         with open(path, "a") as fh:
-            fh.write(line + "\n")
+            fh.write(String("# ") + line + "\n")
     except:
         pass
 
@@ -860,6 +860,7 @@ def host_kmeans_plus_plus(
     is_sqrt: Bool,
     mut centroids: List[Float32],
     mut rng: HostRngReplay,
+    trace: KMeansHostTrace,
 ):
     """`kmeans_plus_plus`, the classic sequential variant (module
     docstring). Writes `k` rows of `centroids`."""
@@ -873,7 +874,7 @@ def host_kmeans_plus_plus(
     var labels = List[UInt32](length=n, fill=UInt32(0))
     var min_dist = List[Float32](length=n, fill=Float32(0.0))
     host_assign(x, n, x_norm, centroids, 1, c_norm, d, is_sqrt, labels, min_dist)
-    var pp_path = String(getenv("MOJOLEARN_KMEANS_PP_TRACE"))
+    var pp_path = trace.path if trace.enabled else String("")
     _pp_trace(pp_path, "pp n=" + String(n) + " d=" + String(d) + " k=" + String(k)
               + " n_trials=" + String(n_trials) + " first=" + String(first)
               + " c_norm0=" + _pp_hex(c_norm[0]) + " min_dist=" + hex(_pp_fnv(min_dist)))
@@ -1119,7 +1120,7 @@ def host_init_scalable(
         # defaults with only `n_clusters` copied.
         var cand_norm_rows = host_row_norms(cand, cand_count, d, False)
         host_kmeans_plus_plus(
-            cand, cand_norm_rows, cand_count, d, k, is_sqrt, centroids, rng
+            cand, cand_norm_rows, cand_count, d, k, is_sqrt, centroids, rng, trace
         )
         var worst = Float64(0.0)
         for f in range(d):
@@ -1334,7 +1335,7 @@ def host_fit_main[with_init: Bool = True](
                         trace, restart_tag, lazy_shift, recluster_max_iter,
                     )
                 else:
-                    host_kmeans_plus_plus(x, x_norm, n, d, k, is_sqrt, cur, rng)
+                    host_kmeans_plus_plus(x, x_norm, n, d, k, is_sqrt, cur, rng, trace)
             else:
                 raise Error("host_fit_main[with_init=False] takes INIT_ARRAY only")
         trace.record_f32(restart_tag + "init.centroids", cur)
