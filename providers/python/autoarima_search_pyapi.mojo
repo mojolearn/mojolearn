@@ -192,6 +192,10 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
         var zeros = _array(batch, 3, context)
         _ = py_call_typed(_base(context, "gather_rows_bytes"), classical_address(scalar32), classical_address(d32),
                           classical_address(zeros), 1, batch, 4)
+        # Raw addresses do not keep the source row or the zero index buffer
+        # alive: without these, both can be freed before the gather reads them.
+        _ = scalar32
+        _ = zeros
     else:
         for i in range(len(ds)):  # driver-loop: over the bounded differencing options
             if ds[i] != i:
@@ -273,6 +277,9 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                 var written = Int(py=py_call_typed(entries["arima_order_search_device"], classical_address(sub),
                                   classical_address(out), classical_address(best32), packed, pens,
                                   Python.list(count, n_obs, d, seasonal_d, period, maxiter, 1 if device_ic else 0)))
+                # best32 is only read back on the device-IC route; keep its
+                # owner alive through the native write on every route.
+                _ = best32
                 var expected = count if device_ic else trials * count
                 if written and written != expected:
                     raise Error("RuntimeError: AutoARIMA: incomplete grouped search output")
@@ -338,6 +345,8 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
             # Raw addresses do not keep Python-owned allocations alive.
             _ = ic_k
             _ = grouped_ll
+        # sub is passed to the grouped kernels by raw address only.
+        _ = sub
         var table_array = classical_input(table, context, "order table")
         var selected_orders = _take(table_array, best, trials, count, 8, 3, context)
         _put(order_out, ids, selected_orders, batch, count, 64, context)
