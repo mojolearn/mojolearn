@@ -8367,8 +8367,7 @@ def _merged_root_is_location_free():
         return f"{MERGED_BUILD} holds a heredoc"
     for line in lines:
         if re.search(r"\$\{?rootdir\b|\brootdir=", line) and not any(p.match(line) for p in _ROOTDIR_USES):
-            if not line.startswith("echo "):
-                return f"{MERGED_BUILD} reads --rootdir in a way this rule does not know: {line[:120]}"
+            return f"{MERGED_BUILD} reads --rootdir in a way this rule does not know: {line[:120]}"
         if re.search(r"\$\{?root\b", line) and not any(p.match(line) for p in _ROOT_USES):
             return f"{MERGED_BUILD} uses the root file in a way this rule does not know: {line[:120]}"
     tree = _parse(os.path.join("tools", "merged_bindings.py"))
