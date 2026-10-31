@@ -174,7 +174,11 @@ def validate(base, candidate, lanes, gpu_only=None):
         for fixture in base["fixtures"]:
             key = f"{lane}/{fixture}"
             cell = cells.get(key, {})
-            missing = (REQUIRED_PARTS | set(old_cells.get(key, {}))) - set(cell)
+            # An old part that only recorded an N/A placeholder ("n/a:...") carries no
+            # reference bits; a harness that no longer emits the placeholder drops nothing.
+            old_parts = {p for p, e in old_cells.get(key, {}).items()
+                         if not str((e or {}).get("ref") or "").startswith("n/a:")}
+            missing = (REQUIRED_PARTS | old_parts) - set(cell)
             if missing:
                 problems.append(f"{key}: missing parts {sorted(missing)}")
             for part, entry in cell.items():
