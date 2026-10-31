@@ -1140,7 +1140,7 @@ LANE_REVISIONS = {
 # Lanes whose model part must be numerical: a missing serializer must fail
 # their model proof, not become an admitted no-save N/A. The five entries were
 # par-* lanes.
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 REQUIRED_NUMERIC_PARTS = {}
 
@@ -6748,7 +6748,7 @@ def _par_devices():
     return devs
 
 
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
@@ -6778,7 +6778,7 @@ def _par_devices():
 # cross-vendor record remains the only thing that sees that.
 
 
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
@@ -6797,7 +6797,7 @@ def _par_devices():
 # forest model pool ride inside par-mlp, par-samba and par-iforest; those
 # lanes' code paths are the pooled ones since the drivers changed.
 
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
@@ -6830,7 +6830,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(scores=_h(m.score_samples(X)), predict=_h(m.predict(X[:512]))),
                 m, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
 
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
@@ -6840,7 +6840,7 @@ def _(ml, X, yc, yr, Xh=None):
 # rules as the par-* lanes above: devices=_par_devices() and `_same_bytes`
 # against the one-device public path the driver promises to equal.
 
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
@@ -6852,7 +6852,7 @@ def _(ml, X, yc, yr, Xh=None):
 # (bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/). Same rules as
 # the par-* lanes above.
 
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
@@ -6884,7 +6884,7 @@ def _(ml, X, yc, yr, Xh=None):
 # Same rules as every par lane above: devices=_par_devices(), the smallest
 # sharding that splits the work, and `_same_bytes` against the plain fit.
 
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
@@ -6924,7 +6924,7 @@ def _refused(call, needle):
     return 0
 
 
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
@@ -7300,7 +7300,7 @@ def _(ml, X, yc, yr, Xh=None):
                 blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
 
 
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 

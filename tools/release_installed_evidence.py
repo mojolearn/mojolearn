@@ -20,7 +20,7 @@ FAMILIES = {
     # kind: (requirement prefix, vendors, coverage IDs, producer module, adapter name)
     "runtime": ("runtime-", ("nvidia", "amd", "apple", "cpu"), runtime.COVERAGE_IDS, runtime, "installed-runtime"),
     # The multi-gpu-<vendor> family left with multi-GPU verification (owner, 2026-10-31).
-    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by b5f27e18a6; code recoverable at b5f27e18a6^.
     # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
     "published": ("published-", ("nvidia", "amd", "apple"), published.COVERAGE_IDS, published, "published-install"),
 }

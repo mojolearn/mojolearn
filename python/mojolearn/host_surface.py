@@ -3446,7 +3446,7 @@ def wheel_bindings():
 #: is what states their claim, and that is what the dedicated legs do.
 #: Multi-GPU verification was retired (owner, 2026-10-31): the harness has no
 #: par-* lane now, and every par-* declaration in this file was removed with them.
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 PUBLIC_INAPPLICABLE_PREFIXES = ("par-",)
 

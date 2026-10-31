@@ -15,7 +15,7 @@ import release_gate_profiles as gate_profiles
 SCHEMA = "mojolearn.release-requirement-receipt.v1"
 PROVENANCE_SCHEMA = "mojolearn.release-producer-inputs.v1"
 # "multi" (the multi-gpu-<vendor> rows) left with multi-GPU verification (owner, 2026-10-31).
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by b5f27e18a6; code recoverable at b5f27e18a6^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 KINDS = {"source", "compile", "runtime", "identity", "adapters", "performance", "candidate", "published"}
 CANDIDATE_COVERAGE = gate_profiles.CAMPAIGN_COVERAGE

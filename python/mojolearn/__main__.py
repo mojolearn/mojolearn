@@ -333,7 +333,7 @@ def build_parser():
     # `--par`, `--par-devices` and `--par-self-test` (the two-device column
     # of the par-* lanes) were removed when multi-GPU verification was
     # retired (owner, 2026-10-31); argparse refuses them as unknown options.
-    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by a417309926; code recoverable at a417309926^.
     # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
     v.add_argument("--compare", nargs=2, metavar=("A", "B"), default=None,
                    help="DIFF TWO EVIDENCE DOCUMENTS, with us out of the loop. "

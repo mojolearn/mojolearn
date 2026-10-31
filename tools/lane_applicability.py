@@ -1105,7 +1105,7 @@ def _selfcheck():
     #    two-device column passes. The registry has no driver lane since the
     #    par-* lanes were retired, so the device rule is watched on a
     #    constructed scope; the rule is the real `Scope.applicable`.
-    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
     # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
     want(not any(sc.claim_devices >= 2 for sc in s.values()),
          "a registered lane claims two devices; multi-GPU verification is retired")
@@ -1264,7 +1264,7 @@ def _selfcheck():
     # 6. THE DERIVATION IS NOT READING THE LANE NAMES: a plain lane's body
     #    reaches no `_par_devices`. (The driver-side arm read a par-* lane,
     #    retired with multi-GPU verification.)
-    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
     # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
     want(la_scope_of_body(identity_break().LANES["kmeans"]) == 1,
          "a plain lane picked up the two-device claim")

@@ -124,7 +124,7 @@ def _cpu_problem(key, part, ref, cpu, gpu_only, cols=None, records=()):
 #: Retired lanes (python/mojolearn/_verify_reference.py RETIRED_LANE_PREFIXES):
 #: the `par-*` multi-GPU driver lanes. Records taken before the retirement
 #: still carry their cells; they are ignored, never selected or refused.
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 RETIRED_LANE_PREFIXES = ("par-",)
 

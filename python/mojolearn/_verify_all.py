@@ -3757,7 +3757,7 @@ def cmd_verify_all(args):
         return _cmd_cross_check(args, ml)
     # `verify --par` (_verify_par.py) was removed when multi-GPU verification
     # was retired (owner, 2026-10-31).
-    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by a417309926; code recoverable at a417309926^.
     # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
     try:

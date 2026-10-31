@@ -71,7 +71,7 @@ PARTS = ("infer", "model", "batch", "rlpair", "batchgrad", "batchscale", "ragged
 DISAGREEING = ("DIVERGENT", "MOVED", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED")
 #: The verdicts a clean check accepts; every other verdict fails. (NOT
 #: APPLICABLE and WITNESS REFUSED were the `par-*` device axis's verdicts.)
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by a417309926; code recoverable at a417309926^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 PASSING = ("AGREE",)
 

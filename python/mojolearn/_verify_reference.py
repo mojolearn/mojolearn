@@ -449,7 +449,7 @@ def _declared_part_gap(j):
 #: 2026-10-31). Records taken before that still carry their cells (the 0.8.63
 #: columns hold every one of them REFUSED); admission ignores those cells
 #: instead of refusing the record or selecting the lane.
-# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 RETIRED_LANE_PREFIXES = ("par-",)
 
