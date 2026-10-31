@@ -201,6 +201,10 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
     every shard's statistics are placed at its column offset."""
     var b = shard_b()
     var context = _ctx()
+    # As _fit_forest: connect NumPy's native types in the shared context on
+    # first use, or an ordinary ndarray is refused ("Sequential requires
+    # native input types").
+    classical_connect_numpy(context)
     var estimator = args[0]
     var kind = _scaler_kind(estimator)
     var names = _scaler_stats(kind)
@@ -260,6 +264,7 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
     their column offsets."""
     var b = shard_b()
     var context = _ctx()
+    classical_connect_numpy(context)  # as _fit_scaler
     var estimator = args[0]
     var kind = _scaler_kind(estimator)
     var names = _scaler_stats(kind)
