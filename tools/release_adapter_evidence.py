@@ -74,7 +74,12 @@ def _smoke(directory, vendor, version):
     resume = [c for c in records["max-training"] if c.endswith(RESUME)]
     counts = {"torch-inference": len(records["torch-compile"]), "torch-training": len(records["torch-training"]),
               "max-train": len(records["max-training"]) - len(resume), "max-train-resume": len(resume)}
-    require(all(count > 0 for count in counts.values()), "an adapter coverage ID has no actual check record")
+    # tools/adapter_wheel_smoke.py runs the MAX checker with --smoke: only analytic_sgd and the
+    # python_api case, which have no resume step, so a smoke record owes no resume check.
+    # Any other MAX case present means the full cases ran, and then resume is required.
+    smoke_max = all(c.startswith(("analytic_sgd:", "python_api:")) for c in records["max-training"])
+    owed = [name for name, count in counts.items() if count == 0 and not (smoke_max and name == "max-train-resume")]
+    require(not owed, "an adapter coverage ID has no actual check record: " + ", ".join(owed))
     return dict(smoke=smoke_ref, phases=phases, counts=counts, evidence=refs)
 
 
