@@ -3127,10 +3127,12 @@ class Release:
         target = self.args.publish
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
-        if not self.dry:
-            ready, reasons = self.release_gate(stage="pre")
-            if not ready:
-                raise StepFailed("publication is blocked: " + "; ".join(reasons))
+        ready, reasons = self.release_gate(stage="pre")
+        if not ready and not self.dry:
+            raise StepFailed("publication is blocked: " + "; ".join(reasons))
+        if self.dry:
+            self.say(f"  pre-publication gate ({platform}): " + ("READY" if ready else
+                     f"would block on {len(reasons)} row(s): " + "; ".join(r[:160] for r in reasons[:5])))
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
@@ -3924,16 +3926,26 @@ class Release:
                     totals[result["status"]] += 1
                 for family, totals in families.items():
                     say(f"      {family}: {totals}")
-                needed = [(name, result) for name, result in rows.items() if result["status"] != "passed"]
-                for name, result in needed[:12]:
-                    reasons = result["reasons"]
-                    detail = "; ".join(reasons[:3])
-                    if len(reasons) > 3:
-                        detail += f"; +{len(reasons) - 3} reasons (full ledger plan --json)"
-                    say(f"      {name}: {result['status']} / {result['action']}: " + detail)
-                if len(needed) > 12:
-                    say(f"      +{len(needed) - 12} other requirements need attention; "
-                        "release_ledger.py plan --ledger <path above> --json shows every row and reason")
+                retained = sum(1 for result in rows.values() if result["status"] == "passed"
+                               and result.get("tested_revision") not in (None, result["source_revision"]))
+                say(f"   passed from evidence of an earlier source (retained, dependency-proven): {retained}")
+                ready, blocked = self.waived(release_requirements.gate_rows(rows, "pre"))
+                say("   pre-publication gate: " + ("READY" if ready else f"BLOCKED by {len(blocked)} required row(s)"))
+                # Every row that still lacks evidence, grouped by family and reason.
+                groups = {}
+                for name, result in rows.items():
+                    if result["status"] == "passed" or not result["required"] or result["stage"] != "pre":
+                        continue
+                    family = result.get("parent_requirement", name.split("/")[0])
+                    reasons = result["reasons"] or ["(no reason recorded)"]
+                    diffs = [r for r in reasons if r.startswith(("changed input:", "added input:", "removed input:"))]
+                    reason = next((r for r in reasons if r not in diffs), reasons[0])
+                    if diffs:
+                        reason += " (inputs differ from the tested source)"
+                    groups.setdefault((family, result["status"], result["action"], reason[:300]), []).append(name)
+                for (family, st, action, reason), names in sorted(groups.items()):
+                    say(f"      {family}: {len(names)} {st} / {action}: {reason}")
+                    say("         e.g. " + ", ".join(names[:3]) + (f" (+{len(names) - 3})" if len(names) > 3 else ""))
             except (OSError, ValueError, subprocess.CalledProcessError) as error:
                 say(f"   requirements ledger untested: {error}")
         if c:
