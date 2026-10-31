@@ -9,12 +9,13 @@ This is Mojo host runtime; no Python computation or GPU import is required.
 from std.memory import bitcast
 from ensemble.host.rf_oracle import RfHostForest, RfHostParams, host_sampled_rows, host_weight_qcdf, n_sampled_rows_host
 from checks.numerics import ftz
+from ensemble.rf_notices import RF_NOTICE_OOB_PARTIAL
 from checks.soft_f64 import SF64_ONE, SF64_ZERO, SF64_NAN, SF64_SIGN, sf64_add, sf64_div, sf64_sub, sf64_mul, sf64_from_int, sf64_from_f32, sf64_gt, sf64_is_nan
 from xtrees.exact_oob_sum import E64_LIMBS, E64_MAX_ROWS, E64_FLAGS, e64_add, e64_round
 
 
 def rf_host_oob[CLASSIFIER: Bool](
-    forest: RfHostForest, p: RfHostParams,
+    mut forest: RfHostForest, p: RfHostParams,
     x: MutPointer[Float32,MutUntrackedOrigin], y_address: Int,
     weights: List[Float32], rows: Int, cols: Int,
     out_address: Int, score_address: Int,
@@ -72,6 +73,10 @@ def rf_host_oob[CLASSIFIER: Bool](
                     bestp = value
             if best == Int(labels[unsafe_offset=row]):
                 correct += 1
+    # The device fit's partial-OOB notice (`compute_oob_score`), recorded
+    # for the binding to raise as a Python warning.
+    if valid != rows:
+        forest.notices |= RF_NOTICE_OOB_PARTIAL
     if valid == 0:
         raise Error("no sample was out of bag for any tree, so there is no OOB score to report")
     comptime if CLASSIFIER:
