@@ -369,14 +369,20 @@ def byte_lm_host_from_state(mut mods: NativeModules, cls: PythonObject, args: Py
         raise Error("TypeError: host restoration requires the connected native trainer class")
     var bi = mods.module("builtins")
     var options = args[4]
-    classical_admit_value(options, context)
     if py_type(options) is not bi.dict:
         raise Error("TypeError: host trainer options require native dictionary storage")
     var keys = py_call(bi.list, options)
     for i in range(len(keys)):  # driver-loop: over admitted constructor keyword metadata
+        if py_type(keys[i]) is not bi.str:
+            raise Error("TypeError: host trainer options require string keyword names")
         var key = String(keys[i])
         if key != "shape" and key != "lr" and key != "betas" and key != "eps" and key != "weight_decay":
             raise Error("TypeError: host trainer received an unexpected keyword argument '" + key + "'")
+        # shape is a ByteLanguageModelConfig owner: _host_shape admits its
+        # exact class and native fields in construct. Admitting the owner
+        # itself as a generic value refuses every valid restoration.
+        if key != "shape":
+            classical_admit_value(options[keys[i]], context)
     var constructor = Python.tuple(args[0], args[1], args[2], py_get(options, "shape"), args[3],
         py_get(options, "lr", PythonObject(.001)), py_get(options, "betas", Python.tuple(.9, .999)),
         py_get(options, "eps", PythonObject(.00000001)), py_get(options, "weight_decay", PythonObject(.01)))
