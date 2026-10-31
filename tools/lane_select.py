@@ -325,12 +325,25 @@ def verify_harness_change(ref, path):
     # An added definition runs only when a changed one calls it, and a removed one stops running only
     # when its callers changed; both are judged by those callers.
     changed = sorted(n for n in set(a[0]) & set(b[0]) if a[0][n] != b[0][n])
-    feeding = [n for n in changed if n not in VERIFY_ALL_ORCHESTRATION]
+    # A feeding definition that only lost a defaulted switch no caller passes
+    # runs the same body for every remaining call (`default_only_specialization`).
+    old_defs = {n.name: n for n in ast.parse(old).body if isinstance(n, ast.FunctionDef)}
+    new_defs = {n.name: n for n in ast.parse(new).body if isinstance(n, ast.FunctionDef)}
+    same = set()
+    for n in changed:
+        if n in VERIFY_ALL_ORCHESTRATION or n not in old_defs or n not in new_defs:
+            continue
+        callers = _calls_named(n, path)
+        if None not in callers and default_only_specialization(old_defs[n], new_defs[n], callers):
+            same.add(n)
+    feeding = [n for n in changed if n not in VERIFY_ALL_ORCHESTRATION and n not in same]
     if feeding:
         VERIFY_HARNESS_WHY[key] = "it can move fixture bytes or a hash: " + ", ".join(feeding[:6])
         return "every"
     VERIFY_HARNESS_WHY[key] = ("orchestration and reporting only: " + (", ".join(changed[:6]) or "none")
-                               + (" and more" if len(changed) > 6 else ""))
+                               + (" and more" if len(changed) > 6 else "")
+                               + (f" ({', '.join(sorted(same))}: a removed defaulted switch no caller passes)"
+                                  if same else ""))
     return "inert"
 
 
@@ -441,9 +454,10 @@ def reset_caches():
     _PYTHON_FILES = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
-    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY
     _LANE_SEED_CALLS = None
     _LANE_PRECISION_PATHS = None
+    _LANE_CPU_ROUTE_ONLY = None
     _SOURCE_HASHED = None
     _CONSTANTS = None
     _EXTENDERS = None
@@ -2799,6 +2813,70 @@ def _mojo_is_docstring(first):
     return re.match(r'^[rRbBuU]?(?:"""|\'\'\')', first) is not None
 
 
+def _mojo_code_text(text):
+    """`text` (one Mojo definition, or a whole source) with its comments and
+    its DOCSTRINGS blanked, or `text` unchanged when it cannot be scanned with
+    certainty.
+
+    A NAME IN PROSE IS NOT AN EDGE (lane release-auto-reuse-2, 2026-10-31).
+    The definition graph (`_MojoDefGraph`) joined a definition to every name
+    its text spelled, so the docstring of
+    `spectral/host/spectral_oracle.mojo:host_validate_connectivity_coo`
+    ("`host_spectral_fit_predict_coo_keep` names the files") made the
+    connectivity check call the spectral clustering fit, and through it
+    `cluster/host/kmeans_oracle.mojo:host_fit_main`; a one-line edit to the
+    k-means seeding then selected 432 of 513 lanes. A `#` comment and a
+    statement-level string literal (a docstring: `_mojo_is_docstring`, which
+    compiles to nothing) cannot name a definition: Mojo has no runtime lookup
+    of a function by its spelling. Every OTHER string literal keeps its
+    identifiers (the safe direction), and a text the scanner cannot read
+    (`_mojo_scan` refuses unbalanced quotes or brackets) keeps all of them."""
+    if _mojo_scan(text) is None:
+        return text
+    out, quote, depth, cont, blank = [], None, 0, False, False
+    for line in text.splitlines():
+        starts_statement = quote is None and depth == 0 and not cont
+        cont = False
+        chars, i, n = [], 0, len(line)
+        while i < n:
+            c = line[i]
+            if quote:
+                if c == "\\":
+                    chars.append(" " if blank else line[i:i + 2])
+                    i += 2
+                    continue
+                if line.startswith(quote, i):
+                    chars.append(" " * len(quote) if blank else quote)
+                    i += len(quote)
+                    quote, blank = None, False
+                    continue
+                chars.append(" " if blank else c)
+                i += 1
+                continue
+            if c == "#":
+                break
+            if line.startswith('"""', i) or line.startswith("'''", i):
+                # a docstring: the first token of a statement, with only a
+                # string prefix before it (`_mojo_is_docstring`)
+                blank = starts_statement and re.fullmatch(r"\s*[rRbBuU]?", line[:i]) is not None
+                quote = line[i:i + 3]
+                chars.append(" " * 3 if blank else quote)
+                i += 3
+                continue
+            if c in "\"'":
+                quote, blank = c, False
+            elif c in "([{":
+                depth += 1
+            elif c in ")]}":
+                depth -= 1
+            chars.append(c)
+            i += 1
+        if quote is None and depth == 0 and "".join(chars).rstrip().endswith("\\"):
+            cont = True
+        out.append("".join(chars))
+    return "\n".join(out)
+
+
 def _mojo_import_bindings(stmt):
     """(local, module, original name or None, star) for one import statement's
     text; None when it is not one. `import a.b` binds `a`, `import a.b as c`
@@ -3102,7 +3180,11 @@ class _MojoDefGraph:
 
     def idents(self, node):
         if node not in self._idents:
-            self._idents[node] = frozenset(_MOJO_IDENT_RE.findall(self.text(node)))
+            text = self.text(node)
+            # A whole-file node keeps every identifier its text carries (see the
+            # class docstring); a definition's edges come from its CODE only.
+            code = text if node[0] == "f" else _mojo_code_text(text)
+            self._idents[node] = frozenset(_MOJO_IDENT_RE.findall(code))
         return self._idents[node]
 
     def targets(self, node):
@@ -3534,9 +3616,77 @@ def host_routes(hs=None):
     return out
 
 
+#: The columns recorded on a GPU: every one loads a GPU set, so `_backend`'s
+#: CPU-only selector (`_select_cpu_only`) never runs there.
+DEVICE_BACKENDS = ("cuda", "hip", "metal")
+
+
+def device_loaded_bindings(bindings, hs=None):
+    """The bindings a lane loads on an install WITH a GPU set: the ones its
+    doors resolve by name (`resolved_bindings`: a host binding named outright,
+    a door host, a `host_model` route of a class it defines, all included),
+    closed over `HOST_IMPORT_ALIASES`, which `load_host_module` connects on any
+    install. The CPU-only tables (`cpu_only_routes`) are NOT followed."""
+    hs = hs or host_surface()
+    aliases = {}
+    for source, rows in getattr(hs, "HOST_IMPORT_ALIASES", {}).items():
+        aliases.setdefault(source, set()).update(row["binding"] for row in rows)
+    out, todo = set(), list(bindings)
+    while todo:
+        name = todo.pop()
+        if name not in out:
+            out.add(name)
+            todo.extend(aliases.get(name, ()))
+    return out
+
+
+def cpu_only_routes(hs=None):
+    """GPU binding -> the host bindings ONLY a CPU-only install loads for it:
+    `routed_modules` and `inference_routes` (`_backend._HOST_MODULES` and
+    `_HOST_INFERENCE_MODULES`) and the host binding of an `ADAPTED_MODULES`
+    family. `_backend` reads those tables in `_select_cpu_only` and
+    `_cpu_only_binding` alone, and installs that set only when no GPU set
+    loaded (`_CPU_ONLY`): "a box with a GPU never serves host arithmetic under
+    a GPU label". `tools/test_lane_select_device_routes.py` pins that the
+    tables have no other reader."""
+    hs = hs or host_surface()
+    out = {}
+    for table in (hs.routed_modules(), hs.inference_routes()):
+        for gpu, host in table.items():
+            out.setdefault(gpu, set()).add(host)
+    for gpu, row in hs.ADAPTED_MODULES.items():
+        out.setdefault(gpu, set()).add(f"_mojolearn_{row['family']}_host")
+    return out
+
+
+def device_column_lanes(path, lanes, backend):
+    """`lanes` without those that reach the Mojo file `path` only through a
+    CPU-only route, when `backend` is a device column; `lanes` otherwise.
+
+    A HOST-ONLY CHANGE DOES NOT MOVE A GPU COLUMN (lane release-auto-reuse-2,
+    2026-10-31). `cluster/host/kmeans_oracle.mojo` is compiled only into host
+    bindings (`_mojolearn_core_host`, `_mojolearn_mixture_host`, ...), and a
+    lane reaches it as the CPU-only twin of the GPU binding its door calls
+    (`kmeans_fit` of `_mojolearn` is served by `_mojolearn_core_host` on a
+    CPU-only install). The map is the union over every install, so its edit
+    selected 432 lanes on the NVIDIA, AMD and Apple columns too, none of which
+    loads those twins. A lane is dropped only when every binding contribution
+    (`_LANE_SEED_CALLS`) carrying `path` is a binding the lane does not load on
+    a GPU install (`device_loaded_bindings`), and no binding it does load,
+    no conformer the map added, and none of its Python files carries it
+    (`_LANE_CPU_ROUTE_ONLY`). A lane that loads a holder by name (a
+    `host_model` route, a door host) is kept, whatever it calls."""
+    if backend not in DEVICE_BACKENDS or not path.endswith(".mojo") or _LANE_CPU_ROUTE_ONLY is None:
+        return set(lanes)
+    return {lane for lane in lanes if path not in _LANE_CPU_ROUTE_ONLY.get(lane, ())}
+
+
 _LANE_SOURCES = None
 _LANE_SEED_CALLS = None
 _LANE_PRECISION_PATHS = None
+#: lane -> the files that lane reaches ONLY through a CPU-only route
+#: (`cpu_only_routes`); see `device_column_lanes`.
+_LANE_CPU_ROUTE_ONLY = None
 
 
 @_by_path
@@ -3890,7 +4040,7 @@ def lane_sources():
         """Is `binding` resolved by a door this lane runs whole (see `_own`)."""
         return binding in _own(lane)[2]
 
-    seed_calls, precision_paths = {}, {}
+    seed_calls, precision_paths, cpu_route_only = {}, {}, {}
     for lane in reach:
         matched, files, doors, bindings = reach[lane]
         # THE NAMES THIS LANE'S OWN DOORS CALL (2026-09-23; this was every
@@ -4050,6 +4200,7 @@ def lane_sources():
         # imports comes in with its closure whenever the lane reaches the
         # trait: the same fixed point, the safe direction.
         by_name = source_only_hosts | narrowed_files
+        before_conformance = set(mojo)
         if by_name:
             imported = set().union(*[_mojo_imports(h) for h in by_name])
             pending = [(f, b) for f, _, b in mojo_conformance_edges() if f in imported]
@@ -4061,6 +4212,16 @@ def lane_sources():
                         mojo |= _mojo_closure([f])
                         grew = True
         sources[lane] = files | mojo
+        # WHAT A DEVICE COLUMN NEVER LOADS for this lane (`device_column_lanes`):
+        # files that only CPU-only routes contribute, never a file a binding the
+        # lane loads on a GPU install contributes, a conformer the fixed point
+        # above added, or a Python file.
+        on_device = device_loaded_bindings(bindings, hs)
+        device_got, cpu_got = set(), set()
+        for src_path, _wide, _exports, got in calls:
+            name = os.path.basename(src_path)[:-len(".mojo")]
+            (device_got if name in on_device else cpu_got).update(got)
+        cpu_route_only[lane] = frozenset(cpu_got - device_got - (mojo - before_conformance) - files)
         declared = {b for b, use in binding_use.items() if use["wide"] is True}
         declared |= {h for b in bindings for h in routed.get(b, ()) if _whole(lane, h)}
         declared |= {f"_mojolearn_{fam}_host" for fam in fams}
@@ -4069,9 +4230,10 @@ def lane_sources():
                          families=sorted(fams), mojo=len(mojo), exports=len(used),
                          ubiquitous=sorted(ubiquitous), binding_use=binding_use,
                          precision_limitations=[limitations[key] for key in limitation_keys])
-    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY
     _LANE_SEED_CALLS = seed_calls
     _LANE_PRECISION_PATHS = precision_paths
+    _LANE_CPU_ROUTE_ONLY = cpu_route_only
     _LANE_SOURCES = (sources, why)
     _remember_lane_sources()
     return _LANE_SOURCES
@@ -4093,7 +4255,8 @@ _LS_HELPER_MODULES = ("bincache", "import_metadata_effects", "mojo_registrations
 _LS_NOT_INPUTS = {"_ENUMERATORS", "_LANE_SOURCES", "_SOURCE_HASHED", "_TRACKED", "_CONSTANTS", "_EXTENDERS",
                   "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PYTHON_FILES", "_PKG_IMPORT_CLOSURE",
                   "_HOST_CLASS_ROUTES", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS",
-                  "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_HOOK_CLASSES", "_LS_MEMO"}
+                  "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY",
+                  "_HOOK_CLASSES", "_LS_MEMO"}
 
 
 def _ls_digest(text):
@@ -4149,7 +4312,7 @@ def _remember_lane_sources():
     if git is None:
         return
     entry = dict(
-        result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS)),
+        result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY)),
         reads={path: _ls_digest(text) for path, text in _read.cache.items()},
         tree=_ls_tree_state(), git=git, ids=_ls_identities(),
         tracked=frozenset(_TRACKED) if _TRACKED is not None else None,
@@ -4194,7 +4357,7 @@ def _ls_memo_matches(memo, ids, git, tree):
 
 def _reuse_lane_sources():
     """Restore a remembered map when nothing it was derived from changed."""
-    global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LS_MEMO
+    global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LS_MEMO
     if not _LS_MEMO:
         return False
     ids, git, tree = _ls_identities(), _ls_git_state(), _ls_tree_state()
@@ -4202,7 +4365,8 @@ def _reuse_lane_sources():
         memo = _LS_MEMO[index]
         if _ls_memo_matches(memo, ids, git, tree):
             import copy
-            _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS = copy.deepcopy(memo["result"])
+            _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY = \
+                copy.deepcopy(memo["result"])
             _LS_MEMO = _LS_MEMO[:index] + _LS_MEMO[index + 1:] + [memo]
             return True
     return False
@@ -7828,6 +7992,457 @@ def build_script_roots(path, seen=None):
 #: the three reaches exactly the lanes that reach the loader. The pairing is
 #: CHECKED, not trusted: the loader and the builder must both still name the
 #: library, or the rule is off and the path selects every lane.
+# ------------------------------------------- narrow rules for build and audit inputs
+#: Why the last `rootdir_only_builder_edit` / `audit_only_native_edit` /
+#: `runtime_import_unreached` / `default_only_specialization` call answered as
+#: it did, keyed by "<ref>:<path>".
+NARROW_WHY = {}
+
+#: The builder `--rootdir` reaches (bindings/merged_build.sh) and the only
+#: shapes in which it may read the variable for `rootdir_only_builder_edit`.
+MERGED_BUILD = os.path.join("bindings", "merged_build.sh")
+_ROOTDIR_USES = (
+    re.compile(r'^rootdir=""$'),
+    re.compile(r'^--rootdir\) \[ \$# -ge 2 \] \|\| \{ usage; exit 2; \}; rootdir=\$2; shift ;;$'),
+    re.compile(r'^if \[ -n "\$rootdir" \]; then$'),
+    re.compile(r'^mkdir -p "\$rootdir"$'),
+    re.compile(r'^root="\$rootdir/\$stem\.mojo"$'),
+)
+_ROOT_USES = (
+    re.compile(r'^root="\$tmpdir/\$stem\.mojo"$'),
+    re.compile(r'^root="\$rootdir/\$stem\.mojo"$'),
+    re.compile(r'^"\$PY" tools/merged_bindings\.py root --stem "\$stem" --members "\$members" --out "\$root" < /dev/null$'),
+    re.compile(r'^"\$root" -o "\$tmpdir/\$stem\.so" < /dev/null$'),
+)
+
+
+def _shell_code_lines(text):
+    """The lines of a shell script, stripped, without blank lines and without
+    comment lines OUTSIDE heredocs (a heredoc body is data: its lines are kept
+    whatever they start with). None when a heredoc never ends."""
+    out, end, strip_tabs = [], None, False
+    for line in text.splitlines():
+        if end is not None:
+            out.append(line)
+            if (line.lstrip("\t") if strip_tabs else line) == end:
+                end = None
+            continue
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        out.append(stripped)
+        m = re.search(r"<<(-?)\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2", line.split(" #", 1)[0])
+        if m:
+            end, strip_tabs = m.group(3), m.group(1) == "-"
+    return None if end is not None else out
+
+
+def _merged_root_is_location_free():
+    """None when `--rootdir` can only move WHERE merged_build.sh writes the
+    generated root file, else why not.
+
+    Three facts, each read from the code: merged_build.sh reads `$rootdir` only
+    to pick the directory of `$root` (`_ROOTDIR_USES`); it uses `$root` only as
+    the file `merged_bindings.py root` writes and the file `mojo build`
+    compiles (`_ROOT_USES`); and the text `merged_bindings.py root` writes is
+    `root_text(stem, names)`, which takes no path."""
+    try:
+        lines = _shell_code_lines(_read(MERGED_BUILD))
+    except OSError:
+        return f"{MERGED_BUILD} cannot be read"
+    if lines is None:
+        return f"{MERGED_BUILD} holds a heredoc"
+    for line in lines:
+        if re.search(r"\$\{?rootdir\b|\brootdir=", line) and not any(p.match(line) for p in _ROOTDIR_USES):
+            if not line.startswith("echo "):
+                return f"{MERGED_BUILD} reads --rootdir in a way this rule does not know: {line[:120]}"
+        if re.search(r"\$\{?root\b", line) and not any(p.match(line) for p in _ROOT_USES):
+            return f"{MERGED_BUILD} uses the root file in a way this rule does not know: {line[:120]}"
+    tree = _parse(os.path.join("tools", "merged_bindings.py"))
+    funcs = {n.name: n for n in (tree.body if tree else ()) if isinstance(n, ast.FunctionDef)}
+    rt, cr = funcs.get("root_text"), funcs.get("cmd_root")
+    if rt is None or cr is None or [a.arg for a in rt.args.args] != ["stem", "names"]:
+        return "tools/merged_bindings.py has no root_text(stem, names) or cmd_root"
+    calls = [n for n in ast.walk(cr) if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "root_text"]
+    if len(calls) != 1 or any("out" in ast.dump(a) for a in calls[0].args):
+        return "cmd_root does not write root_text of the stem and members alone"
+    return None
+
+
+def rootdir_only_builder_edit(ref, path):
+    """A reason when the diff of the Linux set builder `path` since `ref` only
+    adds or changes a `--rootdir <dir>` argument (and comments), else None
+    (the every-lane rule of LINUX_SET_BUILDERS stands).
+
+    A FIXED ROOT PATH IS NOT A BIT (lane release-auto-reuse-2, 2026-10-31).
+    build_sets.sh began passing `--rootdir /tmp/mojolearn-merged-roots/<tier>`
+    to merged_build.sh so that the host libraries of two legs are byte
+    identical: the compiler embeds the root file's path in the image, and the
+    default root directory was a fresh `mktemp -d` per build, so every
+    recorded column already ran merged binaries built from an arbitrary root
+    path, and the columns agree. The edit moves only that directory: the root
+    file's text, the members, the flags and the outputs are the same
+    (`_merged_root_is_location_free` checks how merged_build.sh uses it). Any
+    other changed character refuses this rule."""
+    key = f"{ref}:{path}"
+    NARROW_WHY.pop(key, None)
+    if path not in LINUX_SET_BUILDERS or not path.endswith(".sh") or not ref:
+        return None
+    old = _git_show(ref, path)
+    try:
+        new = _read(path)
+    except OSError:
+        new = None
+    if old is None or new is None:
+        NARROW_WHY[key] = "no readable diff"
+        return None
+    a, b = _shell_code_lines(old), _shell_code_lines(new)
+    if a is None or b is None:
+        NARROW_WHY[key] = "a heredoc: its lines cannot be told from comments"
+        return None
+    strip = re.compile(r"\s--rootdir\s+[^\s\"')]+")
+    if [strip.sub("", x) for x in a] != [strip.sub("", x) for x in b]:
+        NARROW_WHY[key] = "a changed line differs by more than a --rootdir argument"
+        return None
+    if a == b:
+        return "comments only: the builder's commands are unchanged since " + str(ref)
+    why = _merged_root_is_location_free()
+    if why:
+        NARROW_WHY[key] = why
+        return None
+    return ("only a --rootdir argument changed: it moves where merged_build.sh writes the generated root "
+            "file, whose text takes no path; the recorded columns were built from mktemp roots, so the "
+            "root location was already arbitrary")
+
+
+def _named_units(text):
+    """{(kind, name): dump} for every top-level def, class and single-name
+    assignment, and [dump] of every other top-level statement; None when the
+    text does not parse."""
+    try:
+        tree = _strip_docstrings(ast.parse(text))
+    except SyntaxError:
+        return None
+    named, others = {}, []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            named[("def", node.name)] = ast.dump(node)
+        elif (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)) \
+                or (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)):
+            target = node.targets[0] if isinstance(node, ast.Assign) else node.target
+            if ("assign", target.id) in named:
+                return None                    # a rebinding: occurrences cannot be told apart here
+            named[("assign", target.id)] = ast.dump(node)
+        else:
+            others.append(ast.dump(node))
+    return named, others
+
+
+def _changed_names(ref, path):
+    """(changed top-level names, why) for a Python file's diff since `ref`,
+    or (None, why) when the diff is not confined to named top-level units."""
+    old = _git_show(ref, path)
+    try:
+        new = _read(path)
+    except OSError:
+        new = None
+    if old is None or new is None:
+        return None, "no readable diff"
+    a, b = _named_units(old), _named_units(new)
+    if a is None or b is None:
+        return None, "a side does not parse or rebinds a top-level name"
+    if a[1] != b[1]:
+        return None, "a module-level statement other than a definition changed"
+    names = {k[1] for k in set(a[0]) | set(b[0]) if a[0].get(k) != b[0].get(k)}
+    return names, ""
+
+
+def _reach_avoiding(model, roots, sinks):
+    """Module-level names reachable from `roots` in `model` without entering
+    a name in `sinks`."""
+    seen, todo = set(), [n for n in roots if n in model.top and n not in sinks]
+    while todo:
+        n = todo.pop()
+        if n in seen:
+            continue
+        seen.add(n)
+        for k in model.defs.get(n, ()):
+            todo.extend(r for r in model.refs(k) if r not in seen and r not in sinks)
+    return seen
+
+
+#: NATIVE INPUTS WHOSE AUDIT WRITES ONLY ITS OWN REPORT. `finalize` in
+#: wheel.py stages the runtime libraries (`stage`, NATIVE_INPUTS on its own)
+#: and then runs `audit_tree`, whose result either raises (no wheel) or is
+#: written to `<dist-info>/portable-math.json`. Value: the audit function and
+#: the report file. `audit_only_native_edit` checks both facts in code.
+NATIVE_AUDITS = {"packaging/portable_math/wheel.py": ("audit_tree", "portable-math.json")}
+
+
+def audit_only_native_edit(ref, path):
+    """A reason when every top-level unit the diff of the native input `path`
+    changed is reached only through its audit (NATIVE_AUDITS), else None.
+
+    AN AUDIT LIST IS NOT A RUNTIME BYTE (lane release-auto-reuse-2, 2026-10-31).
+    Retiring `_verify_par.py` removed its name from wheel.py's NUMPY_ORACLES,
+    the files the platform-math audit lets import NumPy, and the NATIVE_INPUTS
+    rule selected the 485 lanes that load libMojolearnMath. The audit decides
+    whether the wheel is refused and what portable-math.json says; no lane
+    reads that file (checked: no package or harness file names it) and a
+    refused wheel records nothing. Derived: (1) the changed names are outside
+    what `finalize` and the CLI reach when `audit_tree` is a sink; (2) in
+    `finalize`, the audit's result is only stored, serialized into the report
+    file and returned; (3) no file a lane reaches, and not the harness, names
+    the report file. Anything else keeps the NATIVE_INPUTS rule."""
+    key = f"{ref}:{path}"
+    NARROW_WHY.pop(key, None)
+    if path not in NATIVE_AUDITS or not ref:
+        return None
+    audit, report = NATIVE_AUDITS[path]
+    names, why = _changed_names(ref, path)
+    if names is None:
+        NARROW_WHY[key] = why
+        return None
+    if not names:
+        return "no top-level unit changed"
+    try:
+        model = _HarnessModel(_read(path))
+    except (OSError, SyntaxError):
+        NARROW_WHY[key] = "it does not parse"
+        return None
+    if audit not in model.top or "finalize" not in model.top:
+        NARROW_WHY[key] = f"no {audit} or finalize in {path}"
+        return None
+    import_time = set()
+    for k, node in enumerate(model.stmts):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)) \
+                and not _is_main_guard(node):
+            import_time |= model.refs(k) - set(_stmt_names(node))
+    bytes_side = _reach_avoiding(model, {"finalize", "main"} | import_time, {audit})
+    hit = sorted(names & bytes_side)
+    if hit:
+        NARROW_WHY[key] = "changed outside the audit: " + ", ".join(hit[:6])
+        return None
+    fin = model.stmts[model.defs["finalize"][0]]
+    bound = set()
+    for node in ast.walk(fin):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call) \
+                and getattr(node.value.func, "id", None) == audit:
+            bound |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+    if len(bound) != 1:
+        NARROW_WHY[key] = f"finalize does not keep the {audit} result in one name"
+        return None
+    var = next(iter(bound))
+    parents = {id(c): p for p in ast.walk(fin) for c in ast.iter_child_nodes(p)}
+    for node in ast.walk(fin):
+        if not (isinstance(node, ast.Name) and node.id == var and isinstance(node.ctx, ast.Load)):
+            continue
+        up = parents.get(id(node))
+        stmt = up
+        while stmt is not None and not isinstance(stmt, ast.stmt):
+            stmt = parents.get(id(stmt))
+        ok = (isinstance(up, ast.Return)
+              or (isinstance(up, ast.Subscript) and isinstance(stmt, ast.Assign) and up in stmt.targets)
+              # `(<dist-info> / "portable-math.json").write_text(json.dumps(report, ...))`
+              or (isinstance(up, ast.Call) and getattr(up.func, "attr", None) == "dumps"
+                  and isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)
+                  and getattr(stmt.value.func, "attr", None) == "write_text"
+                  and report in ast.unparse(stmt.value.func.value)))
+        if not ok:
+            NARROW_WHY[key] = f"the {audit} result flows somewhere other than {report}: line {node.lineno}"
+            return None
+    readers = [rel for rel in _python_files() + [HARNESS] if report in (_read(rel) if os.path.exists(
+        os.path.join(ROOT, rel)) else "")]
+    if readers:
+        NARROW_WHY[key] = f"{report} is named by {readers[0]}"
+        return None
+    return (f"audit only ({', '.join(sorted(names)[:6])}): reached only through {audit}, whose result is "
+            f"the refusal or {report}, which nothing a lane runs reads")
+
+
+def runtime_import_unreached(ref, path):
+    """A reason when the diff of a harness runtime import (HARNESS_RUNTIME_IMPORTS)
+    since `ref` is confined to top-level definitions the harness cannot run,
+    else None (every lane, by the HARNESS_RUNTIME_IMPORTS rule).
+
+    THE HARNESS RUNS WHAT IT CALLS (lane release-auto-reuse-2, 2026-10-31).
+    The harness imports tools/lane_applicability.py while it records a column
+    and calls a few of its names (`_la.use_harness`, `_la.degenerate`). The
+    retirement of the par-* lanes rewrote that module's `_selfcheck`, which only
+    its own `--selfcheck` CLI runs, and the import rule selected every lane.
+    Derived: the names the harness (and every lane fragment) reads off the
+    module, as `<alias>.<name>` with the alias used for nothing else, plus every
+    name the module's import-time code reads (its `__main__` guard excluded:
+    an import does not run it), closed over the module's own references; a
+    changed name outside that closure never runs in a recording process."""
+    key = f"{ref}:{path}"
+    NARROW_WHY.pop(key, None)
+    if path not in HARNESS_RUNTIME_IMPORTS or not ref:
+        return None
+    names, why = _changed_names(ref, path)
+    if names is None:
+        NARROW_WHY[key] = why
+        return None
+    stem = os.path.basename(path)[:-3]
+    used = set()
+    users = [HARNESS] + sorted(os.path.join("tools", "identity_lanes", f)
+                               for f in os.listdir(os.path.join(ROOT, "tools", "identity_lanes"))
+                               if f.endswith(".py"))
+    for rel in users:
+        tree = _parse(rel)
+        if tree is None:
+            NARROW_WHY[key] = f"{rel} does not parse"
+            return None
+        aliases = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                aliases |= {a.asname or a.name for a in node.names if a.name == stem}
+            elif isinstance(node, ast.ImportFrom) and node.module == stem:
+                used |= {a.name for a in node.names}
+                if any(a.name == "*" for a in node.names):
+                    NARROW_WHY[key] = f"{rel} star-imports {stem}"
+                    return None
+        parents = {id(c): p for p in ast.walk(tree) for c in ast.iter_child_nodes(p)}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id in aliases and isinstance(node.ctx, ast.Load):
+                up = parents.get(id(node))
+                if not (isinstance(up, ast.Attribute) and up.value is node):
+                    NARROW_WHY[key] = f"{rel} hands the module {stem} on as a value (line {node.lineno})"
+                    return None
+                used.add(up.attr)
+        if stem in _read(rel) and not aliases and not used:
+            # named in some way that is neither an import nor an attribute
+            if re.search(r"\b%s\b" % re.escape(stem), "".join(
+                    s.value for s in ast.walk(tree) if isinstance(s, ast.Constant) and isinstance(s.value, str))):
+                NARROW_WHY[key] = f"{rel} names {stem} in a string"
+                return None
+    try:
+        model = _HarnessModel(_read(path))
+    except (OSError, SyntaxError):
+        NARROW_WHY[key] = "it does not parse"
+        return None
+    roots = set(used)
+    for k, node in enumerate(model.stmts):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for part in node.decorator_list + node.args.defaults + [d for d in node.args.kw_defaults if d]:
+                roots |= {n.id for n in ast.walk(part) if isinstance(n, ast.Name)}
+        elif not _is_main_guard(node):
+            roots |= model.refs(k)
+    # A mutator a reached name calls changes module state; it is in the closure like any callee.
+    reached = model.closure(roots)
+    hit = sorted(names & (reached | (roots & names)))
+    if hit:
+        NARROW_WHY[key] = "the harness can run changed definitions: " + ", ".join(hit[:6])
+        return None
+    return (f"only definitions the harness never runs changed ({', '.join(sorted(names)[:6])}): it reads "
+            f"{', '.join(sorted(used)) or 'nothing'} off {stem}")
+
+
+def default_only_specialization(old_def, new_def, callers):
+    """True when `new_def` is `old_def` with one keyword parameter removed
+    whose default is a falsy constant, the parameter read nowhere but as the
+    whole test of `if <param>:` blocks without an `else` (which the default
+    never enters), and no call in `callers` (call nodes of this function
+    anywhere in the tree) passes that parameter.
+
+    REMOVING A DEFAULTED SWITCH NOBODY PASSES IS NOT A CHANGE (lane
+    release-auto-reuse-2, 2026-10-31): `load_harness(path=None, par_axis=False)`
+    lost `par_axis` with `verify --par`, its one caller that passed it. For
+    every remaining call the old function, with par_axis at its default, ran
+    exactly the new body."""
+    if not (isinstance(old_def, ast.FunctionDef) and isinstance(new_def, ast.FunctionDef)
+            and old_def.name == new_def.name and not old_def.decorator_list and not new_def.decorator_list):
+        return False
+    oa, na = old_def.args, new_def.args
+    if oa.vararg or oa.kwarg or oa.posonlyargs or oa.kwonlyargs:
+        return False
+    old_names = [a.arg for a in oa.args]
+    new_names = [a.arg for a in na.args]
+    gone = [n for n in old_names if n not in new_names]
+    if len(gone) != 1 or [n for n in old_names if n != gone[0]] != new_names:
+        return False
+    param = gone[0]
+    idx = old_names.index(param)
+    first_default = len(old_names) - len(oa.defaults)
+    if idx < first_default:
+        return False
+    default = oa.defaults[idx - first_default]
+    if not (isinstance(default, ast.Constant) and not default.value):
+        return False
+    if idx != len(old_names) - 1:
+        return False                         # positional callers past it would shift
+    import copy
+    spec = copy.deepcopy(old_def)
+    spec.args.args = [a for a in spec.args.args if a.arg != param]
+    spec.args.defaults = spec.args.defaults[:len(spec.args.defaults) - 1]
+
+    class Fold(ast.NodeTransformer):
+        bad = False
+
+        def visit_If(self, node):
+            if isinstance(node.test, ast.Name) and node.test.id == param:
+                if node.orelse:
+                    self.bad = True
+                return None
+            return self.generic_visit(node)
+
+        def visit_Name(self, node):
+            if node.id == param:
+                self.bad = True
+            return node
+
+    fold = Fold()
+    spec = fold.visit(spec)
+    if fold.bad:
+        return False
+    for stmt in ast.walk(spec):
+        if isinstance(getattr(stmt, "body", None), list) and not stmt.body:
+            return False                     # an `if` emptied a block; not a plain removal
+    if ast.dump(_strip_docstrings(ast.Module(body=[spec], type_ignores=[]))) != \
+            ast.dump(_strip_docstrings(ast.Module(body=[copy.deepcopy(new_def)], type_ignores=[]))):
+        return False
+    for call in callers:
+        if any(k.arg == param or k.arg is None for k in call.keywords):
+            return False
+        if any(isinstance(a, ast.Starred) for a in call.args) or len(call.args) > len(new_names):
+            return False
+    return True
+
+
+def _calls_named(name, module):
+    """Every call that can reach `module`'s top-level function `name`, in the
+    tracked Python tree outside prose and evidence (`_is_inert`): a bare
+    `name(...)` in `module` itself or in a file that imports `name` from it,
+    and `<x>.name(...)` in any file that names the module's stem (an alias of
+    it may be `<x>`). A file that defines its own `name` and does not import
+    it calls its own. None in the list: a file that does not parse."""
+    stem = os.path.basename(module)[:-3]
+    out = []
+    for rel in sorted(f for f in tracked_files() if f.endswith(".py") and not _is_inert(f)):
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if name not in text:
+            continue
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            out.append(None)
+            continue
+        imports_it = any(isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[-1] == stem
+                         and any(a.name in (name, "*") for a in n.names) for n in ast.walk(tree))
+        bare = rel == module or imports_it
+        dotted = stem in text
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if (bare and getattr(node.func, "id", None) == name) or \
+                    (dotted and getattr(node.func, "attr", None) == name):
+                out.append(node)
+    return out
+
+
 NATIVE_INPUTS = {
     "packaging/portable_math/portable_math.c": "python/mojolearn/_portable_math.py",
     "packaging/portable_math/powers_of_ten.h": "python/mojolearn/_portable_math.py",
@@ -8267,6 +8882,11 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
             # BEFORE `unreachable`: stage.py is a Python file outside the
             # package that no lane imports, and it still decides the bits of a
             # library the package loads.
+            why_audit = audit_only_native_edit(ref, path) if ref else None
+            if why_audit:
+                inert.append(path)
+                reasons[path] = "a native input's audit: " + why_audit
+                continue
             native = native_input_lanes(path, rev)
             if native is not None:
                 lanes.update(native)
@@ -8284,6 +8904,11 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                                     "is compiled with and every lane runs under")
             continue
         if path in LINUX_SET_BUILDERS:
+            why_root = rootdir_only_builder_edit(ref, path) if ref else None
+            if why_root:
+                inert.append(path)
+                reasons[path] = "a Linux set builder, " + why_root
+                continue
             all_lanes_by_rule(path, "it builds or stages every binding of the Linux release sets the NVIDIA "
                                     "and AMD columns run")
             continue
@@ -8294,6 +8919,11 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
         if path in HARNESS_RUNTIME_IMPORTS:
             # BEFORE the test-module and unreachable rules: nothing a lane
             # reaches names it, and the harness still runs it on every column.
+            why_unrun = runtime_import_unreached(ref, path) if ref else None
+            if why_unrun:
+                inert.append(path)
+                reasons[path] = "a harness runtime import, " + why_unrun
+                continue
             all_lanes_by_rule(path, "imported by the harness while it records every column; what it writes "
                                     "there (degenerate_lanes) is derived over every lane")
             continue
@@ -8402,6 +9032,15 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                                     "every family); with no ref an addition cannot be read")
             continue
         hit = rev.get(path)
+        if hit and backend in DEVICE_BACKENDS and sources is lane_sources()[0]:
+            on_device = device_column_lanes(path, hit, backend)
+            if not on_device:
+                inert.append(path)
+                reasons[path] = (f"a CPU-only route on a {backend} column: every one of the {len(hit)} lane(s) "
+                                 "that compile it reaches it only through a host binding a GPU install never "
+                                 "loads (device_column_lanes)")
+                continue
+            hit = on_device
         if hit and ref and path.startswith("bindings" + os.sep) and path.endswith(".mojo"):
             added = binding_additions(ref, path)
             if added is not None:
