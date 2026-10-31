@@ -79,7 +79,7 @@ def test_an_open_unit_launches_the_leg(tmp_path, verified):
 def test_passes_of_other_runs_or_changed_devices_or_bad_trees_are_refused(tmp_path, verified):
     ctx, _ = controller(tmp_path, run_ids={"compile-amd/gfx942/a": "someone-else"})
     doc, why, retained = find(ctx, "hip-gfx942")
-    assert doc is None and retained and "not this leg's runs" in why
+    assert doc is None and retained and "not that unit's retained pass" in why
     ctx, _ = controller(tmp_path, prior=identity("hip", "gfx942", device="9" * 64))
     doc, why, retained = find(ctx, "hip-gfx942")
     assert doc is None and retained and "device binding identity differs" in why
@@ -193,3 +193,17 @@ def test_host_owner_origin_takes_a_whole_taken_owner_and_refuses_a_requirement_t
     ctx.admitted_leg = lambda n: dict(whole, kind="compile-requirements")
     with pytest.raises(release.StepFailed, match="compile requirements"):
         release.Release.host_owner_origin(ctx)
+
+
+def test_a_later_leg_that_began_only_the_changed_units_is_taken(tmp_path, verified):
+    """The 0.8.63 AMD leg: launched for all 79 units, began the 8 changed host
+    copies, compiled the rest under passes retained for the same inputs."""
+    ctx, _ = controller(tmp_path)
+    old = ctx.leg_candidates()[0][1]
+    old["compile_requirements"]["selected"] = sorted(old["compile_requirements"]["runs"])
+    del old["compile_requirements"]["runs"]["compile-amd/gfx942/a"]
+    doc, why, retained = find(ctx, "hip-gfx942")
+    assert doc, why
+    old["compile_requirements"]["selected"] = ["compile-amd/gfx942/b"]          # launched for other units
+    doc, why, retained = find(ctx, "hip-gfx942")
+    assert doc is None and "launched for other compile units" in why

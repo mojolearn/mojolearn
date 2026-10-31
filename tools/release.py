@@ -2027,8 +2027,9 @@ class Release:
             .belongs_to_leg) reads `reuse` in the readiness ledger: the same
             declared inputs (binding identity, builders, flags, toolchain,
             image, compiler) with verified retained evidence;
-          * that earlier leg's own launch began exactly those units, and the
-            retained passes are its runs (run ids and fingerprints equal);
+          * that earlier leg was launched for exactly those units, and every
+            unit it began is that unit's retained pass (the others it compiled
+            under passes retained for the same inputs); the newest such leg wins;
           * its device bindings' identities equal this freeze's (only host
             rows and the runtime digest may differ);
           * its tree verifies (exit 0, a complete proof of the commit it
@@ -2069,16 +2070,25 @@ class Release:
                           "bytes; it needs packer support and a refreeze"), True
         device = {k: v for k, v in ident["bindings"].items() if "/host/" not in k}
         why = []
-        for where, c in self.leg_candidates(name, vendor, arch, ident):
+        # newest launch first: the latest complete build of these units wins
+        for where, c in sorted(self.leg_candidates(name, vendor, arch, ident),
+                               key=lambda wc: str(wc[1].get("launched_at") or ""), reverse=True):
             if c.get("source_commit") == self.commit:
                 continue
-            runs = (c.get("compile_requirements") or {}).get("runs") or {}
-            if sorted(runs) != sorted(wanted):
-                why.append(f"{where}: it began other compile units")
+            # THE LEG WAS LAUNCHED FOR EXACTLY THESE UNITS (`selected`), and every
+            # unit it began (`runs`) is the retained pass of that unit. A unit it
+            # did not begin already had a retained pass for the same inputs when
+            # it launched (begin reuses an unchanged pass), and the leg compiled
+            # it with the rest of its set: its bytes are under the leg's proof.
+            launch = c.get("compile_requirements") or {}
+            runs = launch.get("runs") or {}
+            selected = launch.get("selected") or sorted(runs)
+            if sorted(selected) != sorted(wanted) or not set(runs) <= set(wanted):
+                why.append(f"{where}: it was launched for other compile units")
                 continue
             if any(runs[n].get("run_id") != passed[n] or runs[n].get("fingerprint") != wanted[n]["fingerprint"]
-                   for n in wanted):
-                why.append(f"{where}: the retained passes are not this leg's runs")
+                   for n in runs):
+                why.append(f"{where}: a unit it began is not that unit's retained pass")
                 continue
             prior = release_reuse.normalized_set_identity(c.get("set_identity"))
             if prior is None or {k: v for k, v in prior["bindings"].items() if "/host/" not in k} != device \
