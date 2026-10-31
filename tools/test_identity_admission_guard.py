@@ -453,3 +453,23 @@ def test_repository_inputs_keep_verifier_companions(tmp_path, preview):
         retained.with_name(launch.name).unlink()
         assert GUARD.repository_inputs(root,[column])==[retained]
         assert retained.with_name(launch.name).read_bytes()==launch.read_bytes()
+
+
+def test_retired_par_lanes_in_old_records_are_ignored_not_selected(tmp_path):
+    # Records taken before multi-GPU verification was retired (0.8.63) carry
+    # par-* cells, all REFUSED; admission ignores them rather than refusing.
+    record = tmp_path / "old.identical.json"
+    record.write_text(json.dumps({"cells": {"kmeans/base": {}, "par-kmeans/base": {"verdict": "REFUSED"},
+                                            "par-forest/ties": {"verdict": "REFUSED"}}}))
+    assert GUARD.selected_lanes([record]) == ["kmeans"]
+    assert GUARD.selected_lanes([record], "kmeans,par-kmeans") == ["kmeans"]
+    with pytest.raises(ValueError):
+        GUARD.selected_lanes([record], "par-kmeans")
+
+
+def test_guard_and_reference_agree_on_the_retired_prefixes():
+    import ast
+    tree = ast.parse((ROOT / "python/mojolearn/_verify_reference.py").read_text())
+    value = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
+                 and any(getattr(t, "id", None) == "RETIRED_LANE_PREFIXES" for t in node.targets))
+    assert value == GUARD.RETIRED_LANE_PREFIXES == ("par-",)

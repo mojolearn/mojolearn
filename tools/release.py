@@ -138,10 +138,15 @@ THE STEPS
                      MOJOLEARN_RELEASE_ADAPTERS=0 skips it
   linux-wait         every launched leg finished, its proof complete for this
                      commit, its route overlay verified on the box, and every
-                     host binding byte-identical across the legs (taken ones too)
+                     host binding byte-identical across the legs (taken ones too);
+                     a host byte mismatch with identical recorded inputs is
+                     composed from the host owner leg (release_reuse.HOST_LEG)
+                     by tools/release_host_composition.py into
+                     <commit12>/host-composition/, receipt in the state
   linux-assemble     the set directories the packer packs: a leg's set, a taken
                      leg's set, or one synthesized from the published wheel
   linux-pack         pixi run -e pkg pack-linux-wheel --profile release-split
+                     (--host-composition <receipt> when linux-wait composed)
                      (the core, the plugins and the Linux mojolearn), audit.sh,
                      strip, split_audit
   gpu-column-nvidia  } SKIPPED by default; with --gpu-smoke the NVIDIA and AMD wheel smokes AT ONCE (detached
@@ -850,6 +855,75 @@ def host_digest_mismatches(legs):
             table.setdefault(so.name, {})[leg.name] = sha256(so)
     return {name: row for name, row in table.items()
             if len(row) != len(legs) or len(set(row.values())) != 1}
+
+
+#: Where linux-wait writes a retained host composition (under the release dir).
+HOST_COMPOSITION_DIR = "host-composition"
+
+
+def host_owner_leg():
+    """The leg that owns the merged CPU host bindings (release_reuse.HOST_LEG)."""
+    return "%s-%s" % release_reuse.HOST_LEG
+
+
+def compose_host_mismatch(legs, mismatch, source_root, out_dir):
+    """THE HOST OWNER RULE FOR A HOST BYTE MISMATCH (0.8.63): the Mojo compiler's
+    host output can differ by build machine CPU with identical recorded inputs
+    (MOJOLEARN_LINUX_CPU=x86-64-v3 on every leg; the Modular ask is in
+    docs/MODULAR_ASKS.md). Instead of stopping, every set ships the owner leg's
+    retained host bytes through tools/release_host_composition.py, a witnessed
+    packaging choice that leaves every original proof untouched.
+
+    Strict: the owner leg must be one of `legs`; every mismatching file must be a
+    planned merged host file present on every leg; every leg's proof, capture,
+    cache witness, source closure, compiler, flags, index and runtime libraries
+    must agree (release_host_composition.validate_document); device artifacts must
+    still match each leg's own proof. Returns the record linux-wait keeps in the
+    release state; raises StepFailed otherwise."""
+    import release_host_composition as hc
+    owner = host_owner_leg()
+    by = {l.name: l for l in legs}
+    if owner not in by:
+        raise StepFailed(f"host bindings differ and the host owner leg {owner} is not among the built legs "
+                         f"({', '.join(sorted(by)) or 'none'}); nothing to compose from")
+    planned = set(hc.host_files())
+    stray = sorted(set(mismatch) - planned)
+    if stray:
+        raise StepFailed("differing files under host/ are not planned merged host bindings: " + ", ".join(stray))
+    absent = {n: sorted(set(by) - set(row)) for n, row in mismatch.items() if set(row) != set(by)}
+    if absent:
+        raise StepFailed("host bindings missing on a leg (a composition only replaces bytes, never fills gaps): "
+                         + "; ".join(f"{n}: {', '.join(m)}" for n, m in sorted(absent.items())))
+    owner_leg = by[owner]
+    selected = f"{owner_leg.vendor}/{owner_leg.arch}"
+    roots = [l.release_build / "build" for l in legs]
+    compiler = (read_json(owner_leg.release_build / "build" / "compile-inputs.json") or {}).get("compiler_sha256")
+    out_dir = Path(out_dir)
+    receipt = out_dir / "host-composition.json"
+    try:
+        if out_dir.exists():
+            # A rerun: the retained composition must still be this one, over these legs.
+            doc = read_json(receipt)
+            if not doc:
+                raise ValueError(f"{out_dir} exists without a readable host-composition.json; inspect and remove it")
+            hc.validate_document(doc)
+            if (doc.get("selected_leg") != selected or doc.get("expected_compiler_sha256") != compiler
+                    or sorted(s["proof"]["sha256"] for s in doc["sources"])
+                    != sorted(sha256(r / "build-provenance.json") for r in roots)):
+                raise ValueError(f"{receipt} composes other legs, compiler or owner; inspect and remove {out_dir}")
+            sets = {s["leg"]: out_dir / "sets" / s["leg"] for s in doc["sources"]}
+            hc.validate_assembly(doc, sets, [r / "build-provenance.json" for r in roots], source_root)
+        else:
+            doc = hc.prepare([str(r) for r in roots], selected, compiler, out_dir, source_root)
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        raise StepFailed(f"host bindings differ and the retained host composition from {owner} is refused: {exc}")
+    why = ("bytes differ with identical recorded source closure, compiler, flags and cache inputs on every leg "
+           "(build-machine-dependent host codegen); the host owner leg's retained bytes ship in every set")
+    return dict(receipt=str(receipt), receipt_sha256=sha256(receipt), sets=str(out_dir / "sets"),
+                selected_leg=selected, owner=owner, host_contract_sha256=doc["host_contract_sha256"],
+                taken={n: dict(from_leg=owner, sha256=row[owner], legs=dict(sorted(row.items())))
+                       for n, row in sorted(mismatch.items())},
+                why=why, at=now())
 
 
 # ---------------------------------------------------------------- the pipelines
@@ -2141,15 +2215,43 @@ class Release:
             raise StepFailed("build leg(s) failed: " + ", ".join(bad)
                              + ". Inspect retained evidence; repair or reconcile before another build.")
         mismatch = host_digest_mismatches(legs + taken)
+        composition = None
         if mismatch:
             lines = [f"{name}: " + ", ".join(f"{leg}={d[:12]}" for leg, d in row.items())
                      for name, row in sorted(mismatch.items())]
-            raise StepFailed("host bindings differ across legs (pack_wheel.py would refuse):\n  "
-                             + "\n  ".join(lines[:12]))
+            if taken:
+                raise StepFailed("host bindings differ across legs and a leg is taken from an earlier freeze "
+                                 "(a host composition needs every leg's original build):\n  " + "\n  ".join(lines[:12]))
+            self.say("  host bindings differ across legs:\n    " + "\n    ".join(lines[:12]))
+            composition = compose_host_mismatch(legs, mismatch, self.src, self.rel / HOST_COMPOSITION_DIR)
+            for name, row in composition["taken"].items():
+                self.say(f"  {name}: taken from {row['from_leg']} ({row['sha256'][:12]}) for every set: "
+                         + composition["why"])
+            self.say(f"  host composition receipt {composition['receipt']} sha256 {composition['receipt_sha256']}")
+        with self._lock:
+            if composition:
+                self.state["host_composition"] = composition
+            else:
+                self.state.pop("host_composition", None)
+            self.save()
         for l in legs:
             self.record_leg(l)
+        if composition:
+            return ("all legs built; host bindings composed from " + composition["owner"] + " ("
+                    + ", ".join(composition["taken"]) + " differed; receipt " + composition["receipt"] + ")")
         return ("all legs built; host bindings byte-identical across " + ", ".join(l.name for l in legs + taken)
                 + (f" ({', '.join(l.name for l in taken)} taken from an earlier freeze)" if taken else ""))
+
+    def host_composition(self):
+        """linux-wait's retained host composition record, or None. Its receipt
+        must still be the bytes linux-wait recorded."""
+        rec = self.state.get("host_composition")
+        if not rec:
+            return None
+        receipt = Path(rec["receipt"])
+        if not receipt.is_file() or sha256(receipt) != rec.get("receipt_sha256"):
+            raise StepFailed(f"the host composition receipt {receipt} is missing or changed; --redo linux-wait")
+        return rec
 
     def record_leg(self, leg):
         """A leg that built, in the PASS ledger, keyed by what it built."""
@@ -2218,7 +2320,17 @@ class Release:
                 and sorted(d.get("taken") or []) == sorted(self.admitted_legs()))
 
     def step_linux_assemble(self):
+        composition = self.host_composition()
+        if composition and self.assembly_needed():
+            # release_host_composition.validate_assembly binds each packed set to
+            # its original manifest and proof; a reuse assembly replaces both.
+            raise StepFailed("the host bindings are composed from " + composition["owner"]
+                             + " and the plan reuses Linux bytes from a published wheel or an earlier freeze; "
+                             "a retained host composition packs only this freeze's own legs")
         if not self.assembly_needed():
+            if composition:
+                return ("not needed: every Linux binding is built by the legs; the host set of every leg is "
+                        + composition["owner"] + "'s, composed in " + composition["sets"])
             return "not needed: every Linux binding is built by the legs"
         if self.assembled_ok():
             return "have " + str(self.assembled_marker().parent)
@@ -2263,6 +2375,13 @@ class Release:
             sets = sorted({base / vendor for vendor, _ in release_reuse.LINUX_SETS})
             manifests = [base / vendor / arch / "manifest.json" for vendor, arch in release_reuse.LINUX_SETS]
             return sets, proofs, manifests
+        composition = self.host_composition()
+        if composition:
+            # every leg's set with the owner leg's host bytes; the proofs stay the originals
+            base = Path(composition["sets"])
+            sets = sorted({base / leg.vendor for leg in legs})
+            manifests = [base / leg.vendor / leg.arch / "manifest.json" for leg in legs]
+            return sets, proofs, manifests
         sets = [leg.release_build / "build" / "sets" / leg.vendor for leg in legs]
         manifests = [leg.release_build / "build" / "sets" / leg.vendor / leg.arch / "manifest.json" for leg in legs]
         return sets, proofs, manifests
@@ -2287,6 +2406,16 @@ class Release:
             args += ["--set", s_]
         for p_ in proofs:
             args += ["--build-proof", p_]
+        composition = None if self.dry else self.host_composition()
+        pack_cwd = src
+        if composition:
+            # The receipt is validated by this tooling's release_host_composition.py
+            # (the frozen source's copy may predate the receipt it reads), so the
+            # tooling checkout packs, reading the shipped source from the frozen one.
+            args += ["--host-composition", composition["receipt"], "--source-root", src]
+            pack_cwd = ROOT
+            self.say("  packing with the retained host composition " + composition["receipt"]
+                     + " (host bindings from " + composition["owner"] + ")")
         # THE FRAMEWORK ADAPTERS ship with every native set (packaging/adapters/);
         # MOJOLEARN_RELEASE_ADAPTERS=0 releases none, legs and pack alike.
         if os.environ.get("MOJOLEARN_RELEASE_ADAPTERS", "1") != "0":
@@ -2295,7 +2424,7 @@ class Release:
         # the vendor wheel's README says which native set ships unsmoked (no Hopper box held)
         unsmoked = sorted(self.smoke_notes("nvidia"))
         self.must(args, env=dict(MOJOLEARN_RELEASE_UNSMOKED_ARCHES=",".join(unsmoked)) if unsmoked else None,
-                  log=self.rel / "linux-pack.log", what="pack_wheel.py", cwd=src)
+                  log=self.rel / "linux-pack.log", what="pack_wheel.py", cwd=pack_cwd)
         final_dir = dist / "final"
         if not self.dry:
             final_dir.mkdir(parents=True, exist_ok=True)

@@ -201,6 +201,33 @@
   compatible driver. Record actual GPU/driver and the selected PTX route;
   executing a native architecture image does not qualify the PTX route.
 
+## Reuse good old runs, automatically (Andrew, 2026-10-31)
+
+"RE USE GOOD OLD RUNS. The CODE should be structured so good old runs are not
+rerun; it should be AUTO in the code, NOT MANUAL."
+
+- `tools/record_identity_column.sh` reuses by default. With no `LANES`, `SHARD`,
+  `ONLY_CHANGED` or `FULL`, it records only the lanes whose source closure
+  (`tools/lane_select.py`, the column's backend) changed since the newest good
+  evidence of the column's own device class: the admitted table's rows, every
+  admissible record under `bench/results/identity_break/` (including
+  `retained/`), the output directory, and `MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2`.
+  It prints `REUSED n / RECORD m`, or `NOTHING-CHANGED` and exits 0.
+- `FULL=1` is the only way to re-record lanes whose closure did not change. Do
+  not pass it, or an explicit full `LANES` list, to get around reuse; name the
+  invalidated evidence when you do use it.
+- A lane whose newest result is not good and whose closure has not changed is
+  reported `KNOWN-BAD` and not re-run: fix the code, then it is recorded.
+- Admission (`tools/admit_identity_columns.sh`) accepts a table assembled from
+  reused older records plus new records of the changed lanes. Every lane an
+  older incoming record carries is superseded by a newer record of its class or
+  has an unchanged closure (`identity_columns.py reuse-check`). Cross-vendor bit
+  agreement is still checked in full.
+- Ledger launches (`tools/release_identity_run.py`, `tools/release.py`) reuse
+  unchanged PASS units on their own. A forced rerun needs `--redo --rerun-reason`.
+- New tools that launch identity work reuse by default in the same way. A full
+  rerun must be explicit in code (a named flag), never the silent default.
+
 ## Results leave the box (Andrew, 2026-10-18)
 
 Every run on a rented box keeps its logs and results on the Mac and in R2, not only on the box.

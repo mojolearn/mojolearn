@@ -26,7 +26,7 @@ def write(path, value):
     return path
 
 
-def build(root, vendor, arch, body, source):
+def build(root, vendor, arch, body, source, rootdir=None, linux_cpu='x86-64-v3'):
     leg = vendor + '/' + arch
     setdir = root / 'sets' / leg
     hosts = {f: setdir / 'host' / f for f in HOST_FILES}
@@ -62,10 +62,11 @@ def build(root, vendor, arch, body, source):
     write(setdir / 'manifest.json', manifest)
     cache_keys = {}
     for f in HOST_FILES:
-        key = dict(schema='mojolearn-bincache-v1', script='bindings/merged_build.sh', args=['host', '--group', f[:-3]],
+        key = dict(schema='mojolearn-bincache-v1', script='bindings/merged_build.sh',
+            args=['host', '--group', f[:-3]] + (['--rootdir', rootdir] if rootdir else []),
             target_column='cpu', numeric_mode='identical', device_arch='none', gpu_archs='',
             build_env={'MOJOLEARN_TARGET_COLUMN': 'cpu', 'MOJOLEARN_COMPILE_JOBS': '2',
-                       'MOJOLEARN_LINUX_CPU': 'x86-64-v3', 'MOJOLEARN_CUDA_CODE_FORMAT': 'ptx' if arch == 'sm_80' else 'native'})
+                       'MOJOLEARN_LINUX_CPU': linux_cpu, 'MOJOLEARN_CUDA_CODE_FORMAT': 'ptx' if arch == 'sm_80' else 'native'})
         cache_keys[f] = hc.digest(key)
         write(root / 'bincache/keys' / (cache_keys[f] + '.json'), key)
     prefix = 'mojolearn/' + leg + '/'
@@ -306,3 +307,120 @@ def test_restored_shard_requires_successful_matching_original_compilation(tmp_pa
     bad=copy.deepcopy(source);bad.pop('host_shard_origins')
     with pytest.raises(ValueError,match='receipt'):
         hc._record(bad,COMPILER)
+
+
+# ---------------------------------------------------------------- the 0.8.63 fixed root
+def _source(tmp_path):
+    source = tmp_path / 'source'
+    source.mkdir()
+    (source / 'sample.mojo').write_text('fixture source\n')
+    for name in hc.HOST_FORMAT_SOURCES:
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('# fixed host compiler fixture\n')
+    return source
+
+
+LEGS = (('cuda', 'sm_89'), ('hip', 'gfx942'), ('cuda', 'sm_80'))
+
+
+def test_fixed_generated_root_directory_is_an_accepted_host_invocation(tmp_path):
+    source = _source(tmp_path)
+    builds = [build(tmp_path / str(i), v, a, b'host-' + a.encode(), source, rootdir='/tmp/mojolearn-merged-roots/host')
+              for i, (v, a) in enumerate(LEGS)]
+    doc = hc.prepare(builds, 'cuda/sm_89', COMPILER, None, source)
+    assert doc['selected_leg'] == 'cuda/sm_89'
+
+
+def test_a_different_generated_root_directory_is_a_different_contract(tmp_path):
+    source = _source(tmp_path)
+    builds = [build(tmp_path / str(i), v, a, b'host-' + a.encode(), source,
+                    rootdir='/tmp/roots-' + (a if a == 'sm_80' else 'x'))
+              for i, (v, a) in enumerate(LEGS)]
+    with pytest.raises(ValueError, match='contract differs'):
+        hc.prepare(builds, 'cuda/sm_89', COMPILER, None, source)
+
+
+def test_a_relative_or_extra_argument_is_not_a_host_invocation(tmp_path):
+    source = _source(tmp_path)
+    builds = [build(tmp_path / str(i), v, a, b'host-' + a.encode(), source, rootdir='relative/root')
+              for i, (v, a) in enumerate(LEGS)]
+    with pytest.raises(ValueError, match='Cache witness'):
+        hc.prepare(builds, 'cuda/sm_89', COMPILER, None, source)
+
+
+# ---------------------------------------------------------------- release.py's linux-wait composition
+class _Leg:
+    """The fields of release.Leg compose_host_mismatch reads."""
+    def __init__(self, base, vendor, arch):
+        self.name, self.vendor, self.arch = f'{vendor}-{arch}', vendor, arch
+        self.release_build = base / self.name / 'release-build'
+
+
+def _release_legs(tmp_path, legs=LEGS, **kw):
+    source = _source(tmp_path)
+    out = []
+    for vendor, arch in legs:
+        leg = _Leg(tmp_path / 'legs', vendor, arch)
+        body = b'host-owner' if arch != 'sm_80' else b'host-other-cpu'
+        build(leg.release_build / 'build', vendor, arch, body, source,
+              rootdir='/tmp/mojolearn-merged-roots/host', **(kw if arch == 'sm_80' else {}))
+        out.append(leg)
+    return source, out
+
+
+def _release():
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import release
+    return release
+
+
+def test_linux_wait_composes_a_host_mismatch_from_the_owner_leg(tmp_path):
+    release = _release()
+    source, legs = _release_legs(tmp_path)
+    mismatch = release.host_digest_mismatches(legs)
+    assert set(mismatch) == set(HOST_FILES)
+    rec = release.compose_host_mismatch(legs, mismatch, source, tmp_path / 'comp')
+    assert rec['owner'] == 'cuda-sm_89' and rec['selected_leg'] == 'cuda/sm_89'
+    owner = legs[0].release_build / 'build/sets/cuda/sm_89/host'
+    for f, row in rec['taken'].items():
+        assert row['from_leg'] == 'cuda-sm_89' and row['sha256'] == hc.file_sha(owner / f)
+        for vendor, arch in LEGS:
+            assert hc.file_sha(tmp_path / 'comp/sets' / vendor / arch / 'host' / f) == row['sha256']
+    assert hc.file_sha(Path(rec['receipt'])) == rec['receipt_sha256']
+    # a rerun keeps the retained composition when it is still the same one
+    again = release.compose_host_mismatch(legs, mismatch, source, tmp_path / 'comp')
+    assert again['receipt_sha256'] == rec['receipt_sha256']
+    # a device binding changed after composing is refused, never re-composed
+    device = tmp_path / 'comp/sets/hip/gfx942/identical' / DEVICE_FILES[0]
+    device.write_bytes(b'tampered')
+    with pytest.raises(release.StepFailed, match='Device artifact changed'):
+        release.compose_host_mismatch(legs, mismatch, source, tmp_path / 'comp')
+
+
+def test_linux_wait_refuses_without_the_owner_leg(tmp_path):
+    release = _release()
+    source, legs = _release_legs(tmp_path, legs=(('hip', 'gfx942'), ('cuda', 'sm_80')))
+    with pytest.raises(release.StepFailed, match='host owner leg cuda-sm_89'):
+        release.compose_host_mismatch(legs, release.host_digest_mismatches(legs), source, tmp_path / 'comp')
+    assert not (tmp_path / 'comp').exists()
+
+
+def test_linux_wait_refuses_a_mismatch_whose_recorded_flags_differ(tmp_path):
+    release = _release()
+    source, legs = _release_legs(tmp_path, linux_cpu='x86-64-v4')
+    with pytest.raises(release.StepFailed, match='refused'):
+        release.compose_host_mismatch(legs, release.host_digest_mismatches(legs), source, tmp_path / 'comp')
+    assert not (tmp_path / 'comp').exists()
+
+
+def test_linux_wait_refuses_a_non_host_or_missing_file(tmp_path):
+    release = _release()
+    source, legs = _release_legs(tmp_path)
+    mismatch = release.host_digest_mismatches(legs)
+    with pytest.raises(release.StepFailed, match='not planned merged host'):
+        release.compose_host_mismatch(legs, dict(mismatch, **{'_stray.so': {'cuda-sm_89': 'a'}}), source, tmp_path / 'c1')
+    first = HOST_FILES[0]
+    short = dict(mismatch, **{first: {k: v for k, v in mismatch[first].items() if k != 'cuda-sm_80'}})
+    with pytest.raises(release.StepFailed, match='missing on a leg'):
+        release.compose_host_mismatch(legs, short, source, tmp_path / 'c2')

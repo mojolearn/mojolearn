@@ -203,3 +203,29 @@ in a pipe read (no spin) while workers fit; each worker's host loops get `MOJOLE
 budget (min of affinity, cgroup quota, an explicit MOJOLEARN_CPU_THREADS) divided by the worker count
 (`_parallel_pool.effective_cpu_budget` / `worker_cpu_threads`). That bounds our own host splits; the Mojo runtime's
 own worker count stays the runtime's until Modular ships the knob.
+
+## Host shared-library bytes depend on the build machine's CPU despite an explicit `--target-cpu x86-64-v3` (2026-10-31, release-host-owner)
+
+**What we see.** Release 0.8.63 (source 6b2e4bc320, mojo-1.0.0 / max-core-26.5.0, the same pixi lock and the same
+container image on every leg) compiles each merged CPU host shared library with `mojo build --target-cpu x86-64-v3`
+(`bindings/merged_build.sh host --group <stem> --rootdir /tmp/mojolearn-merged-roots/host`) on three GitHub
+ubuntu-24.04 runners. The recorded inputs (source closure digest, compiler bytes, flags, environment except a
+CUDA-only staging variable no host command reads) are identical on all three. Four of the five host libraries come
+out byte-identical. `_mojolearn_native_neural_host.so` does not: the runners on AMD EPYC 9V45 and EPYC 9V74 produce
+848fbdb544dd..., the runner on AMD EPYC 7763 produces b02d72c83e8e... The files are the same size and have the same
+strings. 27,354 bytes differ. The bytes follow the machine that compiled them, not the requested target.
+
+**Need.** For an explicit `--target-cpu`, the host code (and any cost model, tuning or feature detection behind it)
+should depend only on the requested target and the inputs, never on the build machine's CPU (its `cpuid`,
+microarchitecture or core count). If some pass reads host properties, document it and add a flag to turn it off.
+Byte-reproducible builds across machines are how we prove a release's host bindings are the same as the ones we
+tested.
+
+**Where.** Every Linux release build: the host bindings ship once in `mojolearn-core`, and the release proves that
+every build leg produced them.
+
+**Meanwhile.** `tools/release.py` linux-wait passes a host byte mismatch with identical recorded inputs to
+`tools/release_host_composition.py`, which ships the host owner leg's (cuda/sm_89) retained bytes in every set under
+a witnessed receipt. Any difference in source, compiler or flags is still refused. Evidence:
+`~/mojolearn-evidence/release/0.8.63/6b2e4bc3208d/legs/<leg>/GHA/shards/6/box.txt` (runner CPU) and
+`.../release-build/build/compile-inputs.json` (recorded inputs).

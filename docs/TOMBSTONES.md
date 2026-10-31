@@ -401,6 +401,7 @@ in the tables after the sections.
 | GPU oracle multi-dimensional host walk (no define) | Trees | removed (host loops on the GPU path) | 2026-10-17 | [GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch](../experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch) |
 | [`MOJOLEARN_AUTOGRAD_TRANSFORMER`](#mojolearn_autograd_transformer) | Neural | PROMOTED (hand arm deleted) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch) |
 | [`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`](#mojolearn_idn_mamba1_chunked_scan) | Neural | REJECTED (breaks decode==prefill) | 2026-10-28 | none (recoverable at lane/mamba-folds@db803a1337) |
+| [`MOJOLEARN_PAR_VERIFY`](#mojolearn_par_verify) | Verification (multi-GPU: par-* identity lanes, `verify --par`, multi-gpu release rows) | retired (owner decision) | 2026-10-31 | [MOJOLEARN_PAR_VERIFY.patch](../experiments/removed/MOJOLEARN_PAR_VERIFY.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3706,3 +3707,48 @@ public runtime qualification; this entry is not release or performance evidence.
   chunk's state across decode calls (the chunk-entry state, the running `(P, Lc)` and the position within the chunk), as the
   Mamba-2 decode carries its open chunk (DEVIATION 786). Then a decode step and a prefill fold every token identically, and
   decode == prefill holds by construction. That changes the decode state the bindings carry, so it is a state-ABI change.
+
+## MOJOLEARN_PAR_VERIFY
+
+- **What it was** (not a `-D` define: the name labels this retirement): multi-GPU VERIFICATION. The 59 `par-*` identity
+  lanes in `tools/identity_break.py` held each multi-GPU driver (`parallel_classical`, `parallel_ensemble`,
+  `parallel_neighbors`, `parallel_neighbors_reference`, `parallel_graph`, `parallel_preprocessing`, `parallel_ivf`,
+  `parallel_gaussian_process`, `parallel_model_selection`, the byte-LM pool/offload trainers, `ParallelNeuralTrainer`,
+  `ParallelCausalLM`) to its plain one-device fit; `python -m mojolearn verify --par` (with `--par-devices` and
+  `--par-self-test`) ran their two-device column on the user's box under a placement witness; the `lq ID` lane check ran the
+  same device axis (`tools/par_witness_arm.py`); the release ledger carried optional `multi-gpu-nvidia` and
+  `multi-gpu-amd` rows filled by `tools/release_multi_gpu_parallel.py`.
+- **Files**: removed `python/mojolearn/_verify_par.py`, `python/mojolearn/tests/test_verify_par.py`,
+  `python/mojolearn/tests/test_verify_worker_parallel_forest.py`, `tools/release_multi_gpu_parallel.py`,
+  `tools/release_physical_verifier_unit.py` (+ test), `tools/par_witness_arm.py`, `tools/test_algos_lane_check_par.py`,
+  `tools/crossvendor_coverage.py`, `tools/audit_parallel_coverage.py` (+ `tools/tests/test_crossvendor_coverage.py`),
+  `tools/par_harness/`, `tools/par_gmm_qualification/`, `tools/test_parallel_saved_models_runtime.py`,
+  `docs/parallel-crossvendor-coverage.md`, `docs/PAR_GMM_CANDIDATE_WORKFLOW.md`. Edited: `tools/identity_break.py` (the 59
+  lanes, their batch/batchgrad/ragged/stepfull declarations, revisions and par-only helpers), `tools/lane_applicability.py`
+  (selfcheck), `python/mojolearn/host_surface.py` and `_verification_catalog.py` (par lane declarations),
+  `python/mojolearn/__main__.py` and `_verify_all.py` (`--par`), `python/mojolearn/_verify_reference.py` and
+  `tools/identity_admission_guard.py` (`RETIRED_LANE_PREFIXES`: admission ignores par-* cells of older records),
+  `tools/algos_lane_check.py` (device axis), `tools/release_requirements.json`, `tools/release_installed_evidence.py`,
+  `tools/release_ledger_admission.py`, `tools/release_requirement_receipts.py`, `tools/release_requirement_dependencies.py`,
+  `tools/identity_lanes/coverage_declared.tsv` and `coverage_sabotage.tsv` (eight par-only arms dropped),
+  `tools/lane_select_reviewed.json`, `docs/VERIFY.md`, `docs/RELEASE_CHECKLIST.md`, and the tests naming par lanes.
+- **Verdict**: RETIRED. Owner retired multi-GPU verification 2026-10-31; not a release gate (the two ledger rows were
+  `required: false`), excluded from the reference (`RECORD_EXCLUDED_PREFIXES`), every 0.8.63 column REFUSED all 18 par-*
+  lanes. No NVIDIA/AMD ratio applies (a verification feature, not a speed experiment); quality: no change. The multi-GPU
+  product features stay in the tree and stay out of the public docs (`docs-site/api_exclude.txt`).
+- **Run ids**: none (no A/B; the 0.8.63 identity columns are the evidence of the REFUSED par cells).
+- **Recoverable**: `868702642c^` (= main `6b2e4bc320`); deleted by `868702642c` (harness lanes and admission),
+  `b5f27e18a6` (ledger rows and producers) and `a417309926` (`verify --par` and the device-axis tooling) on
+  lane/retire-multi-gpu-verify, markers named in the following commit.
+- **Patch**: `experiments/removed/MOJOLEARN_PAR_VERIFY.patch`, the reverse of the lane's commits (the three deletions, the
+  marker commit and two test/allowlist follow-ups) over every changed `.py`, `.sh`, `.json`, `.tsv` and `.patch` file
+  outside `docs/` (`git diff <lane head> 6b2e4bc320 -- <files>`); `git apply` restores the code on the lane head,
+  `git apply -3` once main has moved.
+- **Guard / records**: no `core/six_lane_experiment_guards.mojo` refusal and no `grid_controls/*.json` entry: this was a
+  verifier feature, not a `-D` define, and the lane makes no `.mojo` change. No `docs/apple-fast/EXPERIMENTS.md` row for the
+  same reason. `verify --par`, `--par-devices` and `--par-self-test` are unknown options (argparse exit 2).
+- **Left in the tree**: the native `device_plan_log` export (its only reader was the `--par` witness; removing it is a
+  `.mojo` change), `_verify_reference.admit(par_axis=...)` (still called by `tools/verification_matrix.py`), the
+  historical box legs that mention par lanes (`tools/two_device_par_class_amd_leg.sh`, `tools/gap_column_leg.sh`,
+  `tools/par_lm_xvendor*.py`/`.sh`), and the 531 par-* cells of the shipped reference table (preserved history; the
+  admission guard refuses edits to unselected rows, and no harness lane reads them).

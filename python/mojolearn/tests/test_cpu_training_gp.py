@@ -59,7 +59,6 @@ def test_manifest_declares_the_gp_family():
     # (tests/test_gpc_surface.py).
     assert fam["training_lanes"] == LANES + ("gp-normalize-y", "gpc", "gpc-multiclass",
         "gp-sample-y", "gp-sample-y-normalize", "gp-optimize", "gp-optimize-restarts",
-        "par-gpc-fit", "par-gpc-predict",
         # lane verify-gaps-20261022: the log marginal likelihood at a given theta
         "gp-lml-theta")
     for module in (GP_ORACLE, CHOL_ORACLE):

@@ -50,8 +50,6 @@ Adapters (``--adapter``):
                           --json audit   (--producer audit=)
   installed-runtime       runtime-<vendor> from tools/release_runtime_installed.py
                           (--producer report=DIR/runtime-report.json)
-  multi-gpu               multi-gpu-<vendor> from tools/release_multi_gpu_parallel.py
-                          (--producer report=DIR/multi-gpu-report.json)
   published-install       published-<vendor> (post stage) from tools/release_published_install.py
                           (--producer report=DIR/published-report.json)
 """
@@ -90,7 +88,6 @@ ADAPTERS = {
     "apple-gate-adapters": ("release_adapter_evidence", "adapters"),
     "coverage-source": ("release_coverage_source_evidence", "source"),
     "installed-runtime": ("release_installed_evidence", "runtime"),
-    "multi-gpu": ("release_installed_evidence", "multi"),
     "published-install": ("release_installed_evidence", "published"),
 }
 REPORT_TYPES = {"compile": "build", "source": "source"}

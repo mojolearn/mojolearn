@@ -30,12 +30,6 @@ def test_pending_selection_runs_declared_cpu_shards_without_admitting_gpu_only_d
         assert exposure[lane]["status"] in (surface.LANE_OWED, surface.LANE_NOT_APPLICABLE,
                                             surface.LANE_HELD)
     assert set(va.host_surface().PUBLIC_REFERENCE_CANDIDATES) <= set(broad)
-    for lane in ('par-scaler-minmax', 'par-queries-nn', 'par-forest-et-clf', 'par-forest-reg'):
-        assert lane in broad and lane not in normal
-        assert va.select_lanes(h, table, 'cpu', 'full', [lane], True)[0] == [lane]
-    assert 'par-gram' not in broad
-    with pytest.raises(ValueError, match='does not run'):
-        va.select_lanes(h, table, 'cpu', 'full', ['par-gram'], True)
 
 
 def test_stale_reference_cannot_hide_a_local_failure_or_claim_a_false_match():
@@ -61,10 +55,7 @@ def test_saved_model_entries_have_installed_commands_and_parallel_scope_is_expli
         assert check['status'] == 'available'
         assert check['command'] == 'verify --models-only' and check['run_by_default']
         assert check['models']
-    execution = r['lanes']['par-scaler-minmax']['execution']
-    assert execution['cpu_logical_shards'] and not execution['requires_gpu_for_execution']
-    assert not execution['physical_multi_gpu_measured_by_cpu']
-    assert r['lanes']['par-gram']['execution']['requires_gpu_for_execution']
+    assert not any(name.startswith('par-') for name in r['lanes'])
     assert not any(row['release_qualified'] for row in r['lanes'].values())
 
 

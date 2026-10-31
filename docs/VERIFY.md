@@ -172,13 +172,13 @@ requires equal values.
   reporting divergences that are not arithmetic.
 - **On a GPU install** every applicable lane in the selected profile runs (one per public estimator, plus one
   per constructor value that selects a different numeric path, the linalg
-  and metrics functions, and the multi-GPU drivers on one device).
+  and metrics functions).
 - **On a CPU-only install** the public CPU reference lanes run
   (`host_surface.public_reference_lanes()`; use `--coverage` for the current count), fitted inside the
   verifier's reference scope. The list is DERIVED, not hand-written: every
   lane with a CPU training path that a release record covers and the shipped
-  table carries a reference for, less the `par-*` multi-GPU drivers and the
-  lanes held in `PUBLIC_PENDING_LANES` with a stated reason. They cover the
+  table carries a reference for, less the lanes held in `PUBLIC_PENDING_LANES`
+  with a stated reason. They cover the
   gradient boosting and random forest and Extra Trees fits, k-means and its
   starts, the k-NN, radius and kernel-density variants, DBSCAN, the linear,
   ridge, logistic and decomposition lanes, SVC, SVR and the isolation forest,
@@ -221,7 +221,7 @@ harness, and gives each lane a state and a sentence:
 | DIVERGENT | its bits differ from the reference | **yes** |
 | REFUSED | a part raised, so it did not run | **yes** |
 | OWED | no committed record carries a hash for a part of it | no |
-| NOT APPLICABLE | no run on this box could ever state its claim. The 59 `par-*` drivers claim a two-device column hashes equal to the one-device column cell for cell, and `verify` is a one-device run; and a handful of lanes refuse by name on a CPU-only install | no |
+| NOT APPLICABLE | no run on this box could ever state its claim: a handful of lanes refuse by name on a CPU-only install | no |
 | HELD | its comparison is blocked by a named condition | no |
 | NOT RUN | this run did not select it, or its fixture moved past the shipped reference | no |
 | UNDECLARED | nothing in the manifest says anything about it. This is a bug, and `tools/lane_accounting.py` fails on it | no |
@@ -235,8 +235,7 @@ you. That is the same rule the part level has always followed: a part declared
 `n/a:no-backward` has never made a run INCOMPLETE.
 
 **`--smoke` is a looser tier, not a weaker one.** For a lane whose real claim
-needs hardware you do not have — the 59 `par-*` drivers claim two devices hash
-equal to one — it fits the lane **twice, in full**, and reports whether it
+needs hardware you do not have, it fits the lane **twice, in full**, and reports whether it
 ran, kept its shape, stayed finite and produced the same bits both times. Two
 full fits, never two probes of one fit: a second probe re-reads the same
 arrays and cannot fail, and a cheap check that cannot fail is worse than none.
@@ -244,9 +243,8 @@ It is off by default because two full fits is real work, and it skips lanes
 the run already executed, so on a GPU install it costs nothing.
 
 **A run that checked nothing is still not a pass.** If a run's whole scope is
-NOT APPLICABLE it exits 4 with CANNOT RUN, even though every cell part it
-produced read IDENTICAL, because a one-device `par-*` column is compared
-against itself and passes whatever the code does.
+NOT APPLICABLE it exits 4 with CANNOT RUN: nothing it ran could state its
+claim, so nothing was checked.
 
 **The verdict carries its own scope**, which is what keeps a looser gate
 honest. Nobody should have to open the JSON to learn that a quarter of the run
@@ -428,9 +426,6 @@ you can CHECK and changed nothing about what the library will train for you.
 | `--reference-table PATH` | compare against another table |
 | `--self-test` | show that this verifier can fail (below) |
 | `--cross-check [quick\|default\|all]` | compare your GPU against your CPU (below) |
-| `--par [quick\|default\|all]` | run your two-device column once and compare it with the recorded one-device values (below) |
-| `--par-devices 0,1` | with `--par`: which devices the second column runs on |
-| `--par-self-test` | show that `--par` can fail |
 | `--json-out PATH` | with `--all`: also write the evidence document to PATH |
 
 The default sweep does not run performance benchmarks. It uses one fixed
@@ -440,7 +435,7 @@ a 120-second per-cell limit. `--full` adds the numerical edge-case fixtures;
 reference fixture inputs retain their historical sizes, so this change reduces
 fixture multiplicity without changing any expected hashes.
 
-The four checks answer different questions, and are worth more together than
+The three checks answer different questions, and are worth more together than
 separately:
 
 1. **`--cross-check`**, your GPU against your CPU. Trusts nobody: you generated
@@ -449,93 +444,8 @@ separately:
    which is auditable because the raw columns are committed under
    `bench/results/identity_break/` and the document names the exact file and
    commit each reference came from.
-3. **`--par`**, your two-device column against your one-device column, for the
-   59 `par-*` multi-device driver lanes. Trusts nobody for the same reason
-   `--cross-check` does not, and it is the only command that states the
-   drivers' claim at all: every `par-*` cell in the recorded table is a
-   ONE-device run, so `--all` cannot ask this question.
-4. **`--self-test`** and **`--par-self-test`**, which show the comparisons can
-   fail at all. Without them the first three are checks nobody has watched
-   fail.
-
-## Your two devices against your one device
-
-A `par-*` lane is a multi-device DRIVER: it cuts one fit or one query into
-shards, sends each shard to its own device, and merges the results. Its whole
-claim, in `identity_break._par_devices`, is that the two-device column hashes
-equal to the one-device column cell for cell. Sharding must not move a bit.
-
-That claim is not in any release record. `identity_break.RECORD_EXCLUDED_PREFIXES`
-keeps `par-*` out of a full column, and every `par-*` reference in the shipped
-table is a one-device run, so `verify --all` compares one device against one
-device and passes whatever the sharding does.
-
-```sh
-python -m mojolearn verify --par                  # all 59 par-* lanes, base fixture
-python -m mojolearn verify --par quick            # one lane per family
-python -m mojolearn verify --par --lanes par-queries-nn --fixtures base,ties
-python -m mojolearn verify --par-devices 2,3      # another pair
-```
-
-**Which scope to run.** `--par quick` is the two-physical-GPU check: one lane
-per family on one device and on two, with the placement witness, in under a
-minute of lane time. Run it, with `--par-self-test`, on every routine run and
-every rented box. **Never run `--par all` without the maintainer's express
-permission.** It is every lane on all nine fixtures: measured on two RTX 4090s
-on 2026-09-20, when each lane still ran twice, at about 16 minutes per fixture
-and 2.4 hours in all, with `par-resample` alone taking about 300 s of each
-fixture. The default scope (every lane, base fixture) also needs a reason.
-
-It runs each lane ONCE, with `MOJOLEARN_PAR_DEVICES=0,1`, and compares the
-result with the one-device values the shipped reference table already records
-for that lane on your vendor class. Fitting the one-device column again on
-your box bought nothing and doubled the run, so it is gone.
-
-**A column that never sharded is refused, not passed.** If a driver silently
-falls back to one device, both columns agree instantly and a naive command
-would print a confident pass over nothing. So every device pool the two-device
-column starts is inventoried through the driver, each worker is required to
-resolve to its own process and its own physical GPU by UUID and PCI id, and a
-run in which no pool started at all is reported as CANNOT RUN with that
-sentence.
-
-The byte-level language-model drivers start no pool: they hand their device
-list to the native binding, which opens one device context per device inside
-the calling process. Those sessions are inventoried as native sessions. One
-counts as a witness only when the binding's own ownership rows put resident
-bytes on every requested device and the process's driver inventory shows those
-ordinals as distinct physical GPUs. `par-byte-lm-offload` is different again:
-its driver admits exactly one device, so both of its columns run on the first
-device. Its parts read `N/A` with that reason and are never counted as a match;
-a part that differs still gates.
-
-`DIVERGENT` means sharding changed the bits. `ONE-COLUMN` means the two-device
-run refused a part the record has a value for (or the reverse), which is a
-defect only a two-device run can see. Both exit non-zero.
-
-**A run that ran nothing is not a pass.** The result is a ladder, worst first,
-and it is the one `verify --all` already uses:
-
-| result | when | exit |
-|---|---|---|
-| `MISMATCH` | a `DIVERGENT`, `MOVED` or `ONE-COLUMN` part. A wrong answer outranks an absent one, so this is read first | non-zero |
-| `INCOMPLETE` | nothing disagreed, but a part `REFUSED` on BOTH columns. Absence is not agreement, and the parts that did run do not make up for the ones that did not | non-zero |
-| `NOTHING COMPARED` | no part produced two hashes. A column of `N/A` and `CPU-ROUTE-LIMIT` establishes nothing | non-zero |
-| `VERIFIED` | at least one part was compared and every compared part agreed | 0 |
-
-Until 2026-09-20 the verdict was "no gating verdict was counted", and `REFUSED`
-does not gate, so a run in which every part refused on both columns printed
-`THE TWO COLUMNS AGREE on 0 compared cell parts` and exited 0. Measured on a
-CPU-only install outside the reference-training scope: 65 refused parts, exit
-0, `VERIFIED`.
-
-**Apple is excluded structurally, not by policy.** `DevicePool._start` admits
-the metal vendor only at a single device and raises for any other group, so no
-Mac can produce a two-device `par-*` column with this code. The command says so
-by name rather than leaving you to look for hardware that would never have
-worked. On a CPU-only install it runs the drivers' own partition and merge
-across two worker processes and states, in the report, that this is not a
-device claim.
+3. **`--self-test`**, which shows the comparison can fail at all. Without it
+   the first two are checks nobody has watched fail.
 
 ## Can you watch it fail?
 
@@ -1052,8 +962,27 @@ neural training; `SHARD=i/N` splits the lanes into records that are each
 admissible alone). It refuses harness overrides, sabotage switches and a tree
 whose sources differ from its commit, and ends with the
 `tools/identity_columns.py check` verdict, which is `admit()` itself.
+
+Reuse is the default (Andrew 2026-10-31: reuse good old runs, automatically).
+Without `LANES`, `SHARD`, `ONLY_CHANGED` or `FULL`, the recorder records only
+the lanes whose source closure (`tools/lane_select.py`, the column's backend)
+changed since the newest good evidence of the column's own device class. It
+reads that evidence from the admitted table's rows, every admissible record
+under `bench/results/identity_break/` (including `retained/`), the output
+directory and `MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2`. Every other lane is
+reused, not re-run. It prints `REUSED n / RECORD m` and writes the per-lane
+decision to `<outdir>/<label>.reuse.json`. When no lane is owed, it prints
+`NOTHING-CHANGED` and exits 0. A lane whose newest result is not good and
+whose closure has not changed is listed as `KNOWN-BAD`: rerunning unchanged code
+cannot fix it. `FULL=1` is the only way to re-record unchanged lanes.
+`ONLY_CHANGED=table|<sha>` keeps its older meaning, measured from the table's
+oldest row of any class or from one commit.
 `admit_identity_columns.sh` refuses any record `admit()` refuses or records of
-incompatible source commits, retains byte-identical incoming columns under
+incompatible source commits. Records at several commits are compatible when the
+code is equal or when every lane of an older record is superseded by a newer
+record of its class or has an unchanged closure (`identity_columns.py
+reuse-check`). This is how reused older records are admitted beside new
+records of the changed lanes. It retains byte-identical incoming columns under
 `bench/results/identity_break/` (reusing existing copies), regenerates the table from
 repository columns for the selected lanes, reports which routine reference parts still rest on an older
 commit (`reference-report.json`), and runs `verify --self-test` and

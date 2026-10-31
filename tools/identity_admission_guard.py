@@ -121,13 +121,25 @@ def _cpu_problem(key, part, ref, cpu, gpu_only, cols=None, records=()):
     return f"{key}/{part}: cpu disagrees with the GPU reference (cpu={value}, gpu={ref})"
 
 
+#: Retired lanes (python/mojolearn/_verify_reference.py RETIRED_LANE_PREFIXES):
+#: the `par-*` multi-GPU driver lanes. Records taken before the retirement
+#: still carry their cells; they are ignored, never selected or refused.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
+RETIRED_LANE_PREFIXES = ("par-",)
+
+
 def selected_lanes(paths, asked=""):
     available = set()
     for path in paths:
         record = json.loads(Path(path).read_text())
         available.update(key.split("/", 1)[0] for key in record["cells"])
-    selected = set(filter(None, asked.split(","))) if asked else available
-    if not selected or selected - available:
+    available = {lane for lane in available if not lane.startswith(RETIRED_LANE_PREFIXES)}
+    selected = {lane for lane in (filter(None, asked.split(",")) if asked else available)
+                if not lane.startswith(RETIRED_LANE_PREFIXES)}
+    if not selected:
+        raise ValueError("no admissible lanes selected (the par-* multi-GPU lanes are retired and ignored)")
+    if selected - available:
         raise ValueError(f"selected lanes absent from incoming records: {sorted(selected - available)}")
     return sorted(selected)
 
@@ -174,7 +186,11 @@ def validate(base, candidate, lanes, gpu_only=None):
         for fixture in base["fixtures"]:
             key = f"{lane}/{fixture}"
             cell = cells.get(key, {})
-            missing = (REQUIRED_PARTS | set(old_cells.get(key, {}))) - set(cell)
+            # An old part that only recorded an N/A placeholder ("n/a:...") carries no
+            # reference bits; a harness that no longer emits the placeholder drops nothing.
+            old_parts = {p for p, e in old_cells.get(key, {}).items()
+                         if not str((e or {}).get("ref") or "").startswith("n/a:")}
+            missing = (REQUIRED_PARTS | old_parts) - set(cell)
             if missing:
                 problems.append(f"{key}: missing parts {sorted(missing)}")
             for part, entry in cell.items():

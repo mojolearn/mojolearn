@@ -69,13 +69,5 @@ class BatchedOracle(unittest.TestCase):
                 raise NumericalMismatch(mismatch, {})
         '''), 'recorded')
 
-    def test_real_radius_lane_remains_multi_device_and_excluded_from_one_gpu(self):
-        scope = applicability.scopes()['par-queries-radius']
-        self.assertEqual(scope.oracle, 'independent')
-        self.assertEqual(scope.claim_devices, 2)
-        self.assertFalse(scope.applicable('nvidia-1gpu')[0])
-        self.assertTrue(scope.applicable('nvidia-2gpu')[0])
-
-
 if __name__ == '__main__':
     unittest.main()

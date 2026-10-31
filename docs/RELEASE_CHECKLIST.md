@@ -129,14 +129,14 @@ python3 tools/release_ledger_admission.py admit --ledger "$LEDGER" --root . \
   --report ~/mojolearn-evidence/release/$V/admit-apple-pack/report.json
 ```
 
-### Installed runtime, multi-GPU and published producers
+### Installed runtime and published producers
 
-Three box producers fill `runtime-<vendor>`, `multi-gpu-<vendor>` and (post
+Two box producers fill `runtime-<vendor>` and (post
 stage) `published-<vendor>`. Each runs against installed wheels in a fresh venv,
 writes one report into a NEW output directory, and exits 0 only on a complete
 pass. Pull the whole directory home, then admit it on the Mac with
-`tools/release_ledger_admission.py` (adapters `installed-runtime`, `multi-gpu`,
-`published-install`, all in `tools/release_installed_evidence.py`). Evidence
+`tools/release_ledger_admission.py` (adapters `installed-runtime` and
+`published-install`, both in `tools/release_installed_evidence.py`). Evidence
 paths are relative to the directory, so it can move; admission re-derives every
 count from the raw files and refuses wheels that are not the ledger's
 `artifacts:*` candidate bytes.
@@ -159,11 +159,6 @@ python3 tools/release_runtime_installed.py run --vendor nvidia --source-root ~/s
 #   apple: python3 tools/mac_slot.py --wait-timeout 3600 metal -- python3 tools/release_runtime_installed.py run \
 #            --vendor apple --wheel $W/mojolearn-$V-*-macosx_*.whl ...  (the M2 Pro)
 
-# multi-gpu-<vendor>: two or more GPUs of one vendor; nvidia-smi (NVIDIA) or amd-smi and rocm-smi (AMD).
-python3 tools/release_multi_gpu_parallel.py run --vendor nvidia --devices 0,1 \
-  --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_nvidia-$V-*.whl --wheel $W/mojolearn_nvidia_ptx-$V-*.whl \
-  --python python3.12 --out ~/mojolearn-evidence/release/$V/multi-gpu-nvidia
-
 # published-<vendor>, after publication: PyPI install, published hashes == candidate hashes,
 # the eleven installed correctness jobs and the three adapter phases.
 python3 tools/release_published_install.py run --vendor nvidia --version $V \
@@ -175,16 +170,12 @@ python3 tools/release_published_install.py run --vendor nvidia --version $V \
 python3 tools/release_ledger_admission.py prepare --adapter installed-runtime --ledger "$LEDGER" --root . \
   --producer report=DIR/runtime-report.json --out DIR-admission
 python3 tools/release_ledger_admission.py admit --ledger "$LEDGER" --root . --report DIR-admission/report.json
-#   multi-gpu:          --adapter multi-gpu         --producer report=DIR/multi-gpu-report.json
 #   published-install:  --adapter published-install --producer report=DIR/published-report.json
 ```
 
-`multi-gpu-amd` needs an AMD box with two GPUs; the DigitalOcean MI325X
-droplet has one, so that row stays untested until a two-GPU AMD box runs it.
-The multi-GPU fault controls are a real native fold failure on two devices, a
-hidden-device refusal, wrong-device and Python-callback refusals and the
-verifier's comparator controls. Perturbing a fold's native arithmetic needs a
-product fault-injection hook and is not part of this producer.
+Multi-GPU verification is retired (owner, 2026-10-31): there are no
+`multi-gpu-<vendor>` rows, no `verify --par` and no `par-*` identity lanes
+(docs/TOMBSTONES.md, MOJOLEARN_PAR_VERIFY).
 
 ## Standalone native-only candidate
 
@@ -250,7 +241,9 @@ the table's `3d1d7c30b12d9872`). In order, from one pushed commit:
 1. On each box (NVIDIA, AMD, the Apple M2, and once with `cpu` for the host
    column), in a checkout with every binding built:
    `tools/record_identity_column.sh <vendor-label> <absolute outdir>`
-   (shard with `SHARD=i/N` when a job has a time limit).
+   (it records only the lanes whose closure changed and reuses the rest;
+   `FULL=1` records every lane; shard a full column with `SHARD=i/N` when a
+   job has a time limit).
 2. On this Mac: `tools/admit_identity_columns.sh --build-host <outdir>...`
    places the records under `bench/results/identity_break/<date>-<REF_TAG>/` (REF_TAG, e.g. 0836),
    regenerates the table, and runs `verify --self-test` and `verify --coverage`
@@ -267,10 +260,17 @@ Both must show native GAP 0 and Python GAP 0; every new lane they name goes into
 proven with `tools/coverage_sabotage.py plan --arm <arm>` / `check` (`apply-check` first).
 
 macos-smoke's self-test job fails a wheel whose table is stale; it cannot
-regenerate one. Re-record only what changed: `ONLY_CHANGED=table
-tools/record_identity_column.sh ...` records just the lanes whose closure moved
-since the admitted table; every other row is kept. The admit is THE identity
-check of the release (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun).
+regenerate one. Reuse is the default (Andrew 2026-10-31: reuse good old runs,
+automatically). `tools/record_identity_column.sh <label> <outdir>` records just
+the lanes whose closure moved since the newest good evidence of that device
+class. That evidence is the admitted table, the committed and retained records,
+the output dir and `MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2`. Every other
+lane is reused. The script prints `REUSED n / RECORD m`, or `NOTHING-CHANGED`.
+`FULL=1` is the only way to re-record unchanged lanes. When it prints
+`ADMIT-WITH`, pass those record directories to `admit_identity_columns.sh` as
+well. `ONLY_CHANGED=table|<sha>` keeps its older table-wide meaning. The admit
+is THE identity check of the release (Andrew 2026-10-10: identity runs ONCE; a
+mismatch is a bug to fix, never a reason to rerun).
 
 ## The one command
 
@@ -429,8 +429,7 @@ payload metadata names that source. Run the expanded installed smoke on each
 exact final platform/vendor artifact and compare the selected public identity
 reports with `tools/compare_installed_identity.py`. These bounded receipts do
 not claim full numerical certification: retain the broader original campaign,
-reference-admission evidence, native-source proofs and physical multi-GPU
-witnesses alongside them. Any unresolved applicable failure holds publication.
+reference-admission evidence and native-source proofs alongside them. Any unresolved applicable failure holds publication.
 
 Use the by-hand publication steps below when the orchestrator cannot represent
 these reports. Do not synthesize legacy `column.json` files or mark unexecuted

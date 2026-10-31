@@ -24,7 +24,7 @@ ANCH = {"Program": {"capture", "load_program"}, "GenerationStream": {"stream", "
 class TF:
     pass
 funcs = []
-VERIFY = [ROOT/"python/mojolearn"/f for f in ("_verify_graph.py", "_verify_generation.py", "_verify_par.py",
+VERIFY = [ROOT/"python/mojolearn"/f for f in ("_verify_graph.py", "_verify_generation.py",
           "_verify_model.py", "_verify_partitioned_program.py", "_verify_distributed_program.py")]
 import os
 EXCLUDE = set(filter(None, os.environ.get("COV_EXCLUDE", "").split(",")))
