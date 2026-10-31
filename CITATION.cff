@@ -1,7 +1,7 @@
 cff-version: 1.2.0
-message: "If this is useful in your work, we would appreciate a citation."
+message: "If you use mojolearn, please cite the paper below (preferred-citation)."
 type: software
-title: "mojolearn: bitwise-identical GPU machine learning in Mojo on Apple Metal, NVIDIA CUDA and AMD HIP"
+title: "mojolearn: Bitwise-Identical Machine Learning Across GPUs and CPUs"
 authors:
   - family-names: Hendel
     given-names: Andrew
@@ -17,6 +17,17 @@ date-released: "2026-10-30"
 # must not sit here, where it would name an older release than `version`.
 doi: 10.5281/zenodo.22068632
 repository-code: "https://github.com/mojolearn/mojolearn"
+preferred-citation:
+  type: article
+  title: "Bitwise-Identical Machine Learning Across GPUs and CPUs"
+  authors:
+    - family-names: Hendel
+      given-names: Andrew
+      orcid: "https://orcid.org/0009-0000-9877-3623"
+      affiliation: "Latent Archon"
+  doi: 10.5281/zenodo.23829035
+  url: "https://doi.org/10.5281/zenodo.23829035"
+  year: 2026
 abstract: >-
   mojolearn supports bitwise-identical training and inference across more than
   50 machine-learning algorithms.
