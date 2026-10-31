@@ -2919,7 +2919,10 @@ class Release:
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
         if not self.dry:
-            blocked = [(vendor, self.gate_ok(vendor)) for vendor in GATE_VENDORS]
+            # A gate the owner's --owner-waiver covers (candidate-<vendor>) was recorded
+            # WAIVED by step_gate_<vendor>; it has no report to read here.
+            blocked = [(vendor, (True, "waived") if self.gate_waiver(vendor) else self.gate_ok(vendor))
+                       for vendor in GATE_VENDORS]
             if any(not verdict[0] for _, verdict in blocked):
                 raise StepFailed('publication requires both candidate gates: '+ '; '.join(
                     vendor+': '+verdict[1] for vendor, verdict in blocked if not verdict[0]))
