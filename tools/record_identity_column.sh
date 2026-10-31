@@ -215,11 +215,15 @@ elif [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ]; t
         [ -d "$d" ] || die "MOJOLEARN_IDENTITY_REUSE_RECORDS: no such directory $d"
         reuse_args+=(--records "$d")
     done
-    # The column's GPU backend: a host-binding-only change cannot move a device
-    # column's bits, so lane_select leaves it out of an NVIDIA or AMD record.
+    # The column's backend (lane_select's derived rules): a host-binding-only
+    # change cannot move an NVIDIA or AMD column; the other platform's packaging
+    # tree cannot reach binaries built here (Apple and a Mac cpu column build on
+    # macOS, the NVIDIA and AMD columns from the Linux sets).
     case "$LABEL" in
         nvidia-*) reuse_args+=(--backend cuda) ;;
         amd-*) reuse_args+=(--backend hip) ;;
+        apple-*) reuse_args+=(--backend metal) ;;
+        cpu) reuse_args+=(--backend cpu) ;;
     esac
     AUTO_LANES=$("${PY[@]}" tools/identity_columns.py changed-lanes --scope "${SCOPE:-routine}" "${reuse_args[@]}" \
             2> "$OUT/$LABEL.changed-lanes.txt" | tail -n 1) \

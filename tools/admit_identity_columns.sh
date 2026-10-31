@@ -13,7 +13,10 @@
 #   1. every <records dir>/*.identical.json must pass
 #      tools/identity_columns.py check (the same _verify_reference.admit() the
 #      table builder applies, plus this harness's fixture bytes); all must name
-#      ONE commit, and that commit must be in this repository (its commit time
+#      ONE commit, commits with equal code, or (REUSE GOOD OLD RUNS, Andrew
+#      2026-10-31) older commits whose every lane is superseded by a newer
+#      record of its class or has an unchanged closure (identity_columns.py
+#      reuse-check); every commit must be in this repository (its commit time
 #      decides "newest wins")
 #   2. retains byte-identical copies under bench/results/identity_break/,
 #      reusing existing copies without requiring a separate prerequisite commit

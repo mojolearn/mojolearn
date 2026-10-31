@@ -4597,7 +4597,7 @@ def _searchable(rel):
     return text
 
 
-def _named_by_the_corpus(token, skip=(), whole=False):
+def _named_by_the_corpus(token, skip=(), whole=False, name_end=False):
     """The files a lane reaches that name `token` in CODE, as PATHS, never a
     count: a grep that prints a number cannot be told from one that failed.
 
@@ -4612,10 +4612,17 @@ def _named_by_the_corpus(token, skip=(), whole=False):
     # was what kept every new file under the top-level checks/ reachable. A
     # token preceded by `<word>/` is a subdirectory of something else and does
     # not count; one preceded by `/` alone (ROOT + "/checks/") or `../` does.
+    # `name_end` is for a FILE STEM (2026-10-31): the stem must END there.
+    # `gpu-b` inside "--expansion-gpu-bindings" is a different word, and that
+    # substring hit made an experiments/ partition file `gpu-b.lanes`
+    # unattributable, which re-recorded every lane. Any way code can spell
+    # `gpu-b.lanes` from a literal keeps a non-word character (a quote, `.`,
+    # `{`, `%`, `/`, `-`, a backslash) after the stem, so only a literal that
+    # continues the stem with a letter, digit or underscore is no longer a hit.
     if token not in _corpus_text():
         return []
     pattern = re.compile((r"(?<![A-Za-z0-9_-]/)" if whole else "") + re.escape(token)
-                         + (r"(?![A-Za-z0-9_.])" if whole else ""))
+                         + (r"(?![A-Za-z0-9_.])" if whole else r"(?![A-Za-z0-9_])" if name_end else ""))
     out = []
     for rel in _reaching_corpus():
         if rel in skip or _is_inert(rel) or rel in _NOT_CORPUS:
@@ -4726,7 +4733,7 @@ def unreachable(path):
     stem = os.path.basename(path)
     tokens = [(path, False), (stem, False)]
     if "." in stem:
-        tokens.append((stem.rsplit(".", 1)[0], False))
+        tokens.append((stem.rsplit(".", 1)[0], "stem"))
     generic = _generic_data_name(path)
     if generic:
         # A SHARED DATA FILE NAME IS NOT AN ADDRESS. `manifest.json` names
@@ -4751,7 +4758,7 @@ def unreachable(path):
     if (path, False) not in tokens:
         return None                      # too short a path to search for honestly
     for token, whole in tokens:
-        hits = _named_by_the_corpus(token, skip={path}, whole=whole)
+        hits = _named_by_the_corpus(token, skip={path}, whole=whole is True, name_end=whole == "stem")
         if hits:
             return None
     for part in dict.fromkeys(parts):

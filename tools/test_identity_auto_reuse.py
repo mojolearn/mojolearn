@@ -255,3 +255,18 @@ def test_recorder_explicit_lanes_are_not_narrowed(tmp_path):
     assert res.returncode == 0, res.stderr[-800:]
     assert not any("changed-lanes" in c for c in calls)
     assert _lanes_of(harness[0]) == "lane-a,lane-c"
+
+
+# ------------------------------------- lane_select: a file stem must end there
+
+def test_a_file_stem_inside_a_longer_word_does_not_name_the_file(monkeypatch):
+    texts = {"a.py": 'ap.add_argument("--expansion-gpu-bindings")\n',
+             "b.py": 'open(base / "gpu-b.lanes")\n',
+             "c.py": 'name = f"gpu-b{i}"\n',
+             "d.py": 'p = "gpu-b"\n'}
+    monkeypatch.setattr(lane_select, "_corpus_text", lambda: "".join(texts.values()))
+    monkeypatch.setattr(lane_select, "_reaching_corpus", lambda: list(texts))
+    monkeypatch.setattr(lane_select, "_searchable", lambda rel: texts[rel])
+    monkeypatch.setattr(lane_select, "_is_inert", lambda rel: False)
+    assert lane_select._named_by_the_corpus("gpu-b") == ["a.py", "b.py", "c.py", "d.py"]
+    assert lane_select._named_by_the_corpus("gpu-b", name_end=True) == ["b.py", "c.py", "d.py"]
