@@ -160,3 +160,36 @@ def test_assembly_refuses_a_requirement_taken_set_with_another_runtime(tmp_path)
     with pytest.raises(SystemExit, match="runtime closure differs"):
         release_reuse.assemble_linux(_plan(), None, {"cuda-sm_89": owner, "cuda-sm_80": ptx},
                                      tmp_path / "dest", say=lambda *_: None, leg_reuse=leg_reuse)
+
+
+def test_a_taken_host_owner_ships_its_host_in_the_legs_built_here(tmp_path):
+    owner = _set(tmp_path / "owner", "cuda", "sm_89", b"dev89", b"OWNER host", b"lib")
+    ptx = _set(tmp_path / "ptx", "cuda", "sm_80", b"dev80", b"PTX host", b"lib")
+    amd = _set(tmp_path / "amd", "hip", "gfx942", b"devamd", b"AMD-built host", b"lib")
+    owner_from = dict(name="cuda-sm_89", dir=owner, origin=_origin("cuda-sm_89", "b" * 40))
+    leg_reuse = {"cuda-sm_89": dict(dir=owner, origin=_origin("cuda-sm_89", "b" * 40))}
+    release_reuse.assemble_linux(_plan(), None, {"hip-gfx942": amd, "cuda-sm_80": ptx}, tmp_path / "dest",
+                                 say=lambda *_: None, leg_reuse=leg_reuse, host_owner=owner_from)
+    for vendor, arch in (("hip", "gfx942"), ("cuda", "sm_80"), ("cuda", "sm_89")):
+        sdir = tmp_path / "dest" / vendor / arch
+        assert (sdir / "host/_mojolearn_core_host.so").read_bytes() == b"OWNER host", (vendor, arch)
+    reuse = json.loads((tmp_path / "dest/hip/gfx942/reuse.json").read_text())
+    assert reuse["files"]["host/_mojolearn_core_host.so"]["leg"] == "cuda-sm_89"
+    assert "identical/_mojolearn.so" not in reuse["files"]        # the built leg's own proof covers it
+    amd2 = _set(tmp_path / "amd2", "hip", "gfx942", b"devamd", b"AMD-built host", b"OTHER lib")
+    with pytest.raises(SystemExit, match="runtime closure differs"):
+        release_reuse.assemble_linux(_plan(), None, {"hip-gfx942": amd2, "cuda-sm_80": ptx}, tmp_path / "dest2",
+                                     say=lambda *_: None, leg_reuse=leg_reuse, host_owner=owner_from)
+
+
+def test_host_owner_origin_takes_a_whole_taken_owner_and_refuses_a_requirement_taken_one(tmp_path):
+    whole = dict(set_dir=str(tmp_path / "s"), built_from="b" * 40, leg="cuda-sm_89", proof_sha256="p" * 64,
+                 admitted_for="c" * 40, set_identity_digest="s" * 64, tooling_digest="t" * 64,
+                 release_build=str(tmp_path / "rb"))
+    ctx = SimpleNamespace(admitted_leg=lambda n: whole if n == "cuda-sm_89" else None)
+    ctx.leg_origin = lambda d: release.Release.leg_origin(ctx, d)
+    got = release.Release.host_owner_origin(ctx)
+    assert got["name"] == "cuda-sm_89" and got["origin"]["source_commit"] == "b" * 40
+    ctx.admitted_leg = lambda n: dict(whole, kind="compile-requirements")
+    with pytest.raises(release.StepFailed, match="compile requirements"):
+        release.Release.host_owner_origin(ctx)

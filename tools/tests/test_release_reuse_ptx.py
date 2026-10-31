@@ -238,5 +238,91 @@ class PTXReuse(unittest.TestCase):
             pr.validate_admission(doc, staged, {"cuda-sm_80": self.origin})
 
 
+    # --------------------------------------------- HOST_OWNER_ADMISSION
+    def host_owner_fixture(self):
+        """The PTX leg retained; the host rows of the plan changed; the host
+        owner (cuda-sm_89, built later) carries the new host bytes."""
+        self.fixture()
+        for row in self.plan["rows"]:
+            if row["tier"] == "host":
+                row["identity"] = dict(row["identity"], closure="changed host source")
+                row["identity_digest"] = rr.digest_of(row["identity"])
+        current = rr.set_identity(self.plan, *rr.PTX_SET)
+        self.origin["set_identity_digest"] = current["digest"]
+        orb = self.root / "owner-build"
+        owner_set = orb / "build/sets/cuda/sm_89"
+        (owner_set / "host").mkdir(parents=True)
+        (owner_set / ".libs").mkdir()
+        (owner_set / ".libs/runtime.so").write_bytes(b"original runtime")
+        binary = owner_set / "host/_mojolearn_native_host.so"
+        binary.write_bytes(b"NEW host bytes")
+        members = {binary.name: ["_mojolearn_test_host"]}
+        write(owner_set / "host" / pr.INDEX, dict(format=1, files=members))
+        prefix = pr.HOST_OWNER_PREFIX
+        owner_proof = dict(schema="mojolearn.linux.build-provenance.v1", complete=True, build_exit=0,
+                           action="build", source_commit=NEW, extensions={},
+                           host_extension={prefix + "host/" + binary.name: pr.file_hash(binary)},
+                           merged_indexes={prefix + "host/" + pr.INDEX: dict(
+                               sha256=pr.file_hash(owner_set / "host" / pr.INDEX), files=members)},
+                           binding_layout="merged")
+        write(orb / "build/build-provenance.json", owner_proof)
+        self.owner_set = owner_set
+        self.owner_origin = dict(source_commit=NEW, leg="cuda-sm_89", admitted_for=NEW,
+                                 proof_sha256=pr.file_hash(orb / "build/build-provenance.json"),
+                                 set_identity_digest="d" * 64, tooling_digest="c" * 64, release_build=str(orb))
+        return dict(name="cuda-sm_89", dir=owner_set, origin=self.owner_origin)
+
+    def assemble_owner(self, host_from):
+        with patch.object(rr, "LINUX_SETS", (rr.PTX_SET,)):
+            return rr.assemble_linux(self.plan, None, {}, self.root / "assembled", say=lambda _: None,
+                                     leg_reuse={"cuda-sm_80": dict(dir=self.source, origin=self.origin,
+                                                                   host_from=host_from)})["cuda/sm_80"]
+
+    def test_host_owner_admission_ships_owner_host_and_keeps_ptx_proof(self):
+        host_from = self.host_owner_fixture()
+        self.assertIn("HOST_OWNER_ADMISSION", Path(pr.__file__).read_text())
+        staged = self.assemble_owner(host_from)
+        self.assertEqual((staged / "host/_mojolearn_native_host.so").read_bytes(), b"NEW host bytes")
+        manifest = json.loads((staged / pr.MANIFEST).read_text())
+        reuse = pack_wheel.load_reuse(staged, "cuda", "sm_80")
+        self.assertEqual(set(reuse["legs"]), {"cuda-sm_80", "cuda-sm_89"})
+        self.assertTrue(pr.validate_admission(manifest, staged, reuse["legs"]))
+        # without the owner's origin among the legs it is refused
+        with self.assertRaisesRegex(ValueError, "host owner differs"):
+            pr.validate_admission(manifest, staged, {"cuda-sm_80": reuse["legs"]["cuda-sm_80"]})
+        # a changed GPU byte is still refused by the PTX leg's own proof
+        gpu = staged / "identical/_mojolearn_native.so"
+        gpu.write_bytes(b"tampered")
+        with self.assertRaises(ValueError):
+            pr.validate_admission(manifest, staged, reuse["legs"])
+
+    def test_host_owner_admission_refuses_a_changed_gpu_identity(self):
+        host_from = self.host_owner_fixture()
+        for row in self.plan["rows"]:
+            if row["tier"] != "host":
+                row["identity"] = dict(row["identity"], closure="changed GPU source")
+                row["identity_digest"] = rr.digest_of(row["identity"])
+        self.origin["set_identity_digest"] = rr.set_identity(self.plan, *rr.PTX_SET)["digest"]
+        with self.assertRaisesRegex(SystemExit, "GPU binding identity"):
+            self.assemble_owner(host_from)
+
+    def test_host_owner_admission_refuses_host_bytes_not_in_the_owner_proof(self):
+        host_from = self.host_owner_fixture()
+        (self.owner_set / "host/_mojolearn_native_host.so").write_bytes(b"not the proved bytes")
+        with self.assertRaisesRegex(SystemExit, "host owner's build proof"):
+            self.assemble_owner(host_from)
+
+    def test_host_owner_admission_refuses_another_runtime_closure(self):
+        host_from = self.host_owner_fixture()
+        (self.owner_set / ".libs/runtime.so").write_bytes(b"another runtime")
+        with self.assertRaisesRegex(SystemExit, "runtime closure differs"):
+            self.assemble_owner(host_from)
+
+    def test_without_host_owner_a_changed_host_identity_still_refuses(self):
+        self.host_owner_fixture()
+        with self.assertRaises(SystemExit):
+            self.assemble()
+
+
 if __name__ == "__main__":
     unittest.main()

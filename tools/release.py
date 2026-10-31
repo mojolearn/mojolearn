@@ -2113,13 +2113,23 @@ class Release:
         return None, "; ".join(why) or "no completed leg of an earlier freeze began these units", True
 
     def host_owner_origin(self):
-        """reuse.json's origin of the host owner leg built at THIS freeze, for
-        the host files a requirement-taken set ships (LEG_ORIGIN_KEYS)."""
+        """{name, dir, origin} of the host owner leg whose host/ ships in every
+        set: the one built at THIS freeze, or the one taken whole from an
+        earlier freeze (its set identity, host rows included, equals this
+        freeze's, so its host bytes are a build of this freeze's host inputs).
+        A host owner taken by compile requirements has no current host bytes
+        and is refused (find_requirement_leg never takes it)."""
         owner = host_owner_leg()
+        doc = self.admitted_leg(owner)
+        if doc:
+            if doc.get("kind") == "compile-requirements":
+                raise StepFailed(f"the host owner {owner} was taken by its compile requirements; its host bytes "
+                                 "are not this freeze's")
+            return dict(dir=Path(doc["set_dir"]), name=owner, origin=self.leg_origin(doc))
         leg = next((l for l in linux_legs(self) if l.name == owner), None)
-        if leg is None or self.admitted_leg(owner):
-            raise StepFailed(f"a leg is taken with the host owner's bindings and {owner} was not built at this "
-                             "freeze")
+        if leg is None:
+            raise StepFailed(f"a leg is taken with the host owner's bindings and {owner} was neither built at "
+                             "this freeze nor taken whole")
         vendor, arch = owner.split("-", 1)
         proof = leg.release_build / "build" / "build-provenance.json"
         ident = self.set_identity(vendor, arch) or {}
@@ -2366,7 +2376,11 @@ class Release:
         # bindings (linux-assemble replaces its own), so its stale host bytes
         # are not compared here.
         shipped = [l for l in taken if (self.admitted_leg(l.name) or {}).get("kind") != "compile-requirements"]
-        mismatch = host_digest_mismatches(legs + shipped)
+        owner_taken = any(l.name == host_owner_leg() for l in shipped)
+        # A host owner taken whole ships its host/ in every set (linux-assemble,
+        # release_reuse.assemble_linux host_owner); the built legs' own host
+        # bytes are then never packed, so they are not compared.
+        mismatch = {} if owner_taken else host_digest_mismatches(legs + shipped)
         composition = None
         if mismatch:
             lines = [f"{name}: " + ", ".join(f"{leg}={d[:12]}" for leg, d in row.items())
@@ -2490,9 +2504,14 @@ class Release:
         built = [l for l in linux_legs(self) if l.name not in taken]
         legs = {l.name: l.release_build / "build" / "sets" / l.vendor / l.arch for l in built}
         leg_reuse = {n: dict(dir=Path(d["set_dir"]), origin=self.leg_origin(d)) for n, d in taken.items()}
+        host_owner = None
         for n, d in taken.items():
             if d.get("kind") == "compile-requirements" and not self.dry:
                 leg_reuse[n]["host_from"] = self.host_owner_origin()
+        owner_doc = taken.get(host_owner_leg())
+        if owner_doc and owner_doc.get("kind") != "compile-requirements" and built and not self.dry:
+            # The host owner is taken whole; the legs built here ship its host/.
+            host_owner = self.host_owner_origin()
         plan = self.plan()
         if self.dry:
             n = len(release_reuse.plan_rows(plan, release_reuse.LINUX, "REUSE"))
@@ -2506,7 +2525,8 @@ class Release:
                 raise StepFailed(f"{name} has no set directory at {d}; run linux-wait")
         dest = self.rel / "reuse" / "sets"
         try:
-            release_reuse.assemble_linux(plan, whl, legs, dest, say=self.say, leg_reuse=leg_reuse)
+            release_reuse.assemble_linux(plan, whl, legs, dest, say=self.say, leg_reuse=leg_reuse,
+                                         host_owner=host_owner)
         except SystemExit as exc:
             raise StepFailed(str(exc))
         write_json(self.assembled_marker(), dict(

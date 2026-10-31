@@ -1287,7 +1287,22 @@ def binding_files(set_dir, row):
     return [binary, index]
 
 
-def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
+def _take_owner_host(sdir, key, host_from):
+    """Replace set SDIR's host/ with the host owner's (HOST_LEG) and refuse
+    unless its runtime closure is the owner's byte for byte."""
+    owner_dir = Path(host_from["dir"])
+    mine = {p.name: sha256(p) for p in sorted((sdir / ".libs").glob("*")) if p.is_file()}
+    theirs = {p.name: sha256(p) for p in sorted((owner_dir / ".libs").glob("*")) if p.is_file()}
+    if not mine or mine != theirs:
+        raise SystemExit(f"release_reuse: {key} is taken with the host owner's bindings and its "
+                         f"runtime closure differs from {host_from['name']}'s; it must be rebuilt")
+    if not (owner_dir / "host").is_dir():
+        raise SystemExit(f"release_reuse: the host owner {host_from['name']} has no host/ at {owner_dir}")
+    shutil.rmtree(sdir / "host", ignore_errors=True)
+    shutil.copytree(owner_dir / "host", sdir / "host", symlinks=False)
+
+
+def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None, host_owner=None):
     """The set directories pack_wheel.py packs, one per (vendor, arch): a
     leg's set copied whole when the leg ran, the set of a completed leg of an
     earlier freeze when tools/release.py admitted it (`leg_reuse`: its set
@@ -1302,6 +1317,11 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
     {"dir": that directory of the earlier leg, "origin": {source_commit, leg,
     proof_sha256, admitted_for, set_identity_digest, tooling_digest, ...}}.
     `whl` (the published wheel) may be None when nothing is taken from it.
+    A `leg_reuse` entry with "host_from" ({name, dir, origin} of the host
+    owner) is a leg taken by its compile requirements: its host/ is the
+    owner's. `host_owner` (the same shape) is given when the host owner itself
+    was taken from an earlier freeze: every leg built at this freeze then
+    ships the owner's host/ too, so one host set ships everywhere.
     Returns {"vendor/arch": set dir}."""
     prev = plan["previous"] or {}
     leg_reuse = leg_reuse or {}
@@ -1339,6 +1359,15 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
             if leg:
                 shutil.copytree(leg, sdir, symlinks=False)
                 say(f"  {key}: the leg's set copied from {leg}")
+                if host_owner and name != host_owner["name"]:
+                    _take_owner_host(sdir, key, host_owner)
+                    from_legs[host_owner["name"]] = dict(host_owner["origin"])
+                    for r in host_rows:
+                        for p in binding_files(sdir, r):
+                            rel = p.relative_to(sdir).as_posix()
+                            rec = reused.setdefault(rel, dict(sha256=sha256(p), source="leg", leg=host_owner["name"]))
+                            rec.setdefault("binding_identities", {})[r["name"]] = r["identity_digest"]
+                    say(f"  {key}: host bindings of {host_owner['name']} (the host owner, taken whole)")
             elif old:
                 # A COMPLETED LEG OF AN EARLIER FREEZE whose set identity and
                 # build tooling equal this freeze's: every file it built is
@@ -1349,19 +1378,10 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                 if host_from:
                     # TAKEN BY ITS COMPILE REQUIREMENTS (tools/release.py
                     # find_requirement_leg): its device bytes are the earlier
-                    # leg's, its host bindings the host owner's built at this
-                    # freeze, and its runtime closure must already be the
-                    # owner's, byte for byte, or nothing is assembled.
-                    owner_dir = Path(host_from["dir"])
-                    mine = {p.name: sha256(p) for p in sorted((sdir / ".libs").glob("*")) if p.is_file()}
-                    theirs = {p.name: sha256(p) for p in sorted((owner_dir / ".libs").glob("*")) if p.is_file()}
-                    if not mine or mine != theirs:
-                        raise SystemExit(f"release_reuse: {key} is taken with the host owner's bindings and its "
-                                         f"runtime closure differs from {host_from['name']}'s; it must be rebuilt")
-                    if not (owner_dir / "host").is_dir():
-                        raise SystemExit(f"release_reuse: the host owner {host_from['name']} has no host/ at {owner_dir}")
-                    shutil.rmtree(sdir / "host", ignore_errors=True)
-                    shutil.copytree(owner_dir / "host", sdir / "host", symlinks=False)
+                    # leg's, its host bindings the host owner's, and its
+                    # runtime closure must already be the owner's, byte for
+                    # byte, or nothing is assembled.
+                    _take_owner_host(sdir, key, host_from)
                     from_legs[host_from["name"]] = dict(host_from["origin"])
                 for r in gpu + host_rows:
                     source_leg = host_from["name"] if host_from and r in host_rows else name
@@ -1500,7 +1520,7 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                 # It is not falsely listed among byte-identical reused files.
                 try:
                     rebind_manifest(sdir, old["dir"], old["origin"], plan.get("commit"),
-                                    set_identity(plan, vendor, arch))
+                                    set_identity(plan, vendor, arch), host_owner=old.get("host_from"))
                 except (OSError, ValueError, TypeError, KeyError) as exc:
                     raise SystemExit(f"release_reuse: cannot admit completed PTX leg: {exc}") from exc
             if origin is not None or reused:

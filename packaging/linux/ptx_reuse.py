@@ -11,6 +11,16 @@ from pathlib import Path
 import re
 
 SCHEMA = "mojolearn.ptx-release-admission.v1"
+#: HOST_OWNER_ADMISSION (2026-10-31, lane release-auto-reuse-2): the PTX set's
+#: GPU bytes, indexes, runtime and adapters are the retained PTX leg's own,
+#: proved against its original build proof exactly as before; its host/ files
+#: are the host owner's (tools/release.py host_owner_leg, cuda-sm_89), proved
+#: against THAT leg's original build proof. Only host rows of the set identity
+#: and the runtime identity digest may differ from the PTX leg's original
+#: identity: every GPU binding identity must be equal. tools/release.py looks
+#: for this marker in the frozen source before taking the PTX set this way.
+HOST_OWNER_ADMISSION = "host-owner"
+HOST_OWNER_PREFIX = "mojolearn/cuda/sm_89/"
 MANIFEST = "PTX_BASELINE.json"
 INDEX = "_mojolearn_merged.json"
 PREFIX = "mojolearn/cuda/sm_80/"
@@ -93,8 +103,22 @@ def validate_admission(doc, root, origins, expected_identity=None):
             "incomplete leg identity/tooling/proof")
     current = normalized_set_identity(admission.get("set_identity"))
     original = normalized_set_identity(origin.get("original_set_identity"))
-    require(current is not None and original == current and current["set"] == "cuda/sm_80"
-            and current["digest"] == origin["set_identity_digest"], "changed or missing set identity")
+    owner = admission.get("host_owner")
+    if owner is None:
+        require(current is not None and original == current and current["set"] == "cuda/sm_80"
+                and current["digest"] == origin["set_identity_digest"], "changed or missing set identity")
+    else:
+        require(isinstance(owner, dict) and owner.get("kind") == HOST_OWNER_ADMISSION,
+                "unsupported host owner admission")
+
+        def gpu_rows(identity):
+            # a host row's key is `<target>/host/-/host/<name>` (`host/<name>` in
+            # older plans); every other row is a GPU binding of the set
+            return {k: v for k, v in identity["bindings"].items()
+                    if "/host/" not in k and not k.startswith("host/")}
+        require(current is not None and original is not None and current["set"] == original["set"] == "cuda/sm_80"
+                and current["digest"] == origin["set_identity_digest"] and gpu_rows(current)
+                and gpu_rows(current) == gpu_rows(original), "changed or missing GPU binding identity")
     require(origin["original_set_identity"].get("source_commit", origin["source_commit"])
             == origin["source_commit"], "original identity names a different build source")
     if expected_identity is not None:
@@ -119,14 +143,41 @@ def validate_admission(doc, root, origins, expected_identity=None):
         k: v for k, v in indexes.items() if not k.startswith("host/")})
     require(proof.get("extensions") == {PREFIX + k: v for k, v in gpu.items()} and gpu,
             "GPU bytes differ from original build proof")
-    require(proof.get("host_extension", {}) == {PREFIX + k: v for k, v in host.items()},
-            "host bytes differ from original build proof")
+    owner_indexes = {}
+    if owner is None:
+        require(proof.get("host_extension", {}) == {PREFIX + k: v for k, v in host.items()},
+                "host bytes differ from original build proof")
+    else:
+        owner_origin = owner.get("origin")
+        require(isinstance(owner_origin, dict) and owner_origin.get("leg") == "cuda-sm_89"
+                and origins.get("cuda-sm_89") == owner_origin
+                and owner_origin.get("admitted_for") == origin["admitted_for"]
+                and valid_hash(owner_origin.get("proof_sha256")), "host owner differs from its retained leg origin")
+        owner_proof = decoded(owner.get("build_proof"))
+        require(isinstance(owner_proof, dict) and complete_native_proof(owner_proof)
+                and owner["build_proof"]["sha256"] == owner_origin["proof_sha256"]
+                and owner_proof.get("source_commit") == owner_origin.get("source_commit"),
+                "missing, incomplete or stale host owner build proof")
+        require(host and owner_proof.get("host_extension", {}) == {HOST_OWNER_PREFIX + k: v for k, v in host.items()},
+                "host bytes differ from the host owner's build proof")
+        owner_indexes = owner_proof.get("merged_indexes", {})
     proved_indexes = proof.get("merged_indexes", {})
     require(proof.get("binding_layout", "per-binding") == ("merged" if indexes else "per-binding"),
             "original proof binding layout differs")
-    require(isinstance(proved_indexes, dict) and set(proved_indexes) == {PREFIX + k for k in indexes},
-            "missing or stale original index proof")
+    # Every index the set carries is proved: its GPU tier indexes by the PTX
+    # leg's proof, and in host-owner mode its host/ index by the owner's proof.
+    own = {k for k in indexes if owner is None or not k.startswith("host/")}
+    proved_own = {k for k in proved_indexes if owner is None or not k.startswith(PREFIX + "host/")} \
+        if isinstance(proved_indexes, dict) else None
+    require(proved_own == {PREFIX + k for k in own}, "missing or stale original index proof")
     for rel, value in indexes.items():
+        if owner is not None and rel.startswith("host/"):
+            row = owner_indexes.get(HOST_OWNER_PREFIX + rel)
+            index = json.loads((root / rel).read_text())
+            require(isinstance(row, dict) and row.get("sha256") == value
+                    and isinstance(index, dict) and row.get("files") == index.get("files"),
+                    "host index differs from the host owner's build proof: " + rel)
+            continue
         row = proved_indexes[PREFIX + rel]
         index = json.loads((root / rel).read_text())
         require(isinstance(row, dict) and row.get("sha256") == value
@@ -146,8 +197,10 @@ def validate_admission(doc, root, origins, expected_identity=None):
     return True
 
 
-def rebind_manifest(root, original_root, origin, current_commit, current_identity):
-    """Write only the new release manifest, preserving original raw witnesses."""
+def rebind_manifest(root, original_root, origin, current_commit, current_identity, host_owner=None):
+    """Write only the new release manifest, preserving original raw witnesses.
+    `host_owner` ({"origin": the host owner leg's origin}) admits the set's
+    host/ files as that leg's (HOST_OWNER_ADMISSION)."""
     from staged_native_admission import witness, decoded
 
     require(valid_hash(current_commit, 40) and origin.get("admitted_for") == current_commit,
@@ -162,6 +215,14 @@ def rebind_manifest(root, original_root, origin, current_commit, current_identit
         schema=SCHEMA, origin=origin, set_identity=current_identity,
         original_manifest=manifest, original_build_proof=witness(proof_path),
         original_stage_manifest=witness(original_root / "manifest.json"))
-    validate_admission(doc, root, {"cuda-sm_80": origin}, expected_identity=current_identity)
+    origins = {"cuda-sm_80": origin}
+    if host_owner is not None:
+        owner_origin = host_owner["origin"]
+        require(owner_origin.get("release_build"), "missing host owner release build directory")
+        doc["release_admission"]["host_owner"] = dict(
+            kind=HOST_OWNER_ADMISSION, origin=owner_origin,
+            build_proof=witness(Path(owner_origin["release_build"]) / "build" / "build-provenance.json"))
+        origins["cuda-sm_89"] = owner_origin
+    validate_admission(doc, root, origins, expected_identity=current_identity)
     (Path(root) / MANIFEST).write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
     return doc
