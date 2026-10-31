@@ -51,7 +51,8 @@ def _chol_initialize(model: PythonObject, args: PythonObject, context: PythonObj
     if jitter is not None:
         if py_type(jitter) is b.bool or not Bool(py=py_call(b.isinstance, jitter, Python.tuple(b.int, b.float))):
             raise Error("TypeError: mojolearn Cholesky: jitter must be a float, 0.0 or None")
-        jitter = PythonObject(Float64(py=jitter))
+    # The parameter is stored as given (scikit-learn's get_params/clone
+    # contract is identity); fit converts it to a float.
     var fields = py_fields(model)
     var mode = args[1]
     # NumericModeMixin's former constructor kept an existing instance mode
@@ -113,6 +114,8 @@ def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     if jitter is None:
         var profile = neural_descriptor_entry(binding, "cholesky_profile_jitter")
         jitter = family_call(b.float, family_call(profile))
+    else:
+        jitter = PythonObject(Float64(py=jitter))
     var l_out = family_array(Python.tuple(n, n), "<f4", context)
     # info, nb, logdet, jitter -- in that order.
     var scalars = family_array(Python.tuple(4), "<f8", context)
