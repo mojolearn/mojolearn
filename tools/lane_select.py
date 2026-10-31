@@ -5501,6 +5501,7 @@ def registry_lanes(ref, path, sources=None):
                       + (f" ({', '.join(str(g)[:60] for g in gone[:3])})" if gone else ""))
     old_by_key = dict(zip(old_keys, old_tree.body))
     touched, direct, placed = [], set(), False
+    retired = retired_lanes(ref)
     for key, node in zip(new_keys, new_tree.body):
         if key not in old_by_key:
             if not _admissible_addition(node, {k[:2] for k in old_keys}, set(rev)) \
@@ -5516,7 +5517,7 @@ def registry_lanes(ref, path, sources=None):
             # An edited body reaches anything.
             return refuse(f"the body of `{key[1]}` changed (line {node.lineno})")
         # A TABLE OF KEYED ROWS is attributed row by row (see REGISTRY_ROW_KEYS).
-        rows, why_rows = _row_table_lanes(before.value, node.value, every, rev)
+        rows, why_rows = _row_table_lanes(before.value, node.value, every, rev, retired)
         if rows is not None:
             direct |= rows
             placed = True
@@ -5524,8 +5525,19 @@ def registry_lanes(ref, path, sources=None):
         # A PLAIN LANE LIST that gained or lost lane names selects those lanes.
         members = _membership_delta(before.value, node.value)
         if members is not None and (members[0] or members[1]) \
-                and set(members[0]) | set(members[1]) <= every:
-            direct |= set(members[0]) | set(members[1])
+                and set(members[0]) <= every and set(members[1]) <= every | retired:
+            direct |= (set(members[0]) | set(members[1])) & every
+            placed = True
+            continue
+        # A TABLE KEYED BY LANE NAME that lost only RETIRED lanes' entries
+        # (`_entries_minus`): those lanes are gone, so it selects nothing.
+        # A key may also be a lane-name PREFIX (`PUBLIC_INAPPLICABLE_PREFIX_REASONS`):
+        # one that no registered lane starts with and some retired lane did
+        # names retired lanes only.
+        old_keys_here = [k for k, _ in (_keyed_entries(before.value) or [])]
+        gone = retired | {k for k in old_keys_here if not any(lane.startswith(k) for lane in every)
+                          and any(r.startswith(k) for r in retired)}
+        if retired and _entries_minus(before.value, node.value, gone):
             placed = True
             continue
         delta = _container_delta(before.value, node.value)
@@ -5726,7 +5738,7 @@ def _row_lanes(fields_list, every, rev):
     return lanes & set(every)
 
 
-def _changed_row_lanes(old_fields, new_fields, every, rev):
+def _changed_row_lanes(old_fields, new_fields, every, rev, retired=frozenset()):
     """The lanes an edit to one existing row selects, or None when it cannot be
     placed. Membership edits of lane lists select the lanes that moved; any
     other field edit selects the whole row's lanes."""
@@ -5736,8 +5748,10 @@ def _changed_row_lanes(old_fields, new_fields, every, rev):
         if old is not None and new is not None and ast.dump(old) == ast.dump(new):
             continue
         delta = _membership_delta(old, new) if old is not None and new is not None else None
-        if delta is not None and (delta[0] or delta[1]) and set(delta[0]) | set(delta[1]) <= set(every):
-            lanes |= set(delta[0]) | set(delta[1])
+        if delta is not None and (delta[0] or delta[1]) and set(delta[0]) <= set(every) \
+                and set(delta[1]) <= set(every) | set(retired):
+            # a lost name of a RETIRED lane (`retired_lanes`) selects nothing
+            lanes |= (set(delta[0]) | set(delta[1])) & set(every)
             continue
         if delta is not None and field in REGISTRY_NAME_FIELDS and (delta[0] or delta[1]):
             # AN EXPORT NAME IS A DECLARATION (only tests read `exports`); the
@@ -5754,7 +5768,7 @@ def _changed_row_lanes(old_fields, new_fields, every, rev):
     return lanes
 
 
-def _row_table_lanes(before, after, every, rev):
+def _row_table_lanes(before, after, every, rev, retired=frozenset()):
     """(lanes, None) for an edit to a table of keyed rows that kept every old
     row in order, or (None, why) when it cannot be placed. A removed or
     reordered row, or a row that names nothing a lane loads, is not placed."""
@@ -5774,7 +5788,7 @@ def _row_table_lanes(before, after, every, rev):
                 return None, f"the added row {key[0]}={key[1]!r} names no lane and no binding a lane loads"
             lanes |= row
             continue
-        got = _changed_row_lanes(old_by_key[key], fields, every, rev)
+        got = _changed_row_lanes(old_by_key[key], fields, every, rev, retired)
         if got is None:
             return None, (f"the row {key[0]}={key[1]!r} changed and names no lane and no binding "
                           "a lane loads")
@@ -6704,6 +6718,301 @@ def _only_new_functions(old_others, new_others, old_lanes):
     return True
 
 
+# ------------------------------------------------------- retired lanes
+#: Why the last `retired_lane_subtraction` call answered as it did.
+RETIRED_WHY = {}
+
+
+def _per_name_declarer(node):
+    """True for `def f(spec, *names, kw=None, ...)` whose body is one loop
+    `for n in names:` that only refuses a repeat (`if n in T: raise ...`) and
+    stores PARAMETERS under `n` (`T[n] = spec`, optionally under
+    `if <param> is not None:`). Each name it is called with gets the same
+    entries whatever the other names are, so removing one name from a call
+    changes that name's entries and nothing else."""
+    if not isinstance(node, ast.FunctionDef) or node.decorator_list or not node.args.vararg:
+        return False
+    names = node.args.vararg.arg
+    params = {a.arg for a in node.args.args + node.args.kwonlyargs}
+    body = _strip_docstrings(ast.Module(body=[node], type_ignores=[])).body[0].body
+    if len(body) != 1 or not isinstance(body[0], ast.For) or body[0].orelse:
+        return False
+    loop = body[0]
+    if not (isinstance(loop.iter, ast.Name) and loop.iter.id == names and isinstance(loop.target, ast.Name)):
+        return False
+    var = loop.target.id
+
+    def store(stmt):
+        return (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Subscript) and isinstance(stmt.targets[0].value, ast.Name)
+                and isinstance(stmt.targets[0].slice, ast.Name) and stmt.targets[0].slice.id == var
+                and isinstance(stmt.value, ast.Name) and stmt.value.id in params)
+
+    for stmt in loop.body:
+        if store(stmt):
+            continue
+        if isinstance(stmt, ast.If) and not stmt.orelse:
+            t = stmt.test
+            if (isinstance(t, ast.Compare) and isinstance(t.left, ast.Name) and t.left.id == var
+                    and len(t.ops) == 1 and isinstance(t.ops[0], ast.In) and isinstance(t.comparators[0], ast.Name)
+                    and len(stmt.body) == 1 and isinstance(stmt.body[0], ast.Raise)):
+                continue
+            if (isinstance(t, ast.Compare) and isinstance(t.left, ast.Name) and t.left.id in params
+                    and len(t.ops) == 1 and isinstance(t.ops[0], ast.IsNot)
+                    and isinstance(t.comparators[0], ast.Constant) and t.comparators[0].value is None
+                    and all(store(s) for s in stmt.body)):
+                continue
+        return False
+    return True
+
+
+def _pure_factory(node):
+    """True for a def whose body (docstring aside) only defines undecorated
+    nested functions and returns one of them: calling it runs nothing but
+    making a closure."""
+    if not isinstance(node, ast.FunctionDef) or node.decorator_list:
+        return False
+    if any(not _inert_to_evaluate(d, ()) for d in node.args.defaults + [d for d in node.args.kw_defaults if d]):
+        return False
+    body = _strip_docstrings(ast.Module(body=[node], type_ignores=[])).body[0].body
+    if not body or not isinstance(body[-1], ast.Return) or not isinstance(body[-1].value, ast.Name):
+        return False
+    inner = set()
+    for stmt in body[:-1]:
+        if not isinstance(stmt, ast.FunctionDef) or stmt.decorator_list or not all(
+                _inert_to_evaluate(d, ()) for d in stmt.args.defaults + [d for d in stmt.args.kw_defaults if d]):
+            return False
+        inner.add(stmt.name)
+    return body[-1].value.id in inner
+
+
+#: Builtins that build a value and touch nothing else.
+_INERT_CALLS = PURE_DEFINITION_BUILTINS | {"slice", "range", "dict", "list", "set", "str", "int", "float", "bool"}
+
+
+def _inert_to_evaluate(expr, factories):
+    """True when evaluating `expr` can change nothing: no call except a pure
+    builtin, a lambda (not run when made), or a call of a pure factory
+    (`_pure_factory`) with arguments of the same kind."""
+    lambdas = [sub for sub in ast.walk(expr) if isinstance(sub, ast.Lambda)]
+    inside = {id(x) for lam in lambdas for x in ast.walk(lam.body)}
+    for sub in ast.walk(expr):
+        if id(sub) in inside:
+            continue
+        if isinstance(sub, (ast.Await, ast.Yield, ast.YieldFrom, ast.NamedExpr)):
+            return False
+        if isinstance(sub, ast.Call):
+            fname = getattr(sub.func, "id", None) if isinstance(sub.func, ast.Name) else None
+            if fname not in _INERT_CALLS and fname not in factories:
+                return False
+    return True
+
+
+def _keyed_entries(value):
+    """[(key, value dump)] of a dict literal with string keys, or of a dict
+    comprehension `{x: V for x in (<string constants>)}` (no condition), so the
+    two spellings of one table compare equal; None for anything else."""
+    if isinstance(value, ast.Dict):
+        if not all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in value.keys):
+            return None
+        return [(k.value, ast.dump(v)) for k, v in zip(value.keys, value.values)]
+    if isinstance(value, ast.DictComp) and len(value.generators) == 1:
+        g = value.generators[0]
+        if g.ifs or g.is_async or not isinstance(g.target, ast.Name) or not isinstance(value.key, ast.Name) \
+                or value.key.id != g.target.id or _string_elts(g.iter) is None:
+            return None
+        if any(isinstance(n, ast.Name) and n.id == g.target.id for n in ast.walk(value.value)):
+            return None
+        return [(k, ast.dump(value.value)) for k in _string_elts(g.iter)]
+    return None
+
+
+def _entries_minus(old_value, new_value, retired):
+    """True when the table `new_value` is `old_value` without entries keyed by
+    retired lanes, in order, every removed value inert to evaluate."""
+    a, b = _keyed_entries(old_value), _keyed_entries(new_value)
+    if a is None or b is None or len({k for k, _ in a}) != len(a):
+        return False
+    if [e for e in a if e[0] not in retired] != b or len(a) == len(b):
+        return False
+    if isinstance(old_value, ast.Dict):
+        removed = [v for k, v in zip(old_value.keys, old_value.values) if k.value in retired]
+        return all(_calls_only_pure_builtins(v) for v in removed)
+    return _calls_only_pure_builtins(old_value.value)
+
+
+#: `_names_used`'s mark for a getattr-like call whose name is computed.
+_COMPUTED = ("computed-name",)
+
+
+def _names_used(trees, strings=True):
+    """Every identifier, attribute name and string constant in `trees`. With
+    `strings` False a string counts only as the name argument of
+    `getattr`/`hasattr`/`setattr`/`delattr`: the module reads the harness by
+    attribute, and its other strings are not lookups."""
+    out = set()
+    for tree in trees:
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Name):
+                out.add(n.id)
+            elif isinstance(n, ast.Attribute):
+                out.add(n.attr)
+            elif strings and isinstance(n, ast.Constant) and isinstance(n.value, str):
+                out.add(n.value)
+            elif not strings and isinstance(n, ast.Call) and getattr(n.func, "id", None) in (
+                    "getattr", "hasattr", "setattr", "delattr") and len(n.args) >= 2:
+                arg = n.args[1]
+                out.add(arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else _COMPUTED)
+    return out
+
+
+def retired_lanes(ref):
+    """The lanes registered by decorator in the harness at `ref` and in no
+    registry now: RETIRED. A table entry or list member naming one can only
+    concern that lane, which no column records any more; `registry_lanes`
+    and `_changed_row_lanes` let such a removal select nothing. Empty
+    without a ref or a readable old harness."""
+    old = _git_show(ref, HARNESS) if ref else None
+    if old is None:
+        return frozenset()
+    try:
+        old_lanes, _ = _harness_segments(old)
+    except SyntaxError:
+        return frozenset()
+    return frozenset(set(old_lanes) - set(all_lanes()))
+
+
+def retired_lane_subtraction(old, new, path=HARNESS):
+    """The surviving lanes a harness diff selects when it only RETIRES lanes
+    (and edits lane bodies), or None.
+
+    RETIRING A LANE MOVES NO OTHER LANE (lane release-auto-reuse-2, 2026-10-31).
+    The par-* lanes were removed from tools/identity_break.py with their
+    helpers and their entries in the shared tables, and the call graph read
+    `LANE_REVISIONS` (shared by the recorder) as changed: every lane. A lane
+    runs the same code in a process that registers fewer lanes; every
+    incremental record (`LANES=`, `SHARD=`, `ONLY_CHANGED`) rests on that, and
+    cross-vendor admission checks it. Accepted only when the new harness is
+    the old one with, in order, nothing but:
+      * lane bodies of retired lanes (registered at the old revision, gone now)
+        removed, and lane bodies of surviving lanes edited (selected);
+      * a call of a per-name declarer (`_per_name_declarer`) with some retired
+        names dropped, or removed when every name it declares is retired and
+        its other arguments are inert to evaluate (`_inert_to_evaluate`);
+      * a table `NAME = {...}` keyed by lane name with the retired lanes'
+        entries removed (`_entries_minus`; a dict comprehension over a literal
+        tuple of names reads as the table it builds), or a list of lane names
+        that lost retired names;
+      * a definition (def, or `NAME = <inert value>`) removed that nothing in
+        the new harness, its lane fragments or its runtime imports names.
+    Everything else returns None and the call-graph rule decides."""
+    key = f"{path}"
+    RETIRED_WHY.pop(key, None)
+    try:
+        old_lanes, old_others = _harness_segments(old)
+        new_lanes, new_others = _harness_segments(new)
+        old_model = _HarnessModel(old)
+    except SyntaxError:
+        RETIRED_WHY[key] = "a side does not parse"
+        return None
+    retired = set(old_lanes) - set(new_lanes)
+    if not retired or set(new_lanes) - set(old_lanes):
+        RETIRED_WHY[key] = "no lane retired, or a lane added"
+        return None
+    declarers = {n.name for n in old_model.stmts if _per_name_declarer(n)}
+    factories = {n.name for n in old_model.stmts if _pure_factory(n)}
+    # The new harness and its lane fragments (exec'd into its globals) name a
+    # helper by identifier or by string (`_HarnessModel.refs`); a runtime
+    # import reads the harness module by attribute and its SOURCE by AST
+    # (lane_applicability's `RAISING_COMPARE` matches call names in lane
+    # bodies, which no surviving code makes to a removed name), so for it only
+    # identifiers and the name argument of getattr-like calls count; a
+    # computed one (_COMPUTED) refuses every removal.
+    corpus, imports = [ast.parse(new)], []
+    for rel in sorted(os.path.join("tools", "identity_lanes", f)
+                      for f in os.listdir(os.path.join(ROOT, "tools", "identity_lanes")) if f.endswith(".py")) \
+            + list(HARNESS_RUNTIME_IMPORTS):
+        tree = _parse(rel)
+        if tree is None:
+            RETIRED_WHY[key] = f"{rel} does not parse"
+            return None
+        (imports if rel in HARNESS_RUNTIME_IMPORTS else corpus).append(tree)
+    used = _names_used(corpus) | _names_used(imports, strings=False)
+    if _COMPUTED in used:
+        RETIRED_WHY[key] = "a runtime import reads a harness attribute by a computed name"
+        return None
+    selected = {n for n in set(old_lanes) & set(new_lanes) if old_lanes[n] != new_lanes[n]}
+
+    def decl_call(node):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call) \
+                and isinstance(node.value.func, ast.Name) and node.value.func.id in declarers:
+            return node.value
+        return None
+
+    def lane_args(call):
+        out = []
+        for a in call.args[1:]:
+            if not (isinstance(a, ast.Constant) and isinstance(a.value, str)):
+                return None
+            out.append(a.value)
+        return out
+
+    def shrunk(o, n):
+        """True when `n` is `o` with retired lanes taken out."""
+        co, cn = decl_call(o), decl_call(n)
+        if co is not None and cn is not None:
+            lo, ln = lane_args(co), lane_args(cn)
+            return (lo is not None and ln is not None and co.func.id == cn.func.id and co.args[:1] and cn.args[:1]
+                    and ast.dump(co.args[0]) == ast.dump(cn.args[0])
+                    and [ast.dump(k) for k in co.keywords] == [ast.dump(k) for k in cn.keywords]
+                    and [x for x in lo if x not in retired] == ln and len(ln) < len(lo))
+        if isinstance(o, ast.Assign) and isinstance(n, ast.Assign) and len(o.targets) == 1 \
+                and ast.dump(o.targets[0]) == ast.dump(n.targets[0]) and isinstance(o.targets[0], ast.Name):
+            if _entries_minus(o.value, n.value, retired):
+                return True
+            members = _membership_delta(o.value, n.value)
+            return members is not None and not members[0] and members[1] and set(members[1]) <= retired
+        return False
+
+    def deletable(o):
+        call = decl_call(o)
+        if call is not None:
+            names = lane_args(call)
+            return (names is not None and names and set(names) <= retired
+                    and all(_inert_to_evaluate(a, factories) for a in call.args[:1])
+                    and all(_inert_to_evaluate(k.value, factories) for k in call.keywords))
+        bound = set(_stmt_names(o))
+        if not bound or bound & used:
+            return False
+        if isinstance(o, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return not o.decorator_list and all(_inert_to_evaluate(d, ()) for d in
+                                                o.args.defaults + [d for d in o.args.kw_defaults if d])
+        if isinstance(o, ast.Assign):
+            return all(isinstance(t, ast.Name) for t in o.targets) and _inert_to_evaluate(o.value, ())
+        return False
+
+    j = 0
+    for _name, o, od in old_others:
+        if j < len(new_others) and new_others[j][2] == od:
+            j += 1
+            continue
+        if j < len(new_others) and shrunk(o, new_others[j][1]):
+            j += 1
+            continue
+        if deletable(o):
+            continue
+        RETIRED_WHY[key] = (f"a statement at old line {getattr(o, 'lineno', '?')} changed other than by "
+                            "retiring a lane: " + ast.unparse(o)[:100].replace("\n", " "))
+        return None
+    if j != len(new_others):
+        RETIRED_WHY[key] = f"a statement was added at line {getattr(new_others[j][1], 'lineno', '?')}"
+        return None
+    RETIRED_WHY[key] = (f"{len(retired)} lane(s) retired ({', '.join(sorted(retired)[:4])}"
+                        f"{', ...' if len(retired) > 4 else ''}) and their declarations, table entries and "
+                        f"helpers removed; {len(selected)} surviving lane body(ies) edited")
+    return sorted(selected)
+
+
 def harness_lanes(ref, path=HARNESS):
     """The lanes a diff of `tools/identity_break.py` can reach, or None when
     it can reach all of them.
@@ -6730,6 +7039,10 @@ def harness_lanes(ref, path=HARNESS):
             and not _only_new_functions(old_others, new_others, old_lanes):
         prose = _lane_keyed_prose(old_others, new_others, set(old_lanes) | set(new_lanes))
         if prose is None:
+            retired = retired_lane_subtraction(old, new, path)
+            if retired is not None:
+                HARNESS_WHY[key] = RETIRED_WHY.get(path, "lanes retired")
+                return retired
             # A shared statement moved. Before answering every lane, ask the
             # call graph WHICH lanes reach what moved (2026-09-22).
             lanes, why = harness_closure_lanes(old, new, path)
