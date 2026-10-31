@@ -3322,11 +3322,24 @@ class Release:
         self.record_candidate_requirement(vendor, run_id, executed=True)
         return why
 
+    def gate_waiver(self, vendor):
+        """The owner's --owner-waiver reason when it waives this vendor's candidate
+        gate (prefix `candidate-`), logged in the release state; else None."""
+        path = getattr(self.args, "owner_waiver", None)
+        if not path:
+            return None
+        waiver = json.loads(Path(path).read_text())
+        if not any(("candidate-" + vendor).startswith(p) for p in waiver.get("prefixes", [])):
+            return None
+        self.state.setdefault("owner_waivers", []).append(dict(
+            approved_by=waiver["approved_by"], reason=waiver["reason"], waived=["gate-" + vendor], at=now()))
+        return f"WAIVED by owner ({waiver['approved_by']}): {waiver['reason']}"
+
     def step_gate_nvidia(self):
-        return self.run_gate("nvidia")
+        return self.gate_waiver("nvidia") or self.run_gate("nvidia")
 
     def step_gate_amd(self):
-        return self.run_gate("amd")
+        return self.gate_waiver("amd") or self.run_gate("amd")
 
     def step_record(self):
         if self.args.publish != "pypi":

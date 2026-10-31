@@ -1,0 +1,11 @@
+{
+  "approved_by": "Andrew Hendel, explicit conversation instruction, 2026-10-31 (\"please eliminate that rule lets release. we already checked\")",
+  "prefixes": [
+    "candidate-",
+    "identity-",
+    "runtime-",
+    "adapters-",
+    "coverage-source"
+  ],
+  "reason": "0.8.63 publishes without the lq NVIDIA/AMD candidate gates and without re-executing ledger identity/runtime/adapter rows. Evidence instead: identity of these exact native builds was recorded on Apple M4, NVIDIA L40S/RTX4090 sm_89, NVIDIA PTX sm_80, AMD MI300X gfx942 and Linux CPU and admitted into the committed reference table (docs/release/0.8.63-identity-reuse-waiver.json; cross-vendor comparison over every cell, PTX divergent 0); the 1275-endpoint and 118-output light references are bit-identical on Apple, NVIDIA and AMD; the macOS release wheel's verify --self-test passed; every Linux wheel passed audit.sh at packing. Waived rows stay waived, never reported as executed passes. Live PyPI verification follows publication."
+}
