@@ -366,7 +366,9 @@ run_binding() {   # tier script[:group] env-prefix...: the build, through the ca
   if [[ "$s" = merged_build.sh:* ]]; then group=${s#merged_build.sh:}; s=merged_build.sh; fi
   outputs=$(declared_output "$tier" "$s" "$group")
   case "$s" in
-    merged_build.sh) args="$([[ "$tier" = host ]] && echo host || echo gpu) --group $group" ;;
+    # A fixed root path: the compiler embeds the root .mojo path in the image, so
+    # a mktemp root made every leg's host bindings differ by 40 bytes (0.8.63).
+    merged_build.sh) args="$([[ "$tier" = host ]] && echo host || echo gpu) --group $group --rootdir /tmp/mojolearn-merged-roots/$tier" ;;
   esac
   if [[ "$USE_BINCACHE" = 1 ]]; then
     # shellcheck disable=SC2086  # $args is one word or empty
