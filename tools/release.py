@@ -2545,6 +2545,15 @@ class Release:
         taken = self.admitted_legs()
         legs = [l for l in linux_legs(self) if l.name not in taken]
         proofs = [leg.release_build / "build" / "build-provenance.json" for leg in legs]
+        # A leg taken by its compile requirements ships a changed set (the host
+        # owner's host bindings), so the packer counts it as built and needs its
+        # original complete build proof; a leg taken whole stays proof-free.
+        for name, doc in sorted(taken.items()):
+            if doc.get("kind") == "compile-requirements":
+                proof = Path(doc["release_build"]) / "build" / "build-provenance.json"
+                if sha256(proof) != doc.get("proof_sha256"):
+                    raise StepFailed(f"{name}: the retained build proof differs from its admission")
+                proofs.append(proof)
         if self.assembly_needed():
             base = self.rel / "reuse" / "sets"
             sets = sorted({base / vendor for vendor, _ in release_reuse.LINUX_SETS})
