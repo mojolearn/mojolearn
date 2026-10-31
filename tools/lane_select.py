@@ -2337,20 +2337,35 @@ def _mojo_named_imports(rel, idents):
     return out
 
 
-def _mojo_symbol_step(rel, name):
+def _mojo_symbol_step(rel, name, ops=None):
     """The (file, name) nodes one top-level definition `name` of `rel` names
     (`_mojo_symbol_reach`), or None when `rel` does not define it (or cannot
     be read with certainty) and must be closed over whole. A node named None
     is a file to close over whole. Memoized: every lane asks for the same
-    nodes."""
-    key = (rel, name)
-    if key in _SYMBOL_STEPS:
-        return _SYMBOL_STEPS[key]
+    nodes.
+
+    With `ops` (an `OperationSet`), each body is read through
+    `dispatch_view`: a branch of an operation-string dispatcher that no
+    operation in `ops` can enter contributes nothing. The memo is then keyed
+    by the branches kept, so lanes whose operations open the same branches
+    share it."""
     defs = _mojo_defs_for(rel) if rel.endswith(".mojo") else None
     if defs is None or name not in defs[0]:
-        _SYMBOL_STEPS[key] = None
+        _SYMBOL_STEPS[(rel, name)] = None
         return None
     blocks, preamble = defs
+    if ops is None:
+        key = (rel, name)
+        if key in _SYMBOL_STEPS:
+            return _SYMBOL_STEPS[key]
+        view = lambda text: text  # noqa: E731
+    else:
+        cache = {}
+
+        def view(text):
+            if text not in cache:
+                cache[text] = dispatch_view(text, ops)
+            return cache[text][0]
     pre_idents = set(_MOJO_IDENT_RE.findall(preamble))
     bodies, local_seen, local = [preamble], set(), [name] + [o for o in blocks if o in pre_idents]
     while local:
@@ -2361,18 +2376,524 @@ def _mojo_symbol_step(rel, name):
         body = blocks.get(fn_name)
         if body is None:
             continue
+        body = view(body)
         bodies.append(body)
         idents = set(_MOJO_IDENT_RE.findall(body))
         local.extend(other for other in blocks if other in idents and other not in local_seen)
+    if ops is not None:
+        masks = tuple(sorted((t, m) for t, (_v, m) in cache.items() if m))
+        key = (rel, name) if not masks else (rel, name, masks)
+        _SYMBOL_KEY[(rel, name, ops)] = key
+        if key in _SYMBOL_STEPS:
+            return _SYMBOL_STEPS[key]
     idents = set(_MOJO_IDENT_RE.findall("\n".join(bodies)))
     out = _mojo_named_imports(rel, idents)
     _SYMBOL_STEPS[key] = out
     _SYMBOL_NAMES[key] = idents
     _SYMBOL_REFS[key] = _mojo_export_refs("\n".join(bodies))
+    _SYMBOL_KEY[(rel, name, ops)] = key
     return out
 
 
-def _mojo_symbol_reach(pending, names=None, refs=None):
+_SYMBOL_KEY = {}             # (rel, name, ops) -> the _SYMBOL_STEPS key that step was stored under
+_CACHES.append(_SYMBOL_KEY)
+
+
+# --------------------------------------------- operation-string dispatchers
+# THE DISPATCHER'S OPERATIONS PER LANE (lane identity-attribution, 2026-10-31,
+# docs/plans/POST_0863_RELEASE_TOOLING.md item 3). The classical owner's one
+# compiled entry, `classical_native_call` (bindings/classical_native.mojo,
+# served by `_mojolearn_runtime_classical_host` through HOST_IMPORT_ALIASES on
+# every install), selects what it runs from a runtime string:
+# `if operation == "ridge_fit"`, `elif operation.startswith("family_")`, then
+# `family_operation` (bindings/family_native.mojo) again by prefix, and so on
+# down to each family's owner. Read as plain text, the entry's body names every
+# family's kernels, so every lane that calls it at all (nearly all of them, for
+# `vendor_used`, `archive_save` and the like) took every export name those
+# owners look up, `kmeans_fit` and `spectral_fit_predict_dataset` among them,
+# and a one-definition edit of cluster/host/kmeans_oracle.mojo:host_fit_main
+# selected 432 lanes on the CPU column.
+#
+# The rule: a branch of a DISPATCHER is followed for a lane only when an
+# operation the lane can pass can enter it. What it rests on, each held by
+# tools/test_lane_select_narrowing.py in both directions:
+#   * WHAT A LANE CAN PASS (`OperationSet`). An operation string is a value the
+#     lane's own code spells: the identifier-shaped string constants and
+#     attribute names of the regions it executes (`_executed_names`, the same
+#     over-approximation that decides which exports a lane calls), the files
+#     every lane reaches, and every string literal of the native definitions
+#     the walk reaches (the fixed point in `lane_sources` adds them, so
+#     `var route = "host_infer_predict"` in a kept branch opens the callee's
+#     branch for it). A constant ending in `_` is also a STEM: an f-string or a
+#     concatenation (`f"family_{op}"`, `"family_" + op`) can extend it, so it
+#     opens every branch a string starting with it could enter.
+#   * WHAT A DISPATCHER IS (`_dispatch_vars`). A variable compared with at
+#     least two different literals (`==`, `!=`, `.startswith`) that is either
+#     `var v = String(t[i])` (a Python argument, never assigned again) or a
+#     `String` parameter whose EVERY Mojo call site passes a literal, a
+#     variable assigned only literals, a Python argument, or a dispatcher
+#     variable of the caller (`_string_param_admissible`, across the tree; a
+#     composed or computed argument anywhere leaves the function unnarrowed).
+#   * WHICH BRANCHES ARE DEAD (`_branch_live`). An `if`/`elif` whose condition
+#     is built only from those comparisons, `and`, `or`, `not` and brackets,
+#     and is False for every operation of the set and for any operation the
+#     set does not name. Any other condition, `else:` and everything after the
+#     chain stay live. A dead branch's body is dropped from the text the walk
+#     reads; the literals a condition compares with run nothing and are not
+#     read as export names.
+_DISPATCH_ATOM_RE = re.compile(
+    r'(?P<v1>[A-Za-z_]\w*)\s*(?P<op1>==|!=)\s*"(?P<l1>[^"\\\n]*)"'
+    r'|"(?P<l2>[^"\\\n]*)"\s*(?P<op2>==|!=)\s*(?P<v2>[A-Za-z_]\w*)\b'
+    r'|(?P<v3>[A-Za-z_]\w*)\.startswith\(\s*"(?P<l3>[^"\\\n]*)"\s*\)')
+_DISPATCH_HEAD_RE = re.compile(r"^(?P<indent>[ \t]*)(?P<kw>if|elif)\b(?P<rest>.*)$")
+
+
+class OperationSet:
+    """The operation strings one lane can pass to a dispatcher (see the
+    section comment): `names` exactly, and `stems` (the names ending in `_`)
+    as prefixes of a longer string. Hashable by its RELEVANT part only
+    (`relevant`): names no dispatcher condition can tell apart from an
+    unnamed string do not change any branch, so lanes sharing the rest share
+    the walks."""
+
+    def __init__(self, names):
+        vocab_eq, vocab_sw, vocab_prefixes = _dispatch_vocabulary()
+        keep = set()
+        for o in names:
+            if not isinstance(o, str):
+                continue
+            if o in vocab_eq or any(o[:k] in vocab_sw for k in range(len(o) + 1)):
+                keep.add(o)
+            elif o.endswith("_") and o in vocab_prefixes:
+                keep.add(o)
+        self.names = frozenset(keep)
+        self.stems = frozenset(o for o in keep if o.endswith("_"))
+        self._sorted = sorted(self.names)
+
+    def __hash__(self):
+        return hash(self.names)
+
+    def __eq__(self, other):
+        return isinstance(other, OperationSet) and other.names == self.names
+
+    def __repr__(self):
+        return f"OperationSet({sorted(self.names)[:8]}{'...' if len(self.names) > 8 else ''})"
+
+    def starting_with(self, prefix):
+        import bisect
+        i = bisect.bisect_left(self._sorted, prefix)
+        return i < len(self._sorted) and self._sorted[i].startswith(prefix)
+
+
+_DISPATCH_VOCAB = None
+
+
+def _dispatch_vocabulary():
+    """(every literal compared with `==`/`!=`, every `.startswith` literal,
+    every prefix of either) over the tree's Mojo sources: the strings a
+    dispatcher condition can tell apart. A superset is harmless (it only makes
+    `OperationSet` keys finer)."""
+    global _DISPATCH_VOCAB
+    if _DISPATCH_VOCAB is None:
+        eq, sw = set(), set()
+        for rel in sorted(tracked_files()):
+            if not rel.endswith(".mojo"):
+                continue
+            try:
+                text = _read(rel)
+            except OSError:
+                continue
+            if "==" not in text and "!=" not in text and "startswith" not in text:
+                continue
+            for m in _DISPATCH_ATOM_RE.finditer(text):
+                if m.group("l3") is not None:
+                    sw.add(m.group("l3"))
+                else:
+                    eq.add(m.group("l1") if m.group("l1") is not None else m.group("l2"))
+        prefixes = {lit[:k] for lit in eq | sw for k in range(len(lit) + 1)}
+        _DISPATCH_VOCAB = (frozenset(eq), frozenset(sw), frozenset(prefixes))
+    return _DISPATCH_VOCAB
+
+
+_CACHES.append(_DISPATCH_PARSE := {})
+
+
+def _cond_parse(text, var):
+    """The condition `text` as a tree over comparisons of `var`
+    (('atom', kind, literal), ('not', t), ('and'|'or', a, b)), or None when it
+    holds anything else (then the branch is live)."""
+    atoms, out, pos = [], [], 0
+    for m in _DISPATCH_ATOM_RE.finditer(text):
+        v = m.group("v1") or m.group("v2") or m.group("v3")
+        if v != var:
+            continue
+        out.append(text[pos:m.start()])
+        if m.group("l3") is not None:
+            atoms.append(("sw", m.group("l3")))
+        else:
+            atoms.append((m.group("op1") or m.group("op2"), m.group("l1") if m.group("l1") is not None
+                          else m.group("l2")))
+        out.append(f" @{len(atoms) - 1} ")
+        pos = m.end()
+    out.append(text[pos:])
+    tokens = re.findall(r"@\d+|\(|\)|[A-Za-z_]\w*|\S", "".join(out))
+    if not atoms or any(t not in ("(", ")", "and", "or", "not") and not t.startswith("@") for t in tokens):
+        return None
+    k = [0]
+
+    def expr():
+        node = term()
+        while k[0] < len(tokens) and tokens[k[0]] == "or":
+            k[0] += 1
+            node = ("or", node, term())
+        return node
+
+    def term():
+        node = factor()
+        while k[0] < len(tokens) and tokens[k[0]] == "and":
+            k[0] += 1
+            node = ("and", node, factor())
+        return node
+
+    def factor():
+        if k[0] >= len(tokens):
+            raise ValueError("condition ends early")
+        t = tokens[k[0]]
+        k[0] += 1
+        if t == "not":
+            return ("not", factor())
+        if t == "(":
+            node = expr()
+            if k[0] >= len(tokens) or tokens[k[0]] != ")":
+                raise ValueError("unbalanced")
+            k[0] += 1
+            return node
+        if t.startswith("@"):
+            kind, lit = atoms[int(t[1:])]
+            return ("atom", kind, lit)
+        raise ValueError(t)
+    try:
+        tree = expr()
+    except ValueError:
+        return None
+    return tree if k[0] == len(tokens) else None
+
+
+def _cond_value(tree, value, stem=False):
+    """True, False or None (unknown) for `tree` when the variable holds
+    `value`, or, with `stem`, some string starting with `value`."""
+    kind = tree[0]
+    if kind == "atom":
+        _, op, lit = tree
+        if op == "sw":
+            if value.startswith(lit):
+                return True
+            return None if stem and lit.startswith(value) else False
+        if stem:
+            eq = None if lit.startswith(value) else False
+        else:
+            eq = value == lit
+        return eq if op == "==" else (None if eq is None else not eq)
+    if kind == "not":
+        v = _cond_value(tree[1], value, stem)
+        return None if v is None else not v
+    a, b = _cond_value(tree[1], value, stem), _cond_value(tree[2], value, stem)
+    if kind == "and":
+        return False if a is False or b is False else (True if a and b else None)
+    return True if a is True or b is True else (False if a is False and b is False else None)
+
+
+def _cond_literals(tree, out):
+    if tree[0] == "atom":
+        out.add(tree[2])
+    else:
+        for sub in tree[1:]:
+            _cond_literals(sub, out)
+    return out
+
+
+def _branch_live(tree, ops):
+    """Can any operation of `ops`, or an operation it does not name, enter a
+    branch guarded by `tree`."""
+    unnamed = _cond_value(tree, "\0")         # a string no literal of the condition equals or starts
+    if unnamed is not False:
+        return True
+    for lit in _cond_literals(tree, set()):
+        for o in ([lit] if lit in ops.names else []):
+            if _cond_value(tree, o) is not False:
+                return True
+        if ops.starting_with(lit) and any(_cond_value(tree, o) is not False
+                                          for o in ops.names if o.startswith(lit)):
+            return True
+    for s in ops.stems:
+        if _cond_value(tree, s, stem=True) is not False or _cond_value(tree, s) is not False:
+            return True
+    return False
+
+
+_PY_ARG_INIT_RE = r"String\(\s*(?:py\s*=\s*)?[A-Za-z_]\w*\s*\[\s*\d+\s*\]\s*\)"
+
+
+def _dispatch_parse(text):
+    """The dispatch structure of one Mojo definition text (or several joined):
+    [(first line, last line + 1, body start, var, condition tree)] for every
+    `if`/`elif` over a dispatcher variable (`_dispatch_vars`), or [] when the
+    text has none or cannot be read with certainty. Memoized by text."""
+    hit = _DISPATCH_PARSE.get(text)
+    if hit is not None:
+        return hit
+    out = []
+    code = _mojo_code_text(text)
+    scanned = _mojo_scan(code)
+    if scanned is not None and ("==" in code or "!=" in code or "startswith" in code):
+        dvars = _dispatch_vars(code)
+        if dvars:
+            lines = [line for line, _ in scanned]
+            conts = [c for _, c in scanned]
+            n = len(lines)
+            for i in range(n):
+                if conts[i]:
+                    continue
+                m = _DISPATCH_HEAD_RE.match(lines[i])
+                if not m:
+                    continue
+                indent = len(m.group("indent").expandtabs())
+                j = i + 1
+                while j < n and conts[j]:
+                    j += 1
+                head = " ".join([m.group("rest")] + [lines[t].strip() for t in range(i + 1, j)])
+                cond, tail = _split_colon(head)
+                if cond is None:
+                    continue
+                trees = [(v, _cond_parse(cond, v)) for v in dvars if re.search(r"\b%s\b" % re.escape(v), cond)]
+                trees = [(v, t) for v, t in trees if t is not None]
+                if len(trees) != 1:
+                    continue             # no dispatcher variable, or two at once: live
+                var, tree = trees[0]
+                if tail.strip():
+                    end = j              # `if cond: stmt` on one line
+                else:
+                    end = j
+                    while end < n:
+                        line = lines[end]
+                        if not conts[end] and line.strip() and \
+                                len(line) - len(line.lstrip(" \t")) <= indent:
+                            break
+                        end += 1
+                out.append((i, end, j, var, tree, tail.strip()))
+    _DISPATCH_PARSE[text] = out
+    return out
+
+
+def _split_colon(head):
+    """(condition, text after the statement's colon) of an `if` head, the
+    colon at bracket depth zero outside strings; (None, None) when absent."""
+    depth, quote = 0, None
+    for k, c in enumerate(head):
+        if quote:
+            if c == quote:
+                quote = None
+            continue
+        if c in "\"'":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == ":" and depth == 0:
+            return head[:k], head[k + 1:]
+    return None, None
+
+
+def _dispatch_vars(code):
+    """The dispatcher variables of one definition's code text: compared with
+    two or more different literals, and either a Python argument read once
+    (`var v = String(t[i])`, never assigned again) or a `String` parameter
+    every Mojo call site of the function hands an admissible value
+    (`_string_param_admissible`)."""
+    lits = {}
+    for m in _DISPATCH_ATOM_RE.finditer(code):
+        v = m.group("v1") or m.group("v2") or m.group("v3")
+        lits.setdefault(v, set()).add(m.group("l1") if m.group("l1") is not None else
+                                      m.group("l2") if m.group("l2") is not None else "^" + m.group("l3"))
+    out = set()
+    for v, seen in lits.items():
+        if len(seen) < 2:
+            continue
+        assigned = re.findall(r"(?<![\w.])%s\s*(?:[+\-*/%%|&^]?=)(?!=)" % re.escape(v), code)
+        decl = re.findall(r"\bvar\s+%s\s*(?::\s*String\s*)?=\s*([^\n]*)" % re.escape(v), code)
+        if decl:
+            if len(decl) == 1 and len(assigned) == 1 and re.fullmatch(_PY_ARG_INIT_RE, decl[0].strip()):
+                out.add(v)
+            continue
+        if assigned:
+            continue
+        for fn_name, index in _string_params(code, v):
+            if _string_param_admissible(fn_name, v, index):
+                out.add(v)
+    return out
+
+
+def _string_params(code, var):
+    """(function name, positional index) for every `def` in `code` that takes
+    `var: String` as a parameter."""
+    out = []
+    for m in re.finditer(r"^[ \t]*(?:fn|def)\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*\(", code, re.M):
+        depth, k = 1, m.end()
+        while k < len(code) and depth:
+            depth += {"(": 1, ")": -1}.get(code[k], 0)
+            k += 1
+        params = _split_args(code[m.end():k - 1])
+        for index, p in enumerate(params):
+            if re.fullmatch(r"(?:var\s+|read\s+|owned\s+)?%s\s*:\s*String\s*" % re.escape(var), p.strip()):
+                out.append((m.group(1), index))
+    return out
+
+
+def _split_args(text):
+    """Top-level comma split of an argument or parameter list."""
+    out, depth, quote, cur = [], 0, None, []
+    for c in text:
+        if quote:
+            cur.append(c)
+            if c == quote:
+                quote = None
+            continue
+        if c in "\"'":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            out.append("".join(cur))
+            cur = []
+            continue
+        cur.append(c)
+    if "".join(cur).strip():
+        out.append("".join(cur))
+    return out
+
+
+_PARAM_ADMISSIBLE = {}
+_CACHES.append(_PARAM_ADMISSIBLE)
+_MOJO_CALLERS = None
+
+
+def _mojo_call_sites(fn_name):
+    """[(file, caller code text, argument texts)] for every call of
+    `fn_name(...)` in the tree's Mojo sources (any file: a name defined twice
+    is judged over the call sites of both)."""
+    global _MOJO_CALLERS
+    if _MOJO_CALLERS is None:
+        _MOJO_CALLERS = {}
+        for rel in sorted(tracked_files()):
+            if rel.endswith(".mojo"):
+                try:
+                    _MOJO_CALLERS[rel] = _mojo_code_text(_read(rel))
+                except OSError:
+                    continue
+    out = []
+    pat = re.compile(r"(?<![\w.])%s\s*\(" % re.escape(fn_name))
+    for rel, code in _MOJO_CALLERS.items():
+        if fn_name not in code:
+            continue
+        for m in pat.finditer(code):
+            before = code[max(0, m.start() - 16):m.start()]
+            if re.search(r"\b(?:def|fn)\s+$", before):
+                continue                 # the definition itself
+            depth, k = 1, m.end()
+            while k < len(code) and depth:
+                depth += {"(": 1, ")": -1}.get(code[k], 0)
+                k += 1
+            start = code.rfind("\ndef ", 0, m.start())
+            start2 = code.rfind("\nfn ", 0, m.start())
+            caller = code[max(start, start2, 0):k]
+            out.append((rel, caller, _split_args(code[m.end():k - 1])))
+    return out
+
+
+def _string_param_admissible(fn_name, var, index, seen=None):
+    """Does EVERY Mojo call site of `fn_name` pass, as its `var: String`
+    parameter (position `index` or keyword `var`), a value the operation set
+    accounts for: a string literal, a variable the caller assigns only
+    literals or a Python argument (`String(t[i])`), or a `String` parameter of
+    the caller that is itself admissible. Anything else (a concatenation, a
+    call's result, a field) is refused, and the function is not narrowed."""
+    key = (fn_name, var, index)
+    if key in _PARAM_ADMISSIBLE:
+        return _PARAM_ADMISSIBLE[key]
+    seen = set() if seen is None else seen
+    if key in seen:
+        return True                      # a cycle passes nothing new
+    seen.add(key)
+    ok = True
+    for _rel, caller, args in _mojo_call_sites(fn_name):
+        arg = None
+        for a in args:
+            km = re.match(r"\s*%s\s*=(?!=)(.*)$" % re.escape(var), a, re.S)
+            if km:
+                arg = km.group(1)
+        if arg is None:
+            positional = [a for a in args if not re.match(r"\s*[A-Za-z_]\w*\s*=(?!=)", a)]
+            if any(a.strip().startswith("*") for a in args) or index >= len(positional):
+                ok = False
+                break
+            arg = positional[index]
+        arg = arg.strip()
+        if re.fullmatch(r'"[^"\\\n]*"', arg) or re.fullmatch(r"String\(\s*\"[^\"\\\n]*\"\s*\)", arg) \
+                or re.fullmatch(_PY_ARG_INIT_RE, arg):
+            continue
+        if not re.fullmatch(r"[A-Za-z_]\w*", arg):
+            ok = False
+            break
+        decls = re.findall(r"\bvar\s+%s\s*(?::\s*String\s*)?=\s*([^\n]*)" % re.escape(arg), caller)
+        assigns = re.findall(r"(?<![\w.])%s\s*=(?!=)\s*([^\n]*)" % re.escape(arg), caller)
+        values = decls + [a for a in assigns if a not in decls]
+        if values:
+            literal = r'\s*(?:"[^"\\\n]*"|String\(\s*"[^"\\\n]*"\s*\))\s*'
+            if all(re.fullmatch(_PY_ARG_INIT_RE, v.strip()) or re.fullmatch(
+                    r"{0}(?:if .+ else{0})*".format(literal), v.strip()) for v in values):
+                continue
+            ok = False
+            break
+        params = _string_params(caller, arg)
+        if params and all(_string_param_admissible(f, arg, i, seen) for f, i in params):
+            continue
+        ok = False
+        break
+    _PARAM_ADMISSIBLE[key] = ok
+    return ok
+
+
+def dispatch_view(text, ops):
+    """(text, kept) for one Mojo definition text read for a lane whose
+    operations are `ops`: the text with every dead dispatcher branch's body
+    blanked and every dispatcher condition's literals removed, and the tuple
+    of branch decisions (empty when the text dispatches on nothing). The
+    text is returned unchanged when it has no dispatcher."""
+    parsed = _dispatch_parse(text)
+    if not parsed:
+        return text, ()
+    code = _mojo_code_text(text).split("\n")
+    kept = []
+    for first, end, body, var, tree, inline in parsed:
+        live = _branch_live(tree, ops)
+        kept.append(live)
+        head = re.match(r"^([ \t]*)", code[first]).group(1)
+        kw = "if" if code[first].lstrip().startswith("if") else "elif"
+        code[first] = f"{head}{kw} True:" + ((" " + inline if live else " pass") if inline else "")
+        for t in range(first + 1, body):
+            code[t] = ""
+        if not live and not inline:
+            for t in range(body, end):
+                code[t] = ""
+            # a dead branch keeps a statement, so the block still parses
+            code[first] += " pass"
+    return "\n".join(code), tuple(kept)
+
+
+def _mojo_symbol_reach(pending, names=None, refs=None, ops=None):
     """(files reached by name, files to close over whole) for imported
     symbols `pending` [(file, name)], followed DEFINITION BY DEFINITION.
 
@@ -2391,15 +2912,16 @@ def _mojo_symbol_reach(pending, names=None, refs=None):
         if node in seen:
             continue
         seen.add(node)
-        step = None if node[1] is None else _mojo_symbol_step(*node)
+        step = None if node[1] is None else _mojo_symbol_step(node[0], node[1], ops)
         if step is None:
             whole.add(node[0])
             continue
         reached.add(node[0])
+        key = node if ops is None else _SYMBOL_KEY.get((node[0], node[1], ops), node)
         if names is not None:
-            names.update(_SYMBOL_NAMES.get(node, ()))
+            names.update(_SYMBOL_NAMES.get(key, ()))
         if refs is not None:
-            refs.update(_SYMBOL_REFS.get(node, ()))
+            refs.update(_SYMBOL_REFS.get(key, ()))
         stack.extend(step)
     return reached, whole
 
@@ -3787,7 +4309,7 @@ def lane_sources():
     read_by_name = {}        # seed_cache key -> the files of it read definition by definition
     native_names = {}        # seed_cache key -> names used by the reached native bodies
 
-    def binding_seeds(src, used, wide=True, mark=True):
+    def binding_seeds(src, used, wide=True, mark=True, ops=None):
         """The Mojo files ONE binding contributes to a lane whose door calls
         `used`.
 
@@ -3824,7 +4346,9 @@ def lane_sources():
         exports = _binding_exports(src)
         delegated = _delegated_exports(src)
         hit = tuple(sorted(e for e in used if e in exports or e in delegated))
-        key = (src, hit, wide)
+        # The lane's operations decide which dispatcher branches its calls can
+        # enter (`dispatch_view`); the key carries their relevant part.
+        key = (src, hit, wide, ops)
         if key not in seed_cache:
             if not hit:
                 # NO EXPORT OF THIS BINDING IS CALLED. For a binding the lane
@@ -3883,6 +4407,8 @@ def lane_sources():
                         body = blocks.get(name)
                         if body is None:
                             continue
+                        if ops is not None:
+                            body = dispatch_view(body, ops)[0]
                         bodies.append(body)
                         # the identifiers of the body, not a regex per block
                         # (same word boundaries; it ran per file-local name)
@@ -3898,7 +4424,7 @@ def lane_sources():
                 # into the file defining it (`_mojo_symbol_reach`), so a
                 # thin-shell binding's impl module does not hand every
                 # export's oracles to every lane.
-                reached, whole = _mojo_symbol_reach(pending, named, refs)
+                reached, whole = _mojo_symbol_reach(pending, named, refs, ops)
                 closed = _mojo_closure(seeds | whole)
                 seed_cache[key] = closed | reached | {src}
                 read_by_name[key] = (reached | {src}) - closed
@@ -3947,6 +4473,10 @@ def lane_sources():
     # THE PYTHON FILES EVERY LANE REACHES: the shared helpers (`_buffer.py`,
     # `_array.py`) and the host doors they import for their native helpers.
     ubiquitous_py = set.intersection(*[f for _, f, _, _ in reach.values()]) if reach else set()
+    # THE OPERATIONS EVERY LANE CAN PASS (`OperationSet`): what the files every
+    # lane reaches spell, whole. The own walk stops at those files, and their
+    # import-time code runs in every lane's process.
+    ubiquitous_ops = set().union(*[_file_called_names(rel) for rel in ubiquitous_py if rel.endswith(".py")])
 
     connected_names = set().union(*[b for _, _, _, b in reach.values()]) if reach else set()
     for binding in tuple(connected_names):
@@ -4087,12 +4617,19 @@ def lane_sources():
                            True if _whole(lane, b) else "narrow") for b in sorted(connected)]
         exports_available = set().union(*[set(_binding_exports(src)) | set(_delegated_exports(src))
                                          for src, _ in native_sources])
+        # THE OPERATIONS THIS LANE CAN PASS to a dispatcher (`OperationSet`,
+        # `dispatch_view`): its own names, the files every lane reaches, and
+        # every literal the native definitions it reaches spell, to a fixed
+        # point together with the exports below.
+        op_names = set(used) | ubiquitous_ops
+        ops = OperationSet(op_names)
         while True:
-            found, origins_grew = set(), False
+            found, origins_grew, spelled = set(), False, set()
             for src, wide in native_sources:
-                binding_seeds(src, used, wide)
+                binding_seeds(src, used, wide, ops=ops)
                 exports = set(_binding_exports(src)) | set(_delegated_exports(src))
-                key = (src, tuple(sorted(used & exports)), wide)
+                key = (src, tuple(sorted(used & exports)), wide, ops)
+                spelled |= native_names[key]
                 reached_exports = native_names[key] & exports_available
                 found.update(reached_exports)
                 # Reporting follows each export separately. Sharing a native
@@ -4103,25 +4640,28 @@ def lane_sources():
                     tags = origins.get(name, 0)
                     if not tags:
                         continue
-                    binding_seeds(src, {name}, "narrow", mark=False)
-                    for reached_name in native_names[(src, (name,), "narrow")] & exports_available:
+                    binding_seeds(src, {name}, "narrow", mark=False, ops=ops)
+                    for reached_name in native_names[(src, (name,), "narrow", ops)] & exports_available:
                         previous = origins.get(reached_name, 0)
                         if tags & ~previous:
                             origins[reached_name] = previous | tags
                             origins_grew = True
             fresh = found - used
-            if not fresh and not origins_grew:
+            op_names |= spelled | fresh
+            grown = OperationSet(op_names)
+            if not fresh and not origins_grew and grown == ops:
                 break
             used.update(fresh)
+            ops = grown
 
         def recorded_seeds(src, wide=True):
-            got = binding_seeds(src, used, wide)
+            got = binding_seeds(src, used, wide, ops=ops)
             exports_of = _binding_exports(src)
             calls.append((src, wide, tuple(sorted(e for e in used if e in exports_of)), frozenset(got)))
             for name in used & (exports_of.keys() | _delegated_exports(src).keys()):
                 tags = origins.get(name, 0)
                 if tags:
-                    evidence_files = binding_seeds(src, {name}, "narrow", mark=False)
+                    evidence_files = binding_seeds(src, {name}, "narrow", mark=False, ops=ops)
                     for file in evidence_files & got:
                         limitation_paths[file] = limitation_paths.get(file, 0) | tags
             return got
