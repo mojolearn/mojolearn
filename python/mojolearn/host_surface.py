@@ -449,7 +449,6 @@ TRAINING_LANE_NAMES = {
     "nystroem-laplacian": "nystroem laplacian kernel variant",
 
     # Logical row shards; pending independent reference qualification.
-    "par-rbf-sampler": "the row-sharded random Fourier feature transform",
     "select-d": "ordinary differencing order selection",
     "gemm-pinned": "pinned GEMM",
     "kde": "kernel density",
@@ -578,8 +577,6 @@ TRAINING_LANE_NAMES = {
     # joined `the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)` and these two take a CPU column.
     # `PUBLIC_INAPPLICABLE_PREFIXES` keeps every `par-*` lane out of the public
     # reference set, so being covered here does not make them public.
-    "par-gpc-fit": "the class-sharded Gaussian process classifier fit",
-    "par-gpc-predict": "the class-sharded Gaussian process classifier prediction",
     # lane/cpu-routes-gpu-only-four (2026-09-20): the other FOUR of that
     # census, which the same lane declared had "no cpu route" and could never
     # have one. Three of the four refusals turned out to be about RESIDENCY
@@ -595,8 +592,6 @@ TRAINING_LANE_NAMES = {
     "transformer-decode-session": "the resident Transformer decode session",
     "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
     "transformer-forward-tape": "the Transformer block's forward tape, its backward and its close",
-    "par-causal-lm": "the layer-owned causal language model",
-    "par-cross-val": "the fold-dispatched cross-validation",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -1037,10 +1032,6 @@ TRAINING_LANE_NAMES = {
     # every train, infer and batch cell of the three lanes read IDENTICAL x4
     # against the 166-lane record before the gate ran, and the sabotage set
     # DIVERGENT on every train cell.
-    "par-scaler": "the column-sharded standard scaler",
-    "par-scaler-minmax": "the column-sharded min-max scaler",
-    "par-arima": "series-sharded ARIMA",
-    "par-holtwinters": "series-sharded Holt-Winters",
     # lane/lm-attention-fallback (2026-09-19): the four
     # `parallel_forecasting` drivers, the PREDICTION half of the same series
     # partition. They send one worker operation, `forecast_predict`, whose
@@ -1065,36 +1056,23 @@ TRAINING_LANE_NAMES = {
     # cells REFUSE -- three of them through the in-cell oracle by byte count
     # ("predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ:
     # 1836 bytes of 8192"), two through the drivers' own shape guard.
-    "par-forecast-arima": "the series-sharded ARIMA prediction and forecast drivers",
-    "par-forecast-holtwinters": "the series-sharded Holt-Winters prediction and forecast drivers",
     # Wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor
     # drivers. ParallelQueries cuts query rows in Python (four shards of 16
     # rows); ReferenceShardedNeighbors cuts the reference into four shards
     # of 1024 rows, merges the shard candidates by composite key in Python
     # and sends one vote request, served on CPU by the core host binding's
     # knn_classify_neighbors and knn_regress_neighbors.
-    "par-queries-knn": "query-sharded k-NN classification",
-    "par-queries-nn": "query-sharded nearest-neighbor distances and indices",
-    "par-queries-radius": "query-sharded radius neighbors",
-    "par-queries-kde": "query-sharded kernel density",
-    "par-reference-knn": "reference-sharded k-NN classification",
-    "par-reference-knn-reg": "reference-sharded k-NN regression",
     # Wave 2, the forest driver: fit_forest cuts 16 trees into four global
     # tree ID ranges in Python; each range is the rf or trees host
     # binding's shard fit (rf_classifier_fit_shard, et_regressor_fit_shard),
     # the GPU bindings' tree_start offset restated on the host, and the
     # trees concatenate in ID order.
-    "par-forest": "the tree-range-sharded random forest classifier",
-    "par-forest-et": "the tree-range-sharded Extra Trees regressor",
-    "par-forest-et-clf": "the tree-range-sharded Extra Trees classifier",
-    "par-forest-reg": "the tree-range-sharded random forest regressor",
     # Wave 2, par-mlp: ParallelNeuralTrainer sends one mlp_gradient request
     # per logical shard (three of 64 rows) and one mlp_update that folds
     # them in shard order in Python and steps the optimizer, on the
     # training host binding. The update pool is cooperative and is admitted
     # on CPU only at one device, where the GPU binding's range split is the
     # plain path; two devices refuse by name.
-    "par-mlp": "the small MLP trained over ordered logical gradient shards",
     # Wave 3 (lane/cpu-verifier-par-samba, 2026-09-16): the same driver over
     # the Samba stack. ParallelNeuralTrainer sends one samba_gradient request
     # per logical shard (two windows of (2, 17)) from the non-cooperative
@@ -1103,8 +1081,6 @@ TRAINING_LANE_NAMES = {
     # binding with the mamba and transformer families' blocks. The clip lane
     # adds the global norm (max_norm=0.5), the arithmetic the covered
     # samba-untied-dropout-accum lane checks. One device only, as par-mlp.
-    "par-samba": "the Samba stack trained over ordered logical gradient shards",
-    "par-samba-clip": "the Samba stack trained over ordered logical gradient shards under a global norm clip",
     # The Embedding layer and IVFIndex (lane/cpu-training-embedding-ivf,
     # 2026-09-15). Embedding's gather and fold, both execution plans, the
     # padding row and the microbatch carry, through
@@ -1132,7 +1108,6 @@ TRAINING_LANE_NAMES = {
     # RECORD_EXCLUDED_PREFIXES keeps every par-* lane out of a release
     # record. Its cells come from the CPU identity gate and from the
     # two-device par legs, as the other par-* lanes' do.
-    "par-ivf": "the shard-distributed IVF-Flat index",
     # lane/inference-embedding-ivf-cholesky stage 2 (2026-09-15): the rows
     # added to a built index by IVFIndex.extend. No GPU record carries the
     # lane yet, so every cell is OWED against the record.
@@ -1747,7 +1722,7 @@ FAMILIES = (
         # reason it reaches `hf-causal-lm`.
         # lane/verify-coverage-audit (2026-10-21): `hf-causal-lm-stream`,
         # CausalLM.stream's GenerationStream against generate.
-        training_lanes=("hf-causal-lm", "par-causal-lm", "hf-causal-lm-stream",
+        training_lanes=("hf-causal-lm", "hf-causal-lm-stream",
                         # lane verify-gaps-20261022: generate_text and stream_text
                         "hf-causal-lm-text"),
         inference_lanes=(),
@@ -1803,8 +1778,6 @@ FAMILIES = (
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
             "kmeans-sqrt", "kmeans-classic-pp",
-            "par-queries-knn", "par-queries-nn", "par-queries-radius", "par-reference-knn",
-            "par-reference-knn-reg",
         ),
         # The neighbors and density inference lane (2026-09-15) adds every
         # k-NN metric, the ball cover, the distance-weighted vote and mean
@@ -1972,7 +1945,6 @@ FAMILIES = (
             "kde-weighted", "ols-no-intercept", "ols-weighted", "ridge-no-intercept",
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
-            "par-queries-kde",
             # lane cpu (2026-09-27)
             "pca-inverse", "pca-whiten-inverse", "tsvd-inverse",
             # lane/expose-qn-objectives (2026-09-20)
@@ -2162,7 +2134,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
-            "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler", "par-scaler-minmax",
+            "standard-scaler-no-std", "minmax-scaler-clip",
             # lane verify-coverage-20261024: fit_transform's one-upload entries
             "scaler-fit-transform",
         ),
@@ -2191,8 +2163,7 @@ FAMILIES = (
         routes="_mojolearn_tsa",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "select-d", "par-holtwinters",
-                        "par-forecast-holtwinters"),
+        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "select-d"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExponentialSmoothing", "kpss_test", "select_d"),
@@ -2288,7 +2259,7 @@ FAMILIES = (
         routes="_mojolearn_trees",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel", "par-forest-et", "par-forest-et-clf",
+        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel",
                         "et-clf-weighted", "et-reg-weighted"),
         inference_lanes=(),
         forest_kinds=(),
@@ -2338,7 +2309,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "par-forest-reg", "rf-score-weighted",
+            "rf-reg-poisson", "rf-reg-gamma-ig", "rf-score-weighted",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2401,9 +2372,6 @@ FAMILIES = (
         training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
                         "gpc", "gpc-multiclass", "gp-sample-y", "gp-sample-y-normalize",
                         "gp-optimize", "gp-optimize-restarts",
-                        # lane/unlaned-public-algorithms (2026-09-20): the class-sharded
-                        # GPC drivers, whose shard IS this family's gpc_fit/gpc_predict
-                        "par-gpc-fit", "par-gpc-predict",
                         # lane/verify-coverage-audit (2026-10-21): the likelihood at a caller's theta
                         "gp-lml-theta"),
         inference_lanes=(),
@@ -2456,7 +2424,7 @@ FAMILIES = (
         routes="_mojolearn_kernel_methods",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem", "par-rbf-sampler",
+        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem",
                         "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian", "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian"),
         inference_lanes=(),
         forest_kinds=(),
@@ -2707,12 +2675,6 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide", "cross-val",
-            # lane/cpu-routes-gpu-only-four (2026-09-20): `cross-val`'s folds
-            # dispatched one to a WORKER PROCESS. Every fold is this binding's
-            # own gbdt fit, the same one `cross-val` hashes serially; what the
-            # lane adds is the dispatch, which neither `cross-val` nor
-            # `cross-val-folds` can see.
-            "par-cross-val",
             "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
             "gbdt-parametric-losses", "gbdt-exact-mae",
             "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall", "gbdt-multiclass-defaults",
@@ -2821,8 +2783,8 @@ FAMILIES = (
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("optim-owner-lifecycle", "optim-io-capability", "mlp", "optim-sgd", "optim-adam-clip", "optim-maximize", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum", "par-mlp",
-                        "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip",
+        training_lanes=("optim-owner-lifecycle", "optim-io-capability", "mlp", "optim-sgd", "optim-adam-clip", "optim-maximize", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum",
+                        "samba", "samba-untied-dropout-accum",
                         "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w",
                         # lane/laneless-public-classes (2026-09-19)
                         "grad-accumulation",
@@ -3017,8 +2979,8 @@ FAMILIES = (
         routes="_mojolearn_arima",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("arima", "arima-011", "arima-seasonal-c", "par-arima", "arima-exog",
-                        "arima-exog-seasonal", "par-forecast-arima"),
+        training_lanes=("arima", "arima-011", "arima-seasonal-c", "arima-exog",
+                        "arima-exog-seasonal"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ARIMA",),
@@ -3123,7 +3085,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         # lane/verify-coverage-audit (2026-10-21): `ivf-short-fill`, queries
         # with fewer candidates than k
-        training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf", "ivf-short-fill"),
+        training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "ivf-short-fill"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IVFIndex",),
@@ -3482,6 +3444,10 @@ def wheel_bindings():
 #: CPU-only install has exactly one device. Promoting them would put a cell
 #: in a user's `verify --all` that cannot fail on their machine. Two devices
 #: is what states their claim, and that is what the dedicated legs do.
+#: Multi-GPU verification was retired (owner, 2026-10-31): the harness has no
+#: par-* lane now, and every par-* declaration in this file was removed with them.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 PUBLIC_INAPPLICABLE_PREFIXES = ("par-",)
 
 #: WHY EACH EXCLUDED PREFIX IS EXCLUDED, in the words a user reads
@@ -3498,17 +3464,6 @@ PUBLIC_INAPPLICABLE_PREFIXES = ("par-",)
 #: never "you are missing a feature"; it is "this claim is about two devices
 #: and you have one", which is a fact about the claim, not about the install.
 PUBLIC_INAPPLICABLE_PREFIX_REASONS = {
-    "par-": ("claim requires two devices: a par-* driver claims that a "
-             "TWO-DEVICE column hashes equal to the one-device column cell "
-             "for cell. `verify` is always a one-device run (it refuses "
-             "MOJOLEARN_PAR_DEVICES). A single-device run can check local "
-             "numerical behavior or logical sharding, but cannot establish "
-             "physical multi-device identity. Default verification skips "
-             "execution; --lanes selects a local diagnostic explicitly. Owed: "
-             "a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 "
-             "tools/identity_break.py --repeats 2 --lanes <lane> --json "
-             "par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, "
-             "admitted with _verify_reference.admit(par_axis=True)"),
 }
 
 #: THE STATUS EVERY HARNESS LANE GETS IN `lane_exposure()`, and the whole

@@ -444,6 +444,21 @@ def _declared_part_gap(j):
     return None
 
 
+#: Lane prefixes whose verification is retired. The `par-*` multi-GPU driver
+#: lanes left the harness when multi-GPU verification was retired (owner,
+#: 2026-10-31). Records taken before that still carry their cells (the 0.8.63
+#: columns hold every one of them REFUSED); admission ignores those cells
+#: instead of refusing the record or selecting the lane.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
+RETIRED_LANE_PREFIXES = ("par-",)
+
+
+def retired_lane(name):
+    """True for a lane whose verification is retired (RETIRED_LANE_PREFIXES)."""
+    return str(name).startswith(RETIRED_LANE_PREFIXES)
+
+
 def admit(j, path, par_axis=False, *, known_lanes=()):
     """None when the column is admissible, else the reason it is not.
 
@@ -685,7 +700,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     if unknown:
         raise ValueError(f"unknown reference parts: {sorted(unknown)}")
     log = log or (lambda s: None)
-    lanes = set(lanes if lanes is not None else harness.LANES)
+    lanes = {lane for lane in (lanes if lanes is not None else harness.LANES) if not retired_lane(lane)}
     host_only = _host_only_source_lanes(repo_root) & lanes
     want_fix = {f: dict(X=harness._h(X), y_clf=harness._h(yc), y_reg=harness._h(yr))
                 for f, (X, yc, yr) in ((f, harness.fixture(f)) for f in harness.FIXTURES)}
@@ -939,7 +954,7 @@ def merge_reference_lanes(base, candidate, lanes):
     base's global policy and harness witness: updating a few lanes does not
     qualify its legacy cells. Record the new policy per selected lane instead.
     """
-    lanes = set(lanes)
+    lanes = {lane for lane in lanes if not retired_lane(lane)}
     if not lanes:
         raise TableError("scoped admission requires at least one lane")
     policy = candidate.get("admission_policy", {})

@@ -1100,17 +1100,21 @@ def _selfcheck():
          "a derived answer disagrees with the declaration it is checked against: "
          + "; ".join(_SCOPES_DISAGREE))
 
-    # 1. THE REFUSAL FIRES. A driver lane on a one-device column must raise.
-    try:
-        check(["par-forest"], "apple-metal")
-        fails.append("check() did NOT refuse par-forest on a one-device column")
-    except LaneNotApplicable as exc:
-        want("par-forest" in str(exc) and "DEGENERATE" in str(exc),
-             "the refusal did not name the lane and the reason")
-
-    # 2. THE REFUSAL IS NOT UNIVERSAL. The same lane on a two-device column
-    #    must pass, or the refusal is a blanket and proves nothing.
-    check(["par-forest"], "nvidia-2gpu")
+    # 1. THE REFUSAL FIRES. A driver scope on a one-device column must be
+    #    refused, and 2. THE REFUSAL IS NOT UNIVERSAL: the same scope on a
+    #    two-device column passes. The registry has no driver lane since the
+    #    par-* lanes were retired, so the device rule is watched on a
+    #    constructed scope; the rule is the real `Scope.applicable`.
+    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+    # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
+    want(not any(sc.claim_devices >= 2 for sc in s.values()),
+         "a registered lane claims two devices; multi-GPU verification is retired")
+    driver = Scope(name="<constructed-driver>", claim_devices=2, oracle="independent", oracle_evidence=[],
+                   host_only=set(), has_cpu_route=False, is_function=False, record_excluded=True,
+                   ml_attrs=["Constructed"], pure_python=False)
+    ok, why = driver.applicable("apple-metal")
+    want(not ok and "DEGENERATE" in why, "a two-device scope was not refused on a one-device column")
+    want(driver.applicable("nvidia-2gpu")[0], "a two-device scope was refused on a two-device column")
 
     # 3. A PLAIN LANE IS NOT REFUSED on a GPU column.
     check(["rf-clf"], "apple-metal")
@@ -1124,8 +1128,8 @@ def _selfcheck():
 
     # 5. THE ORACLE CLASSES ARE DISTINGUISHED, on lanes read by hand from the
     #    source, so a classifier that answered one class for everything fails.
-    want(s["par-forest"].oracle == "independent",
-         "par-forest is a plain fit held against a sharded fit; it must read independent")
+    want(s["knn-clf"].oracle == "independent",
+         "knn-clf holds the fitted label columns to an independent transpose; it must read independent")
     want(s["rf-clf"].oracle == "recorded",
          "rf-clf asserts nothing in the cell; it must read recorded")
     self_lanes = [n for n in s if s[n].oracle == "self"]
@@ -1149,15 +1153,6 @@ def _selfcheck():
     want(s["kmeans"].oracle == "self",
          "kmeans holds predict(X) to labels_ inside _km_probe; it must read self, "
          "which is the example this module's own docstring gives for `self`")
-    want(s["par-byte-lm-model-pool"].oracle == "independent",
-         "par-byte-lm-model-pool holds its pooled trainer to a replicated one inside "
-         "_byte_lm_replay; it must read independent")
-    want(s["par-scaler"].oracle == "independent",
-         "par-scaler raises NumericalMismatch on a _mismatch_bytes against the plain "
-         "scaler; a raised mismatch is a raising comparison")
-    want(s["par-queries-radius"].oracle == "independent",
-         "par-queries-radius holds the sharded driver to the plain call; sharing the "
-         "callee _ragged must not collapse the two sides into one object")
     want(s["embedding"].oracle == "self",
          "embedding holds the split backward to the unsplit one on ONE Embedding; two "
          "views of one object are not two objects")
@@ -1258,7 +1253,7 @@ def _selfcheck():
     #     file names no binding (`training.py` and `_mlp_impl.py` are shims
     #     over `_training_impl`) and must not read pure either.
     for n in ("tokenizer", "bpe-trainer", "bpe-vocabulary", "tokenized-corpus",
-              "mlp", "par-mlp", "optim-sgd", "training-primitives", "cross-entropy-arms"):
+              "mlp", "optim-sgd", "training-primitives", "cross-entropy-arms"):
         want(not s[n].pure_python, f"{n} stands on a binding; it must not read pure_python")
     pure = sorted(n for n, sc in s.items() if sc.pure_python)
     declared_pure = sorted(n for n, family in host_surface().PUBLIC_HOST_ONLY_LANES.items() if family is None)
@@ -1266,11 +1261,11 @@ def _selfcheck():
          "pure-Python derivation disagrees with current host declaration; derived set is "
          + (", ".join(pure) if pure else "empty"))
 
-    # 6. THE DERIVATION IS NOT READING THE LANE NAMES. Renaming a driver lane
-    #    must not change its answer, and a lane renamed TO `par-` must not
-    #    acquire the two-device claim.
-    want(la_scope_of_body(identity_break().LANES["par-kmeans"]) == 2,
-         "the device claim did not come from the body")
+    # 6. THE DERIVATION IS NOT READING THE LANE NAMES: a plain lane's body
+    #    reaches no `_par_devices`. (The driver-side arm read a par-* lane,
+    #    retired with multi-GPU verification.)
+    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+    # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
     want(la_scope_of_body(identity_break().LANES["kmeans"]) == 1,
          "a plain lane picked up the two-device claim")
     return fails

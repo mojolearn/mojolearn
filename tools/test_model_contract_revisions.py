@@ -17,15 +17,11 @@ def test_added_model_and_train_fields_reject_old_references():
         'reference_contract_test', ROOT / 'python/mojolearn/_verify_reference.py')
     reference = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(reference)
-    lanes = ['tsvd', 'umap', 'par-graph-umap']
+    lanes = ['tsvd', 'umap']
     table = {'cells': {f'{lane}/base': {'model': 'unchanged-test-hash'}
                        for lane in lanes + ['ols']},
-             'lane_revisions': {'umap': 'transform-row-separable-1',
-                                'par-graph-umap': 'transform-row-separable-1'}}
+             'lane_revisions': {'umap': 'transform-row-separable-1'}}
     harness = SimpleNamespace(LANE_REVISIONS=revisions)
     assert reference.stale_reference_lanes(table, harness) == sorted(lanes)
     table['lane_revisions'].update({lane: revisions[lane] for lane in lanes})
     assert reference.stale_reference_lanes(table, harness) == []
-    # Recording single-device UMAP never admits an obsolete physical-par column.
-    table['lane_revisions']['par-graph-umap'] = 'transform-row-separable-1'
-    assert reference.stale_reference_lanes(table, harness) == ['par-graph-umap']

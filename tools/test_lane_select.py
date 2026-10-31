@@ -1460,8 +1460,7 @@ if __name__ == "__main__":
 # --------------------------------------------------------------------------
 
 FOREST_INFERENCE_LANES = ("rf-clf", "rf-clf-balanced-parallel", "rf-reg",
-                          "et-clf", "et-reg", "et-reg-bootstrap-parallel",
-                          "par-forest", "par-forest-pool")
+                          "et-clf", "et-reg", "et-reg-bootstrap-parallel")
 
 
 def test_a_shipped_inference_file_is_in_the_map_of_the_lanes_that_run_it():
@@ -2068,8 +2067,7 @@ def test_an_aliased_mojo_import_is_recorded_under_the_name_the_body_uses():
     rev = lane_select.reverse_map()
     for rel in ("umap/graph.mojo", "umap/sparse_graph.mojo", "umap/estimator.mojo"):
         lanes = rev.get(rel, set())
-        assert "umap" in lanes and "par-graph-umap" in lanes, \
-            f"{rel} is run by both umap lanes and the map names {sorted(lanes)}"
+        assert "umap" in lanes, f"{rel} is run by the umap lane and the map names {sorted(lanes)}"
 
 
 def test_native_helpers_keep_symbol_reach_across_multiple_dispatch_layers():
@@ -2715,13 +2713,13 @@ def test_the_real_manifest_edits_of_the_three_branches_are_placed():
     this tree (a lane that exists here stands in for ivf-filter). The IVF
     family's training lanes gained ivf-short-fill on 2026-10-21 (354b8049a)."""
     old = lane_select._read(lane_select.MANIFEST)
-    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf", "ivf-short-fill")',
+    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "ivf-short-fill")',
                'inference_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")',
                '"gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad"',
                '"pca_fit", "pca_fit_full", "tsvd_fit"')
     for a in anchors:
         assert old.count(a) == 1, f"the manifest no longer carries {a}; update this replay"
-    ann = old.replace(anchors[0], anchors[0].replace('"par-ivf"', '"kmeans-random", "par-ivf"')) \
+    ann = old.replace(anchors[0], anchors[0].replace('"ivf-short-fill"', '"kmeans-random", "ivf-short-fill"')) \
              .replace(anchors[1], anchors[1][:-1] + ', "kmeans-random")')
     assert _registry(ann, old, lane_select.MANIFEST + ".replay") == ["kmeans-random"]
     nb = old.replace(anchors[2], anchors[2].replace('"gpr_sample_y",', '"gpr_sample_y", "kmeans_fit",'))

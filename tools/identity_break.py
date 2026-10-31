@@ -1073,7 +1073,6 @@ LANE_REVISIONS = {
     "x-glm-tweedie": "portable-positive-target-exp-1",
     "x-glm-poisson-sw": "portable-positive-target-exp-1",
 
-    "par-arima": "trend-metadata-1",
     "tokenizer": "synthetic-vocab-1",
     # rows: these lanes fitted the full 20,000 x 16 fixture
     "gbdt-parametric-losses": "rows-1500-1",
@@ -1094,8 +1093,6 @@ LANE_REVISIONS = {
     # this harness no longer runs by default; they read OWED to the next record.
     "holtwinters": "obs-128-estimated-init-2",
     "holtwinters-multiplicative": "estimated-init-1",
-    "par-holtwinters": "estimated-init-1",
-    "par-forecast-holtwinters": "estimated-init-1",
     # training steps: 3 AdamW steps -> 1, and two of those cuts REVERSED
     # 2026-09-16 (lane/shrink-floors) because the one-step cell could no longer
     # FAIL: byte-lm back to 2 steps, samba-untied-dropout-accum back to 3. Each
@@ -1130,7 +1127,6 @@ LANE_REVISIONS = {
     # arithmetic, not input: UMAP.transform is row separable now
     "tsvd": "explained-variance-train-contract-1",
     "umap": "save-option-extras-contract-2",
-    "par-graph-umap": "save-option-extras-contract-2",
     # arithmetic, not input (2026-09-26, lane/gmm-degenerate-data): the
     # init_params='kmeans' start is the classic greedy k-means++ now, not
     # k-means|| (mixture/estimator.mojo, DEVIATION 3133), so every committed
@@ -1138,17 +1134,15 @@ LANE_REVISIONS = {
     # read OWED to the next record. The random-init lanes did not move.
     "gmm": "classic-kmeanspp-init-1",
     "gmm-sample": "classic-kmeanspp-init-1",
-    "par-gmm": "classic-kmeanspp-init-1",
 }
 
 
-# These parallel estimators implement real portable save/load. A missing
-# serializer must fail their model proof, not become an admitted no-save N/A.
-REQUIRED_NUMERIC_PARTS = {
-    name: ("model",)
-    for name in ("par-arima", "par-holtwinters", "par-scaler", "par-queries-radius",
-                 "par-rbf-sampler")
-}
+# Lanes whose model part must be numerical: a missing serializer must fail
+# their model proof, not become an admitted no-save N/A. The five entries were
+# par-* lanes.
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
+REQUIRED_NUMERIC_PARTS = {}
 
 
 # ------------------------------------------------------------- fixture floors
@@ -1237,18 +1231,6 @@ NON_SIZE_REVISIONS = {
         "level, trend and seasons jointly with alpha/beta/gamma over all n points "
         "(holtwinters/impl/internal/hw_estimate.mojo). The lane still fits the same 512 observations; "
         "'heuristic' reproduces the old cells bit for bit"),
-    "par-holtwinters": (
-        "the same default change as `holtwinters-multiplicative` (2026-09-22, "
-        "feat/holtwinters-estimated-init-sep22): fit_exponential_smoothing forwards "
-        "initialization_method to every shard, and the four series and shard size did not move"),
-    "par-forecast-holtwinters": (
-        "the same default change as `holtwinters-multiplicative` (2026-09-22, "
-        "feat/holtwinters-estimated-init-sep22): the fitted state the prediction drivers read comes "
-        "from the estimated fit now; the drivers, series and horizon did not move"),
-    "par-arima": (
-        "parallel fit now preserves the caller's trend=None instead of rewriting it to c/n "
-        "(2026-09-20, a140bfee5 in python/mojolearn/parallel_classical.py); the saved-model "
-        "metadata changes while the fitted arithmetic is unchanged"),
     "tokenizer": (
         "what changed is the VOCABULARY, not a size: the lane swapped the GPT-2 table for a 512-rank "
         "synthetic one (2026-09-16, lane/identity-fixtures-light), and a vocabulary is a constructor "
@@ -1290,19 +1272,10 @@ NON_SIZE_REVISIONS = {
         "read 49ffb2316f238e6d with and without the swap. The shrink audit did not name this lane, which "
         "is why the lane/dead-arms census was run over every sequence "
         "block rather than the two it listed. Not a size"),
-    "par-graph-umap": (
-        "saved-model contract: the fitted UMAP uses the same b27e071d7 extras array as "
-        "umap, so old model records cannot qualify it. Physical-parallel evidence remains "
-        "owed separately; single-device UMAP evidence does not qualify this lane. Previously: "
-        "the same row-separable UMAP.transform change as the `umap` lane (2026-09-16, "
-        "lane/umap-batch-determinism); this driver's fixture size did not move either"),
     "gmm": (
         "arithmetic, not input: GaussianMixture's init_params='kmeans' start became the classic "
         "greedy k-means++ instead of k-means|| (2026-09-26, lane/gmm-degenerate-data, DEVIATION 3133 "
         "in mixture/estimator.mojo). The lane still fits the same 6000 x 4 rows"),
-    "par-gmm": (
-        "the same init change as `gmm` (2026-09-26, lane/gmm-degenerate-data); the shards and the "
-        "6000 x 4 rows did not move"),
 }
 
 
@@ -6759,18 +6732,6 @@ WIDE_ENV = "MOJOLEARN_IDENTITY_WIDE"
 PAR_WIDE = os.environ.get(WIDE_ENV, "0").strip() == "1"
 
 
-def _par_byte_lm_config(ml):
-    if PAR_WIDE:
-        return ml.ByteLanguageModelConfig(d_model=256, n_heads=4, n_kv=2, head_dim=64, intermediate=1024)
-    return ml.ByteLanguageModelConfig()
-
-
-def _par_samba_config(ml):
-    if PAR_WIDE:
-        return ml.SambaConfig(vocab=256, d_model=256, layers=("mamba3", "attention"), n_heads=2, intermediate=1280)
-    return ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
-
-
 def _par_devices():
     """The device tuple the par-* lanes hand the drivers: MOJOLEARN_PAR_DEVICES,
     comma-separated device indices, default "0". A two-device column names
@@ -6787,243 +6748,8 @@ def _par_devices():
     return devs
 
 
-@lane("par-forest")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_forest, 16 trees in four ranges of four, held to the plain
-    RandomForestClassifier fit of the rf-clf lane."""
-    from mojolearn.parallel_ensemble import fit_forest
-    kw = dict(n_estimators=16, max_depth=8, random_state=7)
-    par = fit_forest(ml.RandomForestClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)
-    plain = ml.RandomForestClassifier(**kw).fit(X, yc)
-    mismatch = _mismatch_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]),
-                               "plain predict_proba", plain.predict_proba(X[:2048]))
-    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
-
-
-@lane("par-forest-et")
-def _(ml, X, yc, yr, Xh=None):
-    from mojolearn.parallel_ensemble import fit_forest
-    kw = dict(n_estimators=16, max_depth=8, random_state=7)
-    par = fit_forest(ml.ExtraTreesRegressor(**kw), X, yr, devices=_par_devices(), trees_per_shard=4)
-    plain = ml.ExtraTreesRegressor(**kw).fit(X, yr)
-    mismatch = _mismatch_bytes("fit_forest predict", par.predict(X[:2048]),
-                               "plain predict", plain.predict(X[:2048]))
-    parts = dict(predict=_h(par.predict(X)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh),))
-
-
-@lane("par-boosting")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_boosting on the gbdt-symmetric configuration, feature histograms
-    partitioned, held to the plain fit."""
-    from mojolearn.parallel_ensemble import fit_boosting
-    kw = dict(n_estimators=20, max_depth=6, loss="Logloss")
-    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
-    plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
-    mismatch = _mismatch_bytes("fit_boosting predict", par.predict(X[:2048]),
-                               "plain predict", plain.predict(X[:2048]))
-    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
-
-
-@lane("par-kmeans")
-def _(ml, X, yc, yr, Xh=None):
-    from mojolearn.parallel_classical import fit_kmeans
-    par = fit_kmeans(ml.KMeans(n_clusters=8, random_state=3), X, devices=_par_devices())
-    plain = ml.KMeans(n_clusters=8, random_state=3).fit(X)
-    mismatch = _mismatch_bytes("fit_kmeans centers", par.cluster_centers_,
-                               "plain centers", plain.cluster_centers_)
-    parts = dict(centers=_h(par.cluster_centers_), labels=_h(par.labels_))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, _km_probe(X, Xh))
-
-
-@lane("par-gram")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_gram_estimator on Ridge: the 128 pinned Gram chunks distributed."""
-    from mojolearn.parallel_classical import fit_gram_estimator
-    par = fit_gram_estimator(ml.Ridge(alpha=1.0), X, yr, devices=_par_devices())
-    plain = ml.Ridge(alpha=1.0).fit(X, yr)
-    mismatch = _mismatch_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
-    parts = dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
-
-
-@lane("par-logistic")
-def _(ml, X, yc, yr, Xh=None):
-    from mojolearn.parallel_classical import fit_logistic
-    par = fit_logistic(ml.LogisticRegression(max_iter=50), X, yc, devices=_par_devices())
-    plain = ml.LogisticRegression(max_iter=50).fit(X, yc)
-    mismatch = _mismatch_bytes("fit_logistic coef", par.coef_, "plain coef", plain.coef_)
-    parts = dict(coef=_h(par.coef_), proba=_h(par.predict_proba(X[:256])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict_proba(Xh[:256]),))
-
-
-@lane("par-cd")
-def _(ml, X, yc, yr, Xh=None):
-    from mojolearn.parallel_classical import fit_coordinate_descent
-    par = fit_coordinate_descent(ml.Lasso(alpha=0.01, max_iter=200), X, yr, devices=_par_devices())
-    plain = ml.Lasso(alpha=0.01, max_iter=200).fit(X, yr)
-    mismatch = _mismatch_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
-    parts = dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
-
-
-@lane("par-svm")
-def _(ml, X, yc, yr, Xh=None):
-    from mojolearn.parallel_classical import fit_svm, predict_svm
-    kw = dict(C=1.0, kernel="rbf", max_iter=200)
-    par = fit_svm(ml.SVC(**kw), X[:2000], yc[:2000], devices=_par_devices())
-    plain = ml.SVC(**kw).fit(X[:2000], yc[:2000])
-    dec = predict_svm(par, X[2000:2256], devices=_par_devices(), method="decision_function")
-    mismatch = _mismatch_bytes("predict_svm decision", dec,
-                               "plain decision", plain.decision_function(X[2000:2256]))
-    parts = dict(decision=_h(dec),
-                 predict=_h(predict_svm(par, X[2000:2256], devices=_par_devices(), method="predict")))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
-
-
-@lane("par-gp")
-def _(ml, X, yc, yr, Xh=None):
-    from mojolearn.parallel_classical import fit_gaussian_process, predict_gaussian_process
-    k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
-    par = fit_gaussian_process(ml.GaussianProcessRegressor(kernel=k), X[:256, :4], yr[:256], devices=_par_devices())
-    plain = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
-    mean, std = predict_gaussian_process(par, X[256:320, :4], devices=_par_devices(), return_std=True)
-    pm, ps = plain.predict(X[256:320, :4], return_std=True)
-    mismatch = _mismatch_bytes("predict_gaussian_process mean", mean, "plain mean", pm)
-    parts = dict(alpha=_h(par.alpha_), L=_h(par.L_), mean=_h(mean), std=_h(std))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: e.predict(Xh[:64, :4], return_std=True))
-
-
-@lane("par-dbscan")
-def _(ml, X, yc, yr, Xh=None):
-    from mojolearn.parallel_classical import fit_dbscan
-    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
-    plain = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4])
-    mismatch = _mismatch_bytes("fit_dbscan labels", par.labels_, "plain labels", plain.labels_)
-    parts = dict(labels=_h(par.labels_))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh[:256, :4]),))
-
-
-@lane("par-scaler")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_scaler and transform_scaler with four columns per shard, so the
-    16-column fixture is four shards, held to the plain scaler.
-
-    The disagreement is raised as `NumericalMismatch` CARRYING the parts, not
-    as a bare ValueError. Measured 2026-09-17 (lane/sabotage-sweep,
-    `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/`):
-    under the preprocessing family's sabotage build this lane raised
-    `transform_scaler and plain transform differ: 2847 bytes of 16384` and the
-    cell read REFUSED, so a negative control that was WORKING was recorded as
-    a refusal, and a refusal is not a catch. The clean cell is unchanged: the
-    same parts in the same order whenever the two agree."""
-    from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
-    par = fit_scaler(ml.StandardScaler(), X, devices=_par_devices(), columns_per_shard=4)
-    plain = ml.StandardScaler().fit(X)
-    t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
-    mismatch = _mismatch_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
-    parts = dict(mean=_h(par.mean_), var=_h(par.var_), transform=_h(t),
-                 inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4, inverse=True)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
-
-
-@lane("par-arima")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_arima with two series per shard over the arima lane's four series.
-
-    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
-    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
-    MEASURED on the M4, one core, --repeats 2, base fixture, under the CORE
-    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding alone: `fit_arima ar and
-    plain ar differ: 15 bytes of 16` and the cell read REFUSED."""
-    from mojolearn.parallel_classical import fit_arima
-    series = np.ascontiguousarray(X[:512, :4].T)
-    par = fit_arima(ml.ARIMA(order=(1, 0, 0)), series, devices=_par_devices(), series_per_shard=2)
-    plain = ml.ARIMA(order=(1, 0, 0)).fit(series)
-    mismatch = _mismatch_bytes("fit_arima ar", par.ar_, "plain ar", plain.ar_)
-    parts = dict(ar=_h(par.ar_), mu=_h(par.mu_), sigma2=_h(par.sigma2_), forecast=_h(par.forecast(24)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                par, lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
-                                           "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON)))
-
-
-@lane("par-forecast-arima")
-def _(ml, X, yc, yr, Xh=None):
-    """predict_arima and forecast_arima -- the PREDICTION drivers, which
-    par-arima does not reach (it shards a fit) -- over the same four series,
-    split THREE to a shard: the uneven 3 + 1 partition, so the last shard's
-    width differs from the first's and a one-series shard is exercised.
-
-    IN-CELL ORACLE (2026-09-19, lane/lm-attention-fallback). The drivers'
-    entire claim is that a SERIES partition moves no bit, so the unsharded
-    call is the oracle: the sharded prediction and forecast are held byte
-    for byte, in this cell, to `ARIMA.predict` and `ARIMA.forecast` of the
-    same fitted estimator. Unlike par-mlp's fold (which is not a plain
-    step), nothing here needs a replay. The two sides are two call chains --
-    a free driver function against the estimator's own door -- so a defect
-    in `_ranges`, in the per-shard `__dict__` slice, in the SHARD ORDER or
-    in the merge offsets separates them on this box with no record to lean
-    on. The infer probe re-runs the driver on the reloaded model.
-
-    Reachable on a CPU column since `forecast_predict` joined
-    `_parallel_pool.CPU_OPERATIONS`; before that all four
-    `parallel_forecasting` entries refused by name on every CPU install.
-
-    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
-    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
-    MEASURED on the M4, one core, --repeats 2, base fixture, under the arima
-    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: the lane raised
-    `predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 7246
-    bytes of 8192` and the cell read REFUSED, so the arm was DOING ITS JOB
-    and the column recorded no catch. The two sides separate under the arm
-    because the driver slices the fitted `__dict__` per shard and the host
-    `arima_predict` is entered once per shard rather than once, so a
-    per-call value perturbation lands a different number of times on the two
-    routes. The clean cell is unchanged: the same parts in the same order
-    whenever the two agree."""
-    from mojolearn.parallel_forecasting import predict_arima, forecast_arima
-    series = np.ascontiguousarray(X[:512, :4].T)
-    d = _par_devices()
-    m = ml.ARIMA(order=(1, 0, 0)).fit(series)
-    sharded = predict_arima(m, 0, m.n_obs_, devices=d, series_per_shard=3)
-    ahead = forecast_arima(m, 24, devices=d, series_per_shard=3)
-    mismatch = _oracle_mismatch(
-        ("predict_arima(0, n_obs)", sharded, "plain ARIMA.predict(0, n_obs)", m.predict(0, m.n_obs_)),
-        ("forecast_arima(24)", ahead, "plain ARIMA.forecast(24)", m.forecast(24)))
-    parts = dict(predict=_h(sharded), forecast=_h(ahead))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, m,
-                lambda e: _same_bytes(
-                    f"forecast_arima({FORECAST_HORIZON})",
-                    forecast_arima(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
-                    f"plain ARIMA.forecast({FORECAST_HORIZON})", e.forecast(FORECAST_HORIZON)))
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
 # ---------------------------------------------------------------- the neural drivers' in-cell oracle (2026-09-19)
@@ -7052,158 +6778,8 @@ def _(ml, X, yc, yr, Xh=None):
 # cross-vendor record remains the only thing that sees that.
 
 
-def _ordered_replay_mlp(plain, steps):
-    """ParallelNeuralTrainer's MLP contract rebuilt on one object through the
-    public doors: every shard's gradient from the SAME weights (loss_and_grads
-    advances no optimizer), `ordered_sum_gradients` over them in shard order,
-    one `apply_gradients`. `_parallel_worker.mlp_gradient` / `mlp_update`."""
-    from mojolearn.parallel_training import ordered_sum_gradients
-    for shards in steps:
-        parts = [plain.loss_and_grads(x, y)[1] for x, y in shards]
-        plain.apply_gradients(ordered_sum_gradients(parts))
-    return plain
-
-
-def _ordered_replay_samba(plain, steps):
-    """The same for a SambaStack, with the driver's token offsets (it advances
-    `offset` by each shard's token count within a step) and its clip: the
-    worker's `samba_gradient` / `samba_update`. Returns the LAST step's
-    reduced gradient, COPIED BEFORE the optimizer step exactly as the worker's
-    `retained` is, because `optimizer.step` clips in place and
-    `export_gradients()` carries the PRE-clip bytes. Measured 2026-09-19: with
-    the copy left out this returned the clipped gradient and the first arm
-    fired, `export_gradients[0] ... differ: 32711 bytes of 32768`.
-
-    dropout is 0 in every par-samba configuration, so the driver passes
-    `dropout_stream=None` and never draws from the generator; a configuration
-    with dropout would need the driver's own stream and is refused here rather
-    than silently compared against a different draw."""
-    from mojolearn.parallel_training import ordered_sum_gradients
-    if plain.config.dropout > 0.0:
-        raise ValueError("_ordered_replay_samba cannot replay a dropout stream")
-    reduced = None
-    for shards in steps:
-        parts, offset = [], 0
-        for x, y in shards:
-            parts.append(plain.loss_and_grads(x, y, dropout_stream=None, token_offset=offset)[1])
-            offset += int(np.asarray(x).size)
-        total = ordered_sum_gradients(parts)
-        reduced = [np.asarray(g).copy() for g in total]
-        plain.optimizer.step(total, max_norm=plain.max_norm)
-    return reduced
-
-
-@lane("par-mlp")
-def _(ml, X, yc, yr, Xh=None):
-    """ParallelNeuralTrainer over the mlp lane's trainer: three logical
-    shards of 64 rows, one ordered update per step, three steps; its
-    contract is equality to its own one-device replay, not to a plain
-    step over 192 rows, so the parts are hashed and not held to mlp.
-
-    IN-CELL ORACLE (2026-09-19): the same three steps replayed on a second
-    SmallMLPTrainer built from the same weights through `_ordered_replay_mlp`,
-    every weight held to the driver's bit for bit. The parts are unchanged."""
-    from mojolearn.parallel_training import ParallelNeuralTrainer
-    w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
-         for s in ((16, 8), (16,), (3, 16), (3,))]
-    schedule = {"dataset": "identity_break", "order": "sequential"}
-    m = ml.SmallMLPTrainer(*w, data_schedule=schedule)
-    plain = ml.SmallMLPTrainer(*w, data_schedule=schedule)
-    Xm = np.ascontiguousarray(X[:576, :8])
-    t = _three_class(X[:576])
-    steps = [[(Xm[192 * s + 64 * k: 192 * s + 64 * (k + 1)], t[192 * s + 64 * k: 192 * s + 64 * (k + 1)])
-              for k in range(3)] for s in range(3)]
-    with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=3) as tr:
-        for shards in steps:
-            tr.train_step(shards)
-        ck = tr.checkpoint()
-    _ordered_replay_mlp(plain, steps)
-    mismatch = _oracle_mismatch(
-        *[(f"ParallelNeuralTrainer weights_[{k}]", np.asarray(m.weights_[k]),
-           "ordered single-device replay", np.asarray(plain.weights_[k]))
-          for k in sorted(m.weights_)],
-        ("ParallelNeuralTrainer predict_logits", np.asarray(m.predict_logits(Xm[:256])),
-         "ordered single-device replay predict_logits", np.asarray(plain.predict_logits(Xm[:256]))))
-    parts = dict(weights=_h(*[np.asarray(m.weights_[k]) for k in sorted(m.weights_)]),
-                 logits=_h(np.asarray(m.predict_logits(Xm[:256]))),
-                 shards=_h(np.int64(ck["logical_shards"])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                m, lambda e: (np.asarray(e.predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
-
-
-@lane("par-samba")
-def _(ml, X, yc, yr, Xh=None):
-    """ParallelNeuralTrainer over the samba lane's stack, two logical shards
-    of (2, 17) windows per step, two steps.
-
-    IN-CELL ORACLE (2026-09-19): the same two steps replayed on a second
-    SambaStack loaded from the same starting state through
-    `_ordered_replay_samba`, every parameter and the logits held to the
-    driver's bit for bit. The parts are unchanged."""
-    from mojolearn.parallel_training import ParallelNeuralTrainer
-    cfg = _par_samba_config(ml)
-    m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
-    plain = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
-    plain.load_state_dict(m.state_dict())
-    ids = _ids(X, 8, 17)
-    steps = [[(ids[4 * s + 2 * k: 4 * s + 2 * k + 2, :-1], ids[4 * s + 2 * k: 4 * s + 2 * k + 2, 1:])
-              for k in range(2)] for s in range(2)]
-    with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
-        for shards in steps:
-            tr.train_step(shards)
-    _ordered_replay_samba(plain, steps)
-    params, ref = m.parameters(), plain.parameters()
-    mismatch = _oracle_mismatch(
-        *[(f"ParallelNeuralTrainer parameters()[{k}]", np.asarray(params[k]),
-           "ordered single-device replay", np.asarray(ref[k])) for k in sorted(params)],
-        ("ParallelNeuralTrainer forward", np.asarray(m.forward(ids[:2, :-1])),
-         "ordered single-device replay forward", np.asarray(plain.forward(ids[:2, :-1]))))
-    parts = dict(logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
-                 params=_h(*[np.asarray(params[k]) for k in sorted(params)]))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
-
-
-@lane("par-byte-lm")
-def _(ml, X, yc, yr, Xh=None):
-    """ParallelByteLanguageModelTrainer from the byte-lm lane's starting
-    state, two logical shards on one device, three steps; the state after
-    and the per-shard losses are the parts.
-
-    IN-CELL ORACLE (2026-09-19): the trainer's own documented comparison,
-    `pool_optimizer=False`, which "retains complete optimizer replicas for
-    comparison" (parallel_training.ParallelByteLanguageModelTrainer). The
-    pooled run under test is held, through `_byte_lm_replay`, to a replicated
-    one on the first device step by step: the per-shard losses, all four state
-    arrays and the exported gradient. It catches a defect in the pooled
-    optimizer ranges, the rollback copies, the reduction buffers and the
-    cross-device ownership; a defect in the shard fold itself, which both
-    sides share, still needs the record.
-
-    THE PARTS DO NOT MOVE, and this is not an argument: `_byte_lm_seed` is
-    this lane's own seed construction verbatim and `_byte_lm_replay`'s loop is
-    this lane's own loop verbatim, and the committed 166-lane columns
-    (2026-09-14, apple-m4 / nvidia-h100 / nvidia-2xh100 / amd-mi325x) record
-    this lane's `loss`, `params` and `m` parts BIT-IDENTICAL, on all nine
-    fixtures, to the two sibling lanes that already hold their driver to this
-    same replicated reference through this same helper.
-
-    NOT RUN HERE. `bindings/_mojolearn_byte_lm_host.mojo` registers no
-    `byte_lm_parallel_*` entry, so this lane REFUSES on every CPU column (it
-    does on the committed one, `2026-09-16_cpu-par-samba`) and the new arm's
-    first binding-level run is owed on a GPU column."""
-    from mojolearn.parallel_training import ParallelByteLanguageModelTrainer
-    shape, state0 = _byte_lm_seed(ml)
-    ids = _ids(X, 6 * shape.batch, shape.length + 1)
-    with ParallelByteLanguageModelTrainer(state0, devices=_par_devices(), logical_shards=2) as tr, \
-         ParallelByteLanguageModelTrainer(state0, devices=_par_devices()[:1], logical_shards=2,
-                                          pool_optimizer=False) as ref:
-        losses, state, _ = _byte_lm_replay(tr, ref, ids)
-    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(state["parameters"])),
-                     m=_h(np.asarray(state["m"]))))
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
 # ---------------------------------------------------------------- lanes (2026-09-14 night, the multi-GPU drivers the par-* lanes above missed)
@@ -7221,493 +6797,8 @@ def _(ml, X, yc, yr, Xh=None):
 # forest model pool ride inside par-mlp, par-samba and par-iforest; those
 # lanes' code paths are the pooled ones since the drivers changed.
 
-#: query rows per ParallelQueries shard: 64 query rows are four shards
-PAR_QUERY_ROWS = 16
-
-
-def _pq(e, R, method, **kw):
-    """One ParallelQueries call on a fitted estimator, the pool opened and
-    closed around it."""
-    from mojolearn.parallel_neighbors import ParallelQueries
-    with ParallelQueries(e, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS) as pq:
-        return pq.query(np.ascontiguousarray(R), method=method, **kw)
-
-
-@lane("par-queries-knn")
-def _(ml, X, yc, yr, Xh=None):
-    """ParallelQueries over the knn-clf lane's KNeighborsClassifier, 64 query
-    rows in shards of 16: kneighbors, predict and predict_proba, each held to
-    the plain call.
-
-    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
-    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
-    MEASURED on the M4, one core, --repeats 2, base fixture, under the core
-    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: `ParallelQueries
-    kneighbors distances and plain distances differ: 1523 bytes of 2048` and
-    the cell read REFUSED, the same bytes `par-queries-nn` reported."""
-    from mojolearn.parallel_neighbors import ParallelQueries
-    m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
-    q = np.ascontiguousarray(X[4096:4160])
-    with ParallelQueries(m, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS) as pq:
-        d, i = pq.query(q, method="kneighbors")
-        pr = pq.query(q, method="predict")
-        pp = pq.query(q, method="predict_proba")
-    d0, i0 = m.kneighbors(q)
-    mismatch = _oracle_mismatch(
-        ("ParallelQueries kneighbors distances", d, "plain distances", d0),
-        ("ParallelQueries kneighbors indices", i, "plain indices", i0),
-        ("ParallelQueries predict", pr, "plain predict", m.predict(q)),
-        ("ParallelQueries predict_proba", pp, "plain predict_proba", m.predict_proba(q)))
-    parts = dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                m, lambda e: (_pq(e, Xh[:64], "predict"), _pq(e, Xh[:64], "predict_proba")))
-
-
-@lane("par-queries-radius")
-def _(ml, X, yc, yr, Xh=None):
-    """ParallelQueries over the radius lane's RadiusNeighbors, ragged rows
-    joined in input order, held to the plain call.
-
-    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
-    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
-    MEASURED on the M4, one core, --repeats 2, base fixture, under the core
-    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: `ParallelQueries
-    radius_neighbors counts and plain counts differ: 50 bytes of 512` and
-    the cell read REFUSED. The COUNTS moving is why this lane must keep its
-    parts: a radius query whose per-row count changed under the arm is the
-    ragged join being exercised, which no other part here reports."""
-    index, q = X[:4096], np.ascontiguousarray(X[4096:4160])
-    r = _radius_for(index, q)
-    m = ml.RadiusNeighbors(radius=r).fit(index)
-    par = _ragged(_pq(m, q, "radius_neighbors", sort_results=True))
-    plain = _ragged(m.radius_neighbors(q, sort_results=True))
-    mismatch = _oracle_mismatch(*[
-        (f"ParallelQueries radius_neighbors {name}", par[k], f"plain {name}", plain[k])
-        for k, name in enumerate(("counts", "distances", "indices"))])
-    lens, dd, ii = par
-    parts = dict(radius=_h(np.float32(r)), counts=_h(lens), dist=_h(dd), idx=_h(ii))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                m, lambda e: _ragged(_pq(e, Xh[:64], "radius_neighbors", sort_results=True)))
-
-
-@lane("par-queries-kde")
-def _(ml, X, yc, yr, Xh=None):
-    """ParallelQueries over the kde lane's KernelDensity, 256 query rows in
-    shards of 16, held to the plain score_samples."""
-    m = ml.KernelDensity(bandwidth=0.7).fit(X[:4096, :4])
-    q = np.ascontiguousarray(X[4096:4352, :4])
-    s = _pq(m, q, "score_samples")
-    mismatch = _mismatch_bytes("ParallelQueries score_samples", s,
-                               "plain score_samples", m.score_samples(q))
-    parts = dict(scores=_h(s))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, m, lambda e: (_pq(e, Xh[:256, :4], "score_samples"),))
-
-
-#: reference rows per ReferenceShardedNeighbors shard: the 4096-row index is four shards
-PAR_REFERENCE_ROWS = 1024
-
-
-def _rsn(e):
-    from mojolearn.parallel_neighbors_reference import ReferenceShardedNeighbors
-    return ReferenceShardedNeighbors(e, devices=_par_devices(), reference_rows_per_shard=PAR_REFERENCE_ROWS,
-                                     query_rows_per_shard=PAR_QUERY_ROWS)
-
-
-@lane("par-reference-knn")
-def _(ml, X, yc, yr, Xh=None):
-    """ReferenceShardedNeighbors over the knn-clf lane's classifier: the
-    4096-row reference in four shards of 1024, 64 query rows in shards of
-    16, the merged distance-bit keys and the original vote half, held to the
-    plain kneighbors, predict and predict_proba."""
-    m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
-    q = np.ascontiguousarray(X[4096:4160])
-    with _rsn(m) as rs:
-        d, i = rs.kneighbors(q)
-        pr, pp = rs.predict(q), rs.predict_proba(q)
-    d0, i0 = m.kneighbors(q)
-    parts = dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp))
-    # Retain measured bytes when the independent comparison detects a fault;
-    # a generic refusal would discard the evidence and cannot qualify a control.
-    for name, actual, expected in (("distances", d, d0), ("indices", i, i0),
-                                   ("predict", pr, m.predict(q)),
-                                   ("predict_proba", pp, m.predict_proba(q))):
-        mismatch = _mismatch_bytes("ReferenceShardedNeighbors " + name, actual,
-                                   "plain " + name, expected)
-        if mismatch:
-            raise NumericalMismatch(mismatch, parts)
-
-    def probe(e):
-        with _rsn(e) as rs:
-            return rs.predict(Xh[:64]), rs.predict_proba(Xh[:64])
-    return _fit(parts, m, probe)
-
-
-@lane("par-reference-knn-reg")
-def _(ml, X, yc, yr, Xh=None):
-    """ReferenceShardedNeighbors over the knn-reg lane's regressor, the
-    merged neighbors' regression vote, held to the plain predict."""
-    m = ml.KNeighborsRegressor(n_neighbors=8).fit(X[:4096], yr[:4096])
-    q = np.ascontiguousarray(X[4096:4160])
-    with _rsn(m) as rs:
-        pr = rs.predict(q)
-    parts = dict(predict=_h(pr))
-    mismatch = _mismatch_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-
-    def probe(e):
-        with _rsn(e) as rs:
-            return (rs.predict(Xh[:64]),)
-    return _fit(parts, m, probe)
-
-
-@lane("par-graph-agglomerative")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_graph over the agglomerative lane's fit, held to the plain labels
-    and merge tree."""
-    from mojolearn.parallel_graph import fit_graph
-    A = np.ascontiguousarray(X[:2000, :4])
-    par = fit_graph(ml.AgglomerativeClustering(n_clusters=4, prediction_data=True), A, devices=_par_devices())
-    plain = ml.AgglomerativeClustering(n_clusters=4).fit(A)
-    mismatch = _oracle_mismatch(
-        ("fit_graph labels_", par.labels_, "plain labels_", plain.labels_),
-        ("fit_graph children_", par.children_, "plain children_", plain.children_))
-    parts = dict(labels=_h(par.labels_), children=_h(par.children_))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh[:256, :4]),))
-
-
-@lane("par-graph-spectral")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_graph over the spectral lane's fit (the eigensolver on the root,
-    the neighbor rows and the KMeans assignment distributed), held to the
-    plain labels and embedding."""
-    from mojolearn.parallel_graph import fit_graph
-    A = np.ascontiguousarray(X[:2000, :4])
-    par = fit_graph(ml.SpectralClustering(n_clusters=4, random_state=3), A, devices=_par_devices())
-    plain = ml.SpectralClustering(n_clusters=4, random_state=3).fit(A)
-    mismatch = _oracle_mismatch(
-        ("fit_graph labels_", par.labels_, "plain labels_", plain.labels_),
-        ("fit_graph embedding_", par.embedding_, "plain embedding_", plain.embedding_))
-    parts = dict(labels=_h(par.labels_), embedding=_h(par.embedding_))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, "n/a:transductive")
-
-
-@lane("par-graph-umap")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_graph and transform_umap over the umap lane's fit, held to the
-    plain embedding and the plain transform of 64 further rows."""
-    from mojolearn.parallel_graph import fit_graph, transform_umap
-    kw = dict(n_neighbors=8, n_components=2, n_epochs=8, random_state=3)
-    A = np.ascontiguousarray(X[:1024, :8])
-    par = fit_graph(ml.UMAP(**kw), A, devices=_par_devices())
-    plain = ml.UMAP(**kw).fit(A)
-    q = np.ascontiguousarray(X[1024:1088, :8])
-    t = transform_umap(par, q, devices=_par_devices())
-    mismatch = _oracle_mismatch(
-        ("fit_graph embedding_", par.embedding_, "plain embedding_", plain.embedding_),
-        ("transform_umap", t, "plain transform", plain.transform(q)))
-    parts = dict(embedding=_h(par.embedding_), transform=_h(t))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                par, lambda e: (transform_umap(e, np.ascontiguousarray(Xh[:64, :8]), devices=_par_devices()),))
-
-
-@lane("par-ordered-rmse")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_ordered_rmse on the gbdt-ordered-rmse lane's fit and permutation,
-    held to the plain fit."""
-    from mojolearn.parallel_ensemble import fit_ordered_rmse
-    perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
-    par = fit_ordered_rmse(ml.OrderedRMSE(n_estimators=20, max_depth=6), X, yr, permutation=perm,
-                           devices=_par_devices())
-    plain = ml.OrderedRMSE(n_estimators=20, max_depth=6).fit(X, yr, permutation=perm)
-    p = par.predict(X)
-    mismatch = _mismatch_bytes("fit_ordered_rmse predict", p, "plain predict", plain.predict(X))
-    parts = dict(predict=_h(p))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh),))
-
-
-@lane("par-ordered")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_boosting on the gbdt-ordered lane's Logloss fit (feature groups of
-    the fold histograms partitioned; permutations, folds, cursors and leaves
-    on the root), held to the plain one-device fit."""
-    from mojolearn.parallel_ensemble import fit_boosting
-    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", boosting_type="Ordered")
-    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
-    plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
-    p = par.predict(X)
-    mismatch = _mismatch_bytes("fit_boosting ordered predict", p, "plain predict", plain.predict(X))
-    parts = dict(predict=_h(p))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh),))
-
-
-@lane("par-border-types")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_boosting on the gbdt-border-types lane's six fits (feature
-    histograms partitioned by whole packed groups; border selection is host
-    code on the root), each held to the plain one-device fit."""
-    from mojolearn.parallel_ensemble import fit_boosting
-    parts, first, pairs = {}, None, []
-    for bt in _GBDT_BORDER_TYPES:
-        kw = dict(n_estimators=8, max_depth=4, border_count=32, loss="Logloss",
-                  feature_border_type=bt)
-        par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
-        plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
-        p = par.predict(X)
-        pairs.append((f"fit_boosting {bt} predict", p, "plain predict", plain.predict(X)))
-        parts[bt] = _h(p)
-        first = first or par
-    mismatch = _oracle_mismatch(*pairs)
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, first, lambda e: (e.predict(Xh),))
-
-
-@lane("par-feature-freq")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_feature_freq on the gbdt-feature-freq lane's fit, held to the plain fit."""
-    from mojolearn.parallel_ensemble import fit_feature_freq
-    Xc = _coded(X)
-    par = fit_feature_freq(ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7), Xc, yr,
-                           devices=_par_devices())
-    plain = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(Xc, yr)
-    p = par.predict(Xc)
-    mismatch = _mismatch_bytes("fit_feature_freq predict", p, "plain predict", plain.predict(Xc))
-    parts = dict(predict=_h(p))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(_coded(Xh)),))
-
-
-@lane("par-boosting-pointwise")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_boosting with use_pointwise_searcher=True (whole packed feature
-    groups per device, the root gathering the interleaved weight and target
-    pairs), held to the plain pointwise fit."""
-    from mojolearn.parallel_ensemble import fit_boosting
-    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", use_pointwise_searcher=True)
-    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
-    plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
-    mismatch = _mismatch_bytes("fit_boosting pointwise predict_proba", par.predict_proba(X[:2048]),
-                               "plain predict_proba", plain.predict_proba(X[:2048]))
-    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
-
-
-def _hw_series(X):
-    """Four positive series of 512 observations, one per ROW (the
-    `(ts_num, n)` layout), from the fixture's first four columns by the
-    holtwinters lane's rule applied per series."""
-    S = np.cumsum(X[:512, :4], axis=0).T.astype(np.float32) + np.float32(50.0)
-    return np.ascontiguousarray((S - S.min(axis=1, keepdims=True) + np.float32(1.0)).astype(np.float32))
-
-
-@lane("par-holtwinters")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_exponential_smoothing, four series in shards of two, held to the
-    plain four-series fit on every fitted array and the forecast.
-
-    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
-    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
-    MEASURED on the M4, one core, --repeats 2, base fixture, under the CORE
-    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding alone: `fit_exponential_
-    smoothing level_ and plain level_ differ: 6054 bytes of 8000` and the
-    cell read REFUSED. Ten comparisons are folded into ONE message here, so
-    the refusal text names every fitted array that moved rather than only
-    `level_`, the first."""
-    from mojolearn.parallel_classical import fit_exponential_smoothing
-    S = _hw_series(X)
-    kw = dict(seasonal="additive", seasonal_periods=12, ts_num=4)
-    par = fit_exponential_smoothing(ml.ExponentialSmoothing(S, **kw), devices=_par_devices(), series_per_shard=2)
-    plain = ml.ExponentialSmoothing(S, **kw).fit()
-    names = ("level_", "trend_", "season_", "sse_", "alpha_", "beta_", "gamma_", "n_iter_", "criterion_")
-    f = par.forecast(24)
-    mismatch = _oracle_mismatch(
-        *[(f"fit_exponential_smoothing {n}", getattr(par, n), f"plain {n}", getattr(plain, n))
-          for n in names],
-        ("fit_exponential_smoothing forecast(24)", f, "plain forecast(24)", plain.forecast(24)))
-    parts = dict(**{n.strip("_"): _h(getattr(par, n)) for n in names}, forecast=_h(f))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                par, lambda e: (e.forecast(FORECAST_HORIZON),))
-
-
-@lane("par-forecast-holtwinters")
-def _(ml, X, yc, yr, Xh=None):
-    """predict_exponential_smoothing and forecast_exponential_smoothing --
-    the PREDICTION drivers, which par-holtwinters does not reach -- over the
-    same four series, three to a shard. That 3 + 1 split exercises the
-    one-series shard, whose worker returns cuML's 1-D shape instead of a
-    `(steps, ts_num)` block and whose components slice is a single column;
-    the `index=` arm asks for the third return shape on top of it.
-    In-sample prediction is refused by the driver by name, so `start = n`.
-
-    IN-CELL ORACLE (2026-09-19, lane/lm-attention-fallback): par-forecast-
-    arima's, read on this driver -- the sharded answer held byte for byte,
-    in the cell, to `ExponentialSmoothing.predict` and `.forecast` of the
-    same fitted estimator, which is what a series partition is claimed to
-    leave alone. Reachable on a CPU column only since `forecast_predict`
-    joined `_parallel_pool.CPU_OPERATIONS`."""
-    from mojolearn.parallel_forecasting import (forecast_exponential_smoothing,
-                                                predict_exponential_smoothing)
-    S = _hw_series(X)
-    d = _par_devices()
-    m = ml.ExponentialSmoothing(S, seasonal="additive", seasonal_periods=12, ts_num=4).fit()
-    sharded = predict_exponential_smoothing(m, m.n, m.n + 24, devices=d, series_per_shard=3)
-    ahead = forecast_exponential_smoothing(m, 24, devices=d, series_per_shard=3)
-    one = forecast_exponential_smoothing(m, 24, index=2, devices=d, series_per_shard=3)
-    mismatch = _oracle_mismatch(
-        ("predict_exponential_smoothing(n, n + 24)", sharded,
-         "plain ExponentialSmoothing.predict(n, n + 24)", m.predict(m.n, m.n + 24)),
-        ("forecast_exponential_smoothing(24)", ahead,
-         "plain ExponentialSmoothing.forecast(24)", m.forecast(24)),
-        ("forecast_exponential_smoothing(24, index=2)", one,
-         "plain ExponentialSmoothing.forecast(24, index=2)", m.forecast(24, index=2)))
-    parts = dict(predict=_h(sharded), forecast=_h(ahead), indexed=_h(one))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, m,
-                lambda e: _same_bytes(
-                    f"forecast_exponential_smoothing({FORECAST_HORIZON})",
-                    forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
-                    f"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})", e.forecast(FORECAST_HORIZON)))
-
-
-def _byte_lm_seed(ml):
-    shape = _par_byte_lm_config(ml)
-    named, _ = _byte_lm_params(shape)
-    seed = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
-                                            shape=shape)
-    return shape, seed.state_dict()
-
-
-def _same_state(name_a, a, name_b, b):
-    for key in ("parameters", "m", "v", "flags"):
-        _same_bytes(f"{name_a} {key}", np.asarray(a[key]), f"{name_b} {key}", np.asarray(b[key]))
-
-
-def _byte_lm_replay(trainer, reference, ids):
-    """Three steps of two logical shards on both trainers from the same
-    state, losses held equal step by step; returns (losses, state, grads)."""
-    losses = []
-    for step in range(3):
-        shards = [ids[4 * step: 4 * step + 2], ids[4 * step + 2: 4 * step + 4]]
-        a, b = trainer.train_step(shards), reference.train_step(shards)
-        _same_bytes(f"step {step} losses", np.asarray(a["losses"], dtype=np.float32),
-                    "replica trainer losses", np.asarray(b["losses"], dtype=np.float32))
-        losses.append([np.float64(v) for v in a["losses"]])
-    state, ref = trainer.state_dict(), reference.state_dict()
-    _same_state("trainer", state, "replica trainer", ref)
-    grads = trainer.export_gradients()
-    _same_bytes("export_gradients", grads, "replica trainer export_gradients", reference.export_gradients())
-    return losses, state, grads
-
-
-@lane("par-byte-lm-model-pool")
-def _(ml, X, yc, yr, Xh=None):
-    """PooledByteLanguageModelTrainer (decoder layers owned by devices, the
-    embedding and head on the first) from the byte-lm lane's starting
-    state, two logical shards, three steps, held to the replicated
-    ParallelByteLanguageModelTrainer (pool_optimizer=False) on the first
-    device: losses, parameters, moments, flags and gradients, the
-    comparison tools/byte_lm_model_pool_check.py makes."""
-    from mojolearn.model_pool_training import PooledByteLanguageModelTrainer
-    from mojolearn.parallel_training import ParallelByteLanguageModelTrainer
-    shape, state0 = _byte_lm_seed(ml)
-    ids = _ids(X, 6 * shape.batch, shape.length + 1)
-    with PooledByteLanguageModelTrainer(state0, devices=_par_devices(), logical_shards=2) as tr, \
-         ParallelByteLanguageModelTrainer(state0, devices=_par_devices()[:1], logical_shards=2,
-                                          pool_optimizer=False) as ref:
-        losses, state, grads = _byte_lm_replay(tr, ref, ids)
-    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(state["parameters"])),
-                     m=_h(np.asarray(state["m"])), v=_h(np.asarray(state["v"])), grads=_h(np.asarray(grads))))
-
-
-@lane("par-byte-lm-offload")
-def _(ml, X, yc, yr, Xh=None):
-    """OffloadedByteLanguageModelTrainer, which admits exactly one device
-    (the first of _par_devices(), so a two-device column runs it on one),
-    held to the replicated ParallelByteLanguageModelTrainer the same way,
-    the comparison tools/byte_lm_offload_check.py makes."""
-    from mojolearn.offload_training import OffloadedByteLanguageModelTrainer
-    from mojolearn.parallel_training import ParallelByteLanguageModelTrainer
-    shape, state0 = _byte_lm_seed(ml)
-    ids = _ids(X, 6 * shape.batch, shape.length + 1)
-    with OffloadedByteLanguageModelTrainer(state0, devices=_par_devices()[:1], logical_shards=2) as tr, \
-         ParallelByteLanguageModelTrainer(state0, devices=_par_devices()[:1], logical_shards=2,
-                                          pool_optimizer=False) as ref:
-        losses, state, grads = _byte_lm_replay(tr, ref, ids)
-    return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(state["parameters"])),
-                     m=_h(np.asarray(state["m"])), v=_h(np.asarray(state["v"])), grads=_h(np.asarray(grads))))
-
-
-@lane("par-samba-clip")
-def _(ml, X, yc, yr, Xh=None):
-    """ParallelNeuralTrainer over the par-samba lane's stack with a global
-    norm clip (max_norm=0.5), the only way into the pooled clipping tensors
-    (whole tensors on owners, the cross-tensor norm on the first device);
-    two logical shards of (2, 17) windows, two steps.
-
-    IN-CELL ORACLE (2026-09-19): the same two steps replayed on a second
-    SambaStack loaded from the same starting state through
-    `_ordered_replay_samba`, which passes the SAME `max_norm` to the
-    single-device optimizer, so the clip is in the comparison and not beside
-    it. The retained pre-update gradient `export_gradients()` carries, every
-    parameter and the logits are held to the replay's bit for bit. The parts
-    are unchanged."""
-    from mojolearn.parallel_training import ParallelNeuralTrainer
-    cfg = _par_samba_config(ml)
-    m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=0.5)
-    plain = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=0.5)
-    plain.load_state_dict(m.state_dict())
-    ids = _ids(X, 8, 17)
-    steps = [[(ids[4 * s + 2 * k: 4 * s + 2 * k + 2, :-1], ids[4 * s + 2 * k: 4 * s + 2 * k + 2, 1:])
-              for k in range(2)] for s in range(2)]
-    with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
-        losses = []
-        for shards in steps:
-            res = tr.train_step(shards)
-            losses.append([np.float64(v) for v in res["losses"]])
-        grads = tr.export_gradients()
-    reduced = _ordered_replay_samba(plain, steps)
-    params, ref = m.parameters(), plain.parameters()
-    # zip() truncates, so a short list would quietly shrink the comparison.
-    mismatch = _oracle_mismatch(
-        ("export_gradients tensor count", np.int64(len(grads)),
-         "ordered single-device replay tensor count", np.int64(len(reduced))),
-        *[(f"ParallelNeuralTrainer export_gradients[{k}]", np.asarray(g),
-           "ordered single-device replay gradient", np.asarray(r))
-          for k, (g, r) in enumerate(zip(grads, reduced))],
-        *[(f"ParallelNeuralTrainer parameters()[{k}]", np.asarray(params[k]),
-           "ordered single-device replay", np.asarray(ref[k])) for k in sorted(params)],
-        ("ParallelNeuralTrainer forward", np.asarray(m.forward(ids[:2, :-1])),
-         "ordered single-device replay forward", np.asarray(plain.forward(ids[:2, :-1]))))
-    parts = dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
-                 grads=_h(*[np.asarray(g) for g in grads]),
-                 params=_h(*[np.asarray(params[k]) for k in sorted(params)]))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
-
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
 # LAST ON PURPOSE (2026-08-29): on a RunPod RTX 4090 the isolation forest
@@ -7739,21 +6830,8 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(scores=_h(m.score_samples(X)), predict=_h(m.predict(X[:512]))),
                 m, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
 
-@lane("par-iforest")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_isolation_forest and score_isolation_forest on the iforest lane's
-    configuration, tree ranges on one device, held to the plain fit; after
-    iforest-tuned for the reason iforest runs last."""
-    from mojolearn.parallel_ensemble import fit_isolation_forest, score_isolation_forest
-    par = fit_isolation_forest(ml.IsolationForest(n_estimators=16, random_state=5), X, devices=_par_devices())
-    plain = ml.IsolationForest(n_estimators=16, random_state=5).fit(X)
-    scores = score_isolation_forest(par, X, devices=_par_devices(), method="score_samples")
-    mismatch = _mismatch_bytes("score_isolation_forest", scores,
-                               "plain score_samples", plain.score_samples(X))
-    parts = dict(scores=_h(scores), predict=_h(par.predict(X[:512])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
 # ---------------------------------------------------------------- lanes (2026-09-14 night, drivers added by the multigpu lane)
@@ -7762,121 +6840,8 @@ def _(ml, X, yc, yr, Xh=None):
 # rules as the par-* lanes above: devices=_par_devices() and `_same_bytes`
 # against the one-device public path the driver promises to equal.
 
-@lane("par-forest-pool")
-def _(ml, X, yc, yr, Xh=None):
-    """ParallelForestPredictor over a 40-tree RandomForestClassifier with
-    inference_engine='parallel_groves' (40 trees put two trees in groves 0..7,
-    so the within-grove order is reached), held to the estimator's own
-    parallel_groves predictions."""
-    from mojolearn.parallel_ensemble import ParallelForestPredictor
-    m = ml.RandomForestClassifier(n_estimators=40, max_depth=8, random_state=7,
-                                  inference_engine="parallel_groves").fit(X, yc)
-
-    def pooled(e, R):
-        # A reloaded model is asked the same way; its engine is set, not assumed.
-        e.inference_engine = "parallel_groves"
-        with ParallelForestPredictor(e, devices=_par_devices()) as pool:
-            return pool.predict(R), pool.predict_proba(R)
-
-    pred, proba = pooled(m, X)
-    mismatch = _mismatch_bytes("ParallelForestPredictor predict_proba", proba,
-                               "parallel_groves predict_proba", m.predict_proba(X))
-    parts = dict(predict=_h(pred), proba=_h(proba))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, m, lambda e: pooled(e, Xh))
-
-
-@lane("par-gmm")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_gaussian_mixture and predict_gaussian_mixture on the gmm lane's
-    configuration, held to the plain fit's covariances and labels."""
-    from mojolearn.parallel_classical import fit_gaussian_mixture, predict_gaussian_mixture
-    kw = dict(n_components=4, max_iter=30, random_state=3)
-    par = fit_gaussian_mixture(ml.GaussianMixture(**kw), X[:6000, :4], devices=_par_devices())
-    plain = ml.GaussianMixture(**kw).fit(X[:6000, :4])
-    labels = predict_gaussian_mixture(par, X[:6000, :4], devices=_par_devices(), method="predict")
-    mismatch = _oracle_mismatch(
-        ("fit_gaussian_mixture covariances_", par.covariances_,
-         "plain covariances_", plain.covariances_),
-        ("predict_gaussian_mixture", labels, "plain predict", plain.predict(X[:6000, :4])))
-    parts = dict(weights=_h(par.weights_), means=_h(par.means_), covariances=_h(par.covariances_),
-                 precisions=_h(par.precisions_cholesky_), n_iter=_h(np.int64(par.n_iter_)),
-                 lower_bound=_h(np.float32(par.lower_bound_)), labels=_h(labels))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                par, lambda e: (predict_gaussian_mixture(e, Xh[:64, :4], devices=_par_devices(), method="score_samples"),
-                                predict_gaussian_mixture(e, Xh[:64, :4], devices=_par_devices(), method="predict")))
-
-
-@lane("par-resample")
-def _(ml, X, yc, yr, Xh=None):
-    """parallel_classical.bootstrap, permutation_test and
-    monte_carlo_integrate (global replicate, permutation and 256-sample
-    chunk ranges on _par_devices()) on the bootstrap, permutation-test and
-    monte-carlo lanes' inputs, each held to the one-device public function."""
-    from mojolearn import parallel_classical as pc
-    rs = ml.resample
-    dev = _par_devices()
-    x = np.ascontiguousarray(yr[:4096])
-    parts, pairs = {}, []
-    for name, kw in (("mean", dict(statistic="mean", n_resamples=2048)),
-                     ("quantile", dict(statistic="quantile", q_or_prop=0.25, n_resamples=1024, alternative="less"))):
-        b = pc.bootstrap(x, devices=dev, random_state=3, **kw)
-        plain = rs.bootstrap(x, random_state=3, **kw)
-        pairs.append(("parallel bootstrap distribution " + name, b.distribution,
-                      "bootstrap distribution", plain.distribution))
-        parts["bootstrap-" + name] = _h(b.distribution, b.sorted_distribution,
-                                        np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0],
-                                                    b.confidence_interval[1]], dtype=np.float64))
-    a = np.ascontiguousarray(yr[:512])
-    c = np.ascontiguousarray(yr[512:1024])
-    p = pc.permutation_test(a, c, devices=dev, statistic="diff_means", n_resamples=2048, random_state=3)
-    plain = rs.permutation_test(a, c, statistic="diff_means", n_resamples=2048, random_state=3)
-    pairs.append(("parallel permutation null", p.null_distribution,
-                  "permutation null", plain.null_distribution))
-    parts["permutation"] = _h(p.null_distribution, np.asarray([p.statistic, p.pvalue], dtype=np.float64),
-                              np.asarray([p.count_less, p.count_greater], dtype=np.int64))
-    lo, hi = [0.0, 0.0], [1.0, 2.0]
-    r = pc.monte_carlo_integrate("product", lo, hi, 65536 + 300, devices=dev, random_state=1)
-    plain = rs.monte_carlo_integrate("product", lo, hi, 65536 + 300, random_state=1)
-    pairs.append(("parallel monte carlo", np.asarray([r.integral, r.mean]),
-                  "monte carlo", np.asarray([plain.integral, plain.mean])))
-    parts["monte-carlo"] = _h(np.asarray([r.integral, r.mean, r.volume, r.closed_form], dtype=np.float64))
-    mismatch = _oracle_mismatch(*pairs)
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts)
-
-
-@lane("par-hdbscan")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_hdbscan on the hdbscan lane's configuration (the neighbors and
-    hierarchy row drivers under _par_devices()), held to the plain fit's
-    labels and core distances.
-
-    ROWS: this lane keeps 6000 while the plain hdbscan lane came down to 4000
-    (2026-09-16, lane/identity-fixtures-light). Deliberate, and it breaks
-    nothing: this lane builds BOTH sides of its own comparison at the same
-    size, so `_same_bytes` below still compares like with like. It was left
-    alone because `par-*` is out of the release record's scope
-    (RECORD_EXCLUDED_PREFIXES), so shrinking it would buy no column time while
-    costing another hash revision. "The hdbscan lane's configuration" means
-    its estimator settings, not its row count."""
-    from mojolearn.parallel_classical import fit_hdbscan
-    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
-    plain = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
-    mismatch = _oracle_mismatch(
-        ("fit_hdbscan labels_", par.labels_, "plain labels_", plain.labels_),
-        ("fit_hdbscan core_distances_", par.core_distances_,
-         "plain core_distances_", plain.core_distances_))
-    parts = dict(labels=_h(par.labels_), core=_h(par.core_distances_),
-                 counts=_h(np.asarray([par.n_clusters_, par.n_outliers_, par.n_boruvka_rounds_,
-                                       par.n_condensed_clusters_], dtype=np.int64)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
 # ---------------------------------------------------------------- lanes (2026-09-15, the kernel-method and Cholesky drivers)
@@ -7887,104 +6852,8 @@ def _(ml, X, yc, yr, Xh=None):
 # (bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/). Same rules as
 # the par-* lanes above.
 
-@lane("par-cholesky")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_cholesky and solve_cholesky on a 600 x 600 Cauchy-kernel SPD
-    matrix with three right-hand sides (whole trailing-update rows and whole
-    right-hand-side columns on _par_devices()), held to the plain fit's
-    factor and solve."""
-    from mojolearn.parallel_classical import fit_cholesky, solve_cholesky
-    dev = _par_devices()
-    A = _cauchy_spd(X[:600, :4])
-    par = fit_cholesky(ml.Cholesky(), A, devices=dev)
-    plain = ml.Cholesky().fit(A)
-    assert par.info_ == 0, "par-cholesky lane: the Cauchy matrix did not factor (info=%d)" % par.info_
-    B = np.ascontiguousarray(np.stack([yr[:600], yr[600:1200], yr[1200:1800]], 1).astype(np.float32))
-    x = solve_cholesky(par, B, devices=dev)
-    mismatch = _oracle_mismatch(
-        ("fit_cholesky L_", par.L_, "plain L_", plain.L_),
-        ("solve_cholesky", x, "plain solve", plain.solve(B)))
-    parts = dict(L=_h(par.L_), logdet=_h(np.float64(par.logdet_)), info=_h(np.int64(par.info_)),
-                 nb=_h(np.int64(par.nb_)), jitter=_h(np.float32(par.jitter_)), solve=_h(x))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                par, lambda e: (solve_cholesky(e, np.ascontiguousarray(Xh[:600, :3]), devices=_par_devices()),))
-
-
-@lane("par-kernel-ridge")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_kernel_method and apply_kernel_method on a KernelRidge at the rbf
-    kernel over 600 rows with two targets (kernel rows through the SVM seam,
-    factor rows and target columns through the Cholesky driver), held to the
-    plain fit's dual coefficients and predictions."""
-    from mojolearn.parallel_classical import fit_kernel_method, apply_kernel_method
-    dev = _par_devices()
-    kw = dict(alpha=0.1, kernel="rbf", gamma=0.5)
-    Y = np.ascontiguousarray(np.stack([yr[:600], yr[600:1200]], 1).astype(np.float32))
-    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)
-    plain = ml.KernelRidge(**kw).fit(X[:600, :4], Y)
-    pred = apply_kernel_method(par, X[600:856, :4], devices=dev)
-    mismatch = _oracle_mismatch(
-        ("fit_kernel_method dual_coef_", par.dual_coef_, "plain dual_coef_", plain.dual_coef_),
-        ("apply_kernel_method predict", pred, "plain predict", plain.predict(X[600:856, :4])))
-    parts = dict(dual=_h(par.dual_coef_), info=_h(np.int64(par.info_)), predict=_h(pred))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
-
-
-@lane("par-nystroem")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_kernel_method and apply_kernel_method on a Nystroem at the rbf
-    kernel with 32 components of 600 rows (kernel rows on _par_devices(),
-    the Jacobi eigensolver on the root), held to the plain fit's model
-    arrays and transform."""
-    from mojolearn.parallel_classical import fit_kernel_method, apply_kernel_method
-    dev = _par_devices()
-    kw = dict(kernel="rbf", gamma=0.5, n_components=32, random_state=7)
-    par = fit_kernel_method(ml.Nystroem(**kw), X[:600, :4], devices=dev)
-    plain = ml.Nystroem(**kw).fit(X[:600, :4])
-    out = apply_kernel_method(par, X[600:1624, :4], devices=dev)
-    mismatch = _oracle_mismatch(
-        ("fit_kernel_method components_", par.components_, "plain components_", plain.components_),
-        ("fit_kernel_method normalization_", par.normalization_,
-         "plain normalization_", plain.normalization_),
-        ("apply_kernel_method transform", out, "plain transform", plain.transform(X[600:1624, :4])))
-    parts = dict(components=_h(par.components_), indices=_h(par.component_indices_),
-                 normalization=_h(par.normalization_), eigenvalues=_h(par.eigenvalues_),
-                 eigenvectors=_h(par.eigenvectors_), sweeps=_h(np.int64(par.sweeps_)), transform=_h(out))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
-
-
-@lane("par-rbf-sampler")
-def _(ml, X, yc, yr, Xh=None):
-    """transform_rbf_sampler with 1024 random Fourier features over 1000
-    rows in shards of 300 rows (each shard's output 1.17 MiB) on
-    _par_devices(), held to the one-call transform.
-
-    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
-    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
-    MEASURED on the M4, one core, --repeats 2, base fixture, under the
-    kernel_methods family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: the lane
-    raised `transform_rbf_sampler and plain transform differ: 3869141 bytes
-    of 4096000` and the cell read REFUSED, so a working negative control was
-    recorded as a refusal and a refusal is not a catch. The two sides
-    separate under the arm because the row shards enter the host
-    `rbf_sampler_transform` four times (300, 300, 300, 100) against the plain
-    call's once, and the arm's perturbation is per call. The clean cell is
-    unchanged: the same parts in the same order whenever the two agree."""
-    from mojolearn.parallel_classical import transform_rbf_sampler
-    m = ml.RBFSampler(gamma=0.5, n_components=1024, random_state=1).fit(X)
-    out = transform_rbf_sampler(m, X[:1000], devices=_par_devices(), rows_per_shard=300)
-    mismatch = _mismatch_bytes("transform_rbf_sampler", out, "plain transform", m.transform(X[:1000]))
-    parts = dict(weights=_h(m.random_weights_), offset=_h(m.random_offset_), transform=_h(out))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                m, lambda e: (transform_rbf_sampler(e, Xh[:256], devices=_par_devices(), rows_per_shard=100),))
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
 # ---------------------------------------------------------------- lanes (2026-09-16, lane/multigpu-audit)
@@ -8015,209 +6884,8 @@ def _(ml, X, yc, yr, Xh=None):
 # Same rules as every par lane above: devices=_par_devices(), the smallest
 # sharding that splits the work, and `_same_bytes` against the plain fit.
 
-@lane("par-forest-reg")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_forest on the rf-reg lane's RandomForestRegressor, 16 trees in four
-    ranges of four, held to the plain fit. par-forest carries the classifier;
-    the driver admits this class on the same global tree ID ranges."""
-    from mojolearn.parallel_ensemble import fit_forest
-    kw = dict(n_estimators=16, max_depth=8, random_state=7)
-    par = fit_forest(ml.RandomForestRegressor(**kw), X, yr, devices=_par_devices(), trees_per_shard=4)
-    plain = ml.RandomForestRegressor(**kw).fit(X, yr)
-    mismatch = _mismatch_bytes("fit_forest predict", par.predict(X[:2048]),
-                               "plain predict", plain.predict(X[:2048]))
-    parts = dict(predict=_h(par.predict(X)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh),))
-
-
-@lane("par-forest-et-clf")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_forest on the et-clf lane's ExtraTreesClassifier. par-forest-et
-    carries the regressor; this is the fourth forest class the driver takes."""
-    from mojolearn.parallel_ensemble import fit_forest
-    kw = dict(n_estimators=16, max_depth=8, random_state=7)
-    par = fit_forest(ml.ExtraTreesClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)
-    plain = ml.ExtraTreesClassifier(**kw).fit(X, yc)
-    mismatch = _mismatch_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]),
-                               "plain predict_proba", plain.predict_proba(X[:2048]))
-    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
-
-
-@lane("par-boosting-clf")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_boosting on the gbdt-adapter-clf lane's GradientBoostingClassifier,
-    the sklearn-style adapter `fit_boosting` admits beside GradientBoosting;
-    the same packed feature groups par-boosting distributes."""
-    from mojolearn.parallel_ensemble import fit_boosting
-    kw = dict(n_estimators=20, max_depth=6)
-    par = fit_boosting(_gbdt(ml.GradientBoostingClassifier, **kw), X, yc, devices=_par_devices())
-    plain = _gbdt(ml.GradientBoostingClassifier, **kw).fit(X, yc)
-    mismatch = _mismatch_bytes("fit_boosting predict_proba", par.predict_proba(X[:2048]),
-                               "plain predict_proba", plain.predict_proba(X[:2048]))
-    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)),
-                 decision=_h(par.decision_function(X[:512])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                par, lambda e: (e.predict(Xh), e.predict_proba(Xh), e.decision_function(Xh[:512])))
-
-
-@lane("par-boosting-reg")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_boosting on the gbdt-adapter-reg lane's GradientBoostingRegressor."""
-    from mojolearn.parallel_ensemble import fit_boosting
-    kw = dict(n_estimators=20, max_depth=6)
-    par = fit_boosting(_gbdt(ml.GradientBoostingRegressor, **kw), X, yr, devices=_par_devices())
-    plain = _gbdt(ml.GradientBoostingRegressor, **kw).fit(X, yr)
-    mismatch = _mismatch_bytes("fit_boosting predict", par.predict(X[:2048]),
-                               "plain predict", plain.predict(X[:2048]))
-    parts = dict(predict=_h(par.predict(X)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh),))
-
-
-@lane("par-gram-ols")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_gram_estimator on the ols lane's LinearRegression: the pinned Gram
-    chunks par-gram distributes for Ridge, on the minimum-norm OLS path."""
-    from mojolearn.parallel_classical import fit_gram_estimator
-    par = fit_gram_estimator(ml.LinearRegression(), X, yr, devices=_par_devices())
-    plain = ml.LinearRegression().fit(X, yr)
-    mismatch = _mismatch_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
-    parts = dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
-
-
-@lane("par-gram-pca")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_gram_estimator on the pca lane's PCA. The fixture is tall, so the
-    covariance route runs; wide full PCA is refused by the driver by name."""
-    from mojolearn.parallel_classical import fit_gram_estimator
-    par = fit_gram_estimator(ml.PCA(n_components=4), X, devices=_par_devices())
-    plain = ml.PCA(n_components=4).fit(X)
-    mismatch = _mismatch_bytes("fit_gram_estimator components", par.components_,
-                               "plain components", plain.components_)
-    parts = dict(components=_h(par.components_), variance=_h(par.explained_variance_),
-                 transform=_h(par.transform(X[:256])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
-
-
-@lane("par-gram-tsvd")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_gram_estimator on the tsvd lane's TruncatedSVD, the fourth class
-    the Gram driver admits."""
-    from mojolearn.parallel_classical import fit_gram_estimator
-    par = fit_gram_estimator(ml.TruncatedSVD(n_components=4), X, devices=_par_devices())
-    plain = ml.TruncatedSVD(n_components=4).fit(X)
-    mismatch = _mismatch_bytes("fit_gram_estimator components", par.components_,
-                               "plain components", plain.components_)
-    parts = dict(components=_h(par.components_), transform=_h(par.transform(X[:256])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
-
-
-@lane("par-cd-elasticnet")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_coordinate_descent on the elasticnet lane's ElasticNet, the second
-    class the dot-leaf driver admits beside Lasso."""
-    from mojolearn.parallel_classical import fit_coordinate_descent
-    kw = dict(alpha=0.01, l1_ratio=0.5, max_iter=200)
-    par = fit_coordinate_descent(ml.ElasticNet(**kw), X, yr, devices=_par_devices())
-    plain = ml.ElasticNet(**kw).fit(X, yr)
-    mismatch = _mismatch_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
-    parts = dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256])))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
-
-
-@lane("par-svm-svr")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_svm and predict_svm on the svr lane's SVR, the second class the
-    kernel-row driver admits. predict_svm refuses decision_function for SVR
-    by name, so only predict is asked."""
-    from mojolearn.parallel_classical import fit_svm, predict_svm
-    kw = dict(C=1.0, kernel="rbf", epsilon=0.1, max_iter=200)
-    par = fit_svm(ml.SVR(**kw), X[:2000], yr[:2000], devices=_par_devices())
-    plain = ml.SVR(**kw).fit(X[:2000], yr[:2000])
-    pred = predict_svm(par, X[2000:2256], devices=_par_devices(), method="predict")
-    mismatch = _mismatch_bytes("predict_svm", pred, "plain predict", plain.predict(X[2000:2256]))
-    parts = dict(predict=_h(pred))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
-
-
-@lane("par-scaler-minmax")
-def _(ml, X, yc, yr, Xh=None):
-    """fit_scaler and transform_scaler on the minmax-scaler lane's
-    MinMaxScaler with four columns per shard, the second class the column
-    driver admits. Its five fitted statistics are the plain lane's.
-
-    `NumericalMismatch` rather than a bare raise, for `par-scaler`'s reason
-    above; the clean cell is unchanged."""
-    from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
-    par = fit_scaler(ml.MinMaxScaler(), X, devices=_par_devices(), columns_per_shard=4)
-    plain = ml.MinMaxScaler().fit(X)
-    t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
-    mismatch = _mismatch_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
-    parts = dict(data_min=_h(par.data_min_), data_max=_h(par.data_max_), scale=_h(par.scale_),
-                 min=_h(par.min_), transform=_h(t),
-                 inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4,
-                                             inverse=True)))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
-
-
-@lane("par-queries-nn")
-def _(ml, X, yc, yr, Xh=None):
-    """ParallelQueries over the knn lane's NearestNeighbors, 64 query rows in
-    shards of 16, held to the plain kneighbors. par-queries-knn carries the
-    classifier; this is the bare index the driver also admits.
-
-    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
-    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
-    MEASURED on the M4, one core, --repeats 2, base fixture, under the core
-    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: the lane raised
-    `ParallelQueries kneighbors distances and plain distances differ: 1523
-    bytes of 2048` and the cell read REFUSED, so the arm fired and the column
-    recorded no catch. The two sides separate under the arm because the query
-    rows enter `core/knn_host_predict.mojo` four times, 16 rows each, against
-    the plain call's one entry over 64, and that arm perturbs a distance at
-    query time. The clean cell is unchanged: the same parts in the same
-    order whenever the two agree.
-
-    THIS IS NOT THE LANE'S OTHER DEFECT. Its `batch` part fails on TWO
-    devices and only on two (18 of 18 attempts on AMD), which is a live
-    investigation into a cross-device copy that does no `transfer_bytes`
-    host staging. Nothing here touches the batch part or the device axis:
-    the change is how a disagreement this cell ALREADY detected is
-    reported."""
-    from mojolearn.parallel_neighbors import ParallelQueries
-    m = ml.NearestNeighbors(n_neighbors=8).fit(X[:4096])
-    q = np.ascontiguousarray(X[4096:4160])
-    with ParallelQueries(m, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS) as pq:
-        d, i = pq.query(q, method="kneighbors")
-    d0, i0 = m.kneighbors(q)
-    mismatch = _oracle_mismatch(
-        ("ParallelQueries kneighbors distances", d, "plain distances", d0),
-        ("ParallelQueries kneighbors indices", i, "plain indices", i0))
-    parts = dict(dist=_h(d), idx=_h(i))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, m, lambda e: _pq(e, Xh[:64], "kneighbors"))
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
 # ---------------------------------------------------------------- lanes (2026-09-19, lane/laneless-public-classes)
@@ -8256,145 +6924,8 @@ def _refused(call, needle):
     return 0
 
 
-def _dist_search(cls, index, queries, devices):
-    """One `DistributedIVFIndex` search over `index`, the pool opened and
-    closed around it (the `_pq` helper's shape). Returns the distances, the
-    global ids and the merged per-query candidate counts."""
-    with cls.from_index(index, devices=devices) as shards:
-        d, i = shards.search(queries)
-        return d, i, np.asarray(shards.n_candidates_).copy()
-
-
-@lane("par-ivf")
-def _(ml, X, yc, yr, Xh=None):
-    """DistributedIVFIndex (python/mojolearn/parallel_ivf.py): a BUILT
-    IVF-Flat index partitioned into disjoint stored shards with the coarse
-    quantizer REPLICATED, searched shard by shard and merged back to global
-    row ids. The `ivf` lane's index exactly (16 lists, 4 probes, k=8, 4096
-    rows, random_state 3) and its 64 queries, so a reader can hold this
-    lane's cells against that one.
-
-    WHAT THE CELL SAYS. The driver's whole contract is equality to the plain
-    search, so the squared-metric arm is held to `IVFIndex.search` BYTE FOR
-    BYTE and the train cell reads DIVERGENT naming the pair if it is not:
-    the local-id maps, the per-shard candidate counts and the global merge
-    by `(distance, original id)` either reproduce the one-index answer or
-    they do not. `cand` is the merged candidate total per query, which is
-    what says the shards were probed at all rather than a k-sized answer
-    arriving from one of them.
-
-    IT READS DIVERGENT AND NOT REFUSED since lane/broken-par-sabotage-arms
-    (2026-09-20), which is `par-scaler`'s correction applied here. The
-    oracle raises `NumericalMismatch` CARRYING the nine parts, so a cell
-    whose oracle fires still hashes what it computed. Until then the four
-    equality checks were bare `_same_bytes` raises, and MEASURED on the M4,
-    one core, --repeats 2, base fixture, under the ivf family's
-    -D MOJOLEARN_HOST_SABOTAGE=1 binding the lane raised `DistributedIVFIndex
-    distances and plain IVFIndex distances differ: 1658 bytes of 2048` and
-    the whole cell read REFUSED -- the arm working perfectly and the column
-    recording nothing. The two routes separate under the arm because each
-    shard enters `host_ivf_search` once, so a per-call value perturbation
-    lands once per shard on this route and once in total on the plain one:
-    the same seam the euclidean arm's flag is about, one level up. The
-    clean cell is unchanged: the same parts in the same order whenever the
-    four pairs agree.
-
-    THE EUCLIDEAN ARM IS A FLAG, NOT A RAISE, and the reason is measured.
-    Under `metric='euclidean'` the shards return SQUARED distances and the
-    root is taken once, afterwards, by `ivf_finalize_distances` on the
-    merged row -- that seam is the one thing the squared arm cannot reach.
-    Its agreement with the plain search is hashed as a flag rather than
-    asserted because the sabotage build's value flip is applied BEFORE that
-    root on this route and AFTER it on the plain one, so a raise would make
-    the sabotaged cell read REFUSED, which the owed check
-    (tools/cpu_identity_gate_check.py owed) does not count as a catch -- the
-    `tokenizer` lane's `roundtrip` part carries the same reasoning. THAT
-    REASONING IS NO LONGER WHAT KEEPS IT A FLAG: since the four squared-arm
-    checks raise `NumericalMismatch` (above), a raise here would read
-    DIVERGENT and would be counted. It stays a flag because the seam it
-    watches is a CONTRACT the driver does not promise byte for byte on a
-    sabotaged build, and because the two hashes below are the recorded
-    evidence that this arm moves twice over. MEASURED
-    on the M4, one core, --repeats 2, base fixture, 2026-09-19: clean
-    `root_dist` cdbf46f042cf7c81 and `flags` b1e0e3b7b8fee07b against
-    6381524ce593f295 and 9ce81bd2eece53a4 under the
-    -D MOJOLEARN_HOST_SABOTAGE=1 ivf binding, so the arm moves TWICE over --
-    the distances and the flag that says they still agree.
-
-    WHAT THE SABOTAGE DOES NOT MOVE, said rather than left to be assumed.
-    The same pair leaves `idx`, `cand`, `root_idx` (on `base`) and
-    `thin_idx` where it found them, because that build's value arm steps a
-    float32 mantissa by ONE UNIT and is therefore monotone on the positive
-    distances, so nothing is reordered; on the `ties` fixture, where
-    distances collide, `root_idx` does move (433afb8e970006c6 ->
-    d85c1e527d64badd). Every distance part moves on both fixtures, and so
-    does the cell (base 82ac27da71d34ea9 -> 1a0e8a596286d0c3, infer
-    fd6eed35b1338d17 -> c70054c87bc14b51).
-
-    THE DEVICE AXIS IS `_par_devices()`, as every par-* lane's is, and at one
-    device the partition is ONE shard: the merge still runs, the id map is
-    still applied and the equality above still fires, but no shard can be
-    short of candidates. The arms that only a multi-shard column reaches --
-    `min(k, n_cand)` selection and the all-zero padding of a shard that owns
-    NO candidate for a query -- are what the `thin_*` parts are for: 128
-    rows over 16 lists probed twice, k=6, so a shard holds few candidates or
-    none. At MOJOLEARN_PAR_DEVICES=0,1,2,3,4,5,6,7 on the M4, 54 of 64 shard
-    answers were short and 42 were EMPTY, and the merged answer was still
-    byte-equal to the plain search (2026-09-19,
-    lane/laneless-public-classes). Those three parts read the same at one
-    shard and at eight, as every part here does; that equality, cell for
-    cell across shard counts, is the driver's claim and the reason this lane
-    is worth running on a column with no device at all.
-
-    THE REFUSALS ARE PART OF THE CLASS. `from_index` is the only door (the
-    constructor refuses by name), it refuses an index that is not ours and
-    one that was never fitted, a closed index refuses to search, and a query
-    of the wrong width refuses. None of them is arithmetic and none moves
-    under a sabotage build; they are in `flags` because a driver that stops
-    refusing has changed its contract and nothing else here would see it."""
-    from mojolearn.parallel_ivf import DistributedIVFIndex
-    dev = _par_devices()
-    kw = dict(n_lists=16, n_probes=4, n_neighbors=8, random_state=3)
-    q = np.ascontiguousarray(X[4096:4160])
-    m = ml.IVFIndex(**kw).fit(X[:4096])
-    d0, i0 = m.search(q)
-    with DistributedIVFIndex.from_index(m, devices=dev) as shards:
-        d, i = shards.search(q)
-        cand = np.asarray(shards.n_candidates_).copy()
-        closed = shards
-    e = ml.IVFIndex(metric="euclidean", **kw).fit(X[:4096])
-    ed0, ei0 = e.search(q)
-    with DistributedIVFIndex.from_index(e, devices=dev) as rooted:
-        ed, ei = rooted.search(q)
-    # THE SHORT-FILL ARM (see the docstring): 128 rows over 16 lists probed
-    # twice, so a shard of this index owns few candidates or none for a
-    # query. Its answer does not depend on the shard count, so the cell is
-    # the same at one device and at eight; what changes is which arms of
-    # `host_ivf_search` the column walks through to produce it.
-    thin = ml.IVFIndex(n_lists=16, n_probes=2, n_neighbors=6, random_state=5).fit(X[:128])
-    tq = np.ascontiguousarray(X[4096:4104])
-    td0, ti0 = thin.search(tq)
-    td, ti, tcand = _dist_search(DistributedIVFIndex, thin, tq, dev)
-    mismatch = _oracle_mismatch(
-        ("DistributedIVFIndex distances", d, "plain IVFIndex distances", d0),
-        ("DistributedIVFIndex ids", i, "plain IVFIndex ids", i0),
-        ("DistributedIVFIndex short-fill distances", td, "plain IVFIndex distances", td0),
-        ("DistributedIVFIndex short-fill ids", ti, "plain IVFIndex ids", ti0))
-    flags = np.asarray([
-        np.asarray(ed).tobytes() == np.asarray(ed0).tobytes(),
-        np.asarray(ei).tobytes() == np.asarray(ei0).tobytes(),
-        _refused(lambda: DistributedIVFIndex(), "from_index"),
-        _refused(lambda: DistributedIVFIndex.from_index(ml.IVFIndex(**kw), devices=dev), "fit or load"),
-        _refused(lambda: DistributedIVFIndex.from_index(m.list_data_, devices=dev), "mojolearn.IVFIndex"),
-        _refused(lambda: closed.search(q), "is closed"),
-        _refused(lambda: _dist_search(DistributedIVFIndex, m, np.ascontiguousarray(q[:, :2]), dev), "query features"),
-    ], dtype=np.int64)
-    parts = dict(dist=_h(d), idx=_h(i), cand=_h(cand), root_dist=_h(ed), root_idx=_h(ei),
-                 thin_dist=_h(td), thin_idx=_h(ti), thin_cand=_h(tcand), flags=_h(flags))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts,
-                m, lambda est: _dist_search(DistributedIVFIndex, est, np.ascontiguousarray(Xh[:64]), _par_devices()))
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
 # ------------------------------------------------- the six unlaned public algorithms
@@ -8769,376 +7300,8 @@ def _(ml, X, yc, yr, Xh=None):
                 blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
 
 
-def _par_gpc_kernel(ml):
-    """The `gpc` lane's kernel, so this driver's cells are readable against
-    that lane's."""
-    return ml.ConstantKernel(1.0) * ml.RBF(1.0)
-
-
-@lane("par-gpc-fit")
-def _(ml, X, yc, yr, Xh=None):
-    """`parallel_gaussian_process.fit_gaussian_process_classifier`: the
-    GaussianProcessClassifier's ONE-VS-REST class problems scheduled one to a
-    worker, held to the plain `GaussianProcessClassifier.fit`.
-
-    THE SHAPE IS THE `gpc` AND `gpc-multiclass` LANES', deliberately: 256
-    rows of four columns, the same kernel, and both arms in one cell -- the
-    BINARY fit, whose `columns = [1]` means the driver builds exactly ONE
-    task and the merge is trivial, and the THREE-CLASS fit over
-    `_gpc_three_classes`, where the driver builds three tasks and
-    `_set_fitted` merges them in class order. A cell with only the binary arm
-    could not see a class-order defect at all.
-
-    THE ORACLE IS IN THE CELL. `_same_bytes` holds the driver's per-class
-    Cholesky factor and the three-class posterior mean to the plain fit's, so
-    this cell fails on one box with no record. What it does NOT say is that
-    the Laplace fit is RIGHT: a wrong Newton loop is wrong identically on both
-    sides of that comparison and on every column.
-
-    THE DEVICE AXIS IS `_par_devices()`, as every `par-*` lane's is. At one
-    device the partition is one worker PROCESS per class, which exercises the
-    Python split, the pickling of each class's target vector and the ordered
-    merge, and says nothing about two devices. The two-device column is owed.
-
-    `parts`: `L` and `pi` are the per-class Laplace state the driver
-    published, `lml` the log marginal likelihoods, `three_L` and `three_lml`
-    the three-class arm, `flags` the driver's refusals (a foreign estimator,
-    a FAST numeric mode, a label vector of the wrong length, a single-class
-    target). None of the refusals is arithmetic; they are hashed because a
-    driver that stops refusing has changed its contract and nothing else here
-    would see it.
-
-    SABOTAGE, SEEN TO MOVE. The arm is the gp family's own define,
-    `-D MOJOLEARN_HOST_SABOTAGE=1` on `bindings/_mojolearn_gp_host.mojo`,
-    against a CLEAN build of the SAME source (a .so digest does not prove a
-    define; `gp_host_sabotage()` reads False on one and the loader refuses the
-    other BY NAME). MEASURED on the M4, one core, `nice -n 19`, `--repeats 2`,
-    all nine fixtures, 2026-09-20
-    (bench/results/identity_break/2026-09-20_unlaned-public-algorithms/):
-    every cell, infer, model and batch hash of BOTH GPC lanes moved, 18 of 18
-    cells and 36 of 36 infer/model parts DIVERGENT. `base`
-    53f3a09fc600d61d -> 59b4a6c2ea6454a4 here, `L`
-    cf8752e79a59c592 -> 07c415bd8bfe2ff3, `pi`
-    3e4e62ab648dd40a -> c2d8c272fe84b3a4.
-
-    WHAT THE ARM DOES NOT MOVE, said rather than left to be assumed. `flags`
-    never moves on any fixture (d529dd94544bb118 both sides, 9 of 9): a
-    refusal is a type check and a length check, not arithmetic, and no build
-    define can reach it -- which is the whole reason it is hashed as a number.
-    `lml` holds on `hashed`, `odd` and `ties` while `L` and `pi` move on all
-    nine; a lane whose only float part were the log marginal likelihood would
-    have read clean on a third of this column.
-
-    CPU COLUMN: yes, since `gpc_class_fit` joined
-    `_parallel_pool.CPU_OPERATIONS` on this branch. OWED GPU COLUMNS:
-      MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \\
-        --lanes par-gpc-fit,par-gpc-predict --repeats 2 --step-full --batch-scale --ragged --batch-grad \\
-        --json <column>.json
-    and the two-device leg that is the actual claim:
-      MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
-        tools/identity_break.py --lanes par-gpc-fit,par-gpc-predict \\
-        --repeats 2 --step-full --batch-scale --ragged --batch-grad --json <column>.2gpu.json"""
-    from mojolearn.parallel_gaussian_process import fit_gaussian_process_classifier
-    dev = _par_devices()
-    k = _par_gpc_kernel(ml)
-    xs, ys = X[:256, :4], yc[:256]
-    par = fit_gaussian_process_classifier(ml.GaussianProcessClassifier(kernel=k), xs, ys, devices=dev)
-    plain = ml.GaussianProcessClassifier(kernel=k).fit(xs, ys)
-    k3 = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
-    y3 = _gpc_three_classes(X)
-    par3 = fit_gaussian_process_classifier(ml.GaussianProcessClassifier(kernel=k3), xs, y3, devices=dev)
-    plain3 = ml.GaussianProcessClassifier(kernel=k3).fit(xs, y3)
-    mismatch = _oracle_mismatch(
-        ("fit_gaussian_process_classifier L", par.estimators_[0].L_,
-         "plain L", plain.estimators_[0].L_),
-        ("fit_gaussian_process_classifier three-class proba", par3.predict_proba(X[256:320, :4]),
-         "plain three-class proba", plain3.predict_proba(X[256:320, :4])))
-    flags = np.asarray([
-        _refused(lambda: fit_gaussian_process_classifier(ml.GaussianProcessRegressor(kernel=k), xs, ys, devices=dev),
-                 "requires mojolearn.GaussianProcessClassifier"),
-        _refused(lambda: fit_gaussian_process_classifier(
-            ml.GaussianProcessClassifier(kernel=k, numeric_mode="fast"), xs, ys, devices=dev), "IDENTICAL"),
-        _refused(lambda: fit_gaussian_process_classifier(
-            ml.GaussianProcessClassifier(kernel=k), xs, ys[:128], devices=dev), "y length"),
-        _refused(lambda: fit_gaussian_process_classifier(
-            ml.GaussianProcessClassifier(kernel=k), xs, np.zeros(256, dtype=np.int64), devices=dev),
-            "at least two classes"),
-    ], dtype=np.int64)
-    parts = dict(L=_h(*[e.L_ for e in par.estimators_]),
-                 pi=_h(*[e.pi_ for e in par.estimators_]),
-                 lml=_h(np.array([e.log_marginal_likelihood_value_ for e in par.estimators_],
-                                 dtype=np.float64)),
-                 three_L=_h(*[e.L_ for e in par3.estimators_]),
-                 three_lml=_h(np.array([e.log_marginal_likelihood_value_ for e in par3.estimators_],
-                                       dtype=np.float64)),
-                 flags=_h(flags))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, par, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
-
-
-@lane("par-gpc-predict")
-def _(ml, X, yc, yr, Xh=None):
-    """`parallel_gaussian_process.predict_gaussian_process_classifier`: the
-    PREDICTION driver, which `par-gpc-fit` does not reach (it schedules a
-    fit), over a fit taken the ordinary way.
-
-    Each worker is handed ONE class's covariance state plus the shared
-    training and query matrices, and the merge -- the binary `[1 - v, v]`
-    pair, the multiclass row-wise normalization and the arg-max that picks a
-    code -- is the driver's own Python in
-    `predict_gaussian_process_classifier` itself. Both `method` arms are
-    asked, on the binary and the three-class fit, and each is held BYTE FOR
-    BYTE in the cell to the plain estimator's `predict`/`predict_proba`,
-    which is the driver's whole documented contract.
-
-    `predict` returns the DECODED labels, so it is hashed as the integer
-    codes `classes_.index` gives back rather than as an object array (`_h`
-    refuses one, and would be hashing addresses if it did not).
-
-    SABOTAGE, SEEN TO MOVE, the same gp-family pair `par-gpc-fit` describes.
-    MEASURED, all nine fixtures, `--repeats 2`, 2026-09-20: `base`
-    2f1217bcae26e6a9 -> 2e25f01e28255189, `proba`
-    on every fixture, `three_proba` on every fixture, and the cell, infer,
-    model and batch hashes on all nine.
-
-    THE LABELS MOSTLY DO NOT MOVE, AND THAT IS WHY `proba` IS HASHED BESIDE
-    THEM. `labels` reads the same bytes under the sabotage on 9 of 9 fixtures
-    and `three_labels` on 8 of 9 (`wide` is the exception): the arm perturbs
-    the latent mean far below the gap between the top two classes, and a
-    `predict` is a sign test and an arg-max. A lane whose only part were the
-    predicted labels would have read CLEAN under a build that computes the
-    posterior wrongly everywhere. `flags` does not move either, for
-    `par-gpc-fit`'s reason.
-
-    Device axis, oracle and the limits of what agreement proves: as
-    `par-gpc-fit`. CPU column: yes. OWED GPU columns: the commands on
-    `par-gpc-fit`."""
-    from mojolearn.parallel_gaussian_process import predict_gaussian_process_classifier
-    dev = _par_devices()
-    k = _par_gpc_kernel(ml)
-    xs, q = X[:256, :4], X[256:320, :4]
-    m = ml.GaussianProcessClassifier(kernel=k).fit(xs, yc[:256])
-    proba = predict_gaussian_process_classifier(m, q, devices=dev, method="predict_proba")
-    labels = predict_gaussian_process_classifier(m, q, devices=dev, method="predict")
-    k3 = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
-    m3 = ml.GaussianProcessClassifier(kernel=k3).fit(xs, _gpc_three_classes(X))
-    proba3 = predict_gaussian_process_classifier(m3, q, devices=dev, method="predict_proba")
-    labels3 = predict_gaussian_process_classifier(m3, q, devices=dev, method="predict")
-    mismatch = _oracle_mismatch(
-        ("predict_gaussian_process_classifier proba", proba,
-         "plain predict_proba", m.predict_proba(q)),
-        ("predict_gaussian_process_classifier predict", _label_codes(m, labels),
-         "plain predict", _label_codes(m, m.predict(q))),
-        ("predict_gaussian_process_classifier three-class proba", proba3,
-         "plain three-class predict_proba", m3.predict_proba(q)))
-    flags = np.asarray([
-        _refused(lambda: predict_gaussian_process_classifier(m, q, devices=dev, method="decision_function"),
-                 "method must be predict or predict_proba"),
-        _refused(lambda: predict_gaussian_process_classifier(
-            ml.GaussianProcessRegressor(kernel=k), q, devices=dev),
-            "requires mojolearn.GaussianProcessClassifier"),
-        _refused(lambda: predict_gaussian_process_classifier(m, np.ascontiguousarray(q[:, :2]), devices=dev),
-                 "features"),
-    ], dtype=np.int64)
-    parts = dict(proba=_h(proba), labels=_h(_label_codes(m, labels)),
-                 three_proba=_h(proba3), three_labels=_h(_label_codes(m3, labels3)),
-                 flags=_h(flags))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts, m, lambda e: (e.predict_proba(Xh[:64, :4]),))
-
-
-def _label_codes(estimator, labels):
-    """The integer position of each predicted label in `classes_`. `predict`
-    hands back the caller's own label objects, and `_h` refuses an object
-    array because its bytes are addresses."""
-    order = {v: i for i, v in enumerate(list(estimator.classes_))}
-    return np.asarray([order[v] for v in list(labels)], dtype=np.int64)
-
-
-@lane("par-causal-lm")
-def _(ml, X, yc, yr, Xh=None):
-    """`models.ParallelCausalLM`: EXPLICIT LAYER OWNERSHIP, one device index
-    per checkpoint layer, hidden activations crossing layer boundaries
-    through host memory. Sequential model parallelism, not tensor
-    parallelism and not a throughput claim; the class says so itself.
-
-    THE CLAIM IS THE ORDINARY `CausalLM` PATH'S BITS. `_RemoteBlock` and
-    `_RemotePrimitives` replace the in-process block and the embedding, norm
-    and head calls with RPCs to the layer's owner, and the class docstring
-    says "Output and state mathematics are the ordinary CausalLM path". So
-    the cell holds the layer-owned model's logits to a plain `CausalLM` on
-    the same weights, byte for byte, exactly as the other `par-*` drivers are
-    held to their plain fit.
-
-    THERE IS A CPU COLUMN AS OF 2026-09-20 (lane/cpu-routes-gpu-only-four),
-    AND IT IS NOT A DEVICE CLAIM. `__init__` and `load` used to raise
-    `NotImplementedError('ParallelCausalLM requires CUDA or HIP device
-    isolation')` before a single layer was constructed. That check was about
-    the VENDOR, not about the work: on a CPU-only install a device index is
-    one WORKER PROCESS, each worker is told its route and builds
-    `_block_classes("cpu")[kind]` and `_CpuPrimitives` over the neural host
-    binding, and the partition (one `_RemoteBlock` per layer) and the merge
-    (`CausalLM._run`'s sequential hand-off, embedding on the first owner and
-    norm and head on the last) are the driver's own Python either way. So
-    `causal_lm_layer` joined `_parallel_pool.CPU_OPERATIONS` against that
-    docstring's bar and this cell holds the layer-owned model to the plain
-    one byte for byte on a box with no GPU at all. Metal also admits assigning
-    every layer to device 0 in one worker; this does not claim device
-    isolation or execution across multiple physical GPUs.
-
-    WHAT THE CPU CELL DOES NOT SAY. It is AGREEMENT with the plain path, not
-    rightness -- a wrong block would be wrong identically on both sides. And
-    one process per index is the DEGENERATE case of the device axis, which is
-    what `_par_devices`'s docstring says of every `par-*` lane; no hidden
-    activation crosses a device boundary here, only a pipe.
-
-    SABOTAGE, SEEN TO MOVE. The neural family's define,
-    `-D MOJOLEARN_HOST_SABOTAGE=1` on `bindings/_mojolearn_neural_host.mojo`,
-    the same arm the covered `hf-causal-lm` lane uses and for the same
-    reason, against a CLEAN build of the SAME source. MEASURED on the M4, one
-    core, `nice -n 19`, `--repeats 2`, all nine fixtures, 2026-09-20
-    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/):
-    `logits` and `batch` DIVERGENT on 9 of 9. `params` does not move and is
-    not expected to -- it is the weights the owners were SENT, read back, and
-    a wrong GEMM does not change those bytes; it is hashed because a broken
-    RPC round-trip would. `flags` never moves either.
-
-    OWED, on a two-device CUDA or HIP box and nowhere else:
-      MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
-        tools/identity_break.py --lanes par-causal-lm --repeats 2 \\
-        --step-full --batch-scale --ragged --batch-grad --json <column>.2gpu.json"""
-    from mojolearn import _causal_lm_fixtures as fx
-    from mojolearn.models import ParallelCausalLM
-    dev = _par_devices()
-    A = ml.Array.from_buffer
-    ids = _ids(X, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
-    cfg, tensors = fx.family_fixture("llama", False)
-    with tempfile.TemporaryDirectory(prefix="ib-par-causal-lm-") as d:
-        root = fx._write_checkpoint(os.path.join(d, "llama"), cfg, tensors)
-        # fp32_v1 BY NAME: the lane's references were recorded under it
-        plain = ml.models.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1")
-        want = np.ascontiguousarray(np.asarray(plain.forward(A(ids))))
-        n_layers = plain.plan.n_layers
-        # ONE DEVICE INDEX PER LAYER, cycling the pool so a two-device column
-        # puts consecutive layers on different owners and every hidden state
-        # crosses a real boundary; at one device the tuple repeats an index,
-        # which the class documents as allowed and which is exactly the
-        # degenerate case `_par_devices` describes.
-        owners = tuple(dev[i % len(dev)] for i in range(n_layers))
-        with ParallelCausalLM.load(root, layer_devices=owners, numeric_profile="fp32_v1") as par:
-            got = np.ascontiguousarray(np.asarray(par.forward(A(ids))))
-            params = np.concatenate([_hf_bytes(w) for _, w in sorted(par.parameters().items())])
-            names_match = sorted(par.parameters()) == sorted(plain.parameters())
-        mismatch = _mismatch_bytes("ParallelCausalLM forward", got,
-                                   "plain CausalLM forward", want)
-        flags = np.asarray([
-            names_match,
-            _refused(lambda: ParallelCausalLM.load(root, layer_devices=owners[:-1]), "layer_devices"),
-            _refused(lambda: ParallelCausalLM.load(root, layer_devices=(-1,) * n_layers), "layer_devices"),
-            _refused(lambda: ParallelCausalLM.load(root, layer_devices=owners, weight_format="fp8"),
-                     "weight_format"),
-            ml.models.ParallelCausalLM is ParallelCausalLM,
-        ], dtype=np.int64)
-    parts = dict(logits=_h(got), params=_h(params), flags=_h(flags))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts)
-
-
-@lane("par-cross-val")
-def _(ml, X, yc, yr, Xh=None):
-    """`parallel_model_selection.cross_val_score`: ONE FRESH ESTIMATOR PER
-    FOLD on the requested devices, dispatched in bounded waves of
-    `len(pool.devices)` including a final partial wave.
-
-    THE CLAIM IS THE SERIAL API'S BITS. Its own docstring says "Fold
-    validation, cloning, scoring and output order match the serial API", so
-    the cell holds the parallel scores to `model_selection.cross_val_score`
-    on the same estimator and folds, byte for byte. The `cross-val` lane
-    hashes the serial side of that comparison and the `cross-val-folds` lane
-    hashes the fold partition itself; this lane adds only the dispatch, which
-    is the one thing neither of those can see.
-
-    LIKE `par-causal-lm`, THIS TOOK A CPU COLUMN ON 2026-09-20
-    (lane/cpu-routes-gpu-only-four). `cross_val_score` used to raise
-    `NotImplementedError('parallel cross-validation requires CUDA or HIP GPU
-    workers')` immediately after constructing the pool and before
-    `_prepare_folds`. That check was about the VENDOR: the fold partition,
-    the cloning, the wave dispatch, the fold order and the merge are
-    `_prepare_folds`/`_take_rows`/`scores.extend` -- the serial API's own
-    code, in the driver's own Python -- and each fold is the estimator's
-    public `fit` and `score`, which on this route is the same gbdt host
-    arithmetic the `cross-val` lane hashes serially. `cross_val_fold` joined
-    `_parallel_pool.CPU_OPERATIONS` against that docstring's bar.
-
-    A FOLD IS A FIT, so the same hole `gpc_class_fit` opened was checked
-    here. `_fit_score_fold` calls the estimator's PUBLIC `fit`, so
-    `_mode._guard_cpu_training` stands behind every mojolearn estimator --
-    but `model_selection._clone` admits ANY object with `get_params`, which
-    the driver's own docstring invites, and such a class carries no guard.
-    Measured on a CPU-only install, 2026-09-20: with `require_training`
-    absent from the worker's `cross_val_fold` arm a foreign estimator was
-    FITTED, outside `reference_training()`, on a box where the plain
-    mojolearn fit refuses. The worker now calls `require_training(state)`
-    first, and `test_parallel_model_selection.py::
-    test_the_cpu_fold_guard_is_load_bearing` was watched to FAIL with it
-    removed.
-
-    THE DEVICE INVENTORY IS THE ONE PIECE THAT COULD NOT BE CARRIED OVER, and
-    it is not faked. On CUDA/HIP the driver calls `require_distinct_workers`
-    on `visible_gpu_inventory`: one visible physical GPU per worker, no
-    repeated UUID or PCI id. There is no such question on a host box, so the
-    CPU route asks `require_distinct_processes` over
-    `worker_process_inventory` instead -- one distinct worker PROCESS per
-    index, under its own record kind, in a SEPARATE function so the GPU
-    check's bar is untouched. That admits the dispatch and NOTHING about
-    hardware.
-
-    WHAT IS AND IS NOT DEGENERATE HERE. Unlike the other `par-*` lanes the
-    width-1 wave is a different dispatch from the width-2 one, so a one-index
-    column really would be evidence about a code path the driver does not
-    take in service -- and on this route that costs nothing, because an index
-    is a process: the recorded CPU column was taken at
-    `MOJOLEARN_PAR_DEVICES=0` and again at `0,1` (cv=3, so one full wave and
-    one partial wave) and the two hash EQUAL, cell for cell, which is the
-    driver's whole claim. What remains owed is the DEVICE axis: two real
-    GPUs, where the folds are isolated by a visibility mask rather than by a
-    process boundary.
-
-    SABOTAGE, SEEN TO MOVE. The gbdt family's define,
-    `-D MOJOLEARN_HOST_SABOTAGE=1` on `bindings/_mojolearn_gbdt_host.mojo`,
-    the family that serves every fold's fit, against a CLEAN build of the
-    SAME source. MEASURED on the M4, one core, `nice -n 19`, `--repeats 2`,
-    all nine fixtures, 2026-09-20
-    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/):
-    `scores` DIVERGENT on 9 of 9. `flags` never moves, because a refusal is
-    not arithmetic.
-
-    OWED, on a two-device CUDA or HIP box and nowhere else:
-      MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
-        tools/identity_break.py --lanes par-cross-val --repeats 2 \\
-        --step-full --batch-scale --ragged --batch-grad --json <column>.2gpu.json"""
-    from mojolearn.parallel_model_selection import cross_val_score
-    dev = _par_devices()
-    est = _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4)
-    scores = cross_val_score(est, X, yr, devices=dev, cv=3)
-    serial = ml.model_selection.cross_val_score(
-        _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4), X, yr, cv=3)
-    mismatch = _mismatch_bytes("parallel cross_val_score", np.asarray(scores, dtype=np.float64),
-                               "serial cross_val_score", np.asarray(serial, dtype=np.float64))
-    flags = np.asarray([
-        _refused(lambda: cross_val_score(est, X, yr, devices=()), "devices"),
-        _refused(lambda: cross_val_score(
-            _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4, numeric_mode="fast"),
-            X, yr, devices=dev, cv=3), "IDENTICAL"),
-        _refused(lambda: cross_val_score(est, X, yr, devices=dev, cv=3, error_score=0.0), "error_score"),
-    ], dtype=np.int64)
-    parts = dict(scores=_h(np.asarray(scores, dtype=np.float64)), flags=_h(flags))
-    if mismatch:
-        raise NumericalMismatch(mismatch, parts)
-    return _fit(parts)
+# TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 
 
 def _neural_inference(ml, lane_name, est):
@@ -9509,17 +7672,15 @@ _batch_decl(_rows_calls("predict", "predict_proba"),
             "gbdt-ordered",
             "rf-clf", "et-clf", "gbdt-symmetric", "gbdt-symmetric-eval",
             "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-multiclass-defaults", "gbdt-pointwise-l2-bayesian-eval",
-            "par-forest", "par-boosting", "par-forest-et-clf")
+            "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-multiclass-defaults", "gbdt-pointwise-l2-bayesian-eval")
 _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
-            "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
+            "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank", "gbdt-ranking-defaults",
-            "gbdt-query-rmse-pointwise", "gbdt-pair-logit-pointwise", "gbdt-yeti-rank-pointwise",
-            "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
-            "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile",
-            "gbdt-catboost-defaults", "par-border-types", "gbdt-stochastic-arms")
+            "gbdt-query-rmse-pointwise", "gbdt-pair-logit-pointwise", "gbdt-yeti-rank-pointwise", "gbdt-border-types",
+            "gbdt-ordered-bayesian-noise", "gbdt-bfa-quantile",
+            "gbdt-catboost-defaults", "gbdt-stochastic-arms")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_gbdt_binary_columns), "gbdt-binary-columns")
@@ -9532,7 +7693,7 @@ def _batch_gbdt_adapter_clf(ml, e, Xh):
             + _rows_calls("decision_function", sl=slice(0, 512))(ml, e, Xh))
 
 
-_batch_decl(_batch_gbdt_adapter_clf, "gbdt-adapter-clf", "par-boosting-clf")
+_batch_decl(_batch_gbdt_adapter_clf, "gbdt-adapter-clf")
 
 
 def _batch_iforest(ml, e, Xh):
@@ -9540,10 +7701,10 @@ def _batch_iforest(ml, e, Xh):
             + _rows_calls("predict", sl=slice(0, 512))(ml, e, Xh))
 
 
-_batch_decl(_batch_iforest, "iforest", "iforest-tuned", "par-iforest")
+_batch_decl(_batch_iforest, "iforest", "iforest-tuned")
 
 _batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
-            "kmeans-sqrt", "kmeans-classic-pp", "par-kmeans")
+            "kmeans-sqrt", "kmeans-classic-pp")
 # The transductive clustering lanes (read 2026-09-15 against the Python
 # estimator, the GPU binding, the CPU host binding and cuML v26.08.00).
 #   DBSCAN and AgglomerativeClustering are NOT transductive since
@@ -9566,7 +7727,7 @@ _batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-random", "kme
 #     which the part asks too. all_points_membership_vectors (:1114) has no
 #     held-out rows; the lanes' infer probe hashes it.
 _batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]),
-            "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan", "agglomerative")
+            "dbscan", "dbscan-brute-l1", "dbscan-weighted", "agglomerative")
 _batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "spectral")
 _batch_decl(lambda ml, e, Xh: [_BatchRows("predict", e._identity_heldout_affinity[:64], lambda r: (e.predict(r),))],
             "spectral-precomputed")
@@ -9618,19 +7779,17 @@ def _batch_inverse(ml, e, Xh):
 _batch_decl(_batch_inverse, "pca-inverse", "pca-whiten-inverse", "tsvd-inverse")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "pca", "pca-whiten", "pca-full-whiten", "tsvd",
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
-            "minmax-scaler-clip", "par-scaler", "rbf-sampler",
-            "par-gram-pca", "par-gram-tsvd", "par-scaler-minmax")
+            "minmax-scaler-clip", "rbf-sampler")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "ols", "ridge", "ols-no-intercept",
-            "ols-weighted", "ridge-no-intercept", "par-gram", "svr", "svr-linear",
-            "par-gram-ols", "par-svm-svr")
+            "ols-weighted", "ridge-no-intercept", "svr", "svr-linear")
 # The coordinate descent predict takes any batch, one row included (0.8.47:
 # the two-row floor cuML's cdPredict keeps, cd.cuh:341, is on fit only).
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)),
-            "lasso", "elasticnet", "elasticnet-l2end-no-intercept", "par-cd", "par-cd-elasticnet")
+            "lasso", "elasticnet", "elasticnet-l2end-no-intercept")
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "logistic", "logistic-l1", "logistic-elasticnet",
-            "logistic-unpenalized-no-intercept", "par-logistic")
+            "logistic-unpenalized-no-intercept")
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 256)), "logistic-multiclass")
-_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "svc", "svc-linear", "par-svm", "svc-poly")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "svc", "svc-linear", "svc-poly")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "linear-svc", "linear-svc-squared-hinge")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "linear-svr", "linear-svr-squared", "qn-squared", "qn-absolute")
 _batch_decl(_rows_calls("score_samples", sl=(slice(0, 256), slice(0, 4))), "kde", "kde-weighted",
@@ -9647,7 +7806,7 @@ def _batch_gp(ml, e, Xh):
     return [_BatchRows("predict(return_std=True)", Xh[:64, :4], lambda r: tuple(e.predict(r, return_std=True)))]
 
 
-_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp", "gp-normalize-y",
+_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
             "gp-optimize", "gp-optimize-restarts")
 # GaussianProcessRegressor.sample_y factors the posterior covariance over ALL
 # the rows of one call, so a row's draw depends on every other row asked with
@@ -9690,17 +7849,7 @@ def _batch_umap(ml, e, Xh):
                        lambda r: (e.transform(r),))]
 
 
-def _batch_par_graph_umap(ml, e, Xh):
-    """The same arm through the parallel graph surface, whose transform is a
-    free function over the fitted graph rather than a method."""
-    from mojolearn.parallel_graph import transform_umap
-    return [_BatchRows("transform_umap", np.ascontiguousarray(Xh[:64, :8]),
-                       lambda r: (transform_umap(e, np.ascontiguousarray(r),
-                                                 devices=_par_devices()),))]
-
-
 _batch_decl(_batch_umap, "umap")
-_batch_decl(_batch_par_graph_umap, "par-graph-umap")
 def _kernel_variant_rows(X):
     return np.ascontiguousarray(X[:64, :4] * np.float32(0.125))
 
@@ -9738,26 +7887,9 @@ def _batch_forecast(ml, e, Xh):
 
 
 _batch_decl(_batch_forecast, "holtwinters", "holtwinters-multiplicative", "arima", "arima-011",
-            "arima-seasonal-c", "par-arima")
+            "arima-seasonal-c")
 
 
-def _batch_par_forecast(driver, axis, **kw):
-    """The forecasting DRIVERS' batch part (2026-09-19): `_batch_forecast`'s
-    LENGTH invariance asked through the sharded entry instead of the
-    estimator's own, so the part exercises the partition at every horizon
-    the prefix protocol asks for (1, 7 and H - 1), not only at H. There are
-    still no input rows to split: a series batch would be a different fit."""
-    def spec(ml, e, Xh):
-        import mojolearn.parallel_forecasting as pf
-        d = _par_devices()
-        fn = getattr(pf, driver)
-        return [_BatchPrefix(driver, FORECAST_HORIZON,
-                             lambda h: (fn(e, h, devices=d, series_per_shard=3, **kw),), axis=axis)]
-    return spec
-
-
-_batch_decl(_batch_par_forecast("forecast_arima", -1), "par-forecast-arima")
-_batch_decl(_batch_par_forecast("forecast_exponential_smoothing", 0), "par-forecast-holtwinters")
 
 
 def _batch_forecast_exog(ml, e, Xh):
@@ -9910,19 +8042,6 @@ def _batch_bootstrap_lane(ml, e, Xh):
 
 def _batch_permutation_lane(ml, e, Xh):
     return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test)(ml, e, Xh)[-1:]
-
-
-def _batch_par_resample(ml, e, Xh):
-    """The parallel driver through the same r_first handle on _par_devices()
-    (parallel_classical.bootstrap: "Replicate r is a pure function of (seed,
-    r, data) (the r_first handle)"); the mean and quantile arms the lane
-    fits, and the permutation null."""
-    from mojolearn import parallel_classical as pc
-    dev = _par_devices()
-    calls = _batch_resample(lambda d, **kw: pc.bootstrap(d, devices=dev, **kw),
-                            lambda a, b, **kw: pc.permutation_test(a, b, devices=dev, **kw),
-                            prefix="parallel ")(ml, e, Xh)
-    return [c for c in calls if " mean " in c.label or " quantile " in c.label or "permutation" in c.label]
 
 
 def _batch_silhouette_chunks(ml, e, Xh):
@@ -10090,18 +8209,6 @@ _batch_decl("n/a:fixed-session-batch (a decode session is opened for state.batch
             "call; the per-call step the session is held to carries the batch part on the mamba1 and "
             "transformer lanes)",
             "mamba1-decode-session", "transformer-decode-session")
-# The GPC drivers DO have a row axis: `predict_gaussian_process_classifier`
-# takes query rows and the merge is per row, so the part asks it exactly as
-# the `gpc` lanes ask the plain estimator. The FIT driver has none -- its
-# shards are classes, not rows -- so it is declared on the fitted estimator's
-# prediction, which is what its infer column hashes.
-_batch_decl(_rows_calls("predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))),
-            "par-gpc-fit", "par-gpc-predict")
-# `par-cross-val`'s answer is one score per FOLD, not per row: a fold is a
-# partition of the whole data set and a smaller call is a different
-# cross-validation, exactly as `cross-val-folds` says of the partition.
-_batch_decl("n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows "
-            "is a different cross-validation, not the same one in a smaller batch)", "par-cross-val")
 # `language-model-config` (lane/laneless-public-classes, 2026-09-19) is a
 # FROZEN DATACLASS. `parameter_shapes`, `offsets`, `n_total` and `profile`
 # are functions of the CONFIG, not of any input rows -- the lane passes no
@@ -10175,43 +8282,8 @@ def _batch_hf_causal_lm(ml, e, Xh):
 
 
 _batch_decl(_batch_hf_causal_lm, "hf-causal-lm")
-# `par-causal-lm` is `hf-causal-lm`'s Llama row with the layers owned by
-# separate worker processes, so its batch axis is the same one: the layer
-# boundary must not make a row's answer depend on its neighbours. The lane's
-# `est` is None (it returns no estimator), so the declaration rebuilds the
-# model the lane built.
-#
-# THE MODEL OUTLIVES THIS FUNCTION ON PURPOSE. A batch declaration RETURNS
-# probes the harness calls later, so a `with ParallelCausalLM.load(...)`
-# here closed the pool before the first probe ran and every batch cell read
-# REFUSED with `ParallelCausalLM is closed` -- seen the first time any column
-# could run this lane at all (lane/cpu-routes-gpu-only-four, 2026-09-20; the
-# lane was GPU-only when the declaration was written, so nothing had ever
-# called these probes). Register explicit cleanup with the probe's finally
-# block: model/block reference cycles make destructor timing unreliable.
-# The checkpoint directory can disappear because load materializes weights.
-def _batch_par_causal_lm(ml, e, Xh):
-    from mojolearn import _causal_lm_fixtures as fx
-    from mojolearn.models import ParallelCausalLM
-    ids = _ids(Xh, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
-    dev = _par_devices()
-    cfg, tensors = fx.family_fixture("llama", False)
-    with tempfile.TemporaryDirectory(prefix="ib-par-causal-lm-batch-") as d:
-        root = fx._write_checkpoint(os.path.join(d, "llama"), cfg, tensors)
-        n_layers = ml.models.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1").plan.n_layers
-        par = ParallelCausalLM.load(
-            root, layer_devices=tuple(dev[i % len(dev)] for i in range(n_layers)),
-            numeric_profile="fp32_v1")
-        _BATCH_CLOSE.append(par.close)
-
-    def fwd(rows):
-        return (np.asarray(par.forward(ml.Array.from_buffer(np.ascontiguousarray(rows)))),)
-
-    return [_BatchRows("forward", ids, fwd),
-            _BatchPrefix("forward", HF_LM_LEN, lambda p: fwd(ids[:, :p]), axis=1)]
 
 
-_batch_decl(_batch_par_causal_lm, "par-causal-lm")
 _batch_decl(_batch_optim_sgd, "optim-sgd")
 _batch_decl(_batch_optim_adam, "optim-adam-clip")
 
@@ -10234,13 +8306,6 @@ _batch_decl("n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_
             "over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the "
             "per-sequence logits are asked by byte-lm-host-infer; lane/batch-invariance-2's batchgrad records the "
             "same reason for this lane and its batchscale and ragged parts do not ask it)", "byte-lm-host-train")
-#: the three multi-GPU byte LM trainers: the same reason, one string
-PAR_BYTE_LM_BATCH_NA = ("n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses "
-                        "have train_step, state_dict, export_gradients and checkpoint only, "
-                        "python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses "
-                        "and one update from the shard-mean gradient, so no output belongs to one sequence, and "
-                        "the shard split is held to the replica trainer by the train column)")
-_batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm")
 # metrics.fowlkes_mallows_score (lane/cpu-training-small-gaps) keeps the reason main gave it
 _batch_decl("n/a:function", "metrics-fowlkes-mallows")
 _batch_decl("n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is "
@@ -10294,7 +8359,7 @@ def _batch_embedding(ml, e, Xh):
 # through the distributed driver, so it takes the SAME batch part as its
 # base lane -- the pattern every other `par-*` lane follows (par-iforest
 # with iforest, par-svm with svc, par-gp with gp).
-_batch_decl(_batch_ivf, "ivf", "ivf-euclidean", "par-ivf")
+_batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
 
 
 def _batch_ivf_extend(ml, e, Xh):
@@ -10325,7 +8390,6 @@ _batch_decl("n/a:ordered-shard-reduction (the specified shard order defines the 
             "ordered-gradient-sum")
 _batch_decl(lambda ml, e, Xh: _rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8)))(
     ml, _neural_inference(ml, "mlp", e), Xh), "mlp")
-_batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "par-mlp")
 
 #: the sequence models' held-out batch: 8 sequences of 16, so eight rows alone
 SEQ_BATCH, SEQ_LEN = 8, 16
@@ -10368,7 +8432,7 @@ def _batch_samba(ml, e, Xh):
                          axis=1)]
 
 
-_batch_decl(_batch_samba, "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip")
+_batch_decl(_batch_samba, "samba", "samba-untied-dropout-accum")
 
 # The 2026-09-14 night par-* lanes. The query drivers ARE inference, so their
 # batch part goes through the driver: one driver is opened per part and
@@ -10377,80 +8441,6 @@ _batch_decl(_batch_samba, "samba", "samba-untied-dropout-accum", "par-samba", "p
 _BATCH_CLOSE = []
 
 
-def _batch_pq(*methods, sl, ragged=False, **kw):
-    def spec(ml, e, Xh):
-        from mojolearn.parallel_neighbors import ParallelQueries
-        pq = ParallelQueries(e, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS)
-        _BATCH_CLOSE.append(pq.close)
-        R = Xh[sl]
-        calls = []
-        for meth in methods:
-            if ragged:
-                def fn(r, meth=meth):
-                    dists, idx = pq.query(r, method=meth, **kw)
-                    n = len(idx)
-                    return (_PerRow(np.asarray(dists[i], dtype=np.float32).reshape(-1) for i in range(n)),
-                            _PerRow(np.asarray(idx[i]).reshape(-1).astype(np.int64) for i in range(n)))
-            else:
-                def fn(r, meth=meth):
-                    out = pq.query(r, method=meth, **kw)
-                    return tuple(out) if isinstance(out, tuple) else (out,)
-            calls.append(_BatchRows(f"ParallelQueries {meth}", R, fn))
-        return calls
-    return spec
-
-
-def _batch_rsn(*methods):
-    def spec(ml, e, Xh):
-        rs = _rsn(e)
-        _BATCH_CLOSE.append(rs.close)
-        calls = []
-        for meth in methods:
-            def fn(r, meth=meth):
-                out = getattr(rs, meth)(r)
-                return tuple(out) if isinstance(out, tuple) else (out,)
-            calls.append(_BatchRows(f"ReferenceShardedNeighbors {meth}", Xh[:64], fn))
-        return calls
-    return spec
-
-
-_batch_decl(_batch_pq("kneighbors", "predict", "predict_proba", sl=slice(0, 64)), "par-queries-knn")
-_batch_decl(_batch_pq("kneighbors", sl=slice(0, 64)), "par-queries-nn")
-_batch_decl(_batch_pq("radius_neighbors", sl=slice(0, 64), ragged=True, sort_results=True), "par-queries-radius")
-_batch_decl(_batch_pq("score_samples", sl=(slice(0, 256), slice(0, 4))), "par-queries-kde")
-_batch_decl(_batch_rsn("kneighbors", "predict", "predict_proba"), "par-reference-knn")
-_batch_decl(_batch_rsn("predict"), "par-reference-knn-reg")
-# parallel_graph.fit_graph fits; the fitted AgglomerativeClustering(prediction_data=True)
-# predicts like the plain lane's (DEVIATION 2740)
-_batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "par-graph-agglomerative")
-# par-graph-spectral fits without prediction_data; its train cells hold the
-# fit_graph labels and embedding to the plain fit's, and it asks no predict
-_batch_decl("n/a:transductive (the par-graph-spectral lane fits without prediction_data; "
-            "SpectralClustering.predict is the spectral lane's)", "par-graph-spectral")
-_batch_decl(_rows_calls("predict"), "par-ordered-rmse")
-_batch_decl(_rows_calls("predict", prep=_coded), "par-feature-freq")
-_batch_decl(_rows_calls("predict", "predict_proba"), "par-boosting-pointwise")
-_batch_decl(lambda ml, e, Xh: [_BatchPrefix("forecast", FORECAST_HORIZON, lambda h: (e.forecast(h),), axis=0)],
-            "par-holtwinters")
-_batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm-model-pool", "par-byte-lm-offload")
-_batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
-_batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
-_batch_decl(_batch_par_resample, "par-resample")
-# parallel_classical.fit_hdbscan copies the worker's fitted estimator back, so a
-# prediction_data=True fit carries the prediction data and the root answers
-# approximate_predict; its two-device cells are owed to the release record.
-_batch_decl(_batch_hdbscan, "par-hdbscan")
-_batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "par-kernel-ridge")
-_batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "par-nystroem")
-_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "par-rbf-sampler")
-def _batch_par_cholesky(ml, e, Xh):
-    """_batch_cholesky at the par-cholesky lane's 600-row factor."""
-    B = np.ascontiguousarray(Xh[:600, :2])
-    return [_BatchRows("solve (right-hand sides)", B.T,
-                       lambda r: (np.asarray(e.solve(np.ascontiguousarray(r.T))).reshape(B.shape[0], -1).T,))]
-
-
-_batch_decl(_batch_par_cholesky, "par-cholesky")
 
 
 # ---------------------------------------------------------------- the batchgrad part (2026-09-15)
@@ -10792,15 +8782,12 @@ _batchgrad_decl(_batchgrad_embedding, "embedding", "embedding-sort")
 # source. Every other lane has no gradient call on its public surface.
 _batchgrad_decl("n/a:mean-reduction (SmallMLPTrainer.loss_and_grads is mean cross-entropy over the call's own "
                 "rows, _mlp_impl.py::_gradient; a row alone or a piece carries a different divisor by definition)",
-                "mlp", "par-mlp")
+                "mlp")
 _batchgrad_decl("n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the "
                 "profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)",
                 "byte-lm", "byte-lm-resident", "byte-lm-host-train")
 _batchgrad_decl("n/a:optimizer-step (no gradient is computed; accumulate_grads is asked by the block, samba "
                 "and primitive lanes)", "optim-sgd", "optim-adam-clip")
-_batchgrad_decl("n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the "
-                "twin lane carries the batchgrad part)", "par-samba", "par-samba-clip", "par-byte-lm",
-                "par-byte-lm-model-pool", "par-byte-lm-offload")
 
 #: every undeclared lane: its public surface has no backward, gradient or
 #: partial_fit (the scalers' partial_fit raises NotImplementedError by name)
@@ -11095,8 +9082,6 @@ def _ragged_samba(ml, st, Xh):
 
 
 _ragged_decl(_ragged_samba, "samba", "samba-untied-dropout-accum")
-_ragged_decl("n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
-             "par-samba", "par-samba-clip", "par-byte-lm", "par-byte-lm-model-pool", "par-byte-lm-offload")
 
 RAGGED_DEFAULT = "n/a:no-sequence-axis"
 
@@ -11201,8 +9186,6 @@ _stepfull_decl(_stepfull_block_spec(), "mamba1", "mamba2", "mamba3", "mamba2-dtl
                "mamba1-bf16w", "mamba1-int8w", "mamba2-bf16w", "mamba2-int8w", "mamba3-bf16w", "mamba3-int8w")
 _stepfull_decl(_stepfull_block_spec("kv"), "transformer", "transformer-window", "transformer-bf16w", "transformer-int8w")
 _stepfull_decl(_stepfull_samba, "samba", "samba-untied-dropout-accum")
-_stepfull_decl("n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
-               "par-samba", "par-samba-clip", "par-byte-lm", "par-byte-lm-model-pool", "par-byte-lm-offload")
 
 
 def _stepfull_session_spec(state_kw=None):
@@ -11234,12 +9217,6 @@ def _stepfull_session_spec(state_kw=None):
 
 _stepfull_decl(_stepfull_session_spec(), "mamba1-decode-session")
 _stepfull_decl(_stepfull_session_spec("kv"), "transformer-decode-session")
-_stepfull_decl("n/a:driver-lane (the layer owners hold the state in their own worker processes; the "
-               "single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
-               "par-causal-lm")
-_stepfull_decl("n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior "
-               "have no sequence axis and no carried state)",
-               "par-cross-val", "par-gpc-fit", "par-gpc-predict")
 
 STEPFULL_DEFAULT = "n/a:no-decode-state"
 
