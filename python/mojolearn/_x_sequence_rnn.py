@@ -712,8 +712,6 @@ _native_xseq_bridge.register(
     xseq_rnn_optimizers=OPTIMIZERS,
     xseq_rnn_defaults=_OPT_DEFAULTS,
     xseq_rnn_state_mappings=(dict, OrderedDict),
-    xseq_rnn_state_layouts=tuple(_state_layout(cls) for cls in (RNNRegressor, RNNClassifier, LSTMRegressor, LSTMClassifier, GRURegressor, GRUClassifier)),  # glue: fixed recurrent classes
-
 )
 
 # Last statement: connect this module's classes to the native full-reset
@@ -722,6 +720,13 @@ _native_xseq_bridge.register(
 from ._native_full_reset_params import connect_module as _connect_full_reset
 _connect_full_reset(globals())
 del _connect_full_reset
+# glue: pin the storage hooks only after connect_full_reset has installed the
+# native __getattribute__ slot on these classes; a snapshot taken before it
+# records None and refuses every connected instance in state_dict and
+# load_state_dict, while a later replacement is still refused.
+_native_xseq_bridge.register(
+    xseq_rnn_state_layouts=tuple(_state_layout(cls) for cls in (RNNRegressor, RNNClassifier, LSTMRegressor, LSTMClassifier, GRURegressor, GRUClassifier)),  # glue: fixed recurrent classes
+)
 # glue: reuse the final native owner storage contract for public operations.
 from ._native_full_reset_params import _CONTEXT as _XSEQ_OWNER_CONTEXT
 _native_xseq_bridge.register(xseq_owner_context=_XSEQ_OWNER_CONTEXT)
