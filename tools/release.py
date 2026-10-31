@@ -273,6 +273,18 @@ def adapter_gate_module():
     return adapter_gate
 
 
+def release_gate_module():
+    """tools/ops/release_gate.py: the NVIDIA/AMD gate's box job through the supported wrappers (run_gate)."""
+    import importlib.util
+    module = sys.modules.get("release_gate_ops")
+    if module is None:
+        spec = importlib.util.spec_from_file_location("release_gate_ops", ROOT / "tools" / "ops" / "release_gate.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["release_gate_ops"] = module
+        spec.loader.exec_module(module)
+    return module
+
+
 def smoke_passed(results, wheel):
     """A light-smoke receipt that is PASSED, expanded, and about THIS wheel."""
     try:
@@ -3286,35 +3298,35 @@ class Release:
             if not self.dry:
                 self.record_candidate_requirement(vendor, run_id)
             return why
-        box = LQ_COLUMN_BOX[vendor]
         work = self.rel / "gates"
         output = self.gate_out(vendor)
-        artifacts = Path(getattr(self.args, 'gate_autograd_root', None) or self.rel/'autograd-bin')/vendor
-        if not self.dry:
-            from gate_autograd_artifacts import validate
-            validate(artifacts/'build-manifest.json', vendor, self.commit)
-        cmd = [PY, "tools/release_lq_smoke.py", "--gate", vendor, self.version, "--box", box,
-               "--tag", f"rel-{self.version}-gate-{vendor}",
-               "--remote-dir", f"/root/results-release-gate/{self.version}/{vendor}/{output.name}",
-               "--out", str(output), "--state", str(work / f"{vendor}-{output.name}.lq.json"),
-               "--branch", getattr(self.args, "smoke_branch", None) or "main",
-               '--candidate-source-commit', self.commit, '--gate-autograd-dir', str(artifacts),
-               "--gate-profile", "release-light-v1",
-               "--max-job-hours", "0.55", "--max-wait-hours", "72"]
+        # plan item 4 (docs/plans/POST_0863_RELEASE_TOOLING.md): one persisted box job per vendor through the
+        # supported wrappers (tools/nvidia_central.sh submit, tools/do_amd_steward.sh run) that builds the eight
+        # autograd executables on the box and runs the gate there; nothing outside this repository
+        cmd = [PY, "tools/ops/release_gate.py", vendor, self.version, "--source-commit", self.commit,
+               "--source-tree", str(self.source_checkout(create=not self.dry)),
+               "--out", str(output), "--state", str(work / f"{vendor}-{output.name}.job.json"),
+               "--profile", "release-light-v1", "--max-wait-hours", "72"]
         for wheel in self.candidate_gate_wheels(vendor):
             cmd += ['--candidate-wheel', str(wheel)]
+        prior = self.gate_autograd_prior(vendor)
+        if prior:
+            cmd += ["--autograd-prior", str(prior)]  # the build reuses each proven-unchanged binary
         if not adapter_gate_module().enabled():
             cmd.append("--no-adapters")  # no adapters ship: the gate records its adapter stage as disabled
         if not self.dry:
             work.mkdir(parents=True, exist_ok=True)
         try:
-            self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate on lq box {box}")
+            self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate box job")
         except StepFailed as error:
             reports = [p for p in (output / "gate-smoke.json", work / f"gate-{vendor}.log") if p.is_file()]
             if run_id and reports:
                 self.readiness().record(run_id, "failed", reports, str(error), 1, 5, 0, failed=1)
             raise
         if self.dry:
+            # the job submission the command makes, wrapper by wrapper (nothing runs)
+            for line in release_gate_module().Runner(release_gate_module().parse(cmd[2:])).dry_lines():
+                self.say("    would: " + line)
             return None
         ok, why = self.gate_ok(vendor)
         if not ok:
@@ -3324,6 +3336,20 @@ class Release:
             raise StepFailed(f"the {vendor} release gate did not pass: {why}")
         self.record_candidate_requirement(vendor, run_id, executed=True)
         return why
+
+    def gate_autograd_prior(self, vendor):
+        """A complete retained autograd set the gate job's build may reuse: --gate-autograd-root/<vendor>
+        when it holds one, else the newest earlier gate's built set of this version (any freeze)."""
+        root = getattr(self.args, 'gate_autograd_root', None)
+        candidates = [Path(root) / vendor] if root else []
+        candidates += sorted(self.base.glob(f"*/gate-{vendor}/*/autograd-bin"),
+                             key=lambda p: (p / "build-manifest.json").stat().st_mtime
+                             if (p / "build-manifest.json").is_file() else 0, reverse=True)
+        for directory in candidates:
+            doc = read_json(directory / "build-manifest.json") or {}
+            if doc.get("state") == "built" and doc.get("vendor") == vendor:
+                return directory
+        return None
 
     def gate_waiver(self, vendor):
         """The owner's --owner-waiver reason when it waives this vendor's candidate
