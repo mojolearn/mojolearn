@@ -444,7 +444,7 @@ def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
     global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
-    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE, _HOST_CLASS_ROUTES
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE, _HOST_CLASS_ROUTES, _CONTEXT_DOORS
     global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES, _INCLUDE_ROOTS, _GRAPH_REVERSE
     for cache in _CACHES:
         cache.clear()
@@ -476,6 +476,7 @@ def reset_caches():
     _INCLUDE_ROOTS = None
     _GRAPH_REVERSE = None
     _HOST_CLASS_ROUTES = None
+    _CONTEXT_DOORS = None
     global _HOOK_CLASSES
     _HOOK_CLASSES = None
     if "lane_map_import_graph" in sys.modules:
@@ -4070,6 +4071,59 @@ def _called_names(files):
     return out
 
 
+_CONTEXT_DOORS = None
+
+
+def context_doors():
+    """key -> the names the Python code that FILLS that native context key
+    spells (lane identity-attribution, 2026-10-31).
+
+    A native owner reaches another compiled entry through its context:
+    `_native_runtime_manifold_bridge.connect` stores the manifold owner's
+    `manifold_native_call` as `context["family_mani_door"]`, and
+    bindings/family_native.mojo calls `py_get(context, "family_mani_door")`
+    for every `family_mani_*` operation. The key is all the native text
+    names, so the UMAP lane reached no file of the manifold owner and no
+    umap/ kernel (tools/test_lane_select.py::test_an_aliased_mojo_import_is_
+    recorded_under_the_name_the_body_uses failed on main 2026-10-31). Every
+    package function, and every module-level statement, that stores under a
+    constant identifier key (`x["k"] = ...`, `x.update(k=...)`,
+    `x.setdefault("k", ...)`, `dict(k=...)`) contributes all its names to
+    that key; `lane_sources` adds them when a native definition the lane
+    reaches spells the key."""
+    global _CONTEXT_DOORS
+    if _CONTEXT_DOORS is not None:
+        return _CONTEXT_DOORS
+    out = {}
+    for rel in _python_files():
+        tree = _parse(rel)
+        if tree is None:
+            continue
+        scopes = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        scopes += [n for n in tree.body if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+        for scope in scopes:
+            keys = set()
+            for node in ast.walk(scope):
+                if isinstance(node, ast.Assign):
+                    for t in node.targets:
+                        if isinstance(t, ast.Subscript) and isinstance(t.slice, ast.Constant) \
+                                and isinstance(t.slice.value, str) and t.slice.value.isidentifier():
+                            keys.add(t.slice.value)
+                elif isinstance(node, ast.Call):
+                    fname = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
+                    if fname in ("update", "dict", "setdefault"):
+                        keys.update(k.arg for k in node.keywords if k.arg)
+                        if fname == "setdefault" and node.args and isinstance(node.args[0], ast.Constant) \
+                                and isinstance(node.args[0].value, str):
+                            keys.add(node.args[0].value)
+            if keys:
+                names = _names_in_nodes([scope])
+                for k in keys:
+                    out.setdefault(k, set()).update(names)
+    _CONTEXT_DOORS = out
+    return out
+
+
 _HOST_CLASS_ROUTES = None
 
 
@@ -4739,11 +4793,13 @@ def lane_sources():
                 for a in srcs:
                     binding_seeds(a, names, "narrow", mark=False, ops=ops)
                     spelled |= native_names[seed_key(a, names, "narrow", ops)]
-                fresh = {n for n in spelled if any(n in e for e in exports_of.values())} - names
-                if not fresh and OperationSet(op_names | spelled) == ops:
+                route_doors = context_doors()
+                opened = set().union(*[route_doors[k] for k in spelled & route_doors.keys()])
+                fresh = {n for n in spelled | opened if any(n in e for e in exports_of.values())} - names
+                if not fresh and OperationSet(op_names | spelled | opened) == ops:
                     break
                 names |= fresh
-                op_names |= spelled | fresh
+                op_names |= spelled | fresh | opened
             got = binding_seeds(src, names, "narrow", mark=False, ops=ops)
             route_cache[host] = (tuple(sorted(names & exports_of[src])), frozenset(got))
         return route_cache[host]
@@ -4799,6 +4855,7 @@ def lane_sources():
         # point together with the exports below.
         op_names = set(used) | ubiquitous_ops
         ops = OperationSet(op_names)
+        doors = context_doors()
         while True:
             found, origins_grew, spelled = set(), False, set()
             for src, wide in native_sources:
@@ -4822,8 +4879,12 @@ def lane_sources():
                         if tags & ~previous:
                             origins[reached_name] = previous | tags
                             origins_grew = True
+            # CONTEXT DOORS (`context_doors`): a key the native text spells
+            # hands over what the Python that filled it names.
+            opened = set().union(*[doors[k] for k in spelled & doors.keys()]) if doors else set()
+            found |= opened & exports_available
             fresh = found - used
-            op_names |= spelled | fresh
+            op_names |= spelled | fresh | opened
             grown = OperationSet(op_names)
             if not fresh and not origins_grew and grown == ops:
                 break
@@ -4994,7 +5055,8 @@ _LS_NOT_INPUTS = {"_ENUMERATORS", "_LANE_SOURCES", "_SOURCE_HASHED", "_TRACKED",
                   "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PYTHON_FILES", "_PKG_IMPORT_CLOSURE",
                   "_HOST_CLASS_ROUTES", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS",
                   "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY",
-                  "_HOOK_CLASSES", "_LS_MEMO", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS"}
+                  "_HOOK_CLASSES", "_LS_MEMO", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS",
+                  "_CONTEXT_DOORS"}
 
 
 def _ls_digest(text):
@@ -6107,6 +6169,47 @@ def _package_file_unreachable(path):
             return None
     return ("nothing reaches it: package data that no file a lane reaches names by basename or "
             "path, in a directory no file a lane reaches walks")
+
+
+def _imported_only_by_unreachable_modules(path):
+    """A package module (not the harness, the manifest, the plugin table or
+    the loader) that no lane's map holds and whose every importer in the tree
+    is a test or a package module `unreachable` proves no lane runs (lane
+    identity-attribution, 2026-10-31: `_verification_light_reference.py`, the
+    light verifier's generated reference DATA, imported only by
+    `_verify_public.py` and `_verification_coverage.py`, the verifier's own
+    modules, and tools/test_light_verifier_command.py). It reads as a
+    registry (`enumerator_files`: it names every binding), and a registry's
+    diff that is not an addition was refused even though nothing a lane runs
+    imports it. Importers are found by the module's name in any tracked Python
+    file's code (`import`, `from ... import`, a string), so an importer this
+    cannot classify keeps the old rules."""
+    if not (path.startswith(PKG + os.sep) and path.endswith(".py")) or path in GLOBAL_PATHS \
+            or os.sep in path[len(PKG) + 1:]:
+        return None
+    stem = os.path.basename(path)[:-3]
+    word = re.compile(r"(?<![\w])%s(?![\w])" % re.escape(stem))
+    importers = []
+    for rel in sorted(tracked_files()):
+        if not rel.endswith(".py") or rel == path:
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if stem in text and word.search(text):
+            importers.append(rel)
+    if not importers:
+        return None
+    for rel in importers:
+        base = os.path.basename(rel)
+        if rel.startswith(TESTS) or (rel.startswith("tools" + os.sep) and base.startswith("test_")):
+            continue
+        if rel.startswith(PKG + os.sep) and rel not in _NOT_CORPUS and unreachable(rel):
+            continue
+        return None
+    return ("nothing a lane runs imports it: every file naming it is a test or a package module no lane "
+            f"reaches ({', '.join(importers[:4])})")
 
 
 _CONSTANTS = None
@@ -10140,6 +10243,11 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
             reasons[path] = ("rental measurement tooling: a leg body, session script or probe that runs "
                              "on a rented box to build and time a binding and replay recorded steps; no "
                              "lane computes through it (MEASUREMENT_TOOLING_PREFIXES)")
+            continue
+        why_only = _imported_only_by_unreachable_modules(path) if path not in rev else None
+        if why_only:
+            inert.append(path)
+            reasons[path] = why_only
             continue
         if path in GLOBAL_PATHS or path in enumerator_files():
             added = registry_lanes(ref, path, sources) if ref else None
