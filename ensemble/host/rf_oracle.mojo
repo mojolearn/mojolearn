@@ -128,6 +128,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from ensemble.host_layout import has_nan_f32_threaded
 from ensemble.nan_refusal import RF_NAN_REFUSAL
+from ensemble.rf_notices import rf_notice, RF_NOTICE_BINS_CLAMPED, RF_NOTICE_MAX_SAMPLES_IGNORED
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -1303,6 +1304,9 @@ struct RfHostForest(Movable):
     var counts: List[Int32]
     var n_trees: Int
     var num_outputs: Int
+    # The fit's user notices, an `ensemble/rf_notices.mojo` bit mask (the
+    # device forest's `RandomForestMetaData.notices`).
+    var notices: Int
 
     def __init__(out self):
         self.offsets = List[Int32]()
@@ -1314,6 +1318,7 @@ struct RfHostForest(Movable):
         self.counts = List[Int32]()
         self.n_trees = 0
         self.num_outputs = 1
+        self.notices = 0
 
     def n_nodes(self) -> Int:
         return len(self.colid)
@@ -1718,6 +1723,7 @@ def rf_host_fit(
     weights: List[Float32] = List[Float32](),
     retain_importance: Bool = False,
     min_weight_leaf: Float32 = Float32(0),
+    notices_to_stderr: Bool = True,
 ) raises -> RfHostForest:
     """`fit_forest`, `ensemble/randomforest.mojo:2299-2849`, on the host.
 
@@ -1764,19 +1770,13 @@ def rf_host_fit(
     if criterion == RF_CRITERION_END:
         criterion = RF_GINI if classification else RF_MSE
     # `:2420-2426` -- the n_bins clamp.
+    var notices = 0
     if p.max_n_bins > n_rows:
-        print(
-            "WARN: The number of bins, `n_bins` is greater than the number"
-            " of samples used for training. Changing `n_bins` to number of"
-            " training samples."
-        )
+        rf_notice(notices, RF_NOTICE_BINS_CLAMPED, notices_to_stderr)
         p.max_n_bins = n_rows
     # `:2429-2434`
     if not p.bootstrap and p.max_samples != Float32(1.0):
-        print(
-            "WARN: If bootstrap sampling is disabled, max_samples value is"
-            " ignored and whole dataset is used for building each tree"
-        )
+        rf_notice(notices, RF_NOTICE_MAX_SAMPLES_IGNORED, notices_to_stderr)
         p.max_samples = Float32(1.0)
     var n_sampled = n_sampled_rows_host(p.bootstrap, p.max_samples, n_rows)
     if n_sampled <= 0:
@@ -1847,6 +1847,7 @@ def rf_host_fit(
     var forest = RfHostForest()
     forest.n_trees = p.n_trees
     forest.num_outputs = n_unique_labels
+    forest.notices = notices
     forest.offsets.append(Int32(0))
     # THE TREES, ONE TASK PER CONTIGUOUS TREE RANGE (lane/trees-cpu,
     # 2026-09-28). Each tree is `_rf_host_tree`, whose statements run in

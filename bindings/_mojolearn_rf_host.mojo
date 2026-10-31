@@ -262,6 +262,9 @@ def _forest_out(forest: RfHostForest) raises -> PythonObject:
     var meta = Python.list()
     meta.append(PythonObject(forest.n_trees))
     meta.append(PythonObject(forest.num_outputs))
+    # The fit's notice bits (`ensemble/rf_notices.mojo`): the public fit
+    # raises them as Python warnings, never prints them.
+    meta.append(PythonObject(forest.notices))
     var out = Python.list()
     out.append(forest_export_py_list_i64(offsets))
     out.append(forest_export_py_list_i64(colid))
@@ -282,7 +285,7 @@ def _retain_rf_export(var forest: RfHostForest) raises -> PythonObject:
         raise Error("cannot export an empty fitted RF")
     if len(forest.leaves) != nodes * outputs:
         raise Error("fitted RF leaf storage differs from export dimensions")
-    var meta: List[Int64] = [Int64(trees), Int64(outputs)]
+    var meta: List[Int64] = [Int64(trees), Int64(outputs), Int64(forest.notices)]
     return RF_HOST_EXPORTS.get_or_create_ptr()[].insert(
         forest^, trees, nodes, outputs, meta^
     )
@@ -481,7 +484,7 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
         forest = rf_host_fit(
             x^, y, List[Float32](), n_rows, n_cols, n_classes, True, p,
             Float32(1.0), tree_start, weights, retain_importance,
-            min_weight_leaf,
+            min_weight_leaf, notices_to_stderr=False,
         )
     else:
         var y = read_f32(y_address, n_rows)
@@ -498,7 +501,7 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
         forest = rf_host_fit(
             x^, List[Int32](), y, n_rows, n_cols, 1, False, p, scale,
             tree_start, weights, retain_importance=retain_importance,
-            min_weight_leaf=min_weight_leaf,
+            min_weight_leaf=min_weight_leaf, notices_to_stderr=False,
         )
     return forest^
 

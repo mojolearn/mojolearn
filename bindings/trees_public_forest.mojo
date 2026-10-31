@@ -33,7 +33,12 @@ from bindings.trees_public_inputs import (
     trees_view, trees_call,
 )
 from bindings.trees_lifetime import trees_resident_new
-from bindings.metrics_native_support import metric_is_integral
+from bindings.metrics_native_support import metric_is_integral, metric_warning_location
+from bindings.classical_warnings import classical_warning
+from ensemble.rf_notices import (
+    rf_notice_text, RF_NOTICE_ALL, RF_NOTICE_BINS_CLAMPED,
+    RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL,
+)
 from checks.numerics import portable_log2_64
 
 comptime _INT32_MAX = 2147483647
@@ -768,8 +773,28 @@ def _rf_fit_arrays(fields: PythonObject, kind: String, x: TreesMatrix, y_addr: I
     _finite_or_refuse(x, device_scan, context)
     var params = _rf_params(fields, kind, x.rows, x.cols, classes, rf, context)
     var result = forest_fit_arrays(_launch(rf, fit, x, y_addr, params, fields["_cfg"]["criterion"], device_scan, context), context)
+    _rf_fit_notices(result[5], context)
     _store_model(fields, result, x.cols)
     return result
+
+
+def _rf_fit_notices(meta: PythonObject, context: PythonObject) raises:
+    """The fit's notices (the third metadata word, an
+    `ensemble/rf_notices.mojo` bit mask) as Python UserWarnings, in the
+    order the fit reached them, attributed to the caller of `fit`. A
+    binding without the word has none to report."""
+    if len(meta) < 3:
+        return
+    var mask = Int(py=meta[2])
+    if mask < 0 or (mask & ~RF_NOTICE_ALL) != 0:
+        raise Error("forest fit returned unknown notice bits " + String(mask))
+    if mask == 0:
+        return
+    var codes: List[Int] = [RF_NOTICE_BINS_CLAMPED, RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL]
+    for i in range(len(codes)):  # small-loop(codes): the three fit notice bits
+        if (mask & codes[i]) != 0:
+            classical_warning(rf_notice_text(codes[i]), trees_builtins().UserWarning, context,
+                              metric_warning_location(2), "UserWarning")
 
 
 def _has(native: PythonObject, name: String) raises -> Bool:

@@ -3,6 +3,10 @@
 """Random Forest estimator surface, parameters, metrics, training dispatch, and host inference, aligned with pinned cuML behavior."""
 
 from ensemble.bootstrap_sort import sort_passes_for, sort_selected_rows
+from ensemble.rf_notices import (
+    rf_notice, RF_NOTICE_OOB_PARTIAL, RF_NOTICE_BINS_CLAMPED,
+    RF_NOTICE_MAX_SAMPLES_IGNORED,
+)
 from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED, T12, T12_BYTES, T15
 from std.math import fma
 from std.gpu import block_dim, block_idx, global_idx, thread_idx
@@ -978,6 +982,10 @@ struct RandomForestMetaData[dtype: DType, label_dtype: DType](
     # `:750` -- regressor only: the averaged OOB prediction per row.
     var oob_prediction_: List[Float64]
     var feature_importances_: List[Scalar[Self.dtype]]
+    # The fit's user notices, an `ensemble/rf_notices.mojo` bit mask. Not
+    # in their struct: cuML prints them from Python and C++; the bindings
+    # raise them as Python warnings from this word.
+    var notices: Int
 
     def __init__(
         out self,
@@ -997,6 +1005,7 @@ struct RandomForestMetaData[dtype: DType, label_dtype: DType](
         self.oob_decision_function_ = List[Float64]()
         self.oob_prediction_ = List[Float64]()
         self.feature_importances_ = List[Scalar[Self.dtype]]()
+        self.notices = 0
 
 
 # ---------------------------------------------------------------------------
@@ -1637,6 +1646,7 @@ def compute_oob_score[
     n_cols: Int,
     row_major: Bool,
     host_x_addr: Int = 0,
+    notices_to_stderr: Bool = True,
 ) raises where O.DataT == DType.float32:
     """`RandomForestClassifier/Regressor._compute_oob_score`,
     `randomforest_common.pyx:695-753`.
@@ -1892,11 +1902,7 @@ def compute_oob_score[
     # `:725-732`
     var n_valid = dev_n_valid
     if n_valid != n_rows:
-        print(
-            "WARN: Some inputs do not have OOB scores. This probably means"
-            " too few trees were used to compute any reliable OOB"
-            " estimates."
-        )
+        rf_notice(forest.notices, RF_NOTICE_OOB_PARTIAL, notices_to_stderr)
     if n_valid == 0:
         raise Error(
             "no sample was out of bag for any tree, so there is no OOB"
@@ -2677,6 +2683,7 @@ def fit_forest[
     tree_start: Int = 0,
     feature_importances: Bool = False,
     min_weight_leaf: Float32 = Float32(0),
+    notices_to_stderr: Bool = True,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -2688,7 +2695,7 @@ def fit_forest[
         ctx, x, y, sample_weight, n_rows, n_cols, n_unique_labels,
         rf_params, prep, False, scales, sample_weight_host, row_major,
         oob_score, host_x_addr, tree_start, feature_importances,
-        min_weight_leaf,
+        min_weight_leaf, notices_to_stderr,
     )
 
 
@@ -2713,6 +2720,7 @@ def fit_forest_prepared[
     tree_start: Int = 0,
     feature_importances: Bool = False,
     min_weight_leaf: Float32 = Float32(0),
+    notices_to_stderr: Bool = True,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -2828,20 +2836,14 @@ def fit_forest_prepared[
     # passed. This implementation sits at the C-API shape but is the only door a
     # caller has, so the clamp lives here or nowhere, and without it the
     # quantile pass below asks for more bins than there are rows.
+    var notices = 0
     if rf_params.tree_params.max_n_bins > Int32(n_rows):
-        print(
-            "WARN: The number of bins, `n_bins` is greater than the number"
-            " of samples used for training. Changing `n_bins` to number of"
-            " training samples."
-        )
+        rf_notice(notices, RF_NOTICE_BINS_CLAMPED, notices_to_stderr)
         rf_params.tree_params.max_n_bins = Int32(n_rows)
 
     # `:298-309`
     if not rf_params.bootstrap and rf_params.max_samples != Float32(1.0):
-        print(
-            "WARN: If bootstrap sampling is disabled, max_samples value is"
-            " ignored and whole dataset is used for building each tree"
-        )
+        rf_notice(notices, RF_NOTICE_MAX_SAMPLES_IGNORED, notices_to_stderr)
         rf_params.max_samples = Float32(1.0)
     var n_sampled = n_sampled_rows_for(
         rf_params.bootstrap, rf_params.max_samples, n_rows
@@ -3072,6 +3074,7 @@ def fit_forest_prepared[
         rf_params,
         Int32(n_cols),
     )
+    forest.notices = notices
 
     # DEVIATION 313: ONE Builder for the whole forest, reset per tree.
     # Their per-tree Builder construction allocates from RMM's POOLED
@@ -3428,7 +3431,7 @@ def fit_forest_prepared[
         t_stage = instr.times.start()
         compute_oob_score[O, oob_sabotage](
             ctx, forest, oob_store, sampler, x, y, n_rows, n_cols, row_major,
-            host_x_addr,
+            host_x_addr, notices_to_stderr,
         )
         instr.times.stop(ctx, "oob", t_stage)
 
