@@ -126,11 +126,13 @@ def connect(context):
     graph_modules=('_mojolearn_metrics','_mojolearn','_mojolearn_estimators','_mojolearn_solver','_mojolearn_x_cluster','_mojolearn_x_neighbors','_mojolearn_x_decomp','_mojolearn_hdbscan')
     add('fit_graph',hier.AgglomerativeClustering,'graph_fit','family_cfb_agglo_fit',
         (bind(hier.AgglomerativeClustering._BINDING),bind('_mojolearn_solver','identical'),bind(xc._XCluster._BINDING),bind('_mojolearn_x_neighbors'),a),graph_modules,mode='effective')
-    add('fit_graph',spectral.SpectralClustering,'graph_fit','family_cfb_sc_fit',
-        (bind('_mojolearn_metrics','default'),bind('_mojolearn_x_decomp','default'),bind('_mojolearn','identical'),bind('_mojolearn_x_cluster'),a),graph_modules,mode='effective')
-    add('fit_graph',umap.UMAP,'graph_fit','family_mani_umap_fit',(bind(umap.UMAP._BINDING),a,const(None)),graph_modules,mode='effective')
+    # The spectral and UMAP owners take their public ABI ((X, y), (X, y) and
+    # (X,)) and route their own bindings; a leading binding argument was
+    # admitted as X and refused ("Sequential requires native input types").
+    add('fit_graph',spectral.SpectralClustering,'graph_fit','family_cfb_sc_fit',(a,const(None)),graph_modules,mode='effective')
+    add('fit_graph',umap.UMAP,'graph_fit','family_mani_umap_fit',(a,const(None)),graph_modules,mode='effective')
     add('transform_umap',umap.UMAP,'umap_transform','family_mani_umap_transform',
-        (bind(umap.UMAP._BINDING,'identical'),a),graph_modules,mode=None,check='umap_transform',output='transform')
+        (a,),graph_modules,mode=None,check='umap_transform',output='transform')
     for cls,op,arity in ((ens.GradientBoosting,'trees_gbdt_fit',8),  # glue: fixed boosting public ABI arities
                         (boost.GradientBoostingClassifier,'trees_gbdt_adapter_classifier_fit',4),
                         (boost.GradientBoostingRegressor,'trees_gbdt_adapter_regressor_fit',4)):

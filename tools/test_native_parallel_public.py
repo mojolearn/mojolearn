@@ -181,6 +181,13 @@ def test_native_owner_argument_recipes_preserve_nondefault_supported_inputs(conn
         plan = meta['plans']['fit_kernel_method'][classes['kernel_methods',cls]]
         assert plan['route'] == 'direct'
         assert plan['recipe'] == (('binding','_mojolearn_kernel_methods','model'),('arg',0),('arg',1),('arg',2))
+    # The spectral and UMAP owners take their public ABI and route their own
+    # bindings; agglomerative keeps its explicit four-binding ABI.
+    for module, cls, op, recipe in (('_spectral_impl','SpectralClustering','fit_graph',(('arg',0),('constant',None))),
+                                    ('_umap_impl','UMAP','fit_graph',(('arg',0),('constant',None))),
+                                    ('_umap_impl','UMAP','transform_umap',(('arg',0),))):
+        assert meta['plans'][op][classes[module,cls]]['recipe'] == recipe
+    assert len(meta['plans']['fit_graph'][classes['_hierarchy_impl','AgglomerativeClustering']]['recipe']) == 5
     plan = meta['plans']['transform_rbf_sampler'][classes['kernel_methods','RBFSampler']]
     assert plan['route'] == 'shard'
     assert plan['recipe'] == (('model',),('arg',0),('arg',1),('arg',2),('binding','_mojolearn_kernel_methods','model'))
