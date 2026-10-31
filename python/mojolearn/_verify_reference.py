@@ -955,7 +955,11 @@ def merge_reference_lanes(base, candidate, lanes):
         for fixture in base["fixtures"]:
             key = f"{lane}/{fixture}"
             cell = candidate["cells"].get(key, {})
-            required = {"train", "infer", "model", "batch"} | set(base["cells"].get(key, {}))
+            # Old N/A placeholders ("n/a:...") carry no reference bits; see
+            # tools/identity_admission_guard.py.
+            required = {"train", "infer", "model", "batch"} | {
+                p for p, e in base["cells"].get(key, {}).items()
+                if not str((e or {}).get("ref") or "").startswith("n/a:")}
             if required - set(cell):
                 raise TableError(f"{key}: missing parts {sorted(required - set(cell))}")
             if any(e.get("ref") is None or e.get("conflict") for e in cell.values()):
