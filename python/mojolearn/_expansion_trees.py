@@ -1266,6 +1266,10 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
         Seed for the per-tree feature sampling.
     bagging_seed : int, default=3
         Seed for the row bagging.
+    numeric_mode : {"identical", "fast"} or None, default=None
+        Numeric mode for this estimator. None uses the process default (see
+        ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
+        only.
 
     Attributes
     ----------
@@ -1295,14 +1299,14 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
                  min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,
                  skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None,
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
-                 feature_fraction_seed=2, bagging_seed=3):
+                 feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
         # The checks and the stored parameters are the native owner's
         # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
         _TREES(self, "trees_dart_construct", (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
-            bagging_seed), _TREES_CONTEXT)
+            bagging_seed, numeric_mode), _TREES_CONTEXT)
 
     def fit(self, X, y):
         """Fit the boosted trees on ``X`` (n_samples, n_features) and target ``y``.
@@ -1398,6 +1402,10 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         Seed for the per-tree feature sampling.
     bagging_seed : int, default=3
         Seed for the row bagging.
+    numeric_mode : {"identical", "fast"} or None, default=None
+        Numeric mode for this estimator. None uses the process default (see
+        ``mojolearn.set_numeric_mode``). ``"fast"`` applies on Apple GPUs
+        only.
 
     Attributes
     ----------
@@ -1429,14 +1437,14 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
                  min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,
                  skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None,
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
-                 feature_fraction_seed=2, bagging_seed=3):
+                 feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
         # The checks and the stored parameters are the native owner's
         # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
         _TREES(self, "trees_dart_construct", (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
-            bagging_seed), _TREES_CONTEXT)
+            bagging_seed, numeric_mode), _TREES_CONTEXT)
 
     def fit(self, X, y):
         """Fit the boosted trees on ``X`` (n_samples, n_features) and labels ``y``.
