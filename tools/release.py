@@ -3153,12 +3153,17 @@ class Release:
         target = self.args.publish
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
-        ready, reasons = self.release_gate(stage="pre")
-        if not ready and not self.dry:
-            raise StepFailed("publication is blocked: " + "; ".join(reasons))
-        if self.dry:
-            self.say(f"  pre-publication gate ({platform}): " + ("READY" if ready else
-                     f"would block on {len(reasons)} row(s): " + "; ".join(r[:160] for r in reasons[:5])))
+        if not self.dry:
+            ready, reasons = self.release_gate(stage="pre")
+            if not ready:
+                raise StepFailed("publication is blocked: " + "; ".join(reasons))
+        else:
+            try:  # a dry run reports the verdict; it never writes the ledger
+                ready, reasons = self.release_gate(stage="pre")
+                self.say(f"  pre-publication gate ({platform}): " + ("READY" if ready else
+                         f"would block on {len(reasons)} row(s): " + "; ".join(r[:160] for r in reasons[:5])))
+            except (ValueError, OSError, KeyError, subprocess.CalledProcessError, StepFailed) as error:
+                self.say(f"  pre-publication gate ({platform}): not evaluated ({error})")
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
