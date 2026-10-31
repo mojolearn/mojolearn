@@ -1261,6 +1261,16 @@ def test_gpu_parallel_diagnostics_remain_explicitly_selectable():
     assert "physical multi-device identity" in exposure["par-forest"]["reason"]
 
 
+@pytest.mark.parametrize("argv", [["verify", "--par"], ["verify", "--par", "quick"],
+                                  ["verify", "--par-devices", "0,1"], ["verify", "--par-self-test"]])
+def test_retired_two_device_flags_are_usage_errors(argv):
+    # Multi-GPU verification was retired (2026-10-31): `verify --par` and its
+    # companions are unknown options, not a deprecation shim.
+    with pytest.raises(SystemExit) as exc:
+        cli.build_parser().parse_args(argv)
+    assert exc.value.code == 2
+
+
 def test_flags_route_to_the_suite_or_the_card():
     p = cli.build_parser()
     for argv in (["verify", "--all"], ["verify", "--quick"], ["verify", "--full"], ["verify", "--lanes", "ols"],

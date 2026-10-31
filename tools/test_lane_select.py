@@ -1348,10 +1348,10 @@ def test_a_mojo_program_nothing_imports_is_unreachable_and_an_imported_one_is_no
 
 
 def test_package_modules_the_verifier_alone_uses_are_unreachable():
-    """`_verify_par.py` runs from `python -m mojolearn verify`, never in a lane.
+    """`_verify_distributed.py` runs from `python -m mojolearn verify-distributed`, never in a lane.
     The controls: `_mode.py`, which every lane imports, and a package module
     that only `__init__.py` imports, whose top level runs in every lane."""
-    assert lane_select.unreachable("python/mojolearn/_verify_par.py")
+    assert lane_select.unreachable("python/mojolearn/_verify_distributed.py")
     assert lane_select.unreachable("python/mojolearn/verify_reference/table.json")
     assert lane_select.unreachable("python/mojolearn/_mode.py") is None
     closure = lane_select._package_import_closure()
@@ -1365,10 +1365,10 @@ def test_package_modules_the_verifier_alone_uses_are_unreachable():
 def test_a_package_module_named_by_a_lane_file_stays_reachable():
     """THE ARM THAT MUST WIDEN for the package rule: a dynamic import string in
     a file every lane reaches."""
-    probe = "python/mojolearn/_verify_par.py"
+    probe = "python/mojolearn/_verify_distributed.py"
     assert lane_select.unreachable(probe), "the probe must start unreachable"
     try:
-        _manifest_reads("\n_ARM = 'mojolearn._verify_par'\n")
+        _manifest_reads("\n_ARM = 'mojolearn._verify_distributed'\n")
         assert lane_select.unreachable(probe) is None
     finally:
         lane_select.reset_caches()
