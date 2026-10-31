@@ -1541,6 +1541,15 @@ class Release:
         """Retained-producer admission reports for this freeze (release_requirements_retained)."""
         return self.rel / "ledger-evidence"
 
+    def retained_producers(self):
+        """(adapter, producer paths) of this freeze's retained outputs that never wrote the
+        ledger: the Apple installed-adapter smoke of the macOS wheel (gate-apple)."""
+        out = []
+        wheel = self.macos_wheel()
+        if wheel and (self.apple_adapters_out() / "wheel.json").is_file():
+            out.append(("apple-gate-adapters", dict(adapters=str(self.apple_adapters_out()), wheel=str(wheel))))
+        return out
+
     def readiness_status(self, write=False):
         manifest = self.readiness_manifest()
         ledger = self.readiness()
@@ -1551,7 +1560,7 @@ class Release:
             # admission) is admitted before any gate reads the ledger, so
             # verified work is never rerun or waived (Andrew, 2026-10-31).
             _, notes = retained.admit_existing_evidence(ROOT, ledger, self.commit, self.evidence_root(),
-                                                        say=self.say)
+                                                        producers=self.retained_producers(), say=self.say)
             for note in notes:
                 self.say("  ledger evidence: " + note)
             return ledger.sync(manifest)
@@ -1562,7 +1571,8 @@ class Release:
         doc.update(json.loads(json.dumps(manifest)))
         with retained.scratch_root() as scratch:
             reports, notes = retained.retained_reports(ROOT, doc, self.commit, Path(scratch),
-                                                       prepared=self.evidence_root(), say=self.say)
+                                                       prepared=self.evidence_root(),
+                                                       producers=self.retained_producers(), say=self.say)
             for note in notes:
                 self.say("   ledger evidence: " + note)
             return ledger._evaluate(retained.with_attempts(doc, retained.retained_attempts(reports)))

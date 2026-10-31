@@ -29,6 +29,7 @@ No product code is imported or executed and nothing is compiled.
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
@@ -213,7 +214,35 @@ def admissions_at(root, revision):
     return sorted(line for line in listing.splitlines() if line)
 
 
-def retained_reports(root, document, revision, out_root, *, prepared=None, log_dir=None, say=print):
+def _prepare_once(name, root, document, producer, key, out_root, search, log_dir, say, reports, notes, label):
+    from release_ledger_admission import prepare
+    # The reconstruction depends on the ledger's qualification configuration
+    # and version, so they key the report too: a corrected configuration
+    # (e.g. a derived optional-file contract) prepares a new one.
+    configuration = document.get("configuration", {})
+    context = dict(version=document.get("version"),
+                   configuration={k: configuration.get(k) for k in ("release_modes", "build_flags", "dependency_context")})
+    folder = f"{name}-{digest([producer, key, context])[:16]}"
+    kept = [d / folder for d in search + [out_root] if (d / folder / "reconciliation.json").is_file()]
+    if kept:
+        reports.append(kept[0] / "report.json")
+        return
+    out = out_root / folder
+    if out.exists():
+        # An earlier attempt admitted nothing; keep its review and try again.
+        out.rename(out.with_name(folder + ".refused-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        review = prepare(name, root, None, out, producer, log_dir, document=document)
+        say(f"  ledger evidence: {label}: {len(review['admitted'])} unit(s) admissible, "
+            f"{len(review['refused'])} refused (review {out / 'review.json'})")
+        reports.append(out / "report.json")
+    except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
+        notes.append(f"{label}: {error}")
+
+
+def retained_reports(root, document, revision, out_root, *, prepared=None, producers=(), log_dir=None,
+                     say=print):
     """Prepare (once) every retained-producer report this source's evidence supports.
 
     ``document`` is the ledger document (with the current manifest applied).
@@ -221,7 +250,6 @@ def retained_reports(root, document, revision, out_root, *, prepared=None, log_d
     inputs; an existing complete one (under ``prepared`` or ``out_root``) is
     reused, never rewritten.
     """
-    from release_ledger_admission import prepare
     root, out_root = Path(root).resolve(), Path(out_root)
     search = [Path(prepared)] if prepared is not None else []
     reports, notes = [], []
@@ -234,28 +262,19 @@ def retained_reports(root, document, revision, out_root, *, prepared=None, log_d
         except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
             notes.append(f"{admission}: {error}")
             continue
+        readme = evidence.sha256(root / admission / "README.md")
         for commit in commits:
-            producer = dict(admission=admission, revision=commit)
-            readme = evidence.sha256(root / admission / "README.md")
-            name = f"{IDENTITY}-{digest([producer, readme])[:16]}"
-            kept = [d / name for d in search + [out_root] if (d / name / "reconciliation.json").is_file()]
-            if kept:
-                reports.append(kept[0] / "report.json")
-                continue
-            out = out_root / name
-            if out.exists():
-                review = out / "review.json"
-                notes.append(f"{admission} at {commit[:12]}: nothing admissible"
-                             + (f" (see {review})" if review.is_file() else ""))
-                continue
-            out.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                review = prepare(IDENTITY, root, None, out, producer, log_dir, document=document)
-                say(f"  ledger evidence: {admission} at {commit[:12]}: {len(review['admitted'])} unit(s) "
-                    f"admissible, {len(review['refused'])} refused (review {out / 'review.json'})")
-                reports.append(out / "report.json")
-            except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
-                notes.append(f"{admission} at {commit[:12]}: {error}")
+            _prepare_once(IDENTITY, root, document, dict(admission=admission, revision=commit), readme, out_root,
+                          search, log_dir, say, reports, notes, f"{admission} at {commit[:12]}")
+    # Other retained producers the release names (adapter, {key: path}); each
+    # existing artifact's bytes key its report, so a changed artifact is re-read.
+    for name, producer in producers:
+        paths = {k: Path(v) for k, v in producer.items()}
+        if not all(p.exists() for p in paths.values()):
+            continue
+        key = {k: evidence.sha256(p) for k, p in paths.items() if p.is_file()}
+        _prepare_once(name, root, document, {k: str(p) for k, p in paths.items()}, key, out_root, search,
+                      log_dir, say, reports, notes, name)
     return reports, notes
 
 
@@ -279,7 +298,7 @@ def with_attempts(document, attempts):
     return doc
 
 
-def admit_existing_evidence(root, ledger, revision, out_root, *, log_dir=None, say=print):
+def admit_existing_evidence(root, ledger, revision, out_root, *, producers=(), log_dir=None, say=print):
     """Admit the evidence that already exists into a synchronized ledger; returns (attempts, notes).
 
     The reports are kept under ``out_root`` and their attempts appended to the
@@ -287,7 +306,8 @@ def admit_existing_evidence(root, ledger, revision, out_root, *, log_dir=None, s
     """
     if not Path(ledger.path).exists():
         return [], ["no ledger yet"]
-    reports, notes = retained_reports(root, ledger.read(), revision, out_root, log_dir=log_dir, say=say)
+    reports, notes = retained_reports(root, ledger.read(), revision, out_root, producers=producers,
+                                      log_dir=log_dir, say=say)
     attempts = retained_attempts(reports)
     if attempts:
         with ledger.edit() as doc:
