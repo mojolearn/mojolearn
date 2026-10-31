@@ -2365,6 +2365,9 @@ def _mojo_symbol_step(rel, name, ops=None):
             return _SYMBOL_STEPS[key]
         view = lambda text: text  # noqa: E731
     else:
+        known = _SYMBOL_KEY.get((rel, name, ops))
+        if known is not None and known in _SYMBOL_STEPS:
+            return _SYMBOL_STEPS[known]
         cache = {}
 
         def view(text):
@@ -2462,14 +2465,17 @@ class OperationSet:
     the walks."""
 
     def __init__(self, names, vocabulary=None):
-        vocab_eq, vocab_sw, vocab_prefixes = vocabulary or _dispatch_vocabulary()
+        vocabulary = vocabulary or _dispatch_vocabulary()
+        vocab_eq, vocab_sw, vocab_prefixes = vocabulary
+        seen = _RELEVANCE.setdefault(vocabulary, {})
         keep = set()
         for o in names:
-            if not isinstance(o, str):
-                continue
-            if o in vocab_eq or any(o[:k] in vocab_sw for k in range(len(o) + 1)):
-                keep.add(o)
-            elif o.endswith("_") and o in vocab_prefixes:
+            hit = seen.get(o)
+            if hit is None:
+                hit = seen[o] = isinstance(o, str) and (
+                    o in vocab_eq or any(o[:k] in vocab_sw for k in range(len(o) + 1))
+                    or (o.endswith("_") and o in vocab_prefixes))
+            if hit:
                 keep.add(o)
         self.names = frozenset(keep)
         self.stems = frozenset(o for o in keep if o.endswith("_"))
@@ -2497,6 +2503,8 @@ class OperationSet:
 
 
 _DISPATCH_VOCAB = None
+_RELEVANCE = {}              # vocabulary -> name -> can a condition of it tell the name apart
+_CACHES.append(_RELEVANCE)
 
 
 def _dispatch_vocabulary():
