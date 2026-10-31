@@ -186,13 +186,18 @@ def test_native_owner_argument_recipes_preserve_nondefault_supported_inputs(conn
     assert plan['recipe'] == (('model',),('arg',0),('arg',1),('arg',2),('binding','_mojolearn_kernel_methods','model'))
 
 
-def test_binding_namespaces_cannot_invoke_module_hooks_or_python_helpers(connected):
+def test_bindings_are_the_exact_compiled_modules(connected):
+    # The native owners require the exact extension module (they read its
+    # dictionary natively and admit only builtin entries it owns); a copied
+    # namespace was refused by every owner.
     meta, _ = connected
-    for modes in meta['modules'].values():
-        for module in modes.values():
-            assert type(module) is types.SimpleNamespace
-            assert set(vars(module)) == {'__name__','compiled_entry'}
-            assert type(module.compiled_entry) is types.BuiltinFunctionType
+    for name, modes in meta['modules'].items():
+        for mode, module in modes.items():
+            assert type(module) is types.ModuleType
+            assert module.__name__ == name + ':' + mode
+    source = (ROOT / 'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    assert 'native provider requires an exact compiled module' in source
+    assert '_neural_descriptor_function_owner(entry) != module._obj_ptr' in source
     assert len(meta['plans']) == 27
 
 

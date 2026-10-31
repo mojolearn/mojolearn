@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time plans for the compiled public parallel-driver boundary."""
-from types import BuiltinFunctionType, GetSetDescriptorType, ModuleType, SimpleNamespace
+from types import GetSetDescriptorType, ModuleType
 
 
 def _binding(name, mode):
@@ -13,11 +13,12 @@ def _binding(name, mode):
         if type(module) is not ModuleType:
             getattr(module, 'parallel_public_probe')
             raise ImportError('parallel driver requires a compiled binding')
-        entries = {'__name__': module.__name__}
-        for key, value in vars(module).items():  # glue: fixed compiled exports, no runtime module hooks
-            if type(value) is BuiltinFunctionType:
-                entries[key] = value
-        return SimpleNamespace(**entries)
+        # The compiled owners admit only the exact extension module: they read
+        # its dictionary natively (never a module __getattr__) and accept only
+        # builtin entries whose owner is that module. A copied namespace was
+        # refused by every owner ("native provider requires an exact compiled
+        # module"), so every public multi-GPU call failed, even on one device.
+        return module
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
         return type(error).__name__ + ': ' + str(error)
 
