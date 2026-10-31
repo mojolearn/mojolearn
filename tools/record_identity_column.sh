@@ -47,6 +47,18 @@
 #   REPEATS=1               fits per cell (default 1). Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
 #                           NVIDIA == AMD is the identity rule; a second fit on
 #                           one box adds nothing the other vendor's column does not
+#   (default)               REUSE GOOD OLD RUNS (Andrew 2026-10-31): with no
+#                           LANES, SHARD, ONLY_CHANGED or FULL, only the lanes whose
+#                           source closure (tools/lane_select.py, this column's
+#                           backend) changed since the newest good evidence of THIS
+#                           device class are recorded: the admitted table's rows and
+#                           every admissible record under bench/results/identity_break
+#                           (retained/ included), <outdir> and
+#                           MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2. Prints
+#                           REUSED n / RECORD m, and NOTHING-CHANGED (exit 0) when no
+#                           lane is owed; decisions in <outdir>/<label>.reuse.json
+#   FULL=1                  record every lane of the scope; the ONLY way to
+#                           re-record lanes whose closure did not change
 #   ONLY_CHANGED=table|<sha> INCREMENTAL RE-RECORD: only the lanes whose source
 #                           closure (tools/lane_select.py) changed between the
 #                           commit each lane's admitted rows rest on (`table`)
@@ -177,7 +189,67 @@ fi
 
 # --- which lanes -----------------------------------------------------------
 NAME=$LABEL
+SELECTION=explicit
+# REUSE GOOD OLD RUNS, AUTOMATICALLY (Andrew 2026-10-31: "The CODE should be
+# structured so good old runs are not rerun; it should be AUTO in the code, NOT
+# MANUAL"). With no LANES, SHARD, ONLY_CHANGED or FULL, the column records only
+# the lanes whose source closure changed since the newest good evidence THIS
+# device class already holds; every other lane is reused, never re-run.
+# FULL=1 is the only way to re-record unchanged lanes.
+case "${FULL:-0}" in 0|1) ;; *) die "FULL=$FULL: 1 records every lane, 0 (default) reuses unchanged ones" ;; esac
+if [ "${FULL:-0}" = 1 ]; then
+    [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] || die "FULL=1 excludes ONLY_CHANGED and LANES"
+    SELECTION=full
+    echo "FULL $LABEL: FULL=1 records every ${SCOPE:-routine} lane; no lane is reused"
+elif [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ]; then
+    SELECTION=auto-reuse
+    CLASS=$("${PY[@]}" -c 'import sys; sys.path.insert(0, "tools"); import identity_columns as c; print(c.label_class(sys.argv[1]))' "$LABEL") \
+        || die "no device class for label $LABEL"
+    reuse_args=(--class "$CLASS" --records "$ROOT/bench/results/identity_break" --records "$OUT"
+                --summary-json "$OUT/$LABEL.reuse.json")
+    # Admissible records that are not committed yet (a previous box run, a
+    # retained archive): MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2.
+    IFS=: read -r -a extra_dirs <<< "${MOJOLEARN_IDENTITY_REUSE_RECORDS:-}"
+    for d in ${extra_dirs[@]+"${extra_dirs[@]}"}; do
+        [ -z "$d" ] && continue
+        [ -d "$d" ] || die "MOJOLEARN_IDENTITY_REUSE_RECORDS: no such directory $d"
+        reuse_args+=(--records "$d")
+    done
+    # The column's GPU backend: a host-binding-only change cannot move a device
+    # column's bits, so lane_select leaves it out of an NVIDIA or AMD record.
+    case "$LABEL" in
+        nvidia-*) reuse_args+=(--backend cuda) ;;
+        amd-*) reuse_args+=(--backend hip) ;;
+    esac
+    AUTO_LANES=$("${PY[@]}" tools/identity_columns.py changed-lanes --scope "${SCOPE:-routine}" "${reuse_args[@]}" \
+            2> "$OUT/$LABEL.changed-lanes.txt" | tail -n 1) \
+        || die "could not decide which lanes to reuse (see $OUT/$LABEL.changed-lanes.txt)"
+    summary=$(grep -m 1 'REUSE-SUMMARY' "$OUT/$LABEL.changed-lanes.txt") \
+        || die "no reuse summary (see $OUT/$LABEL.changed-lanes.txt)"
+    reused=$(sed -n 's/.* REUSED \([0-9]*\) .*/\1/p' <<< "$summary")
+    record=$(sed -n 's/.* RECORD \([0-9]*\) .*/\1/p' <<< "$summary")
+    bad=$(sed -n 's/.* KNOWN-BAD \([0-9]*\) .*/\1/p' <<< "$summary")
+    echo "REUSED $reused / RECORD $record $LABEL (class $CLASS, known-bad $bad; decisions $OUT/$LABEL.reuse.json; FULL=1 records every lane)"
+    # Reused rows from records that are not committed yet must reach admission.
+    "${PY[@]}" -c '
+import json, sys
+doc = json.load(open(sys.argv[1]))
+src = sorted({r["source"] for r in doc["reused"].values() if r.get("source") not in (None, "table") and not r.get("committed")})
+if src:
+    print("ADMIT-WITH %d uncommitted reuse source(s): pass their directories to tools/admit_identity_columns.sh: %s"
+          % (len(src), " ".join(src[:8])))
+' "$OUT/$LABEL.reuse.json"
+    if [ -z "$AUTO_LANES" ]; then
+        echo "NOTHING-CHANGED $LABEL: no lane's closure moved since this class's newest good evidence; every row is reused"
+        exit 0
+    fi
+    ALL_LANES=$("${PY[@]}" tools/identity_columns.py lanes --scope "${SCOPE:-routine}") \
+        || die "could not list the ${SCOPE:-routine} lanes"
+    # Nothing to reuse: an ordinary full column under its own label.
+    [ "$AUTO_LANES" = "$ALL_LANES" ] || LANES=$AUTO_LANES
+fi
 if [ -n "${ONLY_CHANGED:-}" ]; then
+    SELECTION=only-changed-$ONLY_CHANGED
     # INCREMENTAL RE-RECORD: re-record only what changed; every other row is kept.
     # The lanes whose source closure (tools/lane_select.py, the release lane
     # selection's map) changed since the commit each lane's admitted rows rest
@@ -258,7 +330,7 @@ rc=${rc:-0}
     echo "commit=$COMMIT"
     echo "label=$LABEL"
     echo "backend=$BACKEND"
-    echo "scope=${SCOPE:-routine} shard=${SHARD:-} lanes_override=${LANES:+yes}"
+    echo "scope=${SCOPE:-routine} shard=${SHARD:-} lanes_override=${LANES:+yes} lane_selection=$SELECTION"
     echo "repeats=$REPEATS cpu_threads=$T"
     echo "host=$(uname -srm) $(hostname 2>/dev/null)"
     echo "date=$(date -u +%FT%TZ)"
