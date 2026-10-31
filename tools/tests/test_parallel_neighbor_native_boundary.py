@@ -105,20 +105,28 @@ def test_ivf_admission_and_scaler_inverse_never_run_python_protocols():
     assert calls[-1] == ("transform_scaler", (value, value, value, value, value))
 
 
-def test_binding_snapshot_retains_compiled_entries_and_refuses_python_callbacks():
+def test_binding_connection_returns_the_exact_compiled_module_and_refuses_python_callbacks():
+    # The native owners admit only the exact extension module and builtin
+    # entries it owns; a copied module was refused by every worker, so the
+    # connection returns the module itself after checking its listed entries.
+    import math
     tree = ast.parse((PACKAGE / "_native_parallel_shard.py").read_text())
     node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_connect_binding")
-    binding = ModuleType("example")
-    binding.query = len  # Native builtin stands in for an extension door.
     backend_calls = []
-    backend = SimpleNamespace(binding=lambda *args: backend_calls.append(args) or binding)
+    current = {"module": math}
+    backend = SimpleNamespace(binding=lambda *args: backend_calls.append(args) or current["module"],
+                              _HostBinding=type("HostBinding", (ModuleType,), {}))
     ns = {"_backend": backend}
     exec(compile(ast.Module(body=[node], type_ignores=[]), "connection", "exec"), ns)
-    connected = ns["_connect_binding"]("example", ("query",), ("optional",))
-    assert type(connected) is ModuleType and connected.query is len
-    assert "__getattr__" not in vars(connected)
-    binding.query = lambda value: value
-    assert connected.query is len and len(backend_calls) == 1
+    connected = ns["_connect_binding"]("math", ("sqrt",), ("optional",))
+    assert connected is math and backend_calls == [("math", "identical")]
+    assert "missing" in ns["_connect_binding"]("math", ("missing",))
+    foreign = ModuleType("example")
+    foreign.query = len  # a builtin owned by another module
+    current["module"] = foreign
+    with pytest.raises(TypeError, match="requires compiled"):
+        ns["_connect_binding"]("example", ("query",))
+    foreign.query = lambda value: value
     with pytest.raises(TypeError, match="requires compiled"):
         ns["_connect_binding"]("example", ("query",))
 
