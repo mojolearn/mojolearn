@@ -56,14 +56,16 @@ def trees_seed_check(value: PythonObject, context: PythonObject) raises:
 
 def dart_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`DARTRegressor.__init__` / `DARTClassifier.__init__`: `args` holds the
-    21 constructor values in the stored order below."""
+    22 constructor values in the stored order below. The class is native
+    public, so NumericModeMixin injects no numeric_mode: it is the last
+    constructor value and is stored as given."""
     var names = Python.tuple(
         "n_estimators", "learning_rate", "num_leaves", "max_depth", "min_child_samples", "reg_lambda",
         "max_bin", "drop_rate", "max_drop", "skip_drop", "xgboost_dart_mode", "uniform_drop", "drop_seed",
         "random_state", "reg_alpha", "max_delta_step", "colsample_bytree", "subsample", "subsample_freq",
-        "feature_fraction_seed", "bagging_seed")
+        "feature_fraction_seed", "bagging_seed", "numeric_mode")
     if py_type(args) is not native_loaded_module("builtins").tuple or len(args) != len(names):
-        raise Error("TypeError: the DART constructor takes its 21 parameters")
+        raise Error("TypeError: the DART constructor takes its 22 parameters")
     if _int_below(args[0], 1):
         raise Error("n_estimators must be >= 1")
     if not _float(args[1]) > 0:
@@ -91,7 +93,7 @@ def dart_construct(model: PythonObject, args: PythonObject, context: PythonObjec
         raise Error("subsample_freq must be >= 0")
     tree_constructor_storage(model, names)
     var fields = py_fields(model)
-    for i in range(len(names)):  # driver-loop: over the constructor's 21 stored parameters
+    for i in range(len(names)):  # driver-loop: over the constructor's 22 stored parameters
         py_setitem(fields, names[i], args[i])
     # The seeds are checked after they are stored, as the constructor did.
     trees_seed_check(args[13], context)

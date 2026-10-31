@@ -1306,11 +1306,7 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
-            bagging_seed), _TREES_CONTEXT)
-        # Native public, so NumericModeMixin injects no numeric_mode: the
-        # constructor takes it and stores it last, as AdaBoost and Bagging do
-        # (get_params/clone/set_params name it).
-        self.numeric_mode = numeric_mode
+            bagging_seed, numeric_mode), _TREES_CONTEXT)
 
     def fit(self, X, y):
         """Fit the boosted trees on ``X`` (n_samples, n_features) and target ``y``.
@@ -1448,11 +1444,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
-            bagging_seed), _TREES_CONTEXT)
-        # Native public, so NumericModeMixin injects no numeric_mode: the
-        # constructor takes it and stores it last, as AdaBoost and Bagging do
-        # (get_params/clone/set_params name it).
-        self.numeric_mode = numeric_mode
+            bagging_seed, numeric_mode), _TREES_CONTEXT)
 
     def fit(self, X, y):
         """Fit the boosted trees on ``X`` (n_samples, n_features) and labels ``y``.
