@@ -15,7 +15,7 @@ class UnsupportedReceiptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "no-execution.log"
             path.write_text("No build or execution occurred.\n")
-            for kind in ("compile", "runtime", "identity", "adapters", "multi", "performance", "published"):
+            for kind in ("compile", "runtime", "identity", "adapters", "performance", "published"):
                 with self.subTest(kind=kind):
                     wanted = dict(kind=kind, source_revision="a" * 40, fingerprint="b" * 64, coverage=["check"])
                     receipt = dict(schema=R.SCHEMA, requirement_id="test", kind=kind,

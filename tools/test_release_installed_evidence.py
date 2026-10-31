@@ -1,4 +1,4 @@
-"""Installed runtime, multi-GPU and published-install producers on synthetic receipts.
+"""Installed runtime and published-install producers on synthetic receipts.
 
 Nothing is installed, compiled or run on a GPU: the producer report functions
 (summarize/judge) and the ledger adapters run over fixture directories.
@@ -15,23 +15,18 @@ import pytest
 import qualify_native_runtime_installed as q
 import release_installed_evidence as installed
 import release_ledger_admission as admission
-import release_multi_gpu_parallel as multi
 import release_published_install as published
 import release_runtime_installed as runtime
 from release_requirements import RequirementsLedger, producer_admission_available, requirements
 
 VERSION = '0.9.1'
 TOOLS = Path(__file__).resolve().parent
-PCI_A, PCI_B, PCI_C = '0:3b:00.0', '0:5e:00.0', '0:86:00.0'
 CATALOG = {
     'schema': 'fixture', 'source_inputs': {'public_runtime': ['python/mojolearn/*.py']}, 'source_exclude': [],
     'requirements': [
         {'id': 'runtime-nvidia', 'kind': 'runtime', 'stage': 'pre',
          'scope': 'Public operations and transitive callback refusals on nvidia', 'coverage': list(runtime.COVERAGE_IDS),
          'source_inputs': {'tests': ['tools/release_runtime_installed.py']},
-         'configuration': ['release_modes', 'build_flags']},
-        {'id': 'multi-gpu-nvidia', 'kind': 'multi', 'stage': 'pre', 'scope': 'Two physical GPUs for nvidia',
-         'coverage': list(multi.COVERAGE_IDS), 'source_inputs': {'tests': ['tools/*parallel*.py']},
          'configuration': ['release_modes', 'build_flags']},
         {'id': 'published-nvidia', 'kind': 'published', 'stage': 'post', 'scope': 'Installed published wheels on nvidia',
          'coverage': list(published.COVERAGE_IDS),
@@ -64,7 +59,6 @@ def repo(tmp_path):
     git(root, 'config', 'user.name', 'Fixture')
     put(root / 'tools/release_requirements.json', CATALOG)
     put(root / 'tools/release_runtime_installed.py', 'producer = 1\n')
-    put(root / 'tools/release_multi_gpu_parallel.py', 'producer = 1\n')
     put(root / 'tools/release_published_install.py', 'producer = 1\n')
     put(root / 'python/mojolearn/__init__.py', 'api = 1\n')
     git(root, 'add', '.')
@@ -193,95 +187,6 @@ def test_runtime_on_unqualified_wheels_or_tampered_junit_is_refused(tmp_path, re
         admission.prepare('installed-runtime', repo, ledger.path, tmp_path / 'b/review', dict(report=out / runtime.REPORT))
 
 
-# ---------------------------------------------------------------- multi-gpu-<vendor>
-def multi_dir(tmp_path, revision, core, *, stray=False, callback_ok=True, single_gpu=False, unsighted=False):
-    out = tmp_path / 'multi'
-    inventory = [dict(index=0, uuid='GPU-a', pci_bus_id=PCI_A, name='L40S'),
-                 dict(index=1, uuid='GPU-b', pci_bus_id=PCI_B, name='L40S'),
-                 dict(index=2, uuid='GPU-c', pci_bus_id=PCI_C, name='L40S')]
-    if single_gpu:
-        inventory = inventory[:1]
-    put(out / 'driver-inventory.json', dict(command=['nvidia-smi'], raw='', parsed=inventory))
-    gpu = {0: PCI_A, 1: PCI_B}
-    runs, pid = [], 100
-    for model in ('regressor', 'classifier'):
-        for order in ([0], [0, 1], [1, 0]):
-            pids = []
-            for d in order:
-                pid += 1
-                pids.append((pid, gpu[d]))
-            folds = {}
-            for i in range(5):
-                worker, bus = pids[i % len(pids)]
-                fixture = hashlib.sha256(f'{model}{i}'.encode()).hexdigest()
-                folds[fixture] = dict(fixture=fixture, inventory=dict(pid=worker, devices=[dict(pci_bus_id='0000:' + bus[2:])]))
-            runs.append(dict(model=model, devices=order, repeat=0, fold_records=folds))
-    controls = [m + ':' + f for m in ('classifier', 'regressor') for f in ('dropped-fold', 'changed-model',
-                                                                           'changed-prediction', 'aliased-device')]
-    put(out / 'capture/report.json', dict(status='NUMERICS_AND_PLACEMENT_PASS', vendor='cuda', devices=[0, 1],
-        runs=runs, controls=controls, physical_execution_trace='OWED', native_fault_controls='OWED',
-        distribution=dict(import_matches_distribution=True, editable=False)))
-    names = ['parallel-equals-serial', 'assignments', 'recovery-equals-serial', 'native-fold-fault',
-             'wrong-device:repeated', 'wrong-device:nonexistent'] + ['callback:' + k for k in multi.CALLBACK_KINDS]
-    checks = [dict(name=n, passed=callback_ok or not n.startswith('callback:')) for n in names]
-    put(out / 'probe.json', dict(mode='probe', vendor='cuda', numeric_mode='identical', checks=checks, workers=[201, 202],
-                                 assignments=[[i, i % 2, 201 + i % 2] for i in range(5)]))
-    put(out / 'hidden.json', dict(mode='hidden', checks=[dict(name='hidden-device', passed=True)], workers=[]))
-    samples = [dict(t=1.0, rows=[dict(pid=102, pci_bus_id=PCI_A)] + ([] if unsighted else [dict(pid=103, pci_bus_id=PCI_B)])),
-               dict(t=1.1, rows=[dict(pid=999, pci_bus_id=PCI_C)] + ([dict(pid=201, pci_bus_id=PCI_C)] if stray else []))]
-    put(out / 'driver-processes.jsonl', ''.join(json.dumps(s) + '\n' for s in samples))
-    put(out / 'install.log', 'fixture\n')
-    put(out / 'request.json', dict(vendor='nvidia', devices=[0, 1], wheels={core.name: sha(core)},
-                                   source_commit=revision, capture_exit=0, probe_exit=0, hidden_exit=0))
-    if single_gpu:
-        with pytest.raises(ValueError, match='fewer than two GPUs'):
-            multi.judge(out)
-        return out
-    put(out / multi.REPORT, multi.judge(out))
-    return out
-
-
-def test_multi_gpu_trace_and_controls_are_admitted(tmp_path, repo):
-    revision = git(repo, 'rev-parse', 'HEAD')
-    core = wheel(tmp_path)
-    out = multi_dir(tmp_path, revision, core)
-    report = json.loads((out / multi.REPORT).read_text())
-    assert report['status'] == 'passed', report['coverage']
-    counts = {row['id']: row['expected'] for row in report['coverage']}
-    # 30 fold records + 6 schedules + 5 probe folds + assignments + 2 driver sightings
-    assert counts == {'native device placement': 44, 'consumed outputs': 8,
-                      'wrong-device and callback negative controls': 17}
-    assert report['physical_execution_trace']['sighted'] == {PCI_A: [102], PCI_B: [103]}
-    assert report['native_fault_controls']['fold_fault'] is True
-    ledger, rows = ledger_for(tmp_path, repo, revision, {'multi-gpu-nvidia'}, configuration_for({core.name: sha(core)}))
-    assert producer_admission_available(rows['multi-gpu-nvidia'])
-    review, result = admit(tmp_path, repo, ledger, 'multi-gpu', out / multi.REPORT)
-    assert result['actions'] == {'multi-gpu-nvidia': 'reuse'}
-    assert ledger.gate(stage='pre') == (True, [])
-
-
-@pytest.mark.parametrize('fault', ['stray', 'callback', 'unsighted'])
-def test_multi_gpu_faults_fail_the_report(tmp_path, repo, fault):
-    revision = git(repo, 'rev-parse', 'HEAD')
-    out = multi_dir(tmp_path, revision, wheel(tmp_path), stray=fault == 'stray', callback_ok=fault != 'callback',
-                    unsighted=fault == 'unsighted')
-    report = json.loads((out / multi.REPORT).read_text())
-    assert report['status'] == 'failed'
-    failing = {row['id'] for row in report['coverage'] if row['status'] != 'passed'}
-    assert failing == ({'wrong-device and callback negative controls'} if fault == 'callback'
-                       else {'native device placement'})
-
-
-def test_multi_gpu_needs_two_gpus_and_parses_driver_tables(tmp_path, repo):
-    multi_dir(tmp_path, git(repo, 'rev-parse', 'HEAD'), wheel(tmp_path), single_gpu=True)
-    assert multi.normal_pci('00000000:3B:00.0') == multi.normal_pci('0000:3b:00.0') == '0:3b:00.0'
-    assert multi._parse_nvidia_processes('4242, 00000000:3B:00.0\n') == [dict(pid=4242, pci_bus_id=PCI_A)]
-    assert multi._parse_nvidia_inventory('0, GPU-a, 00000000:3B:00.0, NVIDIA L40S\n')[0]['pci_bus_id'] == PCI_A
-    inventory = [dict(index=0, pci_bus_id=PCI_A), dict(index=1, pci_bus_id=PCI_B)]
-    text = 'PID 77 is using 1 DRM device(s):\n1 \n'
-    assert multi._parse_amd_processes(text, inventory) == [dict(pid=77, pci_bus_id=PCI_B)]
-
-
 # ---------------------------------------------------------------- published-<vendor>
 def published_dir(tmp_path, revision, core, *, candidate_sha=None, version=VERSION, job_exit=0):
     out = tmp_path / 'published'
@@ -369,8 +274,7 @@ def test_published_failed_smoke_job_fails(tmp_path, repo):
 
 def test_real_catalog_rows_have_installed_adapters():
     catalog = json.loads((TOOLS / 'release_requirements.json').read_text())
-    families = {'runtime': ('nvidia', 'amd', 'apple', 'cpu'), 'multi': ('nvidia', 'amd'),
-                'published': ('nvidia', 'amd', 'apple')}
+    families = {'runtime': ('nvidia', 'amd', 'apple', 'cpu'), 'published': ('nvidia', 'amd', 'apple')}
     seen = set()
     for spec in catalog['requirements']:
         if spec.get('kind') in families:
@@ -378,7 +282,7 @@ def test_real_catalog_rows_have_installed_adapters():
             assert installed.supports_requirement(wanted), spec['id']
             assert admission.supports_requirement(wanted), spec['id']
             seen.add(spec['id'])
-    assert len(seen) == 9
+    assert len(seen) == 7
     optional = dict(kind='runtime', required=False, coverage=list(runtime.COVERAGE_IDS),
                     inputs=dict(contract=dict(id='runtime-apple/public-regressions')))
     assert not installed.supports_requirement(optional)

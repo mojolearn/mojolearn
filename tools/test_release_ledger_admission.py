@@ -399,10 +399,9 @@ def test_retained_device_and_linux_host_units_require_exact_identities():
                              dict(binding_key=key))
 
 
-def test_runtime_multi_gpu_and_published_rows_with_partial_coverage_have_no_adapter():
+def test_runtime_and_published_rows_with_partial_coverage_have_no_adapter():
     # Full contracts are admitted by release_installed_evidence (test_release_installed_evidence.py).
     for kind, name, coverage_ids in (('runtime', 'runtime-apple', ['constructors']),
-                                     ('multi', 'multi-gpu-nvidia', ['native device placement']),
                                      ('published', 'published-apple', ['index-install'])):
         wanted = dict(kind=kind, coverage=coverage_ids, missing_inputs=[],
                       inputs=dict(contract=dict(id=name)))

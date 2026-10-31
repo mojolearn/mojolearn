@@ -87,7 +87,9 @@ def _worker_snapshot(root, request):
                 oracle=scope.oracle, anchor=scope.anchor,
                 required_columns=[v for v in ("apple", "nvidia", "amd", "cpu") if applicable[v][0]],
                 excluded={v: reason for v, (ok, reason) in applicable.items() if not ok},
-                separate_requirements=(["multi-gpu-nvidia", "multi-gpu-amd"] if scope.claim_devices >= 2 else []))
+                # No multi-GPU release row since multi-GPU verification was retired
+                # (owner, 2026-10-31); no registered lane claims two devices.
+                separate_requirements=[])
         paths = ["tools/lane_applicability.py", "tools/lane_select.py", "tools/verify_lanes.py",
                  "tools/identity_break.py", "python/mojolearn/host_surface.py"]
         paths += [str(p.relative_to(root)) for p in (root / "tools/identity_lanes").glob("*.py")]

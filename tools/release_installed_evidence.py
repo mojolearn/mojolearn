@@ -1,4 +1,4 @@
-"""Installed-wheel runtime, multi-GPU and published-install reports as ledger evidence.
+"""Installed-wheel runtime and published-install reports as ledger evidence.
 
 Used by tools/release_ledger_admission.py; never installs or runs anything. Each
 adapter re-derives its producer's report from the retained raw files (junit,
@@ -6,14 +6,12 @@ verifier captures, driver samples, manifests, checker records) and admits only a
 complete pass whose wheels are the ledger's qualified candidate bytes:
 
   installed-runtime  runtime-<vendor>   tools/release_runtime_installed.py   --producer report=DIR/runtime-report.json
-  multi-gpu          multi-gpu-<vendor> tools/release_multi_gpu_parallel.py  --producer report=DIR/multi-gpu-report.json
   published-install  published-<vendor> tools/release_published_install.py  --producer report=DIR/published-report.json
 """
 from pathlib import Path
 
 from release_ledger_admission import require, load, reference, checked
 
-import release_multi_gpu_parallel as multi
 import release_published_install as published
 import release_runtime_installed as runtime
 
@@ -21,7 +19,9 @@ ROW_KEYS = ("id", "status", "exit_code", "expected", "completed", "failed", "ski
 FAMILIES = {
     # kind: (requirement prefix, vendors, coverage IDs, producer module, adapter name)
     "runtime": ("runtime-", ("nvidia", "amd", "apple", "cpu"), runtime.COVERAGE_IDS, runtime, "installed-runtime"),
-    "multi": ("multi-gpu-", ("nvidia", "amd"), multi.COVERAGE_IDS, multi, "multi-gpu"),
+    # The multi-gpu-<vendor> family left with multi-GPU verification (owner, 2026-10-31).
+    # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by @SHA@; code recoverable at @SHA@^.
+    # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
     "published": ("published-", ("nvidia", "amd", "apple"), published.COVERAGE_IDS, published, "published-install"),
 }
 
@@ -40,8 +40,6 @@ def _rederive(kind, out):
     """The producer's own report function over the retained directory."""
     if kind == "runtime":
         return runtime.summarize(out)
-    if kind == "multi":
-        return multi.judge(out)
     return published.judge(out)
 
 

@@ -453,29 +453,6 @@
       "stage": "pre"
     },
     {
-      "id": "multi-gpu-nvidia",
-      "scope": "Two physical GPUs for nvidia (comparison only: verify --par against the one-device reference; not a release gate, Andrew 2026-10-30)",
-      "coverage": [
-        "native device placement",
-        "consumed outputs",
-        "wrong-device and callback negative controls"
-      ],
-      "source_inputs": {
-        "tests": [
-          "python/mojolearn/_verify*parallel*",
-          "tools/*parallel*.py",
-          "tools/release_installed_evidence.py"
-        ]
-      },
-      "configuration": [
-        "release_modes",
-        "build_flags"
-      ],
-      "kind": "multi",
-      "stage": "pre",
-      "required": false
-    },
-    {
       "id": "performance-nvidia",
       "scope": "Affected full-dataset end-to-end workloads on nvidia (required for performance claims/default promotions; optional for publication)",
       "coverage": [
@@ -529,29 +506,6 @@
       ],
       "kind": "candidate",
       "stage": "pre"
-    },
-    {
-      "id": "multi-gpu-amd",
-      "scope": "Two physical GPUs for amd (comparison only: verify --par against the one-device reference; not a release gate, Andrew 2026-10-30)",
-      "coverage": [
-        "native device placement",
-        "consumed outputs",
-        "wrong-device and callback negative controls"
-      ],
-      "source_inputs": {
-        "tests": [
-          "python/mojolearn/_verify*parallel*",
-          "tools/*parallel*.py",
-          "tools/release_installed_evidence.py"
-        ]
-      },
-      "configuration": [
-        "release_modes",
-        "build_flags"
-      ],
-      "kind": "multi",
-      "stage": "pre",
-      "required": false
     },
     {
       "id": "performance-amd",
