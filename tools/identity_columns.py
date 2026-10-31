@@ -726,7 +726,13 @@ def cmd_changed_lanes(args):
     return 0
 
 
-CLASS_BACKEND = dict(nvidia="cuda", ptx="cuda", amd="hip")
+#: The backend each device class's column runs (record_identity_column.sh
+#: passes the same to changed-lanes): the Apple column is the Metal set, so a
+#: change that reaches only CPU-only routes (lane_select.device_column_lanes)
+#: or only the Linux wheel does not invalidate it. No entry for cpu: the CPU
+#: column may be recorded on Linux or on this Mac, so it is judged with no
+#: backend (every platform's inputs count).
+CLASS_BACKEND = dict(nvidia="cuda", ptx="cuda", amd="hip", apple="metal")
 
 
 def cmd_reuse_check(args):
