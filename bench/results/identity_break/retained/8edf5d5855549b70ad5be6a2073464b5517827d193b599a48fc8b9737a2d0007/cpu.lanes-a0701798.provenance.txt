@@ -1,0 +1,9 @@
+commit=8bd8067c42ceb5ff0d1b1814f39a474b308f4fd8
+label=cpu
+backend=cpu
+scope=routine shard= lanes_override=yes lane_selection=explicit
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-138-generic x86_64 e24bd44fe5a5
+date=2026-10-31T07:01:03Z
+dirty_tracked=none
+record_sha256=8edf5d5855549b70ad5be6a2073464b5517827d193b599a48fc8b9737a2d0007
