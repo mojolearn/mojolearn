@@ -229,3 +229,32 @@ every build leg produced them.
 a witnessed receipt. Any difference in source, compiler or flags is still refused. Evidence:
 `~/mojolearn-evidence/release/0.8.63/6b2e4bc3208d/legs/<leg>/GHA/shards/6/box.txt` (runner CPU) and
 `.../release-build/build/compile-inputs.json` (recorded inputs).
+
+## Linux x86-64 host build drops a floating-point compare that selects the k-means++ seeding (2026-10-31, cpu-identity-0863)
+
+**What we see.** `cluster/host/kmeans_oracle.mojo::host_fit_main` chose its seeding with
+`elif init == INIT_KMEANS_PLUS_PLUS and oversampling_factor != 0.0: host_init_scalable(...) else: host_kmeans_plus_plus(...)`.
+In the Linux x86-64 builds of the merged CPU host library `_mojolearn_native_forest_host.so` (mojo-1.0.0 /
+max-core-26.5.0, `--target-cpu x86-64-v3`, release 0.8.63 on the GitHub runners and the same source rebuilt on a RunPod
+AMD EPYC 7K62 pod), the compiled `host_fit_main[with_init=true]` never compares `oversampling_factor`: the disassembly
+dispatches `init == 2` to the array start, `init == 1` to `host_init_random`, `init == 0` straight into the inlined
+scalable seeding (it calls `host_sum_device`), and calls `host_kmeans_plus_plus` only for other init values. The factor
+argument is read only by the scalable arm's multiply. The caller (`gmmh_fit`, `GaussianMixture`'s classic start)
+passes 0.0 in `xmm1`. So on the Linux CPU column every GaussianMixture fit seeded through k-means|| while macOS and the
+NVIDIA, AMD and Apple GPUs seeded classically: the identity card's first divergence is `init.centroids`
+(Linux `2eb98b22b304b606`, which an Apple M4 reproduces by running the scalable arm at factor 0.0; every other column
+`53da4f39b33e0fd6`). A trace line printed inside `host_fit_main` just before the branch read `init=0 oversampling=0.0`,
+and the classic function's own trace lines never appeared. The same source and flags cross-compiled for
+`x86_64-unknown-linux-gnu` on macOS (the merged group root, and a standalone object) keep the compare
+(`vucomisd` / `setp` / `setne` feeding the branch).
+
+**Need.** A floating-point comparison of a runtime argument must not be removed, and the result must not depend on the
+machine that runs the compiler. If a pass proves facts about the argument across the module, we would like to know
+which, since the module has a caller that passes 0.0.
+
+**Where.** Every Linux CPU host build; any host code whose control flow depends on a float argument could be exposed.
+
+**Meanwhile.** `host_fit_main` stores the factor in a volatile stack slot, reloads it, and decides from the magnitude
+bits (the same answer as IEEE `!=` for every input). The pod build of that spelling matches the NVIDIA record on all
+180 gmm and gmm-sample parts. Evidence: `~/mojolearn-evidence/rel0863/pptrace/` (`gmm_card_linux3.tsv`,
+`pp_gmm4.json`) and `~/mojolearn-evidence/rel0863/gmm-trace/gmm_trace_linux_cpu.tsv`.
