@@ -60,6 +60,11 @@ def _smoke(directory, vendor, version):
         result_ref = reference(directory / relative)
         result = checked(result_ref)
         checks = result.get("checks")
+        # tools/check_native_adapters.py (torch-compile) records {"name", "passed"} objects;
+        # the training checkers record names. Every object check must have passed.
+        if isinstance(checks, list) and checks and all(isinstance(c, dict) for c in checks):
+            require(all(c.get("passed") is True for c in checks), "adapter check failed: " + phase)
+            checks = [c.get("name") for c in checks]
         require(result.get("complete") is True and result.get("failures") == []
                 and isinstance(checks, list) and checks and all(isinstance(c, str) and c for c in checks)
                 and len(set(checks)) == len(checks), "adapter checker record is incomplete: " + phase)
