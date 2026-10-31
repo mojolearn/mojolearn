@@ -3586,6 +3586,8 @@ class Release:
         decide with it. (ready, blocked reasons)."""
         reasons = [f"candidate gate {vendor}: {why}" for vendor in vendors
                    for ok, why in [self.candidate_verdict(vendor)] if not ok]
+        if reasons:
+            return False, reasons  # as before: a missing candidate gate blocks before the ledger is read
         rows = self.readiness_status(write=not self.dry and not self.readonly)
         ready, blocked = self.waived(release_requirements.gate_rows(rows, stage))
         return not reasons and ready, reasons + ([] if ready else blocked)

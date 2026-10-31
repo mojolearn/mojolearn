@@ -233,8 +233,12 @@ class OneGatePredicate(Base):
                 mock.patch.object(release.Release, "readiness_status", return_value=self.ROWS):
             ready, reasons = r.release_gate(stage="pre")
             self.assertFalse(ready)
-            self.assertEqual(sorted(x.split(":")[0] for x in reasons),
-                             ["candidate gate amd", "candidate gate nvidia", "identity-cpu/x"])
+            self.assertEqual(sorted(x.split(":")[0] for x in reasons), ["candidate gate amd", "candidate gate nvidia"])
+        with mock.patch.object(release.Release, "gate_ok", return_value=(True, "PASS")), \
+                mock.patch.object(release.Release, "readiness_status", return_value=self.ROWS):
+            self.assertEqual(r.release_gate(stage="pre")[1][0].split(":")[0], "identity-cpu/x")
+        with mock.patch.object(release.Release, "gate_ok", return_value=(False, "no gate report")), \
+                mock.patch.object(release.Release, "readiness_status", return_value=self.ROWS):
             with mock.patch.object(release.Release, "release_gate", return_value=(False, ["x"])) as gate:
                 with self.assertRaises(release.StepFailed):
                     r.publish("linux", None, None)
