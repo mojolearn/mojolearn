@@ -2365,8 +2365,16 @@ def _mojo_symbol_step(rel, name, ops=None):
             return _SYMBOL_STEPS[key]
         view = lambda text: text  # noqa: E731
     else:
+        # Only this file's dispatcher conditions decide its branches.
+        asked = ops
+        e, w = _file_vocabulary(rel)
+        if not e and not w:
+            _SYMBOL_KEY[(rel, name, asked)] = (rel, name)
+            return _mojo_symbol_step(rel, name, None)
+        ops = ops.restricted(_vocab_triple(e, w))
         known = _SYMBOL_KEY.get((rel, name, ops))
         if known is not None and known in _SYMBOL_STEPS:
+            _SYMBOL_KEY[(rel, name, asked)] = known
             return _SYMBOL_STEPS[known]
         cache = {}
 
@@ -2391,7 +2399,7 @@ def _mojo_symbol_step(rel, name, ops=None):
     if ops is not None:
         masks = tuple(sorted((t, m) for t, (_v, m) in cache.items() if m))
         key = (rel, name) if not masks else (rel, name, masks)
-        _SYMBOL_KEY[(rel, name, ops)] = key
+        _SYMBOL_KEY[(rel, name, ops)] = _SYMBOL_KEY[(rel, name, asked)] = key
         if key in _SYMBOL_STEPS:
             return _SYMBOL_STEPS[key]
     idents = set(_MOJO_IDENT_RE.findall("\n".join(bodies)))
@@ -2399,7 +2407,6 @@ def _mojo_symbol_step(rel, name, ops=None):
     _SYMBOL_STEPS[key] = out
     _SYMBOL_NAMES[key] = idents
     _SYMBOL_REFS[key] = _mojo_export_refs("\n".join(bodies))
-    _SYMBOL_KEY[(rel, name, ops)] = key
     return out
 
 
@@ -2508,27 +2515,18 @@ _CACHES.append(_RELEVANCE)
 
 
 def _dispatch_vocabulary():
-    """(every literal compared with `==`/`!=`, every `.startswith` literal,
-    every prefix of either) over the tree's Mojo sources: the strings a
-    dispatcher condition can tell apart. A superset is harmless (it only makes
-    `OperationSet` keys finer)."""
+    """(every literal a dispatcher condition compares with `==`/`!=`, every
+    `.startswith` literal of one, every prefix of either) over the tree's
+    Mojo sources (`_file_vocabulary`): the strings a dispatcher can tell
+    apart. A superset is harmless (it only makes `OperationSet` keys finer)."""
     global _DISPATCH_VOCAB
     if _DISPATCH_VOCAB is None:
         eq, sw = set(), set()
         for rel in sorted(tracked_files()):
-            if not rel.endswith(".mojo"):
-                continue
-            try:
-                text = _read(rel)
-            except OSError:
-                continue
-            if "==" not in text and "!=" not in text and "startswith" not in text:
-                continue
-            for m in _DISPATCH_ATOM_RE.finditer(text):
-                if m.group("l3") is not None:
-                    sw.add(m.group("l3"))
-                else:
-                    eq.add(m.group("l1") if m.group("l1") is not None else m.group("l2"))
+            if rel.endswith(".mojo"):
+                e, w = _file_vocabulary(rel)
+                eq |= e
+                sw |= w
         prefixes = {lit[:k] for lit in eq | sw for k in range(len(lit) + 1)}
         _DISPATCH_VOCAB = (frozenset(eq), frozenset(sw), frozenset(prefixes))
     return _DISPATCH_VOCAB
@@ -2540,20 +2538,34 @@ _CACHES.append(_CLOSURE_VOCAB := {})
 
 
 def _file_vocabulary(rel):
-    """(`==`/`!=` literals, `.startswith` literals) of one Mojo source."""
+    """(`==`/`!=` literals, `.startswith` literals) of the DISPATCHER
+    conditions of one Mojo source (`_dispatch_parse` over its definitions;
+    an ordinary `metric == "euclidean"` is not one). Empty for a file with
+    no dispatcher, so every lane shares the walks through it."""
     if rel not in _FILE_VOCAB:
         eq, sw = set(), set()
         try:
             text = _read(rel)
         except OSError:
             text = ""
-        for m in _DISPATCH_ATOM_RE.finditer(text):
-            if m.group("l3") is not None:
-                sw.add(m.group("l3"))
-            else:
-                eq.add(m.group("l1") if m.group("l1") is not None else m.group("l2"))
+        defs = _mojo_defs_for(rel) if ("==" in text or "!=" in text or "startswith" in text) else None
+        for body in (defs[0].values() if defs else ()):
+            for parsed in _dispatch_parse(body):
+                _cond_vocab(parsed[4], eq, sw)
         _FILE_VOCAB[rel] = (eq, sw)
     return _FILE_VOCAB[rel]
+
+
+def _cond_vocab(tree, eq, sw):
+    if tree[0] == "atom":
+        (sw if tree[1] == "sw" else eq).add(tree[2])
+    else:
+        for sub in tree[1:]:
+            _cond_vocab(sub, eq, sw)
+
+
+def _vocab_triple(eq, sw):
+    return (frozenset(eq), frozenset(sw), frozenset({lit[:k] for lit in eq | sw for k in range(len(lit) + 1)}))
 
 
 def _closure_vocabulary(src):
