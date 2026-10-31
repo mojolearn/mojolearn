@@ -181,18 +181,30 @@ def test_native_owner_argument_recipes_preserve_nondefault_supported_inputs(conn
         plan = meta['plans']['fit_kernel_method'][classes['kernel_methods',cls]]
         assert plan['route'] == 'direct'
         assert plan['recipe'] == (('binding','_mojolearn_kernel_methods','model'),('arg',0),('arg',1),('arg',2))
+    # The spectral and UMAP owners take their public ABI and route their own
+    # bindings; agglomerative keeps its explicit four-binding ABI.
+    for module, cls, op, recipe in (('_spectral_impl','SpectralClustering','fit_graph',(('arg',0),('constant',None))),
+                                    ('_umap_impl','UMAP','fit_graph',(('arg',0),('constant',None))),
+                                    ('_umap_impl','UMAP','transform_umap',(('arg',0),))):
+        assert meta['plans'][op][classes[module,cls]]['recipe'] == recipe
+    assert len(meta['plans']['fit_graph'][classes['_hierarchy_impl','AgglomerativeClustering']]['recipe']) == 5
     plan = meta['plans']['transform_rbf_sampler'][classes['kernel_methods','RBFSampler']]
     assert plan['route'] == 'shard'
     assert plan['recipe'] == (('model',),('arg',0),('arg',1),('arg',2),('binding','_mojolearn_kernel_methods','model'))
 
 
-def test_binding_namespaces_cannot_invoke_module_hooks_or_python_helpers(connected):
+def test_bindings_are_the_exact_compiled_modules(connected):
+    # The native owners require the exact extension module (they read its
+    # dictionary natively and admit only builtin entries it owns); a copied
+    # namespace was refused by every owner.
     meta, _ = connected
-    for modes in meta['modules'].values():
-        for module in modes.values():
-            assert type(module) is types.SimpleNamespace
-            assert set(vars(module)) == {'__name__','compiled_entry'}
-            assert type(module.compiled_entry) is types.BuiltinFunctionType
+    for name, modes in meta['modules'].items():
+        for mode, module in modes.items():
+            assert type(module) is types.ModuleType
+            assert module.__name__ == name + ':' + mode
+    source = (ROOT / 'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    assert 'native provider requires an exact compiled module' in source
+    assert '_neural_descriptor_function_owner(entry) != module._obj_ptr' in source
     assert len(meta['plans']) == 27
 
 

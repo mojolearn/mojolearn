@@ -12,25 +12,27 @@ _native_parallel_shard = _binding()._module.parallel_shard_call
 
 def _connect_binding(name, required, optional=()):
     # Connection only, before any operation or worker request. Resolve lazy
-    # host proxies here and retain exclusively compiled entries. Native workers
-    # must never invoke a module __getattr__ to resolve a missing entry.
+    # host proxies here and retain the exact compiled module. The native
+    # owners admit only that module: they read its dictionary natively (never
+    # a module __getattr__) and accept only builtin entries it owns, so a
+    # copied module was refused by every worker ("native provider requires
+    # compiled entry prepare_targets") and lost entries such as
+    # kernel_methods_api_v1 that the owners read beyond the listed ones.
     from types import BuiltinFunctionType, ModuleType
     try:
         module = _backend.binding(name, "identical")
-        entries = {"__name__": name}
-        for key in required + optional:  # glue: import-time connection of a fixed set of compiled binding entries
-            try:
-                entry = getattr(module, key)
-            except (ImportError, AttributeError):
-                if key in required:
-                    raise
-                continue
-            if type(entry) is not BuiltinFunctionType:
+        if type(module) is _backend._HostBinding:
+            module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: import-time resolution of the existing CPU-only proxy
+        if type(module) is not ModuleType:
+            raise ImportError(f"parallel native binding requires the compiled {name} module")
+        fields = vars(module)
+        for key in required:  # glue: import-time check of a fixed set of compiled binding entries
+            entry = fields.get(key)
+            if entry is None:
+                raise AttributeError(f"compiled {name} has no entry {key}")
+            if type(entry) is not BuiltinFunctionType or entry.__self__ is not module:
                 raise TypeError(f"parallel native binding requires compiled {name}.{key}")
-            entries[key] = entry
-        connected = ModuleType(name)
-        vars(connected).update(entries)
-        return connected
+        return module
     except (ImportError, AttributeError) as error:
         # A partial install stays importable; its native door reports this
         # error when the corresponding family is actually requested.

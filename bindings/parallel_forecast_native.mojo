@@ -28,7 +28,8 @@ from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send,
 )
 from bindings.native_transport import transport_close
-from bindings.tsa_hw_native import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted
+from bindings.tsa_hw_native import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted, _commit
+from bindings.tsa_admission import tsa_hw_fields
 from bindings.tsa_arima_native import arima_predict, arima_fit, _series_major
 from bindings.parallel_shard_common import (
     shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state, shard_model,
@@ -216,16 +217,18 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     var context = f[].hw_context
     var steps = n - Int(py=fields["seasonal_periods"])
     var comps = fields["_comps"]
+    var drop = py_call(_hw_fitted().union, Python.list("endog"))
     var requests = b.list()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per device shard
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var w = hi - lo
-        # prediction reads only the component state and these scalar fields
-        var state = b.dict()
+        # prediction reads the component state and the constructor settings
+        # the native snapshot admits (start_periods, eps,
+        # initialization_method, numeric_mode, ...): every carried scalar
+        # field, without the batch's fitted arrays, then this shard's slice.
+        var state = shard_state(fields, drop, context)
         py_setitem(state, "n", n)
-        py_setitem(state, "seasonal_periods", fields["seasonal_periods"])
-        py_setitem(state, "seasonal", fields["seasonal"])
         py_setitem(state, "fit_executed_flag", fields["fit_executed_flag"])
         py_setitem(state, "ts_num", w)
         py_setitem(state, "_components_len", steps * w)
@@ -426,8 +429,12 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
         _ = flags  # keep the Python object alive through the native call above
         _ = iters  # keep the Python object alive through the native call above
         _ = criteria  # keep the Python object alive through the native call above
-    py_setitem(fields, "_data", data)
-    _set_fitted(fields, n, comps, stats, flags, context)
+    # `_set_fitted` returns the fitted updates; commit them as the plain
+    # `hw_fit` does (discarding them left the estimator unfitted: "fit() the
+    # model before forecast()" and no fitted components).
+    var updates = _set_fitted(fields, n, comps, stats, flags, context)
+    py_setitem(updates, "_data", data)
+    _commit(tsa_hw_fields(estimator, context), updates, context, True)
     return estimator
 
 
