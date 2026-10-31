@@ -2,6 +2,11 @@
 lq and compile_slot.sh were lost when ~/mojolearn-evidence top-level files were wiped (2026-10-05 ~23:46) and restored from the T9 backup.
 Live copies: ~/mojolearn-evidence/lq/lq and ~/mojolearn-ops/. compile_slot.sh now lives at tools/compile_slot.sh (2026-10-28); tools/ops/compile_slot.sh and ~/mojolearn-evidence/compile_slot.sh forward to it. Never keep the only copy of a script in a logs or evidence folder.
 
+`lq` is retired for releases (docs/plans/POST_0863_RELEASE_TOOLING.md item 4): the NVIDIA/AMD release
+gate runs through `release_gate.py` (Mac side) and `release_gate_job.sh` (the box job), launched with
+`tools/nvidia_central.sh submit` or `tools/do_amd_steward.sh run` and persisted to R2. The `lq` copy here
+is historical.
+
 ## Incremental development builds
 
 Internal engineering path: `tools/development_build.py` builds independent
