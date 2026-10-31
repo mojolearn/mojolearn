@@ -1,0 +1,25 @@
+{
+  "approved_by": "Andrew Hendel, explicit conversation instruction, 2026-10-31 (\"One-time waiver\")",
+  "reason": "0.8.63 identity: columns for apple-m4, nvidia-rtx4090-sm89, nvidia-ptx-rtx4090-sm80, amd-mi300x-gfx942 and cpu were recorded at 0412c8ee2f. Between that commit and the release the only arithmetic change is cluster/host/kmeans_oracle.mojo (Linux x86-64 host build dropped the k-means++ seeding compare). lane_select cannot prove the other lanes unaffected (32 lanes per GPU column via host_model routes, 432 on cpu via runtime dispatch), but the records show it: the old cpu record equalled the GPU consensus on every lane except gmm and gmm-sample, so no other lane reached the changed decision; gmm and gmm-sample were re-recorded on cpu at 8bd8067c42 from the release build and equal the GPU records on 180/180 parts; macOS host bits are unchanged by the fix and GPU columns do not run host k-means. The cross-vendor table build still compares every cell.",
+  "evidence": [
+    "~/mojolearn-evidence/rel0863/identity/",
+    "~/mojolearn-evidence/rel0863/pptrace/pp_gmm4.json",
+    "~/mojolearn-evidence/rel0863/release-auto-reuse-2/"
+  ],
+  "records": {
+    "amd-mi300x-gfx942.identical.json": "69786ce2bf5e448f41dfde08a0680bddb32a5ab2b6ffec1793961ee44cb22214",
+    "apple-m4.identical.json": "4f7947836f543a5c0131b5fbbee63eaf434f4146f90077e24e64b4cc3d8b8063",
+    "cpu.identical.json": "3bc2cc666495ba5643150ab4e9c75416fe3a1f13f29dff92ae90d7d765be110e",
+    "cpu.lanes-a0701798.identical.json": "8edf5d5855549b70ad5be6a2073464b5517827d193b599a48fc8b9737a2d0007",
+    "nvidia-ptx-rtx4090-sm80.identical.json": "73affc194b3497bfc733daeeb3b0a372bda3a3e4d14f9f9fd81590455cdb4f94",
+    "nvidia-rtx4090-sm89.identical.json": "9d5d15b98aa447c4afd49f403bb1a642abc34a90b14fa3854284e5a2596ffd26"
+  },
+  "records_sha256": [
+    "3bc2cc666495ba5643150ab4e9c75416fe3a1f13f29dff92ae90d7d765be110e",
+    "4f7947836f543a5c0131b5fbbee63eaf434f4146f90077e24e64b4cc3d8b8063",
+    "69786ce2bf5e448f41dfde08a0680bddb32a5ab2b6ffec1793961ee44cb22214",
+    "73affc194b3497bfc733daeeb3b0a372bda3a3e4d14f9f9fd81590455cdb4f94",
+    "8edf5d5855549b70ad5be6a2073464b5517827d193b599a48fc8b9737a2d0007",
+    "9d5d15b98aa447c4afd49f403bb1a642abc34a90b14fa3854284e5a2596ffd26"
+  ]
+}

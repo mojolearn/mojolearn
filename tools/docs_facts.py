@@ -124,6 +124,9 @@ def facts():
 
     m = re.search(r"^doi:\s*(\S+)", _read("CITATION.cff"), re.M)
     out["doi"] = m.group(1) if m else ""
+    # Every DOI CITATION.cff declares: the software concept DOI and the
+    # preferred-citation (paper) DOI. Docs may cite either, nothing else.
+    out["dois"] = re.findall(r"^\s*doi:\s*(\S+)", _read("CITATION.cff"), re.M)
 
     m = re.search(r'^version:\s*"?([^"\s]+)"?', _read("CITATION.cff"), re.M)
     out["citation_version"] = m.group(1) if m else ""
@@ -196,13 +199,12 @@ def check():
 
         #: The concept DOI is restated in a badge URL, a link URL and its link
         #: text. A marker cannot live inside a URL, so match the bare token.
-        want = re.search(r"zenodo\.(\d+)", f["doi"])
+        want = {w.group(1) for d in f["dois"] for w in [re.search(r"zenodo\.(\d+)", d)] if w}
         if want:
-            want = want.group(1)
             for m in re.finditer(r"zenodo\.(\d+)", text):
-                if m.group(1) != want:
+                if m.group(1) not in want:
                     problems.append(
-                        f"  {rel}: cites zenodo.{m.group(1)}, CITATION.cff says {f['doi']}"
+                        f"  {rel}: cites zenodo.{m.group(1)}, CITATION.cff declares {', '.join(f['dois'])}"
                     )
 
         for claim in _mode_claims(text, f["default_mode"]):

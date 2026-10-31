@@ -1088,7 +1088,8 @@ def _cmd_self_test(args, ml):
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
     from ._verify_public import run as public_checks
     result['public_api'] = public_checks(self_test=True,scope='neural' if getattr(args,'neural_training',False) else 'all')
-    result['passed'] = result['passed'] and result['public_api']['status'] == 'MATCH'
+    # UNTESTED: this vendor is not one the shipped endpoint reference validates (CPU-only).
+    result['passed'] = result['passed'] and result['public_api']['status'] in ('MATCH', 'UNTESTED')
     if json_out:
         _emit(json.dumps(dict(format="mojolearn.verify-self-test.v1", **result), indent=1, sort_keys=True))
     else:
