@@ -3560,19 +3560,6 @@ index 0000000000..6de3b38559
 +                counts=dict(sorted(totals.items())), gaps=gaps, collection_plan=plans,
 +                numeric_missing_values_by_vendor={v: sum(g['kind'] == 'numeric' and v in g['reasons']
 +                                                         for g in gaps) for v in vendors})
-diff --git a/tools/hooks/no_host_routes.py b/tools/hooks/no_host_routes.py
-index 9175e214fb..eef3807cf7 100755
---- a/tools/hooks/no_host_routes.py
-+++ b/tools/hooks/no_host_routes.py
-@@ -69,7 +69,7 @@ _PY_CPU_SIDE = frozenset("""
- __main__.py _backend.py host_surface.py _cpu_reference.py _conformance.py
- _verify.py _verify_all.py _verify_causal_lm.py _verify_distributed.py
- _verify_distributed_program.py _verify_partitioned_program.py _verify_native_runtime.py
--_verify_parallel_cv.py _verify_reference.py _verify_resources.py
-+_verify_par.py _verify_parallel_cv.py _verify_reference.py _verify_resources.py
- _verify_small.py _verify_worker.py _verification_catalog.py
- _verify_graph.py _verify_native_runtime.py _verify_generation.py
- _verification_coverage.py _verification_ctr_models.py
 diff --git a/tools/identity_admission_guard.py b/tools/identity_admission_guard.py
 index 2c5dc122c6..a1cb957b95 100644
 --- a/tools/identity_admission_guard.py
@@ -8427,18 +8414,18 @@ index a1ed18fdb2..f15b12b735 100644
  if __name__ == '__main__':
      unittest.main()
 diff --git a/tools/test_lane_select.py b/tools/test_lane_select.py
-index cf20529ba3..065a809681 100644
+index e6e47927d3..065a809681 100644
 --- a/tools/test_lane_select.py
 +++ b/tools/test_lane_select.py
 @@ -1348,10 +1348,10 @@ def test_a_mojo_program_nothing_imports_is_unreachable_and_an_imported_one_is_no
  
  
  def test_package_modules_the_verifier_alone_uses_are_unreachable():
--    """`_verify_distributed.py` runs from `python -m mojolearn verify-distributed`, never in a lane.
+-    """`_verify_graph.py` runs from `python -m mojolearn verify-graph`, never in a lane.
 +    """`_verify_par.py` runs from `python -m mojolearn verify`, never in a lane.
      The controls: `_mode.py`, which every lane imports, and a package module
      that only `__init__.py` imports, whose top level runs in every lane."""
--    assert lane_select.unreachable("python/mojolearn/_verify_distributed.py")
+-    assert lane_select.unreachable("python/mojolearn/_verify_graph.py")
 +    assert lane_select.unreachable("python/mojolearn/_verify_par.py")
      assert lane_select.unreachable("python/mojolearn/verify_reference/table.json")
      assert lane_select.unreachable("python/mojolearn/_mode.py") is None
@@ -8447,11 +8434,11 @@ index cf20529ba3..065a809681 100644
  def test_a_package_module_named_by_a_lane_file_stays_reachable():
      """THE ARM THAT MUST WIDEN for the package rule: a dynamic import string in
      a file every lane reaches."""
--    probe = "python/mojolearn/_verify_distributed.py"
+-    probe = "python/mojolearn/_verify_graph.py"
 +    probe = "python/mojolearn/_verify_par.py"
      assert lane_select.unreachable(probe), "the probe must start unreachable"
      try:
--        _manifest_reads("\n_ARM = 'mojolearn._verify_distributed'\n")
+-        _manifest_reads("\n_ARM = 'mojolearn._verify_graph'\n")
 +        _manifest_reads("\n_ARM = 'mojolearn._verify_par'\n")
          assert lane_select.unreachable(probe) is None
      finally:

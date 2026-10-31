@@ -3740,9 +3740,10 @@ public runtime qualification; this entry is not release or performance evidence.
 - **Recoverable**: `868702642c^` (= main `6b2e4bc320`); deleted by `868702642c` (harness lanes and admission),
   `b5f27e18a6` (ledger rows and producers) and `a417309926` (`verify --par` and the device-axis tooling) on
   lane/retire-multi-gpu-verify, markers named in the following commit.
-- **Patch**: `experiments/removed/MOJOLEARN_PAR_VERIFY.patch`, the reverse of the three deletion commits plus the marker
-  commit over every changed `.py`, `.sh`, `.json`, `.tsv` and `.patch` file outside `docs/` (`git diff <head> 6b2e4bc320 --
-  <files>`); `git apply` restores the code on the lane head, `git apply -3` once main has moved.
+- **Patch**: `experiments/removed/MOJOLEARN_PAR_VERIFY.patch`, the reverse of the lane's commits (the three deletions, the
+  marker commit and two test/allowlist follow-ups) over every changed `.py`, `.sh`, `.json`, `.tsv` and `.patch` file
+  outside `docs/` (`git diff <lane head> 6b2e4bc320 -- <files>`); `git apply` restores the code on the lane head,
+  `git apply -3` once main has moved.
 - **Guard / records**: no `core/six_lane_experiment_guards.mojo` refusal and no `grid_controls/*.json` entry: this was a
   verifier feature, not a `-D` define, and the lane makes no `.mojo` change. No `docs/apple-fast/EXPERIMENTS.md` row for the
   same reason. `verify --par`, `--par-devices` and `--par-self-test` are unknown options (argparse exit 2).
