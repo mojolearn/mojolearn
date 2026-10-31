@@ -1,0 +1,142 @@
+#!/bin/bash
+# tools/ops/release_gate_job.sh -- ONE NVIDIA/AMD release gate job on the box (plan item 4 of
+# docs/plans/POST_0863_RELEASE_TOOLING.md). tools/ops/release_gate.py uploads this file verbatim beside
+# its gate.env and launches it through the supported wrappers, which run it under
+# tools/box_persist_run.sh (results to R2 from the box):
+#   tools/nvidia_central.sh submit release-gate --cap 180 --results <res> <in>/release_gate_job.sh
+#   tools/do_amd_steward.sh run <tag> <res> bash <in>/release_gate_job.sh
+# It takes no arguments: gate.env (next to it) holds the exact build and gate argv.
+#
+# In order, all in the candidate commit's clean tree:
+#   inputs   the wheels GATE_ARGV names exist (the Mac side checked every upload's sha256 on the box);
+#   tree     GATE_TREE at GATE_SOURCE_COMMIT, clean (AMD: fetched here from GATE_FETCH_URL; NVIDIA: the
+#            lane tree tools/nvidia_central.sh sync placed there);
+#   gpu      the box's GPU is GATE_TARGET (sm_89 / gfx942), the target the autograd checks compile for;
+#   runtime  AMD with adapters: the ROCm 7.2.3 runtime the ROCm torch build needs
+#            (tools/amd_box_runtime_setup.sh, when /opt/rocm-7.2.3/lib is missing); python3 venv support;
+#   pixi     the tree's locked default environment (the Mojo compiler the builder records);
+#   build    the eight autograd executables: tools/gate_autograd_artifacts.py build (BUILD_ARGV; with a
+#            retained set it reuses each proven-unchanged binary; a refused reuse falls back to a fresh
+#            build, BUILD_FRESH_ARGV), bounded by GATE_BUILD_MINUTES;
+#   gate     python3 tools/gate_smoke_box.py ... all (GATE_ARGV): release-light-v1, unchanged.
+# On any exit the reports (GATE_FETCH) and the built autograd set are copied into
+# $MOJOLEARN_RESULTS_DIR/out and the job's own record into $MOJOLEARN_RESULTS_DIR/job.
+set -euo pipefail
+IN="$(cd "$(dirname "$0")" && pwd)"
+RES="${MOJOLEARN_RESULTS_DIR:?release_gate_job.sh runs under tools/box_persist_run.sh (nvidia_central.sh submit or do_amd_steward.sh run)}"
+[ -f "$IN/gate.env" ] || { echo "release-gate-job: no $IN/gate.env" >&2; exit 2; }
+# shellcheck disable=SC1091
+. "$IN/gate.env"
+[[ "$GATE_VENDOR" =~ ^(nvidia|amd)$ ]] || { echo "release-gate-job: bad GATE_VENDOR" >&2; exit 2; }
+[[ "$GATE_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "release-gate-job: bad GATE_SOURCE_COMMIT" >&2; exit 2; }
+[[ "$GATE_TREE" =~ ^/root/[A-Za-z0-9/_.-]+$ && "$GATE_WORK" =~ ^/root/results[A-Za-z0-9/_.-]+$ ]] \
+    || { echo "release-gate-job: GATE_TREE / GATE_WORK must be plain /root paths (/root/results* for the work)" >&2; exit 2; }
+[[ "$GATE_BUILD_MINUTES" =~ ^[1-9][0-9]*$ ]] || { echo "release-gate-job: bad GATE_BUILD_MINUTES" >&2; exit 2; }
+case "$GATE_VENDOR:$GATE_TARGET" in nvidia:sm_89|amd:gfx942) ;; *) echo "release-gate-job: unsupported vendor/target" >&2; exit 2 ;; esac
+J="$RES/job"
+mkdir -p "$J" "$RES/out"
+[ ! -e "$GATE_WORK/out/gate-smoke.json" ] || { echo "release-gate-job: $GATE_WORK already holds a gate; a new job uses a new tag" >&2; exit 2; }
+mkdir -p "$GATE_WORK"
+exec > "$J/job.log" 2>&1
+PHASE=inputs
+export PATH="/root/.pixi/bin:/usr/local/cuda/bin:/opt/rocm/bin:$PATH"
+say() { echo "[$(date -u +%H:%M:%S) release-gate-job] $*"; }
+finish() {
+    local code=$?
+    trap - EXIT
+    # the reports, never the venv or the caches: the same report set the gate always brought home
+    if [ -d "$GATE_WORK/out" ]; then
+        ( cd "$GATE_WORK/out" && shopt -s nullglob && have=() && for p in "${GATE_FETCH[@]}"; do for f in $p; do have+=("$f"); done; done \
+            && { [ ${#have[@]} -eq 0 ] || tar cf - "${have[@]}"; } ) | tar xf - -C "$RES/out" || say "copying the reports failed"
+    fi
+    printf '{"vendor":"%s","version":"%s","source_commit":"%s","target":"%s","tag":"%s","phase":"%s","exit":%d,"job_script_sha256":"%s","gate_env_sha256":"%s","work":"%s"}\n' \
+        "$GATE_VENDOR" "$GATE_VERSION" "$GATE_SOURCE_COMMIT" "$GATE_TARGET" "$GATE_TAG" "$PHASE" "$code" \
+        "$(sha256sum "$IN/$(basename "$0")" | cut -d' ' -f1)" "$(sha256sum "$IN/gate.env" | cut -d' ' -f1)" "$GATE_WORK" > "$J/status.json"
+    say "exit $code in phase $PHASE"
+    exit "$code"
+}
+trap finish EXIT
+trap 'exit 124' TERM INT
+say "gate $GATE_VENDOR $GATE_VERSION at $GATE_SOURCE_COMMIT ($GATE_TAG); inputs $IN; work $GATE_WORK"
+for ((i = 0; i < ${#GATE_ARGV[@]}; i++)); do
+    if [ "${GATE_ARGV[$i]}" = --candidate-wheel ]; then
+        w="${GATE_ARGV[$((i + 1))]}"; [ -f "$w" ] || { say "missing input $w"; exit 2; }
+    fi
+done
+{ uname -a; nproc; free -g 2>/dev/null || true; df -h /root; } > "$J/box.txt" 2>&1 || true
+
+PHASE=tree
+if [ -n "$GATE_FETCH_URL" ]; then
+    mkdir -p "$GATE_TREE" && cd "$GATE_TREE"
+    [ -d .git ] || { git init -q . && git remote add origin "$GATE_FETCH_URL"; }
+    git config --global --add safe.directory "$GATE_TREE" 2>/dev/null || true
+    if [ "$(git rev-parse -q --verify HEAD 2>/dev/null || true)" != "$GATE_SOURCE_COMMIT" ]; then
+        git fetch -q --depth=1 origin "$GATE_SOURCE_COMMIT"
+        git checkout -q --detach -f "$GATE_SOURCE_COMMIT"
+    fi
+fi
+cd "$GATE_TREE"
+git config --global --add safe.directory "$GATE_TREE" 2>/dev/null || true
+[ "$(git rev-parse HEAD)" = "$GATE_SOURCE_COMMIT" ] && [ -z "$(git status --porcelain --untracked-files=no)" ] \
+    || { say "$GATE_TREE is not a clean tree at $GATE_SOURCE_COMMIT (HEAD $(git rev-parse HEAD 2>/dev/null))"; exit 3; }
+if [ "${GATE_REUSE:-0}" = 1 ]; then
+    # the reuse proof reads the retained set's source revision from git; a shallow tree fetches it (best effort:
+    # without it the builder refuses that reuse and compiles)
+    prior=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("source_commit",""))' "$IN/autograd-prior/build-manifest.json" 2>/dev/null || true)
+    if [[ "$prior" =~ ^[0-9a-f]{40}$ ]] && ! git cat-file -e "$prior^{commit}" 2>/dev/null; then
+        git fetch -q --depth=1 origin "$prior" || say "could not fetch the retained set's source $prior; its entries rebuild"
+    fi
+fi
+
+PHASE=gpu
+if [ "$GATE_VENDOR" = nvidia ]; then
+    cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d ' .')
+    gpu="sm_$cap"
+else
+    gpu=$(rocminfo | grep -m1 -o 'gfx[0-9a-f]*' || true)
+fi
+[ "$gpu" = "$GATE_TARGET" ] || { say "this box's GPU is $gpu, not $GATE_TARGET"; exit 3; }
+say "GPU $gpu"
+
+PHASE=runtime
+if [ "$GATE_VENDOR" = amd ] && [ "$GATE_ADAPTERS" = 1 ] && [ ! -d /opt/rocm-7.2.3/lib ]; then
+    say "installing the ROCm 7.2.3 runtime (tools/amd_box_runtime_setup.sh)"
+    bash tools/amd_box_runtime_setup.sh > "$J/amd-runtime.log" 2>&1
+fi
+if ! python3 -c 'import ensurepip, venv' 2>/dev/null; then
+    say "python3 lacks venv support; installing it"
+    export DEBIAN_FRONTEND=noninteractive
+    pyv=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+    { apt-get -o DPkg::Lock::Timeout=300 update -qq && apt-get -o DPkg::Lock::Timeout=300 install -y -qq "python$pyv-venv"; } > "$J/apt.log" 2>&1
+fi
+
+PHASE=pixi
+PIXI=$(command -v pixi || echo /root/.pixi/bin/pixi)
+[ -x "$PIXI" ] || { curl -fsSL https://pixi.sh/install.sh | bash > "$J/pixi-install.log" 2>&1; PIXI=/root/.pixi/bin/pixi; }
+"$PIXI" install --locked -e default > "$J/pixi-default.log" 2>&1
+# pixi activation supplies MODULAR_HOME (tools/gha_autograd_box.sh): the build runs under `pixi run`, with the
+# environment's own python; the gate runs on the system python3, outside the environment, as before
+PYTHON=$GATE_TREE/.pixi/envs/default/bin/python3
+{ "$PIXI" --version; "$GATE_TREE/.pixi/envs/default/bin/mojo" --version; } > "$J/compiler.txt" 2>&1
+
+PHASE=build
+mkdir -p "$GATE_WORK/out"
+say "building the autograd executables: ${BUILD_ARGV[*]}"
+brc=0
+timeout "${GATE_BUILD_MINUTES}m" "$PIXI" run -e default "$PYTHON" "${BUILD_ARGV[@]}" > "$J/autograd-build.log" 2>&1 || brc=$?
+if [ "$brc" != 0 ] && [ "${GATE_REUSE:-0}" = 1 ] && [ "$brc" != 124 ]; then
+    say "the build with the retained set exited $brc; building every entry fresh"
+    mv "$GATE_WORK/out/autograd-bin" "$GATE_WORK/autograd-bin.reuse-refused" 2>/dev/null || true
+    brc=0
+    timeout "${GATE_BUILD_MINUTES}m" "$PIXI" run -e default "$PYTHON" "${BUILD_FRESH_ARGV[@]}" > "$J/autograd-build-fresh.log" 2>&1 || brc=$?
+fi
+[ "$brc" = 0 ] || { say "the autograd build exited $brc"; tail -n 20 "$J"/autograd-build*.log; exit "$brc"; }
+say "autograd executables built: $GATE_WORK/out/autograd-bin"
+
+PHASE=gate
+say "gate: python3 ${GATE_ARGV[*]}"
+grc=0
+python3 "${GATE_ARGV[@]}" > "$J/gate.log" 2>&1 || grc=$?
+tail -n 5 "$J/gate.log"
+PHASE=complete
+exit "$grc"

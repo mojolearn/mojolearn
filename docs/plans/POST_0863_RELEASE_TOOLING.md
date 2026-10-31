@@ -50,6 +50,24 @@ run the gate through the supported job wrappers (`tools/nvidia_central.sh submit
 
 Acceptance: `release.py` runs both gates on freshly rented boxes with no file outside the repo.
 
+Implemented (lane/gate-in-repo): `release.py` `run_gate` calls `tools/ops/release_gate.py`, which stages
+the candidate wheels, the committed job script `tools/ops/release_gate_job.sh` and its `gate.env`
+(the exact build and gate argv) through the wrapper's own channel, sha256-checked on the box, and
+launches one persisted job: `tools/nvidia_central.sh submit release-gate --results ...` (after
+`sync release-gate <source tree>`) or `tools/do_amd_steward.sh run <tag> <results> ...`. On the box the
+job builds the eight autograd executables from the clean candidate tree
+(`tools/gate_autograd_artifacts.py build`, reusing a proven-unchanged earlier set when one exists) and
+then runs `tools/gate_smoke_box.py ... all` unchanged (release-light-v1). Results come home from R2
+(`tools/box_persist.py fetch`); `gate_ok` judges `gate-smoke.json` as before. Offline tests:
+`tools/test_release_gate_jobs.py`. The box itself is still brought up by the orchestrator first.
+
+`lq` is retired for the release. Nothing the release runs by default needs `~/mojolearn-ops`: the gate
+no longer uses `lq`, `tools/release_lq_smoke.py` lost its `--gate` mode, and no other script from
+`~/mojolearn-ops` is called by `release.py`. The opt-in `--gpu-smoke --smoke-via lq` column smoke
+still calls `lq`; that route is retired too (its AMD box needs `amd_runner.sh`, which no longer
+exists). `tools/ops/lq` stays as a historical copy; it differs from `~/mojolearn-ops/lq` only in the
+hardcoded NV/AMD ssh targets, both stale.
+
 ## 5. Known product debt found during 0.8.63 (not blocking)
 
 - The 18 `par-*` multi-GPU drivers fail on one device ("native provider requires an exact compiled

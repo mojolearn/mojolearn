@@ -14,7 +14,7 @@ import candidate_wheel_install as C
 import gate_autograd_artifacts as A
 import pypi_wheel_install as P
 import release
-import release_lq_smoke as LQ
+RG = release.release_gate_module()
 
 VERSION = '0.8.56'
 COMMIT = 'a'*40
@@ -157,21 +157,33 @@ def test_candidate_install_passes_local_files_and_checks_interpreter_tags(tmp_pa
     assert len(calls) == 2
 
 
-def test_lq_stages_all_eight_source_bound_binaries_and_candidate_wheels(tmp_path):
+def test_gate_job_stages_candidate_wheels_and_builds_the_eight_binaries_in_the_job(tmp_path):
     paths, directory = wheels(tmp_path), artifacts(tmp_path)
-    uploads, argv = LQ.gate_plan('nvidia', VERSION, '/root/results-gate/test', paths, COMMIT, directory)
-    assert len(uploads) == 3+8+1
-    assert argv.count('--candidate-wheel') == 3
-    assert '--source-commit' in argv and COMMIT in argv
-    assert len([remote for _, remote in uploads if '/out/autograd-bin/' in remote]) == 9
-    (directory/next(iter(A.expected('nvidia')))).write_bytes(b'replaced')
-    with pytest.raises(ValueError, match='binary/provenance'):
-        LQ.gate_plan('nvidia', VERSION, '/root/results-gate/test', paths, COMMIT, directory)
+    plan = RG.Plan('nvidia', VERSION, COMMIT, tmp_path, tmp_path/'out', paths, 'rel-test',
+                   prior=directory, prior_files=RG.prior_files(directory, 'nvidia'))
+    uploads = plan.uploads()
+    # three wheels, the job script, the retained set (eight binaries + receipt) and gate.env
+    assert len(uploads) == 3+1+8+1+1
+    assert len([r for _, r, _ in uploads if '/autograd-prior/' in r]) == 9
+    assert all(x for _, r, x in uploads if '/autograd-prior/' in r and not r.endswith('.json'))
+    assert plan.gate.count('--candidate-wheel') == 3
+    assert plan.gate[plan.gate.index('--source-commit')+1] == COMMIT
+    manifest = plan.gate[plan.gate.index('--autograd-manifest')+1]
+    out = plan.build[plan.build.index('--out')+1]
+    assert manifest == out+'/build-manifest.json' and out.startswith('/root/results-release-gate/')
+    assert plan.build[plan.build.index('--reuse-from')+1] == plan.indir+'/autograd-prior'
+    assert '--reuse-from' not in plan.build_fresh
+    # an incomplete or other-vendor set is never offered for reuse; the builder proves each reused entry
+    assert RG.prior_files(directory, 'amd') == []
+    (directory/next(iter(A.expected('nvidia')))).unlink()
+    assert RG.prior_files(directory, 'nvidia') == []
 
 
 def test_published_gate_mode_stays_explicit_and_uploads_no_candidate(tmp_path):
-    uploads, argv = LQ.gate_plan('amd', VERSION, '/root/results-gate/published')
-    assert uploads == [] and '--candidate-wheel' not in argv
+    argv = RG.gate_argv('amd', VERSION, '/root/results-gate/published')
+    assert '--candidate-wheel' not in argv and '--autograd-manifest' not in argv
+    with pytest.raises(SystemExit):
+        RG.gate_argv('amd', VERSION, '/r', source_commit=COMMIT)
 
 
 def test_autograd_resume_reuses_verified_completed_bytes_without_compiling(tmp_path, monkeypatch):
