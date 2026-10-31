@@ -826,21 +826,6 @@ def _candidate_distance(
     return dd
 
 
-# DIAGNOSTIC (lane cpu-identity-0863, 2026-10-31): under MOJOLEARN_IDENTITY_TRACE the
-# stage card also receives `# pp` comment lines with the classic seeding's intermediate words (draws, the scan total, the
-# picked rows, the candidate norms, z, the costs) so a host column whose seeding
-# disagrees can be compared step by step. Writes only; no value depends on it.
-def _pp_fnv(v: List[Float32]) -> UInt64:
-    var h = UInt64(0xCBF29CE484222325)
-    for i in range(len(v)):
-        h = (h ^ UInt64(bitcast[DType.uint32](v[i]))) * UInt64(0x100000001B3)
-    return h
-
-
-def _pp_hex(v: Float32) -> String:
-    return hex(bitcast[DType.uint32](v))
-
-
 def host_kmeans_plus_plus(
     x: List[Float32],
     x_norm: List[Float32],
@@ -850,8 +835,7 @@ def host_kmeans_plus_plus(
     is_sqrt: Bool,
     mut centroids: List[Float32],
     mut rng: HostRngReplay,
-    mut trace: KMeansHostTrace,
-) raises:
+):
     """`kmeans_plus_plus`, the classic sequential variant (module
     docstring). Writes `k` rows of `centroids`."""
     var n_trials = 2 + Int(ceil(log(Float64(k))))
@@ -864,10 +848,6 @@ def host_kmeans_plus_plus(
     var labels = List[UInt32](length=n, fill=UInt32(0))
     var min_dist = List[Float32](length=n, fill=Float32(0.0))
     host_assign(x, n, x_norm, centroids, 1, c_norm, d, is_sqrt, labels, min_dist)
-    var pp_path = trace.path if trace.enabled else String("")
-    trace.header("pp n=" + String(n) + " d=" + String(d) + " k=" + String(k)
-              + " n_trials=" + String(n_trials) + " first=" + String(first)
-              + " c_norm0=" + _pp_hex(c_norm[0]) + " min_dist=" + hex(_pp_fnv(min_dist)))
 
     var picked = 1
     while picked < k:
@@ -883,13 +863,6 @@ def host_kmeans_plus_plus(
                 candidates[t * d + p] = x[sel * d + p]
         var cand_norm = host_row_norms(candidates, n_trials, d, False)
         var z = host_gemm_nt(x, candidates, n, n_trials, d)
-        if pp_path != "":
-            var tl = "pick=" + String(picked) + " csum_total=" + _pp_hex(csum[n - 1]) + " csum=" + hex(_pp_fnv(csum))
-            for t in range(n_trials):
-                tl += " u" + String(t) + "=" + _pp_hex(u01[t]) + " sel" + String(t) + "=" + String(host_binary_search(csum, n, u01[t]))
-                tl += " cn" + String(t) + "=" + _pp_hex(cand_norm[t])
-            tl += " z=" + hex(_pp_fnv(z))
-            trace.header(tl)
         # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
         # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
         # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
@@ -918,11 +891,6 @@ def host_kmeans_plus_plus(
             for lane in range(PLUS_PLUS_TPB):
                 red[lane] = red_all[t * PLUS_PLUS_TPB + lane]
             cost[t] = _halving[PLUS_PLUS_TPB](red)
-        if pp_path != "":
-            var cl = "pick=" + String(picked)
-            for t in range(n_trials):
-                cl += " cost" + String(t) + "=" + _pp_hex(cost[t])
-            trace.header(cl)
         # Step 4, the greedy argmin on the host, in Float64.
         var best = 0
         var best_cost = Float64(cost[0])
@@ -1110,7 +1078,7 @@ def host_init_scalable(
         # defaults with only `n_clusters` copied.
         var cand_norm_rows = host_row_norms(cand, cand_count, d, False)
         host_kmeans_plus_plus(
-            cand, cand_norm_rows, cand_count, d, k, is_sqrt, centroids, rng, trace
+            cand, cand_norm_rows, cand_count, d, k, is_sqrt, centroids, rng
         )
         var worst = Float64(0.0)
         for f in range(d):
@@ -1317,26 +1285,28 @@ def host_fit_main[with_init: Bool = True](
             # `comptime if`, so the [with_init=False] instance never names
             # host_init_scalable and the instantiation graph has no cycle.
             comptime if with_init:
-                # THE SEEDING SWITCH AS AN INTEGER TEST (lane cpu-identity-0863,
-                # 2026-10-31). `oversampling_factor != 0.0` selected classic
-                # k-means++ here, but in the Linux x86-64 merged host build
-                # (`_mojolearn_native_forest_host`, release 0.8.63) the compiled
-                # host_fit_main never compares the factor: init 0 always ran the
-                # scalable seeding, so GaussianMixture's classic start (factor
-                # 0.0, DEVIATION 3133) seeded through k-means|| on the Linux CPU
-                # column while macOS and the three GPUs seeded classically
-                # (pod card: init.centroids 2eb98b22b304b606 = the scalable arm
-                # at factor 0.0, reproduced on the M4). The same merged group
-                # cross-compiled for x86-64 on macOS keeps the compare; the
-                # Linux-built ones (GitHub runners, the RunPod pod) drop it. The
-                # magnitude bits
-                # give the same answer as IEEE `!=` for every input (+-0.0 is
-                # classic, any other value or NaN is scalable) and leave nothing
-                # for a floating-point fold to remove. The word goes through a
-                # volatile stack slot: a plain bitcast folds straight back into
-                # the same floating compare (checked in the x86-64 object), and
-                # a volatile load is never forwarded, so no value reasoning about
-                # the argument can decide the branch at compile time.
+                # THE SEEDING SWITCH FROM A VOLATILE WORD (lane cpu-identity-0863,
+                # 2026-10-31). This used to read `oversampling_factor != 0.0`.
+                # The Linux x86-64 builds of the merged forest host library
+                # (`_mojolearn_native_forest_host`: release 0.8.63 on the
+                # GitHub runners, and rebuilt on the RunPod EPYC 7K62 pod)
+                # compile host_fit_main without that compare: init 0 always ran
+                # the scalable seeding, so GaussianMixture's classic start
+                # (factor 0.0, DEVIATION 3133) seeded through k-means|| on the
+                # Linux CPU column while macOS and the three GPUs seeded
+                # classically. Evidence: the pod's identity card has
+                # init.centroids 2eb98b22b304b606, which the M4 reproduces by
+                # running the scalable arm at factor 0.0; the release binary's
+                # host_fit_main never compares the factor; a macOS x86-64
+                # cross-compile of the same merged group keeps the compare. With
+                # this spelling the pod build matches the NVIDIA record on all
+                # 180 gmm and gmm-sample parts
+                # (~/mojolearn-evidence/rel0863/pptrace/pp_gmm4.json). The
+                # factor goes through a volatile stack slot, which is never
+                # forwarded, so no value reasoning can decide the branch at
+                # compile time; its magnitude bits give the same answer as IEEE
+                # `!=` for every input (+-0.0 is classic, any other value or
+                # NaN is scalable). docs/MODULAR_ASKS.md has the ask.
                 var oversampling_slot = stack_allocation[1, Float64]()
                 oversampling_slot.store[volatile=True](oversampling_factor)
                 var oversampling_bits = oversampling_slot.bitcast[UInt64]().load[
@@ -1346,11 +1316,6 @@ def host_fit_main[with_init: Bool = True](
                     init == INIT_KMEANS_PLUS_PLUS
                     and oversampling_bits != UInt64(0)
                 )
-                trace.header(
-                    "init route init=" + String(init) + " oversampling="
-                    + String(oversampling_factor) + " k=" + String(k)
-                    + " is_sqrt=" + String(is_sqrt) + " scalable=" + String(scalable)
-                )
                 if init == INIT_RANDOM:
                     host_init_random(x, n, d, k, cur, rng)
                 elif scalable:
@@ -1359,7 +1324,7 @@ def host_fit_main[with_init: Bool = True](
                         trace, restart_tag, lazy_shift, recluster_max_iter,
                     )
                 else:
-                    host_kmeans_plus_plus(x, x_norm, n, d, k, is_sqrt, cur, rng, trace)
+                    host_kmeans_plus_plus(x, x_norm, n, d, k, is_sqrt, cur, rng)
             else:
                 raise Error("host_fit_main[with_init=False] takes INIT_ARRAY only")
         trace.record_f32(restart_tag + "init.centroids", cur)
