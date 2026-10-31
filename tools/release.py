@@ -1483,13 +1483,89 @@ class Release:
         if cached is None or cached[0] != key:
             manifest = release_requirements.requirements(ROOT, self.commit, self.version,
                                                         configuration=configuration)
+            presence = self.optional_native_presence(manifest, context)
+            if presence:
+                # Re-expand with the derived layout contract; the frozen
+                # analyzer accepts it only for source-proven optional loaders.
+                configuration["dependency_context"] = dict(context, optional_native_files=presence)
+                manifest = release_requirements.requirements(ROOT, self.commit, self.version,
+                                                            configuration=configuration)
             self._readiness_manifest_cache = (key, manifest)
         return json.loads(json.dumps(self._readiness_manifest_cache[1]))
+
+    UNMAPPED_BINDING = "no native binding context mapped for binding: "
+
+    def optional_native_presence(self, manifest, context):
+        """{target: {binding: present}} for unmapped bindings, read from the candidate wheels.
+
+        An optional native file (one the frozen loader connects only when it is
+        installed, e.g. the fast tokenizer an identical-only release does not
+        ship) leaves every identity unit unresolved until its presence in the
+        shipped layout is stated. That is a fact of the candidate artifacts, so
+        it is read from their file lists: the macOS wheel for osx-arm64, the
+        packed Linux wheels for linux-64. A target whose artifacts are not all
+        present gets no contract, and an explicit configuration always wins.
+        """
+        names = sorted({item[len(self.UNMAPPED_BINDING):] for wanted in manifest["requirements"].values()
+                        for item in wanted.get("missing_inputs", []) if item.startswith(self.UNMAPPED_BINDING)})
+        if not names:
+            return None
+        listings = {}
+        try:
+            wheel = self.macos_wheel()
+            if wheel and Path(wheel).is_file():
+                with zipfile.ZipFile(wheel) as z:
+                    listings["osx-arm64"] = {Path(n).name for n in z.namelist()}
+        except (OSError, zipfile.BadZipFile, StepFailed):
+            pass
+        try:
+            finals = [self.split_final(p) for p in SPLIT_PACKAGES if p != "linux-meta"]
+            if finals and all(f and Path(f).is_file() for f in finals):
+                members = set()
+                for final in finals:
+                    with zipfile.ZipFile(final) as z:
+                        members |= {Path(n).name for n in z.namelist()}
+                listings["linux-64"] = members
+        except (OSError, zipfile.BadZipFile, StepFailed):
+            pass
+        declared = context.get("optional_native_files", {})
+        presence = {}
+        for target, members in listings.items():
+            row = dict(declared.get(target, {}))
+            for name in names:
+                row.setdefault(name, name + ".so" in members)
+            presence[target] = row
+        return presence if presence != {t: declared.get(t) for t in presence} else None
+
+    def evidence_root(self):
+        """Retained-producer admission reports for this freeze (release_requirements_retained)."""
+        return self.rel / "ledger-evidence"
 
     def readiness_status(self, write=False):
         manifest = self.readiness_manifest()
         ledger = self.readiness()
-        return ledger.sync(manifest) if write else ledger.plan(manifest)
+        import release_requirements_retained as retained
+        if write:
+            ledger.sync(manifest)
+            # Evidence that already exists (the committed identity table
+            # admission) is admitted before any gate reads the ledger, so
+            # verified work is never rerun or waived (Andrew, 2026-10-31).
+            _, notes = retained.admit_existing_evidence(ROOT, ledger, self.commit, self.evidence_root(),
+                                                        say=self.say)
+            for note in notes:
+                self.say("  ledger evidence: " + note)
+            return ledger.sync(manifest)
+        # Read-only (--status, --dry-run, the gate's plan): nothing persistent
+        # is written. Reports already kept for this freeze are reused; the rest
+        # are prepared in scratch and evaluated in memory with the ledger.
+        doc = ledger.read()
+        doc.update(json.loads(json.dumps(manifest)))
+        with retained.scratch_root() as scratch:
+            reports, notes = retained.retained_reports(ROOT, doc, self.commit, Path(scratch),
+                                                       prepared=self.evidence_root(), say=self.say)
+            for note in notes:
+                self.say("   ledger evidence: " + note)
+            return ledger._evaluate(retained.with_attempts(doc, retained.retained_attempts(reports)))
 
     def record_candidate_requirement(self, vendor, run_id, executed=False):
         if run_id is None:

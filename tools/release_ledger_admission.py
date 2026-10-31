@@ -52,6 +52,9 @@ Adapters (``--adapter``):
                           (--producer report=DIR/runtime-report.json)
   published-install       published-<vendor> (post stage) from tools/release_published_install.py
                           (--producer report=DIR/published-report.json)
+  identity-table-admission identity-<vendor>/<lane> from the committed identity table admission
+                          (--producer admission=bench/results/reference_admissions/<date>
+                           --producer revision=<record commit>); release.py runs it automatically
 """
 import argparse
 import copy
@@ -89,6 +92,7 @@ ADAPTERS = {
     "coverage-source": ("release_coverage_source_evidence", "source"),
     "installed-runtime": ("release_installed_evidence", "runtime"),
     "published-install": ("release_installed_evidence", "published"),
+    "identity-table-admission": ("release_requirements_retained", "identity"),
 }
 REPORT_TYPES = {"compile": "build", "source": "source"}
 
@@ -239,14 +243,19 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
         status="passed", exit_code=0, evidence=evidence_refs, coverage=rows)
 
 
-def prepare(name, root, ledger_path, out, producer, log_dir=None):
-    """Read retained producer artifacts; write a reviewable admission directory."""
+def prepare(name, root, ledger_path, out, producer, log_dir=None, *, document=None):
+    """Read retained producer artifacts; write a reviewable admission directory.
+
+    ``document`` (instead of ``ledger_path``) is an in-memory ledger document,
+    e.g. the saved ledger with the current manifest applied (read-only status).
+    """
     from release_requirements import RequirementsLedger, changes
     from release_requirement_receipts import validate_receipt
     root, out = Path(root).resolve(), Path(out).resolve()
     require(not out.exists(), "review output directory must be new")
     spec = adapter(name)
-    document = RequirementsLedger(ledger_path).read()
+    if document is None:
+        document = RequirementsLedger(ledger_path).read()
     version = document.get("version")
     require(isinstance(version, str) and version, "synchronize the ledger before preparing an admission")
     collected = spec.collect(root, document, dict(producer))
