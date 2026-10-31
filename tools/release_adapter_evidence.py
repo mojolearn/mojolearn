@@ -80,6 +80,8 @@ def _smoke(directory, vendor, version):
     smoke_max = all(c.startswith(("analytic_sgd:", "python_api:")) for c in records["max-training"])
     owed = [name for name, count in counts.items() if count == 0 and not (smoke_max and name == "max-train-resume")]
     require(not owed, "an adapter coverage ID has no actual check record: " + ", ".join(owed))
+    if smoke_max and counts["max-train-resume"] == 0:
+        del counts["max-train-resume"]  # not part of the smoke's coverage, never reported as a zero
     return dict(smoke=smoke_ref, phases=phases, counts=counts, evidence=refs)
 
 
