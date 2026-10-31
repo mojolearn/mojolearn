@@ -1,9 +1,9 @@
 # mojolearn
 
 [![PyPI](https://img.shields.io/pypi/v/mojolearn.svg)](https://pypi.org/project/mojolearn/)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22068632.svg)](https://doi.org/10.5281/zenodo.22068632)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23829035.svg)](https://doi.org/10.5281/zenodo.23829035)
 
-**Bitwise-identical machine learning across Apple, NVIDIA and AMD GPUs.**
+**Bitwise-Identical Machine Learning Across GPUs and CPUs.**
 
 The same machine-learning workload can produce different bits on different
 GPUs, changing predictions, learned models and subsequent training updates.
@@ -264,5 +264,8 @@ license; see [NOTICE](NOTICE).
 
 ## Citation
 
-To cite mojolearn, use [CITATION.cff](CITATION.cff). The concept DOI is
-[10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632).
+To cite mojolearn, cite the paper: Andrew Hendel, *Bitwise-Identical Machine Learning
+Across GPUs and CPUs*, 2026, [10.5281/zenodo.23829035](https://doi.org/10.5281/zenodo.23829035)
+([CITATION.cff](CITATION.cff)). To refer to the exact code of a release, use its
+software DOI; the concept DOI [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632)
+resolves to the newest release.

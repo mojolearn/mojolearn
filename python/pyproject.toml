@@ -157,7 +157,7 @@ Issues = "https://github.com/mojolearn/mojolearn/issues"
 # `pip install` carries the machine-readable citation and not only the
 # license.
 DOI = "https://doi.org/10.5281/zenodo.22068632"
-Citation = "https://doi.org/10.5281/zenodo.22068632"
+Citation = "https://doi.org/10.5281/zenodo.23829035"
 
 [project.scripts]
 # Kept outside the mojolearn package deliberately: this command must work
