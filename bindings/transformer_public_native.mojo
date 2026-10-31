@@ -576,6 +576,15 @@ def transformer_tape_init(mut mods: NativeModules, tape: PythonObject, values: P
 
 def transformer_backward_from_tape(mut mods: NativeModules, block: PythonObject, tape: PythonObject, input: PythonObject,
                                    context: PythonObject, neural: PythonObject) raises -> PythonObject:
+    # The documented contract: anything that is not this block's tape (None,
+    # another object, another block's tape) is refused as a foreign tape with
+    # ValueError, before owner storage is read.
+    var ancestry = py_call(mods.module("builtins").type.__dict__["__mro__"].__get__, py_type(tape))
+    var is_tape = False
+    for i in range(len(ancestry)):  # driver-loop: tape class ancestry metadata
+        is_tape = is_tape or ancestry[i] is context["tape_class"]
+    if not is_tape:
+        raise Error("Transformer tape belongs to another block")
     var slots = _transformer_fields(mods, tape, context["tape_class"], context["tape_fields"])
     var hobj = slots["_native_owner"]
     var owner = hobj.downcast_value_ptr[TransformerPublicTapeOwner]()
