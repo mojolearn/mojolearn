@@ -143,7 +143,11 @@ def install(args):
     paths = [f["path"] for f in manifest["files"]]
     # Pass 1 resolves the dependencies; pass 2 puts exactly these bytes in place even when the
     # same version was already installed from somewhere else.
-    if run(pip + ["install"] + common + EXTRA_INDEX + paths, log):
+    # The published checks run the verifier, whose NumPy dependency is the documented
+    # `verify` extra (`pip install "mojolearn[verify]"`); resolve it with the exact files.
+    with_extra = [p + "[verify]" if os.path.basename(p).startswith(("mojolearn-", "mojolearn_core-")) else p
+                  for p in paths]
+    if run(pip + ["install"] + common + EXTRA_INDEX + with_extra, log):
         raise SystemExit("pypi_wheel_install: pip install failed; see " + log)
     if run(pip + ["install"] + common + ["--force-reinstall", "--no-deps"] + paths, log):
         raise SystemExit("pypi_wheel_install: pip reinstall of the verified files failed; see " + log)
