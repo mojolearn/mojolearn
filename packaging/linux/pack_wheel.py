@@ -437,9 +437,13 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     # from the published wheel has none (its witnesses are the previous
     # release's), so the proofs number the built sets, not three.
     reused_of = {(s.vendor, s.arch): (s.reuse or {}).get('files', {}) for s in sets}
-    # s.files is keyed vendor/arch/<set-relative>; reuse.json is set-relative
+    # s.files is keyed vendor/arch/<set-relative>; reuse.json is set-relative.
+    # Metadata an admission proved (load_set: a rebound PTX_BASELINE.json) is
+    # accounted for like a reused file; every binary still needs reuse or a proof.
+    admitted_of = {(s.vendor, s.arch): set((s.reuse or {}).get('admitted_metadata', ())) for s in sets}
     built_keys = {(s.vendor, s.arch) for s in sets
-                  if any(rel.split('/', 2)[2] not in reused_of[(s.vendor, s.arch)] for rel in s.files)}
+                  if any(rel.split('/', 2)[2] not in reused_of[(s.vendor, s.arch)]
+                         and rel.split('/', 2)[2] not in admitted_of[(s.vendor, s.arch)] for rel in s.files)}
     # A HOST BINDING BUILT FOR THIS RELEASE while every GPU set is the
     # published one: one leg (release_reuse's cheapest) built it and read it
     # back, so exactly one proof is required, that leg's.
@@ -1242,6 +1246,13 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None, allow_ind
                 gpu_plugins.validate_baseline_manifest(doc, digests, indexes=tier_indexes)
                 if "release_admission" in doc or (reuse or {}).get("legs", {}).get("cuda-sm_80"):
                     validate_ptx_admission(doc, adir, (reuse or {}).get("legs", {}))
+                    if reuse is not None and "release_admission" in doc:
+                        # A RETAINED PTX LEG'S MANIFEST, REBOUND (ptx_reuse.rebind_manifest):
+                        # its only fresh bytes are this metadata, which the admission
+                        # just proved against the leg's raw original manifest and build
+                        # proof, so it is no binary a leg built for this release and
+                        # needs no build proof of its own (the set is not "built").
+                        reuse = dict(reuse, admitted_metadata=[gpu_plugins.BASELINE_MANIFEST])
                 if "retained_composition" in doc:
                     from retained_release_composition import validate_ptx
                     validate_ptx(doc, adir)
