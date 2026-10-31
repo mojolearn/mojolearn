@@ -690,13 +690,17 @@ class RequirementsLedger:
         return attempt
 
     def gate(self, manifest=None, stage=None):
-        rows = self.plan(manifest)
-        if not rows:
-            return False, ["release requirements have not been declared"]
-        blocked = [f"{name}: {row['status']}: {'; '.join(row['reasons'])}"
-                   for name, row in rows.items() if row["required"] and row["status"] != "passed"
-                   and (stage is None or row["stage"] == stage)]
-        return not blocked, blocked
+        return gate_rows(self.plan(manifest), stage)
+
+
+def gate_rows(rows, stage=None):
+    """(ready, blocked reasons) of evaluated rows: every required row of STAGE passed."""
+    if not rows:
+        return False, ["release requirements have not been declared"]
+    blocked = [f"{name}: {row['status']}: {'; '.join(row['reasons'])}"
+               for name, row in rows.items() if row["required"] and row["status"] != "passed"
+               and (stage is None or row["stage"] == stage)]
+    return not blocked, blocked
 
 
 def main(argv=None):
