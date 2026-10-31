@@ -51,7 +51,7 @@ finish() {
     fi
     printf '{"vendor":"%s","version":"%s","source_commit":"%s","target":"%s","tag":"%s","phase":"%s","exit":%d,"job_script_sha256":"%s","gate_env_sha256":"%s","work":"%s"}\n' \
         "$GATE_VENDOR" "$GATE_VERSION" "$GATE_SOURCE_COMMIT" "$GATE_TARGET" "$GATE_TAG" "$PHASE" "$code" \
-        "$(sha256sum "$0" | cut -d' ' -f1)" "$(sha256sum "$IN/gate.env" | cut -d' ' -f1)" "$GATE_WORK" > "$J/status.json"
+        "$(sha256sum "$IN/$(basename "$0")" | cut -d' ' -f1)" "$(sha256sum "$IN/gate.env" | cut -d' ' -f1)" "$GATE_WORK" > "$J/status.json"
     say "exit $code in phase $PHASE"
     exit "$code"
 }
