@@ -454,7 +454,7 @@
     },
     {
       "id": "multi-gpu-nvidia",
-      "scope": "Two physical GPUs for nvidia",
+      "scope": "Two physical GPUs for nvidia (comparison only: verify --par against the one-device reference; not a release gate, Andrew 2026-10-30)",
       "coverage": [
         "native device placement",
         "consumed outputs",
@@ -472,7 +472,8 @@
         "build_flags"
       ],
       "kind": "multi",
-      "stage": "pre"
+      "stage": "pre",
+      "required": false
     },
     {
       "id": "performance-nvidia",
@@ -531,7 +532,7 @@
     },
     {
       "id": "multi-gpu-amd",
-      "scope": "Two physical GPUs for amd",
+      "scope": "Two physical GPUs for amd (comparison only: verify --par against the one-device reference; not a release gate, Andrew 2026-10-30)",
       "coverage": [
         "native device placement",
         "consumed outputs",
@@ -549,7 +550,8 @@
         "build_flags"
       ],
       "kind": "multi",
-      "stage": "pre"
+      "stage": "pre",
+      "required": false
     },
     {
       "id": "performance-amd",
