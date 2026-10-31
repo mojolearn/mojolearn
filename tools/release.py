@@ -3976,6 +3976,8 @@ class Release:
                     reason = next((r for r in reasons if r not in diffs), reasons[0])
                     if diffs:
                         reason += " (inputs differ from the tested source)"
+                    # One group per cause, not per lane: the lane is in the row name.
+                    reason = re.sub(r"execution_environment/[^/]+/", "execution_environment/<lane>/", reason)
                     groups.setdefault((family, result["status"], result["action"], reason[:300]), []).append(name)
                 for (family, st, action, reason), names in sorted(groups.items()):
                     say(f"      {family}: {len(names)} {st} / {action}: {reason}")
