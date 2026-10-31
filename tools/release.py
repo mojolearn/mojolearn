@@ -3351,8 +3351,9 @@ class Release:
         if not published:
             return "nothing published yet", dict(platforms=[])
         # THE RELEASE GATE cannot be skipped: every published Linux vendor needs its gate PASS
+        # (unless the owner's --owner-waiver waived it; step_gate_<vendor> logged that)
         ungated = [f"{v} ({self.gate_ok(v)[1]})" for v in GATE_VENDORS
-                   if v in published and not self.dry and not self.gate_ok(v)[0]]
+                   if v in published and not self.dry and not self.gate_waiver(v) and not self.gate_ok(v)[0]]
         if ungated:
             raise StepFailed("published vendor(s) without a passing release gate: " + "; ".join(ungated)
                              + ". Rerun `release` to run the gate (tools/gate_smoke_box.py on the held lq box).")
