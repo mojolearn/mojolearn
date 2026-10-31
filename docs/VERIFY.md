@@ -1052,8 +1052,27 @@ neural training; `SHARD=i/N` splits the lanes into records that are each
 admissible alone). It refuses harness overrides, sabotage switches and a tree
 whose sources differ from its commit, and ends with the
 `tools/identity_columns.py check` verdict, which is `admit()` itself.
+
+Reuse is the default (Andrew 2026-10-31: reuse good old runs, automatically).
+Without `LANES`, `SHARD`, `ONLY_CHANGED` or `FULL`, the recorder records only
+the lanes whose source closure (`tools/lane_select.py`, the column's backend)
+changed since the newest good evidence of the column's own device class. It
+reads that evidence from the admitted table's rows, every admissible record
+under `bench/results/identity_break/` (including `retained/`), the output
+directory and `MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2`. Every other lane is
+reused, not re-run. It prints `REUSED n / RECORD m` and writes the per-lane
+decision to `<outdir>/<label>.reuse.json`. When no lane is owed, it prints
+`NOTHING-CHANGED` and exits 0. A lane whose newest result is not good and
+whose closure has not changed is listed as `KNOWN-BAD`: rerunning unchanged code
+cannot fix it. `FULL=1` is the only way to re-record unchanged lanes.
+`ONLY_CHANGED=table|<sha>` keeps its older meaning, measured from the table's
+oldest row of any class or from one commit.
 `admit_identity_columns.sh` refuses any record `admit()` refuses or records of
-incompatible source commits, retains byte-identical incoming columns under
+incompatible source commits. Records at several commits are compatible when the
+code is equal or when every lane of an older record is superseded by a newer
+record of its class or has an unchanged closure (`identity_columns.py
+reuse-check`). This is how reused older records are admitted beside new
+records of the changed lanes. It retains byte-identical incoming columns under
 `bench/results/identity_break/` (reusing existing copies), regenerates the table from
 repository columns for the selected lanes, reports which routine reference parts still rest on an older
 commit (`reference-report.json`), and runs `verify --self-test` and

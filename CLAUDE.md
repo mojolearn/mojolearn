@@ -133,8 +133,20 @@ protocol-correctness checks and the no-callback requirement.
 ## Release cost rules (Andrew, 2026-10-10)
 
 - Identity records and checks run ONCE (`REPEATS=1`); a mismatch is a bug to fix, never a reason to rerun.
-- Re-record only the lanes whose bits can have changed (`ONLY_CHANGED=table tools/record_identity_column.sh`); every other table row is kept.
+- Re-record only the lanes whose bits can have changed. This is the default of `tools/record_identity_column.sh` (2026-10-31); every other table row is kept.
 - One identity check per release: the table admit. No release step re-fits or re-diffs identity after it.
+
+## Reuse good old runs, automatically (Andrew, 2026-10-31)
+
+- Reuse is the default in code. `tools/record_identity_column.sh` with no lane
+  options records only the lanes whose closure changed since the newest good
+  evidence of the column's device class. That evidence is the table, the
+  committed and retained records, the output dir and `MOJOLEARN_IDENTITY_REUSE_RECORDS`.
+  It prints `REUSED n / RECORD m` or `NOTHING-CHANGED`.
+- `FULL=1` is the only way to re-record unchanged lanes. Ledger launches rerun
+  only with `--redo --rerun-reason`.
+- Admission accepts reused older records next to new ones when each older lane
+  is superseded or its closure is unchanged. See `AGENTS.md` for the details.
 
 ## Public docs and docstrings (Andrew, 2026-10-12)
 

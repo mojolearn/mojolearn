@@ -28,6 +28,16 @@ no binding is imported and nothing runs on a device.
         path changed since the commit its reference rests on (or since --since)
         to it, when the table has no cell for it, or when its fixture revision
         moved. Reasons go to stderr.
+  identity_columns.py changed-lanes --class CLS [--records DIR ...] [--summary-json F]
+        THE record_identity_column.sh DEFAULT (Andrew 2026-10-31: reuse good
+        old runs, automatically): each lane is measured from the newest good
+        evidence of THIS device class (table rows and admissible column records
+        under the --records dirs); unchanged lanes are reused, changed ones
+        listed. Prints a REUSE-SUMMARY line to stderr.
+  identity_columns.py reuse-check --commit C FILE...
+        admission of incoming records at older commits than C: every lane an
+        older record carries is superseded by a newer same-class record, or
+        its closure is unchanged since that record's commit; else exit 1
   identity_columns.py report --table TABLE --commit SHA [--scope routine] [--out JSON]
         for the profile's lanes, how many reference cell parts the table takes
         from a record at SHA and which still rest on an older commit
@@ -410,12 +420,184 @@ def release_floor():
     return _git("merge-base", nv, amd).stdout.strip() or None
 
 
+#: Device class of a column label, as record_identity_column.sh names them.
+def label_class(label):
+    if label == "cpu" or label.startswith("cpu-"):
+        return "cpu"
+    if label.startswith("nvidia-ptx-"):
+        return "ptx"
+    for cls in ("nvidia", "amd", "apple"):
+        if label.startswith(cls + "-"):
+            return cls
+    raise ValueError(f"label {label!r}: expected nvidia-*, nvidia-ptx-*, amd-*, apple-* or cpu")
+
+
+#: A lane's result in one column is GOOD when every part verdict is one of these.
+GOOD_VERDICTS = frozenset({"STABLE", "N/A"})
+#: Files under a records directory that are never reuse sources.
+_NOT_A_SOURCE = (".admission-preview-", ".other-commit-")
+
+
+def _commit_time(commit, cache):
+    if commit not in cache:
+        out = _git("log", "-1", "--format=%ct", commit + "^{commit}")
+        cache[commit] = int(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip().isdigit() else None
+    return cache[commit]
+
+
+def record_lane_results(path, h, v, cls, want_fix, want_held):
+    """{lane: good} for one column record of device class `cls`, or (None, why).
+
+    A lane counts only when the record is admissible (the same admit() the
+    table builder applies), hashed this harness's fixture and held-out bytes,
+    carries the harness's revision of the lane and holds a cell for every
+    fixture. `good` is False when any part of any fixture is not STABLE/N/A."""
+    try:
+        j = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as exc:
+        return None, f"unreadable ({exc})"
+    if j.get("mode") != "identical" or j.get("complete") is not True:
+        return None, "not a complete identical record"
+    got, why = v.record_device_class(j, str(path))
+    if got != cls:
+        return None, why or f"class {got}"
+    why = v.admit(j, os.path.abspath(path), known_lanes=h.LANES)
+    if why:
+        return None, why
+    if any(want_fix.get(f) != x for f, x in (j.get("fixtures") or {}).items()) or \
+            any(want_held.get(f) != x for f, x in (j.get("heldout") or {}).items()):
+        return None, "fixture bytes differ from this harness"
+    revs = getattr(h, "LANE_REVISIONS", {}) or {}
+    have_revs = j.get("lane_revisions") or {}
+    cells = j.get("cells") or {}
+    per_lane = {}
+    for key, cell in cells.items():
+        lane, _, fixture = key.partition("/")
+        per_lane.setdefault(lane, {})[fixture] = cell
+    out = {}
+    for lane, by_fix in per_lane.items():
+        if lane in revs and have_revs.get(lane) != revs[lane]:
+            continue
+        if set(h.FIXTURES) - set(by_fix):
+            continue
+        good = True
+        for fixture in h.FIXTURES:
+            cell = by_fix[fixture]
+            if not isinstance(cell, dict):
+                good = False
+                break
+            verdicts = [val for k, val in cell.items() if k == "verdict" or k.endswith("_verdict")]
+            if not verdicts or any(val not in GOOD_VERDICTS for val in verdicts):
+                good = False
+                break
+        out[lane] = good
+    return (j.get("commit"), out), None
+
+
+def record_sources(dirs):
+    """Every *.identical.json under `dirs` (recursively), sorted, deduplicated."""
+    seen, out = set(), []
+    for d in dirs:
+        d = Path(d)
+        if not d.is_dir():
+            continue
+        for path in sorted(d.rglob("*.identical.json")):
+            if any(tag in str(path) for tag in _NOT_A_SOURCE):
+                continue
+            real = path.resolve()
+            if real not in seen:
+                seen.add(real)
+                out.append(path)
+    return out
+
+
+def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
+    """REUSE GOOD OLD RUNS (Andrew 2026-10-31): for each lane, the newest
+    evidence this device class already holds.
+
+    Returns {lane: dict(commit, time, good, source, committed)}. Sources:
+      * the admitted table: the OLDEST record any agreeing `cls` column of the
+        lane's cells points at (every part of every fixture must have one);
+      * every admissible column record of class `cls` under `record_dirs`
+        (bench/results/identity_break, its retained/ copies, the output dir,
+        MOJOLEARN_IDENTITY_REUSE_RECORDS), per lane that the record covers.
+    The newest by commit time wins. A lane absent from every source is owed."""
+    v = vref()
+    cache = {}
+    best = {}
+
+    def offer(lane, commit, good, source, committed):
+        t = _commit_time(commit, cache) if commit else None
+        if t is None:
+            return False
+        cur = best.get(lane)
+        # Newest commit wins; at the same commit a good result beats a bad one.
+        if cur is None or (t, good) > (cur["time"], cur["good"]):
+            best[lane] = dict(commit=commit, time=t, good=good, source=source, committed=committed)
+        return True
+
+    wanted = set(lanes)
+    records = table.get("records") or []
+    oldest, uncovered = {}, set()
+    for key, cell in (table.get("cells") or {}).items():
+        lane, _, fixture = key.partition("/")
+        if lane not in wanted:
+            continue
+        for ent in cell.values():
+            col = (ent.get("cols") or {}).get(cls)
+            if ent.get("conflict") or not isinstance(col, int) or not 0 <= col < len(records):
+                uncovered.add(lane)      # this class does not carry the reference here
+                continue
+            c = records[col].get("commit")
+            t = records[col].get("commit_time") or 0
+            if c and (lane not in oldest or t < oldest[lane][1]):
+                oldest[lane] = (c, t)
+    lane_fixtures = {}
+    for key in (table.get("cells") or {}):
+        lane, _, fixture = key.partition("/")
+        lane_fixtures.setdefault(lane, set()).add(fixture)
+    stale = set(v.stale_reference_lanes(table, h))
+    for lane, (c, _t) in oldest.items():
+        if lane in uncovered or lane in stale or set(h.FIXTURES) - lane_fixtures.get(lane, set()):
+            continue
+        offer(lane, c, True, "table", True)
+    want_fix = {f: dict(X=h._h(X), y_clf=h._h(yc), y_reg=h._h(yr))
+                for f, (X, yc, yr) in ((f, h.fixture(f)) for f in h.FIXTURES)}
+    want_held = {f: dict(X=h._h(h.heldout(f))) for f in h.FIXTURES}
+    committed_root = (ROOT / "bench" / "results" / "identity_break").resolve()
+    used = 0
+    for path in record_sources(record_dirs):
+        got, why = record_lane_results(path, h, v, cls, want_fix, want_held)
+        if got is None:
+            if not (why or "").startswith("class "):
+                log(f"# reuse: skip {path}: {why}")
+            continue
+        commit, results = got
+        committed = str(path.resolve()).startswith(str(committed_root) + os.sep)
+        n = sum(offer(lane, commit, good, str(path), committed)
+                for lane, good in results.items() if lane in wanted)
+        if n:
+            used += 1
+        elif results and _commit_time(commit, cache) is None:
+            log(f"# reuse: skip {path}: commit {str(commit)[:12]} is not in this repository")
+    log(f"# reuse: class {cls}: {len(best)} of {len(lanes)} lanes have evidence "
+        f"({used} column record(s) read, table rows included)")
+    return best
+
+
 def cmd_changed_lanes(args):
     """INCREMENTAL RE-RECORD (Andrew 2026-10-10: identity runs ONCE; a mismatch
     is a bug to fix, never a reason to rerun). Re-record only what changed;
     every other row is kept: build_table takes the newest commit per cell part
     and device class, so a record of these lanes at HEAD replaces exactly their
     rows and leaves every other lane's admitted rows in place.
+
+    With --class (the default of record_identity_column.sh since Andrew
+    2026-10-31, "RE USE GOOD OLD RUNS ... AUTO in the code, NOT MANUAL"), each
+    lane is measured from the newest evidence THIS column's device class holds
+    (reuse_points), not from the oldest row of any class. A lane whose newest
+    evidence is not good and whose closure has not changed since is KNOWN-BAD:
+    re-running unchanged code cannot fix it, so it is reported, not re-recorded.
 
     The closure is lane_select's (the map the release lane selection and
     verify_lanes --changed-since use), never a hand list."""
@@ -425,19 +607,33 @@ def cmd_changed_lanes(args):
     records = table.get("records") or []
     sys.path.insert(0, str(ROOT / "tools"))
     import lane_select
-    # The commit each lane's references rest on: the OLDEST record any of its
-    # agreeing columns points at (a change after it can have moved that row).
+    cls = getattr(args, "cls", "") or ""
+    points, bad_at, uncommitted = {}, set(), set()
     since = {}
-    for key, cell in (table.get("cells") or {}).items():
-        lane = key.partition("/")[0]
-        for ent in cell.values():
-            for col in (ent.get("cols") or {}).values():
-                idx = col if isinstance(col, int) else (col[0] if isinstance(col, list) and col else None)
-                if not isinstance(idx, int) or not 0 <= idx < len(records):
-                    continue
-                c, t = records[idx].get("commit"), records[idx].get("commit_time") or 0
-                if c and (lane not in since or t < since[lane][1]):
-                    since[lane] = (c, t)
+    if cls:
+        if args.since:
+            raise SystemExit("REFUSING: --class measures each lane from its own evidence; drop --since")
+        log = lambda s: print(s, file=sys.stderr, flush=True)  # noqa: E731
+        points = reuse_points(h, lanes, table, cls, list(getattr(args, "records", None) or []), log=log)
+        for lane, p in points.items():
+            since[lane] = (p["commit"], p["time"])
+            if not p["good"]:
+                bad_at.add(lane)
+            if not p["committed"]:
+                uncommitted.add(lane)
+    else:
+        # The commit each lane's references rest on: the OLDEST record any of its
+        # agreeing columns points at (a change after it can have moved that row).
+        for key, cell in (table.get("cells") or {}).items():
+            lane = key.partition("/")[0]
+            for ent in cell.values():
+                for col in (ent.get("cols") or {}).values():
+                    idx = col if isinstance(col, int) else (col[0] if isinstance(col, list) and col else None)
+                    if not isinstance(idx, int) or not 0 <= idx < len(records):
+                        continue
+                    c, t = records[idx].get("commit"), records[idx].get("commit_time") or 0
+                    if c and (lane not in since or t < since[lane][1]):
+                        since[lane] = (c, t)
     # RELEASE FLOOR (Andrew 2026-10-12: "we should only need to verify a few
     # things"). A shipped release admitted every row of its table for its own
     # code (the release's one identity check), so a row whose record commit is
@@ -450,11 +646,13 @@ def cmd_changed_lanes(args):
         # per lane: hundreds of lanes rest on a handful of commits.
         ancestor = {c: is_ancestor(c, floor) for c in sorted({c for c, _t in since.values()})}
         for lane, (c, _t) in list(since.items()):
-            if ancestor[c]:
+            # An uncommitted reuse source was never part of a release's table.
+            if ancestor[c] and lane not in uncommitted:
                 since[lane] = (floor, 0)
         print(f"# release floor {floor[:12]} ({args.floor_desc or 'last NVIDIA/AMD release tags'}): rows recorded "
               "before it are measured from it", file=sys.stderr)
-    stale = set(vref().stale_reference_lanes(table, h))
+    # --class: reuse_points already refused table rows at an old fixture revision.
+    stale = set() if cls else set(vref().stale_reference_lanes(table, h))
     sources, _ = lane_select.lane_sources()
     picked_by = {}                       # commit -> set of lanes its diff reaches
     # The lanes whose answer each commit's diff decides: once its selection
@@ -502,11 +700,100 @@ def cmd_changed_lanes(args):
                 why[lane] = f"closure changed since {ref[:12]}"
         if lane in why:
             out.append(lane)
+    known_bad = [lane for lane in lanes if lane in bad_at and lane not in why]
+    reused = [lane for lane in lanes if lane not in why and lane not in bad_at]
     for lane in out[:40]:
         print(f"# re-record {lane}: {why[lane]}", file=sys.stderr)
+    for lane in known_bad[:20]:
+        p = points[lane]
+        print(f"# known-bad {lane}: its newest {cls} result ({p['commit'][:12]}, {p['source']}) is not good and "
+              "its closure has not changed since; fix the code, a rerun cannot", file=sys.stderr)
+    if cls:
+        print(f"# REUSE-SUMMARY class={cls} REUSED {len(reused)} RECORD {len(out)} KNOWN-BAD {len(known_bad)} "
+              f"of {len(lanes)} ({args.scope})", file=sys.stderr)
+    if getattr(args, "summary_json", ""):
+        doc = dict(schema="mojolearn.identity-reuse.v1", device_class=cls or None, scope=args.scope,
+                   record={lane: why[lane] for lane in out},
+                   reused={lane: dict(points[lane], time=None) if lane in points else
+                           dict(commit=(since.get(lane) or (None,))[0], source="table")
+                           for lane in reused},
+                   known_bad={lane: points[lane] for lane in known_bad})
+        for row in doc["reused"].values():
+            row.pop("time", None)
+        Path(args.summary_json).write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
     print(f"# CHANGED-LANES {len(out)} of {len(lanes)} ({args.scope}); every other row is kept", file=sys.stderr)
     print(",".join(out))
     return 0
+
+
+CLASS_BACKEND = dict(nvidia="cuda", ptx="cuda", amd="hip")
+
+
+def cmd_reuse_check(args):
+    """ADMISSION OF REUSED OLDER RECORDS (Andrew 2026-10-31: reuse good old
+    runs). Incoming records may name older commits than the newest one, C:
+    a reused full column next to an incremental record of the changed lanes.
+    Each lane an older record carries must either be carried by a NEWER
+    incoming record of the same device class (the table builder takes the
+    newest commit per cell part and class, so the older row never reaches the
+    table), or have a source closure (tools/lane_select.py, this column's
+    backend) that has not changed between the record's commit and this
+    checkout. Anything else is refused: that row would describe code that is
+    not the code being admitted. Cross-vendor bit agreement is still decided
+    by the table builder and identity_admission_guard.py; this check only
+    decides whether an older row may stand for the admitted code."""
+    h, v = harness(), vref()
+    sys.path.insert(0, str(ROOT / "tools"))
+    import lane_select
+    cache, recs = {}, []
+    for path in args.files:
+        j = json.loads(Path(path).read_text())
+        cls, why = v.record_device_class(j, path)
+        if cls is None:
+            print(f"REUSE-CHECK {path}: no device class ({why})")
+            return 1
+        commit = j.get("commit")
+        t = _commit_time(commit, cache) if commit else None
+        if t is None:
+            print(f"REUSE-CHECK {path}: commit {str(commit)[:12]} is not in this repository")
+            return 1
+        lanes = {k.partition("/")[0] for k in (j.get("cells") or {})}
+        recs.append(dict(path=path, cls=cls, commit=commit, time=t, lanes=lanes))
+    target = args.commit
+    owed = {}          # (commit, cls) -> lanes whose closure must be unchanged since commit
+    for r in recs:
+        if r["commit"] == target:
+            continue
+        newer = set().union(*([o["lanes"] for o in recs if o["cls"] == r["cls"] and o["time"] > r["time"]] or [set()]))
+        rest = r["lanes"] - newer
+        if rest:
+            owed.setdefault((r["commit"], r["cls"]), set()).update(rest)
+    if not owed:
+        print(f"REUSE-CHECK ok=yes: every older incoming row is superseded by a newer record of its class")
+        return 0
+    sources, _ = lane_select.lane_sources()
+    problems, checked = [], 0
+    for (commit, cls), lanes in sorted(owed.items()):
+        checked += len(lanes)
+        try:
+            paths = lane_select.changed_paths(commit)
+            sel = lane_select.select(paths, ref=commit, sources=sources, backend=CLASS_BACKEND.get(cls),
+                                     stop_when=lanes)
+        except (SystemExit, Exception) as exc:  # a diff that cannot be taken is not "unchanged"
+            problems.append(f"{cls}@{commit[:12]}: cannot diff ({exc})")
+            continue
+        if sel.get("unattributed"):
+            problems.append(f"{cls}@{commit[:12]}: unattributed paths {sel['unattributed'][:3]}")
+            continue
+        moved = sorted(lanes & set(sel["lanes"]))
+        if moved:
+            problems.append(f"{cls}@{commit[:12]}: closure changed for {len(moved)} lane(s), e.g. {moved[:5]}; "
+                            "record them at the admitted commit")
+    for p in problems[:20]:
+        print(f"  REUSE-REFUSED {p}")
+    print(f"REUSE-CHECK ok={'NO' if problems else 'yes'} older_rows_checked={checked} "
+          f"commits={len({c for c, _ in owed})} problems={len(problems)}")
+    return 1 if problems else 0
 
 
 def main():
@@ -530,7 +817,16 @@ def main():
                    help="measure each row from its own record commit even when a release shipped after it")
     g.add_argument("--backend", choices=("cuda", "hip", "metal", "cpu"), default="",
                    help="the column's backend: paths that cannot reach its binaries are inert (lane_select)")
+    g.add_argument("--class", dest="cls", choices=("apple", "nvidia", "amd", "cpu", "ptx"), default="",
+                   help="measure each lane from the newest evidence of THIS device class (table rows and "
+                        "column records); the record_identity_column.sh default")
+    g.add_argument("--records", action="append", default=[],
+                   help="a directory of column records to reuse from (recursive; repeatable)")
+    g.add_argument("--summary-json", default="", help="write the per-lane reuse/record decision here")
     g.set_defaults(floor_desc="")
+    k = sub.add_parser("reuse-check")
+    k.add_argument("--commit", required=True, help="the newest incoming record commit (the admitted one)")
+    k.add_argument("files", nargs="+")
     r = sub.add_parser("report")
     r.add_argument("--table", required=True)
     r.add_argument("--commit", required=True)
@@ -539,7 +835,7 @@ def main():
     args = ap.parse_args()
     args.cmd = args.cmd.replace("-", "_")
     return dict(lanes=cmd_lanes, check=cmd_check, report=cmd_report, from_verify=cmd_from_verify,
-                changed_lanes=cmd_changed_lanes)[args.cmd](args)
+                changed_lanes=cmd_changed_lanes, reuse_check=cmd_reuse_check)[args.cmd](args)
 
 
 if __name__ == "__main__":

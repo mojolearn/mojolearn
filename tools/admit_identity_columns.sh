@@ -13,7 +13,10 @@
 #   1. every <records dir>/*.identical.json must pass
 #      tools/identity_columns.py check (the same _verify_reference.admit() the
 #      table builder applies, plus this harness's fixture bytes); all must name
-#      ONE commit, and that commit must be in this repository (its commit time
+#      ONE commit, commits with equal code, or (REUSE GOOD OLD RUNS, Andrew
+#      2026-10-31) older commits whose every lane is superseded by a newer
+#      record of its class or has an unchanged closure (identity_columns.py
+#      reuse-check); every commit must be in this repository (its commit time
 #      decides "newest wins")
 #   2. retains byte-identical copies under bench/results/identity_break/,
 #      reusing existing copies without requiring a separate prerequisite commit
@@ -238,18 +241,30 @@ commits=$(sed -n 's/.* commit=\([0-9a-f]*\) .*/\1/p' "$EVID/check.txt" | sort -u
 # Andrew forbade on 2026-10-10). The admitted commit is the newest of them.
 TMP_CODEDIFF=$(mktemp)
 ncommits=$(wc -l <<< "$commits" | tr -d ' ')
+for c in $commits; do git cat-file -e "$c^{commit}" 2>/dev/null || die "commit $c is not in this repository (git fetch origin first)"; done
+C=$(for c in $commits; do echo "$(git log -1 --format=%ct $c) $c"; done | sort -n | tail -n 1 | cut -d' ' -f2)
 if [ "$ncommits" != 1 ]; then
-    for c in $commits; do git cat-file -e "$c^{commit}" 2>/dev/null || die "commit $c is not in this repository (git fetch origin first)"; done
     first=$(echo $commits | cut -d' ' -f1)
+    code_equal=1
     for c in $commits; do
         # tools/identity_code_equal.py: docs, boards, tools, the docs site, package metadata and docstring-only
         # Python changes cannot move a record's bits (2026-10-12: 80 docstring rewrites between the two columns).
-        python3 tools/identity_code_equal.py "$first" "$c" > "$TMP_CODEDIFF" \
-            || die "records name more than one commit and the code differs between $first and $c ($(head -n 3 "$TMP_CODEDIFF" | tr '\n' ' ')...): $(echo $commits)"
+        python3 tools/identity_code_equal.py "$first" "$c" > "$TMP_CODEDIFF" || { code_equal=0; break; }
     done
-    echo "records name $ncommits commits with identical code ($(echo $commits)); admitting under the newest"
+    if [ $code_equal = 1 ]; then
+        echo "records name $ncommits commits with identical code ($(echo $commits)); admitting under the newest"
+    else
+        # REUSE GOOD OLD RUNS (Andrew 2026-10-31): reused older records next to
+        # incremental records of the changed lanes. Every lane an older record
+        # carries is superseded by a newer record of its class, or its closure
+        # (tools/lane_select.py) is unchanged since that record's commit.
+        "${PY[@]}" tools/identity_columns.py reuse-check --commit "$C" "${files[@]}" > "$EVID/reuse-check.txt" 2>&1
+        rrc=$?
+        grep -m 20 -E 'REUSE-' "$EVID/reuse-check.txt" | cut -c1-300
+        [ $rrc = 0 ] || die "records name more than one commit and an older record's lane closure changed since its commit ($(head -n 3 "$TMP_CODEDIFF" | tr '\n' ' ')...); see $EVID/reuse-check.txt"
+        echo "records name $ncommits commits; every older row is superseded or its lane closure is unchanged; admitting under the newest"
+    fi
 fi
-C=$(for c in $commits; do echo "$(git log -1 --format=%ct $c) $c"; done | sort -n | tail -n 1 | cut -d' ' -f2)
 git cat-file -e "$C^{commit}" 2>/dev/null || die "commit $C is not in this repository (git fetch origin first)"
 
 # Freeze the base before building a candidate. Neither reporting nor coverage

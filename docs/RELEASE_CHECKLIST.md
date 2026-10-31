@@ -250,7 +250,9 @@ the table's `3d1d7c30b12d9872`). In order, from one pushed commit:
 1. On each box (NVIDIA, AMD, the Apple M2, and once with `cpu` for the host
    column), in a checkout with every binding built:
    `tools/record_identity_column.sh <vendor-label> <absolute outdir>`
-   (shard with `SHARD=i/N` when a job has a time limit).
+   (it records only the lanes whose closure changed and reuses the rest;
+   `FULL=1` records every lane; shard a full column with `SHARD=i/N` when a
+   job has a time limit).
 2. On this Mac: `tools/admit_identity_columns.sh --build-host <outdir>...`
    places the records under `bench/results/identity_break/<date>-<REF_TAG>/` (REF_TAG, e.g. 0836),
    regenerates the table, and runs `verify --self-test` and `verify --coverage`
@@ -267,10 +269,17 @@ Both must show native GAP 0 and Python GAP 0; every new lane they name goes into
 proven with `tools/coverage_sabotage.py plan --arm <arm>` / `check` (`apply-check` first).
 
 macos-smoke's self-test job fails a wheel whose table is stale; it cannot
-regenerate one. Re-record only what changed: `ONLY_CHANGED=table
-tools/record_identity_column.sh ...` records just the lanes whose closure moved
-since the admitted table; every other row is kept. The admit is THE identity
-check of the release (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun).
+regenerate one. Reuse is the default (Andrew 2026-10-31: reuse good old runs,
+automatically). `tools/record_identity_column.sh <label> <outdir>` records just
+the lanes whose closure moved since the newest good evidence of that device
+class. That evidence is the admitted table, the committed and retained records,
+the output dir and `MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2`. Every other
+lane is reused. The script prints `REUSED n / RECORD m`, or `NOTHING-CHANGED`.
+`FULL=1` is the only way to re-record unchanged lanes. When it prints
+`ADMIT-WITH`, pass those record directories to `admit_identity_columns.sh` as
+well. `ONLY_CHANGED=table|<sha>` keeps its older table-wide meaning. The admit
+is THE identity check of the release (Andrew 2026-10-10: identity runs ONCE; a
+mismatch is a bug to fix, never a reason to rerun).
 
 ## The one command
 
