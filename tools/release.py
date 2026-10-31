@@ -1541,11 +1541,22 @@ class Release:
         """Retained-producer admission reports for this freeze (release_requirements_retained)."""
         return self.rel / "ledger-evidence"
 
+    def macos_bincache(self):
+        return self.rel / "macos-bincache"
+
     def retained_producers(self):
         """(adapter, producer paths) of this freeze's retained outputs that never wrote the
-        ledger: the Apple installed-adapter smoke of the macOS wheel (gate-apple)."""
+        ledger: the macOS release build (its binary cache and log; the cache of a build
+        made before step_macos_build kept one is named by MOJOLEARN_BINCACHE_DIR) and the
+        Apple installed-adapter smoke of the macOS wheel (gate-apple)."""
         out = []
         wheel = self.macos_wheel()
+        log = self.rel / "macos-build.log"
+        caches = [self.macos_bincache()] + ([Path(os.environ["MOJOLEARN_BINCACHE_DIR"])]
+                                            if os.environ.get("MOJOLEARN_BINCACHE_DIR") else [])
+        cache = next((c for c in caches if (c / "provenance" / "provenance.tsv").is_file()), None)
+        if wheel and log.is_file() and cache is not None:
+            out.append(("macos-release-build", dict(wheel=str(wheel), log=str(log), cache=str(cache))))
         if wheel and (self.apple_adapters_out() / "wheel.json").is_file():
             out.append(("apple-gate-adapters", dict(adapters=str(self.apple_adapters_out()), wheel=str(wheel))))
         return out
@@ -2455,7 +2466,12 @@ class Release:
         sys.path.insert(0, str(ROOT / "tools"))
         import mac_slot
         slots = str(min(4, mac_slot.slot_count()))
-        env = dict(MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1",
+        # The binary cache is the build's provenance (key = exact source closure,
+        # flags, toolchain -> compiled bytes): keep it release-scoped so the
+        # compile-apple rows are admitted from it (macos-release-build) and a
+        # shared cache's pruning can never remove it.
+        env = dict(MOJOLEARN_BINCACHE_DIR=str(self.macos_bincache()),
+                   MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1",
                    MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
         plan = self.plan()
         src = self.src

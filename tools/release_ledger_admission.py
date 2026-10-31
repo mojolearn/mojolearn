@@ -52,6 +52,9 @@ Adapters (``--adapter``):
                           (--producer report=DIR/runtime-report.json)
   published-install       published-<vendor> (post stage) from tools/release_published_install.py
                           (--producer report=DIR/published-report.json)
+  macos-release-build     compile-apple from the macOS release build: its binary cache keys
+                          recomputed at the frozen source, packaging replayed to the shipped
+                          wheel bytes   (--producer wheel= log= cache=)
   identity-table-admission identity-<vendor>/<lane> from the committed identity table admission
                           (--producer admission=bench/results/reference_admissions/<date>
                            --producer revision=<record commit>); release.py runs it automatically
@@ -93,6 +96,7 @@ ADAPTERS = {
     "installed-runtime": ("release_installed_evidence", "runtime"),
     "published-install": ("release_installed_evidence", "published"),
     "identity-table-admission": ("release_requirements_retained", "identity"),
+    "macos-release-build": ("release_requirements_macos_build", "compile"),
 }
 REPORT_TYPES = {"compile": "build", "source": "source"}
 
