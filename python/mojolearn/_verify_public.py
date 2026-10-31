@@ -15,6 +15,7 @@ def run(*, self_test=False, scope='all'):
         except Exception as error:
             results[name]=dict(status='FAILED',errors=[type(error).__name__+': '+str(error)])
     states={r['status'] for r in results.values()}
-    status='FAILED' if 'FAILED' in states else 'MATCH' if states=={'MATCH'} else 'OWED'
+    status=('FAILED' if 'FAILED' in states else 'MATCH' if states=={'MATCH'}
+            else 'UNTESTED' if states<={'MATCH','UNTESTED'} else 'OWED')
     return dict(format='mojolearn.public-verification.v1',status=status,**results,
                 release_qualified=False,scope=scope)
