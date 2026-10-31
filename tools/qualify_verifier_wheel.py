@@ -218,7 +218,17 @@ def runner(manifest, receipt, output):
         save()
         if code not in allowed_exits:
             raise RuntimeError(f"{name} failed with exit {code}; see {path}")
-        return json.loads(path.read_text()) if json_output else None
+        if not json_output:
+            return None
+        text = path.read_text()
+        # The document starts at its first "{" line. Native library notices printed to
+        # stdout before it (0.8.63: RandomForest's "WARN: The number of bins ...") are kept
+        # beside the job's output, never parsed as or dropped from the evidence.
+        lines = text.splitlines(keepends=True)
+        start = next((i for i, line in enumerate(lines) if line.rstrip() == "{"), 0)
+        if start:
+            (output / (name + ".stdout-noise.log")).write_text("".join(lines[:start]))
+        return json.loads("".join(lines[start:]))
 
     return save, run
 
