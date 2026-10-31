@@ -386,12 +386,17 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
         var windowed_result12 = causal_model_embedding(top, args)
         mods.released()
         return windowed_result12^
-    if operation == "final":
-        var windowed_result11 = causal_model_head(top, args)
-        mods.released()
-        return windowed_result11^
-    if operation == "head" or operation == "head_int15":
-        var windowed_result10 = causal_model_head(top, args, False, operation == "head_int15")
+    if operation == "final" or operation == "head" or operation == "head_int15":
+        # Generation head admission reads only a captured native namespace
+        # (generation_metadata_pyapi._generation_fields), never a live model
+        # owner. Capture the worker's private top-level fields per operation,
+        # as the single-process path captures its model.
+        var captured_top = _causal_namespace(mods, _parallel_causal_fields(top))
+        if operation == "final":
+            var windowed_result11 = causal_model_head(captured_top, args)
+            mods.released()
+            return windowed_result11^
+        var windowed_result10 = causal_model_head(captured_top, args, False, operation == "head_int15")
         mods.released()
         return windowed_result10^
     if operation == "norm":
