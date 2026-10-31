@@ -49,7 +49,7 @@ def build_flags(environ=None):
         for name in ("TOKEN", "PASSWORD", "SECRET", "ACCESS_KEY", "PRIVATE_KEY")
         for suffix in ("", "_FILE", "_PATH"))
     evidence_locations = {"MOJOLEARN_REQUIREMENTS_LEDGER", "MOJOLEARN_LEDGER_EVIDENCE_ROOT",
-                          "MOJOLEARN_LEDGER_BUNDLE"}
+                          "MOJOLEARN_LEDGER_BUNDLE", "MOJOLEARN_EVIDENCE_ROOT"}
     # This authorizes the Git pre-push guard; it never reaches a compiler.
     publication_controls = {"MOJOLEARN_WIDE_REBUILD_OK"}
     return {key: value for key, value in flags.items()
