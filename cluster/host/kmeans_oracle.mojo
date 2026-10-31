@@ -1317,14 +1317,43 @@ def host_fit_main[with_init: Bool = True](
             # `comptime if`, so the [with_init=False] instance never names
             # host_init_scalable and the instantiation graph has no cycle.
             comptime if with_init:
+                # THE SEEDING SWITCH AS AN INTEGER TEST (lane cpu-identity-0863,
+                # 2026-10-31). `oversampling_factor != 0.0` selected classic
+                # k-means++ here, but in the Linux x86-64 merged host build
+                # (`_mojolearn_native_forest_host`, release 0.8.63) the compiled
+                # host_fit_main never compares the factor: init 0 always ran the
+                # scalable seeding, so GaussianMixture's classic start (factor
+                # 0.0, DEVIATION 3133) seeded through k-means|| on the Linux CPU
+                # column while macOS and the three GPUs seeded classically
+                # (pod card: init.centroids 2eb98b22b304b606 = the scalable arm
+                # at factor 0.0, reproduced on the M4). The same merged group
+                # cross-compiled for x86-64 on macOS keeps the compare; the
+                # Linux-built ones (GitHub runners, the RunPod pod) drop it. The
+                # magnitude bits
+                # give the same answer as IEEE `!=` for every input (+-0.0 is
+                # classic, any other value or NaN is scalable) and leave nothing
+                # for a floating-point fold to remove. The word goes through a
+                # volatile stack slot: a plain bitcast folds straight back into
+                # the same floating compare (checked in the x86-64 object), and
+                # a volatile load is never forwarded, so no value reasoning about
+                # the argument can decide the branch at compile time.
+                var oversampling_slot = stack_allocation[1, Float64]()
+                oversampling_slot.store[volatile=True](oversampling_factor)
+                var oversampling_bits = oversampling_slot.bitcast[UInt64]().load[
+                    volatile=True
+                ]() & UInt64(0x7FFFFFFFFFFFFFFF)
+                var scalable = (
+                    init == INIT_KMEANS_PLUS_PLUS
+                    and oversampling_bits != UInt64(0)
+                )
                 trace.header(
                     "init route init=" + String(init) + " oversampling="
                     + String(oversampling_factor) + " k=" + String(k)
-                    + " is_sqrt=" + String(is_sqrt)
+                    + " is_sqrt=" + String(is_sqrt) + " scalable=" + String(scalable)
                 )
                 if init == INIT_RANDOM:
                     host_init_random(x, n, d, k, cur, rng)
-                elif init == INIT_KMEANS_PLUS_PLUS and oversampling_factor != 0.0:
+                elif scalable:
                     host_init_scalable(
                         x, x_norm, n, d, k, metric, oversampling_factor, cur, rng,
                         trace, restart_tag, lazy_shift, recluster_max_iter,
