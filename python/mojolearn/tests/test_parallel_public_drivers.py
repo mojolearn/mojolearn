@@ -25,7 +25,8 @@ import pytest
 import mojolearn
 
 MODULES = ("parallel_classical", "parallel_ensemble", "parallel_graph", "parallel_neighbors",
-           "parallel_neighbors_reference", "parallel_preprocessing")
+           "parallel_neighbors_reference", "parallel_preprocessing", "parallel_forecasting",
+           "parallel_gaussian_process")
 
 #: Text that belongs in an engineering comment, never in a user docstring.
 _NOT_USER_VOICE = re.compile(r"lane/|\b20\d\d-\d\d-\d\d\b|\.mojo\b|\.py:\d|\bTODO\b|NOT YET|\bIDENTICAL\b")
@@ -131,6 +132,67 @@ def _umap(dev):
     plain = mojolearn.UMAP(**kw).fit(X[:256])
     return [("fit_graph embedding_", par.embedding_, plain.embedding_),
             ("transform_umap", transform_umap(par, X[256:], devices=dev), plain.transform(X[256:]))]
+
+
+def _spectral(dev):
+    from mojolearn.parallel_graph import fit_graph
+    X, _, _ = _data(200, 4)
+    par = fit_graph(mojolearn.SpectralClustering(n_clusters=3, random_state=3), X, devices=dev)
+    plain = mojolearn.SpectralClustering(n_clusters=3, random_state=3).fit(X)
+    return [("fit_graph labels_", par.labels_, plain.labels_),
+            ("fit_graph embedding_", par.embedding_, plain.embedding_)]
+
+
+def _hw_series():
+    X, _, _ = _data(96, 3)
+    return np.ascontiguousarray(np.cumsum(np.abs(X), axis=0).T.astype(np.float32) + np.float32(10.0))
+
+
+def _forecast_exponential_smoothing(dev):
+    from mojolearn.parallel_forecasting import forecast_exponential_smoothing, predict_exponential_smoothing
+    m = mojolearn.ExponentialSmoothing(_hw_series(), seasonal="additive", seasonal_periods=4, ts_num=3).fit()
+    # Shards of two series leave a one-series shard, whose worker returns the 1-D shape.
+    return [("predict_exponential_smoothing", predict_exponential_smoothing(m, m.n, m.n + 8, devices=dev, series_per_shard=2),
+             m.predict(m.n, m.n + 8)),
+            ("forecast_exponential_smoothing", forecast_exponential_smoothing(m, 8, devices=dev, series_per_shard=2),
+             m.forecast(8)),
+            ("forecast_exponential_smoothing index", forecast_exponential_smoothing(m, 8, index=2, devices=dev, series_per_shard=2),
+             m.forecast(8, index=2))]
+
+
+def _forecast_arima(dev):
+    from mojolearn.parallel_forecasting import forecast_arima, predict_arima
+    X, _, _ = _data(128, 3)
+    series = np.ascontiguousarray(np.cumsum(X, axis=0).T.astype(np.float32))
+    m = mojolearn.ARIMA(order=(1, 0, 0)).fit(series)
+    return [("predict_arima", predict_arima(m, 128, 134, devices=dev, series_per_shard=2), m.predict(128, 134)),
+            ("forecast_arima", forecast_arima(m, 6, devices=dev, series_per_shard=2), m.forecast(6))]
+
+
+def _gpc_targets():
+    X, yc, _ = _data(96, 4)
+    y3 = np.ascontiguousarray((np.argsort(np.argsort(X[:64, 3], kind="stable"), kind="stable") * 3 // 64).astype(np.int64))
+    return X, yc, y3
+
+
+def _gaussian_process_classifier(dev):
+    from mojolearn.parallel_gaussian_process import (fit_gaussian_process_classifier,
+                                                     predict_gaussian_process_classifier)
+    X, yc, y3 = _gpc_targets()
+    k = mojolearn.ConstantKernel(1.0) * mojolearn.RBF(1.0)
+    xs, q = X[:64], X[64:]
+    par = fit_gaussian_process_classifier(mojolearn.GaussianProcessClassifier(kernel=k), xs, yc[:64], devices=dev)
+    plain = mojolearn.GaussianProcessClassifier(kernel=k).fit(xs, yc[:64])
+    par3 = fit_gaussian_process_classifier(mojolearn.GaussianProcessClassifier(kernel=k), xs, y3, devices=dev)
+    plain3 = mojolearn.GaussianProcessClassifier(kernel=k).fit(xs, y3)
+    return [("fit_gaussian_process_classifier proba", par.predict_proba(q), plain.predict_proba(q)),
+            ("fit_gaussian_process_classifier three-class proba", par3.predict_proba(q), plain3.predict_proba(q)),
+            ("predict_gaussian_process_classifier proba",
+             predict_gaussian_process_classifier(plain, q, devices=dev, method="predict_proba"), plain.predict_proba(q)),
+            ("predict_gaussian_process_classifier predict",
+             predict_gaussian_process_classifier(plain, q, devices=dev, method="predict"), plain.predict(q)),
+            ("predict_gaussian_process_classifier three-class proba",
+             predict_gaussian_process_classifier(plain3, q, devices=dev, method="predict_proba"), plain3.predict_proba(q))]
 
 
 def _queries(dev):
@@ -379,6 +441,12 @@ CASES = {
     _scaler: ("parallel_preprocessing.fit_scaler", "parallel_preprocessing.transform_scaler"),
     _graph: ("parallel_graph.fit_graph",),
     _umap: ("parallel_graph.fit_graph", "parallel_graph.transform_umap"),
+    _spectral: ("parallel_graph.fit_graph",),
+    _forecast_exponential_smoothing: ("parallel_forecasting.predict_exponential_smoothing",
+                                      "parallel_forecasting.forecast_exponential_smoothing"),
+    _forecast_arima: ("parallel_forecasting.predict_arima", "parallel_forecasting.forecast_arima"),
+    _gaussian_process_classifier: ("parallel_gaussian_process.fit_gaussian_process_classifier",
+                                   "parallel_gaussian_process.predict_gaussian_process_classifier"),
     _queries: ("parallel_neighbors.ParallelQueries",),
     _reference: ("parallel_neighbors_reference.ReferenceShardedNeighbors",),
     _forest: ("parallel_ensemble.fit_forest",),
