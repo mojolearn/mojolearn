@@ -841,16 +841,6 @@ def _pp_hex(v: Float32) -> String:
     return hex(bitcast[DType.uint32](v))
 
 
-def _pp_trace(path: String, line: String):
-    if path == "":
-        return
-    try:
-        with open(path, "a") as fh:
-            fh.write(String("# ") + line + "\n")
-    except:
-        pass
-
-
 def host_kmeans_plus_plus(
     x: List[Float32],
     x_norm: List[Float32],
@@ -860,8 +850,8 @@ def host_kmeans_plus_plus(
     is_sqrt: Bool,
     mut centroids: List[Float32],
     mut rng: HostRngReplay,
-    trace: KMeansHostTrace,
-):
+    mut trace: KMeansHostTrace,
+) raises:
     """`kmeans_plus_plus`, the classic sequential variant (module
     docstring). Writes `k` rows of `centroids`."""
     var n_trials = 2 + Int(ceil(log(Float64(k))))
@@ -875,7 +865,7 @@ def host_kmeans_plus_plus(
     var min_dist = List[Float32](length=n, fill=Float32(0.0))
     host_assign(x, n, x_norm, centroids, 1, c_norm, d, is_sqrt, labels, min_dist)
     var pp_path = trace.path if trace.enabled else String("")
-    _pp_trace(pp_path, "pp n=" + String(n) + " d=" + String(d) + " k=" + String(k)
+    trace.header("pp n=" + String(n) + " d=" + String(d) + " k=" + String(k)
               + " n_trials=" + String(n_trials) + " first=" + String(first)
               + " c_norm0=" + _pp_hex(c_norm[0]) + " min_dist=" + hex(_pp_fnv(min_dist)))
 
@@ -899,7 +889,7 @@ def host_kmeans_plus_plus(
                 tl += " u" + String(t) + "=" + _pp_hex(u01[t]) + " sel" + String(t) + "=" + String(host_binary_search(csum, n, u01[t]))
                 tl += " cn" + String(t) + "=" + _pp_hex(cand_norm[t])
             tl += " z=" + hex(_pp_fnv(z))
-            _pp_trace(pp_path, tl)
+            trace.header(tl)
         # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
         # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
         # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
@@ -932,7 +922,7 @@ def host_kmeans_plus_plus(
             var cl = "pick=" + String(picked)
             for t in range(n_trials):
                 cl += " cost" + String(t) + "=" + _pp_hex(cost[t])
-            _pp_trace(pp_path, cl)
+            trace.header(cl)
         # Step 4, the greedy argmin on the host, in Float64.
         var best = 0
         var best_cost = Float64(cost[0])
@@ -1327,6 +1317,11 @@ def host_fit_main[with_init: Bool = True](
             # `comptime if`, so the [with_init=False] instance never names
             # host_init_scalable and the instantiation graph has no cycle.
             comptime if with_init:
+                trace.header(
+                    "init route init=" + String(init) + " oversampling="
+                    + String(oversampling_factor) + " k=" + String(k)
+                    + " is_sqrt=" + String(is_sqrt)
+                )
                 if init == INIT_RANDOM:
                     host_init_random(x, n, d, k, cur, rng)
                 elif init == INIT_KMEANS_PLUS_PLUS and oversampling_factor != 0.0:
