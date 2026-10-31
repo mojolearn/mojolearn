@@ -420,7 +420,24 @@ def audit_tree(root, python_only=False):
                     {r['file']:r['sha256'] for r in report['files']},
                     {r['file']:r['sha256'] for r in report.get('indexes', [])})
                 format_manifest = {k:v for k,v in manifest.items()
-                                   if k not in ('component_sources', 'assembly_scope', 'base_source_commit')}
+                                   if k not in ('component_sources', 'assembly_scope', 'base_source_commit',
+                                                'release_admission')}
+                admission = manifest.get('release_admission')
+                if admission is not None:
+                    # A RETAINED PTX LEG'S MANIFEST REBOUND FOR THIS RELEASE
+                    # (packaging/linux/ptx_reuse.py; pack_wheel proved it against
+                    # the set's bytes and both build proofs). Here: its raw
+                    # original build manifest is intact and is this manifest
+                    # with only the source commit moved, so every recomputed
+                    # byte/target/arithmetic field above is the original build's.
+                    raw = (admission.get('original_manifest') or {}).get('utf8', '')
+                    original = json.loads(raw) if isinstance(raw, str) and raw else None
+                    restored = dict(format_manifest, source_commit=(original or {}).get('source_commit'))
+                    if (admission.get('schema') != 'mojolearn.ptx-release-admission.v1' or original is None
+                            or hashlib.sha256(raw.encode()).hexdigest() != admission['original_manifest'].get('sha256')
+                            or {k: v for k, v in original.items() if k not in ('component_sources', 'assembly_scope',
+                                                                               'base_source_commit')} != restored):
+                        errors.append("portable PTX release admission does not restore its original build manifest")
                 if report != format_manifest:
                     errors.append("portable PTX final bytes differ from their build manifest")
                 baseline_reports.append(report)
