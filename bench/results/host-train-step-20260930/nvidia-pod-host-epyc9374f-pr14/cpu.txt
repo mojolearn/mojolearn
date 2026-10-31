@@ -1,1 +1,0 @@
-model name	: AMD EPYC 9374F 32-Core Processor

@@ -1,6 +1,0 @@
-BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/louvain", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
-ALGOS-ROUND lane=louvain dataset=istella arm=ours round=0 ms=67395.647 infer_ms=None digest=3adeefd363c2dea1
-ALGOS-ROUND lane=louvain dataset=istella arm=ours round=1 ms=60655.442 infer_ms=None digest=3adeefd363c2dea1
-ALGOS-ROUND lane=louvain dataset=istella arm=ours round=2 ms=57660.392 infer_ms=None digest=3adeefd363c2dea1
-ALGOS-ROUND lane=louvain dataset=istella arm=ours round=3 ms=62733.365 infer_ms=None digest=3adeefd363c2dea1
-ALGOS lane=louvain dataset=istella arm=ours status=ok median_ms=60655.44165484607 quality={"modularity": 0.909754952503698, "n_communities": 39}

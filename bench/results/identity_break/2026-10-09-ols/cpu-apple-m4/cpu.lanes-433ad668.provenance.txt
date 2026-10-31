@@ -1,9 +1,0 @@
-commit=4df610f3b5c79ea7b7600783484e251f07988553
-label=cpu
-backend=cpu
-scope=routine shard= lanes_override=yes
-repeats=2 cpu_threads=3
-host=Darwin 25.5.0 arm64 Mac
-date=2026-10-08T20:54:16Z
-dirty_tracked=none
-record_sha256=9aceac62624bd6a471621b6562bca59be6e6060b99d84dfebab60d8e0c7c9291

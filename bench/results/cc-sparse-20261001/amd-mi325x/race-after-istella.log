@@ -1,6 +1,0 @@
-BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/connected-components", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
-ALGOS-ROUND lane=connected-components dataset=istella arm=ours round=0 ms=58.521 infer_ms=None digest=7134dcb78da4dc5e
-ALGOS-ROUND lane=connected-components dataset=istella arm=ours round=1 ms=51.845 infer_ms=None digest=7134dcb78da4dc5e
-ALGOS-ROUND lane=connected-components dataset=istella arm=ours round=2 ms=54.113 infer_ms=None digest=7134dcb78da4dc5e
-ALGOS-ROUND lane=connected-components dataset=istella arm=ours round=3 ms=56.641 infer_ms=None digest=7134dcb78da4dc5e
-ALGOS lane=connected-components dataset=istella arm=ours status=ok median_ms=54.11304099834524 quality={"n_components": 81}
