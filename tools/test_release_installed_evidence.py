@@ -286,3 +286,13 @@ def test_real_catalog_rows_have_installed_adapters():
     optional = dict(kind='runtime', required=False, coverage=list(runtime.COVERAGE_IDS),
                     inputs=dict(contract=dict(id='runtime-apple/public-regressions')))
     assert not installed.supports_requirement(optional)
+
+
+def test_linux_split_wheels_match_candidate_distribution_names():
+    import release_installed_evidence as E
+    configuration = {"artifacts:nvidia": {"mojolearn-core": "a" * 64, "mojolearn-nvidia-ptx": "b" * 64}}
+    wheels = {"mojolearn_core-0.8.63-py3-none-manylinux_2_35_x86_64.whl": "a" * 64,
+              "mojolearn_nvidia_ptx-0.8.63-py3-none-manylinux_2_35_x86_64.whl": "b" * 64}
+    assert E._qualified(configuration, wheels)
+    assert not E._qualified(configuration, dict(wheels, **{
+        "mojolearn_core-0.8.63-py3-none-manylinux_2_35_x86_64.whl": "c" * 64}))

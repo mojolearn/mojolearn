@@ -89,7 +89,15 @@ def _qualified(configuration, wheels):
     """Every installed wheel is a qualified candidate artifact of this release."""
     mappings = [mapping for key, mapping in configuration.items()
                 if key.startswith("artifacts:") and isinstance(mapping, dict)]
-    return all(any(mapping.get(name) == digest for mapping in mappings) for name, digest in wheels.items())
+    # Candidate identities name Linux split wheels by distribution
+    # (candidate_wheel_install: "mojolearn-core") and the macOS wheel by file
+    # name; installed reports name files. Both name forms of one artifact must
+    # carry the same sha256.
+    def names(name):
+        distribution = name.split("-", 1)[0].replace("_", "-") if name.endswith(".whl") else name
+        return {name, distribution}
+    return all(any(mapping.get(alias) == digest for mapping in mappings for alias in names(name))
+               for name, digest in wheels.items())
 
 
 def _collect(kind):
@@ -144,7 +152,7 @@ def _check(kind):
             require(facts["test_revision"] == expected_tests, "runtime test revision differs from the requirement")
         if kind == "published":
             artifacts = configuration.get("artifacts:" + vendor) or {}
-            require(all(artifacts.get(file) == digest for file, digest in facts["wheels"].items()),
+            require(_qualified({"artifacts:" + vendor: artifacts}, facts["wheels"]),
                     "published bytes differ from the requirement's qualified artifacts")
         return [dict(row) for row in facts["coverage"]], list(facts["evidence"])
     return check_unit

@@ -1495,13 +1495,110 @@ class Release:
         if cached is None or cached[0] != key:
             manifest = release_requirements.requirements(ROOT, self.commit, self.version,
                                                         configuration=configuration)
+            presence = self.optional_native_presence(manifest, context)
+            if presence:
+                # Re-expand with the derived layout contract; the frozen
+                # analyzer accepts it only for source-proven optional loaders.
+                configuration["dependency_context"] = dict(context, optional_native_files=presence)
+                manifest = release_requirements.requirements(ROOT, self.commit, self.version,
+                                                            configuration=configuration)
             self._readiness_manifest_cache = (key, manifest)
         return json.loads(json.dumps(self._readiness_manifest_cache[1]))
+
+    UNMAPPED_BINDING = "no native binding context mapped for binding: "
+
+    def optional_native_presence(self, manifest, context):
+        """{target: {binding: present}} for unmapped bindings, read from the candidate wheels.
+
+        An optional native file (one the frozen loader connects only when it is
+        installed, e.g. the fast tokenizer an identical-only release does not
+        ship) leaves every identity unit unresolved until its presence in the
+        shipped layout is stated. That is a fact of the candidate artifacts, so
+        it is read from their file lists: the macOS wheel for osx-arm64, the
+        packed Linux wheels for linux-64. A target whose artifacts are not all
+        present gets no contract, and an explicit configuration always wins.
+        """
+        names = sorted({item[len(self.UNMAPPED_BINDING):] for wanted in manifest["requirements"].values()
+                        for item in wanted.get("missing_inputs", []) if item.startswith(self.UNMAPPED_BINDING)})
+        if not names:
+            return None
+        listings = {}
+        try:
+            wheel = self.macos_wheel()
+            if wheel and Path(wheel).is_file():
+                with zipfile.ZipFile(wheel) as z:
+                    listings["osx-arm64"] = {Path(n).name for n in z.namelist()}
+        except (OSError, zipfile.BadZipFile, StepFailed):
+            pass
+        try:
+            finals = [self.split_final(p) for p in SPLIT_PACKAGES if p != "linux-meta"]
+            if finals and all(f and Path(f).is_file() for f in finals):
+                members = set()
+                for final in finals:
+                    with zipfile.ZipFile(final) as z:
+                        members |= {Path(n).name for n in z.namelist()}
+                listings["linux-64"] = members
+        except (OSError, zipfile.BadZipFile, StepFailed):
+            pass
+        declared = context.get("optional_native_files", {})
+        presence = {}
+        for target, members in listings.items():
+            row = dict(declared.get(target, {}))
+            for name in names:
+                row.setdefault(name, name + ".so" in members)
+            presence[target] = row
+        return presence if presence != {t: declared.get(t) for t in presence} else None
+
+    def evidence_root(self):
+        """Retained-producer admission reports for this freeze (release_requirements_retained)."""
+        return self.rel / "ledger-evidence"
+
+    def macos_bincache(self):
+        return self.rel / "macos-bincache"
+
+    def retained_producers(self):
+        """(adapter, producer paths) of this freeze's retained outputs that never wrote the
+        ledger: the macOS release build (its binary cache and log; the cache of a build
+        made before step_macos_build kept one is named by MOJOLEARN_BINCACHE_DIR) and the
+        Apple installed-adapter smoke of the macOS wheel (gate-apple)."""
+        out = []
+        wheel = self.macos_wheel()
+        log = self.rel / "macos-build.log"
+        caches = [self.macos_bincache()] + ([Path(os.environ["MOJOLEARN_BINCACHE_DIR"])]
+                                            if os.environ.get("MOJOLEARN_BINCACHE_DIR") else [])
+        cache = next((c for c in caches if (c / "provenance" / "provenance.tsv").is_file()), None)
+        if wheel and log.is_file() and cache is not None:
+            out.append(("macos-release-build", dict(wheel=str(wheel), log=str(log), cache=str(cache))))
+        if wheel and (self.apple_adapters_out() / "wheel.json").is_file():
+            out.append(("apple-gate-adapters", dict(adapters=str(self.apple_adapters_out()), wheel=str(wheel))))
+        return out
 
     def readiness_status(self, write=False):
         manifest = self.readiness_manifest()
         ledger = self.readiness()
-        return ledger.sync(manifest) if write else ledger.plan(manifest)
+        import release_requirements_retained as retained
+        if write:
+            ledger.sync(manifest)
+            # Evidence that already exists (the committed identity table
+            # admission) is admitted before any gate reads the ledger, so
+            # verified work is never rerun or waived (Andrew, 2026-10-31).
+            _, notes = retained.admit_existing_evidence(ROOT, ledger, self.commit, self.evidence_root(),
+                                                        producers=self.retained_producers(), say=self.say)
+            for note in notes:
+                self.say("  ledger evidence: " + note)
+            return ledger.sync(manifest)
+        # Read-only (--status, --dry-run, the gate's plan): nothing persistent
+        # is written. Reports already kept for this freeze are reused; the rest
+        # are prepared in scratch and evaluated in memory with the ledger.
+        doc = ledger.read()
+        doc.update(json.loads(json.dumps(manifest)))
+        with retained.scratch_root() as scratch:
+            reports, notes = retained.retained_reports(ROOT, doc, self.commit, Path(scratch),
+                                                       prepared=self.evidence_root(),
+                                                       producers=self.retained_producers(), say=self.say)
+            for note in notes:
+                self.say("   ledger evidence: " + note)
+            return ledger._evaluate(retained.with_attempts(doc, retained.retained_attempts(reports)))
 
     def record_candidate_requirement(self, vendor, run_id, executed=False):
         if run_id is None:
@@ -1823,6 +1920,9 @@ class Release:
         if not base:
             raise StepFailed("cross-compile: no published release record names a source commit to diff "
                              "against (bench/results/release_verification/*/alpha-manifest-linux.json)")
+        reused = self.cross_compile_reuse(base)
+        if reused:
+            return reused
         token = f"release-{self.version}-{self.commit[:12]}-{int(time.time())}"
         wf_ref = os.environ.get("MOJOLEARN_XCC_WORKFLOW_REF", "main")
         self.must(["gh", "workflow", "run", self.XCC_WORKFLOW, "--ref", wf_ref, "-f", f"ref={base}",
@@ -1836,6 +1936,8 @@ class Release:
         rc, _ = self.gh("run", "watch", run_id, "--exit-status", "--interval", "30",
                         log=self.rel / "cross-compile.log")
         if rc == 0:
+            write_json(self.cross_compile_receipt(), dict(schema=self.XCC_SCHEMA, verdict="PASS", commit=self.commit,
+                       base=base, archs=self.XCC_ARCHS, tiers=list(self.release_modes), run=url, at=now()))
             return f"PASS vs {prev.get('version')} ({base[:12]}): {url}", dict(run=url, base=base)
         _, out = self.gh("run", "view", run_id, "--json", "jobs", "--jq",
                          '.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name')
@@ -1843,6 +1945,53 @@ class Release:
         named = [n for n in names if n != "summary"] or names
         raise StepFailed(f"cross-compile-check on {self.commit[:12]} vs {prev.get('version')} ({base[:12]}) did "
                          f"not pass: {', '.join(named) or f'gh run watch exited {rc}'}; {url}")
+
+    XCC_SCHEMA = "mojolearn.release-cross-compile.v1"
+    #: Files outside the build scripts' source closures that still decide what
+    #: cross-compile-check compiles and how: the toolchain pins, the workflow
+    #: and its planner.
+    XCC_INPUTS = ("pixi.toml", "pixi.lock", ".github/workflows/cross-compile-check.yml",
+                  "tools/cross_compile_check.py")
+
+    def cross_compile_receipt(self):
+        return self.rel / "cross-compile.json"
+
+    def kernel_changes(self, old, new):
+        """Native build inputs that differ between two commits (None: unreadable).
+
+        The build scripts' source closures (tools/release_reuse.tree_facts, the
+        facts cross_compile_check.py selects its jobs from) and XCC_INPUTS.
+        Empty means cross-compile-check at NEW compiles exactly what it compiled
+        at OLD, from the same bytes."""
+        import cross_compile_check as xcc
+        cache = self.evidence / "release" / "identities"
+        try:
+            scripts = xcc.changed_scripts(release_reuse.facts_for_commit(old, cache),
+                                          release_reuse.facts_for_commit(new, cache))
+            names = git("diff", "--name-only", old, new, "--", *self.XCC_INPUTS).split()
+        except (Exception, SystemExit):  # glue: an unreadable tree is never "unchanged"
+            return None
+        return sorted(["bindings/" + name for name in scripts] + names)
+
+    def cross_compile_reuse(self, base):
+        """A PASS of an earlier freeze of this version, against the same base, archs
+        and tiers, when no native build input changed since that commit (plan item 2:
+        0.8.63 reran it, about 30 minutes, on every freeze). Returns the step result or None."""
+        for path in sorted(self.base.glob("*/cross-compile.json")):
+            doc = read_json(path) or {}
+            if (doc.get("schema") != self.XCC_SCHEMA or doc.get("verdict") != "PASS" or doc.get("base") != base
+                    or doc.get("archs") != self.XCC_ARCHS or doc.get("tiers") != list(self.release_modes)
+                    or not doc.get("commit")):
+                continue
+            passed = doc["commit"]
+            changed = [] if passed == self.commit else self.kernel_changes(passed, self.commit)
+            if changed is None or changed:
+                self.say(f"  cross-compile: the PASS at {passed[:12]} is not reused: "
+                         + ("its tree is unreadable" if changed is None else "changed " + ", ".join(changed[:5])))
+                continue
+            return (f"PASS reused from {passed[:12]} (no native build input changed since): {doc.get('run')}",
+                    dict(run=doc.get("run"), base=base, reused_from=passed, receipt=str(path)))
+        return None
 
     # ------------------------------------------------------------ reuse
     @property
@@ -1980,7 +2129,10 @@ class Release:
             if c.get("source_commit") == self.commit:
                 continue
             prior_ident = release_reuse.normalized_set_identity(c.get("set_identity"))
-            if prior_ident is None or prior_ident["digest"] != ident["digest"]:
+            neutral = None
+            if prior_ident is not None and prior_ident["digest"] != ident["digest"]:
+                neutral = self.byte_neutral_runtime_change(c["source_commit"], prior_ident, ident)
+            if prior_ident is None or (prior_ident["digest"] != ident["digest"] and not neutral):
                 why.append(f"{where}: set identity differs")
                 continue
             if c.get("tooling_digest") != t["digest"]:
@@ -1996,7 +2148,9 @@ class Release:
                        built_from=c["source_commit"], built_with_tooling=c.get("tooling_commit"),
                        admitted_for=self.commit, admitted_with_tooling=t["commit"],
                        because=("the set identity (every binding identity of the set, the host bindings and the "
-                                "runtime closure) and the build tooling digest equal this freeze's"),
+                                "runtime closure) and the build tooling digest equal this freeze's"
+                                if not neutral else "every binding identity and the build tooling digest equal "
+                                "this freeze's; the runtime closure differs only where no byte is built: " + neutral),
                        set_identity_digest=ident["digest"], tooling_digest=t["digest"],
                        original_set_identity=c.get("set_identity"),
                        release_build=c["release_build"], exit_file=c.get("exit_file"),
@@ -2022,6 +2176,80 @@ class Release:
         wanted = {name: w for name, w in doc["requirements"].items()
                   if compile_evidence.belongs_to_leg(w, vendor, arch)}
         return wanted, rows, {a["id"]: a for a in doc.get("attempts", [])}
+
+    def record_finished_legs(self, name, vendor, arch, ident):
+        """Record, from its own output, each finished earlier-freeze leg whose begun
+        compile runs were never recorded (0.8.63: cuda-sm_89 at 9e79e6e65085 needed
+        record_compile_requirements by hand). A leg qualifies only when it exited 0,
+        its proof is complete for the commit it built and its tree verifies; the
+        receipt is parsed from that output exactly as linux-wait would have.
+        Returns the provenance files recorded."""
+        if self.dry or self.readonly:
+            return []
+        import release_compile_evidence as compile_evidence
+        document = self.readiness().read()
+        closed = ({a["run_id"] for a in document.get("attempts", [])}
+                  | {i["run_id"] for i in document.get("interruptions", [])})
+        begun = {r["id"] for r in document.get("runs", [])}
+        recorded = []
+        for where, c in self.leg_candidates(name, vendor, arch, ident):
+            if where.startswith("ledger ") or not c.get("release_build") or not c.get("source_commit"):
+                continue
+            launch = c.get("compile_requirements") or {}
+            open_runs = [r.get("run_id") for r in (launch.get("runs") or {}).values()
+                         if r.get("run_id") in begun and r.get("run_id") not in closed]
+            if launch.get("schema") != compile_evidence.LAUNCH_SCHEMA or not open_runs:
+                continue
+            workdir = Path(where).parent
+            leg = Leg(name, vendor, arch, [], {}, c["release_build"], workdir, workdir / name)
+            if leg.provenance_file.resolve() != Path(where).resolve() or not leg.done(c["source_commit"]):
+                continue
+            ok, reason, _ = verify_leg_tree(c["release_build"], vendor, arch, c["source_commit"], c.get("exit_file"))
+            if not ok:
+                self.say(f"  {name}: finished leg {where} is not recorded: {reason}")
+                continue
+            try:
+                self.record_compile_requirements(leg)
+            except StepFailed as error:
+                self.say(f"  {name}: finished leg {where} is not recorded: {error}")
+                continue
+            self.say(f"  {name}: recorded the {len(open_runs)} begun compile run(s) of the finished leg {where}")
+            recorded.append(where)
+        return recorded
+
+    #: packaging/portable_math files the build consumes: stage.py compiles
+    #: portable_math.c (with powers_of_ten.h) into .libs. The rest of the
+    #: directory (wheel.py's audit, tests, README) never reaches a compiled byte.
+    PORTABLE_MATH_BUILD_INPUTS = ("packaging/portable_math/stage.py", "packaging/portable_math/portable_math.c",
+                                  "packaging/portable_math/powers_of_ten.h")
+
+    def byte_neutral_runtime_change(self, built_from, prior, ident):
+        """Why a set identity change cannot alter the leg's compiled bytes, or None.
+
+        Accepted only when every binding identity is equal, the runtime closure
+        identities differ in nothing but the packaging/portable_math directory
+        digest, and every file changed there since BUILT_FROM is not a build
+        input (0.8.63: packaging/portable_math/wheel.py's audit logic). The
+        earlier runtime identity is read from that freeze's own reuse plan and
+        must hash to the runtime digest its leg recorded."""
+        if prior.get("set") != ident.get("set") or prior.get("bindings") != ident.get("bindings"):
+            return None
+        old_plan = read_json(self.base / built_from[:12] / "reuse" / "plan.json") or {}
+        old = (old_plan.get("runtime") or {}).get("identity")
+        new = (self.plan().get("runtime") or {}).get("identity")
+        if (old_plan.get("commit") != built_from or not isinstance(old, dict) or not isinstance(new, dict)
+                or release_reuse.digest_of(old) != prior.get("runtime")
+                or release_reuse.digest_of(new) != ident.get("runtime")):
+            return None
+        if {k: v for k, v in old.items() if k != "portable_math"} != {k: v for k, v in new.items() if k != "portable_math"}:
+            return None
+        try:
+            changed = git("diff", "--name-only", built_from, self.commit, "--", "packaging/portable_math").split()
+        except subprocess.CalledProcessError:
+            return None
+        if not changed or any(p in self.PORTABLE_MATH_BUILD_INPUTS for p in changed):
+            return None
+        return "only non-build files of packaging/portable_math changed (" + ", ".join(changed) + ")"
 
     def find_requirement_leg(self, name, vendor, arch, write=True):
         """(admission, why not, every owned unit retained) for a leg whose set
@@ -2060,6 +2288,8 @@ class Release:
             return None, "the set identity is unreadable", False
         if not self.packer_takes_legs():
             return None, "the frozen source's packer predates leg origins in reuse.json", False
+        if write:
+            self.record_finished_legs(name, vendor, arch, ident)
         try:
             wanted, rows, attempts = self.requirement_units(vendor, arch)
         except (Exception, SystemExit) as exc:  # glue: an unreadable ledger is not "retained"
@@ -2248,7 +2478,12 @@ class Release:
         sys.path.insert(0, str(ROOT / "tools"))
         import mac_slot
         slots = str(min(4, mac_slot.slot_count()))
-        env = dict(MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1",
+        # The binary cache is the build's provenance (key = exact source closure,
+        # flags, toolchain -> compiled bytes): keep it release-scoped so the
+        # compile-apple rows are admitted from it (macos-release-build) and a
+        # shared cache's pruning can never remove it.
+        env = dict(MOJOLEARN_BINCACHE_DIR=str(self.macos_bincache()),
+                   MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1",
                    MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
         plan = self.plan()
         src = self.src
@@ -2931,17 +3166,17 @@ class Release:
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
         if not self.dry:
-            # A gate the owner's --owner-waiver covers (candidate-<vendor>) was recorded
-            # WAIVED by step_gate_<vendor>; it has no report to read here.
-            blocked = [(vendor, (True, "waived") if self.gate_waiver(vendor) else self.gate_ok(vendor))
-                       for vendor in GATE_VENDORS]
-            if any(not verdict[0] for _, verdict in blocked):
-                raise StepFailed('publication requires both candidate gates: '+ '; '.join(
-                    vendor+': '+verdict[1] for vendor, verdict in blocked if not verdict[0]))
-            self.readiness_status(write=True)
-            ready, reasons = self.waived(self.readiness().gate(stage="pre"))
+            ready, reasons = self.release_gate(stage="pre")
             if not ready:
-                raise StepFailed("release requirements ledger blocks publication: " + "; ".join(reasons))
+                raise StepFailed(("publication requires both candidate gates: " if reasons[0].startswith("candidate gate")
+                                  else "release requirements ledger blocks publication: ") + "; ".join(reasons))
+        else:
+            try:  # a dry run reports the verdict; it never writes the ledger
+                ready, reasons = self.release_gate(stage="pre")
+                self.say(f"  pre-publication gate ({platform}): " + ("READY" if ready else
+                         f"would block on {len(reasons)} row(s): " + "; ".join(r[:160] for r in reasons[:5])))
+            except (ValueError, OSError, KeyError, subprocess.CalledProcessError, StepFailed) as error:
+                self.say(f"  pre-publication gate ({platform}): not evaluated ({error})")
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
@@ -3364,11 +3599,35 @@ class Release:
             approved_by=waiver["approved_by"], reason=waiver["reason"], waived=["gate-" + vendor], at=now()))
         return f"WAIVED by owner ({waiver['approved_by']}): {waiver['reason']}"
 
+    def candidate_verdict(self, vendor):
+        """(ok, why) of one vendor's candidate gate: its PASS report, or the owner's
+        --owner-waiver for candidate-<vendor> (logged in the release state)."""
+        why = self.gate_waiver(vendor)
+        return (True, why) if why else self.gate_ok(vendor)
+
+    def release_gate(self, stage=None, vendors=GATE_VENDORS):
+        """THE ONE GATE PREDICATE (plan item 2): the candidate gates of VENDORS and
+        every required readiness row of STAGE (all stages when None), after the
+        evidence that already exists is admitted. step_gate_<vendor> (through
+        candidate_verdict), the publish preflight and the release record all
+        decide with it. (ready, blocked reasons)."""
+        reasons = [f"candidate gate {vendor}: {why}" for vendor in vendors
+                   for ok, why in [self.candidate_verdict(vendor)] if not ok]
+        if reasons:
+            return False, reasons  # as before: a missing candidate gate blocks before the ledger is read
+        rows = self.readiness_status(write=not self.dry and not self.readonly)
+        ready, blocked = self.waived(release_requirements.gate_rows(rows, stage))
+        return not reasons and ready, reasons + ([] if ready else blocked)
+
+    def step_gate(self, vendor):
+        ok, why = self.candidate_verdict(vendor)
+        return why if ok else self.run_gate(vendor)
+
     def step_gate_nvidia(self):
-        return self.gate_waiver("nvidia") or self.run_gate("nvidia")
+        return self.step_gate("nvidia")
 
     def step_gate_amd(self):
-        return self.gate_waiver("amd") or self.run_gate("amd")
+        return self.step_gate("amd")
 
     def step_record(self):
         if self.args.publish != "pypi":
@@ -3377,18 +3636,12 @@ class Release:
         if not published:
             return "nothing published yet", dict(platforms=[])
         # THE RELEASE GATE cannot be skipped: every published Linux vendor needs its gate PASS
-        # (unless the owner's --owner-waiver waived it; step_gate_<vendor> logged that)
-        ungated = [f"{v} ({self.gate_ok(v)[1]})" for v in GATE_VENDORS
-                   if v in published and not self.dry and not self.gate_waiver(v) and not self.gate_ok(v)[0]]
-        if ungated:
-            raise StepFailed("published vendor(s) without a passing release gate: " + "; ".join(ungated)
-                             + ". Rerun `release` to run the gate (tools/gate_smoke_box.py on the held lq box).")
+        # (or the owner's --owner-waiver), and every pre- and post-publication row (release_gate)
         if not self.dry:
-            self.readiness_status(write=True)
-            ready, reasons = self.waived(self.readiness().gate())
+            ready, reasons = self.release_gate(vendors=[v for v in GATE_VENDORS if v in published])
             if not ready:
-                raise StepFailed("release record requires the pre- and post-publication ledger checks: "
-                                 + "; ".join(reasons))
+                raise StepFailed("release record requires the candidate gates and the pre- and post-publication "
+                                 "ledger checks: " + "; ".join(reasons))
         date = changelog_date(ROOT, self.version, text=file_at(self.commit, "CHANGELOG.md") or "") \
             or dt.date.today().isoformat()
         rec = ROOT / "bench" / "results" / "release_verification" / f"{date}_pypi_{self.version.replace('.', '')}"
@@ -3733,16 +3986,28 @@ class Release:
                     totals[result["status"]] += 1
                 for family, totals in families.items():
                     say(f"      {family}: {totals}")
-                needed = [(name, result) for name, result in rows.items() if result["status"] != "passed"]
-                for name, result in needed[:12]:
-                    reasons = result["reasons"]
-                    detail = "; ".join(reasons[:3])
-                    if len(reasons) > 3:
-                        detail += f"; +{len(reasons) - 3} reasons (full ledger plan --json)"
-                    say(f"      {name}: {result['status']} / {result['action']}: " + detail)
-                if len(needed) > 12:
-                    say(f"      +{len(needed) - 12} other requirements need attention; "
-                        "release_ledger.py plan --ledger <path above> --json shows every row and reason")
+                retained = sum(1 for result in rows.values() if result["status"] == "passed"
+                               and result.get("tested_revision") not in (None, result["source_revision"]))
+                say(f"   passed from evidence of an earlier source (retained, dependency-proven): {retained}")
+                ready, blocked = self.waived(release_requirements.gate_rows(rows, "pre"))
+                say("   pre-publication gate: " + ("READY" if ready else f"BLOCKED by {len(blocked)} required row(s)"))
+                # Every row that still lacks evidence, grouped by family and reason.
+                groups = {}
+                for name, result in rows.items():
+                    if result["status"] == "passed" or not result["required"] or result["stage"] != "pre":
+                        continue
+                    family = result.get("parent_requirement", name.split("/")[0])
+                    reasons = result["reasons"] or ["(no reason recorded)"]
+                    diffs = [r for r in reasons if r.startswith(("changed input:", "added input:", "removed input:"))]
+                    reason = next((r for r in reasons if r not in diffs), reasons[0])
+                    if diffs:
+                        reason += " (inputs differ from the tested source)"
+                    # One group per cause, not per lane: the lane is in the row name.
+                    reason = re.sub(r"execution_environment/[^/]+/", "execution_environment/<lane>/", reason)
+                    groups.setdefault((family, result["status"], result["action"], reason[:300]), []).append(name)
+                for (family, st, action, reason), names in sorted(groups.items()):
+                    say(f"      {family}: {len(names)} {st} / {action}: {reason}")
+                    say("         e.g. " + ", ".join(names[:3]) + (f" (+{len(names) - 3})" if len(names) > 3 else ""))
             except (OSError, ValueError, subprocess.CalledProcessError) as error:
                 say(f"   requirements ledger untested: {error}")
         if c:
