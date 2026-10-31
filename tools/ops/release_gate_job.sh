@@ -44,7 +44,7 @@ say() { echo "[$(date -u +%H:%M:%S) release-gate-job] $*"; }
 finish() {
     local code=$?
     trap - EXIT
-    # the reports, never the venv or the caches: the same set the lq transport brought home
+    # the reports, never the venv or the caches: the same report set the gate always brought home
     if [ -d "$GATE_WORK/out" ]; then
         ( cd "$GATE_WORK/out" && shopt -s nullglob && have=() && for p in "${GATE_FETCH[@]}"; do for f in $p; do have+=("$f"); done; done \
             && { [ ${#have[@]} -eq 0 ] || tar cf - "${have[@]}"; } ) | tar xf - -C "$RES/out" || say "copying the reports failed"

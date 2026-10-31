@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adapter_gate as AG  # noqa: E402
 import gate_smoke_box as G  # noqa: E402
 import release  # noqa: E402
-import release_lq_smoke as L  # noqa: E402
+RG = release.release_gate_module()
 
 PHASES_OK = {p: {"exit": 0} for p in ("install-torch", "install-max") + AG.PHASES}
 
@@ -159,12 +159,12 @@ def test_gate_stage_disabled_runs_nothing(tmp_path, monkeypatch):
     assert g.state["adapters_enabled"] is False and g.state["adapters"]["status"] == "DISABLED"
 
 
-def test_lq_gate_plan_carries_no_adapters_and_fetches_the_receipt():
-    _, argv = L.gate_plan("amd", "0.8.56", "/r")
+def test_gate_job_carries_no_adapters_and_brings_the_receipt_home():
+    argv = RG.gate_argv("amd", "0.8.56", "/r")
     assert "--no-adapters" not in argv
-    _, argv = L.gate_plan("amd", "0.8.56", "/r", adapters=False)
+    argv = RG.gate_argv("amd", "0.8.56", "/r", adapters=False)
     assert argv[-1] == "--no-adapters"
-    assert "adapter-smoke/adapter-smoke.json" in L.GATE_FETCH
+    assert "adapter-smoke/adapter-smoke.json" in RG.GATE_FETCH
 
 
 class FakeRelease(release.Release):
@@ -175,10 +175,13 @@ class FakeRelease(release.Release):
 def release_runner(tmp_path):
     r = object.__new__(FakeRelease)
     r.dry, r.version, r.rel, r.commit = True, "0.8.56", tmp_path / "rel", "c" * 40
+    r.base = tmp_path / "base"
     r.args = SimpleNamespace(smoke_branch="main", gate_autograd_root=None)
     r.gate_ok = lambda vendor: (False, "no gate report")
     r.gate_out = lambda vendor: tmp_path / "out"
-    r.candidate_gate_wheels = lambda vendor: []
+    r.source_checkout = lambda create=True: tmp_path / "source"
+    r.candidate_gate_wheels = lambda vendor: [tmp_path / "core.whl", tmp_path / (vendor + ".whl")]
+    r.say = lambda line: None
     r.calls = []
     r.must = lambda cmd, **kw: r.calls.append([str(c) for c in cmd])
     return r

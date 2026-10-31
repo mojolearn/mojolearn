@@ -11,7 +11,7 @@ import autograd_artifact_reuse as reuse
 import gate_autograd_artifacts as artifacts
 import gate_smoke_box as gate
 import release_gate_profiles as profiles
-import release_lq_smoke as lq
+import release
 import release_requirement_receipts as receipts
 from test_release_requirement_receipts import CandidateReceiptTests
 
@@ -82,7 +82,7 @@ def test_dispatch_defaults_to_bounded_profile_and_campaign_is_explicit(monkeypat
     monkeypatch.setattr(gate, "Gate", FakeGate)
     assert gate.main(["amd", "0.8.57", "/unused"]) == 0
     assert calls == [profiles.LIGHT, "all"]
-    _, command = lq.gate_plan("amd", "0.8.57", "/unused", profile=profiles.CAMPAIGN)
+    command = release.release_gate_module().gate_argv("amd", "0.8.57", "/unused", profile=profiles.CAMPAIGN)
     assert command[-2:] == ["--profile", profiles.CAMPAIGN]
 
 

@@ -267,6 +267,12 @@ def job_script_committed():
         raise SystemExit(f"release-gate: {rel} is not committed and clean in {ROOT}; commit it first")
 
 
+def on_origin_main(commit):
+    """The NVIDIA lane sync puts the box tree at the source tree's merge base with origin/main."""
+    return subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", commit, "origin/main"],
+                          capture_output=True).returncode == 0
+
+
 def prior_files(prior, vendor):
     """The files of a retained autograd set to reuse, or [] when it is not a complete built set for VENDOR.
     The builder proves each entry unchanged before it reuses it; this only skips an obviously unusable set."""
@@ -461,11 +467,8 @@ class Runner:
                 print("  would: " + line)
             return 0
         job_script_committed()
-        if a.vendor == "nvidia":
-            on_main = subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", a.source_commit,
-                                      "origin/main"], capture_output=True)
-            if on_main.returncode:
-                raise SystemExit("release-gate: the candidate commit is not on origin/main; the NVIDIA lane sync "
+        if a.vendor == "nvidia" and not on_origin_main(a.source_commit):
+            raise SystemExit("release-gate: the candidate commit is not on origin/main; the NVIDIA lane sync "
                                  "puts the box tree at its merge base with origin/main (push the commit first)")
         rc = None
         if st and not st.get("tag"):
