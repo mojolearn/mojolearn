@@ -64,10 +64,15 @@ def test_a_leg_whose_own_units_all_passed_is_taken_with_the_owner_host(tmp_path,
     assert set(doc["requirements"]) == {"compile-amd/gfx942/a", "compile-amd/gfx942/b"}
 
 
-def test_the_host_owner_is_never_taken_by_requirements(tmp_path, verified):
-    ctx, _ = controller(tmp_path, vendor="cuda", arch="sm_89")
+def test_the_host_owner_is_taken_only_with_every_binding_identity_equal(tmp_path, verified):
+    """0.8.63: the owner owns its host units, so a requirement take of it ships
+    its own host bytes (host_from None); a host identity change refuses it."""
+    ctx, _ = controller(tmp_path, vendor="cuda", arch="sm_89", prior=identity("cuda", "sm_89"))
     doc, why, retained = find(ctx, "cuda-sm_89")
-    assert doc is None and not retained and "host" in why
+    assert doc and doc["host_from"] is None and "host owner" in doc["because"], why
+    ctx, _ = controller(tmp_path, vendor="cuda", arch="sm_89", prior=identity("cuda", "sm_89", host="9" * 64))
+    doc, why, retained = find(ctx, "cuda-sm_89")
+    assert doc is None and retained and "host binding identity of the host owner differs" in why
 
 
 def test_an_open_unit_launches_the_leg(tmp_path, verified):
@@ -182,7 +187,7 @@ def test_a_taken_host_owner_ships_its_host_in_the_legs_built_here(tmp_path):
                                      say=lambda *_: None, leg_reuse=leg_reuse, host_owner=owner_from)
 
 
-def test_host_owner_origin_takes_a_whole_taken_owner_and_refuses_a_requirement_taken_one(tmp_path):
+def test_host_owner_origin_takes_its_own_host_bytes_and_refuses_borrowed_ones(tmp_path):
     whole = dict(set_dir=str(tmp_path / "s"), built_from="b" * 40, leg="cuda-sm_89", proof_sha256="p" * 64,
                  admitted_for="c" * 40, set_identity_digest="s" * 64, tooling_digest="t" * 64,
                  release_build=str(tmp_path / "rb"))
@@ -190,8 +195,10 @@ def test_host_owner_origin_takes_a_whole_taken_owner_and_refuses_a_requirement_t
     ctx.leg_origin = lambda d: release.Release.leg_origin(ctx, d)
     got = release.Release.host_owner_origin(ctx)
     assert got["name"] == "cuda-sm_89" and got["origin"]["source_commit"] == "b" * 40
-    ctx.admitted_leg = lambda n: dict(whole, kind="compile-requirements")
-    with pytest.raises(release.StepFailed, match="compile requirements"):
+    ctx.admitted_leg = lambda n: dict(whole, kind="compile-requirements", host_from=None)
+    assert release.Release.host_owner_origin(ctx)["name"] == "cuda-sm_89"   # its own host bytes
+    ctx.admitted_leg = lambda n: dict(whole, kind="compile-requirements", host_from="cuda-sm_80")
+    with pytest.raises(release.StepFailed, match="another leg"):
         release.Release.host_owner_origin(ctx)
 
 

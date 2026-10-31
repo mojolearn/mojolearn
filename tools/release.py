@@ -2040,8 +2040,9 @@ class Release:
         closure is byte-identical to the owner's. For the PTX set the frozen
         packer must support that (PTX_HOST_OWNER_MARKER). Anything else is
         refused with its reason."""
-        if (vendor, arch) == release_reuse.HOST_LEG:
-            return None, "it owns the host bindings", False
+        # The host owner may be taken too (its host bindings are then its own build of
+        # these exact host inputs: it owns those units); see the owner check below.
+        owner = (vendor, arch) == release_reuse.HOST_LEG
         ident = self.set_identity(vendor, arch)
         if not ident:
             return None, "the set identity is unreadable", False
@@ -2095,6 +2096,11 @@ class Release:
                     or prior.get("set") != ident.get("set"):
                 why.append(f"{where}: a device binding identity differs")
                 continue
+            # The owner's host bindings ship in every set, so for it every binding
+            # identity (host rows included) must equal this freeze's.
+            if owner and prior["bindings"] != ident["bindings"]:
+                why.append(f"{where}: a host binding identity of the host owner differs")
+                continue
             ok, reason, proof_sha = verify_leg_tree(c["release_build"], vendor, arch, c["source_commit"],
                                                     c.get("exit_file"))
             if ok:
@@ -2108,8 +2114,9 @@ class Release:
                        admitted_for=self.commit, admitted_with_tooling=t.get("commit"),
                        because=(f"every compile requirement it owns ({len(wanted)}) has a retained pass of its own "
                                 "runs for the current inputs, its device binding identities equal this freeze's, "
-                                "and its host bindings are replaced by the host owner's"),
-                       host_from=host_owner_leg(), requirements={n: dict(run_id=passed[n],
+                                + ("and, as the host owner, its host binding identities too; its host bindings ship"
+                                   if owner else "and its host bindings are replaced by the host owner's")),
+                       host_from=None if owner else host_owner_leg(), requirements={n: dict(run_id=passed[n],
                                                                          fingerprint=wanted[n]["fingerprint"])
                                                                  for n in sorted(wanted)},
                        set_identity_digest=ident["digest"], tooling_digest=c.get("tooling_digest"),
@@ -2132,9 +2139,8 @@ class Release:
         owner = host_owner_leg()
         doc = self.admitted_leg(owner)
         if doc:
-            if doc.get("kind") == "compile-requirements":
-                raise StepFailed(f"the host owner {owner} was taken by its compile requirements; its host bytes "
-                                 "are not this freeze's")
+            if doc.get("kind") == "compile-requirements" and doc.get("host_from") is not None:
+                raise StepFailed(f"the host owner {owner} was taken with another leg's host bytes")
             return dict(dir=Path(doc["set_dir"]), name=owner, origin=self.leg_origin(doc))
         leg = next((l for l in linux_legs(self) if l.name == owner), None)
         if leg is None:
