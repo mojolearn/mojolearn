@@ -3156,7 +3156,8 @@ class Release:
         if not self.dry:
             ready, reasons = self.release_gate(stage="pre")
             if not ready:
-                raise StepFailed("publication is blocked: " + "; ".join(reasons))
+                raise StepFailed(("publication requires both candidate gates: " if reasons[0].startswith("candidate gate")
+                                  else "release requirements ledger blocks publication: ") + "; ".join(reasons))
         else:
             try:  # a dry run reports the verdict; it never writes the ledger
                 ready, reasons = self.release_gate(stage="pre")
