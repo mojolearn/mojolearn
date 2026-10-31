@@ -222,9 +222,17 @@ def _record(source, compiler):
         else:
             require(cache.get('outcome') == 'miss+built-uploaded' and cache['compiled_from_commit'] == commit,
                     'Missing original successful host compiler/cache witness')
-        # one group per compile: bindings/merged_build.sh host --group <stem>
+        # one group per compile: bindings/merged_build.sh host --group <stem>,
+        # optionally with the fixed generated-root directory (--rootdir <dir>,
+        # packaging/linux/build_sets.sh since 0.8.63). The rootdir stays in the
+        # normalized cache inputs, so every leg's contract must name the same one.
+        args = one.get('args')
+        require(isinstance(args, list) and args[:3] == ['host', '--group', f[:-len('.so')]]
+                and (len(args) == 3 or (len(args) == 5 and args[3] == '--rootdir'
+                                        and isinstance(args[4], str) and args[4].startswith('/'))),
+                'Cache witness is not an identical CPU host invocation')
         require(one.get('schema') == 'mojolearn-bincache-v1' and one.get('script') == 'bindings/merged_build.sh'
-                and one.get('args') == ['host', '--group', f[:-len('.so')]] and one.get('target_column') == 'cpu'
+                and one.get('target_column') == 'cpu'
                 and one.get('numeric_mode') == 'identical' and one.get('device_arch') == 'none'
                 and one.get('gpu_archs') == '', 'Cache witness is not an identical CPU host invocation')
         env = one.get('build_env', {})
