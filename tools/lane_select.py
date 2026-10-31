@@ -2461,8 +2461,8 @@ class OperationSet:
     unnamed string do not change any branch, so lanes sharing the rest share
     the walks."""
 
-    def __init__(self, names):
-        vocab_eq, vocab_sw, vocab_prefixes = _dispatch_vocabulary()
+    def __init__(self, names, vocabulary=None):
+        vocab_eq, vocab_sw, vocab_prefixes = vocabulary or _dispatch_vocabulary()
         keep = set()
         for o in names:
             if not isinstance(o, str):
@@ -2483,6 +2483,12 @@ class OperationSet:
 
     def __repr__(self):
         return f"OperationSet({sorted(self.names)[:8]}{'...' if len(self.names) > 8 else ''})"
+
+    def restricted(self, vocabulary):
+        """The same operations, keyed by what the conditions of `vocabulary`
+        (`_closure_vocabulary`) can tell apart: a walk that only reads those
+        files decides every branch the same way, and lanes share it."""
+        return OperationSet(self.names, vocabulary)
 
     def starting_with(self, prefix):
         import bisect
@@ -2521,6 +2527,39 @@ def _dispatch_vocabulary():
 
 
 _CACHES.append(_DISPATCH_PARSE := {})
+_CACHES.append(_FILE_VOCAB := {})
+_CACHES.append(_CLOSURE_VOCAB := {})
+
+
+def _file_vocabulary(rel):
+    """(`==`/`!=` literals, `.startswith` literals) of one Mojo source."""
+    if rel not in _FILE_VOCAB:
+        eq, sw = set(), set()
+        try:
+            text = _read(rel)
+        except OSError:
+            text = ""
+        for m in _DISPATCH_ATOM_RE.finditer(text):
+            if m.group("l3") is not None:
+                sw.add(m.group("l3"))
+            else:
+                eq.add(m.group("l1") if m.group("l1") is not None else m.group("l2"))
+        _FILE_VOCAB[rel] = (eq, sw)
+    return _FILE_VOCAB[rel]
+
+
+def _closure_vocabulary(src):
+    """`_dispatch_vocabulary` restricted to the build's import closure of one
+    binding source: every condition a walk from it can read."""
+    if src not in _CLOSURE_VOCAB:
+        eq, sw = set(), set()
+        for rel in _mojo_closure([src]):
+            e, w = _file_vocabulary(rel)
+            eq |= e
+            sw |= w
+        prefixes = {lit[:k] for lit in eq | sw for k in range(len(lit) + 1)}
+        _CLOSURE_VOCAB[src] = (frozenset(eq), frozenset(sw), frozenset(prefixes))
+    return _CLOSURE_VOCAB[src]
 
 
 def _cond_parse(text, var):
@@ -4378,6 +4417,21 @@ def lane_sources():
     adapted = {k: v["family"] for k, v in hs.ADAPTED_MODULES.items()}
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
+    restricted = {}
+
+    def seed_key(src, used, wide, ops):
+        """`binding_seeds`' memo key. The lane's operations decide which
+        dispatcher branches its calls can enter (`dispatch_view`); the key
+        carries the part the binding's own import closure can tell apart
+        (`OperationSet.restricted`), so lanes share the walk."""
+        exports = _binding_exports(src)
+        delegated = _delegated_exports(src)
+        hit = tuple(sorted(e for e in used if e in exports or e in delegated))
+        if ops is not None:
+            if (ops, src) not in restricted:
+                restricted[(ops, src)] = ops.restricted(_closure_vocabulary(src))
+            ops = restricted[(ops, src)]
+        return (src, hit, wide, ops)
     read_by_name = {}        # seed_cache key -> the files of it read definition by definition
     native_names = {}        # seed_cache key -> names used by the reached native bodies
 
@@ -4417,10 +4471,8 @@ def lane_sources():
             return {src}
         exports = _binding_exports(src)
         delegated = _delegated_exports(src)
-        hit = tuple(sorted(e for e in used if e in exports or e in delegated))
-        # The lane's operations decide which dispatcher branches its calls can
-        # enter (`dispatch_view`); the key carries their relevant part.
-        key = (src, hit, wide, ops)
+        key = seed_key(src, used, wide, ops)
+        hit, ops = key[1], key[3]
         if key not in seed_cache:
             if not hit:
                 # NO EXPORT OF THIS BINDING IS CALLED. For a binding the lane
@@ -4666,7 +4718,7 @@ def lane_sources():
                 spelled = set()
                 for a in srcs:
                     binding_seeds(a, names, "narrow", mark=False, ops=ops)
-                    spelled |= native_names[(a, tuple(sorted(names & exports_of[a])), "narrow", ops)]
+                    spelled |= native_names[seed_key(a, names, "narrow", ops)]
                 fresh = {n for n in spelled if any(n in e for e in exports_of.values())} - names
                 if not fresh and OperationSet(op_names | spelled) == ops:
                     break
@@ -4732,7 +4784,7 @@ def lane_sources():
             for src, wide in native_sources:
                 binding_seeds(src, used, wide, ops=ops)
                 exports = set(_binding_exports(src)) | set(_delegated_exports(src))
-                key = (src, tuple(sorted(used & exports)), wide, ops)
+                key = seed_key(src, used, wide, ops)
                 spelled |= native_names[key]
                 reached_exports = native_names[key] & exports_available
                 found.update(reached_exports)
@@ -4745,7 +4797,7 @@ def lane_sources():
                     if not tags:
                         continue
                     binding_seeds(src, {name}, "narrow", mark=False, ops=ops)
-                    for reached_name in native_names[(src, (name,), "narrow", ops)] & exports_available:
+                    for reached_name in native_names[seed_key(src, {name}, "narrow", ops)] & exports_available:
                         previous = origins.get(reached_name, 0)
                         if tags & ~previous:
                             origins[reached_name] = previous | tags
