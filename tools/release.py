@@ -1995,6 +1995,139 @@ class Release:
             return doc, None
         return None, "; ".join(why) or "no completed leg of an earlier freeze with this set identity"
 
+    #: What the frozen source's PTX packer must carry before the PTX set can be
+    #: taken with the host owner's bytes (packaging/linux/ptx_reuse.py binds the
+    #: set's host files to the PTX leg's own original proof otherwise).
+    PTX_HOST_OWNER_MARKER = "HOST_OWNER_ADMISSION"
+
+    def requirement_units(self, vendor, arch):
+        """(wanted requirements this leg owns, evaluated ledger rows, attempts
+        by id), read without writing the ledger."""
+        import release_compile_evidence as compile_evidence
+        ledger = self.readiness()
+        doc = ledger.read()
+        rows = ledger.plan(self.readiness_manifest())
+        wanted = {name: w for name, w in doc["requirements"].items()
+                  if compile_evidence.belongs_to_leg(w, vendor, arch)}
+        return wanted, rows, {a["id"]: a for a in doc.get("attempts", [])}
+
+    def find_requirement_leg(self, name, vendor, arch, write=True):
+        """(admission, why not, every owned unit retained) for a leg whose set
+        identity changed ONLY in what it does not own.
+
+        TAKE THE LEG WHOSE OWN UNITS PASSED (lane release-auto-reuse-2,
+        2026-10-31; AGENTS.md "Reuse good old runs, automatically"). Every leg
+        also stages the merged CPU host bindings and the runtime closure, so a
+        host-only change (cluster/host/kmeans_oracle.mojo for 0.8.63) moved the
+        set identity of cuda-sm_80 and hip-gfx942, and linux-builds then
+        stopped: "all compile inputs already have retained passes". A leg is
+        taken from an earlier freeze here when, and only when:
+          * it is not the host owner (release_reuse.HOST_LEG), which builds;
+          * every compile requirement it owns (release_compile_evidence
+            .belongs_to_leg) reads `reuse` in the readiness ledger: the same
+            declared inputs (binding identity, builders, flags, toolchain,
+            image, compiler) with verified retained evidence;
+          * that earlier leg's own launch began exactly those units, and the
+            retained passes are its runs (run ids and fingerprints equal);
+          * its device bindings' identities equal this freeze's (only host
+            rows and the runtime digest may differ);
+          * its tree verifies (exit 0, a complete proof of the commit it
+            built, every binary the proof's bytes) and its route overlay
+            verified on the box.
+        Its host bindings never ship: linux-assemble replaces them with the
+        host owner's, built at this freeze, and refuses unless the runtime
+        closure is byte-identical to the owner's. For the PTX set the frozen
+        packer must support that (PTX_HOST_OWNER_MARKER). Anything else is
+        refused with its reason."""
+        if (vendor, arch) == release_reuse.HOST_LEG:
+            return None, "it owns the host bindings", False
+        ident = self.set_identity(vendor, arch)
+        if not ident:
+            return None, "the set identity is unreadable", False
+        if not self.packer_takes_legs():
+            return None, "the frozen source's packer predates leg origins in reuse.json", False
+        try:
+            wanted, rows, attempts = self.requirement_units(vendor, arch)
+        except (Exception, SystemExit) as exc:  # glue: an unreadable ledger is not "retained"
+            return None, f"the readiness ledger cannot be read ({exc})", False
+        if not wanted:
+            return None, "it owns no declared compile requirement", False
+        open_units = sorted(n for n in wanted if rows.get(n, {}).get("action") != "reuse")
+        if open_units:
+            return None, (f"{len(open_units)} of its {len(wanted)} compile requirement(s) have no retained pass "
+                          f"for the current inputs (e.g. {open_units[0]})"), False
+        passed = {}
+        for n in wanted:
+            attempt = attempts.get(rows[n].get("attempt"))
+            if not attempt or attempt.get("status") != "passed" or attempt.get("fingerprint") != wanted[n]["fingerprint"]:
+                return None, f"{n}: the retained pass is not an attempt of the current inputs", True
+            passed[n] = attempt["run_id"]
+        if (vendor, arch) == release_reuse.PTX_SET and self.PTX_HOST_OWNER_MARKER not in (
+                file_at(self.commit, "packaging/linux/ptx_reuse.py") or ""):
+            return None, ("the frozen source's PTX packer (packaging/linux/ptx_reuse.py) binds the PTX set's host "
+                          "bytes and set identity to the PTX leg's own proof, so the set cannot ship the host owner's "
+                          "bytes; it needs packer support and a refreeze"), True
+        device = {k: v for k, v in ident["bindings"].items() if "/host/" not in k}
+        why = []
+        for where, c in self.leg_candidates(name, vendor, arch, ident):
+            if c.get("source_commit") == self.commit:
+                continue
+            runs = (c.get("compile_requirements") or {}).get("runs") or {}
+            if sorted(runs) != sorted(wanted):
+                why.append(f"{where}: it began other compile units")
+                continue
+            if any(runs[n].get("run_id") != passed[n] or runs[n].get("fingerprint") != wanted[n]["fingerprint"]
+                   for n in wanted):
+                why.append(f"{where}: the retained passes are not this leg's runs")
+                continue
+            prior = release_reuse.normalized_set_identity(c.get("set_identity"))
+            if prior is None or {k: v for k, v in prior["bindings"].items() if "/host/" not in k} != device \
+                    or prior.get("set") != ident.get("set"):
+                why.append(f"{where}: a device binding identity differs")
+                continue
+            ok, reason, proof_sha = verify_leg_tree(c["release_build"], vendor, arch, c["source_commit"],
+                                                    c.get("exit_file"))
+            if ok:
+                ok, reason = overlay_verified(c, c.get("out_dir", ""))
+            if not ok:
+                why.append(f"{where}: {reason}")
+                continue
+            t = self.tooling()
+            doc = dict(schema="mojolearn.release-leg-admission.v1", kind="compile-requirements", leg=name,
+                       set=f"{vendor}/{arch}", built_from=c["source_commit"], built_with_tooling=c.get("tooling_commit"),
+                       admitted_for=self.commit, admitted_with_tooling=t.get("commit"),
+                       because=(f"every compile requirement it owns ({len(wanted)}) has a retained pass of its own "
+                                "runs for the current inputs, its device binding identities equal this freeze's, "
+                                "and its host bindings are replaced by the host owner's"),
+                       host_from=host_owner_leg(), requirements={n: dict(run_id=passed[n],
+                                                                         fingerprint=wanted[n]["fingerprint"])
+                                                                 for n in sorted(wanted)},
+                       set_identity_digest=ident["digest"], tooling_digest=c.get("tooling_digest"),
+                       admitted_with_tooling_digest=t.get("digest"), original_set_identity=c.get("set_identity"),
+                       release_build=c["release_build"], exit_file=c.get("exit_file"),
+                       set_dir=str(Path(c["release_build"]) / "build" / "sets" / vendor / arch),
+                       proof_sha256=proof_sha, provenance=where, at=now())
+            if write and not self.dry and not self.readonly:
+                write_json(self.admission_path(name), doc)
+            return doc, None, True
+        return None, "; ".join(why) or "no completed leg of an earlier freeze began these units", True
+
+    def host_owner_origin(self):
+        """reuse.json's origin of the host owner leg built at THIS freeze, for
+        the host files a requirement-taken set ships (LEG_ORIGIN_KEYS)."""
+        owner = host_owner_leg()
+        leg = next((l for l in linux_legs(self) if l.name == owner), None)
+        if leg is None or self.admitted_leg(owner):
+            raise StepFailed(f"a leg is taken with the host owner's bindings and {owner} was not built at this "
+                             "freeze")
+        vendor, arch = owner.split("-", 1)
+        proof = leg.release_build / "build" / "build-provenance.json"
+        ident = self.set_identity(vendor, arch) or {}
+        return dict(dir=leg.release_build / "build" / "sets" / vendor / arch, name=owner,
+                    origin=dict(source_commit=self.commit, leg=owner, proof_sha256=sha256(proof),
+                                admitted_for=self.commit, set_identity_digest=ident.get("digest"),
+                                tooling_digest=self.tooling().get("digest"), release_build=str(leg.release_build)))
+
     def packer_takes_legs(self):
         """The pack runs the SOURCE's pack_wheel.py; one older than leg
         origins would pack a taken leg's files as the published release's."""
@@ -2020,7 +2153,7 @@ class Release:
         prev = (self.plan().get("previous") or {}).get("version")
         if not legs:
             return f"no build leg: every Linux binding is taken from {prev} (nothing rented for builds)"
-        launch, taken = [], []
+        launch, taken, refused = [], [], []
         for leg in legs:
             if leg.running():
                 self.say(f"  {leg.name}: already running (pid {leg.pid()}), log {leg.log}")
@@ -2032,6 +2165,17 @@ class Release:
             why = None
             if not doc:
                 doc, why = self.find_reusable_leg(leg.name, leg.vendor, leg.arch)
+            if not doc:
+                # Not the same set: its own compile units may still all have
+                # retained passes (find_requirement_leg). Then it is taken, or
+                # refused by name: launching it would only stop at begin.
+                doc, why_units, retained = self.find_requirement_leg(leg.name, leg.vendor, leg.arch)
+                if not doc and retained:
+                    refused.append(f"{leg.name}: every compile requirement it owns has a retained pass, and no "
+                                   f"earlier leg can be taken for it: {why_units} (set identity: {why})")
+                    self.say("  " + refused[-1])
+                    continue
+                why = f"{why}; by compile requirements: {why_units}" if why_units else why
             if doc:
                 taken.append(leg.name)
                 self.say(f"  {leg.name}: TAKEN, not launched: built from {doc['built_from'][:12]} "
@@ -2042,8 +2186,12 @@ class Release:
             launch.append(leg)
         if self.dry:
             return (f"would launch {len(launch)} leg(s) ({self.args.build_backend})"
-                    + (f"; would take {', '.join(taken)} from an earlier freeze" if taken else ""))
+                    + (f"; would take {', '.join(taken)} from an earlier freeze" if taken else "")
+                    + (f"; REFUSED {'; '.join(refused)}" if refused else ""))
         launch_detached(self, launch)
+        if refused:
+            # The other legs are launched; nothing is rebuilt for the refused one.
+            raise StepFailed("; ".join(refused))
         return (f"{len(launch)} leg(s) launched or running ({self.args.build_backend})"
                 + (f"; taken from an earlier freeze: {', '.join(taken)}" if taken else ""))
 
@@ -2214,12 +2362,16 @@ class Release:
         if bad:
             raise StepFailed("build leg(s) failed: " + ", ".join(bad)
                              + ". Inspect retained evidence; repair or reconcile before another build.")
-        mismatch = host_digest_mismatches(legs + taken)
+        # A leg taken by its compile requirements ships the host owner's host
+        # bindings (linux-assemble replaces its own), so its stale host bytes
+        # are not compared here.
+        shipped = [l for l in taken if (self.admitted_leg(l.name) or {}).get("kind") != "compile-requirements"]
+        mismatch = host_digest_mismatches(legs + shipped)
         composition = None
         if mismatch:
             lines = [f"{name}: " + ", ".join(f"{leg}={d[:12]}" for leg, d in row.items())
                      for name, row in sorted(mismatch.items())]
-            if taken:
+            if shipped:
                 raise StepFailed("host bindings differ across legs and a leg is taken from an earlier freeze "
                                  "(a host composition needs every leg's original build):\n  " + "\n  ".join(lines[:12]))
             self.say("  host bindings differ across legs:\n    " + "\n    ".join(lines[:12]))
@@ -2338,6 +2490,9 @@ class Release:
         built = [l for l in linux_legs(self) if l.name not in taken]
         legs = {l.name: l.release_build / "build" / "sets" / l.vendor / l.arch for l in built}
         leg_reuse = {n: dict(dir=Path(d["set_dir"]), origin=self.leg_origin(d)) for n, d in taken.items()}
+        for n, d in taken.items():
+            if d.get("kind") == "compile-requirements" and not self.dry:
+                leg_reuse[n]["host_from"] = self.host_owner_origin()
         plan = self.plan()
         if self.dry:
             n = len(release_reuse.plan_rows(plan, release_reuse.LINUX, "REUSE"))

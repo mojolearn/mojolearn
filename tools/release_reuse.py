@@ -1345,10 +1345,29 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                 # taken whole, byte for byte, and named in reuse.json.
                 shutil.copytree(old["dir"], sdir, symlinks=False)
                 from_legs[name] = dict(old["origin"])
+                host_from = old.get("host_from")
+                if host_from:
+                    # TAKEN BY ITS COMPILE REQUIREMENTS (tools/release.py
+                    # find_requirement_leg): its device bytes are the earlier
+                    # leg's, its host bindings the host owner's built at this
+                    # freeze, and its runtime closure must already be the
+                    # owner's, byte for byte, or nothing is assembled.
+                    owner_dir = Path(host_from["dir"])
+                    mine = {p.name: sha256(p) for p in sorted((sdir / ".libs").glob("*")) if p.is_file()}
+                    theirs = {p.name: sha256(p) for p in sorted((owner_dir / ".libs").glob("*")) if p.is_file()}
+                    if not mine or mine != theirs:
+                        raise SystemExit(f"release_reuse: {key} is taken with the host owner's bindings and its "
+                                         f"runtime closure differs from {host_from['name']}'s; it must be rebuilt")
+                    if not (owner_dir / "host").is_dir():
+                        raise SystemExit(f"release_reuse: the host owner {host_from['name']} has no host/ at {owner_dir}")
+                    shutil.rmtree(sdir / "host", ignore_errors=True)
+                    shutil.copytree(owner_dir / "host", sdir / "host", symlinks=False)
+                    from_legs[host_from["name"]] = dict(host_from["origin"])
                 for r in gpu + host_rows:
+                    source_leg = host_from["name"] if host_from and r in host_rows else name
                     for p in binding_files(sdir, r):
                         rel = p.relative_to(sdir).as_posix()
-                        rec = reused.setdefault(rel, dict(sha256=sha256(p), source="leg", leg=name))
+                        rec = reused.setdefault(rel, dict(sha256=sha256(p), source="leg", leg=source_leg))
                         rec.setdefault("binding_identities", {})[r["name"]] = r["identity_digest"]
                         if rel == r["set_rel"]:
                             rec["identity_digest"] = r["identity_digest"]
@@ -1358,8 +1377,9 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                 ptx = sdir / "PTX_BASELINE.json"
                 if ptx.is_file() and (vendor, arch) != PTX_SET:
                     reused[ptx.name] = dict(sha256=sha256(ptx), source="leg", leg=name)
-                say(f"  {key}: the set of leg {name} built at {old['origin']['source_commit'][:12]} taken whole "
-                    f"(set identity {old['origin']['set_identity_digest'][:12]} unchanged)")
+                say(f"  {key}: the set of leg {name} built at {old['origin']['source_commit'][:12]} taken "
+                    + (f"with the host bindings of {host_from['name']} (its own compile requirements retained)"
+                       if host_from else f"whole (set identity {old['origin']['set_identity_digest'][:12]} unchanged)"))
             else:
                 sdir.mkdir(parents=True)
             if not leg and not old and any(r["decision"] != "REUSE" for r in gpu):
