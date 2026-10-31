@@ -13,6 +13,12 @@ equals the current requirement's. Changed inputs remain changed.
     python3 tools/release_ledger_admission.py admit --ledger LEDGER --root REPO \
         --report NEW_DIR/report.json
 
+``record`` (one command) prepares, then records each admitted unit on its active begun
+run when the inputs are fingerprint-equal, else admits it retrospectively::
+
+    python3 tools/release_ledger_admission.py record --adapter published-install \
+        --ledger LEDGER --root REPO --out NEW_DIR --producer report=DIR/published-report.json
+
 ``prepare`` writes report.json, originals.json, reconciliation.json,
 receipts.json and review.json into a new directory. It admits only units whose
 producer coverage is complete; every refused unit and reason is listed in
@@ -367,9 +373,49 @@ def admit(ledger_path, root, report_path):
     return dict(admitted=admitted, already_admitted=existing, absent_from_ledger=skipped, actions=status)
 
 
+def record(ledger_path, root, name, out, producer, log_dir=None):
+    """ONE COMMAND for a retained producer report: prepare, then close the ledger.
+
+    Each admitted unit with an active begun run whose fingerprint equals the
+    reconstructed requirement is recorded on that run (its receipt is the
+    re-derived producer payload; the ledger revalidates it field by field).
+    Every other admitted unit gets its retained-execution attempt (``admit``).
+    Nothing is recorded for a refused unit; review.json lists why.
+    """
+    from release_requirements import RequirementsLedger
+    from release_requirement_receipts import coverage_summary
+    review = prepare(name, root, ledger_path, out, producer, log_dir)
+    out = Path(out).resolve()
+    report, attempts = attempts_from(out / "report.json")
+    ledger = RequirementsLedger(ledger_path, source_root=root)
+    doc = ledger.read()
+    closed = {a["run_id"] for a in doc.get("attempts", [])} | {i["run_id"] for i in doc.get("interruptions", [])}
+    active = {}
+    for run in doc.get("runs", []):
+        if run["id"] not in closed:
+            active[run["requirement"]] = run  # the newest begun run wins
+    on_runs, retained = [], []
+    for attempt in attempts:
+        run = active.get(attempt["requirement"])
+        if run is not None and run["fingerprint"] == attempt["fingerprint"]:
+            receipt = attempt["receipt"]
+            paths = [item["path"] for item in receipt["evidence"]]
+            on_runs.append(dict(run_id=run["id"], status="passed", paths=paths, summary=attempt["summary"],
+                                exit_code=0, receipt=receipt, **coverage_summary(receipt)))
+        else:
+            retained.append(attempt["requirement"])
+    if on_runs:
+        ledger.record_many(on_runs)
+    result = admit(ledger_path, root, out / "report.json") if retained else dict(admitted=[], already_admitted=[],
+                                                                                   absent_from_ledger=[])
+    return dict(recorded_on_begun_runs=sorted(r["run_id"] for r in on_runs), refused=review["refused"],
+                retained_admitted=result["admitted"], already_admitted=result["already_admitted"],
+                absent_from_ledger=result["absent_from_ledger"])
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("command", choices=("prepare", "admit"))
+    ap.add_argument("command", choices=("prepare", "admit", "record"))
     ap.add_argument("--ledger", type=Path, required=True)
     ap.add_argument("--root", type=Path, required=True)
     ap.add_argument("--adapter", choices=sorted(ADAPTERS))
@@ -378,9 +424,9 @@ def main(argv=None):
     ap.add_argument("--report", type=Path)
     ap.add_argument("--dependency-log-dir", type=Path)
     args = ap.parse_args(argv)
-    if args.command == "prepare":
+    if args.command in ("prepare", "record"):
         if not args.adapter or not args.out:
-            ap.error("prepare requires --adapter and --out")
+            ap.error(args.command + " requires --adapter and --out")
         producer = {}
         for item in args.producer:
             key, sep, value = item.partition("=")
@@ -388,6 +434,12 @@ def main(argv=None):
                 ap.error("--producer takes distinct KEY=PATH values")
             producer[key] = value
         try:
+            if args.command == "record":
+                result = record(args.ledger, args.root, args.adapter, args.out, producer, args.dependency_log_dir)
+                print(json.dumps(dict(recorded_on_begun_runs=len(result["recorded_on_begun_runs"]),
+                    retained_admitted=len(result["retained_admitted"]), refused=result["refused"],
+                    absent_from_ledger=result["absent_from_ledger"])))
+                return 0 if not result["refused"] else 1
             review = prepare(args.adapter, args.root, args.ledger, args.out, producer, args.dependency_log_dir)
         except ValueError as error:
             print("REFUSED: " + str(error))
