@@ -395,8 +395,10 @@ def _rf_params_from(params: PythonObject, criterion: Int) raises -> RF_params:
     )
 
 
-def _forest_out_trees(trees: List[TreeMetaDataNode[DT]]) raises -> PythonObject:
-    """Retained same-fit diagnostic; RF label dtype does not affect tree storage."""
+def _forest_out_trees(trees: List[TreeMetaDataNode[DT]], notices: Int) raises -> PythonObject:
+    """Retained same-fit diagnostic; RF label dtype does not affect tree storage.
+    `notices` is the fit's notice mask (`ensemble/rf_notices.mojo`), the
+    third metadata word."""
     var offsets = List[Int64]()
     var colid = List[Int64]()
     var quesval = List[Float64]()
@@ -409,6 +411,7 @@ def _forest_out_trees(trees: List[TreeMetaDataNode[DT]]) raises -> PythonObject:
     var meta = Python.list()
     meta.append(PythonObject(len(trees)))
     meta.append(PythonObject(num_outputs))
+    meta.append(PythonObject(notices))
     var out = Python.list()
     out.append(forest_export_py_list_i64(offsets))
     out.append(forest_export_py_list_i64(colid))
@@ -420,11 +423,11 @@ def _forest_out_trees(trees: List[TreeMetaDataNode[DT]]) raises -> PythonObject:
 
 
 def _forest_out(forest: RandomForestMetaData[DT, DT]) raises -> PythonObject:
-    return _forest_out_trees(forest.trees)
+    return _forest_out_trees(forest.trees, forest.notices)
 
 
 def _forest_out_i32(forest: RandomForestMetaData[DT, CLT]) raises -> PythonObject:
-    return _forest_out_trees(forest.trees)
+    return _forest_out_trees(forest.trees, forest.notices)
 
 
 # DEVIATION 2482: both RF label types own the same typed tree list. Moving it
@@ -442,7 +445,7 @@ comptime RF_EXPORTS = _Global[StorageType=ForestExportRegistry[RFExportTrees],
           "MojoRFFitExportFast"), init_fn=ForestExportRegistry[RFExportTrees].__init__]
 
 
-def _retain_rf_export(var trees: RFExportTrees) raises -> PythonObject:
+def _retain_rf_export(var trees: RFExportTrees, notices: Int) raises -> PythonObject:
     if not len(trees):
         raise Error("cannot export an empty fitted RF")
     var nodes = 0
@@ -454,7 +457,9 @@ def _retain_rf_export(var trees: RFExportTrees) raises -> PythonObject:
         if Int(trees[t].num_outputs) != outputs or len(trees[t].vector_leaf) != tree_nodes * outputs:
             raise Error("fitted RF leaf storage differs from export dimensions")
     var count = len(trees)
-    var meta: List[Int64] = [Int64(count), Int64(outputs)]
+    # The third word is the fit's notice mask (`ensemble/rf_notices.mojo`):
+    # the public fit raises those notices as Python warnings.
+    var meta: List[Int64] = [Int64(count), Int64(outputs), Int64(notices)]
     return RF_EXPORTS.get_or_create_ptr()[].insert(trees^, count, nodes, outputs, meta^)
 
 
@@ -484,7 +489,8 @@ def rf_forest_export_legacy_binding(handle: PythonObject) raises -> PythonObject
     var id = Int(py=handle)
     if id not in registry[].entries:
         raise Error("unknown or released fitted forest export handle")
-    return _forest_out_trees(registry[].entries[id].model)
+    ref entry = registry[].entries[id]
+    return _forest_out_trees(entry.model, Int(entry.meta[2]))
 
 
 def rf_forest_export_release_binding(handle: PythonObject) raises -> PythonObject:
@@ -615,12 +621,14 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
                 ctx, dx, dy, dsw, n_fit, n_cols, n_classes, rf_params,
                 scales, sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
                 min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
+                notices_to_stderr=False,
             )
         else:
             _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
             forest = fit_forest[ClsObj](
                 ctx, dx, dy, dsw, n_fit, n_cols, n_classes, rf_params,
                 sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
+                notices_to_stderr=False,
             )
         t_s = bt.start()
         ctx.synchronize()
@@ -660,7 +668,7 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     comptime if EXPORT:
         var export_trees = forest.trees^
         forest.trees = RFExportTrees()
-        var handle = _retain_rf_export(export_trees^)
+        var handle = _retain_rf_export(export_trees^, forest.notices)
         bt.stop_host("bind_export_retain", t_x)
         bt.stop_host("binding_total", t_bind)
         bt.report()
@@ -989,6 +997,7 @@ def rf_regressor_fit_dart_binding(
         forest = fit_forest_prepared[RegObj](
             ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, prep, False,
             scales,
+            notices_to_stderr=False,
         )
         ctx.synchronize()
         _ = dx^
@@ -1000,7 +1009,7 @@ def rf_regressor_fit_dart_binding(
         _ = ctx^
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^)
+    return _retain_rf_export(export_trees^, forest.notices)
 
 
 def rf_regressor_fit_session_rows_binding(
@@ -1075,6 +1084,7 @@ def rf_regressor_fit_session_rows_binding(
         )
         forest = fit_forest[RegObj](
             ctx, dxg, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
+            notices_to_stderr=False,
         )
         ctx.synchronize()
         _ = dxg^
@@ -1086,7 +1096,7 @@ def rf_regressor_fit_session_rows_binding(
         _ = ctx^
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^)
+    return _retain_rf_export(export_trees^, forest.notices)
 
 
 def rf_classifier_fit_weighted_session_binding(
@@ -1178,12 +1188,14 @@ def rf_classifier_fit_weighted_session_binding(
                     BinScales(Float32(1), Float32(cscale)),
                     sample_weight_host=weights, host_x_addr=0,
                     min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
+                    notices_to_stderr=False,
                 )
             else:
                 _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
                 forest = fit_forest[ClsObj](
                     ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
                     sample_weight_host=weights, host_x_addr=0,
+                    notices_to_stderr=False,
                 )
         elif len(weights) > 0 and not rf_params.bootstrap:
             var scale = choose_scale(weight_total, n_rows)
@@ -1195,6 +1207,7 @@ def rf_classifier_fit_weighted_session_binding(
                 prep, share_tables, scales, sample_weight_host=weights,
                 host_x_addr=host_x,
                 min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
+                notices_to_stderr=False,
             )
         else:
             _rf_fold_min_weight_count(rf_params, mw_frac, n_rows)
@@ -1202,6 +1215,7 @@ def rf_classifier_fit_weighted_session_binding(
                 ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
                 prep, share_tables, sample_weight_host=weights,
                 host_x_addr=host_x,
+                notices_to_stderr=False,
             )
         ctx.synchronize()
         _ = dxv^
@@ -1216,7 +1230,7 @@ def rf_classifier_fit_weighted_session_binding(
     _ = prep^
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^)
+    return _retain_rf_export(export_trees^, forest.notices)
 
 
 def rf_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
@@ -1361,6 +1375,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
                 BinScales(Float32(lscale), Float32(wscale)), sample_weight_host=weights,
                 host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
                 min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
+                notices_to_stderr=False,
             )
         else:
             _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
@@ -1368,6 +1383,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
                 ctx, dx, dy, dsw, n_fit, n_cols, 1, rf_params, scales,
                 sample_weight_host=weights,
                 host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
+                notices_to_stderr=False,
             )
         t_s = bt.start()
         ctx.synchronize()
@@ -1398,7 +1414,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     comptime if EXPORT:
         var export_trees = forest.trees^
         forest.trees = RFExportTrees()
-        var handle = _retain_rf_export(export_trees^)
+        var handle = _retain_rf_export(export_trees^, forest.notices)
         bt.stop_host("bind_export_retain", t_x)
         bt.stop_host("binding_total", t_bind)
         bt.report()
