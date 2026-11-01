@@ -444,7 +444,7 @@ def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
     global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
-    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE, _HOST_CLASS_ROUTES
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE, _HOST_CLASS_ROUTES, _CONTEXT_DOORS
     global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES, _INCLUDE_ROOTS, _GRAPH_REVERSE
     for cache in _CACHES:
         cache.clear()
@@ -454,10 +454,15 @@ def reset_caches():
     _PYTHON_FILES = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
-    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LANE_DEVICE_CALLS
     _LANE_SEED_CALLS = None
     _LANE_PRECISION_PATHS = None
     _LANE_CPU_ROUTE_ONLY = None
+    _LANE_DEVICE_CALLS = None
+    global _DISPATCH_VOCAB, _MOJO_CALLERS
+    _DISPATCH_VOCAB = None
+    _MOJO_CALLERS = None
+    _HOST_ROUTE_CLASSES.clear()
     _SOURCE_HASHED = None
     _CONSTANTS = None
     _EXTENDERS = None
@@ -471,6 +476,7 @@ def reset_caches():
     _INCLUDE_ROOTS = None
     _GRAPH_REVERSE = None
     _HOST_CLASS_ROUTES = None
+    _CONTEXT_DOORS = None
     global _HOOK_CLASSES
     _HOOK_CLASSES = None
     if "lane_map_import_graph" in sys.modules:
@@ -2337,20 +2343,46 @@ def _mojo_named_imports(rel, idents):
     return out
 
 
-def _mojo_symbol_step(rel, name):
+def _mojo_symbol_step(rel, name, ops=None):
     """The (file, name) nodes one top-level definition `name` of `rel` names
     (`_mojo_symbol_reach`), or None when `rel` does not define it (or cannot
     be read with certainty) and must be closed over whole. A node named None
     is a file to close over whole. Memoized: every lane asks for the same
-    nodes."""
-    key = (rel, name)
-    if key in _SYMBOL_STEPS:
-        return _SYMBOL_STEPS[key]
+    nodes.
+
+    With `ops` (an `OperationSet`), each body is read through
+    `dispatch_view`: a branch of an operation-string dispatcher that no
+    operation in `ops` can enter contributes nothing. The memo is then keyed
+    by the branches kept, so lanes whose operations open the same branches
+    share it."""
     defs = _mojo_defs_for(rel) if rel.endswith(".mojo") else None
     if defs is None or name not in defs[0]:
-        _SYMBOL_STEPS[key] = None
+        _SYMBOL_STEPS[(rel, name)] = None
         return None
     blocks, preamble = defs
+    if ops is None:
+        key = (rel, name)
+        if key in _SYMBOL_STEPS:
+            return _SYMBOL_STEPS[key]
+        view = lambda text: text  # noqa: E731
+    else:
+        # Only this file's dispatcher conditions decide its branches.
+        asked = ops
+        e, w = _file_vocabulary(rel)
+        if not e and not w:
+            _SYMBOL_KEY[(rel, name, asked)] = (rel, name)
+            return _mojo_symbol_step(rel, name, None)
+        ops = ops.restricted(_vocab_triple(e, w))
+        known = _SYMBOL_KEY.get((rel, name, ops))
+        if known is not None and known in _SYMBOL_STEPS:
+            _SYMBOL_KEY[(rel, name, asked)] = known
+            return _SYMBOL_STEPS[known]
+        cache = {}
+
+        def view(text):
+            if text not in cache:
+                cache[text] = dispatch_view(text, ops)
+            return cache[text][0]
     pre_idents = set(_MOJO_IDENT_RE.findall(preamble))
     bodies, local_seen, local = [preamble], set(), [name] + [o for o in blocks if o in pre_idents]
     while local:
@@ -2361,9 +2393,16 @@ def _mojo_symbol_step(rel, name):
         body = blocks.get(fn_name)
         if body is None:
             continue
+        body = view(body)
         bodies.append(body)
         idents = set(_MOJO_IDENT_RE.findall(body))
         local.extend(other for other in blocks if other in idents and other not in local_seen)
+    if ops is not None:
+        masks = tuple(sorted((t, m) for t, (_v, m) in cache.items() if m))
+        key = (rel, name) if not masks else (rel, name, masks)
+        _SYMBOL_KEY[(rel, name, ops)] = _SYMBOL_KEY[(rel, name, asked)] = key
+        if key in _SYMBOL_STEPS:
+            return _SYMBOL_STEPS[key]
     idents = set(_MOJO_IDENT_RE.findall("\n".join(bodies)))
     out = _mojo_named_imports(rel, idents)
     _SYMBOL_STEPS[key] = out
@@ -2372,7 +2411,554 @@ def _mojo_symbol_step(rel, name):
     return out
 
 
-def _mojo_symbol_reach(pending, names=None, refs=None):
+_SYMBOL_KEY = {}             # (rel, name, ops) -> the _SYMBOL_STEPS key that step was stored under
+_CACHES.append(_SYMBOL_KEY)
+
+
+# --------------------------------------------- operation-string dispatchers
+# THE DISPATCHER'S OPERATIONS PER LANE (lane identity-attribution, 2026-10-31,
+# docs/plans/POST_0863_RELEASE_TOOLING.md item 3). The classical owner's one
+# compiled entry, `classical_native_call` (bindings/classical_native.mojo,
+# served by `_mojolearn_runtime_classical_host` through HOST_IMPORT_ALIASES on
+# every install), selects what it runs from a runtime string:
+# `if operation == "ridge_fit"`, `elif operation.startswith("family_")`, then
+# `family_operation` (bindings/family_native.mojo) again by prefix, and so on
+# down to each family's owner. Read as plain text, the entry's body names every
+# family's kernels, so every lane that calls it at all (nearly all of them, for
+# `vendor_used`, `archive_save` and the like) took every export name those
+# owners look up, `kmeans_fit` and `spectral_fit_predict_dataset` among them,
+# and a one-definition edit of cluster/host/kmeans_oracle.mojo:host_fit_main
+# selected 432 lanes on the CPU column.
+#
+# The rule: a branch of a DISPATCHER is followed for a lane only when an
+# operation the lane can pass can enter it. What it rests on, each held by
+# tools/test_lane_select_narrowing.py in both directions:
+#   * WHAT A LANE CAN PASS (`OperationSet`). An operation string is a value the
+#     lane's own code spells: the identifier-shaped string constants and
+#     attribute names of the regions it executes (`_executed_names`, the same
+#     over-approximation that decides which exports a lane calls), the files
+#     every lane reaches, and every string literal of the native definitions
+#     the walk reaches (the fixed point in `lane_sources` adds them, so
+#     `var route = "host_infer_predict"` in a kept branch opens the callee's
+#     branch for it). A constant ending in `_` is also a STEM: an f-string or a
+#     concatenation (`f"family_{op}"`, `"family_" + op`) can extend it, so it
+#     opens every branch a string starting with it could enter.
+#   * WHAT A DISPATCHER IS (`_dispatch_vars`). A variable compared with at
+#     least two different literals (`==`, `!=`, `.startswith`) that is either
+#     `var v = String(t[i])` (a Python argument, never assigned again) or a
+#     `String` parameter whose EVERY Mojo call site passes a literal, a
+#     variable assigned only literals, a Python argument, or a dispatcher
+#     variable of the caller (`_string_param_admissible`, across the tree; a
+#     composed or computed argument anywhere leaves the function unnarrowed).
+#   * WHICH BRANCHES ARE DEAD (`_branch_live`). An `if`/`elif` whose condition
+#     is built only from those comparisons, `and`, `or`, `not` and brackets,
+#     and is False for every operation of the set and for any operation the
+#     set does not name. Any other condition, `else:` and everything after the
+#     chain stay live. A dead branch's body is dropped from the text the walk
+#     reads; the literals a condition compares with run nothing and are not
+#     read as export names.
+_DISPATCH_ATOM_RE = re.compile(
+    r'(?P<v1>[A-Za-z_]\w*)\s*(?P<op1>==|!=)\s*"(?P<l1>[^"\\\n]*)"'
+    r'|"(?P<l2>[^"\\\n]*)"\s*(?P<op2>==|!=)\s*(?P<v2>[A-Za-z_]\w*)\b'
+    r'|(?P<v3>[A-Za-z_]\w*)\.startswith\(\s*"(?P<l3>[^"\\\n]*)"\s*\)')
+_DISPATCH_HEAD_RE = re.compile(r"^(?P<indent>[ \t]*)(?P<kw>if|elif)\b(?P<rest>.*)$")
+
+
+class OperationSet:
+    """The operation strings one lane can pass to a dispatcher (see the
+    section comment): `names` exactly, and `stems` (the names ending in `_`)
+    as prefixes of a longer string. Hashable by its RELEVANT part only
+    (`relevant`): names no dispatcher condition can tell apart from an
+    unnamed string do not change any branch, so lanes sharing the rest share
+    the walks."""
+
+    def __init__(self, names, vocabulary=None):
+        vocabulary = vocabulary or _dispatch_vocabulary()
+        vocab_eq, vocab_sw, vocab_prefixes = vocabulary
+        seen = _RELEVANCE.setdefault(vocabulary, {})
+        keep = set()
+        for o in names:
+            hit = seen.get(o)
+            if hit is None:
+                hit = seen[o] = isinstance(o, str) and (
+                    o in vocab_eq or any(o[:k] in vocab_sw for k in range(len(o) + 1))
+                    or (o.endswith("_") and o in vocab_prefixes))
+            if hit:
+                keep.add(o)
+        self.names = frozenset(keep)
+        self.stems = frozenset(o for o in keep if o.endswith("_"))
+        self._sorted = sorted(self.names)
+
+    def __hash__(self):
+        return hash(self.names)
+
+    def __eq__(self, other):
+        return isinstance(other, OperationSet) and other.names == self.names
+
+    def __repr__(self):
+        return f"OperationSet({sorted(self.names)[:8]}{'...' if len(self.names) > 8 else ''})"
+
+    def restricted(self, vocabulary):
+        """The same operations, keyed by what the conditions of `vocabulary`
+        (`_closure_vocabulary`) can tell apart: a walk that only reads those
+        files decides every branch the same way, and lanes share it."""
+        return OperationSet(self.names, vocabulary)
+
+    def starting_with(self, prefix):
+        import bisect
+        i = bisect.bisect_left(self._sorted, prefix)
+        return i < len(self._sorted) and self._sorted[i].startswith(prefix)
+
+
+_DISPATCH_VOCAB = None
+_RELEVANCE = {}              # vocabulary -> name -> can a condition of it tell the name apart
+_CACHES.append(_RELEVANCE)
+
+
+def _dispatch_vocabulary():
+    """(every literal a dispatcher condition compares with `==`/`!=`, every
+    `.startswith` literal of one, every prefix of either) over the tree's
+    Mojo sources (`_file_vocabulary`): the strings a dispatcher can tell
+    apart. A superset is harmless (it only makes `OperationSet` keys finer)."""
+    global _DISPATCH_VOCAB
+    if _DISPATCH_VOCAB is None:
+        eq, sw = set(), set()
+        for rel in sorted(tracked_files()):
+            if rel.endswith(".mojo"):
+                e, w = _file_vocabulary(rel)
+                eq |= e
+                sw |= w
+        prefixes = {lit[:k] for lit in eq | sw for k in range(len(lit) + 1)}
+        _DISPATCH_VOCAB = (frozenset(eq), frozenset(sw), frozenset(prefixes))
+    return _DISPATCH_VOCAB
+
+
+_CACHES.append(_DISPATCH_PARSE := {})
+_CACHES.append(_FILE_VOCAB := {})
+_CACHES.append(_CLOSURE_VOCAB := {})
+
+
+def _file_vocabulary(rel):
+    """(`==`/`!=` literals, `.startswith` literals) of the DISPATCHER
+    conditions of one Mojo source (`_dispatch_parse` over its definitions;
+    an ordinary `metric == "euclidean"` is not one). Empty for a file with
+    no dispatcher, so every lane shares the walks through it."""
+    if rel not in _FILE_VOCAB:
+        eq, sw = set(), set()
+        try:
+            text = _read(rel)
+        except OSError:
+            text = ""
+        defs = _mojo_defs_for(rel) if ("==" in text or "!=" in text or "startswith" in text) else None
+        for body in (defs[0].values() if defs else ()):
+            for parsed in _dispatch_parse(body):
+                _cond_vocab(parsed[4], eq, sw)
+        _FILE_VOCAB[rel] = (eq, sw)
+    return _FILE_VOCAB[rel]
+
+
+def _cond_vocab(tree, eq, sw):
+    if tree[0] == "atom":
+        (sw if tree[1] == "sw" else eq).add(tree[2])
+    else:
+        for sub in tree[1:]:
+            _cond_vocab(sub, eq, sw)
+
+
+def _vocab_triple(eq, sw):
+    return (frozenset(eq), frozenset(sw), frozenset({lit[:k] for lit in eq | sw for k in range(len(lit) + 1)}))
+
+
+def _closure_vocabulary(src):
+    """`_dispatch_vocabulary` restricted to the build's import closure of one
+    binding source: every condition a walk from it can read."""
+    if src not in _CLOSURE_VOCAB:
+        eq, sw = set(), set()
+        for rel in _mojo_closure([src]):
+            e, w = _file_vocabulary(rel)
+            eq |= e
+            sw |= w
+        prefixes = {lit[:k] for lit in eq | sw for k in range(len(lit) + 1)}
+        _CLOSURE_VOCAB[src] = (frozenset(eq), frozenset(sw), frozenset(prefixes))
+    return _CLOSURE_VOCAB[src]
+
+
+def _cond_parse(text, var):
+    """The condition `text` as a tree over comparisons of `var`
+    (('atom', kind, literal), ('not', t), ('and'|'or', a, b)), or None when it
+    holds anything else (then the branch is live)."""
+    atoms, out, pos = [], [], 0
+    for m in _DISPATCH_ATOM_RE.finditer(text):
+        v = m.group("v1") or m.group("v2") or m.group("v3")
+        if v != var:
+            continue
+        out.append(text[pos:m.start()])
+        if m.group("l3") is not None:
+            atoms.append(("sw", m.group("l3")))
+        else:
+            atoms.append((m.group("op1") or m.group("op2"), m.group("l1") if m.group("l1") is not None
+                          else m.group("l2")))
+        out.append(f" @{len(atoms) - 1} ")
+        pos = m.end()
+    out.append(text[pos:])
+    tokens = re.findall(r"@\d+|\(|\)|[A-Za-z_]\w*|\S", "".join(out))
+    if not atoms or any(t not in ("(", ")", "and", "or", "not") and not t.startswith("@") for t in tokens):
+        return None
+    k = [0]
+
+    def expr():
+        node = term()
+        while k[0] < len(tokens) and tokens[k[0]] == "or":
+            k[0] += 1
+            node = ("or", node, term())
+        return node
+
+    def term():
+        node = factor()
+        while k[0] < len(tokens) and tokens[k[0]] == "and":
+            k[0] += 1
+            node = ("and", node, factor())
+        return node
+
+    def factor():
+        if k[0] >= len(tokens):
+            raise ValueError("condition ends early")
+        t = tokens[k[0]]
+        k[0] += 1
+        if t == "not":
+            return ("not", factor())
+        if t == "(":
+            node = expr()
+            if k[0] >= len(tokens) or tokens[k[0]] != ")":
+                raise ValueError("unbalanced")
+            k[0] += 1
+            return node
+        if t.startswith("@"):
+            kind, lit = atoms[int(t[1:])]
+            return ("atom", kind, lit)
+        raise ValueError(t)
+    try:
+        tree = expr()
+    except ValueError:
+        return None
+    return tree if k[0] == len(tokens) else None
+
+
+def _cond_value(tree, value, stem=False):
+    """True, False or None (unknown) for `tree` when the variable holds
+    `value`, or, with `stem`, some string starting with `value`."""
+    kind = tree[0]
+    if kind == "atom":
+        _, op, lit = tree
+        if op == "sw":
+            if value.startswith(lit):
+                return True
+            return None if stem and lit.startswith(value) else False
+        if stem:
+            eq = None if lit.startswith(value) else False
+        else:
+            eq = value == lit
+        return eq if op == "==" else (None if eq is None else not eq)
+    if kind == "not":
+        v = _cond_value(tree[1], value, stem)
+        return None if v is None else not v
+    a, b = _cond_value(tree[1], value, stem), _cond_value(tree[2], value, stem)
+    if kind == "and":
+        return False if a is False or b is False else (True if a and b else None)
+    return True if a is True or b is True else (False if a is False and b is False else None)
+
+
+def _cond_literals(tree, out):
+    if tree[0] == "atom":
+        out.add(tree[2])
+    else:
+        for sub in tree[1:]:
+            _cond_literals(sub, out)
+    return out
+
+
+def _branch_live(tree, ops):
+    """Can any operation of `ops`, or an operation it does not name, enter a
+    branch guarded by `tree`."""
+    unnamed = _cond_value(tree, "\0")         # a string no literal of the condition equals or starts
+    if unnamed is not False:
+        return True
+    for lit in _cond_literals(tree, set()):
+        for o in ([lit] if lit in ops.names else []):
+            if _cond_value(tree, o) is not False:
+                return True
+        if ops.starting_with(lit) and any(_cond_value(tree, o) is not False
+                                          for o in ops.names if o.startswith(lit)):
+            return True
+    for s in ops.stems:
+        if _cond_value(tree, s, stem=True) is not False or _cond_value(tree, s) is not False:
+            return True
+    return False
+
+
+_PY_ARG_INIT_RE = r"String\(\s*(?:py\s*=\s*)?[A-Za-z_]\w*\s*\[\s*\d+\s*\]\s*\)"
+
+
+def _dispatch_parse(text):
+    """The dispatch structure of one Mojo definition text (or several joined):
+    [(first line, last line + 1, body start, var, condition tree)] for every
+    `if`/`elif` over a dispatcher variable (`_dispatch_vars`), or [] when the
+    text has none or cannot be read with certainty. Memoized by text."""
+    hit = _DISPATCH_PARSE.get(text)
+    if hit is not None:
+        return hit
+    out = []
+    code = _mojo_code_text(text)
+    scanned = _mojo_scan(code)
+    if scanned is not None and ("==" in code or "!=" in code or "startswith" in code):
+        dvars = _dispatch_vars(code)
+        if dvars:
+            lines = [line for line, _ in scanned]
+            conts = [c for _, c in scanned]
+            n = len(lines)
+            for i in range(n):
+                if conts[i]:
+                    continue
+                m = _DISPATCH_HEAD_RE.match(lines[i])
+                if not m:
+                    continue
+                indent = len(m.group("indent").expandtabs())
+                j = i + 1
+                while j < n and conts[j]:
+                    j += 1
+                head = " ".join([m.group("rest")] + [lines[t].strip() for t in range(i + 1, j)])
+                cond, tail = _split_colon(head)
+                if cond is None:
+                    continue
+                trees = [(v, _cond_parse(cond, v)) for v in dvars if re.search(r"\b%s\b" % re.escape(v), cond)]
+                trees = [(v, t) for v, t in trees if t is not None]
+                if len(trees) != 1:
+                    continue             # no dispatcher variable, or two at once: live
+                var, tree = trees[0]
+                if tail.strip():
+                    end = j              # `if cond: stmt` on one line
+                else:
+                    end = j
+                    while end < n:
+                        line = lines[end]
+                        if not conts[end] and line.strip() and \
+                                len(line) - len(line.lstrip(" \t")) <= indent:
+                            break
+                        end += 1
+                out.append((i, end, j, var, tree, tail.strip()))
+    _DISPATCH_PARSE[text] = out
+    return out
+
+
+def _split_colon(head):
+    """(condition, text after the statement's colon) of an `if` head, the
+    colon at bracket depth zero outside strings; (None, None) when absent."""
+    depth, quote = 0, None
+    for k, c in enumerate(head):
+        if quote:
+            if c == quote:
+                quote = None
+            continue
+        if c in "\"'":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == ":" and depth == 0:
+            return head[:k], head[k + 1:]
+    return None, None
+
+
+def _dispatch_vars(code):
+    """The dispatcher variables of one definition's code text: compared with
+    two or more different literals, and either a Python argument read once
+    (`var v = String(t[i])`, never assigned again) or a `String` parameter
+    every Mojo call site of the function hands an admissible value
+    (`_string_param_admissible`)."""
+    lits = {}
+    for m in _DISPATCH_ATOM_RE.finditer(code):
+        v = m.group("v1") or m.group("v2") or m.group("v3")
+        lits.setdefault(v, set()).add(m.group("l1") if m.group("l1") is not None else
+                                      m.group("l2") if m.group("l2") is not None else "^" + m.group("l3"))
+    out = set()
+    for v, seen in lits.items():
+        if len(seen) < 2:
+            continue
+        assigned = re.findall(r"(?<![\w.])%s\s*(?:[+\-*/%%|&^]?=)(?!=)" % re.escape(v), code)
+        decl = re.findall(r"\bvar\s+%s\s*(?::\s*String\s*)?=\s*([^\n]*)" % re.escape(v), code)
+        if decl:
+            if len(decl) == 1 and len(assigned) == 1 and re.fullmatch(_PY_ARG_INIT_RE, decl[0].strip()):
+                out.add(v)
+            continue
+        if assigned:
+            continue
+        for fn_name, index in _string_params(code, v):
+            if _string_param_admissible(fn_name, v, index):
+                out.add(v)
+    return out
+
+
+def _string_params(code, var):
+    """(function name, positional index) for every `def` in `code` that takes
+    `var: String` as a parameter."""
+    out = []
+    for m in re.finditer(r"^[ \t]*(?:fn|def)\s+([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*\(", code, re.M):
+        depth, k = 1, m.end()
+        while k < len(code) and depth:
+            depth += {"(": 1, ")": -1}.get(code[k], 0)
+            k += 1
+        params = _split_args(code[m.end():k - 1])
+        for index, p in enumerate(params):
+            if re.fullmatch(r"(?:var\s+|read\s+|owned\s+)?%s\s*:\s*String\s*" % re.escape(var), p.strip()):
+                out.append((m.group(1), index))
+    return out
+
+
+def _split_args(text):
+    """Top-level comma split of an argument or parameter list."""
+    out, depth, quote, cur = [], 0, None, []
+    for c in text:
+        if quote:
+            cur.append(c)
+            if c == quote:
+                quote = None
+            continue
+        if c in "\"'":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            out.append("".join(cur))
+            cur = []
+            continue
+        cur.append(c)
+    if "".join(cur).strip():
+        out.append("".join(cur))
+    return out
+
+
+_PARAM_ADMISSIBLE = {}
+_CACHES.append(_PARAM_ADMISSIBLE)
+_MOJO_CALLERS = None
+
+
+def _mojo_call_sites(fn_name):
+    """[(file, caller code text, argument texts)] for every call of
+    `fn_name(...)` in the tree's Mojo sources (any file: a name defined twice
+    is judged over the call sites of both)."""
+    global _MOJO_CALLERS
+    if _MOJO_CALLERS is None:
+        _MOJO_CALLERS = {}
+        for rel in sorted(tracked_files()):
+            if rel.endswith(".mojo"):
+                try:
+                    _MOJO_CALLERS[rel] = _mojo_code_text(_read(rel))
+                except OSError:
+                    continue
+    out = []
+    pat = re.compile(r"(?<![\w.])%s\s*\(" % re.escape(fn_name))
+    for rel, code in _MOJO_CALLERS.items():
+        if fn_name not in code:
+            continue
+        for m in pat.finditer(code):
+            before = code[max(0, m.start() - 16):m.start()]
+            if re.search(r"\b(?:def|fn)\s+$", before):
+                continue                 # the definition itself
+            depth, k = 1, m.end()
+            while k < len(code) and depth:
+                depth += {"(": 1, ")": -1}.get(code[k], 0)
+                k += 1
+            start = code.rfind("\ndef ", 0, m.start())
+            start2 = code.rfind("\nfn ", 0, m.start())
+            caller = code[max(start, start2, 0):k]
+            out.append((rel, caller, _split_args(code[m.end():k - 1])))
+    return out
+
+
+def _string_param_admissible(fn_name, var, index, seen=None):
+    """Does EVERY Mojo call site of `fn_name` pass, as its `var: String`
+    parameter (position `index` or keyword `var`), a value the operation set
+    accounts for: a string literal, a variable the caller assigns only
+    literals or a Python argument (`String(t[i])`), or a `String` parameter of
+    the caller that is itself admissible. Anything else (a concatenation, a
+    call's result, a field) is refused, and the function is not narrowed."""
+    key = (fn_name, var, index)
+    if key in _PARAM_ADMISSIBLE:
+        return _PARAM_ADMISSIBLE[key]
+    seen = set() if seen is None else seen
+    if key in seen:
+        return True                      # a cycle passes nothing new
+    seen.add(key)
+    ok = True
+    for _rel, caller, args in _mojo_call_sites(fn_name):
+        arg = None
+        for a in args:
+            km = re.match(r"\s*%s\s*=(?!=)(.*)$" % re.escape(var), a, re.S)
+            if km:
+                arg = km.group(1)
+        if arg is None:
+            positional = [a for a in args if not re.match(r"\s*[A-Za-z_]\w*\s*=(?!=)", a)]
+            if any(a.strip().startswith("*") for a in args) or index >= len(positional):
+                ok = False
+                break
+            arg = positional[index]
+        arg = arg.strip()
+        if re.fullmatch(r'"[^"\\\n]*"', arg) or re.fullmatch(r"String\(\s*\"[^\"\\\n]*\"\s*\)", arg) \
+                or re.fullmatch(_PY_ARG_INIT_RE, arg):
+            continue
+        if not re.fullmatch(r"[A-Za-z_]\w*", arg):
+            ok = False
+            break
+        decls = re.findall(r"\bvar\s+%s\s*(?::\s*String\s*)?=\s*([^\n]*)" % re.escape(arg), caller)
+        assigns = re.findall(r"(?<![\w.])%s\s*=(?!=)\s*([^\n]*)" % re.escape(arg), caller)
+        values = decls + [a for a in assigns if a not in decls]
+        if values:
+            literal = r'\s*(?:"[^"\\\n]*"|String\(\s*"[^"\\\n]*"\s*\))\s*'
+            if all(re.fullmatch(_PY_ARG_INIT_RE, v.strip()) or re.fullmatch(
+                    r"{0}(?:if .+ else{0})*".format(literal), v.strip()) for v in values):
+                continue
+            ok = False
+            break
+        params = _string_params(caller, arg)
+        if params and all(_string_param_admissible(f, arg, i, seen) for f, i in params):
+            continue
+        ok = False
+        break
+    _PARAM_ADMISSIBLE[key] = ok
+    return ok
+
+
+def dispatch_view(text, ops):
+    """(text, kept) for one Mojo definition text read for a lane whose
+    operations are `ops`: the text with every dead dispatcher branch's body
+    blanked and every dispatcher condition's literals removed, and the tuple
+    of branch decisions (empty when the text dispatches on nothing). The
+    text is returned unchanged when it has no dispatcher."""
+    parsed = _dispatch_parse(text)
+    if not parsed:
+        return text, ()
+    code = _mojo_code_text(text).split("\n")
+    kept = []
+    for first, end, body, var, tree, inline in parsed:
+        live = _branch_live(tree, ops)
+        kept.append(live)
+        head = re.match(r"^([ \t]*)", code[first]).group(1)
+        kw = "if" if code[first].lstrip().startswith("if") else "elif"
+        code[first] = f"{head}{kw} True:" + ((" " + inline if live else " pass") if inline else "")
+        for t in range(first + 1, body):
+            code[t] = ""
+        if not live and not inline:
+            for t in range(body, end):
+                code[t] = ""
+            # a dead branch keeps a statement, so the block still parses
+            code[first] += " pass"
+    return "\n".join(code), tuple(kept)
+
+
+def _mojo_symbol_reach(pending, names=None, refs=None, ops=None):
     """(files reached by name, files to close over whole) for imported
     symbols `pending` [(file, name)], followed DEFINITION BY DEFINITION.
 
@@ -2391,15 +2977,16 @@ def _mojo_symbol_reach(pending, names=None, refs=None):
         if node in seen:
             continue
         seen.add(node)
-        step = None if node[1] is None else _mojo_symbol_step(*node)
+        step = None if node[1] is None else _mojo_symbol_step(node[0], node[1], ops)
         if step is None:
             whole.add(node[0])
             continue
         reached.add(node[0])
+        key = node if ops is None else _SYMBOL_KEY.get((node[0], node[1], ops), node)
         if names is not None:
-            names.update(_SYMBOL_NAMES.get(node, ()))
+            names.update(_SYMBOL_NAMES.get(key, ()))
         if refs is not None:
-            refs.update(_SYMBOL_REFS.get(node, ()))
+            refs.update(_SYMBOL_REFS.get(key, ()))
         stack.extend(step)
     return reached, whole
 
@@ -3259,7 +3846,7 @@ def _mojo_node_label(node):
     return f"{node[1]}:{node[2]}" if node[0] == "t" else f"{node[1]}:{node[2]}.{node[3]}"
 
 
-def mojo_edit_lanes(ref, path, hit, graph):
+def mojo_edit_lanes(ref, path, hit, graph, backend=None):
     """(changed definition labels, selected lanes, lane -> chain, kept lanes)
     for one Mojo source's diff against `ref`, or None (whole file, with the
     reason in MOJO_EDIT_WHY) when the edit is not confined to named
@@ -3268,7 +3855,12 @@ def mojo_edit_lanes(ref, path, hit, graph):
     A lane in `hit` is SELECTED when an export it calls reaches a changed
     definition (the chain says how), KEPT by the old whole-file rule when it
     reaches the file in a way no export explains (`kept`), and dropped
-    otherwise."""
+    otherwise.
+
+    On a device column (`backend` in DEVICE_BACKENDS) a lane's contributions
+    are those of an install WITH a GPU set (`_LANE_DEVICE_CALLS`): no CPU-only
+    route, and a binding loaded only for `host_model` with the exports its
+    route calls (`device_column_lanes`)."""
     key = f"{ref}:{path}"
     MOJO_EDIT_WHY.pop(key, None)
     if _LANE_SEED_CALLS is None:
@@ -3294,8 +3886,11 @@ def mojo_edit_lanes(ref, path, hit, graph):
     nodes = {(u[0], path) + u[1:] for u in changed}
     labels = sorted(_mojo_node_label(n) for n in nodes)
     lanes, chains, kept = set(), {}, set()
+    device = backend in DEVICE_BACKENDS and _LANE_DEVICE_CALLS is not None
     for lane in sorted(hit):
         calls = _LANE_SEED_CALLS.get(lane)
+        if device and calls is not None:
+            calls = _LANE_DEVICE_CALLS.get(lane, calls)
         if calls is None:
             lanes.add(lane)                  # kept = still selected: the fallback never drops a lane
             kept.add(lane)
@@ -3449,6 +4044,54 @@ def _binding_names_in_uncached(rel, nodes):
     return out
 
 
+def _import_time_names(rel, operations=False):
+    """The attribute names and identifier-shaped string constants of the code
+    one Python file runs WHEN IMPORTED: its module-level statements, class
+    bodies outside their methods, decorators and defaults, and, to a fixed
+    point, the bodies of the file's own functions and methods that code
+    names. A file that does not parse keeps every name."""
+    tree = _parse(rel)
+    if tree is None:
+        return _file_called_names(rel)
+    funcs, run = {}, []
+
+    def collect(body, prefix=""):
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                funcs.setdefault(node.name, []).append(node)
+                run.extend(node.decorator_list)
+                run.extend(node.args.defaults + [d for d in node.args.kw_defaults if d is not None])
+            elif isinstance(node, ast.ClassDef):
+                run.extend(node.decorator_list + node.bases + node.keywords)
+                collect(node.body)
+            else:
+                run.append(node)
+    collect(tree.body)
+    names, done, todo = set(), set(), list(run)
+    while todo:
+        node = todo.pop()
+        got = _names_in_nodes([node]) | {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+        if operations:
+            # WHAT IMPORT-TIME CODE PASSES AS AN OPERATION: the native owners'
+            # calling convention is `entry(model, "operation", args, context)`,
+            # so a string in the second position of a call (or `operation=`).
+            # A string only stored in a table (a parallel driver's owner
+            # operation) runs when a lane calls that driver, which names it in
+            # its own walk.
+            names |= {c.args[1].value for c in ast.walk(node) if isinstance(c, ast.Call) and len(c.args) > 1
+                      and isinstance(c.args[1], ast.Constant) and isinstance(c.args[1].value, str)}
+            names |= {k.value.value for c in ast.walk(node) if isinstance(c, ast.Call) for k in c.keywords
+                      if k.arg in ("operation", "op") and isinstance(k.value, ast.Constant)
+                      and isinstance(k.value.value, str)}
+        else:
+            names |= _names_in_nodes([node])
+        for fname in got & funcs.keys():
+            if fname not in done:
+                done.add(fname)
+                todo.extend(funcs[fname])
+    return names
+
+
 @_by_path
 def _file_called_names(rel):
     """One Python file's attribute names and identifier-shaped string
@@ -3473,6 +4116,64 @@ def _called_names(files):
     out = set()
     for rel in files:
         out |= _file_called_names(rel)
+    return out
+
+
+_CONTEXT_DOORS = None
+
+
+def context_doors():
+    """key -> the names the Python code that FILLS that native context key
+    spells (lane identity-attribution, 2026-10-31).
+
+    A native owner reaches another compiled entry through its context:
+    `_native_runtime_manifold_bridge.connect` stores the manifold owner's
+    `manifold_native_call` as `context["family_mani_door"]`, and
+    bindings/family_native.mojo calls `py_get(context, "family_mani_door")`
+    for every `family_mani_*` operation. The key is all the native text
+    names, so the UMAP lane reached no file of the manifold owner and no
+    umap/ kernel (tools/test_lane_select.py::test_an_aliased_mojo_import_is_
+    recorded_under_the_name_the_body_uses failed on main 2026-10-31). Every
+    package function, and every module-level statement, that stores under a
+    constant identifier key (`x["k"] = ...`, `x.update(k=...)`,
+    `x.setdefault("k", ...)`, `dict(k=...)`) contributes all its names to
+    that key.
+
+    NOT APPLIED (measured 2026-11-01): read per function, 71 keys (`entry`,
+    `binding`, `backend`, ...) carried `kmeans_fit`, and adding them in
+    `lane_sources`' fixed point selected all 513 lanes for the k-means seeding
+    edit. Kept for the dataflow version that follows the stored value, which
+    the UMAP lane's map still needs."""
+    global _CONTEXT_DOORS
+    if _CONTEXT_DOORS is not None:
+        return _CONTEXT_DOORS
+    out = {}
+    for rel in _python_files():
+        tree = _parse(rel)
+        if tree is None:
+            continue
+        scopes = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        scopes += [n for n in tree.body if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+        for scope in scopes:
+            keys = set()
+            for node in ast.walk(scope):
+                if isinstance(node, ast.Assign):
+                    for t in node.targets:
+                        if isinstance(t, ast.Subscript) and isinstance(t.slice, ast.Constant) \
+                                and isinstance(t.slice.value, str) and t.slice.value.isidentifier():
+                            keys.add(t.slice.value)
+                elif isinstance(node, ast.Call):
+                    fname = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
+                    if fname in ("update", "dict", "setdefault"):
+                        keys.update(k.arg for k in node.keywords if k.arg)
+                        if fname == "setdefault" and node.args and isinstance(node.args[0], ast.Constant) \
+                                and isinstance(node.args[0].value, str):
+                            keys.add(node.args[0].value)
+            if keys:
+                names = _names_in_nodes([scope])
+                for k in keys:
+                    out.setdefault(k, set()).update(names)
+    _CONTEXT_DOORS = out
     return out
 
 
@@ -3569,8 +4270,58 @@ def host_class_routes():
                 bname = getattr(base, "id", None)
                 if bname and bname not in classes:
                     routes.setdefault(bname, set()).add(host)
+                    _HOST_ROUTE_CLASSES.setdefault(host, set()).add((rel, name, bname))
     _HOST_CLASS_ROUTES = routes
     return routes
+
+
+#: host binding -> {(file, Host class, public base)} behind `host_class_routes`.
+_HOST_ROUTE_CLASSES = {}
+
+
+def host_route_files(host):
+    """The package Python files that can hold the module object of the host
+    binding `host` on an install WITH a GPU set, read from code: every file
+    whose syntax names it (`_binding_names`: `load_host_module("...")`,
+    `_BINDING`, a basename table) and every file defining a `Host<Class>` that
+    `host_class_routes` routes to it. `_backend` hands out a host binding
+    while a GPU set is loaded only by name (`load_host_module`,
+    `host_module_path`); its routing tables are read only by the CPU-only
+    selector (`tools/test_lane_select_narrowing.py`
+    ::test_cpu_only_route_tables_have_no_reader_but_the_cpu_only_selector)."""
+    host_class_routes()
+    out = {rel for rel, _cls, _base in _HOST_ROUTE_CLASSES.get(host, ())}
+    for rel in _python_files():
+        if host in _binding_names(rel):
+            out.add(rel)
+    return out
+
+
+def host_route_names(host):
+    """What the `host_model` route of `host` can call on it on a GPU install
+    (`device_column_lanes`): the attribute names and identifier-shaped string
+    constants of `host_route_files(host)`, and of every class body in the MRO
+    of a routed public base (within the package) that calls `_bind`, the
+    one method a public class uses to reach its binding object, which
+    `_HostBound._bind` answers with the host binding."""
+    symbols = _python_symbols(_python_files())
+    names = set()
+    for rel in host_route_files(host):
+        names |= _file_called_names(rel)
+    seen, todo = set(), [base for _rel, _cls, base in _HOST_ROUTE_CLASSES.get(host, ())]
+    while todo:
+        cname = todo.pop()
+        if cname in seen:
+            continue
+        seen.add(cname)
+        for rel in sorted(symbols.get(cname, ())):
+            tree = _parse(rel)
+            for node in (tree.body if tree else ()):
+                if isinstance(node, ast.ClassDef) and node.name == cname:
+                    if any(isinstance(n, ast.Attribute) and n.attr == "_bind" for n in ast.walk(node)):
+                        names |= _names_in_nodes([node])
+                    todo.extend(getattr(b, "id", None) for b in node.bases if getattr(b, "id", None))
+    return names
 
 
 def resolved_bindings(doors):
@@ -3674,8 +4425,13 @@ def device_column_lanes(path, lanes, backend):
     (`_LANE_SEED_CALLS`) carrying `path` is a binding the lane does not load on
     a GPU install (`device_loaded_bindings`), and no binding it does load,
     no conformer the map added, and none of its Python files carries it
-    (`_LANE_CPU_ROUTE_ONLY`). A lane that loads a holder by name (a
-    `host_model` route, a door host) is kept, whatever it calls."""
+    (`_LANE_CPU_ROUTE_ONLY`). A lane that loads a holder by name (a door
+    host) is kept, whatever it calls. A holder it loads ONLY for `host_model`
+    (a class route no door names by syntax) carries what its route calls
+    (`host_route_names`, `lane_sources`' `route_use`), never the export names
+    the lane's own code hands the GPU set, and `mojo_edit_lanes` reads it the
+    same way (lane identity-attribution, 2026-10-31: 32 lanes per GPU column
+    for a k-means seeding edit no GPU install runs)."""
     if backend not in DEVICE_BACKENDS or not path.endswith(".mojo") or _LANE_CPU_ROUTE_ONLY is None:
         return set(lanes)
     return {lane for lane in lanes if path not in _LANE_CPU_ROUTE_ONLY.get(lane, ())}
@@ -3687,6 +4443,12 @@ _LANE_PRECISION_PATHS = None
 #: lane -> the files that lane reaches ONLY through a CPU-only route
 #: (`cpu_only_routes`); see `device_column_lanes`.
 _LANE_CPU_ROUTE_ONLY = None
+#: lane -> its binding contributions on an install WITH a GPU set: CPU-only
+#: routes left out, a binding loaded only for `host_model` read for what its
+#: route calls (`lane_sources`, `mojo_edit_lanes`).
+_LANE_DEVICE_CALLS = None
+#: lane -> the `OperationSet` its dispatcher walks were read with (diagnostics).
+LANE_OPERATIONS = {}
 
 
 @_by_path
@@ -3784,10 +4546,25 @@ def lane_sources():
     adapted = {k: v["family"] for k, v in hs.ADAPTED_MODULES.items()}
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
+    restricted = {}
+
+    def seed_key(src, used, wide, ops):
+        """`binding_seeds`' memo key. The lane's operations decide which
+        dispatcher branches its calls can enter (`dispatch_view`); the key
+        carries the part the binding's own import closure can tell apart
+        (`OperationSet.restricted`), so lanes share the walk."""
+        exports = _binding_exports(src)
+        delegated = _delegated_exports(src)
+        hit = tuple(sorted(e for e in used if e in exports or e in delegated))
+        if ops is not None:
+            if (ops, src) not in restricted:
+                restricted[(ops, src)] = ops.restricted(_closure_vocabulary(src))
+            ops = restricted[(ops, src)]
+        return (src, hit, wide, ops)
     read_by_name = {}        # seed_cache key -> the files of it read definition by definition
     native_names = {}        # seed_cache key -> names used by the reached native bodies
 
-    def binding_seeds(src, used, wide=True, mark=True):
+    def binding_seeds(src, used, wide=True, mark=True, ops=None):
         """The Mojo files ONE binding contributes to a lane whose door calls
         `used`.
 
@@ -3823,8 +4600,8 @@ def lane_sources():
             return {src}
         exports = _binding_exports(src)
         delegated = _delegated_exports(src)
-        hit = tuple(sorted(e for e in used if e in exports or e in delegated))
-        key = (src, hit, wide)
+        key = seed_key(src, used, wide, ops)
+        hit, ops = key[1], key[3]
         if key not in seed_cache:
             if not hit:
                 # NO EXPORT OF THIS BINDING IS CALLED. For a binding the lane
@@ -3883,6 +4660,8 @@ def lane_sources():
                         body = blocks.get(name)
                         if body is None:
                             continue
+                        if ops is not None:
+                            body = dispatch_view(body, ops)[0]
                         bodies.append(body)
                         # the identifiers of the body, not a regex per block
                         # (same word boundaries; it ran per file-local name)
@@ -3898,7 +4677,7 @@ def lane_sources():
                 # into the file defining it (`_mojo_symbol_reach`), so a
                 # thin-shell binding's impl module does not hand every
                 # export's oracles to every lane.
-                reached, whole = _mojo_symbol_reach(pending, named, refs)
+                reached, whole = _mojo_symbol_reach(pending, named, refs, ops)
                 closed = _mojo_closure(seeds | whole)
                 seed_cache[key] = closed | reached | {src}
                 read_by_name[key] = (reached | {src}) - closed
@@ -3919,7 +4698,7 @@ def lane_sources():
     # PASS ONE: each lane's Python doors and the bindings they resolve. Held
     # first because the next pass needs to know which bindings EVERY lane
     # resolves, and that is a measurement over all the lanes, not a list.
-    reach, seeds_of, seed_members = {}, {}, {}
+    reach, seeds_of, seed_members, syntax_of = {}, {}, {}, {}
     door_bindings = resolved_bindings
     class_routes = host_class_routes()
 
@@ -3943,10 +4722,20 @@ def lane_sources():
         reach[lane] = (matched, files, doors, bindings)
         seeds_of[lane] = seeds
         seed_members[lane] = members
+        # The bindings a door names BY SYNTAX, without the `host_model` class
+        # routes `resolved_bindings` adds (`route_only` below).
+        syntax_of[lane] = {b for rel in doors for b in _binding_names(rel)} & bindings
     ubiquitous = set.intersection(*[b for _, _, _, b in reach.values()]) if reach else set()
     # THE PYTHON FILES EVERY LANE REACHES: the shared helpers (`_buffer.py`,
     # `_array.py`) and the host doors they import for their native helpers.
     ubiquitous_py = set.intersection(*[f for _, f, _, _ in reach.values()]) if reach else set()
+    # THE OPERATIONS EVERY LANE CAN PASS (`OperationSet`): what the IMPORT-TIME
+    # code of the files every lane reaches spells (`_import_time_names`). The
+    # own walk stops at those files and their import-time code runs in every
+    # lane's process; a method of a class they define runs only when called,
+    # and a lane that calls it names it in its own walk.
+    ubiquitous_ops = set().union(*[_import_time_names(rel, operations=True)
+                                   for rel in ubiquitous_py if rel.endswith(".py")])
 
     connected_names = set().union(*[b for _, _, _, b in reach.values()]) if reach else set()
     for binding in tuple(connected_names):
@@ -4040,7 +4829,37 @@ def lane_sources():
         """Is `binding` resolved by a door this lane runs whole (see `_own`)."""
         return binding in _own(lane)[2]
 
-    seed_calls, precision_paths, cpu_route_only = {}, {}, {}
+    seed_calls, precision_paths, cpu_route_only, device_calls = {}, {}, {}, {}
+    route_cache = {}
+    alias_sources = sorted(os.path.join("bindings", b + ".mojo") for b in alias_targets)
+
+    def route_use(host):
+        """(the exports of `host` its `host_model` route can call, the files
+        those calls compile) on a GPU install: `host_route_names`, closed over
+        the native definitions the route's own operations reach through the
+        host binding and the import-alias owners (`classical_native_call`),
+        read for the route's operations alone (`dispatch_view`)."""
+        if host not in route_cache:
+            src = os.path.join("bindings", host + ".mojo")
+            names = set(host_route_names(host))
+            op_names = names | ubiquitous_ops
+            srcs = [src] + [a for a in alias_sources if a != src]
+            exports_of = {a: set(_binding_exports(a)) | set(_delegated_exports(a)) for a in srcs}
+            while True:
+                ops = OperationSet(op_names)
+                spelled = set()
+                for a in srcs:
+                    binding_seeds(a, names, "narrow", mark=False, ops=ops)
+                    spelled |= native_names[seed_key(a, names, "narrow", ops)]
+                opened = set()
+                fresh = {n for n in spelled | opened if any(n in e for e in exports_of.values())} - names
+                if not fresh and OperationSet(op_names | spelled | opened) == ops:
+                    break
+                names |= fresh
+                op_names |= spelled | fresh | opened
+            got = binding_seeds(src, names, "narrow", mark=False, ops=ops)
+            route_cache[host] = (tuple(sorted(names & exports_of[src])), frozenset(got))
+        return route_cache[host]
     for lane in reach:
         matched, files, doors, bindings = reach[lane]
         # THE NAMES THIS LANE'S OWN DOORS CALL (2026-09-23; this was every
@@ -4087,12 +4906,19 @@ def lane_sources():
                            True if _whole(lane, b) else "narrow") for b in sorted(connected)]
         exports_available = set().union(*[set(_binding_exports(src)) | set(_delegated_exports(src))
                                          for src, _ in native_sources])
+        # THE OPERATIONS THIS LANE CAN PASS to a dispatcher (`OperationSet`,
+        # `dispatch_view`): its own names, the files every lane reaches, and
+        # every literal the native definitions it reaches spell, to a fixed
+        # point together with the exports below.
+        op_names = set(used) | ubiquitous_ops
+        ops = OperationSet(op_names)
         while True:
-            found, origins_grew = set(), False
+            found, origins_grew, spelled = set(), False, set()
             for src, wide in native_sources:
-                binding_seeds(src, used, wide)
+                binding_seeds(src, used, wide, ops=ops)
                 exports = set(_binding_exports(src)) | set(_delegated_exports(src))
-                key = (src, tuple(sorted(used & exports)), wide)
+                key = seed_key(src, used, wide, ops)
+                spelled |= native_names[key]
                 reached_exports = native_names[key] & exports_available
                 found.update(reached_exports)
                 # Reporting follows each export separately. Sharing a native
@@ -4103,25 +4929,34 @@ def lane_sources():
                     tags = origins.get(name, 0)
                     if not tags:
                         continue
-                    binding_seeds(src, {name}, "narrow", mark=False)
-                    for reached_name in native_names[(src, (name,), "narrow")] & exports_available:
+                    binding_seeds(src, {name}, "narrow", mark=False, ops=ops)
+                    for reached_name in native_names[seed_key(src, {name}, "narrow", ops)] & exports_available:
                         previous = origins.get(reached_name, 0)
                         if tags & ~previous:
                             origins[reached_name] = previous | tags
                             origins_grew = True
+            # CONTEXT DOORS (`context_doors`): a key the native text spells
+            # hands over what the Python that filled it names.
+            # (`context_doors` is not applied here: read per function it handed
+            # every lane every export, measured 2026-11-01; see its docstring.)
+            opened = set()
             fresh = found - used
-            if not fresh and not origins_grew:
+            op_names |= spelled | fresh | opened
+            grown = OperationSet(op_names)
+            if not fresh and not origins_grew and grown == ops:
                 break
             used.update(fresh)
+            ops = grown
+        LANE_OPERATIONS[lane] = ops
 
         def recorded_seeds(src, wide=True):
-            got = binding_seeds(src, used, wide)
+            got = binding_seeds(src, used, wide, ops=ops)
             exports_of = _binding_exports(src)
             calls.append((src, wide, tuple(sorted(e for e in used if e in exports_of)), frozenset(got)))
             for name in used & (exports_of.keys() | _delegated_exports(src).keys()):
                 tags = origins.get(name, 0)
                 if tags:
-                    evidence_files = binding_seeds(src, {name}, "narrow", mark=False)
+                    evidence_files = binding_seeds(src, {name}, "narrow", mark=False, ops=ops)
                     for file in evidence_files & got:
                         limitation_paths[file] = limitation_paths.get(file, 0) | tags
             return got
@@ -4217,10 +5052,31 @@ def lane_sources():
         # lane loads on a GPU install contributes, a conformer the fixed point
         # above added, or a Python file.
         on_device = device_loaded_bindings(bindings, hs)
+        # A HOST BINDING A GPU INSTALL LOADS ONLY FOR `host_model` (lane
+        # identity-attribution, 2026-10-31): reached through a class route
+        # (`host_class_routes`: `KMeans` -> `_mojolearn_core_host` through
+        # `HostKMeans`) and named by no door's syntax. The lane's own calls of
+        # an export name go to the binding `_backend` resolves, which on a GPU
+        # install is the GPU set (`estimator_binding`: the mode set, never a
+        # host twin, unless `_CPU_ONLY`), so `kmeans_fit` named by the k-means
+        # owner runs `_mojolearn.kmeans_fit` there, not the host one. What runs
+        # in the host binding is what its route can call (`route_use`).
+        route_only = on_device - device_loaded_bindings(syntax_of[lane], hs)
         device_got, cpu_got = set(), set()
-        for src_path, _wide, _exports, got in calls:
+        dev_calls = device_calls[lane] = []
+        for src_path, wide_, exports_, got in calls:
             name = os.path.basename(src_path)[:-len(".mojo")]
-            (device_got if name in on_device else cpu_got).update(got)
+            if name not in on_device:
+                cpu_got.update(got)
+                continue
+            if name in route_only:
+                r_exports, r_got = route_use(name)
+                cpu_got.update(got)
+                dev_calls.append((src_path, "narrow", r_exports, r_got))
+                device_got.update(r_got)
+                continue
+            dev_calls.append((src_path, wide_, exports_, got))
+            device_got.update(got)
         cpu_route_only[lane] = frozenset(cpu_got - device_got - (mojo - before_conformance) - files)
         declared = {b for b, use in binding_use.items() if use["wide"] is True}
         declared |= {h for b in bindings for h in routed.get(b, ()) if _whole(lane, h)}
@@ -4230,8 +5086,9 @@ def lane_sources():
                          families=sorted(fams), mojo=len(mojo), exports=len(used),
                          ubiquitous=sorted(ubiquitous), binding_use=binding_use,
                          precision_limitations=[limitations[key] for key in limitation_keys])
-    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LANE_DEVICE_CALLS
     _LANE_SEED_CALLS = seed_calls
+    _LANE_DEVICE_CALLS = device_calls
     _LANE_PRECISION_PATHS = precision_paths
     _LANE_CPU_ROUTE_ONLY = cpu_route_only
     _LANE_SOURCES = (sources, why)
@@ -4256,7 +5113,8 @@ _LS_NOT_INPUTS = {"_ENUMERATORS", "_LANE_SOURCES", "_SOURCE_HASHED", "_TRACKED",
                   "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PYTHON_FILES", "_PKG_IMPORT_CLOSURE",
                   "_HOST_CLASS_ROUTES", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS",
                   "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY",
-                  "_HOOK_CLASSES", "_LS_MEMO"}
+                  "_HOOK_CLASSES", "_LS_MEMO", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS",
+                  "_CONTEXT_DOORS"}
 
 
 def _ls_digest(text):
@@ -4312,7 +5170,8 @@ def _remember_lane_sources():
     if git is None:
         return
     entry = dict(
-        result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY)),
+        result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY,
+                              _LANE_DEVICE_CALLS)),
         reads={path: _ls_digest(text) for path, text in _read.cache.items()},
         tree=_ls_tree_state(), git=git, ids=_ls_identities(),
         tracked=frozenset(_TRACKED) if _TRACKED is not None else None,
@@ -4358,6 +5217,7 @@ def _ls_memo_matches(memo, ids, git, tree):
 def _reuse_lane_sources():
     """Restore a remembered map when nothing it was derived from changed."""
     global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LS_MEMO
+    global _LANE_DEVICE_CALLS
     if not _LS_MEMO:
         return False
     ids, git, tree = _ls_identities(), _ls_git_state(), _ls_tree_state()
@@ -4365,8 +5225,8 @@ def _reuse_lane_sources():
         memo = _LS_MEMO[index]
         if _ls_memo_matches(memo, ids, git, tree):
             import copy
-            _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY = \
-                copy.deepcopy(memo["result"])
+            _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, \
+                _LANE_DEVICE_CALLS = copy.deepcopy(memo["result"])
             _LS_MEMO = _LS_MEMO[:index] + _LS_MEMO[index + 1:] + [memo]
             return True
     return False
@@ -4566,7 +5426,24 @@ def docstring_only(ref, path):
     except OSError:
         return False
     a, b = code_dump(old), code_dump(new)
-    return a is not None and b is not None and a == b
+    # A DOCSTRING'S PRESENCE IS READ (lane identity-attribution, 2026-10-31):
+    # bindings/classical_exceptions.mojo admits the NotFittedError bridge's
+    # doc (`not_fitted_doc`) only as a str, so deleting or adding a docstring
+    # can raise where editing one cannot. Only edits that keep every
+    # docstring where it was are docstring-only.
+    return a is not None and b is not None and a == b and _docstring_presence(old) == _docstring_presence(new)
+
+
+def _docstring_presence(text):
+    """Which module, class and function bodies open with a docstring, in
+    walk order (aligned whenever the code dumps are equal)."""
+    out = []
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = node.body
+            out.append(bool(body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
+                            and isinstance(body[0].value.value, str)))
+    return out
 
 
 _TRACKED = None
@@ -4876,6 +5753,10 @@ def unreachable(path):
         return _package_file_unreachable(path)
     if path.startswith("bindings" + os.sep):
         return None
+    if path.endswith(".mojo"):
+        why = _precompiled_package_only(path)
+        if why:
+            return why
     if path.endswith(".mojo") and not _mojo_importers(path):
         why = _unimported_mojo_unreachable(path)
         if why:
@@ -5088,6 +5969,79 @@ def _unimported_mojo_unreachable(path):
             "binding, and that nothing a lane reaches names by path, basename, stem or module path")
 
 
+_PRECOMPILE_RE = re.compile(r"\bmojo\s+precompile\b(?P<args>[^\n]*)")
+
+
+def _precompiled_packages():
+    """[(script, package directory, output basename)] for every tracked shell
+    script outside bindings/ that compiles a whole directory into a Mojo
+    package (`mojo precompile DIR -o OUT`), read literally: DIR a tracked
+    directory, OUT a literal basename or a variable the same script assigns
+    one (`MOJOC="$OUT/mojolearn_ops.mojoc"`). A line that cannot be read so
+    is left out, and its files keep the other rules."""
+    out = []
+    for rel in sorted(tracked_files()):
+        if not rel.endswith(".sh") or rel.startswith("bindings" + os.sep):
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if "precompile" not in text:
+            continue
+        for m in _PRECOMPILE_RE.finditer(text.replace("\\\n", " ")):
+            words = [w.strip("\"'()") for w in m.group("args").split()]
+            if "-o" not in words:
+                continue
+            k = words.index("-o")
+            target = words[k + 1] if k + 1 < len(words) else ""
+            dirs = [w for w in words[:k] if not w.startswith("-") and "$" not in w
+                    and os.path.isdir(os.path.join(ROOT, w)) and not w.startswith("/")]
+            if len(dirs) != 1:
+                continue
+            var = re.fullmatch(r"\$\{?([A-Za-z_]\w*)\}?", target)
+            if var:
+                assigned = re.findall(r"^\s*%s=([^\s;]+)" % re.escape(var.group(1)), text, re.M)
+                target = assigned[0].strip("\"'") if len(assigned) == 1 else ""
+            base = os.path.basename(target)
+            if not base or "$" in base:
+                continue
+            out.append((rel, dirs[0].rstrip("/"), base))
+    return out
+
+
+def _precompiled_package_only(path):
+    """A Mojo source compiled ONLY into a Mojo package that no lane loads
+    (lane identity-attribution, 2026-10-31: adapters/max_ops/__init__.mojo,
+    which packaging/adapters/build.sh precompiles into the MAX custom-op
+    package `mojolearn_ops.mojoc`).
+
+    Reached only when the path is under a directory a script outside
+    bindings/ precompiles (`_precompiled_packages`), every tracked Mojo source
+    importing a file of that directory is itself in it (no binding compiles
+    any of it), and nothing a lane reaches names the package's output file,
+    its stem, the directory or its dotted module path. The stem test of
+    `_mojo_named` is not used for a package `__init__.mojo`: `__init__` is in
+    every Python file. Anything else returns None and the other rules
+    decide."""
+    for script, pkg, base in _precompiled_packages():
+        if not path.startswith(pkg + os.sep):
+            continue
+        members = {rel for rel in tracked_files() if rel.startswith(pkg + os.sep) and rel.endswith(".mojo")}
+        if path not in members:
+            continue
+        if any(not set(_mojo_importers(m)) <= members for m in members):
+            return None
+        stem = base.rsplit(".", 1)[0]
+        for token in (base, stem, pkg + os.sep, pkg.replace(os.sep, ".")):
+            if len(token) >= 4 and _named_by_the_corpus(token, skip=members):
+                return None
+        return (f"nothing a lane runs compiles it: it is in the Mojo package {pkg}/, which only {script} "
+                f"builds (`mojo precompile` into {base}), no binding imports any file of it, and nothing a "
+                "lane reaches names that package or its output")
+    return None
+
+
 def _mojo_named(path):
     """Does a file a lane reaches name this Mojo source where a build could
     take it: its path, its dotted module path, its basename, or its bare stem.
@@ -5273,6 +6227,48 @@ def _package_file_unreachable(path):
             return None
     return ("nothing reaches it: package data that no file a lane reaches names by basename or "
             "path, in a directory no file a lane reaches walks")
+
+
+def _imported_only_by_unreachable_modules(path):
+    """A package module (not the harness, the manifest, the plugin table or
+    the loader) that no lane's map holds and whose every importer in the tree
+    is a test or a package module `unreachable` proves no lane runs (lane
+    identity-attribution, 2026-10-31: `_verification_light_reference.py`, the
+    light verifier's generated reference DATA, imported only by
+    `_verify_public.py` and `_verification_coverage.py`, the verifier's own
+    modules, and tools/test_light_verifier_command.py). It reads as a
+    registry (`enumerator_files`: it names every binding), and a registry's
+    diff that is not an addition was refused even though nothing a lane runs
+    imports it. Importers are found by the module's name in any tracked Python
+    file's code (`import`, `from ... import`, a string), so an importer this
+    cannot classify keeps the old rules."""
+    if not (path.startswith(PKG + os.sep) and path.endswith(".py")) or path in GLOBAL_PATHS \
+            or os.sep in path[len(PKG) + 1:]:
+        return None
+    stem = os.path.basename(path)[:-3]
+    word = re.compile(r"(?<![\w])%s(?![\w])" % re.escape(stem))
+    importers = []
+    for rel in sorted(tracked_files()):
+        if not rel.endswith(".py") or rel == path:
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if stem in text and word.search(text):
+            importers.append(rel)
+    if not importers:
+        return None
+    for rel in importers:
+        base = os.path.basename(rel)
+        if rel.startswith(TESTS) or (rel.startswith("tools" + os.sep) and base.startswith("test_")) \
+                or rel in SELECTION_MACHINERY:
+            continue
+        if rel.startswith(PKG + os.sep) and rel not in _NOT_CORPUS and unreachable(rel):
+            continue
+        return None
+    return ("nothing a lane runs imports it: every file naming it is a test or a package module no lane "
+            f"reaches ({', '.join(importers[:4])})")
 
 
 _CONSTANTS = None
@@ -9307,6 +10303,11 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                              "on a rented box to build and time a binding and replay recorded steps; no "
                              "lane computes through it (MEASUREMENT_TOOLING_PREFIXES)")
             continue
+        why_only = _imported_only_by_unreachable_modules(path) if path not in rev else None
+        if why_only:
+            inert.append(path)
+            reasons[path] = why_only
+            continue
         if path in GLOBAL_PATHS or path in enumerator_files():
             added = registry_lanes(ref, path, sources) if ref else None
             # A registry may also own executable helpers. Its table-delta
@@ -9374,7 +10375,7 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
         if hit and ref and path.endswith(".mojo") and sources is lane_sources()[0]:
             if mojo_graph is None:
                 mojo_graph = _MojoDefGraph()
-            edited = mojo_edit_lanes(ref, path, hit, mojo_graph)
+            edited = mojo_edit_lanes(ref, path, hit, mojo_graph, backend)
             if edited is not None:
                 labels, users, lane_chains, kept = edited
                 lanes.update(users)

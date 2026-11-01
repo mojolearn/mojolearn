@@ -853,7 +853,16 @@ def equivalence_proofs(root, old_manifest, new_manifest, *, log_dir=None, retain
         a.pop("native_sources", None)
         b.pop("native_sources", None)
         unit = b.get("unit", {})
-        if new.get("kind") not in ("identity", "performance") or a != b:
+        # FILE-KEYED INPUTS ARE THE SELECTOR'S (lane identity-attribution,
+        # 2026-10-31). An identity unit's execution environment carries the
+        # hashes of the builders its bindings ran (`builders`) and the loader
+        # route sources (`loader_routes.sources`). A difference that is ONLY in
+        # those hashes is a set of changed files, and whether a changed file can
+        # move a lane is tools/lane_select.py's derived, tested answer (the
+        # rootdir-only builder edit, host_surface's named rows, ...), the same
+        # one native sources rest on below. Any other difference stays affected.
+        moved_files = _file_keyed_difference(a, b) if new.get("kind") == "identity" else None
+        if new.get("kind") not in ("identity", "performance") or (a != b and moved_files is None):
             row["reason"] = "execution, coverage, recipe, flags or build inputs changed"
             continue
         version_proof = version_label_proof(root, old, new)
@@ -871,10 +880,16 @@ def equivalence_proofs(root, old_manifest, new_manifest, *, log_dir=None, retain
         if not lanes or lanes & set(selection["lanes"]):
             row["reason"] = "source changes reach this unit"
             continue
+        if moved_files and not set(moved_files) <= set(selection.get("changed_paths", ())):
+            row["reason"] = "an execution input changed that the selector was not asked about"
+            continue
         proof = dict(schema=PROOF_SCHEMA, unit_id=rid, old_revision=plan["old_revision"],
             new_revision=plan["new_revision"], old_fingerprint=old["fingerprint"],
             new_fingerprint=new["fingerprint"], stable_inputs_digest=digest(a),
             lanes=sorted(lanes), selection=selection)
+        if moved_files:
+            proof["selector_proven_files"] = sorted(moved_files)
+            proof["stable_inputs_digest"] = digest(_file_keyed_view(a))
         proof["digest"] = digest(proof)
         row.update(decision="retained", reason="named-edit selector proves lane inputs unaffected", reuse_proof=proof)
     for rid, row in plan["units"].items():
@@ -883,6 +898,43 @@ def equivalence_proofs(root, old_manifest, new_manifest, *, log_dir=None, retain
                 if retained_evidence is not None and rid in retained_evidence
                 else dict(status="not-supplied", restore=[]))
     return plan
+
+
+def _file_keyed_maps(inputs):
+    """The {path: sha256} maps of one identity unit's execution environment:
+    each binding's `builders` and the `loader_routes` `sources`."""
+    for env in (inputs.get("execution_environment") or {}).values():
+        if not isinstance(env, dict):
+            continue
+        for ident in (env.get("bindings") or {}).values():
+            if isinstance(ident, dict) and isinstance(ident.get("builders"), dict):
+                yield ident["builders"]
+        routes = env.get("loader_routes")
+        if isinstance(routes, dict) and isinstance(routes.get("sources"), dict):
+            yield routes["sources"]
+
+
+def _file_keyed_view(inputs):
+    """`inputs` with every file-keyed hash replaced by its path."""
+    view = copy.deepcopy(inputs)
+    for table in _file_keyed_maps(view):
+        for path in table:
+            table[path] = path
+    return view
+
+
+def _file_keyed_difference(a, b):
+    """The files whose hashes are ALL that differ between two identity unit
+    inputs (an empty set when they are equal), or None when anything else
+    differs (a flag, a toolchain, a binding, a file added or removed)."""
+    if a == b:
+        return set()
+    if _file_keyed_view(a) != _file_keyed_view(b):
+        return None
+    moved = set()
+    for ta, tb in zip(_file_keyed_maps(a), _file_keyed_maps(b)):
+        moved |= {p for p in ta if ta[p] != tb.get(p)}
+    return moved or None
 
 
 def validate_equivalence_proof(root, proof, old, new, *, log_dir=None):

@@ -481,6 +481,226 @@ def test_entries_minus_and_row_membership_take_retired_lanes_only():
     assert ls._changed_row_lanes(row(["keep", "nolane"]), row(["keep"]), every, {}, {"par-x"}) != set()
 
 
+
+# ------------------------------------------------ operation-string dispatchers
+_DISPATCHER = _d(r"""
+    def entry_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) -> PyObjectPtr:
+        var call = PythonObject(from_borrowed=args_ptr)
+        var operation = String(call[1])
+        if operation == "alpha_fit":
+            return alpha_fit_impl(call)
+        if operation.startswith("fam_"):
+            return fam_dispatch(call, operation)
+        elif operation == "beta_fit" and len(call) == 3:
+            return beta_fit_impl(call)
+        if operation != "gamma_fit":
+            prelude_impl(call)
+        else:
+            gamma_impl(call)
+        return tail_impl(call)
+    """)
+
+
+class _Vocab:
+    """Seed the dispatch vocabulary and the Mojo call-site index, so nothing
+    here scans the tree."""
+
+    def __init__(self, eq, sw, callers=None):
+        prefixes = {lit[:k] for lit in set(eq) | set(sw) for k in range(len(lit) + 1)}
+        self.vocab = (frozenset(eq), frozenset(sw), frozenset(prefixes))
+        self.callers = callers or {}
+
+    def __enter__(self):
+        self.saved = (ls._DISPATCH_VOCAB, ls._MOJO_CALLERS, dict(ls._PARAM_ADMISSIBLE), dict(ls._DISPATCH_PARSE))
+        ls._DISPATCH_VOCAB, ls._MOJO_CALLERS = self.vocab, dict(self.callers)
+        ls._PARAM_ADMISSIBLE.clear()
+        ls._DISPATCH_PARSE.clear()
+        return self
+
+    def __exit__(self, *exc):
+        ls._DISPATCH_VOCAB, ls._MOJO_CALLERS = self.saved[0], self.saved[1]
+        ls._PARAM_ADMISSIBLE.clear()
+        ls._PARAM_ADMISSIBLE.update(self.saved[2])
+        ls._DISPATCH_PARSE.clear()
+        ls._DISPATCH_PARSE.update(self.saved[3])
+
+
+def _idents(text):
+    return set(ls._MOJO_IDENT_RE.findall(text))
+
+
+def test_a_dispatcher_follows_only_the_branches_the_lane_operations_can_enter():
+    with _Vocab({"alpha_fit", "beta_fit", "gamma_fit"}, {"fam_"}):
+        text, kept = ls.dispatch_view(_DISPATCHER, ls.OperationSet({"alpha_fit", "unrelated"}))
+        got = _idents(text)
+        assert "alpha_fit_impl" in got and "fam_dispatch" not in got
+        # a condition with anything but the operation is live, and so is a `!=`, an
+        # `else` and everything after the chain
+        assert {"beta_fit_impl", "prelude_impl", "gamma_impl", "tail_impl"} <= got
+        # the literals a condition compares with are not read as names
+        assert "alpha_fit" not in _idents(text.replace("alpha_fit_impl", ""))
+        # three dispatch conditions: the `and len(call) == 3` one is not one, so live
+        assert len(kept) == 3 and kept.count(False) == 1
+        text, _ = ls.dispatch_view(_DISPATCHER, ls.OperationSet({"fam_svc_fit"}))
+        assert "fam_dispatch" in _idents(text) and "alpha_fit_impl" not in _idents(text)
+
+
+def test_a_stem_opens_every_branch_a_longer_string_could_enter():
+    """`f"fam_{op}"` leaves the constant `fam_`: it can become any `fam_*`."""
+    with _Vocab({"alpha_fit", "fam_one"}, {"fam_"}):
+        text, _ = ls.dispatch_view(_DISPATCHER, ls.OperationSet({"fam_"}))
+        assert "fam_dispatch" in _idents(text)
+        text, _ = ls.dispatch_view(_DISPATCHER, ls.OperationSet({"al_"}))
+        assert "alpha_fit_impl" not in _idents(text)        # `al_` cannot become `alpha_fit`
+        text, _ = ls.dispatch_view(_DISPATCHER, ls.OperationSet({"alpha_"}))
+        assert "alpha_fit_impl" in _idents(text)
+
+
+def test_a_reassigned_or_computed_operation_is_not_a_dispatcher():
+    with _Vocab({"alpha_fit", "beta_fit"}, {"fam_"}):
+        reassigned = _DISPATCHER.replace("    return tail_impl(call)",
+                                         "    operation = other(call)\n    return tail_impl(call)")
+        assert reassigned != _DISPATCHER
+        assert ls.dispatch_view(reassigned, ls.OperationSet({"x"})) == (reassigned, ())
+        computed = _DISPATCHER.replace("String(call[1])", "String(call[1]) + suffix")
+        assert ls.dispatch_view(computed, ls.OperationSet({"x"})) == (computed, ())
+
+
+def test_a_string_parameter_is_a_dispatcher_only_when_every_call_site_is_admissible():
+    callee = _d("""
+        def fam_dispatch(model: PythonObject, operation: String) raises -> PythonObject:
+            if operation == "fam_one":
+                return one_impl(model)
+            if operation == "fam_two":
+                return two_impl(model)
+            return model
+        """)
+    good = _d("""
+        def caller_a(call: PythonObject) raises -> PythonObject:
+            var operation = String(call[1])
+            return fam_dispatch(call, operation)
+
+        def caller_b(call: PythonObject) raises -> PythonObject:
+            var route = "fam_one" if Bool(call) else "fam_two"
+            return fam_dispatch(call, route) + fam_dispatch(call, "fam_two")
+        """)
+    with _Vocab({"fam_one", "fam_two"}, set(), {"x/good.mojo": good, "x/callee.mojo": callee}):
+        text, kept = ls.dispatch_view(callee, ls.OperationSet({"fam_two"}))
+        assert kept == (False, True) and "one_impl" not in _idents(text)
+    bad = good + "\n" + _d("""
+        def caller_c(call: PythonObject, name: String) raises -> PythonObject:
+            return fam_dispatch(call, "fam_" + name)
+        """)
+    with _Vocab({"fam_one", "fam_two"}, set(), {"x/good.mojo": bad, "x/callee.mojo": callee}):
+        assert ls.dispatch_view(callee, ls.OperationSet({"fam_two"})) == (callee, ())
+
+
+def test_an_operation_set_is_keyed_by_what_a_condition_can_tell_apart():
+    with _Vocab({"alpha_fit"}, {"fam_"}):
+        a = ls.OperationSet({"alpha_fit", "noise", "fam_x", "fam_"})
+        b = ls.OperationSet({"alpha_fit", "other", "fam_x", "fam_"})
+        assert a == b and hash(a) == hash(b)
+        assert a.names == {"alpha_fit", "fam_x", "fam_"} and a.stems == {"fam_"}
+        assert ls.OperationSet({"alpha_fit"}) != a
+
+
+# ------------------------------------------------ host_model routes on devices
+def test_a_device_column_reads_a_host_model_holder_for_its_route_calls_only():
+    """`mojo_edit_lanes` on a device column uses `_LANE_DEVICE_CALLS`: the
+    holder `KMeans` routes to (`HostKMeans`) runs `kmeans_predict` there, the
+    k-means fit runs on the GPU set. Every other column keeps the full map."""
+    path = "ns_test/oracle.mojo"
+    old = "def host_fit(x: Int) -> Int:\n    return x\n\n\ndef host_predict(x: Int) -> Int:\n    return x\n"
+    new = old.replace("    return x\n\n\ndef host_predict", "    return x + 1\n\n\ndef host_predict")
+
+    class Graph:
+        def closure(self, src, export):
+            return {("t", path, "host_fit" if export == "fit" else "host_predict"): None}
+    saved = ls._LANE_SEED_CALLS, ls._LANE_DEVICE_CALLS
+    try:
+        with _Seeded({path: (old, new)}):
+            ls._LANE_SEED_CALLS = {"lane": [("bindings/h.mojo", True, ("fit", "predict"), frozenset({path}))]}
+            ls._LANE_DEVICE_CALLS = {"lane": [("bindings/h.mojo", "narrow", ("predict",), frozenset({path}))]}
+            got = ls.mojo_edit_lanes(REF, path, {"lane"}, Graph(), None)
+            assert got is not None and got[1] == {"lane"}
+            for backend in ("cpu", None):
+                assert ls.mojo_edit_lanes(REF, path, {"lane"}, Graph(), backend)[1] == {"lane"}
+            for backend in ls.DEVICE_BACKENDS:
+                assert ls.mojo_edit_lanes(REF, path, {"lane"}, Graph(), backend)[1] == set()
+            # the route itself calling the changed definition keeps the lane on a device
+            ls._LANE_DEVICE_CALLS = {"lane": [("bindings/h.mojo", "narrow", ("fit",), frozenset({path}))]}
+            assert ls.mojo_edit_lanes(REF, path, {"lane"}, Graph(), "cuda")[1] == {"lane"}
+            ls._LANE_DEVICE_CALLS = None                 # no device map recorded: the full map
+            assert ls.mojo_edit_lanes(REF, path, {"lane"}, Graph(), "cuda")[1] == {"lane"}
+    finally:
+        ls._LANE_SEED_CALLS, ls._LANE_DEVICE_CALLS = saved
+
+
+def test_host_route_names_come_from_the_route_files_and_bind_calling_bases():
+    """The route of `_mojolearn_core_host` names the k-means inference entries
+    and never the fit; a routed public base whose body calls `_bind` would
+    hand its own names over too."""
+    files = ls.host_route_files("_mojolearn_core_host")
+    assert os.path.join(ls.PKG, "_classical_host.py") in files
+    names = ls.host_route_names("_mojolearn_core_host")
+    assert {"kmeans_predict", "kmeans_transform"} <= names and "kmeans_fit" not in names
+    saved_routes = {k: set(v) for k, v in ls._HOST_ROUTE_CLASSES.items()}
+    saved_symbols, saved_parse = ls._python_symbols, dict(ls._parse.cache)
+    try:
+        ls._HOST_ROUTE_CLASSES["_mojolearn_ns_host"] = {("ns_test/route.py", "HostThing", "Thing")}
+        ls._parse.cache["ns_test/thing.py"] = ast.parse(
+            "class Thing:\n    def fit(self):\n        return self._bind().thing_fit()\n")
+        ls._parse.cache["ns_test/route.py"] = ast.parse("class HostThing(Thing):\n    _BINDING = 'x'\n")
+        ls._python_symbols = lambda files: {"Thing": {"ns_test/thing.py"}}
+        assert "thing_fit" in ls.host_route_names("_mojolearn_ns_host")
+        ls._parse.cache["ns_test/thing.py"] = ast.parse(
+            "class Thing:\n    def fit(self):\n        return _NATIVE(self, 'thing_fit')\n")
+        assert "thing_fit" not in ls.host_route_names("_mojolearn_ns_host")
+    finally:
+        ls._HOST_ROUTE_CLASSES.clear()
+        ls._HOST_ROUTE_CLASSES.update(saved_routes)
+        ls._python_symbols = saved_symbols
+        ls._parse.cache.clear()
+        ls._parse.cache.update(saved_parse)
+
+
+# ---------------------------------------------------- precompiled Mojo packages
+def test_the_max_ops_package_is_attributed_to_no_lane_and_refuses_otherwise():
+    path = "adapters/max_ops/__init__.mojo"
+    assert ("packaging/adapters/build.sh", "adapters/max_ops", "mojolearn_ops.mojoc") in ls._precompiled_packages()
+    saved = ls._named_by_the_corpus, ls._mojo_importers
+    try:
+        ls._named_by_the_corpus = lambda token, skip=(), whole=False, name_end=False: []
+        ls._mojo_importers = lambda rel: set()
+        assert "mojolearn_ops.mojoc" in (ls._precompiled_package_only(path) or "")
+        assert ls._precompiled_package_only("adapters/native/c_api.mojo") is None   # not in the package
+        ls._mojo_importers = lambda rel: {"bindings/_mojolearn_x.mojo"} if rel == path else set()
+        assert ls._precompiled_package_only(path) is None          # a binding imports it
+        ls._mojo_importers = lambda rel: set()
+        ls._named_by_the_corpus = lambda token, skip=(), whole=False, name_end=False: (
+            ["python/mojolearn/adapters/max.py"] if token == "mojolearn_ops.mojoc" else [])
+        assert ls._precompiled_package_only(path) is None          # a lane's file loads the package
+    finally:
+        ls._named_by_the_corpus, ls._mojo_importers = saved
+
+
+def test_a_docstring_edit_is_docstring_only_and_a_deleted_or_added_one_is_not():
+    """bindings/classical_exceptions.mojo admits NotFittedError's doc only as a
+    str, so a docstring's presence is read at run time; its text is not."""
+    path = "ns_test/doc_only.py"
+    old = 'class A:\n    """one"""\n    def f(self):\n        return 1\n'
+    saved = ls._SOURCE_HASHED
+    try:
+        ls._SOURCE_HASHED = set()
+        with _Seeded({path: (old, old.replace('"""one"""', '"""two"""'))}):
+            assert ls.docstring_only(REF, path)
+        with _Seeded({path: (old, old.replace('    """one"""\n', ''))}):
+            assert not ls.docstring_only(REF, path)
+        with _Seeded({path: (old, old.replace('return 1', '"""new"""\n        return 1'))}):
+            assert not ls.docstring_only(REF, path)
+    finally:
+        ls._SOURCE_HASHED = saved
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):

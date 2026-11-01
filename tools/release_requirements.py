@@ -312,7 +312,12 @@ class RequirementsLedger:
             return
         before, after = copy.deepcopy(old["inputs"]), copy.deepcopy(wanted["inputs"])
         old_sources, new_sources = before.pop("native_sources", None), after.pop("native_sources", None)
-        if before != after or old.get("kind") != wanted.get("kind"):
+        # A difference only in file-keyed execution hashes (builders, loader
+        # route sources) is a changed file, which the frozen selector judges
+        # like a native source (release_requirement_dependencies.equivalence_proofs).
+        from release_requirement_dependencies import _file_keyed_difference
+        file_keyed = wanted.get("kind") == "identity" and _file_keyed_difference(before, after) is not None
+        if (before != after and not file_keyed) or old.get("kind") != wanted.get("kind"):
             row["dependency_reason"] = "execution, coverage, recipe, flags or build inputs changed"
             return
         if not isinstance(old_sources, dict) or not isinstance(new_sources, dict):
@@ -373,7 +378,9 @@ class RequirementsLedger:
                 old = RequirementsLedger._attempt_requirement(failure)
                 before, after = copy.deepcopy(old["inputs"]), copy.deepcopy(wanted["inputs"])
                 a, b = before.pop("native_sources", None), after.pop("native_sources", None)
-                if before != after:
+                from release_requirement_dependencies import _file_keyed_difference
+                if before != after and not (wanted.get("kind") == "identity"
+                                            and _file_keyed_difference(before, after) is not None):
                     row.setdefault("unrelated_failures", []).append(dict(attempt=failure["id"],
                         source_revision=old["source_revision"], reason="different execution or build inputs"))
                     continue

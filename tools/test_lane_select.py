@@ -1210,10 +1210,16 @@ def test_no_docstring_is_read_back_at_run_time():
                            for f in files if f.endswith(".mojo")]
 
     def native_doc_key(key):
+        # A store as `__doc__`, or an admission that the doc is a str: the
+        # second reads the docstring's PRESENCE, which `docstring_only` holds
+        # fixed (a deleted or added docstring is never docstring-only), so
+        # its text still reaches nothing but a `__doc__`.
         reads = [m.group(0) for text in mojo_texts
                  for m in re.finditer(r'[^\n]*context\["%s"\][^\n]*' % re.escape(key), text)]
-        return bool(reads) and all(re.search(r'py_setitem\(\s*\w+\s*,\s*"__doc__"\s*,\s*context\["%s"\]\s*\)'
-                                             % re.escape(key), r) for r in reads)
+        store = r'py_setitem\(\s*\w+\s*,\s*"__doc__"\s*,\s*context\["%s"\]\s*\)' % re.escape(key)
+        admit = r'py_type\(\s*context\["%s"\]\s*\)\s+is\s+not\s+\w+\.str\b' % re.escape(key)
+        return bool(reads) and any(re.search(store, r) for r in reads) and all(
+            re.search(store, r) or re.search(admit, r) for r in reads)
 
     def doc_to_doc(node, parents):
         parent = parents.get(node)
