@@ -1,6 +1,0 @@
-lu-factor synthetic before  ms=6270.240 digest=43e06346de01739b  
-lu-factor synthetic after  ms=1217.396 digest=43e06346de01739b  
-lu-factor synthetic restore  ms=4499.727 digest=43e06346de01739b  
-lu-solve synthetic before  ms=6253.864 digest=43e06346de01739b  
-lu-solve synthetic after  ms=1231.541 digest=43e06346de01739b  
-lu-solve synthetic restore  ms=4519.111 digest=43e06346de01739b  
