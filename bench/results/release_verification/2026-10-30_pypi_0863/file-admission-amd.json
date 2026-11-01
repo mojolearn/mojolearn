@@ -1,0 +1,22 @@
+{
+  "files": {
+    "mojolearn_amd-0.8.63-py3-none-manylinux_2_35_x86_64.whl": "9119af63fedb2f7a9b2df75af5006e3f9e0a67f3206370ca90aca6ca17e764e8"
+  },
+  "linux_qualification": null,
+  "manifest_sha256": "0ea333a648662de90c2edb32ac36430e76d71c1b30b1ddf9cf2b45d0759acba1",
+  "passed": true,
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "3c026af7c1926c731295b71242545165cba62ebe"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-artifact-verification.v1",
+  "scope": "File integrity, alpha metadata and recorded overlay provenance only; no package execution. A listed fresh Linux payload additionally requires its exact final-wheel three-architecture installed admission; overlay artifacts inherit no current numerical qualification",
+  "tags": {
+    "mojolearn_amd-0.8.63-py3-none-manylinux_2_35_x86_64.whl": [
+      "py3-none-manylinux_2_35_x86_64"
+    ]
+  },
+  "version": "0.8.63"
+}
