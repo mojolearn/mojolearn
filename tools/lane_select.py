@@ -4447,6 +4447,8 @@ _LANE_CPU_ROUTE_ONLY = None
 #: routes left out, a binding loaded only for `host_model` read for what its
 #: route calls (`lane_sources`, `mojo_edit_lanes`).
 _LANE_DEVICE_CALLS = None
+#: lane -> the `OperationSet` its dispatcher walks were read with (diagnostics).
+LANE_OPERATIONS = {}
 
 
 @_by_path
@@ -4945,6 +4947,7 @@ def lane_sources():
                 break
             used.update(fresh)
             ops = grown
+        LANE_OPERATIONS[lane] = ops
 
         def recorded_seeds(src, wide=True):
             got = binding_seeds(src, used, wide, ops=ops)
