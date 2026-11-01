@@ -463,6 +463,7 @@ def reset_caches():
     _DISPATCH_VOCAB = None
     _MOJO_CALLERS = None
     _HOST_ROUTE_CLASSES.clear()
+    _DISPATCHER_NAMES.clear()
     _SOURCE_HASHED = None
     _CONSTANTS = None
     _EXTENDERS = None
@@ -2408,10 +2409,13 @@ def _mojo_symbol_step(rel, name, ops=None):
     _SYMBOL_STEPS[key] = out
     _SYMBOL_NAMES[key] = idents
     _SYMBOL_REFS[key] = _mojo_export_refs("\n".join(bodies))
+    _SYMBOL_PASSED[key] = passed_operations("\n".join(bodies))
     return out
 
 
 _SYMBOL_KEY = {}             # (rel, name, ops) -> the _SYMBOL_STEPS key that step was stored under
+_SYMBOL_PASSED = {}          # step key -> the operations those bodies pass (`passed_operations`)
+_CACHES.append(_SYMBOL_PASSED)
 _CACHES.append(_SYMBOL_KEY)
 
 
@@ -2437,10 +2441,12 @@ _CACHES.append(_SYMBOL_KEY)
 #     lane's own code spells: the identifier-shaped string constants and
 #     attribute names of the regions it executes (`_executed_names`, the same
 #     over-approximation that decides which exports a lane calls), the files
-#     every lane reaches, and every string literal of the native definitions
-#     the walk reaches (the fixed point in `lane_sources` adds them, so
-#     `var route = "host_infer_predict"` in a kept branch opens the callee's
-#     branch for it). A constant ending in `_` is also a STEM: an f-string or a
+#     every lane reaches, and every string the native definitions the walk
+#     reaches PASS to a dispatcher (`passed_operations`; the fixed point in
+#     `lane_sources` adds them, so `var route = "host_infer_predict"` handed to
+#     `host_inference_operation` in a kept branch opens the callee's branch
+#     for it, while a table that merely spells `family_kmeans_fit` opens
+#     nothing). A constant ending in `_` is also a STEM: an f-string or a
 #     concatenation (`f"family_{op}"`, `"family_" + op`) can extend it, so it
 #     opens every branch a string starting with it could enter.
 #   * WHAT A DISPATCHER IS (`_dispatch_vars`). A variable compared with at
@@ -2550,11 +2556,76 @@ def _file_vocabulary(rel):
         except OSError:
             text = ""
         defs = _mojo_defs_for(rel) if ("==" in text or "!=" in text or "startswith" in text) else None
-        for body in (defs[0].values() if defs else ()):
-            for parsed in _dispatch_parse(body):
-                _cond_vocab(parsed[4], eq, sw)
+        for name, body in (defs[0].items() if defs else ()):
+            parsed = _dispatch_parse(body)
+            for row in parsed:
+                _cond_vocab(row[4], eq, sw)
+            if parsed:
+                _DISPATCHER_NAMES.add(name)
         _FILE_VOCAB[rel] = (eq, sw)
     return _FILE_VOCAB[rel]
+
+
+#: Every Mojo definition that dispatches on an operation string
+#: (`_dispatch_parse` non-empty), filled by `_file_vocabulary`.
+_DISPATCHER_NAMES = set()
+
+
+def dispatcher_names():
+    """The names of every operation-string dispatcher in the tree."""
+    _dispatch_vocabulary()
+    return _DISPATCHER_NAMES
+
+
+_PASSED_CACHE = {}
+_CACHES.append(_PASSED_CACHE)
+
+
+def passed_operations(text):
+    """The operation strings one Mojo text actually PASSES to a dispatcher
+    (lane identity-attribution-2, 2026-11-01): a string literal that is an
+    argument of a call of a dispatcher (`dispatcher_names`:
+    `family_operation(model, "family_kmeans_fit", args, context)`), or the
+    literal values of a variable that such a call is handed and that the text
+    assigns only literals (`var route = "a" if c else "b"`). A literal the
+    text merely spells (a table of operation names, an error message, a
+    compared value) is not passed, and opens no branch. A text that cannot be
+    read with certainty passes every identifier-shaped literal it holds (the
+    old reading)."""
+    hit = _PASSED_CACHE.get(text)
+    if hit is not None:
+        return hit
+    if _mojo_scan(text) is None:
+        out = frozenset(_mojo_export_refs(text))
+        _PASSED_CACHE[text] = out
+        return out
+    code = _mojo_code_text(text)
+    names = dispatcher_names()
+    out = set()
+    for m in re.finditer(r"(?<![\w.])([A-Za-z_]\w*)\s*(?:\[[^\]\n]*\])?\s*\(", code):
+        if m.group(1) not in names:
+            continue
+        before = code[max(0, m.start() - 16):m.start()]
+        if re.search(r"\b(?:def|fn)\s+$", before):
+            continue
+        depth, k = 1, m.end()
+        while k < len(code) and depth:
+            depth += {"(": 1, ")": -1}.get(code[k], 0)
+            k += 1
+        for arg in _split_args(code[m.end():k - 1]):
+            arg = re.sub(r"^\s*[A-Za-z_]\w*\s*=(?!=)", "", arg).strip()
+            lit = re.fullmatch(r'(?:String\(\s*)?"([^"\\\n]*)"(?:\s*\))?', arg)
+            if lit:
+                out.add(lit.group(1))
+            elif re.fullmatch(r"[A-Za-z_]\w*", arg):
+                for value in re.findall(r"(?<![\w.])%s\s*(?::\s*String\s*)?=(?!=)\s*([^\n]*)" % re.escape(arg), code):
+                    literals = re.findall(r'"([^"\\\n]*)"', value)
+                    rest = re.sub(r'"[^"\\\n]*"|\bString\b|\bif\b|\belse\b|[()]', " ", value)
+                    if literals and not re.search(r"[+\[]", rest):
+                        out.update(literals)
+    out = frozenset(o for o in out if _MOJO_FULL_IDENT_RE.match(o))
+    _PASSED_CACHE[text] = out
+    return out
 
 
 def _cond_vocab(tree, eq, sw):
@@ -2958,7 +3029,7 @@ def dispatch_view(text, ops):
     return "\n".join(code), tuple(kept)
 
 
-def _mojo_symbol_reach(pending, names=None, refs=None, ops=None):
+def _mojo_symbol_reach(pending, names=None, refs=None, ops=None, passed=None):
     """(files reached by name, files to close over whole) for imported
     symbols `pending` [(file, name)], followed DEFINITION BY DEFINITION.
 
@@ -2987,6 +3058,8 @@ def _mojo_symbol_reach(pending, names=None, refs=None, ops=None):
             names.update(_SYMBOL_NAMES.get(key, ()))
         if refs is not None:
             refs.update(_SYMBOL_REFS.get(key, ()))
+        if passed is not None:
+            passed.update(_SYMBOL_PASSED.get(key, ()))
         stack.extend(step)
     return reached, whole
 
@@ -4563,6 +4636,7 @@ def lane_sources():
         return (src, hit, wide, ops)
     read_by_name = {}        # seed_cache key -> the files of it read definition by definition
     native_names = {}        # seed_cache key -> names used by the reached native bodies
+    native_passed = {}       # seed_cache key -> operations those bodies pass (`passed_operations`)
 
     def binding_seeds(src, used, wide=True, mark=True, ops=None):
         """The Mojo files ONE binding contributes to a lane whose door calls
@@ -4618,11 +4692,13 @@ def lane_sources():
                 read_by_name[key] = {src} if wide == "narrow" else set()
                 native_names[key] = set() if wide == "narrow" else set().union(*[
                     _mojo_export_refs(_read(f)) for f in seed_cache[key] if f.endswith(".mojo")])
+                native_passed[key] = set() if wide == "narrow" else set().union(*[
+                    passed_operations(_read(f)) for f in seed_cache[key] if f.endswith(".mojo")])
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
                 params = _binding_export_params(src)
-                seeds, pending, named, refs = set(), [], set(), set()
+                seeds, pending, named, refs, passed = set(), [], set(), set(), set()
                 for export in hit:
                     if export not in exports:
                         # REGISTERED BY A FUNCTION THE BINDING IMPORTS
@@ -4672,12 +4748,13 @@ def lane_sources():
                     body = "\n".join(bodies)
                     named.update(_MOJO_IDENT_RE.findall(body))
                     refs.update(_mojo_export_refs(body))
+                    passed.update(passed_operations(body))
                     pending.extend(_mojo_named_imports(src, set(_MOJO_IDENT_RE.findall(body))))
                 # An imported symbol is followed definition by definition
                 # into the file defining it (`_mojo_symbol_reach`), so a
                 # thin-shell binding's impl module does not hand every
                 # export's oracles to every lane.
-                reached, whole = _mojo_symbol_reach(pending, named, refs, ops)
+                reached, whole = _mojo_symbol_reach(pending, named, refs, ops, passed)
                 closed = _mojo_closure(seeds | whole)
                 seed_cache[key] = closed | reached | {src}
                 read_by_name[key] = (reached | {src}) - closed
@@ -4687,7 +4764,9 @@ def lane_sources():
                 for f in closed:
                     if f.endswith(".mojo"):
                         refs.update(_mojo_export_refs(_read(f)))
+                        passed.update(passed_operations(_read(f)))
                 native_names[key] = refs
+                native_passed[key] = passed
         if mark and wide is not False:
             narrowed_files.update(read_by_name[key])
         return seed_cache[key]
@@ -4850,7 +4929,7 @@ def lane_sources():
                 spelled = set()
                 for a in srcs:
                     binding_seeds(a, names, "narrow", mark=False, ops=ops)
-                    spelled |= native_names[seed_key(a, names, "narrow", ops)]
+                    spelled |= native_passed[seed_key(a, names, "narrow", ops)]
                 opened = set()
                 fresh = {n for n in spelled | opened if any(n in e for e in exports_of.values())} - names
                 if not fresh and OperationSet(op_names | spelled | opened) == ops:
@@ -4918,7 +4997,7 @@ def lane_sources():
                 binding_seeds(src, used, wide, ops=ops)
                 exports = set(_binding_exports(src)) | set(_delegated_exports(src))
                 key = seed_key(src, used, wide, ops)
-                spelled |= native_names[key]
+                spelled |= native_passed[key]
                 reached_exports = native_names[key] & exports_available
                 found.update(reached_exports)
                 # Reporting follows each export separately. Sharing a native
@@ -5113,7 +5192,7 @@ _LS_NOT_INPUTS = {"_ENUMERATORS", "_LANE_SOURCES", "_SOURCE_HASHED", "_TRACKED",
                   "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PYTHON_FILES", "_PKG_IMPORT_CLOSURE",
                   "_HOST_CLASS_ROUTES", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS",
                   "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY",
-                  "_HOOK_CLASSES", "_LS_MEMO", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS",
+                  "_HOOK_CLASSES", "_LS_MEMO", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS", "_DISPATCHER_NAMES",
                   "_CONTEXT_DOORS"}
 
 

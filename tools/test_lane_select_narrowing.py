@@ -701,6 +701,59 @@ def test_a_docstring_edit_is_docstring_only_and_a_deleted_or_added_one_is_not():
     finally:
         ls._SOURCE_HASHED = saved
 
+
+def test_only_an_operation_passed_to_a_dispatcher_opens_its_branch():
+    """A table that merely SPELLS `family_kmeans_fit` passes nothing; a call
+    of the dispatcher with it (or with a literal-only variable holding it)
+    does, and only then is the k-means branch of `family_operation` live."""
+    family = _d("""
+        def family_operation(model: PythonObject, operation: String) raises -> PythonObject:
+            if operation.startswith("family_kmeans_"):
+                return kmeans_operation(model, operation)
+            if operation.startswith("family_gp_"):
+                return gp_operation(model, operation)
+            return model
+        """)
+    table = _d("""
+        def par_spec_families() -> List[String]:
+            return List[String]("family_kmeans_fit", "family_gp_fit")
+
+        def caller(m: PythonObject, call: PythonObject) raises -> PythonObject:
+            raise Error("family_kmeans_fit requires fitted data")
+        """)
+    direct = _d("""
+        def caller(m: PythonObject) raises -> PythonObject:
+            return family_operation(m, "family_kmeans_fit")
+        """)
+    routed = _d("""
+        def caller(m: PythonObject, b: Bool) raises -> PythonObject:
+            var route = "family_kmeans_fit" if b else "family_kmeans_predict"
+            return family_operation(m, route)
+        """)
+    saved = set(ls._DISPATCHER_NAMES), dict(ls._PASSED_CACHE), ls._dispatch_vocabulary
+    try:
+        ls._dispatch_vocabulary = lambda: (frozenset(), frozenset({"family_kmeans_", "family_gp_"}),
+                                           frozenset({"family_", "family_kmeans_", "family_gp_"}))
+        ls._DISPATCHER_NAMES.clear()
+        ls._DISPATCHER_NAMES.add("family_operation")
+        ls._PASSED_CACHE.clear()
+        assert ls.passed_operations(table) == set()
+        assert ls.passed_operations(direct) == {"family_kmeans_fit"}
+        assert ls.passed_operations(routed) == {"family_kmeans_fit", "family_kmeans_predict"}
+        with _Vocab(set(), {"family_kmeans_", "family_gp_"},
+                    {"x/caller.mojo": direct, "x/family.mojo": family}):
+            for text, live in ((table, False), (direct, True), (routed, True)):
+                ops = ls.OperationSet(ls.passed_operations(text))
+                view, _kept = ls.dispatch_view(family, ops)
+                assert ("kmeans_operation" in _idents(view)) is live, (text, ops)
+                assert "gp_operation" not in _idents(view)
+    finally:
+        ls._DISPATCHER_NAMES.clear()
+        ls._DISPATCHER_NAMES.update(saved[0])
+        ls._PASSED_CACHE.clear()
+        ls._PASSED_CACHE.update(saved[1])
+        ls._dispatch_vocabulary = saved[2]
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):
