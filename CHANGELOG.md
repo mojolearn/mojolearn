@@ -4,6 +4,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.64 (published 2026-11-01)
+
 - **RandomForest notices.** Fit notices (n_bins clamped to the sample count, max_samples ignored without bootstrap, partial out-of-bag scores) are raised as `UserWarning`s instead of being printed to standard output.
 - **Verification.** `python -m mojolearn verify --self-test --json` writes only JSON to standard output.
 
