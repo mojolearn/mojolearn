@@ -4045,6 +4045,41 @@ def _binding_names_in_uncached(rel, nodes):
 
 
 @_by_path
+def _import_time_names(rel):
+    """The attribute names and identifier-shaped string constants of the code
+    one Python file runs WHEN IMPORTED: its module-level statements, class
+    bodies outside their methods, decorators and defaults, and, to a fixed
+    point, the bodies of the file's own functions and methods that code
+    names. A file that does not parse keeps every name."""
+    tree = _parse(rel)
+    if tree is None:
+        return _file_called_names(rel)
+    funcs, run = {}, []
+
+    def collect(body, prefix=""):
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                funcs.setdefault(node.name, []).append(node)
+                run.extend(node.decorator_list)
+                run.extend(node.args.defaults + [d for d in node.args.kw_defaults if d is not None])
+            elif isinstance(node, ast.ClassDef):
+                run.extend(node.decorator_list + node.bases + node.keywords)
+                collect(node.body)
+            else:
+                run.append(node)
+    collect(tree.body)
+    names, done, todo = set(), set(), list(run)
+    while todo:
+        node = todo.pop()
+        got = _names_in_nodes([node]) | {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+        names |= _names_in_nodes([node])
+        for fname in got & funcs.keys():
+            if fname not in done:
+                done.add(fname)
+                todo.extend(funcs[fname])
+    return names
+
+
 def _file_called_names(rel):
     """One Python file's attribute names and identifier-shaped string
     constants: `self._bind("_mojolearn").kmeans_fit(` leaves 'kmeans_fit',
@@ -4674,10 +4709,12 @@ def lane_sources():
     # THE PYTHON FILES EVERY LANE REACHES: the shared helpers (`_buffer.py`,
     # `_array.py`) and the host doors they import for their native helpers.
     ubiquitous_py = set.intersection(*[f for _, f, _, _ in reach.values()]) if reach else set()
-    # THE OPERATIONS EVERY LANE CAN PASS (`OperationSet`): what the files every
-    # lane reaches spell, whole. The own walk stops at those files, and their
-    # import-time code runs in every lane's process.
-    ubiquitous_ops = set().union(*[_file_called_names(rel) for rel in ubiquitous_py if rel.endswith(".py")])
+    # THE OPERATIONS EVERY LANE CAN PASS (`OperationSet`): what the IMPORT-TIME
+    # code of the files every lane reaches spells (`_import_time_names`). The
+    # own walk stops at those files and their import-time code runs in every
+    # lane's process; a method of a class they define runs only when called,
+    # and a lane that calls it names it in its own walk.
+    ubiquitous_ops = set().union(*[_import_time_names(rel) for rel in ubiquitous_py if rel.endswith(".py")])
 
     connected_names = set().union(*[b for _, _, _, b in reach.values()]) if reach else set()
     for binding in tuple(connected_names):
