@@ -812,3 +812,43 @@ def test_interrupt_cli_bulk_preserves_unexecuted_status(ledger, tmp_path, capsys
                    '--producer-stopped', '--reason', 'producer stopped', '--evidence', str(proof)]) == 0
     assert json.loads(capsys.readouterr().out) == {'interrupted': 1, 'qualification_claim': False}
     assert ledger.plan()['identity']['status'] == 'untested'
+
+
+def _builder_manifest(tmp_path, revision, builder_hash, flags='fixed'):
+    target = native_manifest(tmp_path, revision, 'old')
+    wanted = target['requirements']['identity']
+    wanted['inputs']['execution_environment'] = {'two': dict(target='linux-64', bindings={'cuda/x': dict(
+        flags=flags, builders={'packaging/linux/build_sets.sh': builder_hash})})}
+    wanted['fingerprint'] = R.digest(wanted['inputs'])
+    return target
+
+
+@pytest.mark.parametrize('case', ['proven', 'not-asked', 'reached', 'flags'])
+def test_a_builder_hash_change_is_retained_only_on_the_selector_proof(native_ledger, tmp_path, monkeypatch, case):
+    """An identity unit whose inputs differ ONLY in a file-keyed hash (a
+    builder, a loader route source) is judged by tools/lane_select.py's
+    selection over the changed files, the same rule as native sources: retained
+    when the selector was asked about that file and selects none of the unit's
+    lanes; affected when it was not asked, when it selects a lane, or when
+    anything else (a flag) changed too."""
+    import release_requirement_dependencies as D
+    led, calls, selected = native_ledger
+    paths = ['core/shared.mojo'] if case == 'not-asked' else ['packaging/linux/build_sets.sh']
+    real = D.frozen_snapshot
+
+    def snapshot(root, revision, request, **kwargs):
+        got = real(root, revision, request, **kwargs)
+        got['selections']['nvidia']['changed_paths'] = paths
+        return got
+    monkeypatch.setattr(D, 'frozen_snapshot', snapshot)
+    led.sync(_builder_manifest(tmp_path, 'a' * 40, 'h-old'))
+    record(led, tmp_path)
+    if case == 'reached':
+        selected['lanes'].append('two')
+    led.sync(_builder_manifest(tmp_path, 'b' * 40, 'h-new', flags='changed' if case == 'flags' else 'fixed'))
+    row = led.plan()['identity']
+    if case == 'proven':
+        assert row['status'] == 'passed' and row['action'] == 'reuse', (row.get('dependency_decision'), row.get('reasons'))
+        assert row['equivalence_proof']['selector_proven_files'] == ['packaging/linux/build_sets.sh']
+    else:
+        assert row['status'] == 'untested' and row['dependency_decision'] == 'affected'
