@@ -4124,8 +4124,13 @@ def context_doors():
     package function, and every module-level statement, that stores under a
     constant identifier key (`x["k"] = ...`, `x.update(k=...)`,
     `x.setdefault("k", ...)`, `dict(k=...)`) contributes all its names to
-    that key; `lane_sources` adds them when a native definition the lane
-    reaches spells the key."""
+    that key.
+
+    NOT APPLIED (measured 2026-11-01): read per function, 71 keys (`entry`,
+    `binding`, `backend`, ...) carried `kmeans_fit`, and adding them in
+    `lane_sources`' fixed point selected all 513 lanes for the k-means seeding
+    edit. Kept for the dataflow version that follows the stored value, which
+    the UMAP lane's map still needs."""
     global _CONTEXT_DOORS
     if _CONTEXT_DOORS is not None:
         return _CONTEXT_DOORS
@@ -4830,8 +4835,7 @@ def lane_sources():
                 for a in srcs:
                     binding_seeds(a, names, "narrow", mark=False, ops=ops)
                     spelled |= native_names[seed_key(a, names, "narrow", ops)]
-                route_doors = context_doors()
-                opened = set().union(*[route_doors[k] for k in spelled & route_doors.keys()])
+                opened = set()
                 fresh = {n for n in spelled | opened if any(n in e for e in exports_of.values())} - names
                 if not fresh and OperationSet(op_names | spelled | opened) == ops:
                     break
@@ -4892,7 +4896,6 @@ def lane_sources():
         # point together with the exports below.
         op_names = set(used) | ubiquitous_ops
         ops = OperationSet(op_names)
-        doors = context_doors()
         while True:
             found, origins_grew, spelled = set(), False, set()
             for src, wide in native_sources:
@@ -4918,8 +4921,9 @@ def lane_sources():
                             origins_grew = True
             # CONTEXT DOORS (`context_doors`): a key the native text spells
             # hands over what the Python that filled it names.
-            opened = set().union(*[doors[k] for k in spelled & doors.keys()]) if doors else set()
-            found |= opened & exports_available
+            # (`context_doors` is not applied here: read per function it handed
+            # every lane every export, measured 2026-11-01; see its docstring.)
+            opened = set()
             fresh = found - used
             op_names |= spelled | fresh | opened
             grown = OperationSet(op_names)
@@ -6240,7 +6244,8 @@ def _imported_only_by_unreachable_modules(path):
         return None
     for rel in importers:
         base = os.path.basename(rel)
-        if rel.startswith(TESTS) or (rel.startswith("tools" + os.sep) and base.startswith("test_")):
+        if rel.startswith(TESTS) or (rel.startswith("tools" + os.sep) and base.startswith("test_")) \
+                or rel in SELECTION_MACHINERY:
             continue
         if rel.startswith(PKG + os.sep) and rel not in _NOT_CORPUS and unreachable(rel):
             continue
