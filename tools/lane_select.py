@@ -4044,8 +4044,7 @@ def _binding_names_in_uncached(rel, nodes):
     return out
 
 
-@_by_path
-def _import_time_names(rel):
+def _import_time_names(rel, operations=False):
     """The attribute names and identifier-shaped string constants of the code
     one Python file runs WHEN IMPORTED: its module-level statements, class
     bodies outside their methods, decorators and defaults, and, to a fixed
@@ -4072,7 +4071,20 @@ def _import_time_names(rel):
     while todo:
         node = todo.pop()
         got = _names_in_nodes([node]) | {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
-        names |= _names_in_nodes([node])
+        if operations:
+            # WHAT IMPORT-TIME CODE PASSES AS AN OPERATION: the native owners'
+            # calling convention is `entry(model, "operation", args, context)`,
+            # so a string in the second position of a call (or `operation=`).
+            # A string only stored in a table (a parallel driver's owner
+            # operation) runs when a lane calls that driver, which names it in
+            # its own walk.
+            names |= {c.args[1].value for c in ast.walk(node) if isinstance(c, ast.Call) and len(c.args) > 1
+                      and isinstance(c.args[1], ast.Constant) and isinstance(c.args[1].value, str)}
+            names |= {k.value.value for c in ast.walk(node) if isinstance(c, ast.Call) for k in c.keywords
+                      if k.arg in ("operation", "op") and isinstance(k.value, ast.Constant)
+                      and isinstance(k.value.value, str)}
+        else:
+            names |= _names_in_nodes([node])
         for fname in got & funcs.keys():
             if fname not in done:
                 done.add(fname)
@@ -4080,6 +4092,7 @@ def _import_time_names(rel):
     return names
 
 
+@_by_path
 def _file_called_names(rel):
     """One Python file's attribute names and identifier-shaped string
     constants: `self._bind("_mojolearn").kmeans_fit(` leaves 'kmeans_fit',
@@ -4719,7 +4732,8 @@ def lane_sources():
     # own walk stops at those files and their import-time code runs in every
     # lane's process; a method of a class they define runs only when called,
     # and a lane that calls it names it in its own walk.
-    ubiquitous_ops = set().union(*[_import_time_names(rel) for rel in ubiquitous_py if rel.endswith(".py")])
+    ubiquitous_ops = set().union(*[_import_time_names(rel, operations=True)
+                                   for rel in ubiquitous_py if rel.endswith(".py")])
 
     connected_names = set().union(*[b for _, _, _, b in reach.values()]) if reach else set()
     for binding in tuple(connected_names):
