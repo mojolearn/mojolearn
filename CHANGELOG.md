@@ -4,6 +4,9 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- **RandomForest notices.** Fit notices (n_bins clamped to the sample count, max_samples ignored without bootstrap, partial out-of-bag scores) are raised as `UserWarning`s instead of being printed to standard output.
+- **Verification.** `python -m mojolearn verify --self-test --json` writes only JSON to standard output.
+
 ## 0.8.63 (published 2026-10-30)
 
 - **Model selection.** `StratifiedGroupKFold` accumulates in FP64 with a pinned operation order on every backend, so its folds are identical on Apple, NVIDIA, AMD and the CPU.
