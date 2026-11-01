@@ -754,6 +754,42 @@ def test_only_an_operation_passed_to_a_dispatcher_opens_its_branch():
         ls._PASSED_CACHE.update(saved[1])
         ls._dispatch_vocabulary = saved[2]
 
+
+def test_an_unused_registry_edit_is_inert_only_when_no_reached_file_names_it():
+    """`unused_registry_definitions`: a registry's changed definition named
+    only by files no lane reaches (the retired multi-GPU drivers) selects no
+    lane; one a lane-reached file, or the harness, names still refuses."""
+    reg = os.path.join(ls.PKG, "_ns_registry.py")
+    driver = os.path.join(ls.PKG, "_ns_parallel_driver.py")
+    public = os.path.join(ls.PKG, "_ns_public.py")
+    files = {reg: "def _connect_binding(x):\n    return x\n",
+             driver: "from ._ns_registry import _connect_binding\n_connect_binding(1)\n",
+             public: "def fit(self):\n    return 2\n"}
+    saved_tracked, saved_search = ls._TRACKED, dict(ls._searchable.cache)
+    saved_read = dict(ls._read.cache)
+    try:
+        ls._TRACKED = set(files)
+        for rel, text in files.items():
+            ls._read.cache[rel] = text
+            ls._searchable.cache[rel] = text
+        ls._read.cache[ls.HARNESS] = "def lane():\n    return 0\n"
+        rev = {reg: {"lane-a"}, public: {"lane-a"}}
+        why = ls.unused_registry_definitions(reg, ["_connect_binding"], rev)
+        assert why and driver in why
+        rev[driver] = {"lane-b"}                       # a lane reaches the namer: refused
+        assert ls.unused_registry_definitions(reg, ["_connect_binding"], rev) is None
+        del rev[driver]
+        ls._TRACKED = set(files) | {ls.HARNESS}        # the harness names it: refused
+        ls._searchable.cache[ls.HARNESS] = "def lane():\n    return _connect_binding(0)\n"
+        assert ls.unused_registry_definitions(reg, ["_connect_binding"], rev) is None
+        assert ls.unused_registry_definitions(reg, [], rev) is None
+    finally:
+        ls._TRACKED = saved_tracked
+        ls._searchable.cache.clear()
+        ls._searchable.cache.update(saved_search)
+        ls._read.cache.clear()
+        ls._read.cache.update(saved_read)
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):

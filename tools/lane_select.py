@@ -6684,6 +6684,44 @@ REGISTRY_BINDING_FIELDS = ("binding", "routes")
 REGISTRY_NAME_FIELDS = ("exports",)
 
 
+def unused_registry_definitions(path, names, rev):
+    """A reason when the changed named definitions `names` of the registry
+    `path` (`python_edit_lanes`: the closure over the module's own callers)
+    are named by NO file any lane reaches, else None (lane
+    identity-attribution-3, 2026-11-01).
+
+    `python_edit_lanes` answers an empty lane set when no lane-reached package
+    file and no harness seed names an affected definition; the registry branch
+    of `select` refused that empty answer, because a registry is read
+    dynamically. This rule re-derives it and accepts it only on proof: every
+    tracked Python file (package, tools, harness) whose code names one of the
+    affected definitions, other than `path` itself and tests, is in no lane's
+    map, and the harness names none. `_native_parallel_shard.py::_connect_binding`
+    is the case: only the multi-GPU drivers (`_native_parallel_public.py`'s
+    sharded routes, `parallel_*.py`, the shard worker) name it, the single-device
+    public routes the identity lanes call never do, and the multi-GPU
+    verification lanes are retired. A namer any lane reaches returns None."""
+    if not names:
+        return None
+    words = [re.compile(r"(?<![\w])%s(?![\w])" % re.escape(n)) for n in names]
+    namers = []
+    for rel in sorted(tracked_files()):
+        if rel == path or not rel.endswith(".py") or rel.startswith(TESTS) \
+                or (rel.startswith("tools" + os.sep) and os.path.basename(rel).startswith("test_")):
+            continue
+        try:
+            text = _searchable(rel) if rel.startswith(PKG + os.sep) or rel == HARNESS else _read(rel)
+        except OSError:
+            continue
+        if any(w.search(text) for w in words):
+            if rel == HARNESS or rev.get(rel):
+                return None
+            namers.append(rel)
+    return (f"a registry's named definitions changed ({', '.join(sorted(names)[:6])}), and every file "
+            f"naming them is in no lane's map ({', '.join(namers[:4]) or 'none'}"
+            f"{' and more' if len(namers) > 4 else ''}): no lane runs them")
+
+
 def _lanes_reaching_a_file_naming(names, rev, skip=()):
     """The lanes that reach a package Python file whose text names any of
     `names` as a whole word. Text, not syntax, so a getattr by string counts."""
@@ -10404,6 +10442,12 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                                      + ", ".join(names) + "): "
                                      + str(len(users)) + " lane(s) reached through their callers")
                     continue
+                if edited is not None:
+                    why_unused = unused_registry_definitions(path, edited[0], rev)
+                    if why_unused:
+                        inert.append(path)
+                        reasons[path] = why_unused
+                        continue
             if added is not None:
                 lanes.update(added)
                 by_path[path] = set(added)
