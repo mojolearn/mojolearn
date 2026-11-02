@@ -1034,12 +1034,12 @@ def _ptx_leg_docs(prev, evidence_root):
         taken = _read_json(d / "legs" / f"{name}.reused.json")
         if taken and taken.get("release_build"):
             out.append((str(d / "legs" / f"{name}.reused.json"), taken.get("built_from"), taken["release_build"],
-                        taken.get("original_set_identity")))
+                        taken.get("original_set_identity"), taken.get("tooling_digest")))
             continue
         built = _read_json(d / "legs" / f"{name}.provenance.json")
         if built and built.get("release_build") and built.get("source_commit") == prev.get("source_commit"):
             out.append((str(d / "legs" / f"{name}.provenance.json"), built["source_commit"], built["release_build"],
-                        built.get("set_identity")))
+                        built.get("set_identity"), built.get("tooling_digest")))
     return out
 
 
@@ -1091,7 +1091,7 @@ def ptx_proof_source(prev, evidence_root=None):
                             witnesses={k: dict(file=w["file"], sha256=w["sha256"]) for k, w in witnesses.items()}), None
             return None, f"{prev.get('version')}'s retained PTX proof {index} cannot be used: {why}"
     why = []
-    for where, built_from, release_build, ident in _ptx_leg_docs(prev, evidence_root):
+    for where, built_from, release_build, ident, tooling in _ptx_leg_docs(prev, evidence_root):
         if recorded and built_from != recorded:
             why.append(f"{where}: names {str(built_from)[:12]}, the record {recorded[:12]}")
             continue
@@ -1106,7 +1106,7 @@ def ptx_proof_source(prev, evidence_root=None):
             continue
         return dict(source="leg tree " + where, built_from=built_from, release_build=str(rb),
                     proof_sha256=sha256(rb / PTX_WITNESSES["proof"]), original_set_identity=ident,
-                    tooling_digest=None, shipped=shipped,
+                    tooling_digest=tooling, shipped=shipped,
                     witnesses={k: dict(file=str(rb / rel), sha256=sha256(rb / rel))
                                for k, rel in PTX_WITNESSES.items()}), None
     where = (f"no {PTX_PROOF_DIR}/ptx-proof.json in its record" if prev.get("record_dir") else "no release record")
