@@ -56,7 +56,11 @@
 #                           (retained/ included), <outdir> and
 #                           MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2. Prints
 #                           REUSED n / RECORD m, and NOTHING-CHANGED (exit 0) when no
-#                           lane is owed; decisions in <outdir>/<label>.reuse.json
+#                           lane is owed; decisions in <outdir>/<label>.reuse.json.
+#                           A depth-1 box tree is enough: the reuse step fetches
+#                           HEAD's history back to the oldest reuse commit from the
+#                           tree's own remote (MOJOLEARN_IDENTITY_REUSE_REMOTE,
+#                           default origin) and names the release tags it holds
 #   FULL=1                  record every lane of the scope; the ONLY way to
 #                           re-record lanes whose closure did not change
 #   ONLY_CHANGED=table|<sha> INCREMENTAL RE-RECORD: only the lanes whose source
