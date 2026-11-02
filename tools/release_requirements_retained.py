@@ -269,14 +269,20 @@ def table_check_unit(ident, lane, vendor, classes, source, environment, facts):
     refs = [facts["readme"], dict(path=own_ref["path"], sha256=own_ref["sha256"]), own[0]["provenance"]]
     loaded = {}
 
-    def column(index):
+    def column(index, cls):
         if index not in loaded:
             item = cited.get(index)
             require(item is not None, f"the table cites column record {index}, which is not retained by content address")
             ref, record = ident.load_record(item["path"])
             require(ref["sha256"] == item["sha256"], "cited column record bytes changed: " + item["path"])
+            # the cited column is a complete, admissible record of its class at the commit it names
+            found, errors = ident.record_errors(record, ref["path"], ref, record.get("commit"))
+            require(not errors and found == cls, f"cited {cls} column record refused: " + "; ".join(errors))
             loaded[index] = (ref, record)
         return loaded[index]
+
+    def own_value(key, part):
+        return v._part_value(own_record["cells"].get(key), part) if isinstance(own_record.get("cells"), dict) else None
 
     slots = agree = declared_na = 0
     problems = []
@@ -287,8 +293,13 @@ def table_check_unit(ident, lane, vendor, classes, source, environment, facts):
             slots += 1
             agreed, cols = item.get("ref"), item.get("cols") or {}
             if isinstance(agreed, str) and agreed.startswith("n/a:"):
-                declared_na += 1
-                agree += 1
+                # declared inapplicable in the table: the admitted column must say so itself
+                value = own_value(key, part)
+                if value is None or value == agreed:
+                    declared_na += 1
+                    agree += 1
+                else:
+                    problems.append(f"{key}/{part}: the table declares {agreed} but the {vendor} column carries {value}")
                 continue
             if not isinstance(agreed, str) or not agreed:
                 problems.append(f"{key}/{part}: the table records no agreed digest")
@@ -304,7 +315,7 @@ def table_check_unit(ident, lane, vendor, classes, source, environment, facts):
                     problems.append(f"{key}/{part}: the table cites another {vendor} record than the admitted one")
                     ok = False
                     break
-                _, record = column(index)
+                _, record = column(index, cls)
                 value = v._part_value(record["cells"].get(key), part) if isinstance(record.get("cells"), dict) else None
                 if value != agreed:
                     problems.append(f"{key}/{part}: {cls} column {value} differs from the table's {agreed}")
@@ -312,6 +323,7 @@ def table_check_unit(ident, lane, vendor, classes, source, environment, facts):
                     break
             if ok:
                 agree += 1
+    require(slots > declared_na, f"lane {lane}: the table carries no compared slot for it (all declared n/a)")
     rows = []
     for name in (ident.BASE_COVERAGE, "lane:" + lane):
         require(slots > 0 and agree == slots, f"{name}: {slots - agree} of {slots} slots disagree; "

@@ -333,6 +333,10 @@ class TableBackedIdentityAdmission(unittest.TestCase):
     """identity-<vendor>/<lane> from the reference table's cited records when another column was not
     re-recorded at the admission revision (Andrew, 2026-10-31: re-record only changed lanes)."""
 
+    @staticmethod
+    def by_vendor(record, path, ref, revision, equivalent=()):
+        return ("apple" if "apple" in record["vendor"] else "amd"), []
+
     def facts(self, root, own_sha, cited):
         return dict(source_root=str(root), source_revision=NEW, readme=dict(path=str(root / "README.md"), sha256="r" * 64),
                     records=[dict(cls="amd", path=str(root / "amd.identical.json"), sha256=own_sha,
@@ -365,7 +369,7 @@ class TableBackedIdentityAdmission(unittest.TestCase):
 
     def test_unit_admitted_from_the_table_when_the_other_column_is_older(self):
         retained, ident, root, amd_sha, cited, environment = self.table_case()
-        with mock.patch.object(ident, "record_errors", return_value=("amd", [])), \
+        with mock.patch.object(ident, "record_errors", side_effect=self.by_vendor), \
                 mock.patch.object(ident, "platform_target", return_value="linux-64"):
             rows, refs = retained.table_check_unit(ident, "ols", "amd", ("amd", "apple"), NEW, environment,
                                                    self.facts(root, amd_sha, cited))
@@ -375,7 +379,7 @@ class TableBackedIdentityAdmission(unittest.TestCase):
 
     def test_a_cited_column_whose_bytes_disagree_with_the_table_is_refused(self):
         retained, ident, root, amd_sha, cited, environment = self.table_case(apple_digest="feedfeedfeedfeed")
-        with mock.patch.object(ident, "record_errors", return_value=("amd", [])), \
+        with mock.patch.object(ident, "record_errors", side_effect=self.by_vendor), \
                 mock.patch.object(ident, "platform_target", return_value="linux-64"):
             with self.assertRaisesRegex(ValueError, "apple column feedfeedfeedfeed differs from the table"):
                 retained.table_check_unit(ident, "ols", "amd", ("amd", "apple"), NEW, environment,
@@ -384,7 +388,7 @@ class TableBackedIdentityAdmission(unittest.TestCase):
     def test_a_table_citing_another_own_record_is_refused(self):
         retained, ident, root, amd_sha, cited, environment = self.table_case()
         cited[0] = dict(cited[0], sha256="0" * 64)
-        with mock.patch.object(ident, "record_errors", return_value=("amd", [])), \
+        with mock.patch.object(ident, "record_errors", side_effect=self.by_vendor), \
                 mock.patch.object(ident, "platform_target", return_value="linux-64"):
             with self.assertRaisesRegex(ValueError, "cites another amd record"):
                 retained.table_check_unit(ident, "ols", "amd", ("amd", "apple"), NEW, environment,

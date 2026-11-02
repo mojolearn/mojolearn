@@ -638,25 +638,18 @@ def test_host_scope_cannot_qualify_a_gpu_unit(tmp_path, monkeypatch):
         E.required_classes(wanted)
 
 
-def test_a_box_record_without_a_sidecar_is_its_own_provenance(tmp_path):
+def test_a_retained_record_needs_its_sidecar(tmp_path):
     directory = tmp_path / "retained"
     j = record("amd", ["ols"])
-    sha = E.reference(_write_plain(directory, j))["sha256"]
-    path = directory / sha / f"{LABELS['amd']}.identical.json"
-    path.parent.mkdir(parents=True)
+    directory.mkdir()
+    path = directory / f"{LABELS['amd']}.identical.json"
     path.write_text(json.dumps(j))
     ref = E.reference(path)
+    assert E.provenance_errors(path, ref, j)[0].startswith("record provenance unavailable")
+    (directory / f"{LABELS['amd']}.provenance.txt").write_text(
+        f"commit={j['commit']}\nrepeats=1 cpu_threads=3\ndirty_tracked=none\nrecord_sha256={ref['sha256']}\n")
     assert E.provenance_errors(path, ref, j) == []
-    assert E.provenance_reference(path, ref, j) == dict(path=ref["path"], sha256=ref["sha256"])
-    assert E.provenance_errors(directory / "x" / path.name, ref, j) == ["record is not retained under its own content address"]
-    launched = dict(j, verifier_observation=dict(launch=True))
-    assert E.provenance_errors(path, ref, launched)[0].startswith("record provenance unavailable")
-    (path.parent / f"{LABELS['amd']}.provenance.txt").write_text(f"commit={j['commit']}\nrepeats=1\ndirty_tracked=tools/x.py\nrecord_sha256={sha}\n")
+    assert E.provenance_reference(path, ref, j)["path"].endswith(".provenance.txt")
+    (directory / f"{LABELS['amd']}.provenance.txt").write_text(
+        f"commit={j['commit']}\nrepeats=1\ndirty_tracked=tools/x.py\nrecord_sha256={ref['sha256']}\n")
     assert E.provenance_errors(path, ref, j) == ["record provenance (commit, clean tree, repeats, record hash) differs"]
-
-
-def _write_plain(directory, j):
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / "plain.identical.json"
-    path.write_text(json.dumps(j))
-    return path

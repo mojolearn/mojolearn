@@ -58,7 +58,7 @@ def sha256(path):
     original, actual, expected, state = _resolved(path)
     try:
         st = actual.stat()
-        key = (str(actual), st.st_size, st.st_mtime_ns)
+        key = (str(actual), st.st_size, st.st_mtime_ns, st.st_ctime_ns)
     except OSError:
         key = None
     found = _DIGESTS.get(key) if key is not None else None
