@@ -41,13 +41,27 @@ exec > "$J/job.log" 2>&1
 PHASE=inputs
 export PATH="/root/.pixi/bin:/usr/local/cuda/bin:/opt/rocm/bin:$PATH"
 say() { echo "[$(date -u +%H:%M:%S) release-gate-job] $*"; }
+# copy_reports SRC DST: the GATE_FETCH reports under SRC into DST. Only paths that exist enter the archive (a
+# pattern that matches nothing, such as smoke.log when no smoke ran, is skipped, never a tar error), and
+# autograd-smoke/tmp is excluded: pytest and comgr scratch that holds absolute symlinks, never a report
+# (0.8.64: those symlinks aborted the Mac-side extraction). tools/test_release_gate_jobs.py runs this function.
+copy_reports() {
+    ( cd "$1" || exit 1
+      shopt -s nullglob
+      have=()
+      for p in "${GATE_FETCH[@]}"; do
+          for f in $p; do
+              if [ -e "$f" ]; then have+=("$f"); fi
+          done
+      done
+      if [ ${#have[@]} -gt 0 ]; then tar cf - --exclude=autograd-smoke/tmp "${have[@]}"; fi ) | tar xf - -C "$2"
+}
 finish() {
     local code=$?
     trap - EXIT
     # the reports, never the venv or the caches: the same report set the gate always brought home
     if [ -d "$GATE_WORK/out" ]; then
-        ( cd "$GATE_WORK/out" && shopt -s nullglob && have=() && for p in "${GATE_FETCH[@]}"; do for f in $p; do have+=("$f"); done; done \
-            && { [ ${#have[@]} -eq 0 ] || tar cf - "${have[@]}"; } ) | tar xf - -C "$RES/out" || say "copying the reports failed"
+        copy_reports "$GATE_WORK/out" "$RES/out" || say "copying the reports failed"
     fi
     printf '{"vendor":"%s","version":"%s","source_commit":"%s","target":"%s","tag":"%s","phase":"%s","exit":%d,"job_script_sha256":"%s","gate_env_sha256":"%s","work":"%s"}\n' \
         "$GATE_VENDOR" "$GATE_VERSION" "$GATE_SOURCE_COMMIT" "$GATE_TARGET" "$GATE_TAG" "$PHASE" "$code" \

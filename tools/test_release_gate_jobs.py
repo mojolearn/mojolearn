@@ -107,6 +107,41 @@ def test_the_job_script_takes_its_argv_from_gate_env_and_keeps_the_gate_unchange
     assert "MOJOLEARN_RESULTS_DIR" in text and "mojolearn-ops" not in text and "lq" not in text.split()
 
 
+def job_function(name):
+    """The text of one shell function of the job script (from `name() {` to its closing `}` line)."""
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text().splitlines()
+    start = text.index(f"{name}() {{")
+    end = text.index("}", start)
+    return "\n".join(text[start:end + 1]) + "\n"
+
+
+def test_the_job_copies_only_existing_reports_and_never_the_autograd_tmp_symlinks(tmp_path):
+    import subprocess
+    out = tmp_path / "work" / "out"
+    (out / "autograd-smoke" / "tmp" / "pytest-of-root" / "pytest-0").mkdir(parents=True)
+    (out / "autograd-smoke" / "tmp" / "pytest-of-root" / "pytest-0" / "test_xcurrent").symlink_to(
+        "/tmp/pytest-of-root/pytest-0/test_x0")
+    (out / "autograd-smoke" / "tmp" / "scratch.bin").write_bytes(b"scratch")
+    (out / "autograd-smoke" / "autograd-public.log").write_text("21 passed\n")
+    (out / "gate-smoke.json").write_text('{"verdict":"PASS"}\n')
+    (out / "autograd-smoke.json").write_text("{}\n")
+    assert not (out / "smoke.log").exists()           # a GATE_FETCH pattern that matches nothing
+    dst = tmp_path / "res" / "out"
+    dst.mkdir(parents=True)
+    script = ("set -euo pipefail\n" + "GATE_FETCH=(" + " ".join(shlex.quote(p) for p in RG.GATE_FETCH) + ")\n"
+              + job_function("copy_reports") + f"copy_reports {shlex.quote(str(out))} {shlex.quote(str(dst))}\n")
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert "Cannot stat" not in r.stderr and "smoke.log" not in r.stderr
+    assert (dst / "gate-smoke.json").read_text() == '{"verdict":"PASS"}\n'
+    assert (dst / "autograd-smoke.json").exists()
+    assert (dst / "autograd-smoke" / "autograd-public.log").read_text() == "21 passed\n"
+    assert not (dst / "autograd-smoke" / "tmp").exists()
+    assert not any(p.is_symlink() for p in dst.rglob("*"))
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    assert 'copy_reports "$GATE_WORK/out" "$RES/out"' in text
+
+
 # ------------------------------------------------------------------ release.py run_gate
 class FakeRelease(release.Release):
     rel = commit = version = dry = base = None
