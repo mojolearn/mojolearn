@@ -36,8 +36,10 @@ Exit: 0 when the gate-smoke.json that came home says PASS for this vendor and ve
 --state resumes the same job instead of submitting another).
 """
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 import re
@@ -45,6 +47,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 from pathlib import Path
 
@@ -418,7 +421,10 @@ class Runner:
         if got.returncode != 0:
             say(f"fetch of {tag} exited {got.returncode}: {(got.stdout or '')[-300:]}")
             return False
-        final = dest / "final"
+        return self.copy_home(dest / "final", tag)
+
+    def copy_home(self, final, tag):
+        """FINAL/out (and FINAL/job) of one fetched job into --out."""
         if not (final / "out").is_dir():
             say(f"no out/ in the final results of {tag}")
             return False
@@ -428,6 +434,59 @@ class Runner:
             shutil.copytree(final / "job", self.a.out / "job", dirs_exist_ok=True)
         say(f"{tag}: results home in {self.a.out}")
         return True
+
+    def adopt_landed(self):
+        """Reuse a landed result instead of relaunching (Andrew, 2026-10-31: reuse good old runs, automatically).
+        Under the state dir (the --state parent, else --out's parent), every fetch-*/final.tgz whose
+        manifest.json is final and whose bytes are the manifest's final upload is extracted tolerantly; a
+        gate-smoke.json for THIS candidate (vendor, version, source commit, profile and the sha256 of every
+        --candidate-wheel) with verdict PASS is brought home exactly as bring_home does. A landed FAIL for this
+        candidate is reported, never adopted (the gate relaunches). The adopted tag, or None."""
+        a = self.a
+        base = Path(a.state).parent if a.state else a.out.parent
+        want = sorted(sha256(w) for w in a.candidate_wheel if Path(w).is_file())
+        if len(want) != len(a.candidate_wheel):
+            return None
+        import box_persist
+        fetched = sorted(base.glob("fetch-*/final.tgz"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for tgz in fetched:
+            d = tgz.parent
+            try:
+                m = json.loads((d / "manifest.json").read_text())
+            except (OSError, ValueError):
+                continue
+            ups = [u for u in m.get("uploads", []) if u.get("name") == "final.tgz"]
+            if m.get("state") != "final" or not ups or ups[-1].get("sha256") != sha256(tgz):
+                continue
+            tag = m.get("tag") or d.name[len("fetch-"):]
+            try:
+                with contextlib.redirect_stdout(io.StringIO()) as skipped:
+                    box_persist.extract_tolerant(str(tgz), str(d / "final"))
+            except (OSError, tarfile.TarError) as e:
+                say(f"landed {tag}: cannot extract ({e}); not adopted")
+                continue
+            try:
+                doc = json.loads((d / "final" / "out" / "gate-smoke.json").read_text())
+            except (OSError, ValueError):
+                continue
+            cand = doc.get("candidate") or {}
+            wheels = cand.get("wheels")
+            if (doc.get("vendor") != a.vendor or doc.get("version") != a.version
+                    or doc.get("source_commit") != a.source_commit or cand.get("source_commit") != a.source_commit
+                    or doc.get("profile", a.profile) != a.profile
+                    or not isinstance(wheels, dict) or sorted(wheels.values()) != want):
+                continue
+            ok, why = gate_verdict_home(d / "final" / "out", a.vendor, a.version)
+            if not ok:
+                say(f"landed {tag} is this candidate's gate but {why}; not adopted, the gate runs again")
+                continue
+            n = skipped.getvalue().count("SKIPPED ")
+            if not self.copy_home(d / "final", tag):
+                continue
+            say(f"adopted {tag}: {why} for {a.vendor} {a.version} at {a.source_commit[:12]} "
+                f"({len(want)} wheel sha256 equal; {n} link member(s) skipped); no job launched")
+            return tag
+        return None
 
     def make_plan(self):
         """(plan, key, state path, state): the launch's plan, its input key and a resumable earlier launch."""
@@ -466,6 +525,11 @@ class Runner:
             for line in plan.describe():
                 print("  would: " + line)
             return 0
+        if self.adopt_landed():
+            if state_path and state_path.is_file():
+                state_path.unlink()   # a landed PASS for this candidate settles any earlier launch
+            ok, why = gate_verdict_home(a.out, a.vendor, a.version)
+            return 0 if ok else 1
         job_script_committed()
         if a.vendor == "nvidia" and not on_origin_main(a.source_commit):
             raise SystemExit("release-gate: the candidate commit is not on origin/main; the NVIDIA lane sync "
