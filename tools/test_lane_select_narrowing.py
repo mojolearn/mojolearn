@@ -614,7 +614,7 @@ def test_a_device_column_reads_a_host_model_holder_for_its_route_calls_only():
     new = old.replace("    return x\n\n\ndef host_predict", "    return x + 1\n\n\ndef host_predict")
 
     class Graph:
-        def closure(self, src, export):
+        def closure(self, src, export, ops=None):
             return {("t", path, "host_fit" if export == "fit" else "host_predict"): None}
     saved = ls._LANE_SEED_CALLS, ls._LANE_DEVICE_CALLS
     try:
@@ -806,6 +806,71 @@ def test_import_bound_definitions_follow_bound_globals_and_refuse_bare_calls():
     with _Seeded({path: (bare, bare.replace("return n", "return n + 1"))}):
         assert ls.import_bound_definitions(REF, path) is None
 
+
+
+def test_the_definition_graph_follows_only_the_lane_operations_branches():
+    """The edit rule's graph reads a dispatcher through the lane's operations:
+    a lane whose operations cannot enter `fam_fit_` does not reach the fit
+    owner (the RF owner reached 418 lanes through `trees_public_operation`)."""
+    a = "ns_test/dispatch.mojo"
+    text = _d("""
+        from ns_test.owners import fit_owner, predict_owner
+
+        def dispatch(model: PythonObject, operation: String) raises -> PythonObject:
+            if operation.startswith("fam_fit_"):
+                return fit_owner(model)
+            if operation.startswith("fam_predict_"):
+                return predict_owner(model)
+            return model
+        """)
+    owners = "def fit_owner(m: Int) -> Int:\n    return m\n\n\ndef predict_owner(m: Int) -> Int:\n    return m\n"
+    saved = (dict(ls._FILE_VOCAB), ls._dispatch_vocabulary)
+    try:
+        with _Seeded({a: (text, text), "ns_test/owners.mojo": (owners, owners)}), \
+                _Vocab(set(), {"fam_fit_", "fam_predict_"}, {a: text}):
+            ls._FILE_VOCAB[a] = (set(), {"fam_fit_", "fam_predict_"})
+            ls._FILE_VOCAB["ns_test/owners.mojo"] = (set(), set())
+            orig = ls._mojo_module_files
+            ls._mojo_module_files = lambda module, rel, names=(): (
+                {"ns_test/owners.mojo"} if module == "ns_test.owners" else orig(module, rel, names))
+            try:
+                g = ls._MojoDefGraph()
+                node = ("t", a, "dispatch")
+                fit, predict = ("t", "ns_test/owners.mojo", "fit_owner"), ("t", "ns_test/owners.mojo", "predict_owner")
+                assert {fit, predict} <= set(g.targets(node))                    # no operations: both
+                only_predict = set(g.targets(node, ls.OperationSet({"fam_predict_x"})))
+                assert predict in only_predict and fit not in only_predict
+                assert fit in set(g.targets(node, ls.OperationSet({"fam_fit_x"})))
+            finally:
+                ls._mojo_module_files = orig
+    finally:
+        ls._FILE_VOCAB.clear()
+        ls._FILE_VOCAB.update(saved[0])
+
+
+def test_a_release_label_bump_is_inert_by_the_ledger_rule_only():
+    """`release_label_only` calls the ledger's `version_literal_unconsumed`:
+    a `__version__` literal edit with unchanged reviewed consumers is inert;
+    any other edit, or a consumer whose bytes moved, is not."""
+    import hashlib
+    import release_requirement_dependencies as deps
+    path = deps.VERSION_PATH
+    old = '# Kept in one place.\n__version__ = "0.8.63"\n'
+    consumer = "ns_test/consumer.py"
+    saved = dict(deps.VERSION_LABEL_ANCHORS)
+    try:
+        deps.VERSION_LABEL_ANCHORS.clear()
+        deps.VERSION_LABEL_ANCHORS[consumer] = hashlib.sha256(b"reviewed\n").hexdigest()
+        with _Seeded({path: (old, old.replace("0.8.63", "0.8.64")), consumer: ("reviewed\n", "reviewed\n")}):
+            assert ls.release_label_only(REF, path)
+        with _Seeded({path: (old, old.replace("0.8.63", "0.8.64")), consumer: ("reviewed\n", "edited\n")}):
+            assert ls.release_label_only(REF, path) is None          # a consumer moved
+        with _Seeded({path: (old, old + "OTHER = 1\n"), consumer: ("reviewed\n", "reviewed\n")}):
+            assert ls.release_label_only(REF, path) is None          # not only the label
+        assert ls.release_label_only(REF, "ns_test/other.py") is None
+    finally:
+        deps.VERSION_LABEL_ANCHORS.clear()
+        deps.VERSION_LABEL_ANCHORS.update(saved)
 
 if __name__ == "__main__":
     failed = 0

@@ -768,6 +768,25 @@ def _version_literal_view(data):
     return "".join(lines)
 
 
+def version_literal_unconsumed(read_old, read_new):
+    """THE RELEASE-LABEL RULE, shared by the ledger (`version_label_proof`) and
+    tools/lane_select.py: True when `python/mojolearn/_version.py` differs
+    only in its `__version__` literal (`_version_literal_view`) and every
+    reviewed consumer of that literal (`VERSION_LABEL_ANCHORS`) has its
+    reviewed bytes on both sides. `read_old(path)` / `read_new(path)` return
+    a file's bytes (or raise OSError)."""
+    try:
+        views = [_version_literal_view(read(VERSION_PATH)) for read in (read_old, read_new)]
+        if views[0] is None or views[0] != views[1]:
+            return False
+        for path, sha in VERSION_LABEL_ANCHORS.items():
+            if any(hashlib.sha256(read(path)).hexdigest() != sha for read in (read_old, read_new)):
+                return False
+    except (OSError, UnicodeError, SyntaxError, subprocess.SubprocessError, TypeError, AttributeError):
+        return False
+    return True
+
+
 @lru_cache(maxsize=512)
 def _git_bytes(root, revision, path):
     return subprocess.check_output(["git", "-C", str(root), "show", revision + ":" + path])
@@ -790,15 +809,11 @@ def version_label_proof(root, old, new):
     old_rev, new_rev = old["source_revision"], new["source_revision"]
     try:
         before, after = (_git_bytes(root, rev, VERSION_PATH) for rev in (old_rev, new_rev))
-        views = [_version_literal_view(data) for data in (before, after)]
-        if views[0] is None or views[0] != views[1]:
-            return None
         if [hashlib.sha256(data).hexdigest() for data in (before, after)] != [x[VERSION_PATH], y[VERSION_PATH]]:
             return None
-        for path, sha in VERSION_LABEL_ANCHORS.items():
-            if any(hashlib.sha256(_git_bytes(root, rev, path)).hexdigest() != sha for rev in (old_rev, new_rev)):
-                return None
     except (OSError, UnicodeError, SyntaxError, subprocess.SubprocessError):
+        return None
+    if not version_literal_unconsumed(lambda p: _git_bytes(root, old_rev, p), lambda p: _git_bytes(root, new_rev, p)):
         return None
     proof = dict(schema=PROOF_SCHEMA, kind="unconsumed-release-version-literal",
                  unit_id=b["contract"]["id"], old_revision=old_rev, new_revision=new_rev,

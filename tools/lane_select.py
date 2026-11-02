@@ -464,6 +464,7 @@ def reset_caches():
     _MOJO_CALLERS = None
     _HOST_ROUTE_CLASSES.clear()
     _DISPATCHER_NAMES.clear()
+    LANE_OPERATIONS.clear()
     _SOURCE_HASHED = None
     _CONSTANTS = None
     _EXTENDERS = None
@@ -3838,23 +3839,40 @@ class _MojoDefGraph:
             return "\n".join(units["top"].get(node[2], (None, []))[1])
         return "\n".join(units["methods"].get(node[2], {}).get(node[3], []))
 
-    def idents(self, node):
-        if node not in self._idents:
+    def _ops_for(self, node, ops):
+        """`ops` restricted to the dispatcher conditions of `node`'s file, or
+        None when the node is a whole file or its file has no dispatcher (the
+        lane's operations then change nothing about it)."""
+        if ops is None or node[0] == "f":
+            return None
+        e, w = _file_vocabulary(node[1])
+        return ops.restricted(_vocab_triple(e, w)) if (e or w) else None
+
+    def idents(self, node, ops=None):
+        ops = self._ops_for(node, ops)
+        key = node if ops is None else (node, ops)
+        if key not in self._idents:
             text = self.text(node)
+            if ops is not None:
+                # THE LANE'S OPERATIONS (`dispatch_view`): a dispatcher branch no
+                # operation of the lane can enter names nothing for it.
+                text = dispatch_view(text, ops)[0]
             # A whole-file node keeps every identifier its text carries (see the
             # class docstring); a definition's edges come from its CODE only.
             code = text if node[0] == "f" else _mojo_code_text(text)
-            self._idents[node] = frozenset(_MOJO_IDENT_RE.findall(code))
-        return self._idents[node]
+            self._idents[key] = frozenset(_MOJO_IDENT_RE.findall(code))
+        return self._idents[key]
 
-    def targets(self, node):
-        if node not in self._targets:
+    def targets(self, node, ops=None):
+        ops = self._ops_for(node, ops)
+        key = node if ops is None else (node, ops)
+        if key not in self._targets:
             out = set()
-            for ident in self.idents(node):
+            for ident in self.idents(node, ops):
                 out |= self.resolve(node[1], ident)
             out.discard(node)
-            self._targets[node] = sorted(out)
-        return self._targets[node]
+            self._targets[key] = sorted(out)
+        return self._targets[key]
 
     def roots(self, src, export):
         """The nodes one binding export starts from: its impl and the
@@ -3870,10 +3888,12 @@ class _MojoDefGraph:
             roots |= self.resolve(src, name)
         return roots
 
-    def closure(self, src, export):
+    def closure(self, src, export, ops=None):
         """node -> the node it was reached from (None for a root), for every
-        node one export reaches; None when its roots cannot be resolved."""
-        key = (src, export)
+        node one export reaches; None when its roots cannot be resolved.
+        With `ops` (the lane's `OperationSet`, `LANE_OPERATIONS`), a
+        dispatcher's dead branches are not followed (`dispatch_view`)."""
+        key = (src, export) if ops is None else (src, export, ops)
         if key in self._closure:
             return self._closure[key]
         roots = self.roots(src, export)
@@ -3902,12 +3922,12 @@ class _MojoDefGraph:
                         visit(m, node)
                     else:
                         waiting.setdefault(meth, []).append((m, node))
-            fresh = self.idents(node) - mentioned
+            fresh = self.idents(node, ops) - mentioned
             mentioned |= fresh
             for ident in sorted(fresh):
                 for m, owner in waiting.pop(ident, ()):
                     visit(m, owner)
-            for t in self.targets(node):
+            for t in self.targets(node, ops):
                 visit(t, node)
         self._closure[key] = parent
         return parent
@@ -3982,7 +4002,7 @@ def mojo_edit_lanes(ref, path, hit, graph, backend=None):
                 opaque.append(f"kept whole-file: {lane} calls no export of {src} (wide={wide})")
                 continue
             for export in exports:
-                parent = graph.closure(src, export)
+                parent = graph.closure(src, export, LANE_OPERATIONS.get(lane))
                 if parent is None:
                     opaque.append(f"kept whole-file: export {export} of {src} has an impl this "
                                   "graph cannot resolve")
@@ -5250,7 +5270,7 @@ def _remember_lane_sources():
         return
     entry = dict(
         result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY,
-                              _LANE_DEVICE_CALLS)),
+                              _LANE_DEVICE_CALLS, dict(LANE_OPERATIONS))),
         reads={path: _ls_digest(text) for path, text in _read.cache.items()},
         tree=_ls_tree_state(), git=git, ids=_ls_identities(),
         tracked=frozenset(_TRACKED) if _TRACKED is not None else None,
@@ -5305,7 +5325,9 @@ def _reuse_lane_sources():
         if _ls_memo_matches(memo, ids, git, tree):
             import copy
             _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, \
-                _LANE_DEVICE_CALLS = copy.deepcopy(memo["result"])
+                _LANE_DEVICE_CALLS, operations = copy.deepcopy(memo["result"])
+            LANE_OPERATIONS.clear()
+            LANE_OPERATIONS.update(operations)
             _LS_MEMO = _LS_MEMO[:index] + _LS_MEMO[index + 1:] + [memo]
             return True
     return False
@@ -5481,6 +5503,34 @@ def source_hashed_files():
                     out.add(node.value)
         _SOURCE_HASHED = out
     return _SOURCE_HASHED
+
+
+def release_label_only(ref, path):
+    """A reason when `path` is `python/mojolearn/_version.py` and its diff
+    against `ref` is only the release `__version__` literal, read by the SAME
+    rule the release ledger admits identity units with
+    (`release_requirement_dependencies.version_literal_unconsumed`: the
+    literal view is otherwise identical and every reviewed consumer of the
+    literal has its reviewed bytes on both sides), else None (lane
+    identity-attribution-4, 2026-11-01). One source of truth: a release bump
+    no computed output reads moves no lane, here and in the ledger alike."""
+    import release_requirement_dependencies as deps
+    if path != deps.VERSION_PATH:
+        return None
+
+    def old(p):
+        text = _git_show(ref, p)
+        if text is None:
+            raise OSError(p)
+        return text.encode("utf-8", "surrogateescape")
+
+    def new(p):
+        return _read(p).encode("utf-8", "surrogateescape")
+    if not deps.version_literal_unconsumed(old, new):
+        return None
+    return ("only the release `__version__` literal changed, and every reviewed consumer of it is unchanged "
+            "(release_requirement_dependencies.version_literal_unconsumed, the ledger's rule): no lane's "
+            "computed output reads it")
 
 
 def docstring_only(ref, path):
@@ -10324,6 +10374,11 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
             inert.append(path)
             reasons[path] = ("deleted since " + str(ref) + ": nothing can load a file that is gone, and "
                              "whatever imported it changed too and is attributed on its own")
+            continue
+        why_label = release_label_only(ref, path) if ref else None
+        if why_label:
+            inert.append(path)
+            reasons[path] = why_label
             continue
         if ref and docstring_only(ref, path):
             inert.append(path)
