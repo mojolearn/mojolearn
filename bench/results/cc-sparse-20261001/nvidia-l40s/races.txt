@@ -1,4 +1,0 @@
-before taxi ms=942.267 digest=f9dd8da0c6fcd7d8 
-before istella ms=1096.869 digest=7134dcb78da4dc5e 
-after taxi ms=118.386 digest=f9dd8da0c6fcd7d8 
-after istella ms=105.521 digest=7134dcb78da4dc5e 

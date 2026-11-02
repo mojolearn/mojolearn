@@ -1,6 +1,0 @@
-mainnow gaussian-rp 
-pass27 gaussian-rp 
-mainnow sparse-rp 
-pass27 sparse-rp 
-mainnow svd ms=45434.177 digest=92c189cb2337dc73 
-pass27 svd ms=43806.651 digest=92c189cb2337dc73 
