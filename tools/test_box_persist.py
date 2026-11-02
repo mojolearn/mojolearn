@@ -465,6 +465,34 @@ class TestFetch(Base):
         self.assertEqual(r.returncode, 1)
         self.assertIn("VERIFY-FAILED final.tgz", r.stdout)
 
+    def test_fetch_extract_skips_absolute_symlink(self):
+        tag, js = self.stage()
+        res = os.path.join(self.w, "res")
+        self.runner(js, res, "true")
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            link = tarfile.TarInfo("out/tmp/pytest-of-root/pytest-0/test_xcurrent")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "/tmp/pytest-of-root/pytest-0/test_x0"
+            tf.addfile(link)
+            data = b"PASS\n"
+            reg = tarfile.TarInfo("out/gate-smoke.json")
+            reg.size = len(data)
+            tf.addfile(reg, io.BytesIO(data))
+        body = buf.getvalue()
+        self.srv.objects["%s/final.tgz" % self.prefix(tag)] = body
+        self.srv.objects["%s/final.tgz.sha256" % self.prefix(tag)] = (
+            hashlib.sha256(body).hexdigest() + "  final.tgz\n").encode()
+        dest = os.path.join(self.w, "fx")
+        r = self.tool("fetch", "--tag", tag, "--dest", dest, "--extract", check=False)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("SKIPPED out/tmp/pytest-of-root/pytest-0/test_xcurrent (symbolic link", r.stdout)
+        self.assertIn("EXTRACTED final.tgz", r.stdout)
+        with open(os.path.join(dest, "final", "out", "gate-smoke.json")) as fh:
+            self.assertEqual(fh.read(), "PASS\n")
+        self.assertFalse(os.path.lexists(os.path.join(dest, "final", "out", "tmp", "pytest-of-root", "pytest-0",
+                                                      "test_xcurrent")))
+
     def test_fetch_without_manifest(self):
         tag, js = self.stage()
         res = os.path.join(self.w, "res")

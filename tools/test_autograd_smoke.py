@@ -132,6 +132,34 @@ def test_timeout_remains_incomplete_and_unknown_selection_refuses(monkeypatch, t
         smoke.run("amd", tmp_path, sys.executable, out, entries=["misspelled"])
 
 
+def test_an_entry_timer_replaces_the_callers_and_is_recorded(monkeypatch, tmp_path):
+    public = next(e for e in smoke.ENTRIES if e["name"] == "autograd-public")
+    assert public["timeout_s"] == 180
+    assert [e["name"] for e in smoke.ENTRIES if "timeout_s" in e] == ["autograd-public"]
+    seen = {}
+    def start(cmd, log, timeout, env, cwd):
+        seen[cmd[4]] = timeout
+        return _completed_entry(cmd, log, timeout, env, cwd)
+    monkeypatch.setattr(smoke, "start", start)
+    out = tmp_path / "report.json"
+    smoke.run("nvidia", tmp_path, sys.executable, out, 30, entries=["autograd-public", "autograd-usability"])
+    assert seen == {"autograd-public": 180, "autograd-usability": 30}
+    rows = {r["name"]: r for r in json.loads(out.read_text())["rows"]}
+    assert rows["autograd-public"]["timeout_s"] == 180 and rows["autograd-usability"]["timeout_s"] == 30
+
+
+def test_the_deadline_still_bounds_an_entry_timer(monkeypatch, tmp_path):
+    seen = []
+    def start(cmd, log, timeout, env, cwd):
+        seen.append(timeout)
+        return _completed_entry(cmd, log, timeout, env, cwd)
+    monkeypatch.setattr(smoke, "start", start)
+    monkeypatch.setattr(smoke.time, "time", lambda: 1000.0)
+    out = tmp_path / "report.json"
+    smoke.run("nvidia", tmp_path, sys.executable, out, 30, entries=["autograd-public"], deadline=1052.0)
+    assert seen == [50.0]
+
+
 def test_completed_mlp_binary_checks_stored_digests_and_coverage(tmp_path):
     rows = [line.split() for line in (smoke.ROOT / "autograd/checks/mlp_cases_digests.tsv").read_text().splitlines()
             if line and not line.startswith(("#", "case"))]

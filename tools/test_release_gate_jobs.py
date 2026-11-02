@@ -107,6 +107,41 @@ def test_the_job_script_takes_its_argv_from_gate_env_and_keeps_the_gate_unchange
     assert "MOJOLEARN_RESULTS_DIR" in text and "mojolearn-ops" not in text and "lq" not in text.split()
 
 
+def job_function(name):
+    """The text of one shell function of the job script (from `name() {` to its closing `}` line)."""
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text().splitlines()
+    start = text.index(f"{name}() {{")
+    end = text.index("}", start)
+    return "\n".join(text[start:end + 1]) + "\n"
+
+
+def test_the_job_copies_only_existing_reports_and_never_the_autograd_tmp_symlinks(tmp_path):
+    import subprocess
+    out = tmp_path / "work" / "out"
+    (out / "autograd-smoke" / "tmp" / "pytest-of-root" / "pytest-0").mkdir(parents=True)
+    (out / "autograd-smoke" / "tmp" / "pytest-of-root" / "pytest-0" / "test_xcurrent").symlink_to(
+        "/tmp/pytest-of-root/pytest-0/test_x0")
+    (out / "autograd-smoke" / "tmp" / "scratch.bin").write_bytes(b"scratch")
+    (out / "autograd-smoke" / "autograd-public.log").write_text("21 passed\n")
+    (out / "gate-smoke.json").write_text('{"verdict":"PASS"}\n')
+    (out / "autograd-smoke.json").write_text("{}\n")
+    assert not (out / "smoke.log").exists()           # a GATE_FETCH pattern that matches nothing
+    dst = tmp_path / "res" / "out"
+    dst.mkdir(parents=True)
+    script = ("set -euo pipefail\n" + "GATE_FETCH=(" + " ".join(shlex.quote(p) for p in RG.GATE_FETCH) + ")\n"
+              + job_function("copy_reports") + f"copy_reports {shlex.quote(str(out))} {shlex.quote(str(dst))}\n")
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert "Cannot stat" not in r.stderr and "smoke.log" not in r.stderr
+    assert (dst / "gate-smoke.json").read_text() == '{"verdict":"PASS"}\n'
+    assert (dst / "autograd-smoke.json").exists()
+    assert (dst / "autograd-smoke" / "autograd-public.log").read_text() == "21 passed\n"
+    assert not (dst / "autograd-smoke" / "tmp").exists()
+    assert not any(p.is_symlink() for p in dst.rglob("*"))
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    assert 'copy_reports "$GATE_WORK/out" "$RES/out"' in text
+
+
 # ------------------------------------------------------------------ release.py run_gate
 class FakeRelease(release.Release):
     rel = commit = version = dry = base = None
@@ -298,3 +333,143 @@ def test_dry_run_prints_the_submissions_and_runs_nothing(tmp_path, capsys):
     out = capsys.readouterr().out
     assert calls == [] and "would: bash tools/do_amd_steward.sh run rel-0.8.57-gate-amd-" in out
     assert "mojolearn-ops" not in out
+
+
+# ------------------------------------------------------------------ adopt a landed result instead of relaunching
+def landed_fetch(tmp_path, report, tag="nvc-release-gate-20261102T061047Z-864f9c", state="final"):
+    """A fetch dir as tools/box_persist.py fetch leaves it: manifest.json + a verified final.tgz whose out/ holds
+    REPORT and one of pytest's absolute <test>current symlinks (what aborted the 0.8.64 extraction)."""
+    import io
+    import tarfile
+    d = tmp_path / "gates" / f"fetch-{tag}"
+    d.mkdir(parents=True)
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        link = tarfile.TarInfo("out/autograd-smoke/tmp/pytest-of-root/pytest-0/test_xcurrent")
+        link.type, link.linkname = tarfile.SYMTYPE, "/tmp/pytest-of-root/pytest-0/test_x0"
+        tf.addfile(link)
+        for name, body in (("out/gate-smoke.json", json.dumps(report).encode()),
+                           ("job/status.json", b'{"phase":"complete","exit":0}')):
+            info = tarfile.TarInfo(name)
+            info.size = len(body)
+            tf.addfile(info, io.BytesIO(body))
+    (d / "final.tgz").write_bytes(buf.getvalue())
+    (d / "manifest.json").write_text(json.dumps(dict(tag=tag, state=state, exit=0, uploads=[
+        dict(name="final.tgz", seq=3, sha256=hashlib.sha256(buf.getvalue()).hexdigest())])))
+    return d
+
+
+def landed_report(tmp_path, vendor, **over):
+    wheels = {w.name.split("-")[0]: hashlib.sha256(w.read_bytes()).hexdigest() for w in wheel_files(tmp_path, vendor)}
+    doc = dict(vendor=vendor, version=VERSION, source_commit=COMMIT, profile=profiles.LIGHT, verdict="PASS",
+               candidate=dict(source_commit=COMMIT, vendor=vendor, version=VERSION, wheels=wheels))
+    doc.update(over)
+    return doc
+
+
+def no_wrapper(*argv, **kw):
+    raise AssertionError(f"a wrapper was called: {argv}")
+
+
+def test_a_landed_pass_for_this_candidate_is_adopted_and_no_job_is_launched(tmp_path, capsys):
+    a = args(tmp_path, "nvidia")
+    report = landed_report(tmp_path, "nvidia")
+    landed_fetch(tmp_path, report)
+    assert RG.Runner(a, run=no_wrapper, popen=no_wrapper).main() == 0
+    assert json.loads((a.out / "gate-smoke.json").read_text()) == report
+    assert (a.out / "job" / "status.json").is_file()
+    assert not (a.out / "autograd-smoke" / "tmp" / "pytest-of-root" / "pytest-0" / "test_xcurrent").is_symlink()
+    out = capsys.readouterr().out
+    assert "adopted nvc-release-gate-20261102T061047Z-864f9c: PASS" in out and "no job launched" in out
+
+
+@pytest.mark.parametrize("change", ["wheels", "commit", "fail", "not-final"])
+def test_a_landed_result_for_another_candidate_or_a_fail_is_not_adopted(tmp_path, monkeypatch, recorded, change):
+    a = args(tmp_path, "nvidia")
+    report = landed_report(tmp_path, "nvidia")
+    if change == "wheels":
+        report["candidate"]["wheels"] = dict(report["candidate"]["wheels"], mojolearn_core="0" * 64)
+    elif change == "commit":
+        report["source_commit"] = report["candidate"]["source_commit"] = "b" * 40
+    elif change == "fail":
+        report["verdict"] = "FAIL"
+    landed_fetch(tmp_path, report, state="running" if change == "not-final" else "final")
+    assert RG.Runner(a, run=no_wrapper, popen=no_wrapper).adopt_landed() is None
+    assert not (a.out / "gate-smoke.json").exists()
+    # and the gate launches as before
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    box = FakeBox(dict(recorded.gate, vendor="nvidia"), "nvidia")
+    RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main()
+    assert sum(1 for c in box.calls if c[2] == "submit") == 1
+
+
+# ------------------------------------------------------------------ the gate runner overlay
+def head():
+    import subprocess
+    return subprocess.run(["git", "-C", str(RG.ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                          check=True).stdout.strip()
+
+
+def test_the_gate_runner_overlay_is_an_input_only_when_bytes_differ(tmp_path):
+    a = args(tmp_path, "nvidia")
+    a.source_commit = head()                      # the tooling's own bytes: nothing to overlay
+    plan, key_same, _, _ = RG.Runner(a).make_plan()
+    assert plan.overlay is None
+    assert not any(r.endswith(("route-overlay.tgz", "route-overlay.json")) for _, r, _ in plan.uploads())
+    assert "GATE_OVERLAY_SHA256=\n" in plan.env_text()
+    a = args(tmp_path, "nvidia")                  # COMMIT has none of these files: every one differs
+    plan, key_other, _, _ = RG.Runner(a).make_plan()
+    assert sorted(plan.overlay["files"]) == sorted(RG.GATE_OVERLAY)
+    remotes = [r for _, r, _ in plan.uploads()]
+    assert f"{plan.indir}/route-overlay.tgz" in remotes and f"{plan.indir}/route-overlay.json" in remotes
+    assert key_same != key_other
+
+
+def test_the_job_applies_the_overlay_after_the_build_and_before_the_gate():
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    build, overlay, gate = text.index("\nPHASE=build"), text.index("\nPHASE=overlay"), text.index("\nPHASE=gate")
+    assert build < overlay < gate
+    block = text[overlay:gate]
+    assert 'echo "before $f' in block and 'echo "after $f' in block and "route-overlay.txt" in block
+    assert '"$GATE_OVERLAY_SHA256"' in block and "GATE_OVERLAY[*]" in block
+    assert "git checkout -q --" in text[text.index("finish() {"):]       # restored on exit: the tree stays clean
+
+
+def test_gate_ok_accepts_the_verified_overlay_and_refuses_other_bytes(tmp_path, monkeypatch, recorded):
+    import release_tooling
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
+    vendor = "nvidia"
+    report = dict(recorded.gate, vendor=vendor, candidate=dict(recorded.identity, vendor=vendor))
+    import gate_autograd_artifacts as A
+    report["autograd_artifacts"] = dict(report["autograd_artifacts"], vendor=vendor, files=[
+        dict(file=name, source=source, exit_code=0, sha256="e" * 64, source_sha256="f" * 64)
+        for name, source in A.expected(vendor).items()])
+    identity = report["candidate"]
+    box = FakeBox(report, vendor)
+    a = args(tmp_path, vendor)
+    a.source_commit = identity["source_commit"]
+    assert RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main() == 0
+    env = next(v for k, v in box.files.items() if k.endswith("/gate.env")).decode()
+    tgz = next(v for k, v in box.files.items() if k.endswith("/route-overlay.tgz"))
+    assert f"GATE_OVERLAY_SHA256={hashlib.sha256(tgz).hexdigest()}\n" in env
+    r = object.__new__(FakeRelease)
+    r.version, r.dry = VERSION, False
+    r.candidate_gate_identity = lambda v: identity
+    r.gate_out = lambda v: a.out
+    assert r.gate_ok(vendor)[0]                    # no overlay record: the source commit's own runner
+    m = release_tooling.overlay_manifest(RG.ROOT, head(), identity["source_commit"], RG.GATE_OVERLAY)
+    (a.out / "route-overlay.json").write_text(json.dumps(m))
+    lines = [f"before {rel} absent" for rel in m["files"]]
+    (a.out / "route-overlay.txt").write_text("\n".join(
+        lines + [f"after {rel} {row['tooling_sha256']}" for rel, row in m["files"].items()]) + "\n")
+    ok, why = r.gate_ok(vendor)
+    assert ok, why
+    (a.out / "route-overlay.txt").write_text("\n".join(lines + [f"after {rel} {'0' * 64}" for rel in m["files"]]) + "\n")
+    ok, why = r.gate_ok(vendor)
+    assert not ok and "not the overlaid bytes" in why
+    (a.out / "route-overlay.json").unlink()
+    ok, why = r.gate_ok(vendor)
+    assert not ok and "without its route-overlay.json" in why

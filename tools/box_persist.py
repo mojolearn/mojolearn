@@ -262,6 +262,40 @@ def find_job(tag):
     return date, slots
 
 
+def extract_tolerant(path, dest):
+    """Extract a verified archive member by member. Links (symbolic or hard) and any member the "data" filter
+    rejects are skipped with one SKIPPED line each; everything else lands. A results dir can hold scratch such as
+    pytest's absolute `<test>current` symlinks: one of those must never abort the extraction midway (0.8.64 gate
+    fetches). Returns the list of (member, reason) skipped."""
+    os.makedirs(dest, exist_ok=True)
+    skipped = []
+    has_filter = hasattr(tarfile, "data_filter")
+    with tarfile.open(path) as tf:
+        for m in tf:
+            reason = None
+            if m.issym() or m.islnk():
+                reason = "%s link -> %s" % ("symbolic" if m.issym() else "hard", m.linkname)
+            elif not (m.isfile() or m.isdir()):
+                reason = "not a regular file or directory"
+            elif not has_filter:
+                # no data filter in this Python: refuse what it would refuse (absolute or escaping names)
+                name = os.path.normpath(m.name)
+                if os.path.isabs(m.name) or name == ".." or name.startswith(".." + os.sep):
+                    reason = "path outside the destination"
+            if reason is None:
+                try:
+                    if has_filter:
+                        tf.extract(m, dest, filter="data")
+                    else:
+                        tf.extract(m, dest)
+                except (tarfile.TarError, OSError) as e:   # FilterError is a TarError
+                    reason = "%s: %s" % (type(e).__name__, e)
+            if reason is not None:
+                skipped.append((m.name, reason))
+                print("SKIPPED %s (%s)" % (m.name, reason))
+    return skipped
+
+
 def fetch(a):
     if not TAG_RE.match(a.tag):
         die("bad tag")
@@ -324,10 +358,8 @@ def fetch(a):
             print("VERIFIED %s -> %s" % (n, p))
             if a.extract:
                 x = os.path.join(dest, n[:-4])
-                os.makedirs(x, exist_ok=True)
-                with tarfile.open(p) as tf:
-                    tf.extractall(x, filter="data") if hasattr(tarfile, "data_filter") else tf.extractall(x)
-                print("EXTRACTED %s -> %s" % (n, x))
+                skipped = extract_tolerant(p, x)
+                print("EXTRACTED %s -> %s (%d skipped)" % (n, x, len(skipped)))
         else:
             bad += 1
             print("VERIFY-FAILED %s http=%s sha256=%s want=%s" % (n, code, got, sha))

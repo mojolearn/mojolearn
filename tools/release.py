@@ -492,6 +492,32 @@ def overlay_verified(prov, out_dir):
     return True, ""
 
 
+def gate_runner_verified(out_dir, source_commit):
+    """(ok, why): the gate runner that wrote <out_dir>/gate-smoke.json is the source commit's own (no
+    route-overlay.txt and no route-overlay.json: no overlay, or a report from before the gate overlay existed)
+    or the gate runner overlay (tools/ops/release_gate.py GATE_OVERLAY) the box verified: every file its
+    manifest names is a GATE_OVERLAY file, its bytes are that file's at the manifest's tooling commit, and the
+    box's route-overlay.txt shows those bytes after the overlay (overlay_verified)."""
+    out_dir = Path(out_dir)
+    doc = read_json(out_dir / "route-overlay.json")
+    if not doc:
+        if (out_dir / "route-overlay.txt").is_file():
+            return False, f"{out_dir}/route-overlay.txt without its route-overlay.json manifest"
+        return True, ""
+    if doc.get("source_commit") != source_commit:
+        return False, "the gate runner overlay was made for another source commit"
+    tooling = doc.get("tooling_commit") or ""
+    if not re.fullmatch(r"[0-9a-f]{40}", tooling):
+        return False, "the gate runner overlay names no tooling commit"
+    allowed = release_gate_module().GATE_OVERLAY
+    for rel, row in (doc.get("files") or {}).items():
+        if rel not in allowed or release_tooling.refused(rel):
+            return False, f"the gate runner overlay carries {rel}, not a gate runner file"
+        if release_tooling.sha(release_tooling.blob(ROOT, tooling, rel)) != row.get("tooling_sha256"):
+            return False, f"the gate runner overlay's {rel} is not its bytes at {tooling[:12]}"
+    return overlay_verified(dict(overlay=doc), out_dir)
+
+
 def leg_layout(legs_dir, backend, name):
     """(release_build, out_dir) of a leg named `vendor-arch` on a backend."""
     legs_dir = Path(legs_dir)
@@ -3675,6 +3701,9 @@ class Release:
             return False, 'gate report does not identify these candidate wheel hashes and source'
         if doc.get("version") != self.version or doc.get("vendor") != vendor:
             return False, f"the gate report is for {doc.get('vendor')} {doc.get('version')}"
+        runner_ok, runner_why = gate_runner_verified(output, identity.get("source_commit"))
+        if not runner_ok:
+            return False, runner_why
         sys.path.insert(0, str(ROOT / "tools"))
         from gate_smoke_box import gate_verdict
         verdict, why = gate_verdict(doc)
