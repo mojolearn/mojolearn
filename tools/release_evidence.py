@@ -48,9 +48,24 @@ def read_text(path):
     return read_bytes(path).decode("utf-8")
 
 
+#: (actual path, size, mtime_ns) -> sha256. A release step hashes the same retained evidence files tens of
+#: thousands of times (0.8.64 --status: 106,791 file hashes, 120 s); the bytes are keyed by their stat, so a
+#: rewritten file is hashed again. The admission-bundle bookkeeping (_checked) still runs on every call.
+_DIGESTS = {}
+
+
 def sha256(path):
     original, actual, expected, state = _resolved(path)
-    with actual.open("rb") as stream:
-        found = hashlib.file_digest(stream, "sha256").hexdigest()
+    try:
+        st = actual.stat()
+        key = (str(actual), st.st_size, st.st_mtime_ns)
+    except OSError:
+        key = None
+    found = _DIGESTS.get(key) if key is not None else None
+    if found is None:
+        with actual.open("rb") as stream:
+            found = hashlib.file_digest(stream, "sha256").hexdigest()
+        if key is not None:
+            _DIGESTS[key] = found
     _checked(original, expected, state, found)
     return found

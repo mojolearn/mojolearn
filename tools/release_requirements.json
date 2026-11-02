@@ -383,8 +383,7 @@
       "coverage": [
         "torch-inference",
         "torch-training",
-        "max-train",
-        "max-train-resume"
+        "max-train"
       ],
       "source_inputs": {
         "adapter_harness": [
@@ -408,8 +407,7 @@
       "coverage": [
         "torch-inference",
         "torch-training",
-        "max-train",
-        "max-train-resume"
+        "max-train"
       ],
       "source_inputs": {
         "adapter_harness": [
@@ -433,8 +431,7 @@
       "coverage": [
         "torch-inference",
         "torch-training",
-        "max-train",
-        "max-train-resume"
+        "max-train"
       ],
       "source_inputs": {
         "adapter_harness": [

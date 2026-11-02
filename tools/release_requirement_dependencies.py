@@ -44,8 +44,16 @@ def _git(root, *args):
     return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
 
 
+_REVISIONS = {}
+
+
 def _revision(root, revision):
-    return _git(root, "rev-parse", "--verify", revision + "^{commit}")
+    """rev-parse once per (root, revision) in this process: a commit never changes; 0.8.64 --status spawned
+    6,010 of these for 2,002 equivalence proofs (127 s)."""
+    key = (str(root), revision)
+    if key not in _REVISIONS:
+        _REVISIONS[key] = _git(root, "rev-parse", "--verify", revision + "^{commit}")
+    return _REVISIONS[key]
 
 
 def _file_hash(root, path):

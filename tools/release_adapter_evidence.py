@@ -130,8 +130,11 @@ def _apple_facts(root, producer):
             and "macosx" in wheel.name, "adapter smoke receipt belongs to another macOS wheel")
     with zipfile.ZipFile(wheel) as archive:
         revision = archive.read("mojolearn/identity_columns/COMMIT").decode().strip()
-        version = next((n.split("-")[1] for n in archive.namelist()
-                        if n.endswith(".dist-info/METADATA") and n.startswith("mojolearn-")), None)
+        # the dist-info directory is mojolearn-<version>.dist-info: take the version between the two
+        # (a split on "-" returned "<version>.dist" and refused every macOS wheel, 0.8.63 and 0.8.64)
+        version = next((n.split("/", 1)[0][len("mojolearn-"):-len(".dist-info")] for n in archive.namelist()
+                        if n.endswith(".dist-info/METADATA") and n.startswith("mojolearn-")
+                        and n.count("/") == 1), None)
     require(HEX40.fullmatch(revision) and version and wheel.name.split("-")[1] == version,
             "macOS wheel lacks its packaged source commit/version")
     smoke = _smoke(directory, "apple", version)
@@ -170,6 +173,12 @@ def _check(requirement_id, wanted, facts, unit):
             "installed adapter wheels differ from the requirement artifacts")
     if "release_modes" in facts:
         require(configuration.get("release_modes") == facts["release_modes"], "release modes differ")
+    # The requirement's coverage IDs are the three the release adapter smoke exercises (torch-inference,
+    # torch-training, max-train). max-train-resume belongs to the full MAX campaign (tools/adapter_wheel_smoke.py
+    # --smoke runs no resume step) and is not a publication prerequisite (AGENTS.md, 2026-10-25); 0.8.64's
+    # catalog still listed it and the admission crashed on the smoke's counts.
+    owed = [name for name in wanted["coverage"] if name not in facts["counts"]]
+    require(not owed, "adapter smoke has no check record for required coverage: " + ", ".join(owed))
     rows = [dict(id=name, status="passed", exit_code=0, expected=facts["counts"][name],
                  completed=facts["counts"][name], failed=0, skipped=0) for name in wanted["coverage"]]
     return rows, list(facts["evidence"])

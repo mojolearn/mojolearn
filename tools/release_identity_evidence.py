@@ -181,12 +181,36 @@ def requested_lanes(record):
     return [lane for lane in lanes.split(",") if lane] if isinstance(lanes, str) else []
 
 
+#: (record sha256, source revision, equivalent) -> (class, errors). The verdict is a function of the record
+#: bytes and the revision: the same five column records are checked once per unit per step (0.8.64 --status:
+#: 25,374 checks, 1,254 s, almost all in _verify_reference.admit over multi-megabyte records).
+_RECORD_ERRORS = {}
+
+
 def record_errors(record, path, ref, source_revision, equivalent=()):
     """(device class, errors) for one column record against the revision it must carry.
 
     ``equivalent`` names further admissible commits (revisions of begun runs
     whose inputs are fingerprint-equal to the current requirement).
     """
+    key = None
+    if isinstance(ref, dict) and ref.get("sha256"):
+        try:  # the sidecar is part of the verdict: a rewritten one is checked again
+            st = provenance_path(path).stat()
+            sidecar = (st.st_size, st.st_mtime_ns)
+        except (OSError, ValueError):
+            sidecar = None
+        key = (ref["sha256"], str(source_revision), tuple(equivalent), sidecar)
+    if key is not None and key[0] and key in _RECORD_ERRORS:
+        cls, errors = _RECORD_ERRORS[key]
+        return cls, list(errors)
+    cls, errors = _record_errors(record, path, ref, source_revision, equivalent)
+    if key is not None and key[0]:
+        _RECORD_ERRORS[key] = (cls, list(errors))
+    return cls, errors
+
+
+def _record_errors(record, path, ref, source_revision, equivalent=()):
     v = _vref()
     errors = []
     why = v.admit(record, str(path))
@@ -246,15 +270,47 @@ def record_errors(record, path, ref, source_revision, equivalent=()):
         arch = (record.get("host") or {}).get("arch")
         if arch is not None and arch != PLATFORMS[target][1]:
             errors.append(f"cpu host arch {arch} contradicts platform {target}")
-    try:
-        prov_path = provenance_path(path)
-        fields = provenance_fields(prov_path)
-        if (fields.get("commit") != record.get("commit") or fields.get("record_sha256") != ref["sha256"]
-                or fields.get("dirty_tracked") != "none" or fields.get("repeats", "").split()[:1] != ["1"]):
-            errors.append("record provenance (commit, clean tree, repeats, record hash) differs")
-    except (OSError, ValueError) as error:
-        errors.append("record provenance unavailable: " + str(error))
+    errors += provenance_errors(path, ref, record)
     return cls, errors
+
+
+def launched(record):
+    """True when a verifier launch produced the record (it writes the .provenance.txt sidecar)."""
+    return bool((record.get("verifier_observation") or {}).get("launch"))
+
+
+def provenance_errors(path, ref, record):
+    """The record's provenance witness. A verifier-launched record has a .provenance.txt sidecar
+    (commit, clean tree, repeats, record hash), checked as written. An identity_break column record
+    (tools/record_identity_column.sh on a box, no launch) writes none: its witness is the record itself,
+    the commit it names, repeats 1 and its content address (bench/results/identity_break/retained/<sha256>/).
+    0.8.64: requiring the sidecar from every record refused the whole 2026-11-02 admission."""
+    prov_path = provenance_path(path)
+    if launched(record) or prov_path.is_file():
+        try:
+            fields = provenance_fields(prov_path)
+            if (fields.get("commit") != record.get("commit") or fields.get("record_sha256") != ref["sha256"]
+                    or fields.get("dirty_tracked") != "none" or fields.get("repeats", "").split()[:1] != ["1"]):
+                return ["record provenance (commit, clean tree, repeats, record hash) differs"]
+        except (OSError, ValueError) as error:
+            return ["record provenance unavailable: " + str(error)]
+        return []
+    commit = record.get("commit")
+    if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{12,40}", commit):
+        return ["record names no commit witness"]
+    if record.get("repeats") != 1:
+        return ["record repeats is not 1 (identity runs once)"]
+    if Path(path).resolve().parent.name != ref["sha256"]:
+        return ["record is not retained under its own content address"]
+    return []
+
+
+def provenance_reference(path, ref, record):
+    """The evidence reference of the record's provenance witness: the sidecar, else the record itself."""
+    prov_path = provenance_path(path)
+    if launched(record) or prov_path.is_file():
+        return dict(path=str(Path(prov_path).resolve()), sha256=evidence.sha256(prov_path))
+    return dict(path=ref["path"], sha256=ref["sha256"])
 
 
 def _gpu_only_from_texts(harness_text, lane_texts):

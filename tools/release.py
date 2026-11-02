@@ -1492,6 +1492,10 @@ class Release:
             configuration = release_requirements.merge_configuration(configuration, supplied)
         configuration.update(release_modes=list(self.release_modes),
                              build_flags=release_requirements.build_flags())
+        # runtime-<vendor> (tools/release_installed_evidence.py) runs the frozen source's own tests against
+        # the installed wheels: the test revision is the frozen source unless a configuration names another.
+        # 0.8.64: no configuration ever supplied it, so every runtime row was "missing input" for good.
+        configuration.setdefault("runtime_test_source_revision", self.commit)
         context = dict(configuration.get("dependency_context", {}))
         apple_toolchain = release_reuse.darwin_toolchain()
         if apple_toolchain is not None:
@@ -1597,7 +1601,38 @@ class Release:
             out.append(("macos-release-build", dict(wheel=str(wheel), log=str(log), cache=str(cache))))
         if wheel and (self.apple_adapters_out() / "wheel.json").is_file():
             out.append(("apple-gate-adapters", dict(adapters=str(self.apple_adapters_out()), wheel=str(wheel))))
+        # The NVIDIA and AMD candidate gates (adapters-<vendor>): every gate directory of this freeze
+        # that holds a report; the adapter admits only a PASS for the ledger's qualified wheels.
+        # 0.8.64: these PASSED on the boxes and still blocked publication because nothing named them here.
+        for vendor in GATE_VENDORS:
+            for directory in sorted((self.rel / f"gate-{vendor}").glob("*/")):
+                if (directory / "gate-smoke.json").is_file() and (directory / "adapter-smoke").is_dir():
+                    out.append(("gate-adapters", dict(gate=str(directory))))
+        # The Linux release legs (compile-<vendor>/runtime, compile-<vendor>/adapters/<arch>, compile-cpu/runtime
+        # on the host leg): a leg built in this freeze, or the earlier freeze's leg a <leg>.reused.json names.
+        for directory in self.retained_leg_dirs():
+            out.append(("linux-release-leg", dict(leg=str(directory))))
         return out
+
+    def retained_leg_dirs(self):
+        """Leg directories whose build this freeze ships: built here (legs/<leg>/ with its .provenance.json
+        and .exit beside it) or reused byte for byte from an earlier freeze (legs/<leg>.reused.json names
+        that freeze's provenance file; the leg directory sits beside it)."""
+        legs = self.rel / "legs"
+        found = []
+        for provenance in sorted(legs.glob("*.provenance.json")):
+            name = provenance.name[:-len(".provenance.json")]
+            if (legs / name).is_dir() and (legs / (name + ".exit")).is_file():
+                found.append(legs / name)
+        for reused in sorted(legs.glob("*.reused.json")):
+            doc = read_json(reused) or {}
+            name = reused.name[:-len(".reused.json")]
+            source = Path(str(doc.get("provenance") or ""))
+            leg = source.parent / name
+            if (doc.get("leg") == name and source.is_file() and leg.is_dir()
+                    and (source.parent / (name + ".exit")).is_file() and leg not in found):
+                found.append(leg)
+        return found
 
     def readiness_status(self, write=False):
         manifest = self.readiness_manifest()

@@ -45,6 +45,43 @@ ADMISSIONS = "bench/results/reference_admissions"
 RECORD_RE = re.compile(r"`(bench/results/identity_break/retained/([0-9a-f]{64})/[^`/]+\.identical\.json)`")
 HEX40 = re.compile(r"[0-9a-f]{40}")
 IDENTITY_SPECS = ("identity-apple", "identity-nvidia", "identity-amd", "identity-cpu")
+TABLE = "python/mojolearn/verify_reference/table.json"
+IDENTITY_BREAK = "bench/results/identity_break"
+_TABLES = {}
+
+
+def reference_table(root, revision):
+    """(reference, table): the committed verify_reference table at the admission revision, read from Git."""
+    key = (str(Path(root).resolve()), revision)
+    if key not in _TABLES:
+        raw = subprocess.check_output(["git", "-C", str(root), "show", f"{revision}:{TABLE}"])
+        _TABLES[key] = (dict(path=TABLE, revision=revision, sha256=_sha(raw)), json.loads(raw))
+    return _TABLES[key]
+
+
+def _sha(raw):
+    import hashlib
+    return hashlib.sha256(raw).hexdigest()
+
+
+def cited_records(root, table):
+    """The table's column records that are retained by content address in this checkout:
+    index -> dict(index, cls, commit, path, sha256). A record the table lists without a sha256, or
+    whose bytes are not under bench/results/identity_break, is not cited (a unit needing it is refused)."""
+    root = Path(root).resolve()
+    found = {}
+    for index, row in enumerate(table.get("records") or []):
+        sha = row.get("sha256")
+        if not isinstance(sha, str) or not HEX40.fullmatch(sha[:40]) or not row.get("file"):
+            continue
+        candidates = [root / IDENTITY_BREAK / "retained" / sha / row["file"],
+                      root / IDENTITY_BREAK / str(row.get("dir") or "") / row["file"]]
+        for path in candidates:
+            if path.is_file() and evidence.sha256(path) == sha:
+                found[index] = dict(index=index, cls=row.get("class"), commit=row.get("commit"),
+                                    path=str(path), sha256=sha)
+                break
+    return found
 
 
 def _identity():
@@ -93,11 +130,20 @@ def _identity_facts(root, producer):
         require(not problem and cls in ident.GPU_CLASSES + ("cpu", ident.PTX_CLASS),
                 "retained record has no device class: " + rel)
         records.append(dict(cls=cls, path=str(path), sha256=ref["sha256"], size=ref["size"],
-                            provenance=reference(ident.provenance_path(path)),
+                            provenance=ident.provenance_reference(path, ref, record),
                             lanes=sorted(ident.requested_lanes(record))))
     require(records, "admission has no records at " + revision[:12])
+    # The table admission (tools/admit_identity_columns.sh) regenerates the verify_reference table for the
+    # recorded lanes and keeps every other row: a unit whose other columns were not re-recorded at this
+    # revision (Andrew, 2026-10-31: re-record only changed lanes) is admitted from the table's cited records.
+    # The table lives in the commit that admitted these records (the admission README's commit), after
+    # the record commit itself: the records carry the source they measured, the README commit retains them.
+    table_commit = _git(root, "log", "-1", "--format=%H", "--", admission + "/README.md").strip()
+    require(HEX40.fullmatch(table_commit) is not None, "the admission README has no commit in this checkout")
+    table_ref, table = reference_table(root, table_commit)
+    cited = sorted(cited_records(root, table).values(), key=lambda c: c["index"])
     return dict(producer=IDENTITY, source_root=str(root), source_revision=revision, admission=admission,
-                readme=readme, records=records)
+                readme=readme, records=records, table=table_ref, cited=cited)
 
 
 def _commit_of(root, commit):
@@ -162,6 +208,9 @@ def identity_check_unit(requirement_id, wanted, facts, unit):
     classes = ident.required_classes(wanted)
     environment = wanted["inputs"]["execution_environment"][lane]
     records, refs = {}, [facts["readme"]]
+    if "cited" in facts and any(not [r for r in facts["records"] if r["cls"] == cls and lane in r["lanes"]]
+                                for cls in classes):
+        return table_check_unit(ident, lane, vendor, classes, source, environment, facts)
     for cls in classes:
         found = [r for r in facts["records"] if r["cls"] == cls and lane in r["lanes"]]
         require(found, f"no {cls} column record at {source[:12]} requested {lane}")
@@ -189,6 +238,87 @@ def identity_check_unit(requirement_id, wanted, facts, unit):
                 + "; ".join(problems[:3]))
         rows.append(dict(id=name, status="passed", exit_code=0, expected=slots, completed=slots,
                          failed=0, skipped=0))
+    return rows, refs
+
+
+def table_check_unit(ident, lane, vendor, classes, source, environment, facts):
+    """identity-<vendor>/<lane> from the reference table at the admission revision.
+
+    The vendor's own column is the record recorded at this revision (the admission README names it);
+    every other required column is the record the table cites for each (fixture, part) slot of the
+    lane, retained by content address. Agreement is re-derived from those bytes: every slot's values
+    equal the table's agreed digest, or the slot is declared n/a. The identity rule holds: the same
+    bits on every column within this version; which commit recorded an unchanged column is provenance."""
+    v = ident._vref()
+    root = facts["source_root"]
+    _, table = reference_table(root, facts["table"]["revision"])
+    cited = {c["index"]: c for c in facts["cited"]}
+    cells = {key: cell for key, cell in (table.get("cells") or {}).items() if key.split("/", 1)[0] == lane}
+    require(cells, f"the reference table at {source[:12]} has no cells for lane {lane}")
+    own = [r for r in facts["records"] if r["cls"] == vendor and lane in r["lanes"]]
+    require(own, f"no {vendor} column record at {source[:12]} requested {lane}")
+    require(len(own) == 1, f"{len(own)} {vendor} records at {source[:12]} cover {lane}; identity runs once")
+    own_ref, own_record = ident.load_record(own[0]["path"])
+    require(own_ref == {k: own[0][k] for k in ("path", "sha256", "size")}, f"{vendor} column record bytes changed")
+    cls_found, errors = ident.record_errors(own_record, own_ref["path"], own_ref, source)
+    require(not errors and cls_found == vendor, f"{vendor} column record refused: " + "; ".join(errors))
+    target = ident.platform_target(own_record.get("platform"))
+    require(target == environment["target"], f"{vendor} record platform {target} differs from the "
+            f"frozen execution target {environment['target']}")
+    _optional_files(ident, own_record, own_ref["path"], environment.get("loader_routes", {}).get("optional_files", {}))
+    refs = [facts["readme"], dict(path=own_ref["path"], sha256=own_ref["sha256"]), own[0]["provenance"]]
+    loaded = {}
+
+    def column(index):
+        if index not in loaded:
+            item = cited.get(index)
+            require(item is not None, f"the table cites column record {index}, which is not retained by content address")
+            ref, record = ident.load_record(item["path"])
+            require(ref["sha256"] == item["sha256"], "cited column record bytes changed: " + item["path"])
+            loaded[index] = (ref, record)
+        return loaded[index]
+
+    slots = agree = declared_na = 0
+    problems = []
+    for key, cell in sorted(cells.items()):
+        for part, item in sorted(cell.items()):
+            if not isinstance(item, dict):
+                continue
+            slots += 1
+            agreed, cols = item.get("ref"), item.get("cols") or {}
+            if isinstance(agreed, str) and agreed.startswith("n/a:"):
+                declared_na += 1
+                agree += 1
+                continue
+            if not isinstance(agreed, str) or not agreed:
+                problems.append(f"{key}/{part}: the table records no agreed digest")
+                continue
+            ok = True
+            for cls in classes:
+                index = cols.get(cls)
+                if index is None:
+                    problems.append(f"{key}/{part}: the table has no {cls} column")
+                    ok = False
+                    break
+                if cls == vendor and cited.get(index, {}).get("sha256") != own_ref["sha256"]:
+                    problems.append(f"{key}/{part}: the table cites another {vendor} record than the admitted one")
+                    ok = False
+                    break
+                _, record = column(index)
+                value = v._part_value(record["cells"].get(key), part) if isinstance(record.get("cells"), dict) else None
+                if value != agreed:
+                    problems.append(f"{key}/{part}: {cls} column {value} differs from the table's {agreed}")
+                    ok = False
+                    break
+            if ok:
+                agree += 1
+    rows = []
+    for name in (ident.BASE_COVERAGE, "lane:" + lane):
+        require(slots > 0 and agree == slots, f"{name}: {slots - agree} of {slots} slots disagree; "
+                + "; ".join(problems[:3]))
+        rows.append(dict(id=name, status="passed", exit_code=0, expected=slots, completed=slots,
+                         failed=0, skipped=0))
+    refs += [dict(path=ref["path"], sha256=ref["sha256"]) for ref, _ in loaded.values()]
     return rows, refs
 
 
