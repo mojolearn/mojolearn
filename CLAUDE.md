@@ -135,6 +135,10 @@ protocol-correctness checks and the no-callback requirement.
 - Identity records and checks run ONCE (`REPEATS=1`); a mismatch is a bug to fix, never a reason to rerun.
 - Re-record only the lanes whose bits can have changed. This is the default of `tools/record_identity_column.sh` (2026-10-31); every other table row is kept.
 - One identity check per release: the table admit. No release step re-fits or re-diffs identity after it.
+- No re-verification of green work, ever (Andrew, 2026-11-02). The gates install the exact wheel bytes and run the
+  records on NVIDIA, AMD and Apple; nothing reinstalls those bytes from PyPI to run the verifier again, and a ledger
+  waiver never triggers a rerun. A verdict is reused automatically for the same bytes (gate adoption, build reuse);
+  only a changed input reruns, and only the units it reaches.
 
 ## Reuse good old runs, automatically (Andrew, 2026-10-31)
 

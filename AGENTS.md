@@ -186,6 +186,9 @@
   Retain source closures, compiler, flags, dependencies, target, binary hashes,
   actual coverage and results. Do not promote source checks or compilation to
   runtime success, or extend a partial result to untested paths or devices.
+- No re-verification of green work (Andrew, 2026-11-02): the gates install the
+  exact wheel bytes and run the records on every vendor; nothing reinstalls them
+  from PyPI to run the verifier again, and a ledger waiver never triggers a rerun.
 - Reuse those results during release. Require an explicit relevant input change
   or observed failure for each rerun; a version, commit name, packaging step or
   unchanged group assembled beside a changed one is not sufficient by itself.
