@@ -56,14 +56,18 @@ def verify(reference, *, self_test=False, retain=None):
     if retain:
         retain('clean', clean)
     result['vendor'] = clean['vendor']
+    changed = False
     if reference['witnesses']['metal']['version'] != __version__:
         witness = reference['witnesses'].get(clean['vendor'], {})
-        if not unchanged_artifacts(clean, witness):
-            result.update(status='OWED', errors=['changed native artifacts need current-release witnesses; prior-release bits are not a contract'])
-            return result
-        result['evidence_reuse'] = 'unchanged native bytes and numerical fixtures'
+        changed = not unchanged_artifacts(clean, witness)
+        result['evidence_reuse'] = ('changed native bytes reproduce the admitted witness' if changed
+                                    else 'unchanged native bytes and numerical fixtures')
     result['errors'] = verifier.compare(clean, reference['witnesses']['metal'])
     if result['errors']:
+        # Changed native bytes are judged by their outputs; only moved outputs owe new witnesses.
+        if changed:
+            result.pop('evidence_reuse', None)
+            result.update(status='OWED', errors=['changed native artifacts moved these outputs; they need current-release witnesses'] + result['errors'])
         return result
     if self_test:
         for name, (case, _) in FAULTS.items():

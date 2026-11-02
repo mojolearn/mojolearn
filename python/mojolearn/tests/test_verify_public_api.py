@@ -215,3 +215,20 @@ def test_release_label_reuses_only_unchanged_executed_native_inputs():
     changed=copy.deepcopy(clean);changed['bindings']=[]
     assert not api.unchanged_reference_inputs(changed,reference)
     assert not api.unchanged_reference_inputs(clean,{'witnesses':{}})
+
+
+def test_changed_native_bytes_are_judged_by_their_outputs(monkeypatch):
+    row={'status':'captured','kind':'value','output':{'sha256':'a'*64}}
+    clean={'vendor':'cuda','version':'new','families':{'example.call':'metadata'},'sources':{'metadata':'fixture'},
+        'bindings':[{'module':'native','sha256':'changed'}],'expected':['example.call'],'pending':[],
+        'endpoints':{'example.call':dict(row)}}
+    witness=copy.deepcopy(clean);witness['version']='old';witness['bindings'][0]['sha256']='binary'
+    reference={'validated_vendors':['cuda'],'witness':witness,'witnesses':{'cuda':witness}}
+    monkeypatch.setattr(api,'output_contract',lambda value:'contract')
+    monkeypatch.setattr(api,'selected_endpoints',lambda scope:None)
+    monkeypatch.setattr(api,'capture',lambda **kw:copy.deepcopy(clean))
+    result=api.verify(self_test=False,reference=reference)
+    assert result['status']=='MATCH' and result['evidence_reuse'].startswith('changed native bytes')
+    clean['endpoints']['example.call']['output']={'sha256':'b'*64}
+    result=api.verify(self_test=False,reference=reference)
+    assert result['status']=='OWED' and 'output differs: example.call' in result['errors']
