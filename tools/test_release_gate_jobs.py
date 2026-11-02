@@ -402,3 +402,74 @@ def test_a_landed_result_for_another_candidate_or_a_fail_is_not_adopted(tmp_path
     box = FakeBox(dict(recorded.gate, vendor="nvidia"), "nvidia")
     RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main()
     assert sum(1 for c in box.calls if c[2] == "submit") == 1
+
+
+# ------------------------------------------------------------------ the gate runner overlay
+def head():
+    import subprocess
+    return subprocess.run(["git", "-C", str(RG.ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                          check=True).stdout.strip()
+
+
+def test_the_gate_runner_overlay_is_an_input_only_when_bytes_differ(tmp_path):
+    a = args(tmp_path, "nvidia")
+    a.source_commit = head()                      # the tooling's own bytes: nothing to overlay
+    plan, key_same, _, _ = RG.Runner(a).make_plan()
+    assert plan.overlay is None
+    assert not any(r.endswith(("route-overlay.tgz", "route-overlay.json")) for _, r, _ in plan.uploads())
+    assert "GATE_OVERLAY_SHA256=\n" in plan.env_text()
+    a = args(tmp_path, "nvidia")                  # COMMIT has none of these files: every one differs
+    plan, key_other, _, _ = RG.Runner(a).make_plan()
+    assert sorted(plan.overlay["files"]) == sorted(RG.GATE_OVERLAY)
+    remotes = [r for _, r, _ in plan.uploads()]
+    assert f"{plan.indir}/route-overlay.tgz" in remotes and f"{plan.indir}/route-overlay.json" in remotes
+    assert key_same != key_other
+
+
+def test_the_job_applies_the_overlay_after_the_build_and_before_the_gate():
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    build, overlay, gate = text.index("\nPHASE=build"), text.index("\nPHASE=overlay"), text.index("\nPHASE=gate")
+    assert build < overlay < gate
+    block = text[overlay:gate]
+    assert 'echo "before $f' in block and 'echo "after $f' in block and "route-overlay.txt" in block
+    assert '"$GATE_OVERLAY_SHA256"' in block and "GATE_OVERLAY[*]" in block
+    assert "git checkout -q --" in text[text.index("finish() {"):]       # restored on exit: the tree stays clean
+
+
+def test_gate_ok_accepts_the_verified_overlay_and_refuses_other_bytes(tmp_path, monkeypatch, recorded):
+    import release_tooling
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
+    vendor = "nvidia"
+    report = dict(recorded.gate, vendor=vendor, candidate=dict(recorded.identity, vendor=vendor))
+    import gate_autograd_artifacts as A
+    report["autograd_artifacts"] = dict(report["autograd_artifacts"], vendor=vendor, files=[
+        dict(file=name, source=source, exit_code=0, sha256="e" * 64, source_sha256="f" * 64)
+        for name, source in A.expected(vendor).items()])
+    identity = report["candidate"]
+    box = FakeBox(report, vendor)
+    a = args(tmp_path, vendor)
+    a.source_commit = identity["source_commit"]
+    assert RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main() == 0
+    env = next(v for k, v in box.files.items() if k.endswith("/gate.env")).decode()
+    tgz = next(v for k, v in box.files.items() if k.endswith("/route-overlay.tgz"))
+    assert f"GATE_OVERLAY_SHA256={hashlib.sha256(tgz).hexdigest()}\n" in env
+    r = object.__new__(FakeRelease)
+    r.version, r.dry = VERSION, False
+    r.candidate_gate_identity = lambda v: identity
+    r.gate_out = lambda v: a.out
+    assert r.gate_ok(vendor)[0]                    # no overlay record: the source commit's own runner
+    m = release_tooling.overlay_manifest(RG.ROOT, head(), identity["source_commit"], RG.GATE_OVERLAY)
+    (a.out / "route-overlay.json").write_text(json.dumps(m))
+    lines = [f"before {rel} absent" for rel in m["files"]]
+    (a.out / "route-overlay.txt").write_text("\n".join(
+        lines + [f"after {rel} {row['tooling_sha256']}" for rel, row in m["files"].items()]) + "\n")
+    ok, why = r.gate_ok(vendor)
+    assert ok, why
+    (a.out / "route-overlay.txt").write_text("\n".join(lines + [f"after {rel} {'0' * 64}" for rel in m["files"]]) + "\n")
+    ok, why = r.gate_ok(vendor)
+    assert not ok and "not the overlaid bytes" in why
+    (a.out / "route-overlay.json").unlink()
+    ok, why = r.gate_ok(vendor)
+    assert not ok and "without its route-overlay.json" in why

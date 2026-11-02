@@ -83,7 +83,15 @@ GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-s
               "measure-*/campaign-retention.json", "measure-*/board",
               # the installed-wheel adapter smoke (tools/adapter_gate.py): receipt, logs, per-phase results
               "adapter-smoke/adapter-smoke.json", "adapter-smoke/*.log", "adapter-smoke/*.exit",
-              "adapter-smoke/*/*.json")
+              "adapter-smoke/*/*.json",
+              # the gate runner overlay the job applied (GATE_OVERLAY): its box-side record and its manifest
+              "route-overlay.txt", "route-overlay.json")
+#: THE GATE RUNNER OVERLAY: the tooling checkout's copy of each of these files whose bytes differ from the
+#: source commit's ships with the job (route-overlay.tgz, tools/release_tooling.py write_overlay) and is
+#: applied over the source tree AFTER the autograd build (the build and its reuse proof read the clean tree)
+#: and BEFORE the gate runs, so a runner fix never needs a refreeze. tools/release.py gate_ok accepts the
+#: report only when the box's route-overlay.txt shows the overlaid bytes (release.overlay_verified).
+GATE_OVERLAY = ("tools/gate_smoke_box.py", "tools/autograd_smoke.py", "tools/release_gate_profiles.py")
 TERMINAL_NV = ("done", "failed", "cancelled", "timeout", "interrupted")
 
 
@@ -141,7 +149,7 @@ class Plan:
     """Every path, file and wrapper command of one gate job; pure (reads no file, runs nothing)."""
 
     def __init__(self, vendor, version, source_commit, source_tree, out, wheels, tag, adapters=True,
-                 profile="release-light-v1", prior=None, prior_files=(), staged=None):
+                 profile="release-light-v1", prior=None, prior_files=(), staged=None, overlay=None):
         if vendor not in VENDORS:
             raise SystemExit(f"release-gate: vendor must be nvidia or amd, not {vendor!r}")
         if not re.fullmatch(r"[0-9a-f]{40}", source_commit or ""):
@@ -167,6 +175,10 @@ class Plan:
         self.prior_files = list(prior_files)
         #: the local directory that holds the generated gate.env
         self.staged = Path(staged) if staged else self.out.parent / f"inputs-{tag}"
+        #: the gate runner overlay manifest (release_tooling.overlay_manifest); an input only when bytes differ
+        self.overlay = overlay if overlay and overlay.get("files") else None
+        #: the overlay tarball's sha256, set once Runner writes it (gate.env carries it)
+        self.overlay_sha256 = None
         gate_out = f"{self.work}/out"
         manifest = f"{gate_out}/autograd-bin/build-manifest.json"
         box_wheels = [f"{self.indir}/{w.name}" for w in self.wheels]
@@ -185,6 +197,7 @@ class Plan:
                  f"GATE_WORK={self.work}", f"GATE_BUILD_MINUTES={BUILD_MINUTES}",
                  f"GATE_ADAPTERS={1 if self.adapters else 0}", f"GATE_PROFILE={self.profile}",
                  f"GATE_REUSE={1 if self.prior else 0}",
+                 f"GATE_OVERLAY_SHA256={self.overlay_sha256 or ''}", bash_array("GATE_OVERLAY", GATE_OVERLAY),
                  bash_array("BUILD_ARGV", self.build), bash_array("BUILD_FRESH_ARGV", self.build_fresh),
                  bash_array("GATE_ARGV", self.gate), bash_array("GATE_FETCH", GATE_FETCH)]
         return "\n".join(lines) + "\n"
@@ -193,6 +206,9 @@ class Plan:
         """[(local, remote, executable)]: the wheels, the job script, the reused autograd set, gate.env."""
         out = [(w, f"{self.indir}/{w.name}", False) for w in self.wheels]
         out.append((ROOT / JOB_SCRIPT, f"{self.indir}/release_gate_job.sh", True))
+        if self.overlay:
+            for name in ("route-overlay.tgz", "route-overlay.json"):
+                out.append((self.staged / name, f"{self.indir}/{name}", False))
         for name in self.prior_files:
             out.append((self.prior / name, f"{self.indir}/autograd-prior/{name}", name != "build-manifest.json"))
         out.append((self.staged / "gate.env", f"{self.indir}/gate.env", False))
@@ -268,6 +284,18 @@ def job_script_committed():
     dirty = subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", "HEAD", "--", rel], capture_output=True)
     if tracked.returncode or dirty.returncode:
         raise SystemExit(f"release-gate: {rel} is not committed and clean in {ROOT}; commit it first")
+
+
+def gate_overlay(source_commit):
+    """The gate runner overlay manifest: each GATE_OVERLAY file whose bytes at the tooling commit (this
+    checkout's HEAD) differ from the source commit's (an empty `files` when none differ)."""
+    import release_tooling
+    tooling = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                             check=True).stdout.strip()
+    try:
+        return release_tooling.overlay_manifest(ROOT, tooling, source_commit, GATE_OVERLAY)
+    except release_tooling.OverlayRefused as exc:
+        raise SystemExit(f"release-gate: {exc}")
 
 
 def on_origin_main(commit):
@@ -500,9 +528,12 @@ class Runner:
                 st = json.loads(state_path.read_text())
             except ValueError:
                 st = {}
+        overlay = gate_overlay(a.source_commit)
         key_inputs = [a.vendor, a.version, a.source_commit, a.profile, not a.no_adapters,
                       [sha256(w) if Path(w).is_file() else str(w) for w in a.candidate_wheel],
                       sha256(ROOT / JOB_SCRIPT) if (ROOT / JOB_SCRIPT).is_file() else None]
+        if overlay["files"]:
+            key_inputs.append(overlay["digest"])   # a runner fix is a new job, never a resumed old one
         key = hashlib.sha256(json.dumps(key_inputs).encode()).hexdigest()
         if st.get("key") == key and st.get("tag"):
             tag = st["plan_tag"]
@@ -511,7 +542,8 @@ class Runner:
         plan = Plan(a.vendor, a.version, a.source_commit, a.source_tree, a.out, a.candidate_wheel, tag,
                     adapters=not a.no_adapters, profile=a.profile,
                     prior=a.autograd_prior if prior else None, prior_files=prior,
-                    staged=(state_path.parent if state_path else a.out.parent) / f"inputs-{tag}")
+                    staged=(state_path.parent if state_path else a.out.parent) / f"inputs-{tag}",
+                    overlay=overlay)
         return plan, key, state_path, st
 
     def dry_lines(self):
@@ -543,6 +575,13 @@ class Runner:
             say(f"resuming {st['tag']} (launched {st.get('launched_at')}); not launched again")
         else:
             plan.staged.mkdir(parents=True, exist_ok=True)
+            if plan.overlay:
+                import release_tooling
+                try:
+                    _, plan.overlay_sha256 = release_tooling.write_overlay(ROOT, plan.overlay, plan.staged)
+                except release_tooling.OverlayRefused as exc:
+                    raise SystemExit(f"release-gate: {exc}")
+                say("gate runner overlay: " + ", ".join(sorted(plan.overlay["files"])))
             (plan.staged / "gate.env").write_text(plan.env_text())
             self.stage(plan)
             record = dict(key=key, plan_tag=tag, vendor=a.vendor, launched_at=dt.datetime.now(

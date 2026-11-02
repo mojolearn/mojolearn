@@ -18,6 +18,9 @@
 #   build    the eight autograd executables: tools/gate_autograd_artifacts.py build (BUILD_ARGV; with a
 #            retained set it reuses each proven-unchanged binary; a refused reuse falls back to a fresh
 #            build, BUILD_FRESH_ARGV), bounded by GATE_BUILD_MINUTES;
+#   overlay  when GATE_OVERLAY_SHA256 is set: the gate runner overlay (route-overlay.tgz, only GATE_OVERLAY
+#            files) over the tree, AFTER the build (which reads the clean tree) and BEFORE the gate; every
+#            file's sha256 before and after in out/route-overlay.txt; the files are restored on exit;
 #   gate     python3 tools/gate_smoke_box.py ... all (GATE_ARGV): release-light-v1, unchanged.
 # On any exit the reports (GATE_FETCH) and the built autograd set are copied into
 # $MOJOLEARN_RESULTS_DIR/out and the job's own record into $MOJOLEARN_RESULTS_DIR/job.
@@ -31,6 +34,7 @@ RES="${MOJOLEARN_RESULTS_DIR:?release_gate_job.sh runs under tools/box_persist_r
 [[ "$GATE_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "release-gate-job: bad GATE_SOURCE_COMMIT" >&2; exit 2; }
 [[ "$GATE_TREE" =~ ^/root/[A-Za-z0-9/_.-]+$ && "$GATE_WORK" =~ ^/root/results[A-Za-z0-9/_.-]+$ ]] \
     || { echo "release-gate-job: GATE_TREE / GATE_WORK must be plain /root paths (/root/results* for the work)" >&2; exit 2; }
+[[ "${GATE_OVERLAY_SHA256:-}" =~ ^([0-9a-f]{64})?$ ]] || { echo "release-gate-job: bad GATE_OVERLAY_SHA256" >&2; exit 2; }
 [[ "$GATE_BUILD_MINUTES" =~ ^[1-9][0-9]*$ ]] || { echo "release-gate-job: bad GATE_BUILD_MINUTES" >&2; exit 2; }
 case "$GATE_VENDOR:$GATE_TARGET" in nvidia:sm_89|amd:gfx942) ;; *) echo "release-gate-job: unsupported vendor/target" >&2; exit 2 ;; esac
 J="$RES/job"
@@ -56,9 +60,15 @@ copy_reports() {
       done
       if [ ${#have[@]} -gt 0 ]; then tar cf - --exclude=autograd-smoke/tmp "${have[@]}"; fi ) | tar xf - -C "$2"
 }
+OVERLAID=""
 finish() {
     local code=$?
     trap - EXIT
+    # the overlaid runner files go back to the source commit's bytes: the next job finds a clean tree
+    if [ -n "$OVERLAID" ]; then
+        ( cd "$GATE_TREE" && for f in $OVERLAID; do git checkout -q -- "$f" 2>/dev/null || rm -f "$f"; done ) \
+            || say "restoring the overlaid files failed"
+    fi
     # the reports, never the venv or the caches: the same report set the gate always brought home
     if [ -d "$GATE_WORK/out" ]; then
         copy_reports "$GATE_WORK/out" "$RES/out" || say "copying the reports failed"
@@ -146,6 +156,30 @@ if [ "$brc" != 0 ] && [ "${GATE_REUSE:-0}" = 1 ] && [ "$brc" != 124 ]; then
 fi
 [ "$brc" = 0 ] || { say "the autograd build exited $brc"; tail -n 20 "$J"/autograd-build*.log; exit "$brc"; }
 say "autograd executables built: $GATE_WORK/out/autograd-bin"
+
+PHASE=overlay
+if [ -n "${GATE_OVERLAY_SHA256:-}" ]; then
+    # the gate runner overlay (tools/ops/release_gate.py GATE_OVERLAY): checked, then applied over the tree
+    [ -f "$IN/route-overlay.tgz" ] && [ "$(sha256sum "$IN/route-overlay.tgz" | cut -d' ' -f1)" = "$GATE_OVERLAY_SHA256" ] \
+        || { say "the route overlay is not the recorded bytes $GATE_OVERLAY_SHA256"; exit 4; }
+    ro="$GATE_WORK/route-overlay"
+    rm -rf "$ro" && mkdir -p "$ro" && tar -xzf "$IN/route-overlay.tgz" -C "$ro"
+    [ -z "$(cd "$ro" && find . ! -type f ! -type d)" ] || { say "refusing a link or special file in the route overlay"; exit 4; }
+    files=$(cd "$ro" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
+    [ -n "$files" ] || { say "the route overlay is empty"; exit 4; }
+    for f in $files; do
+        case " ${GATE_OVERLAY[*]} " in *" $f "*) ;; *) say "the route overlay carries $f, not a gate runner file"; exit 4 ;; esac
+    done
+    for f in $files; do
+        if [ -f "$f" ]; then echo "before $f $(sha256sum "$f" | cut -c1-64)"; else echo "before $f absent"; fi
+    done > "$GATE_WORK/out/route-overlay.txt"
+    OVERLAID=$files
+    tar -xzf "$IN/route-overlay.tgz" -C "$GATE_TREE"
+    for f in $files; do echo "after $f $(sha256sum "$f" | cut -c1-64)"; done >> "$GATE_WORK/out/route-overlay.txt"
+    echo "overlay_sha256=$GATE_OVERLAY_SHA256" >> "$GATE_WORK/out/route-overlay.txt"
+    cp "$IN/route-overlay.json" "$GATE_WORK/out/route-overlay.json"
+    say "gate runner overlay applied: $(echo $files)"
+fi
 
 PHASE=gate
 say "gate: python3 ${GATE_ARGV[*]}"
