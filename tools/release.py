@@ -1665,11 +1665,28 @@ class Release:
                         or saved.get("source_revision") != run["source_revision"]):
                     raise StepFailed("provider retry differs from the active begun compile inputs")
             return prior
+        # An open begun run whose producer stopped (a failed or cancelled
+        # GitHub run, or a launch that never dispatched) is closed here with
+        # its retained evidence, so only this leg relaunches; a running or
+        # queued producer still refuses below, and a succeeded one is
+        # collected and recorded, never interrupted (0.8.64: sm_89 run
+        # 41364664603 left 124 open runs that had to be closed by hand).
+        groups = []
+        if callable(getattr(self, "close_stopped_compile_producers", None)):
+            groups = self.close_stopped_compile_producers(leg, selected)
+        succeeded = [g for g in groups if g["state"] == "succeeded"]
+        if succeeded:
+            attached = self.attach_succeeded_producer(leg, selected, succeeded[0], groups)
+            if attached is not None:
+                return attached
         runs = {}
         try:
             begun = ledger.begin_many(selected)
         except ValueError as error:
-            raise StepFailed("compile requirements refused a new build: " + str(error)) from error
+            held = "; ".join(f"{len(g['run_ids'])} run(s) {g['state']}: {g['reason']}"
+                             for g in groups if not g.get("closed"))
+            raise StepFailed("compile requirements refused a new build: " + str(error)
+                             + (f" [producer: {held}]" if held else "")) from error
         for name, run_id in begun.items():
             wanted = selected[name]
             # Normal begin reuses an unchanged pass and refuses active work or
@@ -1681,6 +1698,67 @@ class Release:
             raise StepFailed("all compile inputs already have retained passes; restore/reconcile their artifacts "
                              "instead of launching another build")
         return dict(schema=compile_evidence.LAUNCH_SCHEMA, selected=sorted(selected), runs=runs)
+
+    def leg_compile_names(self, leg):
+        import release_compile_evidence as compile_evidence
+        return {name for name, wanted in self.readiness().read()["requirements"].items()
+                if compile_evidence.belongs_to_leg(wanted, leg.vendor, leg.arch)}
+
+    def close_stopped_compile_producers(self, leg, names=None):
+        """Classify a GitHub build leg's open begun compile runs by their
+        producer (tools/release_stopped_producers.py) and interrupt, with the
+        gh run JSON and failed-log excerpt (or the run listing) retained under
+        compile-interruptions/, those whose producer concluded failure,
+        cancelled, timed out or never dispatched. Returns the groups; the
+        running, succeeded and unknown ones are left open for the caller."""
+        import release_stopped_producers as producers
+        if self.dry or getattr(self, "readonly", False) or type(leg) is not Leg or not producers.is_github_leg(leg):
+            return []
+        ledger = self.readiness()
+        names = set(names) if names is not None else self.leg_compile_names(leg)
+        groups = producers.Producers(lambda *a: self.gh(*a), release_github_build.WORKFLOW).classify(
+            leg, ledger.read(), names, self.commit)
+        producers.close_stopped(ledger, groups, self.rel / "compile-interruptions", leg.name)
+        for group in groups:
+            self.say(f"  {leg.name}: {len(group['run_ids'])} open compile run(s), producer {group['state']}: "
+                     + group["reason"] + ("; interrupted (producer stopped, no qualification claim)"
+                                          if group.get("closed") else ""))
+        return groups
+
+    def attach_succeeded_producer(self, leg, selected, group, groups):
+        """A GitHub run that succeeded for this leg's open begun runs: record
+        the leg from its own finished output, or relaunch its collector
+        attached to that run (--run-id: download and verify, no compile), so
+        the runs are recorded from the producer that made them, never
+        interrupted. Returns the launch to reuse, or None after recording."""
+        import release_compile_evidence as compile_evidence
+        prov = read_json(leg.provenance_file) or {}
+        prior = prov.get("compile_requirements") or {}
+        document = self.readiness().read()
+        runs = {row["id"]: row for row in document["runs"]}
+        saved = prior.get("runs") or {}
+        if (len(groups) != 1 or prior.get("schema") != compile_evidence.LAUNCH_SCHEMA
+                or prior.get("selected") != sorted(selected)
+                or group["run_ids"] != sorted(row.get("run_id") for row in saved.values())
+                or any(name not in selected or runs[row["run_id"]]["requirement"] != name
+                       or row.get("fingerprint") != selected[name]["fingerprint"]
+                       or row.get("source_revision") != selected[name]["source_revision"]
+                       for name, row in saved.items())):
+            raise StepFailed(f"{leg.name}: {group['reason']} succeeded, but its open begun compile runs differ "
+                             "from the leg's launch; reconcile before another build")
+        source = prov.get("source_commit")
+        if source and leg.done(source):
+            self.record_compile_requirements(leg)
+            return None
+        if source != self.commit:
+            raise StepFailed(f"{leg.name}: {group['reason']} built {str(source)[:12]}, not this freeze; "
+                             "its output is not here to record")
+        command = list(leg.command)
+        if "--run-id" in command:
+            del command[command.index("--run-id"):command.index("--run-id") + 2]
+        leg.command = command + ["--run-id", str(group["github_run"])]
+        self.say(f"  {leg.name}: collecting the succeeded GitHub run {group['github_run']} (no new compile)")
+        return dict(prior, attached_github_run=group["github_run"])
 
     def record_compile_requirements(self, leg):
         """Parse the actual complete producer output for its original begun runs."""
@@ -2689,7 +2767,17 @@ class Release:
         for l in legs:
             if l.exit_code() != 0 or not l.proof_ok(self.commit):
                 self.record_compile_failure(l)
-                bad.append(f"{l.name} (exit {l.exit_code()}, log {l.log})")
+                closed = []
+                if callable(getattr(self, "close_stopped_compile_producers", None)):
+                    # A stopped producer's open runs close now, so the next
+                    # linux-builds relaunches only this leg without a hand step.
+                    try:
+                        closed = [g for g in self.close_stopped_compile_producers(l) if g.get("closed")]
+                    except (StepFailed, ValueError, OSError) as error:
+                        self.say(f"  {l.name}: open compile runs not closed: {error}")
+                bad.append(f"{l.name} (exit {l.exit_code()}, log {l.log}"
+                           + (f"; {sum(len(g['run_ids']) for g in closed)} open compile run(s) interrupted, "
+                              f"producer {closed[0]['state']}; linux-builds relaunches it" if closed else "") + ")")
                 continue
             ok, why = overlay_verified(read_json(l.provenance_file), l.out_dir)
             if not ok:
