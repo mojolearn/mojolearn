@@ -6684,7 +6684,71 @@ REGISTRY_BINDING_FIELDS = ("binding", "routes")
 REGISTRY_NAME_FIELDS = ("exports",)
 
 
-def unused_registry_definitions(path, names, rev):
+def import_bound_definitions(ref, path):
+    """The names a Python module's diff against `ref` affects when the diff is
+    confined to top-level definitions whose import-time use is ONLY to bind
+    module globals (`_WORKER_BINDINGS = {...: _connect_binding(...)}`), closed
+    over the module: a changed def, a global whose assignment names an
+    affected name, and a def whose body names one. None when any other
+    top-level statement changed, or an affected name is evaluated at import
+    by anything but such an assignment (an expression statement, a header,
+    a decorator, a default).
+
+    What it rests on: an import-time call's effect reaches a lane through the
+    value it binds, which `unused_registry_definitions` then follows to every
+    reader, or through what it calls; for the case it was written for
+    (`_native_parallel_shard.py::_connect_binding`) that is `_backend`'s own
+    binding loaders, which load the binaries every lane already loads."""
+    old_text = _git_show(ref, path)
+    try:
+        new_text = _read(path)
+    except OSError:
+        return None
+    if old_text is None:
+        return None
+    a, b = _top_level_units(old_text), _top_level_units(new_text)
+    if a is None or b is None or a[1] != b[1] or set(a[0]) != set(b[0]):
+        return None
+    changed = {n for n in a[0] if a[0][n] != b[0][n]}
+    if not changed:
+        return None
+    tree = ast.parse(new_text)
+    affected = set(changed)
+    grew = True
+    while grew:
+        grew = False
+        for node in tree.body:
+            used = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                header = node.decorator_list + ([] if isinstance(node, ast.ClassDef) else
+                                                node.args.defaults + [d for d in node.args.kw_defaults if d])
+                if {n.id for h in header for n in ast.walk(h) if isinstance(n, ast.Name)} & affected:
+                    return None
+                if node.name not in affected and used & affected:
+                    affected.add(node.name)
+                    grew = True
+            elif used & affected:
+                if not (isinstance(node, ast.Assign) and all(isinstance(t, ast.Name) for t in node.targets)):
+                    return None
+                for t in node.targets:
+                    if t.id not in affected:
+                        affected.add(t.id)
+                        grew = True
+    return sorted(affected)
+
+
+def registry_definition_lanes(path, names, rev):
+    """(lanes, reason) for a registry edit whose affected definitions are
+    `names`: the lanes whose maps hold a file naming one
+    (`unused_registry_definitions` with the namers' lanes kept), or None when
+    the harness names one. `_native_parallel_public.connect`, which a module
+    runs at its import, calls `_native_parallel_shard.register`, so the lanes
+    reaching it (bootstrap, monte-carlo, permutation-test, ...) run the edited
+    `_connect_binding` and are selected; no other lane does."""
+    return unused_registry_definitions(path, names, rev, keep_lanes=True)
+
+
+def unused_registry_definitions(path, names, rev, keep_lanes=False):
     """A reason when the changed named definitions `names` of the registry
     `path` (`python_edit_lanes`: the closure over the module's own callers)
     are named by NO file any lane reaches, else None (lane
@@ -6704,6 +6768,9 @@ def unused_registry_definitions(path, names, rev):
     if not names:
         return None
     words = [re.compile(r"(?<![\w])%s(?![\w])" % re.escape(n)) for n in names]
+    # A public-looking name (`register`) is another module's own unless the
+    # file names THIS module; a private one is matched anywhere.
+    module = re.compile(r"(?<![\w])%s(?![\w])" % re.escape(os.path.basename(path)[:-3]))
     namers = []
     for rel in sorted(tracked_files()):
         if rel == path or not rel.endswith(".py") or rel.startswith(TESTS) \
@@ -6713,13 +6780,20 @@ def unused_registry_definitions(path, names, rev):
             text = _searchable(rel) if rel.startswith(PKG + os.sep) or rel == HARNESS else _read(rel)
         except OSError:
             continue
-        if any(w.search(text) for w in words):
-            if rel == HARNESS or rev.get(rel):
+        imports = module.search(text) is not None
+        if any(w.search(text) for n, w in zip(names, words) if n.startswith("_") or imports):
+            if rel == HARNESS or (rev.get(rel) and not keep_lanes):
                 return None
             namers.append(rel)
-    return (f"a registry's named definitions changed ({', '.join(sorted(names)[:6])}), and every file "
-            f"naming them is in no lane's map ({', '.join(namers[:4]) or 'none'}"
-            f"{' and more' if len(namers) > 4 else ''}): no lane runs them")
+    users = set().union(*[rev.get(rel, set()) for rel in namers]) if keep_lanes else set()
+    if users:
+        return users, (f"a registry's named definitions changed ({', '.join(sorted(names)[:6])}): the "
+                       f"{len(users)} lane(s) reaching a file that names them "
+                       f"({', '.join(r for r in namers if rev.get(r))[:200]})")
+    why = (f"a registry's named definitions changed ({', '.join(sorted(names)[:6])}), and every file "
+           f"naming them is in no lane's map ({', '.join(namers[:4]) or 'none'}"
+           f"{' and more' if len(namers) > 4 else ''}): no lane runs them")
+    return (set(), why) if keep_lanes else why
 
 
 def _lanes_reaching_a_file_naming(names, rev, skip=()):
@@ -10442,11 +10516,17 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                                      + ", ".join(names) + "): "
                                      + str(len(users)) + " lane(s) reached through their callers")
                     continue
-                if edited is not None:
-                    why_unused = unused_registry_definitions(path, edited[0], rev)
-                    if why_unused:
-                        inert.append(path)
-                        reasons[path] = why_unused
+                names = edited[0] if edited is not None else import_bound_definitions(ref, path)
+                if names:
+                    placed = registry_definition_lanes(path, names, rev)
+                    if placed is not None:
+                        users, why_placed = placed
+                        if users:
+                            lanes.update(users)
+                            by_path[path] = set(users)
+                        else:
+                            inert.append(path)
+                        reasons[path] = why_placed
                         continue
             if added is not None:
                 lanes.update(added)

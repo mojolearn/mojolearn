@@ -756,6 +756,9 @@ def test_only_an_operation_passed_to_a_dispatcher_opens_its_branch():
 
 
 def test_an_unused_registry_edit_is_inert_only_when_no_reached_file_names_it():
+    # and `import_bound_definitions` closes a changed def over the globals its
+    # import-time calls bind and the defs that read them, refusing any other
+    # import-time evaluation (tested below).
     """`unused_registry_definitions`: a registry's changed definition named
     only by files no lane reaches (the retired multi-GPU drivers) selects no
     lane; one a lane-reached file, or the harness, names still refuses."""
@@ -776,12 +779,15 @@ def test_an_unused_registry_edit_is_inert_only_when_no_reached_file_names_it():
         rev = {reg: {"lane-a"}, public: {"lane-a"}}
         why = ls.unused_registry_definitions(reg, ["_connect_binding"], rev)
         assert why and driver in why
-        rev[driver] = {"lane-b"}                       # a lane reaches the namer: refused
+        assert ls.registry_definition_lanes(reg, ["_connect_binding"], rev)[0] == set()
+        rev[driver] = {"lane-b"}                       # a lane reaches the namer: not inert, it is selected
         assert ls.unused_registry_definitions(reg, ["_connect_binding"], rev) is None
+        assert ls.registry_definition_lanes(reg, ["_connect_binding"], rev)[0] == {"lane-b"}
         del rev[driver]
         ls._TRACKED = set(files) | {ls.HARNESS}        # the harness names it: refused
         ls._searchable.cache[ls.HARNESS] = "def lane():\n    return _connect_binding(0)\n"
         assert ls.unused_registry_definitions(reg, ["_connect_binding"], rev) is None
+        assert ls.registry_definition_lanes(reg, ["_connect_binding"], rev) is None
         assert ls.unused_registry_definitions(reg, [], rev) is None
     finally:
         ls._TRACKED = saved_tracked
@@ -789,6 +795,17 @@ def test_an_unused_registry_edit_is_inert_only_when_no_reached_file_names_it():
         ls._searchable.cache.update(saved_search)
         ls._read.cache.clear()
         ls._read.cache.update(saved_read)
+
+def test_import_bound_definitions_follow_bound_globals_and_refuse_bare_calls():
+    path = "ns_test/shard.py"
+    old = "def _c(n):\n    return n\n\n\n_W = {'a': _c(1)}\n\n\ndef register(ctx):\n    ctx['w'] = _W\n"
+    new = old.replace("return n", "return n + 1")
+    with _Seeded({path: (old, new)}):
+        assert ls.import_bound_definitions(REF, path) == ["_W", "_c", "register"]
+    bare = old + "\n_c(2)\n"
+    with _Seeded({path: (bare, bare.replace("return n", "return n + 1"))}):
+        assert ls.import_bound_definitions(REF, path) is None
+
 
 if __name__ == "__main__":
     failed = 0
@@ -801,3 +818,4 @@ if __name__ == "__main__":
                 failed += 1
                 print("FAIL", name, type(exc).__name__, str(exc)[:200])
     sys.exit(1 if failed else 0)
+
