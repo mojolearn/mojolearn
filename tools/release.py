@@ -2371,6 +2371,58 @@ class Release:
             return doc, None, True
         return None, "; ".join(why) or "no completed leg of an earlier freeze began these units", True
 
+    def admit_published_ptx(self, write=True):
+        """(admission, why not) of THE PUBLISHED PTX SET, taken whole when no
+        PTX binding builds (release_reuse._settle_ptx, lane ptx-reuse
+        2026-11-01). Its leg is the one that built the previous release's PTX
+        bytes, read from the retained proof the plan found (the record's
+        ptx-proof/, else that leg's tree under the evidence root; a record-only
+        proof is materialized from the published wheel's own bytes). It is
+        admitted only when that tree verifies (a complete proof of the commit it
+        built, every device file the proof's bytes), the proof's device bytes are
+        the published wheel's, its device identities are this freeze's and the
+        frozen packer carries HOST_OWNER_ADMISSION: its host bindings are then
+        the host owner's, built at this freeze, and ptx_reuse.rebind_manifest
+        rebinds its original PTX_BASELINE.json to this commit inside assembly."""
+        name = "%s-%s" % release_reuse.PTX_SET
+        vendor, arch = release_reuse.PTX_SET
+        plan = self.plan()
+        proof = (plan or {}).get("ptx_proof")
+        if not proof:
+            return None, "the plan takes no published PTX set"
+        if self.PTX_HOST_OWNER_MARKER not in (file_at(self.commit, "packaging/linux/ptx_reuse.py") or ""):
+            return None, "the frozen source's PTX packer cannot ship the host owner's bytes in the PTX set"
+        if not self.packer_takes_legs():
+            return None, "the frozen source's packer predates leg origins in reuse.json"
+        ident = self.set_identity(vendor, arch)
+        if not ident:
+            return None, "the set identity is unreadable"
+        if self.dry:
+            return None, "dry run: would take the published PTX set with the proof of " + proof["source"]
+        whl = self.previous_wheel("linux")
+        rb = release_reuse.materialize_ptx_leg(proof, whl, self.rel / "reuse" / "ptx-published" / "release-build")
+        ok, reason, proof_sha = verify_leg_tree(rb, vendor, arch, proof["built_from"])
+        if not ok or proof_sha != proof["proof_sha256"]:
+            return None, f"the published PTX set's leg tree does not verify: {reason or 'its proof changed'}"
+        shipped = release_reuse.linux_payload(whl).get("extensions") or {}
+        named = read_json(Path(rb) / release_reuse.PTX_WITNESSES["proof"]).get("extensions") or {}
+        if any(shipped.get(k) != v for k, v in named.items()):
+            return None, "the proof's PTX bytes are not the published wheel's"
+        doc = dict(schema="mojolearn.release-leg-admission.v1", kind="published-ptx", leg=name,
+                   set=f"{vendor}/{arch}", built_from=proof["built_from"], admitted_for=self.commit,
+                   admitted_with_tooling=self.tooling().get("commit"),
+                   because=("no PTX binding builds: the published PTX set is taken whole with the original proof of "
+                            "the leg that built it (" + proof["source"] + "); its device binding identities equal "
+                            "this freeze's and its host bindings are replaced by the host owner's"),
+                   host_from=host_owner_leg(), set_identity_digest=ident["digest"],
+                   tooling_digest=proof.get("tooling_digest") or proof["proof_sha256"],
+                   original_set_identity=proof["original_set_identity"], release_build=str(rb), exit_file=None,
+                   set_dir=str(Path(rb) / "build" / "sets" / vendor / arch), proof_sha256=proof_sha,
+                   provenance=proof["source"], at=now())
+        if write and not self.readonly:
+            write_json(self.admission_path(name), doc)
+        return doc, None
+
     def host_owner_origin(self):
         """{name, dir, origin} of the host owner leg whose host/ ships in every
         set: the one built at THIS freeze, or the one taken whole from an
@@ -2452,6 +2504,20 @@ class Release:
             self.say(f"  {leg.name}: {leg.describe()}  [{self.plan()['leg_reasons'].get(leg.name, '')}]"
                      + (f"  (not reusable: {why})" if why else ""))
             launch.append(leg)
+        ptx_name = "%s-%s" % release_reuse.PTX_SET
+        if ptx_name not in {l.name for l in legs} and (self.plan() or {}).get("ptx_proof") \
+                and not self.admitted_leg(ptx_name):
+            # NO PTX BINDING BUILDS: the published PTX set is taken whole
+            doc, why = self.admit_published_ptx()
+            if doc:
+                taken.append(ptx_name)
+                self.say(f"  {ptx_name}: TAKEN, not launched: the published set built from {doc['built_from'][:12]}, "
+                         f"proved by {doc['provenance']}")
+            elif self.dry:
+                self.say(f"  {ptx_name}: {why}")
+            else:
+                refused.append(f"{ptx_name}: the plan takes the published PTX set and it cannot be admitted: {why}")
+                self.say("  " + refused[-1])
         if self.dry:
             return (f"would launch {len(launch)} leg(s) ({self.args.build_backend})"
                     + (f"; would take {', '.join(taken)} from an earlier freeze" if taken else "")
@@ -2635,10 +2701,11 @@ class Release:
         if bad:
             raise StepFailed("build leg(s) failed: " + ", ".join(bad)
                              + ". Inspect retained evidence; repair or reconcile before another build.")
-        # A leg taken by its compile requirements ships the host owner's host
-        # bindings (linux-assemble replaces its own), so its stale host bytes
-        # are not compared here.
-        shipped = [l for l in taken if (self.admitted_leg(l.name) or {}).get("kind") != "compile-requirements"]
+        # A leg taken by its compile requirements, or the published PTX set
+        # taken whole, ships the host owner's host bindings (linux-assemble
+        # replaces its own), so its stale host bytes are not compared here.
+        shipped = [l for l in taken if (self.admitted_leg(l.name) or {}).get("kind")
+                   not in ("compile-requirements", "published-ptx")]
         owner_taken = any(l.name == host_owner_leg() for l in shipped)
         # A host owner taken whole ships its host/ in every set (linux-assemble,
         # release_reuse.assemble_linux host_owner); the built legs' own host
@@ -2769,7 +2836,8 @@ class Release:
         leg_reuse = {n: dict(dir=Path(d["set_dir"]), origin=self.leg_origin(d)) for n, d in taken.items()}
         host_owner = None
         for n, d in taken.items():
-            if d.get("kind") == "compile-requirements" and not self.dry:
+            if (d.get("kind") == "compile-requirements" or (d.get("kind") == "published-ptx" and d.get("host_from"))) \
+                    and not self.dry:
                 leg_reuse[n]["host_from"] = self.host_owner_origin()
         owner_doc = taken.get(host_owner_leg())
         if owner_doc and owner_doc.get("kind") != "compile-requirements" and built and not self.dry:
@@ -3424,6 +3492,20 @@ class Release:
         return "; ".join(done) + (f"; not yet published: {', '.join(pending)}" if pending else ""), \
             dict(platforms=published)
 
+    def shipped_ptx_leg(self):
+        """record_ptx_proof's arguments for the leg whose PTX set this freeze
+        shipped: the leg taken (its original build) or the leg built here."""
+        name = "%s-%s" % release_reuse.PTX_SET
+        doc = self.admitted_leg(name)
+        if doc:
+            return dict(leg_name=name, built_from=doc["built_from"], release_build=doc["release_build"],
+                        set_identity=doc.get("original_set_identity"), tooling_digest=doc.get("tooling_digest"))
+        prov = read_json(self.rel / "legs" / f"{name}.provenance.json")
+        if prov and prov.get("release_build") and prov.get("source_commit") == self.commit:
+            return dict(leg_name=name, built_from=prov["source_commit"], release_build=prov["release_build"],
+                        set_identity=prov.get("set_identity"), tooling_digest=prov.get("tooling_digest"))
+        return None
+
     def release_provenance(self):
         legs = {}
         for v, a in release_reuse.LINUX_SETS:
@@ -3665,6 +3747,19 @@ class Release:
         linux = [self.split_final(k) for k in SPLIT_PACKAGES if k in published]
         release_reuse.record_identities(self.plan(), linux, self.macos_wheel() if "macos" in published else None,
                                         rec / "binding-identities.json")
+        # THE PTX SET'S ORIGINAL PROOF (lane ptx-reuse, 2026-11-01): the build
+        # proof, PTX_BASELINE.json and stage manifest of the leg whose PTX bytes
+        # shipped, so the next release can take the published PTX set from this
+        # record alone (release_reuse.ptx_proof_source) when no PTX binding builds.
+        if "nvidia-ptx" in published:
+            leg = self.shipped_ptx_leg()
+            if leg:
+                try:
+                    self.say("  retained the PTX proof: " + str(release_reuse.record_ptx_proof(rec, **leg)))
+                except (OSError, ValueError, KeyError, SystemExit) as exc:
+                    self.say(f"  NOTE the PTX proof is not retained ({exc}); the next release builds its PTX set")
+            else:
+                self.say("  NOTE no PTX leg named for the shipped PTX set; the next release builds its PTX set")
         self.must(["git", "-C", ROOT, "add", "--", rec], what="git add record")
         self.must(["git", "-C", ROOT, "commit", "-q", "-m",
                    f"Record the published {self.version} wheels ({', '.join(published)}) and their release verification",

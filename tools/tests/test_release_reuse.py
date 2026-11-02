@@ -239,14 +239,17 @@ class DecisionTests(unittest.TestCase):
     def test_python_only_release_rents_nothing(self):
         prev = self.record(self.cur, dict(xcode="16"))
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
-        # THE PTX SET IS BUILT EVERY RELEASE (its manifest binds the source commit):
-        # its leg is the only one a Python-only release launches, and it needs no GPU.
-        # Without the PTX slot in the release, a Python-only release launches nothing.
+        # A PYTHON-ONLY RELEASE WITHOUT A RETAINED PTX PROOF builds the PTX set
+        # (its manifest binds the source commit): its leg is the only one it
+        # launches, and it needs no GPU. Without the PTX slot it launches nothing.
+        # With a retained proof (tests/test_release_reuse_ptx_per_binding.py)
+        # the published set is taken when the host owner leg runs.
         self.assertEqual(plan["legs"], PTX_LEGS)
         ptx = [r for r in plan["rows"] if (r["vendor"], r["arch"]) == rr.PTX_SET]
         self.assertEqual(bool(ptx), SHIPS_PTX)
         if SHIPS_PTX:
-            self.assertEqual({(r["decision"], r["reason"]) for r in ptx}, {("BUILD", PTX_REASON)})
+            self.assertEqual({r["decision"] for r in ptx}, {"BUILD"})
+            self.assertTrue(all(r["reason"].startswith(PTX_REASON + ": ") for r in ptx))
         self.assertEqual({r["decision"] for r in plan["rows"] if (r["vendor"], r["arch"]) != rr.PTX_SET}, {"REUSE"})
         self.assertEqual(plan["runtime"]["decision"], "REUSE")
         text = rr.render(plan, full=True)

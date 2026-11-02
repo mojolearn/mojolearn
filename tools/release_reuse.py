@@ -107,9 +107,29 @@ MACOS = "osx-arm64"
 #: normal target; no flag) and gfx942 (python/mojolearn/gpu_plugins.py; sm_90a out from 0.8.38: PyPI 100 MiB limit).
 #: PTX ships in its own exactly pinned wheel, under the per-file upload limit.
 LINUX_SETS = (("cuda", "sm_89"), ("cuda", "sm_80"), ("hip", "gfx942"))
-#: PTX reuse needs an original completed-leg proof; wheel-only reuse is unproved.
+#: THE PTX SET REUSES PER BINDING LIKE EVERY OTHER SET (lane ptx-reuse, 2026-11-01).
+#: A PTX row whose identity equals the previous release's is REUSE. When some
+#: PTX binding builds, the PTX leg runs and its own build proof and
+#: PTX_BASELINE.json cover the set (a reused merged file must reproduce, as on
+#: sm_89). When NO PTX binding builds, no leg runs and the set is the published
+#: one, whose PTX_BASELINE.json binds the old source commit; it is rebound for
+#: this release (packaging/linux/ptx_reuse.rebind_manifest) from the ORIGINAL
+#: build proof, PTX_BASELINE.json and stage manifest of the leg that built the
+#: published bytes. The plan reuses the set that way only when that proof is
+#: retained (ptx_proof_source: the release record's ptx-proof/, written by every
+#: release from 0.8.64 on, else the leg tree under the evidence root), it names
+#: exactly the bytes the release shipped, its leg built today's device
+#: identities, the runtime closure is unchanged and the host owner leg runs
+#: (its host bindings replace the PTX leg's, HOST_OWNER_ADMISSION).
 PTX_SET = ("cuda", "sm_80")
-PTX_REASON = "published PTX reuse needs a retained whole-set build proof; completed legs are admitted separately"
+PTX_REASON = "the published PTX set is not taken"
+#: The record directory that retains that proof (record_ptx_proof).
+PTX_PROOF_DIR = "ptx-proof"
+PTX_PROOF_SCHEMA = "mojolearn.ptx-set-proof.v1"
+#: The original witnesses rebind_manifest needs, relative to a leg's release-build.
+PTX_WITNESSES = {"proof": "build/build-provenance.json",
+                 "baseline": "build/sets/cuda/sm_80/PTX_BASELINE.json",
+                 "stage": "build/sets/cuda/sm_80/manifest.json"}
 #: The leg that builds when only a host binding or the runtime needs one.
 HOST_LEG = ("cuda", "sm_89")
 LINUX_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
@@ -950,6 +970,229 @@ def upgrade_v1(rows, runtime, commit, cache_dir, root=ROOT):
     return out, runtime, n
 
 
+# ---------------------------------------------------------------- the PTX proof
+def _read_json(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def shipped_ptx(prev):
+    """{canonical archive path: sha256} of the PTX device files the previous
+    release shipped, from its record's binding-identities.json, or None when
+    the record does not name them (a candidate's plan.json, an older record)."""
+    doc = _read_json(prev.get("identities")) if prev.get("identities") else None
+    prefix = "mojolearn/%s/%s/" % PTX_SET
+    out = {}
+    for r in (doc or {}).get("rows", []):
+        path, digest = r.get("shipped_archive_path"), r.get("shipped_sha256")
+        if not path or not digest:
+            continue
+        path = legacy_archive_path(path)
+        if path.startswith(prefix) and "/host/" not in path[len(prefix) - 1:]:
+            if out.setdefault(path, digest) != digest:
+                return None
+    return out or None
+
+
+def _proof_complete(proof, built_from):
+    """The leg-tree test of tools/release.py verify_leg_tree, on the proof alone."""
+    from staged_native_admission import SCHEMA as STAGED_SCHEMA, complete_native_proof
+    ok = (complete_native_proof(proof) if proof.get("schema") == STAGED_SCHEMA
+          else proof.get("complete") is True and proof.get("build_exit") == 0)
+    return ok and proof.get("source_commit") == built_from
+
+
+def _check_ptx_proof(proof, built_from, identity, shipped):
+    """Why a proof cannot prove the published PTX set, or None."""
+    if not isinstance(proof, dict) or not _proof_complete(proof, built_from):
+        return "its build proof is incomplete or not of " + str(built_from)[:12]
+    if shipped is not None and proof.get("extensions") != shipped:
+        return "its build proof names other PTX bytes than the release shipped"
+    ident = normalized_set_identity(identity)
+    if ident is None or ident["set"] != "%s/%s" % PTX_SET:
+        return "its leg's set identity is missing or unreadable"
+    return None
+
+
+def _ptx_leg_docs(prev, evidence_root):
+    """(where, built_from, release_build, set identity) of the leg whose PTX set
+    the previous build shipped: the admission (a taken leg) or provenance (a
+    built leg) in the freeze directory that published it."""
+    dirs = []
+    if prev.get("build_dir"):
+        dirs.append(Path(prev["build_dir"]))
+    if evidence_root and prev.get("version") and prev.get("source_commit"):
+        dirs.append(Path(evidence_root) / "release" / prev["version"] / prev["source_commit"][:12])
+    out, seen = [], set()
+    for d in dirs:
+        if d in seen:
+            continue
+        seen.add(d)
+        name = "%s-%s" % PTX_SET
+        taken = _read_json(d / "legs" / f"{name}.reused.json")
+        if taken and taken.get("release_build"):
+            out.append((str(d / "legs" / f"{name}.reused.json"), taken.get("built_from"), taken["release_build"],
+                        taken.get("original_set_identity"), taken.get("tooling_digest")))
+            continue
+        built = _read_json(d / "legs" / f"{name}.provenance.json")
+        if built and built.get("release_build") and built.get("source_commit") == prev.get("source_commit"):
+            out.append((str(d / "legs" / f"{name}.provenance.json"), built["source_commit"], built["release_build"],
+                        built.get("set_identity"), built.get("tooling_digest")))
+    return out
+
+
+def ptx_proof_source(prev, evidence_root=None):
+    """(proof, None) or (None, what is missing): the original build proof,
+    PTX_BASELINE.json and stage manifest of the leg that built the PTX set the
+    previous build `prev` shipped, with that leg's set identity. Taken from the
+    release record's ptx-proof/ (record_ptx_proof) when it has one, else from
+    the leg tree retained under `evidence_root`. The proof must be complete for
+    the commit its leg built and, when the record names the shipped PTX bytes,
+    name exactly those bytes."""
+    if not prev:
+        return None, "no previous release"
+    shipped = shipped_ptx(prev)
+    recorded = None
+    if prev.get("record_dir"):
+        prov = _read_json(Path(prev["record_dir"]) / "release-provenance.json") or {}
+        leg = (prov.get("legs") or {}).get("%s-%s" % PTX_SET) or {}
+        recorded = leg.get("built_from") or leg.get("source_commit")
+        index = Path(prev["record_dir"]) / PTX_PROOF_DIR / "ptx-proof.json"
+        doc = _read_json(index)
+        if doc:
+            import gzip
+            why = None
+            witnesses = {}
+            if doc.get("schema") != PTX_PROOF_SCHEMA:
+                why = "its ptx-proof.json is not " + PTX_PROOF_SCHEMA
+            for key in PTX_WITNESSES if why is None else ():
+                row = (doc.get("witnesses") or {}).get(key) or {}
+                path = index.parent / str(row.get("file", ""))
+                try:
+                    data = gzip.decompress(path.read_bytes())
+                except (OSError, EOFError, ValueError):
+                    why = f"its retained {key} witness {path.name} is missing or unreadable"
+                    break
+                if hashlib.sha256(data).hexdigest() != row.get("sha256"):
+                    why = f"its retained {key} witness {path.name} is not the bytes ptx-proof.json names"
+                    break
+                witnesses[key] = dict(file=str(path), sha256=row["sha256"], data=data)
+            if why is None:
+                why = _check_ptx_proof(json.loads(witnesses["proof"]["data"]), doc.get("built_from"),
+                                       doc.get("set_identity"), shipped)
+            if why is None and recorded and recorded != doc.get("built_from"):
+                why = "its ptx-proof.json names another leg than release-provenance.json"
+            if why is None:
+                return dict(source="record " + str(index), built_from=doc["built_from"], release_build=None,
+                            proof_sha256=witnesses["proof"]["sha256"], original_set_identity=doc["set_identity"],
+                            tooling_digest=doc.get("tooling_digest"), shipped=shipped,
+                            witnesses={k: dict(file=w["file"], sha256=w["sha256"]) for k, w in witnesses.items()}), None
+            return None, f"{prev.get('version')}'s retained PTX proof {index} cannot be used: {why}"
+    why = []
+    for where, built_from, release_build, ident, tooling in _ptx_leg_docs(prev, evidence_root):
+        if recorded and built_from != recorded:
+            why.append(f"{where}: names {str(built_from)[:12]}, the record {recorded[:12]}")
+            continue
+        rb = Path(release_build)
+        missing = [rel for rel in PTX_WITNESSES.values() if not (rb / rel).is_file()]
+        if missing:
+            why.append(f"{where}: no {', '.join(missing)} under {rb}")
+            continue
+        reason = _check_ptx_proof(_read_json(rb / PTX_WITNESSES["proof"]), built_from, ident, shipped)
+        if reason:
+            why.append(f"{where}: {reason}")
+            continue
+        return dict(source="leg tree " + where, built_from=built_from, release_build=str(rb),
+                    proof_sha256=sha256(rb / PTX_WITNESSES["proof"]), original_set_identity=ident,
+                    tooling_digest=tooling, shipped=shipped,
+                    witnesses={k: dict(file=str(rb / rel), sha256=sha256(rb / rel))
+                               for k, rel in PTX_WITNESSES.items()}), None
+    where = (f"no {PTX_PROOF_DIR}/ptx-proof.json in its record" if prev.get("record_dir") else "no release record")
+    where += (" and no retained PTX leg tree under " + str(Path(evidence_root) / "release" / str(prev.get("version")))
+              if evidence_root else " and no evidence root to look for its PTX leg tree")
+    return None, f"{prev.get('version')}: " + ("; ".join(why) if why else where)
+
+
+def record_ptx_proof(rec_dir, leg_name, built_from, release_build, set_identity, tooling_digest=None):
+    """Retain, in the release record, the original witnesses of the leg whose
+    PTX set this release shipped (gzip, sha256 of the raw bytes), so the next
+    release can take the published PTX set without this machine's evidence
+    root (ptx_proof_source). Returns the index path."""
+    import gzip
+    out = Path(rec_dir) / PTX_PROOF_DIR
+    out.mkdir(parents=True, exist_ok=True)
+    witnesses = {}
+    for key, rel in PTX_WITNESSES.items():
+        data = (Path(release_build) / rel).read_bytes()
+        name = Path(rel).name + ".gz"
+        # mtime=0: the same witness always writes the same bytes
+        (out / name).write_bytes(gzip.compress(data, mtime=0))
+        witnesses[key] = dict(file=name, sha256=hashlib.sha256(data).hexdigest())
+    proof = json.loads((Path(release_build) / PTX_WITNESSES["proof"]).read_text())
+    if not _proof_complete(proof, built_from):
+        raise SystemExit(f"release_reuse: the PTX leg {leg_name}'s proof is incomplete or not of {built_from[:12]}")
+    doc = dict(schema=PTX_PROOF_SCHEMA, leg=leg_name, built_from=built_from, set_identity=set_identity,
+               tooling_digest=tooling_digest, witnesses=witnesses, extensions=proof.get("extensions"))
+    (out / "ptx-proof.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
+    return out / "ptx-proof.json"
+
+
+def materialize_ptx_leg(proof, whl, dest):
+    """A leg tree (dest/build/build-provenance.json and
+    dest/build/sets/cuda/sm_80/) of the leg that built the published PTX set,
+    from the retained witnesses and the published wheel's own bytes: every
+    device file and index the proof names, the runtime closure the stage
+    manifest lists and any adapters the proof names, each verified against the
+    proof or the wheel's payload. A tree retained under the evidence root is
+    returned as it is. Returns the release-build directory."""
+    if proof.get("release_build"):
+        return Path(proof["release_build"])
+    import gzip
+    dest = Path(dest)
+    if dest.exists():
+        shutil.rmtree(dest)
+    for key, rel in PTX_WITNESSES.items():
+        w = proof["witnesses"][key]
+        data = gzip.decompress(Path(w["file"]).read_bytes())
+        if hashlib.sha256(data).hexdigest() != w["sha256"]:
+            raise SystemExit(f"release_reuse: the retained PTX {key} witness changed")
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        (dest / rel).write_bytes(data)
+    doc = json.loads((dest / PTX_WITNESSES["proof"]).read_text())
+    stage = json.loads((dest / PTX_WITNESSES["stage"]).read_text())
+    sdir = dest / "build" / "sets" / PTX_SET[0] / PTX_SET[1]
+    prefix = "mojolearn/%s/%s/" % PTX_SET
+    payload = linux_payload(whl)
+    with zipfile.ZipFile(whl) as z:
+        members = set(z.namelist())
+        for name, want in sorted((doc.get("extensions") or {}).items()):
+            if name not in members or not name.startswith(prefix):
+                raise SystemExit(f"release_reuse: the published wheel has no {name} the PTX proof names")
+            extract_member(z, name, sdir / name[len(prefix):], want)
+        for name, row in sorted((doc.get("merged_indexes") or {}).items()):
+            if not name.startswith(prefix) or name[len(prefix):].startswith("host/"):
+                continue
+            if name not in members:
+                raise SystemExit(f"release_reuse: the published wheel has no {name} the PTX proof names")
+            extract_member(z, name, sdir / name[len(prefix):], row.get("sha256"))
+        shared = payload.get("runtime_layout") == "shared"
+        libs = "mojolearn/.libs/" if shared else f"mojolearn/{PTX_SET[0]}/.libs/"
+        for rec in stage.get("staged_libs") or []:
+            name = libs + str(rec.get("name"))
+            if name not in members or "/" in str(rec.get("name")):
+                raise SystemExit(f"release_reuse: the published wheel has no runtime library {name}")
+            extract_member(z, name, sdir / ".libs" / rec["name"], rec.get("sha256"))
+        for key, row in sorted((doc.get("adapters") or {}).items()):
+            for fname, want in sorted((row.get("files") or {}).items()):
+                name = key + "/" + fname
+                if name not in members:
+                    raise SystemExit(f"release_reuse: the published wheel has no adapter {name}")
+                extract_member(z, name, sdir / name[len(prefix):], want)
+    return dest
+
+
 # ---------------------------------------------------------------- the plan
 def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None,
               evidence_root=None, candidates=None, modes=None):
@@ -994,7 +1237,7 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     plans = []
     for src in sources:
         try:
-            plans.append(_decide(commit, root, cache_dir, facts, current, rt, src))
+            plans.append(_decide(commit, root, cache_dir, facts, current, rt, src, evidence_root))
         except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
             if src is prev:
                 raise
@@ -1009,6 +1252,20 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
                        chosen=p is best) for p in plans if p["source"] is not None]
     rows, runtime, prev, prev_source = best["rows"], best["runtime"], best["source"], best["prev_source"]
     rt_decision = runtime["decision"]
+    ptx_proof = best.get("ptx_proof")
+    # A PUBLISHED PTX SET TAKEN WHOLE ships the host owner's host bindings
+    # (ptx_reuse.HOST_OWNER_ADMISSION): the owner leg must run at this freeze
+    # (a device binding of its set builds, or it is the cheapest leg for a host
+    # or runtime build). Otherwise the PTX leg builds, as before.
+    host_leg_runs = any(r["target"] == LINUX and r["tier"] != "host" and r["decision"] == "BUILD"
+                        and (r["vendor"], r["arch"]) == HOST_LEG for r in rows) or (
+        not any(r["target"] == LINUX and r["tier"] != "host" and r["decision"] == "BUILD"
+                and (r["vendor"], r["arch"]) not in (HOST_LEG, PTX_SET) for r in rows)
+        and any(r["target"] == LINUX and r["tier"] == "host" and r["decision"] == "BUILD" for r in rows))
+    if ptx_proof and not host_leg_runs:
+        _refuse_ptx(rows, "the published set is taken with the host owner's host bindings and no %s-%s leg runs "
+                    "at this freeze" % HOST_LEG)
+        ptx_proof = None
     legs, why = [], {}
     for vendor, arch in LINUX_SETS:
         need = [r for r in rows if r["target"] == LINUX and not r["tier"] == "host"
@@ -1024,11 +1281,11 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
             " need a build box and no set does: the cheapest leg builds them"
     return dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
-                legs=legs, leg_reasons=why, host_toolchain=host_toolchain,
+                legs=legs, leg_reasons=why, ptx_proof=ptx_proof, host_toolchain=host_toolchain,
                 builders_override=dict(sorted((builders_override or {}).items())), release_modes=list(modes))
 
 
-def _decide(commit, root, cache_dir, facts, current, rt, prev):
+def _decide(commit, root, cache_dir, facts, current, rt, prev, evidence_root=None):
     """Rows and runtime of a plan of `commit` against one source build `prev`
     (None: no published record), and its score (REUSE rows + runtime)."""
     if prev:
@@ -1047,14 +1304,9 @@ def _decide(commit, root, cache_dir, facts, current, rt, prev):
             decision, reason = "BUILD", "no published release record"
         elif prev.get("linux" if target == LINUX else "macos") is None:
             decision, reason = "BUILD", "the previous release published no %s wheel" % target
-        elif (b.vendor, b.arch) == PTX_SET:
-            # A completed leg can supply its original build/manifest witnesses
-            # at assembly, with a fresh core admission. A published wheel alone
-            # does not supply that proof. Preserve actual input-change reasons.
-            decision, reason = compare(cur, old)
-            if decision == "REUSE":
-                decision, reason = "BUILD", PTX_REASON
         else:
+            # the PTX set too (PTX_SET): what proves a whole published PTX set is
+            # settled below, once every row and the runtime are decided
             decision, reason = compare(cur, old)
         if decision == "BUILD" and reason.startswith("changed: closure"):
             closure = facts["closures"].get(b.script) or {}
@@ -1088,8 +1340,48 @@ def _decide(commit, root, cache_dir, facts, current, rt, prev):
     runtime = dict(decision=rt_decision, reason=rt_reason, identity=rt, identity_digest=digest_of(rt),
                    previous_digest=digest_of(prev_runtime) if prev_runtime else None,
                    reuse_from=dict(origin) if rt_decision == "REUSE" else None)
+    ptx_proof = _settle_ptx(rows, rt_decision, prev, evidence_root, origin)
     score = sum(r["decision"] == "REUSE" for r in rows) + (rt_decision == "REUSE")
-    return dict(source=prev, rows=rows, runtime=runtime, prev_source=prev_source, score=score)
+    return dict(source=prev, rows=rows, runtime=runtime, prev_source=prev_source, score=score, ptx_proof=ptx_proof)
+
+
+def _ptx_device_rows(rows):
+    return [r for r in rows if r["target"] == LINUX and r["tier"] != "host" and (r["vendor"], r["arch"]) == PTX_SET]
+
+
+def _refuse_ptx(rows, why):
+    for r in _ptx_device_rows(rows):
+        if r["decision"] == "REUSE":
+            r.update(decision="BUILD", reason=PTX_REASON + ": " + why, reuse_from=None)
+
+
+def _settle_ptx(rows, rt_decision, prev, evidence_root, origin):
+    """The PTX rows of a plan against `prev`, after every row is decided.
+
+    A PTX binding with an unchanged identity is REUSE, like any other. When
+    some PTX binding builds, the PTX leg runs and proves its whole set: nothing
+    more is needed. When none builds, the set is the published one, taken
+    whole with its rebound PTX_BASELINE.json; that needs the leg's retained
+    original proof (ptx_proof_source) whose set identity has today's device
+    identities, and an unchanged runtime closure (the original stage manifest
+    lists the runtime bytes). Without them every PTX row builds, with the
+    missing input named. Returns the proof source (its summary) or None."""
+    ptx = _ptx_device_rows(rows)
+    if not ptx or any(r["decision"] != "REUSE" for r in ptx):
+        return None
+    if rt_decision != "REUSE":
+        _refuse_ptx(rows, "the runtime closure changes, so the published set's original stage inventory does not hold")
+        return None
+    proof, why = ptx_proof_source(prev, evidence_root)
+    if proof is None:
+        _refuse_ptx(rows, "no retained build proof of the leg that built it: " + why)
+        return None
+    original = normalized_set_identity(proof["original_set_identity"])["bindings"]
+    moved = [r["name"] for r in ptx if original.get(r["key"]) != r["identity_digest"]]
+    if moved:
+        _refuse_ptx(rows, "the leg that built the published PTX set built other inputs for " + ", ".join(moved[:4]))
+        return None
+    return {k: v for k, v in proof.items() if k != "shipped"}
 
 
 def set_identity(plan, vendor, arch):
@@ -1154,9 +1446,11 @@ def render(plan, full=False):
         n_r = sum(r["decision"] == "REUSE" for r in rs)
         n_b = len(rs) - n_r
         leg = ""
-        if name in ("cuda/sm_90a", "cuda/sm_89", "hip/gfx942"):
+        if name in ("cuda/sm_90a", "cuda/sm_89", "cuda/sm_80", "hip/gfx942"):
             leg_name = name.replace("/", "-")
             leg = leg_name + ": " + plan["leg_reasons"][leg_name] if leg_name in plan["legs"] else "none"
+            if name == "%s/%s" % PTX_SET and leg_name not in plan["legs"] and plan.get("ptx_proof"):
+                leg = "none: the published set, rebound from " + plan["ptx_proof"]["source"]
         out.append("   %-20s %5d %5d  %s" % (name, n_r, n_b, leg))
     rt = plan["runtime"]
     out.append("   %-20s %5d %5d  %s" % ("runtime .libs", rt["decision"] == "REUSE", rt["decision"] == "BUILD", rt["reason"]))
@@ -1302,6 +1596,90 @@ def _take_owner_host(sdir, key, host_from):
     shutil.copytree(owner_dir / "host", sdir / "host", symlinks=False)
 
 
+MERGED_INDEX = "_mojolearn_merged.json"
+
+
+def published_group(z, members, payload, row):
+    """(group archive path, its members, index archive path) of the merged
+    file that ships a binding in a merged published wheel, or None when the
+    wheel ships the binding as its own file. A merged wheel
+    (MOJOLEARN_MERGED_BINDINGS, the Linux default since 2026-10-26) has no
+    per-binding member: its unit of reuse is the merged file, taken only when
+    every binding it serves is REUSE (place_merged)."""
+    if row["archive_path"] in members:
+        return None
+    adir = row["archive_path"].rsplit("/", 1)[0]
+    index = adir + "/" + MERGED_INDEX
+    if index not in members:
+        return None
+    doc = json.loads(z.read(index))
+    files = doc.get("files")
+    if doc.get("format") != 1 or not isinstance(files, dict):
+        raise SystemExit(f"release_reuse: invalid merged index {index} in the published wheel")
+    found = [g for g, ms in files.items() if isinstance(ms, list) and row["name"] in ms]
+    if len(found) != 1 or Path(found[0]).name != found[0] or not found[0].endswith(".so"):
+        raise SystemExit(f"release_reuse: the published merged index {index} must name {row['name']} exactly once")
+    return adir + "/" + found[0], list(files[found[0]]), index
+
+
+def published_index_sha(payload, index):
+    for name, rec in (payload.get("merged_indexes") or {}).items():
+        if legacy_archive_path(name) == index:
+            return (rec or {}).get("sha256")
+    return None
+
+
+def place_merged(z, members, payload, sdir, key, vendor, rows_here, group, reused, built, say):
+    """Place one published merged file into set SDIR when EVERY binding it
+    serves is REUSE in this plan (else the file is built: its bytes stay the
+    leg's, and `built` says whether a leg built them). As for a per-binding
+    file, an NVIDIA rebuild must reproduce the published bytes. The published
+    index ships beside it unless the leg wrote one with the same file map."""
+    garch, names, index = group
+    by_name = {r["name"]: r for r in rows_here}
+    member_rows = [by_name.get(n) for n in names]
+    rel_dir = Path(next(r for r in member_rows if r is not None)["set_rel"]).parent
+    target = sdir / rel_dir / Path(garch).name
+    if any(r is None or r["decision"] != "REUSE" for r in member_rows):
+        if not built or not target.is_file():
+            missing = [n for n, r in zip(names, member_rows) if r is None or r["decision"] != "REUSE"]
+            raise SystemExit(f"release_reuse: {key} {Path(garch).name} serves {', '.join(missing[:4])} to BUILD "
+                             "and no leg built it")
+        say(f"  {key} {(rel_dir / Path(garch).name).as_posix()}: built by the leg (it also serves a binding to BUILD)")
+        return
+    want = (payload.get("extensions") or {}).get(garch)
+    if want is None:
+        # a merged host file: every host binding it serves names it and its sha256
+        hosts = {(h or {}).get("sha256") for h in (payload.get("host_native") or {}).values()
+                 if legacy_archive_path((h or {}).get("archive_path") or "") == garch}
+        want = hosts.pop() if len(hosts) == 1 else None
+    if want is None:
+        raise SystemExit(f"release_reuse: {garch} is not in the published wheel's payload")
+    rebuilt = sha256(target) if target.is_file() else None
+    got = extract_member(z, garch, target, want)
+    owner_only = all(str(r.get("reason", "")).startswith("release owner:") for r in member_rows)
+    if rebuilt is not None and rebuilt != got:
+        if vendor in ("cuda", "cpu") and not owner_only:
+            raise SystemExit(f"release_reuse: the {key} leg rebuilt {target.name} with different bytes "
+                             f"({rebuilt[:12]} against the published {got[:12]}) although every binding it serves "
+                             "has an unchanged identity; an NVIDIA rebuild must reproduce. Find the cause before reusing.")
+        say(f"  NOTE {key} {target.name}: the leg's rebuild differs ({rebuilt[:12]}); the published bytes "
+            f"{got[:12]} are packed")
+    rel = (rel_dir / target.name).as_posix()
+    reused[rel] = dict(sha256=got, archive_path=garch, rebuilt_sha256=rebuilt,
+                       binding_identities={r["name"]: r["identity_digest"] for r in member_rows})
+    published = json.loads(z.read(index))
+    mine = sdir / rel_dir / MERGED_INDEX
+    if mine.is_file():
+        if (json.loads(mine.read_text()).get("files") or {}) != published.get("files"):
+            raise SystemExit(f"release_reuse: the {key} leg's {(rel_dir / MERGED_INDEX).as_posix()} maps other "
+                             "files than the published one; a published merged file cannot ship beside it")
+    else:
+        irel = (rel_dir / MERGED_INDEX).as_posix()
+        reused[irel] = dict(sha256=extract_member(z, index, mine, published_index_sha(payload, index)),
+                            archive_path=index)
+
+
 def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None, host_owner=None):
     """The set directories pack_wheel.py packs, one per (vendor, arch): a
     leg's set copied whole when the leg ran, the set of a completed leg of an
@@ -1404,8 +1782,16 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None, host_owner=
                 sdir.mkdir(parents=True)
             if not leg and not old and any(r["decision"] != "REUSE" for r in gpu):
                 raise SystemExit(f"release_reuse: {key} has bindings to BUILD and no leg ran")
+            placed = set()
             for r in gpu:
                 if r["decision"] != "REUSE":
+                    continue
+                group = published_group(z, members, payload, r)
+                if group is not None:
+                    if group[0] not in placed:
+                        placed.add(group[0])
+                        place_merged(z, members, payload, sdir, key, vendor, gpu, group, reused,
+                                     bool(leg or old), say)
                     continue
                 want = payload.get("extensions", {}).get(r["archive_path"])
                 if want is None or r["archive_path"] not in members:
@@ -1446,6 +1832,13 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None, host_owner=
             for r in host_rows:
                 rec = payload.get("host_native", {}).get(r["name"], {})
                 target = sdir / r["set_rel"]
+                group = published_group(z, members, payload, r) if r["decision"] == "REUSE" else None
+                if group is not None:
+                    if group[0] not in placed:
+                        placed.add(group[0])
+                        place_merged(z, members, payload, sdir, key, "cpu", host_rows, group, reused,
+                                     bool(binding_files(sdir, r)), say)
+                    continue
                 if r["decision"] == "REUSE":
                     want = rec.get("sha256")
                     if want is None or r["archive_path"] not in members:
@@ -1508,7 +1901,8 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None, host_owner=
                 else:
                     raise SystemExit("release_reuse: the runtime closure must be built and no leg built it")
             if not leg and not old:
-                exts = [sdir / r["set_rel"] for r in gpu]
+                # the physical files (a merged set ships one file per group)
+                exts = sorted({f for r in gpu for f in binding_files(sdir, r) if f.suffix == ".so"})
                 staged = [dict(name=p.name, sha256=sha256(p), bytes=p.stat().st_size) for p in sorted(libs.iterdir())]
                 manifest = dict(schema="mojolearn.linux.reused-set-manifest.v1", set=str(sdir), reused_from=origin,
                                 bytes_extensions=sum(p.stat().st_size for p in exts),
