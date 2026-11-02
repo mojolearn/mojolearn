@@ -511,6 +511,73 @@ def record_sources(dirs):
     return out
 
 
+#: Parts a column may simply not carry (_verify_reference.OPTIONAL_PARTS): a
+#: cell part with no column of this class is the class never having run it,
+#: which a column record of the class is not refused for either.
+_OPTIONAL_PARTS = ("batchgrad", "batchscale", "ragged", "rlpair")
+
+
+def harness_sha256(h):
+    """sha256 of the harness source `h` was loaded from (None for a stand-in)."""
+    path = getattr(h, "__file__", None)
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest() if path else None
+
+
+@lru_cache(maxsize=1)
+def is_shallow():
+    """True for a depth-limited checkout (the box trees: `git fetch --depth=1`)."""
+    return _git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
+
+
+def _has_commit(commit):
+    return _git("cat-file", "-e", commit + "^{commit}").returncode == 0
+
+
+def deepen_for_reuse(points, log=lambda s: None):
+    """THE REPO ALONE IS ENOUGH TO REUSE (0.8.64: the AMD droplet's depth-1 tree
+    reused 0 of 513 lanes, every record and table commit "not in this
+    repository"). On a shallow checkout, fetch HEAD's history back to the
+    oldest reuse commit chosen (one day of slack for merge dates) from the
+    checkout's own remote, so the closure diffs (`ref...HEAD`), the release
+    floor's ancestry and the old file bytes lane_select reads all exist. A
+    failed fetch leaves the tree as it was: every lane whose commit is still
+    absent is then re-recorded, never reused unchecked. Then the release tags
+    whose commits the deepened history holds are named locally (from
+    `git ls-remote`, no object fetched), so release_floor sees them.
+    Returns the number of chosen commits now reachable from HEAD."""
+    if not is_shallow() or not points:
+        return None
+    import time
+    remote = os.environ.get("MOJOLEARN_IDENTITY_REUSE_REMOTE", "origin")
+    commits = sorted({p["commit"] for p in points.values()})
+    since = min(p["time"] for p in points.values()) - 86400
+    head = _git("rev-parse", "HEAD").stdout.strip()
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S +0000", time.gmtime(since))
+    res = _git("fetch", "-q", "--no-tags", f"--shallow-since={stamp}", remote, head)
+    if res.returncode != 0:
+        log(f"# reuse: shallow checkout: could not deepen from {remote} since {stamp} "
+            f"({(res.stderr or '').strip()[:200]}); lanes resting on absent commits are re-recorded")
+    reach = sum(_has_commit(c) and is_ancestor(c, "HEAD") for c in commits)
+    named = 0
+    tags = _git("ls-remote", "--tags", remote, "refs/tags/alpha-api-*")
+    if tags.returncode == 0:
+        peeled = {}
+        for line in tags.stdout.splitlines():
+            sha, _, ref = line.partition("\t")
+            name = ref.strip()
+            if name.endswith("^{}"):
+                peeled[name[:-3]] = sha
+            else:
+                peeled.setdefault(name, sha)
+        for ref, sha in sorted(peeled.items()):
+            if ("-nvidia-" in ref or "-amd-" in ref) and _has_commit(sha) and \
+                    _git("rev-parse", "-q", "--verify", ref).returncode != 0:
+                named += _git("update-ref", ref, sha).returncode == 0
+    log(f"# reuse: shallow checkout deepened from {remote} since {stamp}: {reach} of {len(commits)} "
+        f"reuse commit(s) reachable from HEAD, {named} release tag(s) named")
+    return reach
+
+
 def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
     """REUSE GOOD OLD RUNS (Andrew 2026-10-31): for each lane, the newest
     evidence this device class already holds.
@@ -521,13 +588,29 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
       * every admissible column record of class `cls` under `record_dirs`
         (bench/results/identity_break, its retained/ copies, the output dir,
         MOJOLEARN_IDENTITY_REUSE_RECORDS), per lane that the record covers.
-    The newest by commit time wins. A lane absent from every source is owed."""
+    The newest by commit time wins. A lane absent from every source is owed.
+
+    A table row counts only when the table admitted the lane with THIS
+    harness (lane_admission[lane].harness_sha256, else the table's), so its
+    fixtures and lane definitions are the ones a record would be checked
+    against; a part this class never carried is skipped only when it is an
+    optional part. On a shallow checkout a commit git does not hold yet takes
+    the commit time the table recorded for it (deepen_for_reuse then fetches
+    the history the closure diff needs)."""
     v = vref()
     cache = {}
     best = {}
+    records = table.get("records") or []
+    table_times = {}
+    for r in records:
+        if r.get("commit") and str(r.get("commit_time", "")).isdigit():
+            table_times[r["commit"]] = int(r["commit_time"])
+    shallow = is_shallow()
 
     def offer(lane, commit, good, source, committed):
         t = _commit_time(commit, cache) if commit else None
+        if t is None and shallow:
+            t = table_times.get(commit)
         if t is None:
             return False
         cur = best.get(lane)
@@ -537,14 +620,16 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
         return True
 
     wanted = set(lanes)
-    records = table.get("records") or []
+    optional = set(getattr(v, "OPTIONAL_PARTS", _OPTIONAL_PARTS))
     oldest, uncovered = {}, set()
     for key, cell in (table.get("cells") or {}).items():
         lane, _, fixture = key.partition("/")
         if lane not in wanted:
             continue
-        for ent in cell.values():
+        for part, ent in cell.items():
             col = (ent.get("cols") or {}).get(cls)
+            if col is None and not ent.get("conflict") and part in optional:
+                continue                 # e.g. a legacy rlpair n/a row only Apple ever recorded
             if ent.get("conflict") or not isinstance(col, int) or not 0 <= col < len(records):
                 uncovered.add(lane)      # this class does not carry the reference here
                 continue
@@ -557,10 +642,19 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
         lane, _, fixture = key.partition("/")
         lane_fixtures.setdefault(lane, set()).add(fixture)
     stale = set(v.stale_reference_lanes(table, h))
+    want_harness = harness_sha256(h)
+    admitted = table.get("lane_admission") or {}
+    other_harness = 0
     for lane, (c, _t) in oldest.items():
         if lane in uncovered or lane in stale or set(h.FIXTURES) - lane_fixtures.get(lane, set()):
             continue
+        witness = (admitted.get(lane) or {}).get("harness_sha256") or table.get("harness_sha256")
+        if not witness or witness != want_harness:
+            other_harness += 1           # admitted under another harness: its rows are not this one's
+            continue
         offer(lane, c, True, "table", True)
+    if other_harness:
+        log(f"# reuse: {other_harness} lane(s) skip the table: admitted under a different harness")
     want_fix = {f: dict(X=h._h(X), y_clf=h._h(yc), y_reg=h._h(yr))
                 for f, (X, yc, yr) in ((f, h.fixture(f)) for f in h.FIXTURES)}
     want_held = {f: dict(X=h._h(h.heldout(f))) for f in h.FIXTURES}
@@ -615,6 +709,7 @@ def cmd_changed_lanes(args):
             raise SystemExit("REFUSING: --class measures each lane from its own evidence; drop --since")
         log = lambda s: print(s, file=sys.stderr, flush=True)  # noqa: E731
         points = reuse_points(h, lanes, table, cls, list(getattr(args, "records", None) or []), log=log)
+        deepen_for_reuse(points, log=log)
         for lane, p in points.items():
             since[lane] = (p["commit"], p["time"])
             if not p["good"]:
