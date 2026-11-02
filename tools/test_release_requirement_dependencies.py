@@ -617,3 +617,18 @@ def test_scope_annotation_preserves_inputs_and_separate_multi_device_obligations
         deferred = d.scope_identity_manifest('.', old)
         assert deferred['requirements']['multi-gpu-amd']['required'] is False
         assert deferred['requirements']['identity-nvidia/two']['dependency_provenance']['identity_applicability']['separate_requirements'] == ['multi-gpu-nvidia', 'multi-gpu-amd']
+
+
+class ProofExplanation(unittest.TestCase):
+    def test_a_proof_recorded_with_selector_chains_is_compared_on_its_decision(self):
+        selection = dict(lanes=["a"], changed_paths=["p"], chains={"a": ["a -> x"]})
+        proof = dict(schema=d.PROOF_SCHEMA, unit_id="identity-amd/a", selection=selection, lanes=["a"])
+        proof["digest"] = d.digest(proof)
+        decided = d.decision_proof(proof)
+        self.assertNotIn("chains", decided["selection"])
+        self.assertEqual(decided["digest"], d.digest({k: v for k, v in decided.items() if k != "digest"}))
+        self.assertEqual(d.proof_selection(selection), dict(lanes=["a"], changed_paths=["p"]))
+        plain = dict(schema=d.PROOF_SCHEMA, unit_id="identity-amd/a", selection=d.proof_selection(selection), lanes=["a"])
+        plain["digest"] = d.digest(plain)
+        self.assertEqual(decided, plain)
+        self.assertIs(d.decision_proof(plain), plain)

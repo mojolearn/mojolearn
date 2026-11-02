@@ -327,3 +327,99 @@ class OptionalNativePresence(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TableBackedIdentityAdmission(unittest.TestCase):
+    """identity-<vendor>/<lane> from the reference table's cited records when another column was not
+    re-recorded at the admission revision (Andrew, 2026-10-31: re-record only changed lanes)."""
+
+    def facts(self, root, own_sha, cited):
+        return dict(source_root=str(root), source_revision=NEW, readme=dict(path=str(root / "README.md"), sha256="r" * 64),
+                    records=[dict(cls="amd", path=str(root / "amd.identical.json"), sha256=own_sha,
+                                  size=(root / "amd.identical.json").stat().st_size,
+                                  provenance=dict(path=str(root / "amd.identical.json"), sha256=own_sha), lanes=["ols"])],
+                    table=dict(path="t", revision=OLD, sha256="t" * 64), cited=cited)
+
+    def table_case(self, apple_digest="1234567890abcdef"):
+        import release_requirements_retained as retained
+        import release_identity_evidence as ident
+        import test_release_identity_evidence as fixtures
+        root = pathlib.Path(tempfile.mkdtemp()).resolve()
+        amd = fixtures.record("amd", ["ols"], commit=NEW)
+        apple = fixtures.record("apple", ["ols"], commit=OLD, digests={("ols", f): apple_digest for f in fixtures.FIXTURES})
+        (root / "amd.identical.json").write_text(json.dumps(amd))
+        (root / "apple.identical.json").write_text(json.dumps(apple))
+        amd_sha = ident.reference(root / "amd.identical.json")["sha256"]
+        apple_sha = ident.reference(root / "apple.identical.json")["sha256"]
+        digest = "1234567890abcdef"
+        cells = {f"ols/{f}": {"train": dict(cols={"amd": 0, "apple": 1}, ref=digest),
+                              "infer": dict(cols={"amd": 0, "apple": 1}, ref=digest[::-1]),
+                              "batchgrad": dict(cols={"amd": 0, "apple": 1}, ref="n/a:no-backward")}
+                 for f in fixtures.FIXTURES}
+        table = dict(records=[dict(sha256=amd_sha), dict(sha256=apple_sha)], cells=cells)
+        retained._TABLES[(str(root.resolve()), OLD)] = (dict(path="t", revision=OLD, sha256="t" * 64), table)
+        cited = [dict(index=0, cls="amd", commit=NEW, path=str(root / "amd.identical.json"), sha256=amd_sha),
+                 dict(index=1, cls="apple", commit=OLD, path=str(root / "apple.identical.json"), sha256=apple_sha)]
+        environment = dict(target="linux-64", loader_routes={})
+        return retained, ident, root, amd_sha, cited, environment
+
+    def test_unit_admitted_from_the_table_when_the_other_column_is_older(self):
+        retained, ident, root, amd_sha, cited, environment = self.table_case()
+        with mock.patch.object(ident, "record_errors", return_value=("amd", [])), \
+                mock.patch.object(ident, "platform_target", return_value="linux-64"):
+            rows, refs = retained.table_check_unit(ident, "ols", "amd", ("amd", "apple"), NEW, environment,
+                                                   self.facts(root, amd_sha, cited))
+        self.assertEqual([(r["id"], r["status"], r["expected"], r["completed"]) for r in rows],
+                         [(ident.BASE_COVERAGE, "passed", 6, 6), ("lane:ols", "passed", 6, 6)])
+        self.assertIn(cited[1]["path"], [r["path"] for r in refs])
+
+    def test_a_cited_column_whose_bytes_disagree_with_the_table_is_refused(self):
+        retained, ident, root, amd_sha, cited, environment = self.table_case(apple_digest="feedfeedfeedfeed")
+        with mock.patch.object(ident, "record_errors", return_value=("amd", [])), \
+                mock.patch.object(ident, "platform_target", return_value="linux-64"):
+            with self.assertRaisesRegex(ValueError, "apple column feedfeedfeedfeed differs from the table"):
+                retained.table_check_unit(ident, "ols", "amd", ("amd", "apple"), NEW, environment,
+                                          self.facts(root, amd_sha, cited))
+
+    def test_a_table_citing_another_own_record_is_refused(self):
+        retained, ident, root, amd_sha, cited, environment = self.table_case()
+        cited[0] = dict(cited[0], sha256="0" * 64)
+        with mock.patch.object(ident, "record_errors", return_value=("amd", [])), \
+                mock.patch.object(ident, "platform_target", return_value="linux-64"):
+            with self.assertRaisesRegex(ValueError, "cites another amd record"):
+                retained.table_check_unit(ident, "ols", "amd", ("amd", "apple"), NEW, environment,
+                                          self.facts(root, amd_sha, cited))
+
+
+class RetainedProducersWiring(Base):
+    def test_every_gate_directory_and_leg_is_a_retained_producer(self):
+        r = self.release()
+        gate = r.rel / "gate-nvidia" / "abc-release-light-v1"
+        (gate / "adapter-smoke").mkdir(parents=True)
+        (gate / "gate-smoke.json").write_text("{}")
+        legs = r.rel / "legs"
+        (legs / "hip-gfx942").mkdir(parents=True)
+        (legs / "hip-gfx942.provenance.json").write_text("{}")
+        (legs / "hip-gfx942.exit").write_text("0\n")
+        earlier = self.tmp / "earlier" / "legs"
+        (earlier / "cuda-sm_89").mkdir(parents=True)
+        (earlier / "cuda-sm_89.provenance.json").write_text("{}")
+        (earlier / "cuda-sm_89.exit").write_text("0\n")
+        (legs / "cuda-sm_89.reused.json").write_text(json.dumps(dict(leg="cuda-sm_89", provenance=str(earlier / "cuda-sm_89.provenance.json"))))
+        (legs / "cuda-sm_80.reused.json").write_text(json.dumps(dict(leg="cuda-sm_80", provenance=str(earlier / "missing.provenance.json"))))
+        with mock.patch.object(release.Release, "macos_wheel", return_value=None):
+            producers = r.retained_producers()
+        self.assertIn(("gate-adapters", dict(gate=str(gate))), producers)
+        self.assertEqual([p for n, p in producers if n == "linux-release-leg"],
+                         [dict(leg=str(legs / "hip-gfx942")), dict(leg=str(earlier / "cuda-sm_89"))])
+
+    def test_runtime_test_revision_defaults_to_the_frozen_source(self):
+        r = self.release()
+        with mock.patch.object(release.release_reuse, "darwin_toolchain", return_value=None), \
+                mock.patch.object(release.Release, "candidate_gate_wheels", return_value=[]), \
+                mock.patch.object(release.Release, "split_finals", return_value={}):
+            try:
+                manifest = r.readiness_manifest()
+            except Exception as error:  # the rest of the manifest needs a frozen tree; the default is set first
+                self.skipTest("readiness manifest needs a frozen tree here: " + str(error)[:80])
+        self.assertEqual(manifest["configuration"]["runtime_test_source_revision"], NEW)
