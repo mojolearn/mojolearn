@@ -102,7 +102,12 @@ ENTRIES = (
      "what": "48 MLP tape fits against stored digests when the GPU check completes"},
     {"name": "autograd-fit-smoke", "pytest": "tests/test_autograd_smoke.py",
      "what": "a tiny MLP and LSTM fit through the installed bindings' default path"},
+    # timeout_s (optional, any entry): this entry's own timer in place of the caller's, still bounded by the
+    # caller's deadline, recorded in its row. autograd-public: pytest start + torch import + the 45 MB
+    # published ResNet-18 weights download of test_guide_import_pretrained + a TorchScript/ONNX export, 21
+    # tests; 14.8 s on an L4, killed past 30 s on an MI300X droplet at 0.8.64.
     {"name": "autograd-public", "pytest": "python/mojolearn/tests/test_autograd_public.py", "pytest_args": ["-s"],
+     "timeout_s": 180,
      "what": "the public Sequential and ops.Session examples of the docs, PUBLIC_DIGEST lines"},
     # 2026-10-19 (lane ag-board-twins): the two board lanes of the public tape API, in miniature
     {"name": "autograd-sequential-smoke", "probe": "sequential",
@@ -604,7 +609,8 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
     rows = []
     for e in selected:
         log = logs / ("%s-%s.log" % (e["name"], vendor))
-        row = {"name": e["name"], "vendor": vendor, "what": e["what"], "timeout_s": timeout, "log": str(log)}
+        entry_timeout = e.get("timeout_s", timeout)       # an entry's own timer replaces the caller's
+        row = {"name": e["name"], "vendor": vendor, "what": e["what"], "timeout_s": entry_timeout, "log": str(log)}
         if "source" in e:
             exe = binary(bin_dir, e, vendor).resolve()
             if not exe.is_file():
@@ -634,7 +640,7 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
             if "pytest" in e:
                 row["junit"] = str(junit)
         offset = log.stat().st_size if log.exists() else 0
-        limit = min(timeout, max(0, deadline - 2 - time.time())) if deadline else timeout
+        limit = min(entry_timeout, max(0, deadline - 2 - time.time())) if deadline else entry_timeout
         status, rc, seconds = start(cmd, log, limit, env=env, cwd=str(ROOT))
         row.update(command=cmd, status=status, rc=rc, seconds=seconds)
         if status == "ok":
