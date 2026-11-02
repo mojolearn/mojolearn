@@ -740,7 +740,10 @@ def evidence_restoration(evidence):
 # and predictions, not that sidecar. Keep exact reviewed consumers/fixture bytes:
 # new use of version in computation or a consumed checkpoint requires review.
 VERSION_PATH = "python/mojolearn/_version.py"
-VERSION_LABEL_ANCHORS = {'python/mojolearn/_x_sequence_model.py': 'bf42be02698ce0f67c5f0dfd94630e0c607841950c24ff3d1a313192ce65f5b6', 'bindings/sequential_checkpoint.mojo': 'ee37e236bbc6846032eeed31a22900723dcd18b561198c8e403a44306a6dcee7', 'tools/identity_lanes/coverage.py': 'db8d3ae94a2a635cb169d97dfd1267267f4a830afe5cae5e53047ff67a4e191d'}
+# Reviewed 2026-11-01 (orchestrator): __version__ reaches the sequential binding context only as
+# context["version"], written into the model-verify sidecar's install record next to the platform
+# (bindings/sequential_checkpoint.mojo:59); no fitted or predicted value reads it.
+VERSION_LABEL_ANCHORS = {'python/mojolearn/_x_sequence_model.py': 'b09cd035b7fa4a326487698e5f1bb39d7dca4a1a12f4a47e2550c82603415b07', 'bindings/sequential_checkpoint.mojo': 'c6ee2b88d4351713378afea4395cdc6dfe9edf7e385e6ad74617ffde68a0e0bf', 'tools/identity_lanes/coverage.py': 'db8d3ae94a2a635cb169d97dfd1267267f4a830afe5cae5e53047ff67a4e191d'}
 VERSION_LABEL_LANES = frozenset("""public-theta-variants sequence-adamax sequence-croston
 sequence-ets sequence-export-roundtrip sequence-garch sequence-gru sequence-lion
 sequence-lr-schedulers sequence-lstm sequence-mlp sequence-nadam sequence-prophet
