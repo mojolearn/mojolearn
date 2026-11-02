@@ -912,7 +912,7 @@ def equivalence_proofs(root, old_manifest, new_manifest, *, log_dir=None, retain
         proof = dict(schema=PROOF_SCHEMA, unit_id=rid, old_revision=plan["old_revision"],
             new_revision=plan["new_revision"], old_fingerprint=old["fingerprint"],
             new_fingerprint=new["fingerprint"], stable_inputs_digest=digest(a),
-            lanes=sorted(lanes), selection=selection)
+            lanes=sorted(lanes), selection=proof_selection(selection))
         if moved_files:
             proof["selector_proven_files"] = sorted(moved_files)
             proof["stable_inputs_digest"] = digest(_file_keyed_view(a))
@@ -924,6 +924,18 @@ def equivalence_proofs(root, old_manifest, new_manifest, *, log_dir=None, retain
                 if retained_evidence is not None and rid in retained_evidence
                 else dict(status="not-supplied", restore=[]))
     return plan
+
+
+#: Explanation the selector attaches to a selection, never part of its decision: `chains` holds ONE example
+#: dependency chain per lane and path, whichever the traversal met first, and that choice differs between
+#: Python processes (hash-randomized set order). 0.8.64: every stored identity proof failed to reproduce on
+#: the next step because of it, and the ledger kept the failed proof (blocked 439 rows).
+SELECTION_EXPLANATION = ("chains",)
+
+
+def proof_selection(selection):
+    """The decision-bearing part of a selector selection, as the equivalence proof records it."""
+    return {key: value for key, value in selection.items() if key not in SELECTION_EXPLANATION}
 
 
 def _file_keyed_maps(inputs):
@@ -985,9 +997,23 @@ def validate_equivalence_proof(root, proof, old, new, *, log_dir=None):
         dict(source_revision=old["source_revision"], requirements={rid: old}),
         dict(source_revision=new["source_revision"], requirements={rid: new}), log_dir=log_dir)
     actual = plan["units"][rid].get("reuse_proof")
-    if actual != proof:
+    if actual != decision_proof(proof):
         errors.append("equivalence proof does not reproduce from the frozen source and requirement inputs")
     return errors
+
+
+def decision_proof(proof):
+    """A proof recorded before SELECTION_EXPLANATION existed carries the selector's explanation inside
+    its selection; its decision content is compared, with the digest recomputed over that content. A
+    proof whose decision fields were altered still fails: the frozen selector does not reproduce them."""
+    if not isinstance(proof, dict) or not isinstance(proof.get("selection"), dict):
+        return proof
+    if not any(key in proof["selection"] for key in SELECTION_EXPLANATION):
+        return proof
+    saved = dict(proof, selection=proof_selection(proof["selection"]))
+    saved.pop("digest", None)
+    saved["digest"] = digest(saved)
+    return saved
 
 
 if __name__ == "__main__":
