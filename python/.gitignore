@@ -54,6 +54,8 @@ mojolearn/host/_mojolearn_merged.json
 mojolearn/_identity_trace_diff.py
 mojolearn/_identity_break.py
 mojolearn/_identity_lane_*.py
+# Framework adapter payloads the macOS build stages into the tree; the wheel ships them.
+mojolearn/_adapters/
 mojolearn/identity_columns/
 mojolearn/identical/
 mojolearn/.dylibs/
