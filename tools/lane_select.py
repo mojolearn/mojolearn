@@ -462,6 +462,8 @@ def reset_caches():
     global _DISPATCH_VOCAB, _MOJO_CALLERS
     _DISPATCH_VOCAB = None
     _MOJO_CALLERS = None
+    global _BINDING_HELD
+    _BINDING_HELD = None
     _HOST_ROUTE_CLASSES.clear()
     _DISPATCHER_NAMES.clear()
     LANE_OPERATIONS.clear()
@@ -2966,6 +2968,10 @@ def _string_param_admissible(fn_name, var, index, seen=None):
     seen.add(key)
     ok = True
     for _rel, caller, args in _mojo_call_sites(fn_name):
+        if _MOJO_MAIN_RE.search(_MOJO_CALLERS.get(_rel, "")) or not _in_some_binding(_rel):
+            # A program with its own `main`, or a source no binding's build
+            # closure holds (a checks/ compile probe), runs in no lane.
+            continue
         arg = None
         for a in args:
             km = re.match(r"\s*%s\s*=(?!=)(.*)$" % re.escape(var), a, re.S)
@@ -3001,6 +3007,26 @@ def _string_param_admissible(fn_name, var, index, seen=None):
         break
     _PARAM_ADMISSIBLE[key] = ok
     return ok
+
+
+_BINDING_HELD = None
+
+
+def _in_some_binding(rel):
+    """Is `rel` in the compiled closure of some binding build script
+    (`tools/lane_map_import_graph.py`, the build's own walk). A path the
+    tree does not track is answered True: unknown is never "runs nowhere"."""
+    global _BINDING_HELD
+    if rel not in tracked_files():
+        return True
+    if _BINDING_HELD is None:
+        import lane_map_import_graph
+        held = set()
+        for name in lane_map_import_graph.build_scripts():
+            closure, _ = lane_map_import_graph.binding_closure(name)
+            held |= set(closure or ())
+        _BINDING_HELD = frozenset(held)
+    return rel in _BINDING_HELD
 
 
 def dispatch_view(text, ops):
@@ -5212,7 +5238,7 @@ _LS_NOT_INPUTS = {"_ENUMERATORS", "_LANE_SOURCES", "_SOURCE_HASHED", "_TRACKED",
                   "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PYTHON_FILES", "_PKG_IMPORT_CLOSURE",
                   "_HOST_CLASS_ROUTES", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS",
                   "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY",
-                  "_HOOK_CLASSES", "_LS_MEMO", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS", "_DISPATCHER_NAMES",
+                  "_HOOK_CLASSES", "_LS_MEMO", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS", "_DISPATCHER_NAMES", "_BINDING_HELD",
                   "_CONTEXT_DOORS"}
 
 

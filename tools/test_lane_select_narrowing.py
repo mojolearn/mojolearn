@@ -872,6 +872,33 @@ def test_a_release_label_bump_is_inert_by_the_ledger_rule_only():
         deps.VERSION_LABEL_ANCHORS.clear()
         deps.VERSION_LABEL_ANCHORS.update(saved)
 
+
+def test_a_call_site_no_binding_compiles_does_not_block_narrowing():
+    """A compile probe outside every binding (checks/*_compile.mojo) passing a
+    computed operation runs in no lane; the same call inside a binding still
+    leaves the dispatcher unnarrowed."""
+    callee = _d("""
+        def fam_dispatch(model: PythonObject, operation: String) raises -> PythonObject:
+            if operation == "fam_one":
+                return one_impl(model)
+            if operation == "fam_two":
+                return two_impl(model)
+            return model
+        """)
+    probe = _d("""
+        def probe(call: PythonObject, name: PythonObject) raises -> PythonObject:
+            return fam_dispatch(call, String(name) + "x")
+        """)
+    saved = ls._in_some_binding
+    try:
+        for held, narrowed in ((False, True), (True, False)):
+            ls._in_some_binding = lambda rel, held=held: held or rel != "checks/probe_compile.mojo"
+            with _Vocab({"fam_one", "fam_two"}, set(), {"checks/probe_compile.mojo": probe, "x/callee.mojo": callee}):
+                got = ls.dispatch_view(callee, ls.OperationSet({"fam_two"}))
+                assert (got != (callee, ())) is narrowed
+    finally:
+        ls._in_some_binding = saved
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):
