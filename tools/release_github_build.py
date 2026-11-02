@@ -1028,6 +1028,17 @@ def run_modes(text):
         raise SystemExit(str(exc))
 
 
+def write_run_id(gha, run, attached=False):
+    """GHA/run-id.json: the producer run of this leg, written the moment it is
+    known (before the wait). A collector that dies while the run goes on leaves
+    it, so release.py reads that run's state instead of guessing (0.8.64: the
+    sm_89 leg's begun compile runs stayed open after run 41364664603 failed)."""
+    (gha / "run-id.json").write_text(json.dumps(dict(
+        databaseId=run.get("databaseId"), url=run.get("url"), displayTitle=run.get("displayTitle"),
+        headSha=run.get("headSha"), attached=attached,
+        recorded_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
+
+
 def cmd_run(a):
     if not re.fullmatch(r"[0-9a-f]{40}", a.commit):
         raise SystemExit("--commit must be a full 40-hex SHA")
@@ -1065,6 +1076,7 @@ def cmd_run(a):
     if a.run_id:
         run = json.loads(gh("run", "view", str(a.run_id), "--json", "databaseId,displayTitle,headSha,url"))
         say(f"attached to run {a.run_id} ({run.get('url')})")
+        write_run_id(gha, run, attached=True)
     else:
         branch, head = tooling_ref(a.ref)
         tag = f"gha-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{os.urandom(3).hex()}"
@@ -1081,6 +1093,12 @@ def cmd_run(a):
             say(f"host donor {a.host_donor}: sha256 {donor_sha[:16]}.., valid {MAP_HOURS} h")
         sets = " ".join(x for x in (a.arch, "host" if a.host else "") if x)
         wid = workflow_id()
+        # Written BEFORE the dispatch: a collector killed between here and
+        # find_run leaves the tag, so tools/release_stopped_producers.py can
+        # tell "never dispatched" from "dispatched, run unknown" by listing.
+        (gha / "dispatch-intent.json").write_text(json.dumps(dict(
+            tag=tag, branch=branch, source_commit=a.commit, arch=a.arch, host=a.host,
+            intended_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
         gh("workflow", "run", wid, "--ref", branch, "-f", f"commit={a.commit}", "-f", f"sets={sets}",
            "-f", f"shards={a.shards}", "-f", f"jobs={a.jobs}", "-f", f"tag={tag}", "-f", f"map_url={map_url}",
            "-f", f"modes={' '.join(modes)}", "-f", f"host_donor_url={donor_url}",
@@ -1097,6 +1115,7 @@ def cmd_run(a):
         if run.get("headSha") != head:
             raise SystemExit(f"the run is at {run.get('headSha')}, this checkout at {head}")
         a.run_id = run["databaseId"]
+        write_run_id(gha, run)
     try:
         view = wait_run(a.run_id, a.timeout_min, a.poll)
     finally:
