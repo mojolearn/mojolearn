@@ -1656,9 +1656,20 @@ def place_merged(z, members, payload, sdir, key, vendor, rows_here, group, reuse
     if want is None:
         raise SystemExit(f"release_reuse: {garch} is not in the published wheel's payload")
     rebuilt = sha256(target) if target.is_file() else None
+    rebuilt_bytes = target.read_bytes() if rebuilt is not None else None
     got = extract_member(z, garch, target, want)
     owner_only = all(str(r.get("reason", "")).startswith("release owner:") for r in member_rows)
     host_file = (payload.get("extensions") or {}).get(garch) is None
+    if rebuilt is not None and rebuilt != got and vendor == "cuda" and not host_file and not owner_only:
+        # The leg built this device file from the frozen source and its bytes differ from the published
+        # file with the same recorded identity. 0.8.64: the published 0.8.63 sm_80 cluster file was built
+        # at 6b2e4bc3208d, before a kmeans host change in its closure, and admitted under the rebound
+        # 0.8.63 identity; the guard cannot tell that from build-CPU variance (docs/MODULAR_ASKS.md:207).
+        # Either way the leg's build is the frozen source's: pack it, never the stale published copy.
+        target.write_bytes(rebuilt_bytes)
+        say(f"  NOTE {key} {target.name}: the leg's rebuild {rebuilt[:12]} differs from the published {got[:12]}; "
+            "the leg's bytes (the frozen source) are packed")
+        return
     if rebuilt is not None and rebuilt != got:
         # A merged HOST file's bytes depend on the build machine's CPU (docs/MODULAR_ASKS.md:207), so a
         # rebuild on another runner cannot be held to the published bytes; its bindings' identities are

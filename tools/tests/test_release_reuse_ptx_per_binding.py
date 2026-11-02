@@ -306,10 +306,13 @@ class MergedAssemblyTests(unittest.TestCase):
         self.assertNotIn("identical/_mojolearn_native_x.so", files)
         self.assertNotIn("identical/_mojolearn_merged.json", files, "the leg's index of the same map ships")
 
-    def test_an_nvidia_rebuild_of_a_reused_file_must_reproduce(self):
+    def test_an_nvidia_rebuild_with_other_bytes_packs_the_legs_build(self):
         whl, plan = self.fixture("cuda", "sm_89")
-        with self.assertRaisesRegex(SystemExit, "must reproduce"):
-            self.assemble(plan, whl, {"cuda-sm_89": self.leg("cuda", "sm_89", a=b"OTHER A")}, "cuda", "sm_89")
+        sdir = self.assemble(plan, whl, {"cuda-sm_89": self.leg("cuda", "sm_89", a=b"OTHER A")}, "cuda", "sm_89")
+        self.assertEqual((sdir / "identical/_mojolearn_native.so").read_bytes(), b"OTHER A",
+                         "a device file the leg rebuilt with other bytes packs the leg's build, never the published copy")
+        files = json.loads((sdir / "reuse.json").read_text())["files"]
+        self.assertNotIn("identical/_mojolearn_native.so", files)
 
     def test_a_leg_index_of_another_map_is_refused(self):
         whl, plan = self.fixture("cuda", "sm_89")
