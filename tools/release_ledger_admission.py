@@ -195,6 +195,22 @@ _VERIFIED = {}
 _REPORTS = {}
 
 
+def adapter_code_digest(name):
+    """sha256 over the adapter's own code (its module and tool files): a prepared report records what that
+    code derived, so a report prepared by other code is another report (0.8.64: a facts shape change made
+    every earlier report fail re-derivation and aborted the status)."""
+    import hashlib
+    module, _ = ADAPTERS[name]
+    paths = sorted({Path(__file__).with_name(module + ".py"), Path(__file__).resolve().parents[1] / tool_of(name)})
+    extra = {"identity-table-admission": ("release_identity_evidence",)}.get(name, ())
+    paths += [Path(__file__).with_name(m + ".py") for m in extra]
+    h = hashlib.sha256()
+    for path in paths:
+        if path.is_file():
+            h.update(path.name.encode() + b"\0" + path.read_bytes() + b"\0")
+    return h.hexdigest()
+
+
 def load_report(path):
     """Parse each exact report once per process; its bytes are hashed on every use."""
     key = (str(Path(path).resolve()), evidence.sha256(path))

@@ -352,7 +352,8 @@ def _prepare_once(name, root, document, producer, key, out_root, search, log_dir
     configuration = document.get("configuration", {})
     context = dict(version=document.get("version"),
                    configuration={k: configuration.get(k) for k in ("release_modes", "build_flags", "dependency_context")})
-    folder = f"{name}-{digest([producer, key, context])[:16]}"
+    from release_ledger_admission import adapter_code_digest
+    folder = f"{name}-{digest([producer, key, context, adapter_code_digest(name)])[:16]}"
     kept = [d / folder for d in search + [out_root] if (d / folder / "reconciliation.json").is_file()]
     if kept:
         reports.append(kept[0] / "report.json")
@@ -408,11 +409,19 @@ def retained_reports(root, document, revision, out_root, *, prepared=None, produ
     return reports, notes
 
 
-def retained_attempts(report_paths):
+def retained_attempts(report_paths, notes=None):
+    """The attempts of every prepared report that still re-derives from its producer artifacts. A report that
+    no longer does (prepared by other adapter code, or evidence changed) contributes nothing and is noted;
+    the current code prepares its own report under its own key."""
     from release_ledger_admission import attempts_from
     attempts = []
     for path in report_paths:
-        _, found = attempts_from(path)
+        try:
+            _, found = attempts_from(path)
+        except (ValueError, OSError, KeyError) as error:
+            if notes is not None:
+                notes.append(f"{Path(path).parent.name}: not reused: {error}")
+            continue
         attempts += found
     return attempts
 
@@ -438,7 +447,7 @@ def admit_existing_evidence(root, ledger, revision, out_root, *, producers=(), l
         return [], ["no ledger yet"]
     reports, notes = retained_reports(root, ledger.read(), revision, out_root, producers=producers,
                                       log_dir=log_dir, say=say)
-    attempts = retained_attempts(reports)
+    attempts = retained_attempts(reports, notes)
     if attempts:
         with ledger.edit() as doc:
             doc["attempts"] = with_attempts(doc, attempts)["attempts"]

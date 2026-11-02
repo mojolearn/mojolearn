@@ -1662,9 +1662,10 @@ class Release:
             reports, notes = retained.retained_reports(ROOT, doc, self.commit, Path(scratch),
                                                        prepared=self.evidence_root(),
                                                        producers=self.retained_producers(), say=self.say)
+            attempts = retained.retained_attempts(reports, notes)
             for note in notes:
                 self.say("   ledger evidence: " + note)
-            return ledger._evaluate(retained.with_attempts(doc, retained.retained_attempts(reports)))
+            return ledger._evaluate(retained.with_attempts(doc, attempts))
 
     def record_candidate_requirement(self, vendor, run_id, executed=False):
         if run_id is None:
