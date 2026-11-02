@@ -122,7 +122,7 @@ LINUX_SETS = (("cuda", "sm_89"), ("cuda", "sm_80"), ("hip", "gfx942"))
 #: identities, the runtime closure is unchanged and the host owner leg runs
 #: (its host bindings replace the PTX leg's, HOST_OWNER_ADMISSION).
 PTX_SET = ("cuda", "sm_80")
-PTX_REASON = "published PTX reuse needs the retained build proof of the leg that built the published PTX set"
+PTX_REASON = "the published PTX set is not taken"
 #: The record directory that retains that proof (record_ptx_proof).
 PTX_PROOF_DIR = "ptx-proof"
 PTX_PROOF_SCHEMA = "mojolearn.ptx-set-proof.v1"
@@ -1374,7 +1374,7 @@ def _settle_ptx(rows, rt_decision, prev, evidence_root, origin):
         return None
     proof, why = ptx_proof_source(prev, evidence_root)
     if proof is None:
-        _refuse_ptx(rows, why)
+        _refuse_ptx(rows, "no retained build proof of the leg that built it: " + why)
         return None
     original = normalized_set_identity(proof["original_set_identity"])["bindings"]
     moved = [r["name"] for r in ptx if original.get(r["key"]) != r["identity_digest"]]
