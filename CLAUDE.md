@@ -2,6 +2,15 @@
 
 Every Claude session and subagent in this repo reads this file. Lane briefs add to it; they don't repeat it.
 
+## The name is Mojolearn, with a capital M (Andrew, 2026-11-02)
+
+- In prose (docs, docstrings, README, site, paper, emails, release notes, commit
+  messages and replies) write **Mojolearn**: capital M, the rest lower case.
+  Never "mojolearn", "MojoLearn" or "MOJOLEARN" as the name.
+- Code stays lower case: the package, module and command names (`pip install
+  mojolearn`, `import mojolearn`, `python -m mojolearn verify`), paths, URLs and
+  domains (mojolearn.org). Put them in backticks when they appear in prose.
+
 ## Logs and output
 
 - These context rules also apply to Codex and all delegated lanes; see `AGENTS.md`.
@@ -161,7 +170,7 @@ protocol-correctness checks and the no-callback requirement.
   documentation: it never appears in docs-site or the library docs.
 
 Additions (Andrew, 2026-10-13):
-- Public docs state the contract in one sentence, verbatim: "In `identical` mode, mojolearn returns the same bits on Apple,
+- Public docs state the contract in one sentence, verbatim: "In `identical` mode, Mojolearn returns the same bits on Apple,
   NVIDIA and AMD GPUs." Every `numeric_mode` doc that lists `'fast'` says Apple only.
 - Omit, never caveat: no "Known defect" or other status notes, no all-caps IDENTICAL/FAST asides (write `identical`/`fast`),
   no "NOT IMPLEMENTED" in docstrings. Excluded or unverified names (`docs-site/api_exclude.txt`) and unverified features
