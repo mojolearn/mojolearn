@@ -939,23 +939,27 @@ def proof_selection(selection):
 
 
 def _file_keyed_maps(inputs):
-    """The {path: sha256} maps of one identity unit's execution environment:
-    each binding's `builders` and the `loader_routes` `sources`."""
-    for env in (inputs.get("execution_environment") or {}).values():
+    """((lane, owner), {path: sha256}) for each file-keyed map of one identity unit's execution environment:
+    each binding's `builders` (owner: the binding) and the `loader_routes` `sources` (owner: "loader_routes").
+    Maps are NAMED, never positional: a stored attempt (JSON, sorted keys) and a freshly materialized
+    manifest (insertion order) list the bindings in different orders, and pairing them by position compared
+    one binding's builders with another's (0.8.64: 439 identity-apple rows read as "an execution input
+    changed that the selector was not asked about")."""
+    for lane, env in (inputs.get("execution_environment") or {}).items():
         if not isinstance(env, dict):
             continue
-        for ident in (env.get("bindings") or {}).values():
+        for name, ident in (env.get("bindings") or {}).items():
             if isinstance(ident, dict) and isinstance(ident.get("builders"), dict):
-                yield ident["builders"]
+                yield (lane, name), ident["builders"]
         routes = env.get("loader_routes")
         if isinstance(routes, dict) and isinstance(routes.get("sources"), dict):
-            yield routes["sources"]
+            yield (lane, "loader_routes"), routes["sources"]
 
 
 def _file_keyed_view(inputs):
     """`inputs` with every file-keyed hash replaced by its path."""
     view = copy.deepcopy(inputs)
-    for table in _file_keyed_maps(view):
+    for _, table in _file_keyed_maps(view):
         for path in table:
             table[path] = path
     return view
@@ -969,8 +973,12 @@ def _file_keyed_difference(a, b):
         return set()
     if _file_keyed_view(a) != _file_keyed_view(b):
         return None
+    maps_a, maps_b = dict(_file_keyed_maps(a)), dict(_file_keyed_maps(b))
+    if set(maps_a) != set(maps_b):
+        return None
     moved = set()
-    for ta, tb in zip(_file_keyed_maps(a), _file_keyed_maps(b)):
+    for label, ta in maps_a.items():
+        tb = maps_b[label]
         moved |= {p for p in ta if ta[p] != tb.get(p)}
     return moved or None
 

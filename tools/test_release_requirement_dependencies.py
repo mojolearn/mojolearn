@@ -632,3 +632,20 @@ class ProofExplanation(unittest.TestCase):
         plain["digest"] = d.digest(plain)
         self.assertEqual(decided, plain)
         self.assertIs(d.decision_proof(plain), plain)
+
+
+class FileKeyedMapsAreNamed(unittest.TestCase):
+    def test_binding_order_does_not_change_the_moved_files(self):
+        def inputs(order, host_surface):
+            bindings = {"linux-64/cuda/sm_89/identical/_mojolearn": dict(builders={"packaging/linux/build_sets.sh": "s1"}),
+                        "osx-arm64/host/-/host/_mojolearn_core_host": dict(builders={"packaging/macos/build_release_wheel.sh": "m1"})}
+            ordered = {k: bindings[k] for k in order}
+            return dict(execution_environment={"ols": dict(target="t", bindings=ordered,
+                                                         loader_routes=dict(sources={"python/mojolearn/host_surface.py": host_surface}))})
+        keys = list(inputs(["linux-64/cuda/sm_89/identical/_mojolearn", "osx-arm64/host/-/host/_mojolearn_core_host"], "h1")["execution_environment"]["ols"]["bindings"])
+        old = inputs(keys, "h1")
+        new = inputs(list(reversed(keys)), "h2")
+        self.assertEqual(d._file_keyed_difference(old, new), {"python/mojolearn/host_surface.py"})
+        self.assertEqual(d._file_keyed_difference(old, inputs(list(reversed(keys)), "h1")), set())
+        gone = inputs(keys, "h2"); del gone["execution_environment"]["ols"]["bindings"][keys[0]]
+        self.assertIsNone(d._file_keyed_difference(old, gone))
