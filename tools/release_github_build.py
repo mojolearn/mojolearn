@@ -252,7 +252,9 @@ UNIT_PEAK_GIB = {
     # 12.88 / 9.25 / 10.37 GiB. Retained in codex-takeover-0859/
     # gha-40340886439.log, gha-40340885959.log and their memory summaries.
     ("host", "_mojolearn_native_host", "cuda"): 14, ("host", "_mojolearn_native_host", "hip"): 13,
-    ("host", "_mojolearn_native_tokenizer_host", "cuda"): 10, ("host", "_mojolearn_native_tokenizer_host", "hip"): 10,
+    # Run 41364664603 at 40c11f7bc (2026-11-02): the tokenizer host group (it now carries the RF
+    # notice path) was stopped by the memory guard at 15 GiB with no swap; sized like native_host.
+    ("host", "_mojolearn_native_tokenizer_host", "cuda"): 14, ("host", "_mojolearn_native_tokenizer_host", "hip"): 14,
     ("host", "_mojolearn_native_neural_host", "cuda"): 10, ("host", "_mojolearn_native_neural_host", "hip"): 10,
     ("host", "_mojolearn_native_forest_host", "cuda"): 11, ("host", "_mojolearn_native_forest_host", "hip"): 11,
     ("host", "_mojolearn_native_x_host", "cuda"): 10, ("host", "_mojolearn_native_x_host", "hip"): 11,
