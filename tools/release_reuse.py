@@ -1658,8 +1658,12 @@ def place_merged(z, members, payload, sdir, key, vendor, rows_here, group, reuse
     rebuilt = sha256(target) if target.is_file() else None
     got = extract_member(z, garch, target, want)
     owner_only = all(str(r.get("reason", "")).startswith("release owner:") for r in member_rows)
+    host_file = (payload.get("extensions") or {}).get(garch) is None
     if rebuilt is not None and rebuilt != got:
-        if vendor in ("cuda", "cpu") and not owner_only:
+        # A merged HOST file's bytes depend on the build machine's CPU (docs/MODULAR_ASKS.md:207), so a
+        # rebuild on another runner cannot be held to the published bytes; its bindings' identities are
+        # unchanged, so the published (identity-verified) bytes are packed. Device files must reproduce.
+        if vendor in ("cuda", "cpu") and not owner_only and not host_file:
             raise SystemExit(f"release_reuse: the {key} leg rebuilt {target.name} with different bytes "
                              f"({rebuilt[:12]} against the published {got[:12]}) although every binding it serves "
                              "has an unchanged identity; an NVIDIA rebuild must reproduce. Find the cause before reusing.")
