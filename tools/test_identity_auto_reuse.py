@@ -27,6 +27,7 @@ import lane_select  # noqa: E402
 FIX = ("base", "ties")
 LANES = ["lane-a", "lane-b", "lane-c", "lane-d"]
 TIMES = {"c1" * 20: 100, "c2" * 20: 200, "c3" * 20: 300}
+HARNESS = "e" * 64
 
 
 def _harness():
@@ -58,6 +59,8 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(ic, "vref", lambda: v)
     monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(LANES))
     monkeypatch.setattr(ic, "_commit_time", lambda c, cache: TIMES.get(c))
+    monkeypatch.setattr(ic, "harness_sha256", lambda h: HARNESS)
+    monkeypatch.setattr(ic, "is_shallow", lambda: False)
     monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in LANES}, {}))
     state = {"changed": {}, "diffs": []}
 
@@ -132,13 +135,144 @@ def test_table_rows_of_the_class_count_as_evidence(world, capsys):
              for lane in ("lane-a", "lane-b") for f in FIX}
     cells["lane-c/base"] = {"train": {"ref": "f" * 16, "cols": {"amd": 1}}}       # no nvidia column
     cells["lane-c/ties"] = {"train": {"ref": "f" * 16, "cols": {"amd": 1}}}
-    table.write_text(json.dumps({"cells": cells, "records": [
+    table.write_text(json.dumps({"cells": cells, "harness_sha256": HARNESS, "records": [
         {"commit": "c2" * 20, "commit_time": 200, "class": "nvidia"},
         {"commit": "c1" * 20, "commit_time": 100, "class": "amd"}]}))
     assert ic.cmd_changed_lanes(_args(table, [])) == 0
     out, err = capsys.readouterr()
     assert out.strip().split(",") == ["lane-c", "lane-d"]
     assert "REUSED 2 RECORD 2" in err
+
+
+# --------------------- the repo alone is enough: table rows, records, shallow trees
+
+def _table(table, cells, **extra):
+    doc = {"cells": cells, "records": [{"commit": "c2" * 20, "commit_time": "200", "class": "nvidia"}]}
+    doc.update(extra)
+    table.write_text(json.dumps(doc))
+
+
+def _cells(lanes, parts=("train",), cls="nvidia"):
+    return {f"{lane}/{f}": {p: {"ref": "f" * 16, "cols": {cls: 0}} for p in parts}
+            for lane in lanes for f in FIX}
+
+
+def test_record_present_is_reused_absent_everywhere_is_recorded(world, capsys):
+    tmp, table, state = world
+    recs = tmp / "records"
+    _record(recs / "retained" / "x" / "nvidia-x.identical.json", "nvidia", "c2" * 20, ["lane-a"])
+    summary = tmp / "reuse.json"
+    assert ic.cmd_changed_lanes(_args(table, [recs], summary)) == 0
+    out, err = capsys.readouterr()
+    assert out.strip().split(",") == ["lane-b", "lane-c", "lane-d"]
+    doc = json.loads(summary.read_text())
+    assert doc["reused"]["lane-a"]["commit"] == "c2" * 20
+    assert doc["record"]["lane-b"] == "no reference row in the table"
+
+
+def test_table_row_alone_is_reused_at_the_record_commit(world, capsys):
+    """No record file anywhere: the admitted table's row of the class names the
+    commit its record carried, and the closure is measured from that commit."""
+    tmp, table, state = world
+    _table(table, _cells(["lane-a", "lane-b"]), lane_admission={
+        "lane-a": {"harness_sha256": HARNESS}, "lane-b": {"harness_sha256": HARNESS}})
+    summary = tmp / "reuse.json"
+    assert ic.cmd_changed_lanes(_args(table, [], summary)) == 0
+    out, err = capsys.readouterr()
+    assert out.strip().split(",") == ["lane-c", "lane-d"]
+    doc = json.loads(summary.read_text())
+    assert doc["reused"]["lane-a"] == {"commit": "c2" * 20, "committed": True, "good": True, "source": "table"}
+    assert state["diffs"] == ["c2" * 20]
+    # the same lane from a record at the same commit gives the same point
+    recs = tmp / "records"
+    _record(recs / "nvidia-x.identical.json", "nvidia", "c2" * 20, ["lane-a"])
+    points = ic.reuse_points(_harness(), LANES, json.loads(table.read_text()), "nvidia", [str(recs)])
+    assert points["lane-a"]["commit"] == "c2" * 20
+
+
+def test_table_row_from_a_different_harness_is_recorded(world, capsys):
+    tmp, table, state = world
+    _table(table, _cells(["lane-a", "lane-b"]), harness_sha256=HARNESS,
+           lane_admission={"lane-a": {"harness_sha256": "0" * 64}})
+    assert ic.cmd_changed_lanes(_args(table, [])) == 0
+    out, err = capsys.readouterr()
+    # lane-a was admitted by another harness; lane-b falls back to the table's (this one)
+    assert out.strip().split(",") == ["lane-a", "lane-c", "lane-d"]
+    assert "admitted under a different harness" in err
+    # a table with no harness witness at all is not a reuse point either
+    _table(table, _cells(["lane-a", "lane-b"]))
+    assert ic.cmd_changed_lanes(_args(table, [])) == 0
+    assert capsys.readouterr()[0].strip().split(",") == LANES
+
+
+def test_optional_part_this_class_never_ran_does_not_block_the_table(world, capsys):
+    """0.8.64: a legacy rlpair n/a row only Apple carried made every AMD lane
+    'uncovered'. A missing optional part is skipped; a missing required one is not."""
+    tmp, table, state = world
+    cells = _cells(["lane-a", "lane-b"], parts=("train", "infer"))
+    for f in FIX:
+        cells[f"lane-a/{f}"]["rlpair"] = {"ref": "n/a:no-pair", "cols": {"apple": 0}}
+        cells[f"lane-b/{f}"]["infer"] = {"ref": "f" * 16, "cols": {"apple": 0}}   # required, no nvidia
+    _table(table, cells, harness_sha256=HARNESS)
+    assert ic.cmd_changed_lanes(_args(table, [])) == 0
+    assert capsys.readouterr()[0].strip().split(",") == ["lane-b", "lane-c", "lane-d"]
+
+
+def test_shallow_tree_takes_commit_times_from_the_table(world, monkeypatch, capsys):
+    tmp, table, state = world
+    monkeypatch.setattr(ic, "_commit_time", lambda c, cache: None)     # a depth-1 box tree
+    monkeypatch.setattr(ic, "is_shallow", lambda: True)
+    deepened = []
+    monkeypatch.setattr(ic, "deepen_for_reuse", lambda points, log: deepened.append(dict(points)))
+    _table(table, _cells(["lane-a"]), harness_sha256=HARNESS)
+    recs = tmp / "records"
+    _record(recs / "nvidia-x.identical.json", "nvidia", "c2" * 20, ["lane-b"])
+    _record(recs / "nvidia-y.identical.json", "nvidia", "c3" * 20, ["lane-c"])   # commit the table never saw
+    assert ic.cmd_changed_lanes(_args(table, [recs])) == 0
+    out, err = capsys.readouterr()
+    assert out.strip().split(",") == ["lane-c", "lane-d"]
+    assert sorted(deepened[0]) == ["lane-a", "lane-b"]
+    assert {p["time"] for p in deepened[0].values()} == {200}
+
+
+def _git(cwd, *args):
+    return subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def test_deepen_fetches_history_and_names_release_tags(tmp_path, monkeypatch):
+    src = tmp_path / "src"
+    src.mkdir()
+    _git(src, "init", "-q", "-b", "main")
+    _git(src, "config", "user.email", "t@example.invalid")
+    _git(src, "config", "user.name", "t")
+    shas = []
+    for n, when in enumerate((1_700_000_000, 1_700_100_000, 1_700_200_000, 1_700_300_000)):
+        (src / "f.txt").write_text(str(n))
+        _git(src, "add", "f.txt")
+        env = dict(os.environ, GIT_COMMITTER_DATE=f"@{when} +0000", GIT_AUTHOR_DATE=f"@{when} +0000")
+        subprocess.run(["git", "-C", str(src), "commit", "-q", "-m", str(n)], check=True, env=env)
+        shas.append(_git(src, "rev-parse", "HEAD"))
+    _git(src, "tag", "-a", "-m", "r", "alpha-api-0.1-nvidia-x", shas[2])
+    _git(src, "tag", "alpha-api-0.1-amd-x", shas[2])
+    _git(src, "tag", "alpha-api-0.0-amd-x", shas[0])
+    box = tmp_path / "box"
+    subprocess.run(["git", "clone", "-q", "--depth=1", "--no-tags", f"file://{src}", str(box)], check=True)
+    monkeypatch.setattr(ic, "ROOT", box)
+    ic.is_shallow.cache_clear()
+    try:
+        assert ic.is_shallow() and not ic._has_commit(shas[1])
+        logs = []
+        points = {"lane-a": dict(commit=shas[1], time=1_700_100_000)}
+        assert ic.deepen_for_reuse(points, log=logs.append) == 1
+        assert ic.is_ancestor(shas[1], "HEAD")
+        assert ic._git("diff", "--name-only", f"{shas[1]}...HEAD").returncode == 0
+        tags = set(ic._git("tag").stdout.split())
+        # tags whose commits the deepened history holds; the older one stays unnamed
+        assert tags == {"alpha-api-0.1-nvidia-x", "alpha-api-0.1-amd-x"}
+        assert ic.release_floor() == shas[2]
+        assert "1 of 1 reuse commit(s) reachable" in logs[-1]
+    finally:
+        ic.is_shallow.cache_clear()
 
 
 def test_reuse_check_admits_superseded_and_unchanged_refuses_changed(world, capsys):
