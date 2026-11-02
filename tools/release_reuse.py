@@ -1901,7 +1901,8 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None, host_owner=
                 else:
                     raise SystemExit("release_reuse: the runtime closure must be built and no leg built it")
             if not leg and not old:
-                exts = [sdir / r["set_rel"] for r in gpu]
+                # the physical files (a merged set ships one file per group)
+                exts = sorted({f for r in gpu for f in binding_files(sdir, r) if f.suffix == ".so"})
                 staged = [dict(name=p.name, sha256=sha256(p), bytes=p.stat().st_size) for p in sorted(libs.iterdir())]
                 manifest = dict(schema="mojolearn.linux.reused-set-manifest.v1", set=str(sdir), reused_from=origin,
                                 bytes_extensions=sum(p.stat().st_size for p in exts),
