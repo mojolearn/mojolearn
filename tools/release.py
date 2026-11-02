@@ -1608,6 +1608,11 @@ class Release:
             for directory in sorted((self.rel / f"gate-{vendor}").glob("*/")):
                 if (directory / "gate-smoke.json").is_file() and (directory / "adapter-smoke").is_dir():
                     out.append(("gate-adapters", dict(gate=str(directory))))
+        # runtime-<vendor>: the installed-runtime qualifier the gate job runs after its smoke (a passed run only;
+        # the adapter re-derives the counts from the raw junit and the qualifier receipt).
+        for vendor in GATE_VENDORS:
+            for report in sorted((self.rel / f"gate-{vendor}").glob(f"*/runtime-{vendor}/runtime-report.json")):
+                out.append(("installed-runtime", dict(report=str(report))))
         # The Linux release legs (compile-<vendor>/runtime, compile-<vendor>/adapters/<arch>, compile-cpu/runtime
         # on the host leg): a leg built in this freeze, or the earlier freeze's leg a <leg>.reused.json names.
         for directory in self.retained_leg_dirs():

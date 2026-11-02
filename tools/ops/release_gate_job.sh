@@ -21,7 +21,9 @@
 #   overlay  when GATE_OVERLAY_SHA256 is set: the gate runner overlay (route-overlay.tgz, only GATE_OVERLAY
 #            files) over the tree, AFTER the build (which reads the clean tree) and BEFORE the gate; every
 #            file's sha256 before and after in out/route-overlay.txt; the files are restored on exit;
-#   gate     python3 tools/gate_smoke_box.py ... all (GATE_ARGV): release-light-v1, unchanged.
+#   gate     python3 tools/gate_smoke_box.py ... all (GATE_ARGV): release-light-v1, unchanged;
+#   runtime-qualify  tools/release_runtime_installed.py run against GATE_WHEELS (runtime-<vendor> ledger
+#            evidence), bounded by GATE_RUNTIME_MINUTES, recorded under out/runtime-<vendor>/, never the verdict.
 # On any exit the reports (GATE_FETCH) and the built autograd set are copied into
 # $MOJOLEARN_RESULTS_DIR/out and the job's own record into $MOJOLEARN_RESULTS_DIR/job.
 set -euo pipefail
@@ -186,5 +188,19 @@ say "gate: python3 ${GATE_ARGV[*]}"
 grc=0
 python3 "${GATE_ARGV[@]}" > "$J/gate.log" 2>&1 || grc=$?
 tail -n 5 "$J/gate.log"
+
+PHASE=runtime-qualify
+# runtime-<vendor> evidence for the ledger (tools/release_runtime_installed.py run: fresh venv, the exact
+# candidate wheels, the frozen source's own tests). Recorded and fetched (out/runtime-<vendor>/), bounded by
+# GATE_RUNTIME_MINUTES; its exit never changes the gate verdict above, which stays the smoke's.
+if [ "${GATE_RUNTIME_MINUTES:-0}" != 0 ] && [ "${#GATE_WHEELS[@]}" -gt 0 ]; then
+    wheel_args=(); for w in "${GATE_WHEELS[@]}"; do wheel_args+=(--wheel "$w"); done
+    rrc=0
+    timeout "${GATE_RUNTIME_MINUTES}m" python3 tools/release_runtime_installed.py run --vendor "$GATE_VENDOR" \
+        --source-root "$GATE_TREE" --source-commit "$GATE_SOURCE_COMMIT" "${wheel_args[@]}" \
+        --out "$GATE_WORK/out/runtime-$GATE_VENDOR" > "$J/runtime-qualify.log" 2>&1 || rrc=$?
+    say "runtime qualifier exited $rrc (recorded under out/runtime-$GATE_VENDOR; the gate verdict is the smoke's)"
+    tail -n 3 "$J/runtime-qualify.log"
+fi
 PHASE=complete
 exit "$grc"

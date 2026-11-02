@@ -76,7 +76,7 @@ NV_CAP_MIN = 180
 BUILD_MINUTES = 120
 #: what the job copies from the gate's out root into <res>/out (reports only; the venv and caches stay
 #: on the box). The same list the lq transport fetched, plus the whole built autograd set.
-GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-smoke.json", "autograd-smoke",
+GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-smoke.json", "autograd-smoke", "runtime-*",
               "smoke.log", "measure-*.log", "measure-manifest-*.json",
               "setup/wheel-manifest.json", "setup/logs", "autograd-bin",
               "smoke-*/smoke/smoke.json", "smoke-*/smoke/smoke.txt", "measure-*/campaign.json",
@@ -141,6 +141,13 @@ def build_argv(vendor, source_commit, tree, out, reuse_from=None):
     return argv
 
 
+#: The installed-runtime qualifier (tools/release_runtime_installed.py run: the public runtime registry against
+#: the installed candidate wheels, runtime-<vendor> in the ledger) runs on the box after the smoke, bounded by
+#: this many minutes. Its outcome is recorded under out/runtime-<vendor>/ and fetched; it never changes the
+#: gate verdict (the smoke's), and the ledger admits runtime-<vendor> only from a passed run. 0 skips it.
+RUNTIME_MINUTES = int(os.environ.get("MOJOLEARN_GATE_RUNTIME_MINUTES", "30"))
+
+
 def bash_array(name, items):
     return f"{name}=(" + " ".join(shlex.quote(str(i)) for i in items) + ")"
 
@@ -196,7 +203,8 @@ class Plan:
                  f"GATE_TAG={self.tag}", f"GATE_TREE={self.tree}", f"GATE_FETCH_URL={self.fetch_url}",
                  f"GATE_WORK={self.work}", f"GATE_BUILD_MINUTES={BUILD_MINUTES}",
                  f"GATE_ADAPTERS={1 if self.adapters else 0}", f"GATE_PROFILE={self.profile}",
-                 f"GATE_REUSE={1 if self.prior else 0}",
+                 f"GATE_REUSE={1 if self.prior else 0}", f"GATE_RUNTIME_MINUTES={RUNTIME_MINUTES}",
+                 bash_array("GATE_WHEELS", [f"{self.indir}/{w.name}" for w in self.wheels]),
                  f"GATE_OVERLAY_SHA256={self.overlay_sha256 or ''}", bash_array("GATE_OVERLAY", GATE_OVERLAY),
                  bash_array("BUILD_ARGV", self.build), bash_array("BUILD_FRESH_ARGV", self.build_fresh),
                  bash_array("GATE_ARGV", self.gate), bash_array("GATE_FETCH", GATE_FETCH)]
