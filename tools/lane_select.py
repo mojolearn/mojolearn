@@ -10516,6 +10516,12 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                                      + ", ".join(names) + "): "
                                      + str(len(users)) + " lane(s) reached through their callers")
                     continue
+            if added is None and ref and path != MANIFEST and path.endswith(".py") \
+                    and path.startswith(PKG + os.sep):
+                # A registry is a sink of every lane's walk, so its own map
+                # entry can be empty while lanes run it: place an edit by the
+                # files that name what it changed (`registry_definition_lanes`).
+                edited = python_edit_lanes(ref, path, sources, rev) if path in rev else None
                 names = edited[0] if edited is not None else import_bound_definitions(ref, path)
                 if names:
                     placed = registry_definition_lanes(path, names, rev)
