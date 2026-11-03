@@ -6,6 +6,8 @@ from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
 from isolation_forest.impl.isolation_forest import IsolationForest, IsolationForestModel, IF_params, read_i32, read_f32, path_lengths, score_samples
 from metrics.checks.device_io import upload_f32, upload_i32
+from core.device_plan import device_plan_current
+from isolation_forest.multi_gpu import fit_dispatch
 
 
 def check_paths(ctx: DeviceContext, one: IsolationForestModel,
@@ -39,12 +41,14 @@ def main() raises:
             var trace = IdentityTrace.disabled()
             if not setenv("MOJOLEARN_IFOREST_DEVICE_COUNT", "1", True):
                 raise Error("setenv failed")
-            estimator.fit(ctx, x, 257, 7, one, trace)
+            var plan_one = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
+            fit_dispatch(plan_one, estimator, ctx, x, 257, 7, one, trace)
             # Exercise release of a previously fitted full root model too.
-            estimator.fit(ctx, x, 257, 7, many, trace)
+            fit_dispatch(plan_one, estimator, ctx, x, 257, 7, many, trace)
             if not setenv("MOJOLEARN_IFOREST_DEVICE_COUNT", "2", True):
                 raise Error("setenv failed")
-            estimator.fit(ctx, x, 257, 7, many, trace)
+            var plan_many = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
+            fit_dispatch(plan_many, estimator, ctx, x, 257, 7, many, trace)
             if len(many.shards) != 2 or len(one.shards) != 0:
                 raise Error("resident owner route mismatch")
             if (len(many.node_feature) != 1 or len(many.node_threshold) != 1

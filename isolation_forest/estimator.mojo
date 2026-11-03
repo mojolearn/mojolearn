@@ -46,6 +46,8 @@ comptime _DEVCTX_SLOT = "MojoSvmContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDE
 
 
 from core.identity_trace import IdentityTrace
+from core.device_plan import DevicePlan, plan_for_single
+from isolation_forest.multi_gpu import fit_params_dispatch
 from isolation_forest.impl.isolation_forest import (
     IDN_IF_EPILOGUE_DEVICE,
     IDN_IF_QUERY_DEVICE,
@@ -53,7 +55,6 @@ from isolation_forest.impl.isolation_forest import (
     IF_params,
     IFLaunchKnobs,
     IsolationForestModel,
-    fit as if_fit,
     predict as if_predict,
     predict_into as if_predict_into,
     score_samples as if_score_samples,
@@ -157,6 +158,7 @@ struct IsolationForestEstimator(Movable):
     def fit(
         mut self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int,
         src_addr: Int = 0,
+        plan: DevicePlan = plan_for_single(),
     ) raises:
         """`IsolationForest.fit(X)` (`:572-787`). DEVIATION 2638: a nonzero
         `src_addr` lends the ROW-major X by address (the CPython binding's
@@ -234,8 +236,10 @@ struct IsolationForestEstimator(Movable):
                     + String(n_rows * n_cols)
                 )
             x_addr = Int(x_rowmajor.unsafe_ptr())
-        if_fit(ctx, self.model, List[Float32](), n_rows, n_cols, params, trace,
-               self.knobs, x_addr)
+        # The device plan is the binding entry's (read once there); one
+        # device runs the single-device fit unchanged.
+        fit_params_dispatch(plan, ctx, self.model, List[Float32](), n_rows,
+                            n_cols, params, trace, self.knobs, x_addr)
         self.fitted = True
 
         if use_quantile:
@@ -383,6 +387,7 @@ struct IFRunOutputs(Copyable, Movable):
 
 
 def iforest_run_host(
+    plan: DevicePlan,
     train: List[Float32],
     n_train: Int,
     n_features: Int,
@@ -462,7 +467,7 @@ def iforest_run_host(
     # DEVIATION 2638: `train_addr` lends the ROW-major training block.
     # Lane fam-forests: `query_addr` (nonzero only under
     # `IDN_IF_QUERY_DEVICE`) lends the ROW-major query block the same way.
-    est.fit(ctx, train, n_train, n_features, src_addr=train_addr)
+    est.fit(ctx, train, n_train, n_features, src_addr=train_addr, plan=plan)
 
     var out = IFRunOutputs()
     out.offset_ = est.offset_
@@ -678,6 +683,7 @@ def if_resident_release(token: Int) raises:
 
 
 def iforest_run_resident(
+    plan: DevicePlan,
     mut held: List[IFResidentEntry],
     key: IFResidentKey,
     new_token: Int,
@@ -738,7 +744,8 @@ def iforest_run_resident(
         est.contamination_auto = key.contamination_auto
         est.contamination = key.contamination
         est.warm_start = False
-        est.fit(ctx, List[Float32](), key.n_train, key.n_features, src_addr=key.train_addr)
+        est.fit(ctx, List[Float32](), key.n_train, key.n_features,
+                src_addr=key.train_addr, plan=plan)
         held.append(IFResidentEntry(new_token, key, ctx, est^))
 
     var out = IFRunOutputs()
