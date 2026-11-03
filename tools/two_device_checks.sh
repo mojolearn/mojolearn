@@ -25,6 +25,9 @@ export PATH="$HOME/.pixi/bin:$PATH"
 export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_TARGET_COLUMN=nvidia PYTHONUNBUFFERED=1
 export MOJOLEARN_SKIP_BUILD_GATE=1 PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
 export MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-2}
+# The checks refuse to run off a RunPod box (`RUNPOD_POD_ID` empty); the queue
+# job's environment does not carry the pod's variable, so name the pod here.
+export RUNPOD_POD_ID=${RUNPOD_POD_ID:-$(hostname)}
 nvidia-smi --query-gpu=name,compute_cap,driver_version,memory.total --format=csv > "$OUT/gpu.txt" 2>&1 || { echo "no nvidia-smi" >&2; exit 2; }
 n_gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l | tr -d ' ')
 [ "$n_gpu" -ge 2 ] || { echo "two-device gate needs 2 GPUs, found $n_gpu" | tee "$OUT/summary.txt" >&2; exit 2; }
