@@ -7,7 +7,7 @@ from std.ffi import _Global
 from std.memory import alloc, memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP, OPT_SGD, OPT_ADAM, OPT_ADAMW
-from autograd.ops_api import OpsSession, ops_session, _OpsStore
+from autograd.ops_api import ops_session, _OpsStore
 from autograd.distributed_program import ProgramReplica, DistributedProgram
 from autograd.distributed_checkpoint import (
     distributed_checkpoint, distributed_graph, restore_distributed_state,
@@ -15,7 +15,6 @@ from autograd.distributed_checkpoint import (
 )
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
 from autograd.program_io import HostArray
-from autograd.program_runtime import replay_values
 from autograd.rankn import ShapeN
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.optim import OptimizerConfig, optimizer_slots, optimizer_config_packed
@@ -73,8 +72,7 @@ def distributed_open_native[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("distributed programs require identical mode")
     var s = ops_session[E, KIND](sid)
     var p = s[].program(pid)
-    var oi = s[]._opt_index(opt)
-    var o = s[].opts[oi]
+    var o = s[].optimizer_settings(opt)
     var ip: List[Int] = [o.cfg.kind, 1 if o.cfg.nesterov else 0, o.sched, o.sched_step]
     var fp: List[Float32] = [o.cfg.lr, o.cfg.momentum, o.cfg.beta1, o.cfg.beta2, o.cfg.eps, o.cfg.weight_decay, o.gamma]
     var values = List[List[Float32]]()
@@ -92,8 +90,8 @@ def distributed_open_native[E: Exec & Movable & Deinitable, KIND: Int](
             raise Error("distributed program: trainable handle is not a captured parameter")
     for j in range(len(p.params)):  # driver-loop: copy canonical source parameter bytes
         if len(parameters) == 0:
-            trainable[j] = not s[].int_words[s[]._slot(p.params[j])]
-        if trainable[j] and s[].int_words[s[]._slot(p.params[j])]:
+            trainable[j] = not s[].is_integer(p.params[j])
+        if trainable[j] and s[].is_integer(p.params[j]):
             raise Error("distributed program: integer parameters cannot be trainable")
         var data = List[Float32](length=p.param_shapes[j].count(), fill=Float32(0))
         s[].download(p.params[j], FP(unsafe_from_address=Int(data.unsafe_ptr())))
@@ -113,25 +111,23 @@ def distributed_open_native[E: Exec & Movable & Deinitable, KIND: Int](
     for j in range(len(p.params)):  # driver-loop: source optimizer migration
         if not trainable[j]:
             continue
-        var si = -1
-        for k in range(len(s[].opt_states)):  # driver-loop: native optimizer state table
-            if s[].opt_states[k].opt == oi and s[].opt_states[k].param == p.params[j]:
-                si = k
-        var t = s[].opt_states[si].t if si >= 0 else 0
+        var si = s[].optimizer_state_index(opt, p.params[j])
+        var t = s[].optimizer_state_record(si).t if si >= 0 else 0
         if clock >= 0 and clock != t:
             raise Error("distributed program: selected parameters have different optimizer step counts")
         clock = t
         if si < 0:
             continue
+        var st = s[].optimizer_state_record(si)
         var n = p.param_shapes[j].count()
         var off = ck.offsets[j]
         if slots[0]:
-            s[].ex.download(FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off, s[].opt_states[si].s1, n)
+            s[].ex.download(FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off, st.s1, n)
         if slots[1]:
-            s[].ex.download(FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + off, s[].opt_states[si].s2, n)
-        ck.ext_floats[scalar_at + 3 * j] = s[].opt_states[si].pw1
-        ck.ext_floats[scalar_at + 3 * j + 1] = s[].opt_states[si].pw2
-        ck.ext_floats[scalar_at + 3 * j + 2] = s[].opt_states[si].mu_prod
+            s[].ex.download(FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + off, st.s2, n)
+        ck.ext_floats[scalar_at + 3 * j] = st.pw1
+        ck.ext_floats[scalar_at + 3 * j + 1] = st.pw2
+        ck.ext_floats[scalar_at + 3 * j + 2] = st.mu_prod
     ck.t = max(0, clock)
     ck.ext_ints[2] = Int64(o.epoch)
     ck.ext_ints[3] = Int64(ck.t)
@@ -178,39 +174,35 @@ def distributed_run_native[E: Exec & Movable & Deinitable, KIND: Int](
     if len(srcs) != p.n_in:
         raise Error("distributed run: input count differs from captured program")
     ref w = d[].workers[0]
-    w.session._drop_temps(w.temps)
-    w.temps.clear()
-    w.session.tape.reset()
-    w.session.tape.no_grad()
+    w.executor.clear()
+    w.executor.no_grad()
     var buffers = List[FP]()
     var shapes = List[ShapeN]()
     try:
         for k in range(len(srcs)):  # driver-loop: inference input buffers
             if in_shapes[k].ndim != p.in_shapes[k].ndim:
                 raise Error("distributed inference input rank differs from capture")
-            var buf = w.session.ex.alloc(in_shapes[k].count())
+            var buf = w.executor.session.ex.alloc(in_shapes[k].count())
             buffers.append(buf)
             shapes.append(in_shapes[k])
             if p.in_kinds[k] == PROGRAM_IN_IDS:
-                upload_cast_i32(w.session.ex, buf, srcs[k], "distributed ids")
+                upload_cast_i32(w.executor.session.ex, buf, srcs[k], "distributed ids")
             else:
-                upload_cast(w.session.ex, buf, srcs[k])
+                upload_cast(w.executor.session.ex, buf, srcs[k])
         var phs = List[Int]()
         var trainable = List[Bool](length=len(w.params), fill=False)
-        var outs = replay_values(w.session, p, buffers, shapes, w.params, trainable, w.temps, phs)
-        var sh = w.session.shapes[w.session._slot(outs[0])]
+        var outs = w.executor.evaluate(p, buffers, shapes, w.params, trainable, phs)
+        var sh = w.executor.shape(outs[0])
         var result = HostArray(sh)
-        w.session.download(outs[0], FP(unsafe_from_address=Int(result.data.unsafe_ptr())))
-        w.session._drop_temps(w.temps)
-        w.temps.clear()
+        w.executor.read(outs[0], FP(unsafe_from_address=Int(result.data.unsafe_ptr())))
+        w.executor.clear_temps()
         for k in range(len(buffers)):  # driver-loop: temporary inputs
-            w.session.ex.free(buffers[k])
+            w.executor.session.ex.free(buffers[k])
         return result^
     except err:
-        w.session._drop_temps(w.temps)
-        w.temps.clear()
+        w.executor.clear_temps()
         for k in range(len(buffers)):  # driver-loop: failed inference cleanup
-            w.session.ex.free(buffers[k])
+            w.executor.session.ex.free(buffers[k])
         raise err
 
 
