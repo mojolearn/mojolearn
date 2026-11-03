@@ -39,8 +39,9 @@ from max.gpu.sync import barrier
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from svm.checks.device_select import SEL_TPB, check_finite_device, read_f32, upload_f32
+from core.device_plan import DevicePlan, plan_for_single
+from svm.multi_gpu import kernel_matrix_dispatch
 from svm.impl.distance.kernel_matrices import (
-    kernel_op,
     kernel_workspace_floats,
     row_norms_l2sq,
 )
@@ -135,6 +136,7 @@ def svc_fit(
     record_iterations: Bool = False,
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
+    plan: DevicePlan = plan_for_single(),
 ) raises -> SvmModel:
     """`svcFit(handle, input, n_rows, n_cols, labels, param, kernel_params,
     model, sample_weight)`. Returns the model (host); `trace` receives the
@@ -151,7 +153,7 @@ def svc_fit(
     var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
     var x = upload_f32(ctx, x_host)
     var fitted = _svc_fit_staged(
-        ctx, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
+        ctx, plan, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
         kernel_tile_byte_limit, block_solve_threads, record_iterations,
         scratch_pad, scratch_poison,
     )
@@ -170,6 +172,7 @@ def svc_fit_borrowed(
     mut card: IdentityTrace,
     mut trace: SmoTrace,
     c_rows: List[Float32] = List[Float32](),
+    plan: DevicePlan = plan_for_single(),
 ) raises -> SvmModel:
     """`svc_fit` on the caller's borrowed row-major X (DEVIATION 2665,
     2026-09-11). The List front copied X into a host List, walked it once
@@ -192,7 +195,7 @@ def svc_fit_borrowed(
     check_finite_device(ctx, x, n_rows * n_cols, "X")
     var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
     var fitted = _svc_fit_staged(
-        ctx, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
+        ctx, plan, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
         1 << 30, 0, False, 0, Float32(0.0), c_rows,
     )
     _ = x^
@@ -228,6 +231,7 @@ def _svc_label_model(
 
 def _svc_fit_staged(
     ctx: DeviceContext,
+    plan: DevicePlan,
     mut x: DeviceBuffer[DType.float32],
     labels_host: List[Float32],
     n_rows: Int,
@@ -258,7 +262,7 @@ def _svc_fit_staged(
     card.record_device[DType.float32](ctx, "svm.input.y", y, n_rows)
 
     var smo = SmoSolver(
-        ctx, param, kp, n_rows, n_cols, kernel_tile_byte_limit,
+        ctx, plan, param, kp, n_rows, n_cols, kernel_tile_byte_limit,
         block_solve_threads, record_iterations, scratch_pad, scratch_poison,
         c_rows,
     )
@@ -492,6 +496,7 @@ def svc_predict(
     buffer_size_mib: Float64,
     predict_class: Bool,
     mut card: IdentityTrace,
+    plan: DevicePlan = plan_for_single(),
 ) raises -> List[Float32]:
     """`svcPredict(handle, input, n_rows, n_cols, kernel_params, model,
     preds, buffer_size, predict_class)`, dense input and dense support.
@@ -591,7 +596,7 @@ def svc_predict(
             nb if kp.kernel == KERNEL_RBF else 1,
         )
         if not precomputed:
-            kernel_op(ctx, kp, K, xb, sv, nb, n_support, n_cols, l2b, l2_support, ws)
+            kernel_matrix_dispatch(plan, ctx, kp, K, xb, sv, nb, n_support, n_cols, l2b, l2_support, ws)
         var pb = d_preds.create_sub_buffer[DType.float32](i, nb)
         ctx.enqueue_function[decision_kernel](
             pb.unsafe_ptr(), xb.unsafe_ptr() if precomputed else K.unsafe_ptr(), dual.unsafe_ptr(),
