@@ -1,9 +1,0 @@
-commit=e4e9004af95b1ea87457130ebb209637c51a9bed
-label=cpu
-backend=cpu
-scope=routine shard= lanes_override=yes
-repeats=2 cpu_threads=3
-host=Linux 6.8.0-59-generic x86_64 mojolearn-refcols-final-amd
-date=2026-10-03T21:11:43Z
-dirty_tracked=none
-record_sha256=49f0c8ceca69e054a0dfeef1ed63a706adccb784f63e2bc90388d39f46f9682a
