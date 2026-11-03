@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One complete CatBoost-compatible oblivious-tree level on the GPU. Kernel ordering is contractual: copy precedes subtract, and scan precedes scoring."""
 
-from core.device_plan import device_plan_setting
+from core.device_plan import DevicePlan, plan_for_single
 from std.math import sqrt
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -83,7 +83,11 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 )
 from checks.numerics import numeric_mode_name
 from std.os import getenv
-from core.multi_gpu import peer_clone, copy_columns_kernel, copy_scalar_kernel, gbdt_shard_device_id
+from core.multi_gpu import peer_clone
+# Module cycle on purpose (Mojo resolves it, as gbdt.models.oblivious_model <->
+# non_symmetric_tree already do): the dispatcher calls back into this file's
+# one-device `launch_histograms_for_blocks`.
+from gbdt.methods.pointwise_multi_gpu import gbdt_hist_dispatch
 
 from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
@@ -3132,7 +3136,6 @@ def replication_int32_for[smem_mode: Int = HIST_SMEM_SHARED2_I32](
 def launch_histograms_for_blocks[
     hist2_smem_mode: Int = HIST2_SMEM_MODE, ridx_stats: Bool = False,
     level_quant: Bool = False, group_width: Bool = False,
-    distribute: Bool = True,
 ](
     ctx: DeviceContext,
     mut blocks: List[DeviceBlock],
@@ -3210,19 +3213,11 @@ def launch_histograms_for_blocks[
     bind it to `ridx_only_splits_for[TARGET_COLUMN, identical]()`; the
     default keeps every existing call site byte for byte.
     """
-    comptime if distribute:
-        var requested = device_plan_setting("MOJOLEARN_GBDT_DEVICE_COUNT")
-        if requested != "" and requested != "1":
-            var devices = Int(requested)
-            if devices < 1 or devices > 64 or HIST_BUILD_MODE != NUMERIC_IDENTICAL:
-                raise Error("GBDT multi-GPU requires IDENTICAL and 1..64 devices")
-            if skip_bridge:
-                raise Error("GBDT multi-GPU does not expose the per-block scratch probe")
-            launch_feature_shards[hist2_smem_mode, ridx_stats](ctx, blocks,
-                depth, n_live, n_rows, stat_count, max_leaves, sm_count,
-                fixed_scale, cindex, row_index, stats, p_off, p_sz, ids,
-                dense_ids, hist, hist_cells_per_leaf, devices)
-            return
+    # ONE DEVICE ONLY. The multi-device branch that sat here (a read of the
+    # thread plan's MOJOLEARN_GBDT_DEVICE_COUNT and a jump to
+    # `launch_feature_shards`) moved to `gbdt_hist_dispatch` in
+    # `gbdt/methods/pointwise_multi_gpu.mojo`, which calls this function
+    # unchanged when `plan.single()` (the same "" / "1" test).
     # Where each block's slice begins in the flat histogram: the running
     # total of earlier blocks' bin counts.
     var block_first_bin = 0
@@ -4807,6 +4802,11 @@ struct TSynchronizedSymmetricLevelState(Movable):
     var c45_pending_subtract: Bool
     var last_winner_score: Float32
     var last_winner_bin: UInt32
+    # The fit's device plan, a value read once at the binding entry. The
+    # constructor leaves one device (`plan_for_single()`); a production
+    # driver hands its plan over with `set_device_plan` before the first
+    # level. `enqueue_pre_score` passes it to `gbdt_hist_dispatch`.
+    var device_plan: DevicePlan
 
     def __init__(
         out self,
@@ -4839,6 +4839,11 @@ struct TSynchronizedSymmetricLevelState(Movable):
         self.c45_pending_subtract = False
         self.last_winner_score = Float32(0.0)
         self.last_winner_bin = DEAD_DEVICE_POISON
+        self.device_plan = plan_for_single()
+
+    def set_device_plan(mut self, plan: DevicePlan):
+        """Bind the fit's device plan (read once at the binding entry)."""
+        self.device_plan = plan.copy()
 
     def initialize_tree(
         mut self,
@@ -5032,9 +5037,10 @@ struct TSynchronizedSymmetricLevelState(Movable):
         )
         times.begin(ctx)
         if planned:
-            launch_histograms_for_blocks[
+            gbdt_hist_dispatch[
                 hist2_smem_mode, SYM_RIDX_SPLITS_2031
             ](
+                self.device_plan,
                 ctx, workspace.dblocks, self.level, n_compute, self.n_rows,
                 self.stat_count, workspace.max_leaves_key,
                 workspace.sm_count, fixed_scale, self.active_cindex,
@@ -5045,9 +5051,10 @@ struct TSynchronizedSymmetricLevelState(Movable):
                 symmetric_policy=True,
             )
         else:
-            launch_histograms_for_blocks[
+            gbdt_hist_dispatch[
                 hist2_smem_mode, SYM_RIDX_SPLITS_2031
             ](
+                self.device_plan,
                 ctx, workspace.dblocks, self.level, n_compute, self.n_rows,
                 self.stat_count, workspace.max_leaves_key,
                 workspace.sm_count, fixed_scale, self.active_cindex,
@@ -5309,6 +5316,7 @@ struct TSynchronizedTensorTreeResult(Movable):
 def run_sequential_two_level_feature_freq_tree[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
 ](
+    device_plan: DevicePlan,
     ctx: DeviceContext,
     initial: TStagedTensorCandidate,
     x_colmajor: List[Float32],
@@ -5354,6 +5362,7 @@ def run_sequential_two_level_feature_freq_tree[
         ctx, layout.copy(), blocks^, initial_device^,
         n_rows, stat_count, 2, tensor_acc_live_for[hist2_smem_mode](),
     )
+    state.set_device_plan(device_plan)
     state.initialize_tree(ctx, weight_magnitude, gradient_magnitude)
     var splits = List[TBinarySplit]()
     if not run_synchronized_symmetric_level[hist2_smem_mode](
@@ -5409,6 +5418,7 @@ def run_sequential_two_level_feature_freq_tree[
 def run_bounded_synchronized_tensor_tree[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
 ](
+    device_plan: DevicePlan,
     ctx: DeviceContext,
     layout: CompressedIndexLayout,
     blocks: List[PolicyBlock],
@@ -5452,6 +5462,7 @@ def run_bounded_synchronized_tensor_tree[
         ctx, layout.copy(), blocks.copy(), level_cindexes[0].copy(),
         n_rows, stat_count, depth, tensor_acc_live_for[hist2_smem_mode](),
     )
+    state.set_device_plan(device_plan)
     state.initialize_tree(ctx, weight_magnitude, gradient_magnitude)
     var splits = List[TBinarySplit]()
     for level in range(depth):
@@ -5498,6 +5509,7 @@ def run_bounded_synchronized_tensor_tree[
 def run_tree_layout_traced[
     hist2_smem_mode: Int = HIST2_SMEM_MODE
 ](
+    device_plan: DevicePlan,
     ctx: DeviceContext,
     n_rows: Int,
     fold_counts: List[Int],
@@ -6044,10 +6056,11 @@ def run_tree_layout_traced[
                         qstats, p_off, p_sz, ids_compute, fixed_scale,
                     )
                 if use_ridx:
-                    launch_histograms_for_blocks[
+                    gbdt_hist_dispatch[
                         hist2_smem_mode, True,
                         SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
                     ](
+                        device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
                         max_leaves, sm_count, fixed_scale,
                         active_cindex, row_index, stats, p_off, p_sz,
@@ -6057,10 +6070,11 @@ def run_tree_layout_traced[
                         qstats=Optional(qstats.copy()), width_plans=width_plans,
                     )
                 else:
-                    launch_histograms_for_blocks[
+                    gbdt_hist_dispatch[
                         hist2_smem_mode, False,
                         SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
                     ](
+                        device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
                         max_leaves, sm_count, fixed_scale,
                         active_cindex, row_index, stats, p_off, p_sz,
@@ -6076,10 +6090,11 @@ def run_tree_layout_traced[
                         qstats, p_off, p_sz, zero_ids, fixed_scale,
                     )
                 if use_ridx:
-                    launch_histograms_for_blocks[
+                    gbdt_hist_dispatch[
                         hist2_smem_mode, True,
                         SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
                     ](
+                        device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
                         max_leaves, sm_count, fixed_scale,
                         active_cindex, row_index, stats, p_off, p_sz, zero_ids,
@@ -6089,10 +6104,11 @@ def run_tree_layout_traced[
                         qstats=Optional(qstats.copy()), width_plans=width_plans,
                     )
                 else:
-                    launch_histograms_for_blocks[
+                    gbdt_hist_dispatch[
                         hist2_smem_mode, False,
                         SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
                     ](
+                        device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
                         max_leaves, sm_count, fixed_scale,
                         active_cindex, row_index, stats, p_off, p_sz, zero_ids,
@@ -6104,9 +6120,10 @@ def run_tree_layout_traced[
         else:
             if planned:
                 if use_ridx:
-                    launch_histograms_for_blocks[
+                    gbdt_hist_dispatch[
                         hist2_smem_mode, True
                     ](
+                        device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
                         max_leaves, sm_count, fixed_scale,
                         active_cindex, row_index, stats, p_off, p_sz, ids_compute,
@@ -6115,9 +6132,10 @@ def run_tree_layout_traced[
                         symmetric_policy=True,
                     )
                 else:
-                    launch_histograms_for_blocks[
+                    gbdt_hist_dispatch[
                         hist2_smem_mode, False
                     ](
+                        device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
                         max_leaves, sm_count, fixed_scale,
                         active_cindex, row_index, stats, p_off, p_sz, ids_compute,
@@ -6127,9 +6145,10 @@ def run_tree_layout_traced[
                     )
             else:
                 if use_ridx:
-                    launch_histograms_for_blocks[
+                    gbdt_hist_dispatch[
                         hist2_smem_mode, True
                     ](
+                        device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
                         max_leaves, sm_count, fixed_scale,
                         active_cindex, row_index, stats, p_off, p_sz, zero_ids,
@@ -6138,9 +6157,10 @@ def run_tree_layout_traced[
                         symmetric_policy=True,
                     )
                 else:
-                    launch_histograms_for_blocks[
+                    gbdt_hist_dispatch[
                         hist2_smem_mode, False
                     ](
+                        device_plan,
                         ctx, dblocks, depth, n_compute, n_rows, stat_count,
                         max_leaves, sm_count, fixed_scale,
                         active_cindex, row_index, stats, p_off, p_sz, zero_ids,
@@ -6961,7 +6981,9 @@ def run_tree_layout[
     var no_trace = IdentityTrace.disabled()
     var no_times = StageTimes()
     no_times.enabled = False
+    # A check-only entry: one device by definition (no fit driver calls it).
     return run_tree_layout_traced[hist2_smem_mode](
+        plan_for_single(),
         ctx, n_rows, fold_counts, max_depth,
         cindex, stats, row_index, cursor,
         weight_magnitude, gradient_magnitude,
@@ -6984,184 +7006,3 @@ def run_tree_layout[
         dynamic_fold_counts=dynamic_fold_counts,
         dynamic_one_hot=dynamic_one_hot,
     )
-
-
-@fieldwise_init
-struct FeatureHistogramShard(Movable):
-    """One independently owned feature slice; buffers die before the context."""
-    var ctx: DeviceContext
-    var blocks: List[DeviceBlock]
-    var inputs: List[DeviceBuffer[DType.uint32]]
-    var stats: DeviceBuffer[DType.float32]
-    var scale: DeviceBuffer[DType.float32]
-    var hist: DeviceBuffer[DType.float32]
-    var acc: DeviceBuffer[DType.int32]
-    var scratch: DeviceBuffer[DType.float32]
-    var first: Int
-    var folds: Int
-    var replicas: Int
-
-    def __deinit__(deinit self):
-        _ = self.blocks^
-        _ = self.inputs^
-        _ = self.stats^
-        _ = self.scale^
-        _ = self.hist^
-        _ = self.acc^
-        _ = self.scratch^
-        try:
-            self.ctx.synchronize()
-        except:
-            pass
-        _ = self.ctx^
-
-
-def _feature_descriptor(ctx: DeviceContext, values: List[UInt32]) raises -> DeviceBuffer[DType.uint32]:
-    var out = ctx.enqueue_create_buffer[DType.uint32](len(values))
-    var host = ctx.enqueue_create_host_buffer[DType.uint32](len(values))
-    for i in range(len(values)):  # small-loop(values: shard descriptor words): launch argument staging only
-        host.unsafe_ptr()[i] = values[i]
-    ctx.enqueue_copy(dst_buf=out, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return out^
-
-
-def launch_feature_shards[hist2_smem_mode: Int, ridx_stats: Bool](
-    ctx: DeviceContext, mut blocks: List[DeviceBlock], depth: Int,
-    n_live: Int, n_rows: Int, stat_count: Int, max_leaves: Int, sm_count: Int,
-    fixed_scale: MutPointer[Float32, MutAnyOrigin],
-    mut cindex: DeviceBuffer[DType.uint32], mut row_index: DeviceBuffer[DType.uint32],
-    mut stats: DeviceBuffer[DType.float32], mut p_off: DeviceBuffer[DType.uint32],
-    mut p_sz: DeviceBuffer[DType.uint32], mut ids: DeviceBuffer[DType.uint32],
-    mut dense_ids: DeviceBuffer[DType.uint32], mut hist: DeviceBuffer[DType.float32],
-    hist_cells_per_leaf: Int, devices: Int,
-) raises:
-    """Partition whole packed feature groups; retain each row reduction.
-
-    A shard owns only its compressed feature columns and histogram columns.
-    Row metadata and statistics are replicated. The existing driver still owns
-    the full root histogram and compressed index: this is not yet an out-of-core
-    fit. Original global row replication is retained even for the float-partial
-    binary/half-byte kernels. The root receives disjoint columns, never sums of
-    separately rounded histograms. Prefix scans and split selection stay global.
-
-    THE NEGATIVE CONTROL. `-D MOJOLEARN_GBDT_PARALLEL_SABOTAGE=1` makes every
-    owner above rank 0 read its compressed feature columns one GROUP early.
-    The group count `(end_group - first_group)`, the bin range `first`, the
-    fold count, every descriptor and the copy-back all keep the true
-    `first_group`, so no allocation, length or validation changes; only the
-    packed columns a shard histograms do. `active` is `min(devices, groups)`,
-    so `first_group >= 1` whenever `rank >= 1`. It is a `comptime if`, so no
-    production bit can move, and it is INERT AT ONE DEVICE, which is what makes
-    a moved `par-boosting`, `par-boosting-clf`, `par-boosting-reg`,
-    `par-ordered`, `par-ordered-rmse`, `par-border-types` or `par-feature-freq`
-    cell attributable to the define rather than to the second device. Owed a
-    two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates
-    this driver, so no CPU column can watch it fire.
-    """
-    ctx.synchronize()
-    var scale = ctx.enqueue_create_buffer[DType.float32](1)
-    ctx.enqueue_function[copy_scalar_kernel](fixed_scale, scale.unsafe_ptr(),
-        grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
-    ctx.synchronize()
-    var first_bin = 0
-    for b in range(len(blocks)):
-        ref block = blocks[b]
-        var group_size = 4
-        if block.policy == POLICY_BINARY:
-            group_size = 32
-        elif block.policy == POLICY_HALF_BYTE:
-            group_size = 8
-        var groups = feature_groups_for(block.policy, block.n_features)
-        var active = min(devices, groups)
-        var host_folds = ctx.enqueue_create_host_buffer[DType.uint32](block.n_features)
-        ctx.enqueue_copy(dst_buf=host_folds, src_buf=block.folds)
-        ctx.synchronize()
-        var prefix = List[Int](length=block.n_features + 1, fill=0)
-        for f in range(block.n_features):  # small-loop(n_features: block fold counts): shard bin ranges are launch shape
-            prefix[f + 1] = prefix[f] + Int(host_folds.unsafe_ptr()[f])
-        var shards = List[FeatureHistogramShard]()
-        for rank in range(active):
-            var first_group = groups * rank // active
-            var end_group = groups * (rank + 1) // active
-            var first_feature = first_group * group_size
-            var end_feature = min(block.n_features, end_group * group_size)
-            var nf = end_feature - first_feature
-            var folds = prefix[end_feature] - prefix[first_feature]
-            var first = first_bin + prefix[first_feature]
-            var cells = max_leaves * stat_count * folds
-            var device = DeviceContext(device_id=gbdt_shard_device_id(rank))
-            var desc_folds = List[UInt32]()
-            var desc_offsets = List[UInt32]()
-            var desc_groups = List[UInt32](length=nf, fill=0)
-            var desc_sizes = List[UInt32](length=nf, fill=UInt32(folds))
-            for f in range(first_feature, end_feature):  # small-loop(end_feature: shard feature descriptors): launch argument lists per shard
-                desc_folds.append(host_folds.unsafe_ptr()[f])
-                desc_offsets.append(UInt32(prefix[f] - prefix[first_feature]))
-            var local_blocks = List[DeviceBlock]()
-            # Keep the parent's bit-width ladder, including a partial last group.
-            local_blocks.append(DeviceBlock(block.policy, nf, 0, folds, block.max_folds,
-                _feature_descriptor(device, desc_folds), _feature_descriptor(device, desc_offsets),
-                _feature_descriptor(device, desc_groups), _feature_descriptor(device, desc_sizes),
-                block.replication_groups))
-            var inputs = List[DeviceBuffer[DType.uint32]]()
-            var source_group = first_group
-            comptime if is_defined["MOJOLEARN_GBDT_PARALLEL_SABOTAGE"]():
-                # Check-only arm: later owners read one packed group early.
-                if rank > 0:
-                    source_group = first_group - 1
-            var columns = cindex.create_sub_buffer[DType.uint32](
-                (block.first_column + source_group) * n_rows, (end_group - first_group) * n_rows)
-            inputs.append(peer_clone(ctx, device, columns))
-            inputs.append(peer_clone(ctx, device, row_index))
-            inputs.append(peer_clone(ctx, device, p_off))
-            inputs.append(peer_clone(ctx, device, p_sz))
-            inputs.append(peer_clone(ctx, device, ids))
-            inputs.append(peer_clone(ctx, device, dense_ids))
-            var local_stats = peer_clone(ctx, device, stats)
-            var local_scale = peer_clone(ctx, device, scale)
-            var packed = ctx.enqueue_create_buffer[DType.float32](cells)
-            ctx.enqueue_function[copy_columns_kernel[False]](hist.unsafe_ptr(), packed.unsafe_ptr(),
-                Int32(hist_cells_per_leaf), Int32(first), Int32(folds), Int32(cells),
-                grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1))
-            ctx.synchronize()
-            var local_hist = peer_clone(ctx, device, packed)
-            _ = packed^
-            var acc = device.enqueue_create_buffer[DType.int32](cells)
-            var scratch = device.enqueue_create_buffer[DType.float32](cells)
-            enqueue_fill(device, acc, Int32(0))
-            enqueue_fill(device, scratch, Float32(0))
-            device.synchronize()
-            var replicas = replication_for(block.replication_groups, n_live, stat_count, sm_count, gather=(depth > 0))
-            shards.append(FeatureHistogramShard(device^, local_blocks^, inputs^, local_stats^,
-                local_scale^, local_hist^, acc^, scratch^, first, folds, replicas))
-        # Each context queues its own original kernels. No source copies remain
-        # outstanding here, and the launches need no host readback before join.
-        for rank in range(active):
-            ref shard = shards[rank]
-            var ci = shard.inputs[0].create_sub_buffer[DType.uint32](0, len(shard.inputs[0]))
-            var ri = shard.inputs[1].create_sub_buffer[DType.uint32](0, len(shard.inputs[1]))
-            var po = shard.inputs[2].create_sub_buffer[DType.uint32](0, len(shard.inputs[2]))
-            var ps = shard.inputs[3].create_sub_buffer[DType.uint32](0, len(shard.inputs[3]))
-            var li = shard.inputs[4].create_sub_buffer[DType.uint32](0, len(shard.inputs[4]))
-            var di = shard.inputs[5].create_sub_buffer[DType.uint32](0, len(shard.inputs[5]))
-            launch_histograms_for_blocks[hist2_smem_mode, ridx_stats, False, False, False](
-                shard.ctx, shard.blocks, depth, n_live, n_rows, stat_count, max_leaves, sm_count,
-                rebind[MutPointer[Float32, MutAnyOrigin]](shard.scale.unsafe_ptr()), ci, ri, shard.stats,
-                po, ps, li, di,
-                shard.hist, shard.acc, shard.scratch, shard.folds,
-                replicas_override=shard.replicas)
-        for rank in range(active):
-            ref shard = shards[rank]
-            var packed = peer_clone(shard.ctx, ctx, shard.hist)
-            var cells = len(packed)
-            ctx.enqueue_function[copy_columns_kernel[True]](hist.unsafe_ptr(), packed.unsafe_ptr(),
-                Int32(hist_cells_per_leaf), Int32(shard.first), Int32(shard.folds), Int32(cells),
-                grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1))
-            ctx.synchronize()
-            _ = packed^
-        _ = shards^
-        _ = host_folds^
-        first_bin += block.total_folds
-    _ = scale^
