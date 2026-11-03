@@ -123,7 +123,7 @@ def _kernel_rows(plan: DevicePlan, ctx: DeviceContext, kp: KernelParams,
         if active > 1:
             raise Error("parallel SVM cannot use process-global GEMM phase counters")
     var shards = List[SVMKernelShard]()
-    for rank in range(active):
+    for rank in range(active):  # driver-loop: over the plan's ranks
         var first = m * rank // active
         var rows = m * (rank + 1) // active - first
         var source = first
@@ -161,10 +161,10 @@ def _kernel_rows(plan: DevicePlan, ctx: DeviceContext, kp: KernelParams,
         task(0)
     else:
         host_parallelize(task, active)
-    for rank in range(active):
+    for rank in range(active):  # driver-loop: over the plan's ranks
         if failures[rank] != 0:
             raise Error("SVM kernel row shard failed: " + String(rank))
-    for rank in range(active):
+    for rank in range(active):  # driver-loop: over the plan's ranks
         ref shard = shards[rank]
         var destination = output.create_sub_buffer[DType.float32](shard.first * n, shard.rows * n)
         shard.out.enqueue_copy_to(destination)
