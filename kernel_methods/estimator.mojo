@@ -75,6 +75,7 @@ from cholesky.checks.potrf import (
     CHOL_PANEL_TPB,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB
+from core.device_plan import device_plan_current
 from core.identity_trace import IdentityTrace
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
@@ -724,9 +725,13 @@ def kernel_ridge_fit_host(
     if precomputed:
         ctx.enqueue_copy(dst_buf=dk, src_buf=xa)
     else:
+        # The kernel-method entry reads the calling thread's device plan once; the
+        # svm kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
+        var km_plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
         km_kernel_matrix(
             ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
             na, nb, kws, elem_tpb, sabotage, True,
+            plan=km_plan,
         )
     ctx.synchronize()
     trace.record_device(ctx, "krr.kernel", dk, n_samples * n_samples)
@@ -845,8 +850,12 @@ def kernel_ridge_predict_host(
         # X IS the n_query x n_samples cross-kernel matrix.
         ctx.enqueue_copy(dst_buf=dk, src_buf=dq)
     else:
+        # The kernel-method entry reads the calling thread's device plan once; the
+        # svm kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
+        var km_plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
         km_kernel_matrix(
-            ctx, kp, dk, dq, dfit, n_query, n, d, na, nb, kws, elem_tpb, sabotage
+            ctx, kp, dk, dq, dfit, n_query, n, d, na, nb, kws, elem_tpb, sabotage,
+            plan=km_plan,
         )
     ctx.synchronize()
     trace.record_device(ctx, "krr.cross_kernel", dk, n_query * n)
@@ -956,9 +965,13 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     if precomputed:
         ctx.enqueue_copy(dst_buf=dk, src_buf=xa)
     else:
+        # The kernel-method entry reads the calling thread's device plan once; the
+        # svm kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
+        var km_plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
         km_kernel_matrix(
             ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
             na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE, True,
+            plan=km_plan,
         )
     trace.record_device(ctx, "krr.kernel", dk, n_samples * n_samples)
     if weighted:
@@ -1071,8 +1084,12 @@ def kernel_ridge_predict_dev[out_origin: MutOrigin, //](
         # X IS the n_query x n_samples cross-kernel matrix.
         ctx.enqueue_copy(dst_buf=dk, src_buf=dq)
     else:
+        # The kernel-method entry reads the calling thread's device plan once; the
+        # svm kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
+        var km_plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
         km_kernel_matrix(
-            ctx, kp, dk, dq, dfit, n_query, n, d, na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE
+            ctx, kp, dk, dq, dfit, n_query, n, d, na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE,
+            plan=km_plan,
         )
     trace.record_device(ctx, "krr.cross_kernel", dk, n_query * n)
     identical_gemm_into(ctx, dpred, dk, ddual, gws, n_query, t, n, OP_NN)
@@ -2111,8 +2128,12 @@ def _nystroem_fit_core(
         km_kernel_workspace_floats(q, q, n_features)
     )
     ctx.synchronize()
+    # The kernel-method entry reads the calling thread's device plan once; the
+    # svm kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
+    var km_plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     km_kernel_matrix(
-        ctx, kp, dk, ca, ca, q, q, n_features, na, nb, kws, elem_tpb, sabotage, True
+        ctx, kp, dk, ca, ca, q, q, n_features, na, nb, kws, elem_tpb, sabotage, True,
+        plan=km_plan,
     )
     ctx.synchronize()
     trace.record_device(ctx, "nys.basis_kernel", dk, q * q)
@@ -2431,8 +2452,12 @@ def nystroem_transform_host(
     )
     ctx.synchronize()
 
+    # The kernel-method entry reads the calling thread's device plan once; the
+    # svm kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
+    var km_plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     km_kernel_matrix(
-        ctx, kp, dk, dx, dc, n_rows, q, d, na, nb, kws, elem_tpb, sabotage
+        ctx, kp, dk, dx, dc, n_rows, q, d, na, nb, kws, elem_tpb, sabotage,
+        plan=km_plan,
     )
     ctx.synchronize()
     trace.record_device(ctx, "nys.cross_kernel", dk, n_rows * q)
@@ -2526,8 +2551,12 @@ def _nystroem_transform_dev[out_origin: MutOrigin, //](
     )
     ctx.synchronize()
     var t1 = Int(perf_counter_ns())
+    # The kernel-method entry reads the calling thread's device plan once; the
+    # svm kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
+    var km_plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     km_kernel_matrix(
-        ctx, kp, dk, dx, dc, n_rows, q, d, na, nb, kws, elem_tpb, sabotage
+        ctx, kp, dk, dx, dc, n_rows, q, d, na, nb, kws, elem_tpb, sabotage,
+        plan=km_plan,
     )
     ctx.synchronize()
     var t2 = Int(perf_counter_ns())
