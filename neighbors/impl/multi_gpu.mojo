@@ -91,6 +91,21 @@ def parallel_knn_rows(
     mut out_dist: DeviceBuffer[DType.float32], mut out_idx: DeviceBuffer[DType.uint32],
     nq: Int, ni: Int, d: Int, k: Int, query_tile: Int, buf_len: Int,
     return_sqrt: Bool, method: Int, metric: Int, metric_arg: Float32, count: Int,
+) raises -> Int:
+    """Entry for check tools that call the shard path directly
+    (`training/checks/graph_rows_check.mojo`): reads the plan once."""
+    return parallel_knn_rows(ctx, queries, query_norm, index, index_norm,
+        out_dist, out_idx, nq, ni, d, k, query_tile, buf_len, return_sqrt,
+        method, metric, metric_arg, count, neighbors_device_plan())
+
+
+def parallel_knn_rows(
+    ctx: DeviceContext,
+    mut queries: DeviceBuffer[DType.float32], mut query_norm: DeviceBuffer[DType.float32],
+    mut index: DeviceBuffer[DType.float32], mut index_norm: DeviceBuffer[DType.float32],
+    mut out_dist: DeviceBuffer[DType.float32], mut out_idx: DeviceBuffer[DType.uint32],
+    nq: Int, ni: Int, d: Int, k: Int, query_tile: Int, buf_len: Int,
+    return_sqrt: Bool, method: Int, metric: Int, metric_arg: Float32, count: Int,
     dplan: DevicePlan,
 ) raises -> Int:
     ctx.synchronize()
