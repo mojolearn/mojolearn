@@ -176,7 +176,7 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
                 self.gradients[j] = self.executor.parameter_gradient(
                     self.parameter_leaves[j], self.program.param_shapes[j].count())
         self.executor.read_loss(loss, FP(unsafe_from_address=Int(self.loss_word.unsafe_ptr())))
-        self.executor.executor.session.ex.sync()
+        self.executor.session.ex.sync()
         self.loss = self.loss_word[0]
 
     def clear_totals(mut self) raises:
