@@ -40,7 +40,8 @@ from gemm.checks.gemm_identical import (
 )
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from core.gram_multi_gpu import pinned_gemm_nt_gram_kernel, parallel_gram_outputs
+from core.device_plan import DevicePlan
+from core.gram_multi_gpu import gram_plan_current, pinned_gemm_nt_gram_kernel, parallel_gram_outputs
 from core.strided_walk import NV_AMD_IDENTICAL_STEPS
 
 from gemm.checks.gemm_identical import (
@@ -499,6 +500,19 @@ def gemm_nt_gram(
     n: Int,
     k: Int,
 ) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_nt_gram(gram_plan_current(), ctx, z, xt, m, n, k)
+
+
+def gemm_nt_gram(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    xt: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
     """`z[m x n] = xt[m x k] ."""
     if n == 1:
         raise Error(
@@ -509,7 +523,7 @@ def gemm_nt_gram(
         )
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var xtm = xt
-        if m == n and parallel_gram_outputs[False](ctx,z,xtm,m,k):
+        if m == n and parallel_gram_outputs[False](plan,ctx,z,xtm,m,k):
             return
         ctx.enqueue_function[pinned_gemm_nt_gram_kernel](
             z.unsafe_ptr(),
@@ -553,6 +567,21 @@ def gemm_tn(
     n: Int,
     k: Int,
 ) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_tn(gram_plan_current(), ctx, z, x, xt, xt2, m, n, k)
+
+
+def gemm_tn(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut xt: DeviceBuffer[DType.float32],
+    mut xt2: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
     """`z[m x n] = x[k x m]^T .
 
     IDENTICAL: the split-K Gram kernel where it applies (`m == n <= 128`,
@@ -576,19 +605,32 @@ def gemm_tn(
                     + " operand and one width, so m must equal n."
                     + " IDENTITY_PATHS row 27."
                 )
-            gemm_tn_identical_v1(ctx, z, x, xt2, m, k)
+            gemm_tn_identical_v1(plan, ctx, z, x, xt2, m, k)
             return
     if gram_splitk_applies(m, n, k):
-        gemm_tn_splitk_into(ctx, z, x, xt, m, k)
+        gemm_tn_splitk_into(plan, ctx, z, x, xt, m, k)
         return
     comptime if APPLE_FAST_GEMM_TN_V1:
         if m == n:
-            gemm_tn_identical_v1(ctx, z, x, xt2, m, k)
+            gemm_tn_identical_v1(plan, ctx, z, x, xt2, m, k)
             return
-    gemm_tn_via_transpose(ctx, z, x, xt, xt2, m, n, k)
+    gemm_tn_via_transpose(plan, ctx, z, x, xt, xt2, m, n, k)
 
 
 def gemm_tn_identical_v1(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_tn_identical_v1(gram_plan_current(), ctx, z, x, scratch, m, k)
+
+
+def gemm_tn_identical_v1(
+    plan: DevicePlan,
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -603,7 +645,7 @@ def gemm_tn_identical_v1(
     split-K capacity is a fused tile plan needing no workspace at all, so
     the allocate-and-wait branch below is the guard, not the path.
     """
-    if parallel_gram_outputs[True](ctx,z,x,m,k):
+    if parallel_gram_outputs[True](plan,ctx,z,x,m,k):
         return
     var x2 = x
     var need = identical_gemm_workspace_max_floats(m, m, k)
@@ -618,6 +660,21 @@ def gemm_tn_identical_v1(
 
 
 def gemm_tn_via_transpose(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut xt: DeviceBuffer[DType.float32],
+    mut xt2: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_tn_via_transpose(gram_plan_current(), ctx, z, x, xt, xt2, m, n, k)
+
+
+def gemm_tn_via_transpose(
+    plan: DevicePlan,
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -658,7 +715,7 @@ def gemm_tn_via_transpose(
         ),
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
-    gemm_nt_gram(ctx, z, xt, m, n, k)
+    gemm_nt_gram(plan, ctx, z, xt, m, n, k)
     _ = xt2
 
 
