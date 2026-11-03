@@ -1613,6 +1613,9 @@ class Release:
         for vendor in GATE_VENDORS:
             for report in sorted((self.rel / f"gate-{vendor}").glob(f"*/runtime-{vendor}/runtime-report.json")):
                 out.append(("installed-runtime", dict(report=str(report))))
+        # published-<vendor> (post stage): tools/release_published_install.py reports under published-<vendor>/.
+        for report in sorted(self.rel.glob("published-*/published-report.json")):
+            out.append(("published-install", dict(report=str(report))))
         # The Linux release legs (compile-<vendor>/runtime, compile-<vendor>/adapters/<arch>, compile-cpu/runtime
         # on the host leg): a leg built in this freeze, or the earlier freeze's leg a <leg>.reused.json names.
         for directory in self.retained_leg_dirs():
