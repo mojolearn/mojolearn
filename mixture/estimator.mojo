@@ -101,7 +101,8 @@ from mixture.checks.estep import (
     gmm_neg_inf,
     gmm_predict_labels,
 )
-from mixture.multi_gpu import gmm_e_step_dispatch
+from core.device_plan import DevicePlan
+from mixture.multi_gpu import gmm_device_plan, gmm_e_step_dispatch
 from mixture.checks.sample import (
     GMM_SAMPLE_TPB,
     gmm_sample_components,
@@ -1078,6 +1079,41 @@ def gaussian_mixture_fit(
     card_prefix: String = "gmm",
     trace_path: String = "",
 ) raises -> GaussianMixtureModel:
+    """Reads the device plan once and runs the planned overload below."""
+    return gaussian_mixture_fit(
+        gmm_device_plan(),
+        x,
+        n_samples,
+        n_features,
+        params,
+        elem_tpb,
+        row_tpb,
+        comp_tpb,
+        solve_tpb,
+        panel_tpb,
+        chol_elem_tpb,
+        sabotage,
+        card_prefix,
+        trace_path,
+    )
+
+
+def gaussian_mixture_fit(
+    dplan: DevicePlan,
+    x: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    params: GmmParams,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    row_tpb: Int = GMM_ROW_TPB,
+    comp_tpb: Int = GMM_COMP_TPB,
+    solve_tpb: Int = CHOL_SOLVE_TPB,
+    panel_tpb: Int = CHOL_PANEL_TPB,
+    chol_elem_tpb: Int = CHOL_ELEM_TPB,
+    sabotage: Int = GMM_SAB_NONE,
+    card_prefix: String = "gmm",
+    trace_path: String = "",
+) raises -> GaussianMixtureModel:
     """`GaussianMixture(...).fit(X)`, host in and host out, one shot.
 
     `trace_path` empty means READ THE ENVIRONMENT (`MOJOLEARN_IDENTITY_TRACE`),
@@ -1276,7 +1312,7 @@ def gaussian_mixture_fit(
             ctx.synchronize()
             st_t = Int(perf_counter_ns())
         gmm_e_step_dispatch(
-            ctx, dx, means, prec, linv, log_det_chol, log_weights,
+            dplan, ctx, dx, means, prec, linv, log_det_chol, log_weights,
             escratch, gws, mahal, wlp, rowmax, lse, logresp, meanll,
             n, d, ncomp, trace, tag, elem_tpb, row_tpb, sabotage,
         )
@@ -1457,6 +1493,29 @@ def gaussian_mixture_score_samples(
     card_prefix: String = "gmm.score",
     trace_path: String = "",
 ) raises -> List[Float32]:
+    """Reads the device plan once and runs the planned overload below."""
+    return gaussian_mixture_score_samples(
+        gmm_device_plan(),
+        model,
+        x,
+        n_samples,
+        elem_tpb,
+        row_tpb,
+        card_prefix,
+        trace_path,
+    )
+
+
+def gaussian_mixture_score_samples(
+    dplan: DevicePlan,
+    model: GaussianMixtureModel,
+    x: List[Float32],
+    n_samples: Int,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    row_tpb: Int = GMM_ROW_TPB,
+    card_prefix: String = "gmm.score",
+    trace_path: String = "",
+) raises -> List[Float32]:
     """`score_samples(X)`, `_base.py:356-373`: `logsumexp_k` of the weighted
     log probabilities, one value per row.
 
@@ -1511,7 +1570,7 @@ def gaussian_mixture_score_samples(
     ctx.synchronize()
 
     gmm_e_step_dispatch(
-        ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
+        dplan, ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
     )
@@ -1535,6 +1594,29 @@ def gaussian_mixture_score_samples(
 
 
 def gaussian_mixture_predict_proba(
+    model: GaussianMixtureModel,
+    x: List[Float32],
+    n_samples: Int,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    row_tpb: Int = GMM_ROW_TPB,
+    card_prefix: String = "gmm.proba",
+    trace_path: String = "",
+) raises -> List[Float32]:
+    """Reads the device plan once and runs the planned overload below."""
+    return gaussian_mixture_predict_proba(
+        gmm_device_plan(),
+        model,
+        x,
+        n_samples,
+        elem_tpb,
+        row_tpb,
+        card_prefix,
+        trace_path,
+    )
+
+
+def gaussian_mixture_predict_proba(
+    dplan: DevicePlan,
     model: GaussianMixtureModel,
     x: List[Float32],
     n_samples: Int,
@@ -1592,7 +1674,7 @@ def gaussian_mixture_predict_proba(
     ctx.synchronize()
 
     gmm_e_step_dispatch(
-        ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
+        dplan, ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
     )
@@ -1653,6 +1735,29 @@ def gaussian_mixture_predict(
     card_prefix: String = "gmm.predict",
     trace_path: String = "",
 ) raises -> List[Int32]:
+    """Reads the device plan once and runs the planned overload below."""
+    return gaussian_mixture_predict(
+        gmm_device_plan(),
+        model,
+        x,
+        n_samples,
+        elem_tpb,
+        row_tpb,
+        card_prefix,
+        trace_path,
+    )
+
+
+def gaussian_mixture_predict(
+    dplan: DevicePlan,
+    model: GaussianMixtureModel,
+    x: List[Float32],
+    n_samples: Int,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    row_tpb: Int = GMM_ROW_TPB,
+    card_prefix: String = "gmm.predict",
+    trace_path: String = "",
+) raises -> List[Int32]:
     """`predict(X)`, `_base.py:395-412`: `argmax_k` of the weighted log
     probabilities. Ties go to the LOWEST component index, which is
     `xp.argmax`'s documented rule and `argmax_kernel`'s."""
@@ -1698,7 +1803,7 @@ def gaussian_mixture_predict(
     ctx.synchronize()
 
     gmm_e_step_dispatch(
-        ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
+        dplan, ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
     )
@@ -1730,16 +1835,30 @@ def gaussian_mixture_predict(
 def gaussian_mixture_score(
     model: GaussianMixtureModel, x: List[Float32], n_samples: Int
 ) raises -> Float32:
+    """Reads the device plan once and runs the planned overload below."""
+    return gaussian_mixture_score(
+        gmm_device_plan(),
+        model,
+        x,
+        n_samples,
+    )
+
+
+def gaussian_mixture_score(
+    dplan: DevicePlan,
+    model: GaussianMixtureModel, x: List[Float32], n_samples: Int
+) raises -> Float32:
     """`score(X)`, `_base.py:375-393`: the mean of `score_samples`.
 
     The scoring E-step's device mean, folded in the chunked levels of
     `mixture/meanll_order.mojo` (`gmm_meanll_host`'s order), one word read
     back (`_gmm_score_device`).
     """
-    return _gmm_score_device(model, x, n_samples)
+    return _gmm_score_device(dplan, model, x, n_samples)
 
 
 def _gmm_score_device(
+    dplan: DevicePlan,
     model: GaussianMixtureModel, x: List[Float32], n_samples: Int
 ) raises -> Float32:
     """`score(X)` read from the device (fam2-cluster): the scoring E-step already folds `mean(lse)`
@@ -1778,7 +1897,7 @@ def _gmm_score_device(
     ctx.synchronize()
 
     gmm_e_step_dispatch(
-        ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
+        dplan, ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, "gmm.score", GMM_ELEM_TPB, GMM_ROW_TPB, GMM_SAB_NONE,
     )

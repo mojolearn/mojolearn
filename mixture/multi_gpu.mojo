@@ -20,7 +20,7 @@ another shard. Traced stages are recorded on the root after the gather, in the
 original stage order, so a traced multi-device fit writes the same card.
 Sabotage probes are refused by the distributed path.
 """
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from std.os import getenv
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -40,8 +40,16 @@ from mixture.checks.estep import (
 from mixture.checks.gmm_sabotage import GMM_SAB_NONE
 
 
-def gmm_device_count() raises -> Int:
-    var value = device_plan_setting("MOJOLEARN_GMM_DEVICE_COUNT")
+def gmm_device_plan() raises -> DevicePlan:
+    """The GaussianMixture family's device plan, read once at a family entry
+    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    `device_plan_setting("MOJOLEARN_GMM_DEVICE_COUNT")` returned, so
+    `gmm_device_count` parses the same text as before."""
+    return device_plan_current("MOJOLEARN_GMM_DEVICE_COUNT", "")
+
+
+def gmm_device_count(dplan: DevicePlan) raises -> Int:
+    var value = dplan.setting
     if value == "":
         return 1
     var count = Int(value)
@@ -75,8 +83,8 @@ struct GmmEStepShard(Movable):
     var begin: Int
     var rows: Int
 
-    def __init__(out self, rank: Int, begin: Int, rows: Int, d: Int, ncomp: Int) raises:
-        self.ctx = DeviceContext(device_id=device_plan_device(rank))
+    def __init__(out self, dplan: DevicePlan, rank: Int, begin: Int, rows: Int, d: Int, ncomp: Int) raises:
+        self.ctx = DeviceContext(device_id=dplan.device(rank))
         self.begin = begin
         self.rows = rows
         self.x = self.ctx.enqueue_create_buffer[DType.float32](rows * d)
@@ -140,12 +148,67 @@ def gmm_e_step_dispatch(
     row_tpb: Int = GMM_ROW_TPB,
     sabotage: Int = GMM_SAB_NONE,
 ) raises:
+    """Reads the device plan once and runs the planned overload below."""
+    gmm_e_step_dispatch(
+        gmm_device_plan(),
+        ctx,
+        x,
+        means,
+        prec_input,
+        linv_input,
+        log_det_chol,
+        log_weights,
+        scratch,
+        gws,
+        mahal,
+        wlp,
+        rowmax,
+        lse,
+        logresp,
+        meanll,
+        n,
+        d,
+        ncomp,
+        trace,
+        tag,
+        elem_tpb,
+        row_tpb,
+        sabotage,
+    )
+
+
+def gmm_e_step_dispatch(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut means: DeviceBuffer[DType.float32],
+    prec_input: DeviceBuffer[DType.float32],
+    linv_input: DeviceBuffer[DType.float32],
+    mut log_det_chol: DeviceBuffer[DType.float32],
+    mut log_weights: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    mut gws: DeviceBuffer[DType.float32],
+    mut mahal: DeviceBuffer[DType.float32],
+    mut wlp: DeviceBuffer[DType.float32],
+    mut rowmax: DeviceBuffer[DType.float32],
+    mut lse: DeviceBuffer[DType.float32],
+    mut logresp: DeviceBuffer[DType.float32],
+    mut meanll: DeviceBuffer[DType.float32],
+    n: Int,
+    d: Int,
+    ncomp: Int,
+    mut trace: IdentityTrace,
+    tag: String,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    row_tpb: Int = GMM_ROW_TPB,
+    sabotage: Int = GMM_SAB_NONE,
+) raises:
     """`gmm_e_step`, or its row-sharded form when MOJOLEARN_GMM_DEVICE_COUNT > 1.
 
     Same buffers, same stages, same postconditions. A single row, or a device
     count of one, runs the original entry unchanged.
     """
-    var count = gmm_device_count()
+    var count = gmm_device_count(dplan)
     if count == 1 or n < 2:
         gmm_e_step(
             ctx, x, means, prec_input, linv_input, log_det_chol, log_weights,
@@ -174,7 +237,7 @@ def gmm_e_step_dispatch(
     for rank in range(active):
         var begin = gmm_row_shard_begin(n, rank, active)
         var rows = gmm_row_shard_begin(n, rank + 1, active) - begin
-        var shard = GmmEStepShard(rank, begin, rows, d, ncomp)
+        var shard = GmmEStepShard(dplan, rank, begin, rows, d, ncomp)
         var source_row = begin
         comptime if is_defined["MOJOLEARN_GMM_PARALLEL_SABOTAGE"]():
             # Check-only arm: every later owner reads its rows one row early.
