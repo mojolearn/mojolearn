@@ -47,6 +47,7 @@ the wrapper holds the caller's arrays for the length of the call.
 """
 
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.device_plan import DevicePlan, device_plan_current, device_plan_device, device_plan_setting
 from bindings.py_lists import py_list_int
 from gbdt.methods.ordered_fast_switches import ordered_doc_count
 from std.os import abort
@@ -198,6 +199,40 @@ def _u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null buffer address")
     return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def _gbdt_device_plan() raises -> DevicePlan:
+    """THE GBDT FAMILY'S DEVICE PLAN, read ONCE here at the binding entry
+    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Nothing below the
+    entry reads the thread plan; the value travels down to the dispatchers in
+    `gbdt/methods/pointwise_multi_gpu.mojo`.
+
+    `setting` is what the old in-kernel reads parsed:
+    `device_plan_setting("MOJOLEARN_GBDT_DEVICE_COUNT")`, i.e. the plan's size
+    while a plan driving the GBDT family is bound to this thread, else the
+    environment variable (a cooperative worker process). `plan.single()` is
+    then the same "" / "1" test both old branch sites made. For a valid
+    multi-device count the device ids are read here, rank by rank, through
+    `device_plan_device` (the plan's entry, or the rank itself in a worker),
+    so the shard owners no longer read the thread plan. An unparsable or
+    out-of-range count is left for the dispatchers to refuse, as before.
+    """
+    var plan = device_plan_current()
+    plan.setting = device_plan_setting("MOJOLEARN_GBDT_DEVICE_COUNT")
+    if not plan.single():
+        var count = 0
+        try:
+            count = Int(plan.setting)
+        except:
+            count = 0
+        if count >= 1 and count <= 64:
+            var devices = List[Int]()
+            for rank in range(count):  # driver-loop: over plan devices (at most 64), ids only
+                devices.append(device_plan_device(rank))
+            plan.count = count
+            plan.root = devices[0]
+            plan.devices = devices^
+    return plan^
 
 
 def _gbdt_fit_impl(
@@ -499,6 +534,7 @@ def _gbdt_fit_impl(
     var n_eval_rows = Int(py=params[20])
 
     var result: GbdtFitResult
+    var device_plan = _gbdt_device_plan()
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         result = gbdt_fit(
@@ -510,6 +546,7 @@ def _gbdt_fit_impl(
             pair_weights=pair_weights,
             target_dim=target_dim,
             x_row_major=row_major,
+            device_plan=device_plan,
         )
         ctx.synchronize()
 
@@ -795,11 +832,13 @@ def gbdt_fit_two_level_feature_freq_binding(
     var l2_leaf_reg = Float32(Float64(py=params[5]))
     var random_seed = UInt64(Int(py=params[6]))
     var text: String
+    var device_plan = _gbdt_device_plan()
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         text = gbdt_fit_two_level_feature_freq(
             ctx, xp, n_rows, n_features, yp, wp, n_weights, sp, n_sources,
             learning_rate, l2_leaf_reg, random_seed,
+            device_plan=device_plan,
         )
         ctx.synchronize()
     return PythonObject(text)
@@ -842,6 +881,7 @@ def gbdt_fit_ordered_rmse_binding(
     var pp = _u32_ptr(Int(py=permutation_addr))
     var text: String
     var x_address = Int(py=x_addr)
+    var device_plan = _gbdt_device_plan()
     with GILReleased(Python()):
         # cpu2-l6-bindings: X (n_rows x n_features) is NOT copied into a host
         # List: `train_ordered_rmse_ptr` uploads it from the caller's
@@ -857,6 +897,7 @@ def gbdt_fit_ordered_rmse_binding(
                 ctx, x_address, ys, n_rows, n_features, permutation,
                 n_estimators, max_depth, border_count, learning_rate,
                 l2_leaf_reg, ws,
+                device_plan=device_plan,
             )
             text = model_text(trained)
             ctx.synchronize()
