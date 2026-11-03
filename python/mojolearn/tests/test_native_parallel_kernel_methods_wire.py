@@ -124,6 +124,9 @@ def test_root_context_follows_the_plan():
     # every binding's process-lifetime context (core/neural_context.mojo)
     # opens on the plan's root while a plan whose root is not device 0 is bound
     context = _read("core/neural_context.mojo")
+    # (2026-11-03) the plan-less entry reads the plan once and the plan-taking
+    # overload opens on its root
     body = context[context.index("def process_ctx["):]
-    assert "var root = device_plan_root()" in body
+    assert "return process_ctx[name](neural_device_plan())" in body
+    assert "var root = dplan.root" in body
     assert "DeviceContext(device_id=root)" in body
