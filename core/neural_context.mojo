@@ -85,7 +85,7 @@ struct _NeuralContext(Defaultable, Movable):
 
 def neural_device_plan() raises -> DevicePlan:
     """The calling thread's device plan, read once at an entry, for its root
-    only (`DevicePlan.root` is `device_plan_root()`); no family's count
+    only (`DevicePlan.root`, the plan's first device or -1); no family's count
     setting is consulted, so the name is empty."""
     return device_plan_current("", "")
 
