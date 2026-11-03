@@ -73,12 +73,13 @@ from gbdt.methods.kernel.pointwise_split_resolve import (
     launch_pw_fold_winner,
     launch_pw_seed_sentinel,
 )
-from gbdt.methods.pointwise_kernels import FoldsHistogram, compute_hist2_dev
+from gbdt.methods.pointwise_kernels import FoldsHistogram
 from gbdt.methods.ordered_fast_switches import ORD_DOC_ID_STORAGE, ordered_doc_hit
 from std.memory import bitcast
 from gbdt.methods.pointwise_optimization_subsets import TOptimizationSubsets
 from gbdt.data.permutation import TRandom
-from gbdt.methods.pointwise_multi_gpu import pointwise_device_count, pointwise_feature_shards
+from core.device_plan import DevicePlan, plan_for_single
+from gbdt.methods.pointwise_multi_gpu import pointwise_is_multi, pointwise_hist_dispatch
 
 
 def folds_histogram_for(folds: List[UInt32]) raises -> FoldsHistogram:
@@ -192,6 +193,12 @@ struct PolicyScoreHelper(Movable):
     var h_scale_staged: Float32
     var h_std_staged: Float32
     var words_staged: Bool
+    # The fit's device plan, a value read once at the binding entry. The
+    # constructor leaves one device (`plan_for_single()`);
+    # `ScoresCalcerOnCompressedDataSet` hands its plan over with
+    # `set_device_plan`. The submit sites pass it to the dispatchers in
+    # `gbdt/methods/pointwise_multi_gpu.mojo`.
+    var device_plan: DevicePlan
 
     def __init__(
         out self,
@@ -354,7 +361,12 @@ struct PolicyScoreHelper(Movable):
         self.h_scale_staged = Float32(0.0)
         self.h_std_staged = Float32(0.0)
         self.words_staged = False
+        self.device_plan = plan_for_single()
         ctx.synchronize()
+
+    def set_device_plan(mut self, plan: DevicePlan):
+        """Bind the fit's device plan (read once at the binding entry)."""
+        self.device_plan = plan.copy()
 
     def submit_compute(
         mut self,
@@ -372,7 +384,7 @@ struct PolicyScoreHelper(Movable):
         host-scalar form: the scale staged on `d_scale_word`."""
         if self.feature_count == 0:
             return
-        if pointwise_device_count() > 1:
+        if pointwise_is_multi(self.device_plan):
             self._submit(
                 ctx, subsets, cindex, docs, n_rows, sm_count, fixed_scale,
                 rebind[MutPointer[Float32, MutAnyOrigin]](
@@ -428,7 +440,7 @@ struct PolicyScoreHelper(Movable):
         if self.feature_count == 0:
             return
         var host_scale = Float32(1.0)
-        if pointwise_device_count() > 1:
+        if pointwise_is_multi(self.device_plan):
             var h = ctx.enqueue_create_host_buffer[DType.float32](1)
             var view = DeviceBuffer[DType.float32](
                 ctx, scale_word, 1, owning=False
@@ -463,58 +475,24 @@ struct PolicyScoreHelper(Movable):
         `fold_part_sizes`: A ORD_HIST_FOLD_SKIP's fold partition counts
         (one device only; empty = no skip)."""
         var plan = self.hist_helper.plan(Int(subsets.current_depth))
-        var devices = pointwise_device_count()
-        if devices > 1:
-            pointwise_feature_shards(ctx, self.policy, self.d_offset,
-                self.d_first_fold, self.d_folds, self.d_one_hot, cindex,
-                subsets.gathered_target, subsets.gathered_weight, docs,
-                subsets.partitions, self.d_hist, self.feature_count,
-                self.bin_feature_count, n_rows, plan.part_count, self.fold_count,
-                plan.build_from_scratch, self.folds_hist.copy(), sm_count,
-                fixed_scale, devices)
-            self.hist_helper.clear_from_scratch()
-            return
-        # TWO SEPARATE BUFFERS, and that is not a convenience: the kernels
-        # take `target` and `weight` on independent origins, and Mojo
-        # refuses two views of one buffer at a launch. DEVIATION 97.2.
-        var weight_p = subsets.gathered_weight.unsafe_ptr()
-        var target_p = subsets.gathered_target.unsafe_ptr()
-        var parts_p = subsets.partitions.unsafe_ptr()
-        compute_hist2_dev(
-            ctx,
-            self.policy,
-            self.d_offset.unsafe_ptr(),
-            self.d_first_fold.unsafe_ptr(),
-            self.d_folds.unsafe_ptr(),
-            self.d_one_hot.unsafe_ptr(),
-            self.feature_count,
-            0,
-            self.bin_feature_count,
-            cindex.unsafe_ptr(),
-            # PLANE 1 is the weighted target and PLANE 0 the weight
-            # (DEVIATION 97.3): `gathered` holds them `doc_count` apart in
-            # `TPartitionStatistics{Weight, Sum}` order, which is the
-            # REVERSE of `TL2Target`'s declaration order. Passing them the
-            # other way round swaps every gradient with its weight, changes
-            # no total, and destroys every split.
-            target_p,
-            weight_p,
-            docs.unsafe_ptr(),
-            n_rows,
-            parts_p,
-            plan.part_count,
-            self.fold_count,
-            self.d_hist.unsafe_ptr(),
-            self.bin_feature_count,
-            plan.build_from_scratch,
-            self.folds_hist.copy(),
-            sm_count,
-            scale_word,
+        # One device or feature shards: the decision and both launches live in
+        # `pointwise_hist_dispatch` (gbdt/methods/pointwise_multi_gpu.mojo);
+        # the one-device launch is the `compute_hist2_dev` call that sat here,
+        # same arguments, same order.
+        var sharded = pointwise_hist_dispatch(
+            self.device_plan, ctx, self.policy, self.d_offset,
+            self.d_first_fold, self.d_folds, self.d_one_hot, cindex,
+            subsets.gathered_target, subsets.gathered_weight, docs,
+            subsets.partitions, self.d_hist, self.feature_count,
+            self.bin_feature_count, n_rows, plan.part_count, self.fold_count,
+            plan.build_from_scratch, self.folds_hist, sm_count,
+            fixed_scale, scale_word,
             dither_ids=dither_ids,
             fold_part_sizes=fold_part_sizes,
         )
-        comptime if ORD_DOC_ID_STORAGE:
-            if dither_ids:ordered_doc_hit()
+        if not sharded:
+            comptime if ORD_DOC_ID_STORAGE:
+                if dither_ids:ordered_doc_hit()
         self.hist_helper.clear_from_scratch()
 
     def compute_optimal_split(
@@ -694,6 +672,7 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
 
     def __init__(
         out self,
+        device_plan: DevicePlan,
         ctx: DeviceContext,
         blocks: List[PolicyBlock],
         layout: CompressedIndexLayout,
@@ -704,15 +683,18 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
     ) raises:
         """Their constructor (`:35-59`): a helper per policy whose
         `GetGridSize` is non-zero. `blocks_for` already omits empty
-        policies, so the guard is structural here rather than a test."""
+        policies, so the guard is structural here rather than a test.
+
+        `device_plan` is the fit's plan, read once at the binding entry;
+        every helper keeps a copy for its submit sites."""
         self.helpers = List[PolicyScoreHelper]()
         for i in range(len(blocks)):
-            self.helpers.append(
-                PolicyScoreHelper(
-                    ctx, blocks[i], layout, n_rows, max_depth,
-                    global_feature_ids, fold_count,
-                )
+            var helper = PolicyScoreHelper(
+                ctx, blocks[i], layout, n_rows, max_depth,
+                global_feature_ids, fold_count,
             )
+            helper.set_device_plan(device_plan)
+            self.helpers.append(helper^)
 
     def submit_compute(
         mut self,
