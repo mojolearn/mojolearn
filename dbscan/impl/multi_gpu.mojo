@@ -13,7 +13,7 @@ production bit can move, and it is INERT AT ONE DEVICE: the shift is guarded by
 the define rather than to the second device. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 """
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu import block_dim, block_idx, thread_idx
 from core.host_parallel import host_parallelize
@@ -30,8 +30,16 @@ from dbscan.impl.vertexdeg.algo import vertex_deg_dispatch as native_dense
 from neighbors.impl.ball_cover.common import RBC_METRIC_DEFAULT
 
 
-def _devices(rows: Int) raises -> Int:
-    var count = Int(device_plan_setting("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1"))
+def dbscan_device_plan() raises -> DevicePlan:
+    """The DBSCAN family's device plan, read once at a family entry
+    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    `device_plan_setting("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1")` returned, so
+    `_devices` parses the same text as before."""
+    return device_plan_current("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1")
+
+
+def _devices(dplan: DevicePlan, rows: Int) raises -> Int:
+    var count = Int(dplan.setting)
     if count < 1 or count > 64:
         raise Error("DBSCAN device count must be in 1..64")
     if count > 1 and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -124,6 +132,7 @@ def _rbc_rows(
     mut ja: DeviceBuffer[DType.int32], mut vd: DeviceBuffer[DType.int32],
     rows: Int, features: Int, landmarks: Int, eps: Float32,
     mode: Int, max_k: Int, metric: Int, metric_arg: Float32, count: Int,
+    dplan: DevicePlan,
 ) raises -> Int:
     # mode 0=count, 1=fill, 2=bounded one-pass. Integer offsets alone merge.
     # The CSR offsets merge on the devices: a shard's slice of the root
@@ -140,7 +149,7 @@ def _rbc_rows(
             # Check-only arm: later owners read their query rows one row early.
             if rank > 0:
                 source = first - 1
-        var device = DeviceContext(device_id=device_plan_device(rank))
+        var device = DeviceContext(device_id=dplan.device(rank))
         var qv = q.create_sub_buffer[DType.float32](source * features, nr * features)
         var local_x = peer_clone(ctx, device, x)
         var local_q = peer_clone(ctx, device, qv)
@@ -254,6 +263,7 @@ def _rbc_rows(
 
 
 def rbc_eps_nn_query_count(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32], mut q: DeviceBuffer[DType.float32],
     mut r: DeviceBuffer[DType.float32], mut ip: DeviceBuffer[DType.int32],
@@ -263,16 +273,17 @@ def rbc_eps_nn_query_count(
     rows: Int, features: Int, landmarks: Int, eps: Float32,
     metric: Int = RBC_METRIC_DEFAULT, metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
-    var count = _devices(rows)
+    var count = _devices(dplan, rows)
     if count <= 1:
         return native_count(ctx, x, q, r, ip, cols, dist, radius, ia, vd, rows, features, landmarks, eps, metric, metric_arg)
     var ja = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.synchronize()
     return _rbc_rows(ctx, x, q, r, ip, cols, dist, radius, ia, ja, vd,
-        rows, features, landmarks, eps, 0, 0, metric, metric_arg, count)
+        rows, features, landmarks, eps, 0, 0, metric, metric_arg, count, dplan)
 
 
 def rbc_eps_nn_query_fill(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32], mut q: DeviceBuffer[DType.float32],
     mut r: DeviceBuffer[DType.float32], mut ip: DeviceBuffer[DType.int32],
@@ -282,17 +293,18 @@ def rbc_eps_nn_query_fill(
     rows: Int, features: Int, landmarks: Int, eps: Float32,
     metric: Int = RBC_METRIC_DEFAULT, metric_arg: Float32 = Float32(2.0),
 ) raises:
-    var count = _devices(rows)
+    var count = _devices(dplan, rows)
     if count <= 1:
         native_fill(ctx, x, q, r, ip, cols, dist, radius, ia, ja, rows, features, landmarks, eps, metric, metric_arg)
         return
     var vd = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.synchronize()
     _ = _rbc_rows(ctx, x, q, r, ip, cols, dist, radius, ia, ja, vd,
-        rows, features, landmarks, eps, 1, 0, metric, metric_arg, count)
+        rows, features, landmarks, eps, 1, 0, metric, metric_arg, count, dplan)
 
 
 def rbc_eps_nn_query_max_k(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32], mut q: DeviceBuffer[DType.float32],
     mut r: DeviceBuffer[DType.float32], mut ip: DeviceBuffer[DType.int32],
@@ -305,11 +317,11 @@ def rbc_eps_nn_query_max_k(
     max_k: Int,
     metric: Int = RBC_METRIC_DEFAULT, metric_arg: Float32 = Float32(2.0),
 ) raises -> Int:
-    var count = _devices(rows)
+    var count = _devices(dplan, rows)
     if count <= 1:
         return native_max_k(ctx, x, q, r, ip, cols, dist, radius, ia, ja, vd, tmp, scratch, rows, features, landmarks, eps, max_k, metric, metric_arg)
     return _rbc_rows(ctx, x, q, r, ip, cols, dist, radius, ia, ja, vd,
-        rows, features, landmarks, eps, 2, max_k, metric, metric_arg, count)
+        rows, features, landmarks, eps, 2, max_k, metric, metric_arg, count, dplan)
 
 
 @fieldwise_init
@@ -333,11 +345,12 @@ struct DenseShard(Movable):
 
 
 def vertex_deg_dispatch(
+    dplan: DevicePlan,
     ctx: DeviceContext, mut adj: DeviceBuffer[DType.uint8],
     mut vd: DeviceBuffer[DType.int32], mut x: DeviceBuffer[DType.float32],
     start: Int, rows: Int, references: Int, features: Int, eps: Float64, metric: Int,
 ) raises:
-    var count = _devices(rows)
+    var count = _devices(dplan, rows)
     if count <= 1:
         native_dense(ctx, adj, vd, x, start, rows, references, features, eps, metric)
         return
@@ -351,7 +364,7 @@ def vertex_deg_dispatch(
             # Check-only arm: later owners read their query rows one row early.
             if rank > 0:
                 source = first - 1
-        var device = DeviceContext(device_id=device_plan_device(rank))
+        var device = DeviceContext(device_id=dplan.device(rank))
         var data = peer_clone(ctx, device, x)
         var local_adj = device.enqueue_create_buffer[DType.uint8](nr * references)
         var local_vd = device.enqueue_create_buffer[DType.int32](nr + 1)
