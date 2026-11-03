@@ -9,14 +9,12 @@ from std.memory import memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COPY, OP_FILL, OP_SCALE, dummy_ptr
 from autograd.ops import OP_AG_ACCUMULATE
-from autograd.ops_api import OpsSession
+from autograd.program_executor import ProgramExecutor
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape
-from autograd.program_runtime import parameter_buffers, replay_values_prepared, program_loss
 from autograd.program_replay_metadata import PreparedProgramReplay
 from autograd.rankn import ShapeN
 from autograd.optim import OptimizerConfig, OptimizerState, step_lr, optimizer_slots
 from autograd.model import epoch_lr
-from autograd.import_api import ImportRules
 from autograd.data import epoch_order, gather_rows, DATA_MAX_ROWS
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from core.cast_in import CastIn
@@ -25,7 +23,7 @@ from checks.numerics import identical_mul, identical_div, identical_mul_add, ftz
 
 
 struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
-    var session: OpsSession[Self.E]
+    var executor: ProgramExecutor[Self.E]
     var program: OpsProgram
     var params: List[FP]
     var trainable: List[Bool]
@@ -44,7 +42,6 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
     var dataset_ready: Bool
     var target_cols: Int
     var gradients: List[FP]
-    var temps: List[Int]
     var loss: Float32
     var states: List[OptimizerState]
     var totals: List[FP]
@@ -54,7 +51,7 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
 
     def __init__(out self, var ex: Self.E, p: OpsProgram, values: List[List[Float32]],
                  trainable: List[Bool], cfg: OptimizerConfig, rank: Int, world: Int) raises:
-        self.session = OpsSession[Self.E](ex^, False)
+        self.executor = ProgramExecutor[Self.E](ex^)
         self.program = p.copy()
         self.params = List[FP]()
         self.trainable = trainable.copy()
@@ -73,7 +70,6 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
         self.dataset_ready = False
         self.target_cols = 1
         self.gradients = List[FP]()
-        self.temps = List[Int]()
         self.loss = Float32(0)
         self.states = List[OptimizerState]()
         self.totals = List[FP]()
@@ -83,9 +79,9 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
         for j in range(len(p.params)):  # driver-loop: parameter ownership table
             var sh = p.param_shapes[j]
             var src = CastIn.f32_c(Int(values[j].unsafe_ptr()), sh.rows(), sh.cols())
-            var h = self.session.upload_nd(src, sh, False)
+            var h = self.executor.load_param(src, sh)
             self.program.params[j] = h
-            self.params.append(FP(unsafe_from_address=self.session.owned[self.session._slot(h)]))
+            self.params.append(self.executor.param_buffer(h))
             self.gradients.append(dummy_ptr())
             # A shape-independent partition: adjacent owners cover the whole
             # tensor exactly once, including uneven widths and empty owners.
@@ -93,15 +89,15 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
             var n = sh.count() * (rank + 1) // world - lo
             self.first.append(lo)
             self.width.append(n)
-            self.states.append(OptimizerState(self.session.ex, cfg, max(1, n)) if trainable[j] else OptimizerState())
-            self.totals.append(self.session.ex.alloc(max(1, n)))
-            self.incoming.append(self.session.ex.alloc(max(1, n)))
+            self.states.append(OptimizerState(self.executor.session.ex, cfg, max(1, n)) if trainable[j] else OptimizerState())
+            self.totals.append(self.executor.session.ex.alloc(max(1, n)))
+            self.incoming.append(self.executor.session.ex.alloc(max(1, n)))
 
     def release_dataset(mut self) raises:
         # Register every acquisition immediately, including a partial setup.
         # Full/batch lists borrow these buffers and need not have equal lengths.
         for j in range(len(self.dataset_storage)):  # driver-loop: call-scoped allocation owners
-            self.session.ex.free(self.dataset_storage[j])
+            self.executor.session.ex.free(self.dataset_storage[j])
         self.dataset_storage.clear()
         self.full.clear()
         self.batches.clear()
@@ -118,27 +114,27 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
         var rows = shapes[0].d[0]
         try:
             for k in range(len(srcs)):  # driver-loop: input arrays
-                var buf = self.session.ex.alloc(srcs[k].count())
+                var buf = self.executor.session.ex.alloc(srcs[k].count())
                 self.dataset_storage.append(buf)
                 self.full.append(buf)
-                var batch_buf = self.session.ex.alloc(batch * (shapes[k].count() // rows))
+                var batch_buf = self.executor.session.ex.alloc(batch * (shapes[k].count() // rows))
                 self.dataset_storage.append(batch_buf)
                 self.batches.append(batch_buf)
                 self.batch_shapes.append(shapes[k])
                 self.input_widths.append(shapes[k].count() // rows)
                 if self.program.in_kinds[k] == PROGRAM_IN_IDS:
-                    upload_cast_i32(self.session.ex, buf, srcs[k], "distributed program ids")
+                    upload_cast_i32(self.executor.session.ex, buf, srcs[k], "distributed program ids")
                 else:
-                    upload_cast(self.session.ex, buf, srcs[k])
+                    upload_cast(self.executor.session.ex, buf, srcs[k])
             self.target_cols = max(1, target.cols)
-            self.target = self.session.ex.alloc(max(1, target.count()))
+            self.target = self.executor.session.ex.alloc(max(1, target.count()))
             self.dataset_storage.append(self.target)
-            self.batch_target = self.session.ex.alloc(max(1, batch * self.target_cols))
+            self.batch_target = self.executor.session.ex.alloc(max(1, batch * self.target_cols))
             self.dataset_storage.append(self.batch_target)
-            self.indices = self.session.ex.alloc(rows)
+            self.indices = self.executor.session.ex.alloc(rows)
             self.dataset_storage.append(self.indices)
             if loss_kind != 0:
-                upload_cast(self.session.ex, self.target, target)
+                upload_cast(self.executor.session.ex, self.target, target)
             self.dataset_ready = True
         except error:
             self.release_dataset()
@@ -146,18 +142,16 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
 
     def gradient(mut self, start: Int, count: Int, loss_kind: Int, delta: Float32,
                  stream: Int) raises:
-        self.session._drop_temps(self.temps)
-        self.temps.clear()
-        self.session.tape.reset()
-        self.session.tape.record()
+        self.executor.clear()
+        self.executor.record()
         # Dataset-invariant widths/shapes were captured during prepare. Only
         # the current logical microbatch's leading dimension changes here.
         for k in range(len(self.full)):  # driver-loop: input arrays
-            gather_rows(self.session.ex, self.full[k], self.indices, start, count,
+            gather_rows(self.executor.session.ex, self.full[k], self.indices, start, count,
                         self.input_widths[k], self.batches[k])
             self.batch_shapes[k].d[0] = count
         if loss_kind != 0:
-            gather_rows(self.session.ex, self.target, self.indices, start, count,
+            gather_rows(self.executor.session.ex, self.target, self.indices, start, count,
                         self.target_cols, self.batch_target)
         # Each physical replica owns an immutable graph and separate scratch.
         # Prepare only on its first executed microbatch; no sharing between
@@ -166,33 +160,23 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
             self.replay = PreparedProgramReplay(self.program)
             self.replay_ready = True
         self.parameter_leaves.clear()
-        var outs = replay_values_prepared(self.session, self.program, self.replay,
-                                 self.batches, self.batch_shapes, self.params,
-                                 self.trainable, self.temps, self.parameter_leaves, stream)
-        var output = self.session.tensor(outs[0])
-        var y = self.session.tape.variable(self.session.ex, self.batch_target, count, self.target_cols, False)
-        var loss = program_loss(self.session.tape, self.session.ex, output, y, loss_kind, delta)
-        if self.session.tape.requires_grad(loss):
-            self.session.tape.backward_scalar_with_rules(self.session.ex, loss, ImportRules())
+        var outs = self.executor.forward(self.program, self.replay, self.batches,
+                                         self.batch_shapes, self.params, self.trainable,
+                                         self.parameter_leaves, stream)
+        var output = self.executor.tensor(outs[0])
+        var y = self.executor.target(self.batch_target, count, self.target_cols)
+        var loss = self.executor.loss(output, y, loss_kind, delta)
+        if self.executor.requires_grad(loss):
+            self.executor.backward(loss)
         for j in range(len(self.params)):  # driver-loop: parameter gradients
             if self.trainable[j]:
-                var parameter = self.session.tensor(self.parameter_leaves[j])
-                if self.session.tape._nodes[parameter._index].grad_ready:
-                    self.gradients[j] = self.session.tape.gradient(parameter)
-                else:
-                    # A selected parameter behind detach/copy has the zero
-                    # derivative. Keep the existing global optimizer clock:
-                    # momentum/decay still use this explicit zero gradient.
-                    var n = self.program.param_shapes[j].count()
-                    var zero = self.session.tape.reserve(self.session.ex, n)
-                    var fill = Args()
-                    fill.p0 = zero
-                    fill.f0 = Float32(0)
-                    self.session.ex.launch[OP_FILL](fill, n)
-                    self.gradients[j] = zero
-        self.session.ex.download(FP(unsafe_from_address=Int(self.loss_word.unsafe_ptr())),
-                                 self.session.tape.value(loss), 1)
-        self.session.ex.sync()
+                # A selected parameter behind detach/copy has the zero
+                # derivative. Keep the existing global optimizer clock:
+                # momentum/decay still use this explicit zero gradient.
+                self.gradients[j] = self.executor.parameter_gradient(
+                    self.parameter_leaves[j], self.program.param_shapes[j].count())
+        self.executor.read_loss(loss, FP(unsafe_from_address=Int(self.loss_word.unsafe_ptr())))
+        self.executor.executor.session.ex.sync()
         self.loss = self.loss_word[0]
 
     def clear_totals(mut self) raises:
@@ -201,26 +185,25 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
                 var a = Args()
                 a.p0 = self.totals[j]
                 a.f0 = Float32(0)
-                self.session.ex.launch[OP_FILL](a, self.width[j])
+                self.executor.session.ex.launch[OP_FILL](a, self.width[j])
 
     def update(mut self, cfg: OptimizerConfig, step: Int, lr: Float32) raises:
         for j in range(len(self.params)):  # driver-loop: disjoint optimizer ranges
             if self.trainable[j] and self.width[j] > 0:
-                step_lr(self.session.ex, cfg, self.states[j], self.params[j] + self.first[j],
+                step_lr(self.executor.session.ex, cfg, self.states[j], self.params[j] + self.first[j],
                         self.totals[j], self.width[j], step, lr)
-        self.session.ex.sync()
+        self.executor.session.ex.sync()
 
     def close(mut self) raises:
         self.release_dataset()
-        self.session._drop_temps(self.temps)
-        self.temps.clear()
+        self.executor.clear_temps()
         for j in range(len(self.states)):  # driver-loop: optimizer range owners
             if self.trainable[j]:
-                self.states[j].release(self.session.ex)
-            self.session.ex.free(self.totals[j])
-            self.session.ex.free(self.incoming[j])
+                self.states[j].release(self.executor.session.ex)
+            self.executor.session.ex.free(self.totals[j])
+            self.executor.session.ex.free(self.incoming[j])
         self.states.clear()
-        self.session.close()
+        self.executor.close()
         self.replay = PreparedProgramReplay()
         self.replay_ready = False
         self.parameter_leaves = List[Int]()
@@ -287,17 +270,17 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                     continue
                 var bytes = List[Float32](length=n, fill=Float32(0))
                 var ptr = FP(unsafe_from_address=Int(bytes.unsafe_ptr()))
-                wp[source].session.ex.download(ptr, wp[source].gradients[j] + wp[rank].first[j], n)
-                wp[rank].session.ex.upload(wp[rank].incoming[j], ptr, n)
+                wp[source].executor.session.ex.download(ptr, wp[source].gradients[j] + wp[rank].first[j], n)
+                wp[rank].executor.session.ex.upload(wp[rank].incoming[j], ptr, n)
                 # FP erases the List origin. Keep its owner alive until both
                 # transfers finish; Mojo otherwise destroys it at unsafe_ptr.
                 _ = bytes^
                 var a = Args()
                 a.p0 = wp[rank].incoming[j]
                 a.f0 = weight
-                wp[rank].session.ex.launch[OP_SCALE](a, n)
+                wp[rank].executor.session.ex.launch[OP_SCALE](a, n)
                 a.p1 = wp[rank].totals[j]
-                wp[rank].session.ex.launch[OP_AG_ACCUMULATE](a, n)
+                wp[rank].executor.session.ex.launch[OP_AG_ACCUMULATE](a, n)
 
     def broadcast(mut self) raises:
         var wp = rebind[MutPointer[ProgramReplica[Self.E], MutUntrackedOrigin]](self.workers.unsafe_ptr())
@@ -311,13 +294,13 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                 var lo = wp[owner].first[j]
                 var bytes = List[Float32](length=n, fill=Float32(0))
                 var ptr = FP(unsafe_from_address=Int(bytes.unsafe_ptr()))
-                wp[owner].session.ex.download(ptr, wp[owner].params[j] + lo, n)
+                wp[owner].executor.session.ex.download(ptr, wp[owner].params[j] + lo, n)
                 for rank in range(len(self.workers)):  # driver-loop: parameter replicas
                     if rank != owner:
-                        wp[rank].session.ex.upload(wp[rank].params[j] + lo, ptr, n)
+                        wp[rank].executor.session.ex.upload(wp[rank].params[j] + lo, ptr, n)
                 _ = bytes^
         for rank in range(len(self.workers)):  # driver-loop: transfer completion
-            self.workers[rank].session.ex.sync()
+            self.workers[rank].executor.session.ex.sync()
 
     def fit(mut self, srcs: List[CastIn], shapes: List[ShapeN], target: CastIn,
             loss_kind: Int, delta: Float32, epochs: Int, batch: Int, shuffle: Bool,
@@ -341,7 +324,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
             var wp = rebind[MutPointer[ProgramReplica[Self.E], MutUntrackedOrigin]](self.workers.unsafe_ptr())
             for e in range(epochs):  # driver-loop: epochs
                 for rank in range(len(self.workers)):  # driver-loop: native row permutations
-                    epoch_order(wp[rank].session.ex, shuffle, self.seed, self.epoch, n, wp[rank].indices)
+                    epoch_order(wp[rank].executor.session.ex, shuffle, self.seed, self.epoch, n, wp[rank].indices)
                 var epoch_loss = Float32(0)
                 var start = 0
                 while start < n:  # driver-loop: optimizer minibatches
@@ -365,7 +348,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                                 # Stream coordinates are logical, not physical.
                                 wp[rank].gradient(start + lo, hi - lo, loss_kind, delta, step * logical + shard)
                                 # One native executor per rank; join queued work before folding.
-                                wp[rank].session.ex.sync()
+                                wp[rank].executor.session.ex.sync()
                             except err:
                                 fp[rank] = String(err)
                         if active == 1:
