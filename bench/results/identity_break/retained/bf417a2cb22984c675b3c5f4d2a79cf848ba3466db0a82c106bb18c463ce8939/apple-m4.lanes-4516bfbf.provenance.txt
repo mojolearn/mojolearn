@@ -1,0 +1,9 @@
+commit=dcdbb6be4ff49fb57dfc65ee478ae5664fb38745
+label=apple-m4
+backend=metal
+scope=routine shard= lanes_override=yes lane_selection=explicit
+repeats=1 cpu_threads=3
+host=Darwin 25.5.0 arm64 Mac
+date=2026-11-03T17:17:24Z
+dirty_tracked=docs/verification/latest/auto/identity-apple-m4.json 
+record_sha256=bf417a2cb22984c675b3c5f4d2a79cf848ba3466db0a82c106bb18c463ce8939
