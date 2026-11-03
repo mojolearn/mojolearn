@@ -151,7 +151,8 @@ from `R` alone -- but `raft`'s randomized SVD does (`rsvd.cuh:198`, `:218`,
 pieces it now waits on instead of the whole QR.
 """
 
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan
+from core.qr_multi_gpu import qr_panels_dispatch, qr_plan_current
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -667,6 +668,20 @@ def qr_factor(
     n_cols: Int,
     slices_override: Int = 0,
 ) raises -> Int:
+    """Plan-less entry: reads the QR plan once and forwards."""
+    return qr_factor(qr_plan_current(), ctx, a, r_scratch, r_out, n_rows, n_cols, slices_override)
+
+
+def qr_factor(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    mut r_scratch: DeviceBuffer[DType.float32],
+    mut r_out: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    slices_override: Int = 0,
+) raises -> Int:
     """`R` of the `n_rows x n_cols` row-major `a`, into `r_out` (`n x n`).
 
     DESTROYS `a`. `r_scratch` must hold `qr_slice_count(...) * n_cols^2`
@@ -699,85 +714,12 @@ def qr_factor(
     if ns == 1:
         qr_factor_split(ctx, a, r_out, n_rows, n_cols, n_cols, 1)
         return 1
-    if not qr_parallel_panels(ctx,a,r_scratch,n_rows,n_cols,ns):
-        qr_factor_split(ctx, a, r_scratch, n_rows, n_cols, n_cols, ns)
+    # The panel split over devices lives in core/qr_multi_gpu.mojo; one owner
+    # runs the same `qr_factor_split` call this line made before.
+    qr_panels_dispatch(plan, ctx, a, r_scratch, n_rows, n_cols, ns)
     # The `ns` tiles are contiguous `n x n` row-major blocks, so the stack
     # of them IS an `(ns * n) x n` row-major matrix with leading dimension
     # `n`. No copy and no transpose: TSQR's second pass is the SAME kernel
     # on the SAME layout, which is the reason the tiles are stored this way.
     qr_factor_split(ctx, r_scratch, r_out, ns * n_cols, n_cols, n_cols, 1)
     return ns
-
-
-def qr_parallel_panels(ctx: DeviceContext, mut a: DeviceBuffer[DType.float32],
-    mut r_scratch: DeviceBuffer[DType.float32], m: Int,n: Int,ns: Int,
-) raises -> Bool:
-    """Original shape-defined TSQR panels; no change to the root R-stack fold.
-
-    Every panel keeps exactly its original row interval and QR_TPB lanes.
-    Both its destroyed input and R tile return to their original addresses.
-    Only row-panel memory is held on workers; the full root matrix remains.
-    """
-    var count = Int(device_plan_setting("MOJOLEARN_QR_DEVICE_COUNT", "1"))
-    if count == 1:
-        return False
-    if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("parallel QR requires IDENTICAL and 1..64 devices")
-    count = min(count,ns)
-    ctx.synchronize()
-    var devices = List[DeviceContext]()
-    for rank in range(count):
-        devices.append(DeviceContext(device_id=device_plan_device(rank)))
-    var panels = List[DeviceBuffer[DType.float32]]()
-    var outputs = List[DeviceBuffer[DType.float32]]()
-    for panel in range(ns):
-        var rank = panel%count
-        var first = panel*m//ns
-        var rows = (panel+1)*m//ns-first
-        var source = first
-        comptime if is_defined["MOJOLEARN_QR_PARALLEL_SABOTAGE"]():
-            # Check-only arm: later owners read their panel one row early. The
-            # length `rows*n` is unchanged, the kernel scalars are re-derived in
-            # the launch loop from the true `first`, and both write-backs keep
-            # the true offsets. INERT AT ONE DEVICE: `count == 1` returns before
-            # this loop, and `panel % 1` is 0 for every panel.
-            if rank > 0:
-                source = first - 1
-        var view = a.create_sub_buffer[DType.float32](source*n,rows*n)
-        panels.append(peer_clone(ctx,devices[rank],view))
-        outputs.append(devices[rank].enqueue_create_buffer[DType.float32](n*n))
-    for rank in range(count):
-        devices[rank].synchronize()
-    # each panel as the split launches on its device (trailing columns over
-    # blocks), enqueued on every device before any wait
-    var taus = List[DeviceBuffer[DType.float32]]()
-    for panel in range(ns):
-        var rank = panel%count
-        taus.append(devices[rank].enqueue_create_buffer[DType.float32](1))
-    for panel in range(ns):
-        var rank = panel%count
-        var first = panel*m//ns
-        var rows = (panel+1)*m//ns-first
-        qr_split_enqueue(
-            devices[rank], panels[panel].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            outputs[panel].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            taus[panel].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows, n, n, 1,
-        )
-    for panel in range(ns):
-        var rank = panel%count
-        devices[rank].synchronize()
-        var first = panel*m//ns
-        var rows = (panel+1)*m//ns-first
-        var av = a.create_sub_buffer[DType.float32](first*n,rows*n)
-        var rv = r_scratch.create_sub_buffer[DType.float32](panel*n*n,n*n)
-        panels[panel].enqueue_copy_to(av)
-        outputs[panel].enqueue_copy_to(rv)
-        devices[rank].synchronize()
-    _ = taus^
-    _ = outputs^
-    _ = panels^
-    for rank in range(count):
-        devices[rank].synchronize()
-    _ = devices^
-    ctx.synchronize()
-    return True
