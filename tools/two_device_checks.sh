@@ -61,7 +61,10 @@ done
 for b in main tokenizer_host kernel_methods gp x_neighbors ivf tsa forecast_host x_sequence; do
     s=bindings/build_$b.sh; [ "$b" = main ] && s=bindings/build.sh
     [ -f "$s" ] || continue
-    phase "build-$b" sh "$s"
+    case "$b" in
+        *_host) phase "build-$b" env -u MOJOLEARN_TARGET_COLUMN sh "$s" ;;  # host bindings compile the CPU column only
+        *) phase "build-$b" sh "$s" ;;
+    esac
 done
 rm -f "$OUT/distributed.json"
 phase verify-distributed pixi run python -m mojolearn verify-distributed --devices 0,1 --out "$OUT/distributed.json"
