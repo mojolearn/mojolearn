@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pinned pairwise rows; root diagonal policy and Boruvka order stay intact."""
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -9,8 +9,16 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.checks.pinned_distance_tile import pinned_distance_tile_kernel, pinned_distance_tile_direct_kernel
 
 
-def hierarchy_device_count(rows: Int, sabotage: Int32) raises -> Int:
-    var count = Int(device_plan_setting("MOJOLEARN_HIERARCHY_DEVICE_COUNT", "1"))
+def hierarchy_device_plan() raises -> DevicePlan:
+    """The hierarchy family's device plan, read once at a family entry
+    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    `device_plan_setting("MOJOLEARN_HIERARCHY_DEVICE_COUNT", "1")` returned,
+    so `hierarchy_device_count` parses the same text as before."""
+    return device_plan_current("MOJOLEARN_HIERARCHY_DEVICE_COUNT", "1")
+
+
+def hierarchy_device_count(dplan: DevicePlan, rows: Int, sabotage: Int32) raises -> Int:
+    var count = Int(dplan.setting)
     if count < 1 or count > 64:
         raise Error("hierarchy device count must be in 1..64")
     if count > 1:
@@ -25,6 +33,15 @@ def pairwise_rows(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
                   mut norms: DeviceBuffer[DType.float32],
                   mut data: DeviceBuffer[DType.float32], m: Int, d: Int,
                   is_sqrt: Int32, tpb: Int, count: Int) raises:
+    """Entry for check tools that call the shard path directly
+    (`training/checks/graph_rows_check.mojo`): reads the plan once."""
+    pairwise_rows(ctx, x, norms, data, m, d, is_sqrt, tpb, count, hierarchy_device_plan())
+
+
+def pairwise_rows(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
+                  mut norms: DeviceBuffer[DType.float32],
+                  mut data: DeviceBuffer[DType.float32], m: Int, d: Int,
+                  is_sqrt: Int32, tpb: Int, count: Int, dplan: DevicePlan) raises:
     ctx.synchronize()
     var devices = List[DeviceContext]()
     var queries = List[DeviceBuffer[DType.float32]]()
@@ -35,7 +52,7 @@ def pairwise_rows(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
     for rank in range(count):
         var first = m * rank // count
         var rows = m * (rank + 1) // count - first
-        devices.append(DeviceContext(device_id=device_plan_device(rank)))
+        devices.append(DeviceContext(device_id=dplan.device(rank)))
         var source = first
         comptime if is_defined["MOJOLEARN_HIERARCHY_PARALLEL_SABOTAGE"]():
             # Check-only reach witness: later owners read their query rows one row early.
