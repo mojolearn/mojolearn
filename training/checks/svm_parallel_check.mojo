@@ -4,7 +4,9 @@ from std.os import getenv, setenv
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from metrics.checks.device_io import upload_f32, download_f32
-from svm.impl.distance.kernel_matrices import kernel_op, kernel_workspace_floats, row_norms_l2sq
+from core.device_plan import device_plan_current
+from svm.impl.distance.kernel_matrices import kernel_workspace_floats, row_norms_l2sq
+from svm.multi_gpu import kernel_matrix_dispatch
 from svm.impl.svm_parameter import KernelParams
 
 
@@ -43,11 +45,12 @@ def main() raises:
                     kp = KernelParams.rbf(0.01)
                 if not setenv("MOJOLEARN_SVM_DEVICE_COUNT", "1", True):
                     raise Error("setenv failed")
-                kernel_op(ctx, kp, one, a, b, m, n, k, na, nb, ws)
+                # This check is its own entry: it reads the plan after each setenv.
+                kernel_matrix_dispatch(device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT"), ctx, kp, one, a, b, m, n, k, na, nb, ws)
                 ctx.synchronize()
                 if not setenv("MOJOLEARN_SVM_DEVICE_COUNT", "2", True):
                     raise Error("setenv failed")
-                kernel_op(ctx, kp, many, a, b, m, n, k, na, nb, ws)
+                kernel_matrix_dispatch(device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT"), ctx, kp, many, a, b, m, n, k, na, nb, ws)
                 ctx.synchronize()
                 var x = download_f32(ctx, one, m * n)
                 var y = download_f32(ctx, many, m * n)
