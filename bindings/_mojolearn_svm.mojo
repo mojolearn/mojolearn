@@ -46,6 +46,7 @@ there.
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.device_plan import device_plan_current
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
 from std.os import abort
 from std.memory import memcpy
@@ -597,6 +598,10 @@ def iforest_run_binding(
     else:
         # the define's off arm: one memcpy (no per-cell host loop)
         query = list_f32(qp, n_query * n_features)
+    # The IsolationForest device plan, read ONCE here at the binding entry
+    # (the thread-scoped plan, else MOJOLEARN_IFOREST_DEVICE_COUNT); nothing
+    # below reads it again (isolation_forest/multi_gpu.mojo::fit_dispatch).
+    var plan = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
     var res = IFRunOutputs()
     comptime if IDN_IF_RESIDENT:
         if resident:
@@ -619,7 +624,7 @@ def iforest_run_binding(
             try:
                 with GILReleased(Python()):
                     res = iforest_run_resident(
-                        held, key, new_token, query, q_addr, n_query, want, out_f32, out_i32,
+                        plan, held, key, new_token, query, q_addr, n_query, want, out_f32, out_i32,
                     )
             except e:
                 # Preserve an existing caller-owned forest after a refused
@@ -636,7 +641,7 @@ def iforest_run_binding(
             return PythonObject(n_query)
     with GILReleased(Python()):
         res = iforest_run_host(
-            train, n_train, n_features, query, n_query, n_estimators,
+            plan, train, n_train, n_features, query, n_query, n_estimators,
             max_samples_mode, max_samples_int, max_samples_frac, max_depth,
             max_features_mode, max_features_int, max_features_frac,
             bootstrap, random_state, contamination_auto, contamination,
