@@ -65,7 +65,7 @@ float `diff`: `diff > diff_prev * 1.5` and `abs(diff - diff_prev) < 0.001
 NaN throw is the same sentence.
 """
 
-from core.device_plan import device_plan_setting
+from core.device_plan import DevicePlan
 from std.builtin.sort import sort
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isnan
@@ -589,10 +589,14 @@ struct SmoSolver(Movable):
     # `InitPenalty`'s weighted arm: one bound per ROW (the caller's C * w,
     # rounded to float32 once on the host); empty = C at every index.
     var c_rows: List[Float32]
+    var plan: DevicePlan
+    """The device plan the fit entry read once. `plan.single()` selects the
+    one-device kernels; the kernel tiles shard over it (svm/multi_gpu.mojo)."""
 
     def __init__(
         out self,
         ctx: DeviceContext,
+        plan: DevicePlan,
         param: SvmParameter,
         kp: KernelParams,
         n_rows: Int,
@@ -659,6 +663,7 @@ struct SmoSolver(Movable):
         self.trace = SmoTrace()
         check_c_rows(c_rows, n_rows)
         self.c_rows = c_rows.copy()
+        self.plan = plan.copy()
         ctx.synchronize()
 
     def get_n_iter(self) -> Int:
@@ -814,7 +819,7 @@ struct SmoSolver(Movable):
         self.n_ws = ws.get_size()
         self.initialize(ctx, y)
         var cache = KernelCache(
-            ctx, x, n_rows, n_cols, self.n_ws, self.kp, self.cache_size,
+            ctx, self.plan, x, n_rows, n_cols, self.n_ws, self.kp, self.cache_size,
             self.kernel_tile_byte_limit, self.scratch_pad,
             self.scratch_poison, self.svmType,
         )
@@ -844,9 +849,10 @@ struct SmoSolver(Movable):
                 self.nan_flag.unsafe_ptr(), Int32(0), grid_dim=1, block_dim=1,
             )
         # SVM_IDN_FUSED_UPDATE_F serves one device; the multi-device kernel
-        # rows (`kernel_op`, MOJOLEARN_SVM_DEVICE_COUNT) keep the tile path.
-        var device_setting = device_plan_setting("MOJOLEARN_SVM_DEVICE_COUNT")
-        var one_device = device_setting == "" or device_setting == "1"
+        # rows (svm/multi_gpu.mojo::kernel_matrix_dispatch) keep the tile
+        # path. `plan.single()` is the old `setting == "" or setting == "1"`
+        # test on the same MOJOLEARN_SVM_DEVICE_COUNT setting: same truth table.
+        var one_device = self.plan.single()
         while keep_going:
             var t0 = st.start()
             ctx.enqueue_function[fill_f32_kernel](

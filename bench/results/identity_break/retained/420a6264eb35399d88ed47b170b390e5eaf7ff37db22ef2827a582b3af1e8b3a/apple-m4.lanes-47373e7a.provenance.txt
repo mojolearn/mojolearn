@@ -1,0 +1,9 @@
+commit=bc7f87ca3a01ae1c14e064291d88a2a4c939e3ae
+label=apple-m4
+backend=metal
+scope=routine shard= lanes_override=yes lane_selection=auto-reuse
+repeats=1 cpu_threads=3
+host=Darwin 25.5.0 arm64 Mac
+date=2026-11-03T18:17:13Z
+dirty_tracked=none
+record_sha256=420a6264eb35399d88ed47b170b390e5eaf7ff37db22ef2827a582b3af1e8b3a

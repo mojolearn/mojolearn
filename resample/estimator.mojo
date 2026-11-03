@@ -33,7 +33,7 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan, plan_for_single
 from core.hostptr import copy_f32, f32_ptr, i32_ptr
 from experiments.classical_identical_ideas.shared_controls import C11_DRAW_GATHER
 from resample.gather_fast import GATHER_COLS, GATHER_ROWS, classical_draw_gather_kernel, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
@@ -58,6 +58,12 @@ comptime _DEVCTX_SLOT = "MojoResampleContextIdentical" if _DEVCTX_MODE == _DEVCT
 from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
 from resample.order_select import IDN_BOOT_SELECT, boot_quantile_select_kernel
+from resample.multi_gpu import (
+    bootstrap_theta_dispatch,
+    mc_partials_dispatch,
+    perm_null_dispatch,
+    resample_device_count,
+)
 from metrics.checks.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
@@ -1026,25 +1032,15 @@ def _sort_segments(
 # ===========================================================================
 
 
-def resample_device_count() raises -> Int:
-    """MOJOLEARN_RESAMPLE_DEVICE_COUNT: replicate or sample ranges on owners."""
-    var value = device_plan_setting("MOJOLEARN_RESAMPLE_DEVICE_COUNT")
-    if value == "":
-        return 1
-    var count = Int(value)
-    if count < 1 or count > 64:
-        raise Error("resample device count must be in [1, 64]")
-    if count > 1 and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("multi-GPU resampling requires IDENTICAL numeric mode")
-    return count
-
-
-def _owner_offset(rank: Int) -> Int:
-    """Check-only arm: later owners compute their range one position late."""
-    comptime if is_defined["MOJOLEARN_RESAMPLE_PARALLEL_SABOTAGE"]():
-        if rank > 0:
-            return 1
-    return 0
+def _resample_plan(plan: Optional[DevicePlan]) raises -> DevicePlan:
+    """The device plan an entry runs under: the value its binding entry read
+    once (`device_plan_current()`), or one device for a direct caller that
+    passes none (checks, the speed bench, `resample_main`). The owner loops
+    and their dispatchers live in `resample/multi_gpu.mojo`; nothing in this
+    file reads the thread-scoped plan."""
+    if plan:
+        return plan.value().copy()
+    return plan_for_single()
 
 
 def _launch_boot_select_at[
@@ -1178,86 +1174,6 @@ def _bootstrap_theta(
         ctx.synchronize()
 
 
-def _bootstrap_theta_owners(
-    ctx: DeviceContext,
-    mut theta: DeviceBuffer[DType.float32],
-    x: List[Float32],
-    key: UInt64,
-    r_first: Int,
-    n_resamples: Int,
-    n: Int,
-    n_features: Int,
-    statistic: Int,
-    q_or_prop: Float32,
-    tpb: Int,
-    map_tpb: Int,
-    count: Int,
-) raises:
-    """Contiguous global replicate ranges on owners, bytes copied into place."""
-    var active = min(count, n_resamples)
-    ctx.synchronize()
-    for rank in range(active):
-        var begin = n_resamples * rank // active
-        var rows = n_resamples * (rank + 1) // active - begin
-        var owner = DeviceContext(device_id=device_plan_device(rank))
-        var ox = _upload(owner, x)
-        var ot = owner.enqueue_create_buffer[DType.float32](rows)
-        owner.synchronize()
-        _bootstrap_theta(
-            owner, ot, ox, key, r_first + begin + _owner_offset(rank), rows,
-            n, n_features, statistic, q_or_prop, tpb, map_tpb,
-        )
-        owner.synchronize()
-        var view = theta.create_sub_buffer[DType.float32](begin, rows)
-        ot.enqueue_copy_to(view)
-        owner.synchronize()
-        ctx.synchronize()
-        _ = view^
-        _ = ox^
-        _ = ot^
-        _ = owner^
-    ctx.synchronize()
-
-
-def _perm_null_owners(
-    ctx: DeviceContext,
-    mut null_buf: DeviceBuffer[DType.float32],
-    pooled: List[Float32],
-    key: UInt64,
-    r_first: Int,
-    n_resamples: Int,
-    n_pooled: Int,
-    n_x: Int,
-    statistic: Int,
-    tpb: Int,
-    count: Int,
-) raises:
-    """Contiguous global permutation ranges on owners, bytes copied into place."""
-    var active = min(count, n_resamples)
-    ctx.synchronize()
-    for rank in range(active):
-        var begin = n_resamples * rank // active
-        var rows = n_resamples * (rank + 1) // active - begin
-        var owner = DeviceContext(device_id=device_plan_device(rank))
-        var op = _upload(owner, pooled)
-        var on = owner.enqueue_create_buffer[DType.float32](rows)
-        owner.synchronize()
-        _launch_perm_stat(
-            owner, on, op, key, r_first + begin + _owner_offset(rank), rows,
-            n_pooled, n_x, statistic, tpb,
-        )
-        owner.synchronize()
-        var view = null_buf.create_sub_buffer[DType.float32](begin, rows)
-        on.enqueue_copy_to(view)
-        owner.synchronize()
-        ctx.synchronize()
-        _ = view^
-        _ = op^
-        _ = on^
-        _ = owner^
-    ctx.synchronize()
-
-
 def _mc_partials[
     f_id: Int
 ](
@@ -1290,57 +1206,6 @@ def _mc_partials[
             " got " + String(tpb)
         )
 
-def _mc_partials_owners[
-    f_id: Int
-](
-    ctx: DeviceContext,
-    mut partials: DeviceBuffer[DType.float32],
-    lower: List[Float32],
-    span: List[Float32],
-    key: UInt64,
-    i_first: Int,
-    n_samples: Int,
-    n_chunks: Int,
-    tpb: Int,
-    count: Int,
-) raises:
-    """Whole PINNED_SUM_W chunks on owners. An owner starting at global chunk
-    c0 draws from `i_first + c0 * PINNED_SUM_W`, so its chunk j is global
-    chunk c0 + j with the same values and the same pinned fold; the root folds
-    all partials in chunk order."""
-    var active = min(count, n_chunks)
-    ctx.synchronize()
-    for rank in range(active):
-        var c0 = n_chunks * rank // active
-        var c1 = n_chunks * (rank + 1) // active
-        var first_sample = c0 * PINNED_SUM_W
-        var last_sample = c1 * PINNED_SUM_W
-        if last_sample > n_samples:
-            last_sample = n_samples
-        var chunks = c1 - c0
-        var owner = DeviceContext(device_id=device_plan_device(rank))
-        var ol = _upload(owner, lower)
-        var ospan = _upload(owner, span)
-        var opart = owner.enqueue_create_buffer[DType.float32](chunks)
-        owner.synchronize()
-        _mc_partials[f_id](
-            owner, opart, ol, ospan, key,
-            i_first + first_sample + _owner_offset(rank),
-            last_sample - first_sample, chunks, chunks, tpb,
-        )
-        owner.synchronize()
-        var view = partials.create_sub_buffer[DType.float32](c0, chunks)
-        opart.enqueue_copy_to(view)
-        owner.synchronize()
-        ctx.synchronize()
-        _ = view^
-        _ = ol^
-        _ = ospan^
-        _ = opart^
-        _ = owner^
-    ctx.synchronize()
-
-
 def bootstrap_host(
     x: List[Float32],
     n: Int,
@@ -1356,6 +1221,7 @@ def bootstrap_host(
     tpb: Int = RESAMPLE_TPB,
     with_bca_diagnostics: Bool = False,
     map_tpb: Int = RESAMPLE_MAP_TPB,
+    plan: Optional[DevicePlan] = None,
 ) raises -> BootstrapResult:
     """`scipy.stats.bootstrap((x,), statistic, n_resamples=..., rng=seed,
     method=..., confidence_level=..., alternative=...)`, one shot.
@@ -1496,17 +1362,12 @@ def bootstrap_host(
     ctx.synchronize()
     trace.record_device(ctx, "resample.index_map", idx_buf, win_r * win_i)
 
-    var owners = resample_device_count()
-    if owners > 1 and n_resamples > 1:
-        _bootstrap_theta_owners(
-            ctx, theta, x, key, r_first, n_resamples, n, n_features,
-            statistic, q_or_prop, tpb, map_tpb, owners,
-        )
-    else:
-        _bootstrap_theta(
-            ctx, theta, dx, key, r_first, n_resamples, n, n_features,
-            statistic, q_or_prop, tpb, map_tpb,
-        )
+    var dplan = _resample_plan(plan)
+    var owners = resample_device_count(dplan)
+    bootstrap_theta_dispatch(
+        dplan, owners, ctx, theta, dx, x, key, r_first, n_resamples, n,
+        n_features, statistic, q_or_prop, tpb, map_tpb,
+    )
     trace.record_device(ctx, "resample.theta", theta, n_resamples)
     var dist = _download_f32(ctx, theta, n_resamples)
 
@@ -1756,6 +1617,7 @@ def permutation_test_host(
     alternative: Int,
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
+    plan: Optional[DevicePlan] = None,
 ) raises -> PermutationResult:
     """`scipy.stats.permutation_test((x, y), statistic,
     permutation_type='independent', n_resamples=..., rng=seed,
@@ -1827,36 +1689,22 @@ def permutation_test_host(
     var dpool = _upload(ctx, pooled)
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
-    var owners = resample_device_count()
+    var dplan = _resample_plan(plan)
+    var owners = resample_device_count(dplan)
     # RESAMPLE_FAST_PERM_SELECT (FAST + Apple default; _OFF rolls back): the
     # null by fast_apple.mojo's 4-bit radix select (no atomics, FAST's fold);
     # the same permutation. Mean and diff_means; anything else: main's launch.
-    # (Owners > 1 is IDENTICAL only, resample_device_count.)
+    # (Owners > 1 is IDENTICAL only, resample/multi_gpu.mojo::resample_device_count.)
     var selected = False
     comptime if RESAMPLE_FAST_PERM_SELECT:
         selected = perm_select_fast(
             ctx, null_buf, dpool, key, r_first, n_resamples, n_pooled, n_x,
             statistic,
         )
-    if selected:
-        pass
-    elif owners > 1 and n_resamples > 1:
-        _perm_null_owners(
-            ctx, null_buf, pooled, key, r_first, n_resamples, n_pooled, n_x,
-            statistic, tpb, owners,
-        )
-    else:
-        _launch_perm_stat(
-            ctx,
-            null_buf,
-            dpool,
-            key,
-            r_first,
-            n_resamples,
-            n_pooled,
-            n_x,
-            statistic,
-            tpb,
+    if not selected:
+        perm_null_dispatch(
+            dplan, owners, ctx, null_buf, dpool, pooled, key, r_first,
+            n_resamples, n_pooled, n_x, statistic, tpb,
         )
     ctx.synchronize()
     trace.record_device(ctx, "resample.null", null_buf, n_resamples)
@@ -2023,6 +1871,7 @@ def monte_carlo_integrate_host[
     tpb: Int = RESAMPLE_TPB,
     grid_blocks: Int = 0,
     map_tpb: Int = RESAMPLE_MAP_TPB,
+    plan: Optional[DevicePlan] = None,
 ) raises -> MonteCarloResult:
     """`volume * mean(f(x_i))` over `n_samples` points drawn uniformly from
     the rectangle `[lower, upper)`.
@@ -2099,17 +1948,12 @@ def monte_carlo_integrate_host[
     ctx.synchronize()
 
     var blocks = grid_blocks if grid_blocks > 0 else n_chunks
-    var owners = resample_device_count()
-    if owners > 1 and n_chunks > 1:
-        _mc_partials_owners[f_id](
-            ctx, partials, lower, span, key, i_first, n_samples, n_chunks, tpb,
-            owners,
-        )
-    else:
-        _mc_partials[f_id](
-            ctx, partials, dlower, dspan, key, i_first, n_samples, n_chunks,
-            blocks, tpb,
-        )
+    var dplan = _resample_plan(plan)
+    var owners = resample_device_count(dplan)
+    mc_partials_dispatch[f_id](
+        dplan, owners, ctx, partials, dlower, dspan, lower, span, key,
+        i_first, n_samples, n_chunks, blocks, tpb,
+    )
     ctx.synchronize()
 
     # A bounded window of coordinates, for the card and for the map gate.

@@ -14,7 +14,8 @@ from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.generator_state_native import generator_next
-from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view
+from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view, samba_optimizer_device_plan
+from core.device_plan import DevicePlan
 from bindings.samba_training_native import samba_ids, samba_gradients, _samba_count
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
@@ -33,11 +34,11 @@ def _samba_moments(opt: PythonObject, context: PythonObject) raises -> PythonObj
     return result
 
 
-def _samba_open_optimizer(opt: PythonObject, entries: PythonObject, context: PythonObject, provider: PythonObject) raises:
+def _samba_open_optimizer(opt: PythonObject, entries: PythonObject, context: PythonObject, provider: PythonObject, device_plan: DevicePlan) raises:
     if opt["_res"] is not None or opt["_resident_wanted"] is PythonObject(False):
         return
     var bi = native_loaded_module("builtins")
-    var enabled = getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1") != "0" and getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") == "1"
+    var enabled = getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1") != "0" and device_plan.setting == "1"
     for name in [String("optimizer_resident_open"), String("optimizer_resident_close"), String("optimizer_resident_download"), String("optimizer_resident_upload"), String("optimizer_resident_step")]:  # driver-loop: over the existing resident optimizer ABI
         enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
     if not enabled:
@@ -110,7 +111,7 @@ def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObje
 
 
 def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject,
-                         accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
+                         device_plan: DevicePlan, accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     var config = samba_fields(fields["config"])
     if Float64(py=config["dropout"]) != 0.0:
@@ -127,7 +128,7 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
         return PythonObject(None)
     if provider is None and Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")) and Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")()):
         return PythonObject(None)
-    _samba_open_optimizer(opt, entries, context, provider)
+    _samba_open_optimizer(opt, entries, context, provider, device_plan)
     if opt["_res"] is None:
         return PythonObject(None)
     var session = py_get(fields, "_resident_handle")
@@ -232,6 +233,8 @@ def _samba_parameter_publish(flat: PythonObject, views: PythonObject, fields: Py
         py_setitem(target, py_call(bi.slice, PythonObject(None)), raw[py_call(bi.slice, begin, end)])
 
 def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The optimizer device plan, read from the environment once per step.
+    var device_plan = samba_optimizer_device_plan()
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
@@ -252,12 +255,12 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
     if a > 1 and not microbatch_split_is_identical(b * length, a):
         raise Error("Samba: MISALIGNED microbatch split; optimizer contract clause 9.2")
     if a == 1:
-        var resident = _samba_resident_step(fields, opt, entries, ids, y, context)
+        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, device_plan)
         if resident is not None:
             return resident
     var count = _samba_count(y, context)
     if a > 1:
-        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, a, count)
+        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, device_plan, a, count)
         if resident is not None:
             return resident
     var provider = samba_resident_provider(fields, entries)
@@ -336,7 +339,7 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
     if not device_parameters:
         py_setitem(opt, "packed_", True)
     var info = generation_array([3])
-    _samba_open_optimizer(opt, entries, context, provider)
+    _samba_open_optimizer(opt, entries, context, provider, device_plan)
     if device_parameters:
         if opt["_res"] is None or not Bool(py=py_call(bi.hasattr, entries, "optimizer_resident_step_io")):
             raise Error("RuntimeError: Samba optimizer device parameters require their native resident owner")

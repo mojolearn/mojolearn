@@ -47,27 +47,27 @@ def check_replica(kind: Int, at: Int) raises:
     sources.append(CastIn.f32_c(Int(data.unsafe_ptr()), 2, 1))
     var shapes = p.in_shapes.copy()
     var y = CastIn.f32_c(Int(target.unsafe_ptr()), 2, 1)
-    var before = len(replica.session.ex.host.bufs)
-    replica.session.ex.arm(kind, at)
+    var before = len(replica.executor.session.ex.host.bufs)
+    replica.executor.session.ex.arm(kind, at)
     var failed = False
     try:
         replica.prepare(sources, shapes, y, 1, 1)
     except error:
         require(String(error) == "injected setup failure", "replica masked original fault: " + String(error))
         failed = True
-    require(failed and replica.session.ex.hit, "replica fault not reached")
-    require(len(replica.session.ex.host.bufs) == before, "replica retained partial dataset until close")
+    require(failed and replica.executor.session.ex.hit, "replica fault not reached")
+    require(len(replica.executor.session.ex.host.bufs) == before, "replica retained partial dataset until close")
     require(not replica.dataset_ready and len(replica.full) == 0 and len(replica.batches) == 0,
             "replica partial setup remains published")
-    replica.session.ex.arm(0, 0)
+    replica.executor.session.ex.arm(0, 0)
     replica.prepare(sources, shapes, y, 1, 1)
-    require(replica.dataset_ready and len(replica.session.ex.host.bufs) == before + 5,
+    require(replica.dataset_ready and len(replica.executor.session.ex.host.bufs) == before + 5,
             "replica positive setup lost its owners")
     replica.release_dataset()
     replica.release_dataset()
-    require(len(replica.session.ex.host.bufs) == before, "replica release is not idempotent")
+    require(len(replica.executor.session.ex.host.bufs) == before, "replica release is not idempotent")
     replica.close()
-    require(len(replica.session.ex.host.bufs) == 0, "replica close retained registered model storage")
+    require(len(replica.executor.session.ex.host.bufs) == 0, "replica close retained registered model storage")
     _ = data^
     _ = target^
 
@@ -92,8 +92,8 @@ def check_partition(kind: Int, at: Int) raises:
     var sources = List[CastIn]()
     sources.append(CastIn.f32_c(Int(data.unsafe_ptr()), 2, 1))
     var y = CastIn.f32_c(Int(target.unsafe_ptr()), 2, 1)
-    var before = len(model.workers[0].session.ex.host.bufs)
-    model.workers[0].session.ex.arm(kind, at)
+    var before = len(model.workers[0].executor.session.ex.host.bufs)
+    model.workers[0].executor.session.ex.arm(kind, at)
     var failed = False
     try:
         model.fit(sources, p.in_shapes, y, 1, Float32(1.0), 1, 1, False,
@@ -101,11 +101,11 @@ def check_partition(kind: Int, at: Int) raises:
     except error:
         require(String(error) == "injected setup failure", "partition masked original fault: " + String(error))
         failed = True
-    require(failed and model.workers[0].session.ex.hit, "partition fault not reached")
-    require(len(model.workers[0].session.ex.host.bufs) == before, "partition retained partial dataset until close")
+    require(failed and model.workers[0].executor.session.ex.hit, "partition fault not reached")
+    require(len(model.workers[0].executor.session.ex.host.bufs) == before, "partition retained partial dataset until close")
     require(not model.busy and not model.usable, "failed partition has inconsistent admission state")
     require(model.epoch == 0 and model.step == 0, "partition setup fault advanced optimizer clock")
-    model.workers[0].session.ex.arm(0, 0)
+    model.workers[0].executor.session.ex.arm(0, 0)
     model.close()
     require(len(model.workers) == 0, "partition close retained workers")
     _ = data^
@@ -148,8 +148,8 @@ def check_prepared_peer() raises:
     var before = List[Int]()
     for rank in range(2):
         model.workers.append(ProgramReplica[FaultExec](FaultExec(), p, weights(), selected, cfg, rank, 2))
-        before.append(len(model.workers[rank].session.ex.host.bufs))
-    model.workers[1].session.ex.arm(1, 1)
+        before.append(len(model.workers[rank].executor.session.ex.host.bufs))
+    model.workers[1].executor.session.ex.arm(1, 1)
     var data = List[Float32](length=2, fill=1.0)
     var target = List[Float32](length=2, fill=0.0)
     var curve = List[Float32](length=1, fill=0.0)
@@ -162,10 +162,10 @@ def check_prepared_peer() raises:
     except error:
         require(String(error) == "injected setup failure", "peer setup masked original error")
         failed = True
-    require(failed and model.workers[1].session.ex.hit, "peer setup fault not reached")
+    require(failed and model.workers[1].executor.session.ex.hit, "peer setup fault not reached")
     for rank in range(2):
-        require(len(model.workers[rank].session.ex.host.bufs) == before[rank], "prepared peer retained dataset")
-        model.workers[rank].session.ex.arm(0, 0)
+        require(len(model.workers[rank].executor.session.ex.host.bufs) == before[rank], "prepared peer retained dataset")
+        model.workers[rank].executor.session.ex.arm(0, 0)
     require(not model.busy and not model.usable and model.step == 0, "failed coordinator changed state")
     model.close()
     _ = data^

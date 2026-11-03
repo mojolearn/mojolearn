@@ -55,7 +55,8 @@ from cluster.impl.detail.classical_assignment import ASSIGN_ROWS, classical_assi
 
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from cluster.multi_gpu import assignment_device_count, assignment_parallel
+from core.device_plan import DevicePlan
+from cluster.multi_gpu import assignment_device_count, assignment_parallel, kmeans_device_plan
 
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel, enqueue_row_norms
@@ -166,6 +167,7 @@ def compute_centroid_norms(
 def _launch_fused[
     veclen: Int, kblk: Int, tr: Int, tc: Int
 ](
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut out_key: DeviceBuffer[DType.uint32],
     mut out_value: DeviceBuffer[DType.float32],
@@ -205,11 +207,11 @@ def _launch_fused[
             grid_dim=((n_samples + 128 * ASSIGN_ROWS - 1) // (128 * ASSIGN_ROWS),1,1), block_dim=(128,1,1),
         )
         return
-    var device_count = assignment_device_count()
+    var device_count = assignment_device_count(dplan)
     if device_count > 1:
         assignment_parallel[veclen, kblk, tr, tc](ctx, out_key, out_value,
             x, centroids, x_norm, centroid_norm, n_samples, n_clusters,
-            n_features, is_sqrt, device_count)
+            n_features, is_sqrt, device_count, dplan)
         return
     comptime nthreads = tr * tc
     comptime mblk = 4 * tr
@@ -239,6 +241,43 @@ def _launch_fused[
 
 
 def min_cluster_and_distance_compute(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut centroid_norm: DeviceBuffer[DType.float32],
+    mut dist_buf: DeviceBuffer[DType.float32],
+    mut out_key: DeviceBuffer[DType.uint32],
+    mut out_value: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    metric: Int,
+    batch_samples: Int,
+    batch_centroids: Int,
+) raises:
+    """Reads the device plan once and runs the planned overload below."""
+    min_cluster_and_distance_compute(
+        kmeans_device_plan(),
+        ctx,
+        x,
+        x_norm,
+        centroids,
+        centroid_norm,
+        dist_buf,
+        out_key,
+        out_value,
+        n_samples,
+        n_features,
+        n_clusters,
+        metric,
+        batch_samples,
+        batch_centroids,
+    )
+
+
+def min_cluster_and_distance_compute(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_norm: DeviceBuffer[DType.float32],
@@ -295,21 +334,21 @@ def min_cluster_and_distance_compute(
             _launch_fused[
                 4, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
         elif vl == 2:
             _launch_fused[
                 2, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
         else:
             _launch_fused[
                 1, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
     else:
@@ -317,21 +356,21 @@ def min_cluster_and_distance_compute(
             _launch_fused[
                 4, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
         elif vl == 2:
             _launch_fused[
                 2, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
         else:
             _launch_fused[
                 1, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
 
@@ -354,7 +393,7 @@ def _launch_fused_gated[
 ) raises:
     """`_launch_fused` on one device with the kernel gated on `gate[0]`
     (fam2-cluster, `IDN_KMEANS_DEVICE_CONV`). The caller has already ruled
-    out the multi-device split (`assignment_device_count() == 1`)."""
+    out the multi-device split (`assignment_device_count(dplan) == 1`)."""
     if kmeans_row_assign_takes(n_clusters, n_features):
         ctx.enqueue_function[classical_assign_gated_kernel](
             gate.unsafe_ptr(), out_key.unsafe_ptr(), out_value.unsafe_ptr(), x.unsafe_ptr(), centroids.unsafe_ptr(),

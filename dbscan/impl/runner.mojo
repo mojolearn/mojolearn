@@ -141,8 +141,9 @@ from neighbors.impl.ball_cover.ball_cover import (
     rbc_build_index,
     rbc_n_landmarks,
 )
+from core.device_plan import DevicePlan
 from dbscan.impl.multi_gpu import (
-    vertex_deg_dispatch, rbc_eps_nn_query_count,
+    dbscan_device_plan, vertex_deg_dispatch, rbc_eps_nn_query_count,
     rbc_eps_nn_query_fill, rbc_eps_nn_query_max_k,
 )
 from neighbors.impl.ball_cover.scan import (
@@ -431,6 +432,65 @@ def border_pull_kernel(
 
 
 def dbscan_fit(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut adj: DeviceBuffer[DType.uint8],
+    mut vd: DeviceBuffer[DType.int32],
+    mut core: DeviceBuffer[DType.uint8],
+    mut ex_scan: DeviceBuffer[DType.int32],
+    mut labels: DeviceBuffer[DType.int32],
+    mut labels_temp: DeviceBuffer[DType.int32],
+    mut work_buffer: DeviceBuffer[DType.int32],
+    mut block_sums: DeviceBuffer[DType.int32],
+    mut sample_weight: DeviceBuffer[DType.float32],
+    mut wght_sum: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_features: Int,
+    eps: Float64,
+    min_pts: Int,
+    batch_size: Int = 0,
+    max_iterations: Int = 200,
+    eps_nn_method: Int = EPS_NN_RBC,
+    phase_timing: Bool = False,
+    metric: Int = DBSCAN_METRIC_L2,
+    has_weights: Bool = False,
+    edge_cap: Int = Int(MAX_LABEL),
+    n_batches_out_addr: Int = 0,
+    edge_free: Bool = True,
+) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return dbscan_fit(
+        dbscan_device_plan(),
+        ctx,
+        x,
+        adj,
+        vd,
+        core,
+        ex_scan,
+        labels,
+        labels_temp,
+        work_buffer,
+        block_sums,
+        sample_weight,
+        wght_sum,
+        n_rows,
+        n_features,
+        eps,
+        min_pts,
+        batch_size,
+        max_iterations,
+        eps_nn_method,
+        phase_timing,
+        metric,
+        has_weights,
+        edge_cap,
+        n_batches_out_addr,
+        edge_free,
+    )
+
+
+def dbscan_fit(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut adj: DeviceBuffer[DType.uint8],
@@ -781,7 +841,7 @@ their code branches on is this Bool.
                 )
             else:
                 nnz1 = rbc_eps_nn_query_count(
-                    ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                    dplan, ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
                     ex_scan, vd, n_points, n_features, n_landmarks, eps_radius,
                 )
             # WHY cuML REQUIRES int64 ON THIS PATH, AND WHAT OURS DOES INSTEAD.
@@ -876,7 +936,7 @@ their code branches on is this Bool.
                     start_vertex_id * n_features, n_points * n_features
                 )
                 rbc_eps_nn_query_fill(
-                    ctx, rbc_xr, qbw, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                    dplan, ctx, rbc_xr, qbw, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
                     ex_scan, ja1, n_points, n_features, n_landmarks,
                     eps_radius,
                 )
@@ -888,7 +948,7 @@ their code branches on is this Bool.
                 _ = ja1^
         else:
             vertex_deg_dispatch(
-                ctx, adj, vd, x, start_vertex_id, n_points, n_rows,
+                dplan, ctx, adj, vd, x, start_vertex_id, n_points, n_rows,
                 n_features, eps, metric,
             )
             ctx.synchronize()
@@ -1047,7 +1107,7 @@ their code branches on is this Bool.
         else:
             var qb0 = x.create_sub_buffer[DType.float32](0, np0 * n_features)
             rbc_eps_nn_query_fill(
-                ctx, rbc_xr, qb0, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                dplan, ctx, rbc_xr, qb0, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
                 ex_scan, col_ind, np0, n_features, n_landmarks, eps_radius,
             )
         ctx.synchronize()
@@ -1115,7 +1175,7 @@ their code branches on is this Bool.
                     # buffer, and nothing after this point reads it -- the
                     # core mask came from loop 1.
                     var actual = rbc_eps_nn_query_max_k(
-                        ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        dplan, ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                         rbc_rad, ex_scan, col_ind, vd, rbc_tmp,
                         rbc_mk_scratch, n_points2, n_features,
                         n_landmarks, eps_radius, maxklen[b2],
@@ -1169,7 +1229,7 @@ their code branches on is this Bool.
                         )
                     else:
                         var _nnz2 = rbc_eps_nn_query_count(
-                            ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                            dplan, ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                             rbc_rad, ex_scan, vd, n_points2, n_features,
                             n_landmarks, eps_radius,
                         )
@@ -1178,7 +1238,7 @@ their code branches on is this Bool.
                         start2 * n_features, n_points2 * n_features
                     )
                     rbc_eps_nn_query_fill(
-                        ctx, rbc_xr, qb3, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        dplan, ctx, rbc_xr, qb3, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                         rbc_rad, ex_scan, col_ind, n_points2, n_features,
                         n_landmarks, eps_radius,
                     )
@@ -1197,7 +1257,7 @@ their code branches on is this Bool.
                 # `wght_sum` would write the same numbers and be read by
                 # nothing.
                 vertex_deg_dispatch(
-                    ctx, adj, vd, x, start2, n_points2, n_rows, n_features,
+                    dplan, ctx, adj, vd, x, start2, n_points2, n_rows, n_features,
                     eps, metric,
                 )
                 ctx.synchronize()
@@ -1339,20 +1399,20 @@ their code branches on is this Bool.
                         rbc_exclusive_scan_launch(ctx, ex_scan, vd, np_b)
                     else:
                         var _nnzb = rbc_eps_nn_query_count(
-                            ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                            dplan, ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                             rbc_rad, ex_scan, vd, np_b, n_features,
                             n_landmarks, eps_radius,
                         )
                     ctx.synchronize()
                     rbc_eps_nn_query_fill(
-                        ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        dplan, ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                         rbc_rad, ex_scan, col_ind, np_b, n_features,
                         n_landmarks, eps_radius,
                     )
                     ctx.synchronize()
                 else:
                     vertex_deg_dispatch(
-                        ctx, adj, vd, x, start_b, np_b, n_rows, n_features,
+                        dplan, ctx, adj, vd, x, start_b, np_b, n_rows, n_features,
                         eps, metric,
                     )
                     ctx.synchronize()

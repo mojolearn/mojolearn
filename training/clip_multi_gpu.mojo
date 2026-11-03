@@ -9,6 +9,7 @@ owner, with full host staging before publication. One tensor must fit an owner.
 from std.os import getenv
 from std.sys import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
+from core.device_plan import DevicePlan
 from core.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
 from training.estimator import identical_clip_grad_norm_host, _offsets_from_ptr
@@ -63,12 +64,14 @@ struct OwnedClipTensor(Movable):
 
 def parallel_clip_grad_norm_host(
     ctx: DeviceContext,
+    plan: DevicePlan,
     grad_ptr: MutPointer[Float32, MutUntrackedOrigin],
     offsets_ptr: MutPointer[Int32, MutUntrackedOrigin],
     info_ptr: MutPointer[Float32, MutUntrackedOrigin],
     n_tensors: Int, max_norm: Float32,
 ) raises -> Int:
-    var devices = Int(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT","1"))
+    # The optimizer device count from the binding entry's plan.
+    var devices = plan.count
     if devices == 1:
         return identical_clip_grad_norm_host(ctx,grad_ptr,offsets_ptr,info_ptr,n_tensors,max_norm)
     if devices < 1 or devices > 64:

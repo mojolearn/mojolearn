@@ -47,6 +47,7 @@ the wrapper holds the caller's arrays for the length of the call.
 """
 
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.device_plan import DevicePlan, device_plan_current
 from bindings.py_lists import py_list_int
 from gbdt.methods.ordered_fast_switches import ordered_doc_count
 from std.os import abort
@@ -198,6 +199,15 @@ def _u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null buffer address")
     return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def _gbdt_device_plan() raises -> DevicePlan:
+    """THE GBDT FAMILY'S DEVICE PLAN, read ONCE here at the binding entry
+    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Nothing below the
+    entry reads the thread plan; the value travels down to the dispatchers in
+    `gbdt/methods/pointwise_multi_gpu.mojo`, which parse `plan.setting` as
+    the old in-kernel reads did and open `plan.device(rank)` per shard."""
+    return device_plan_current("MOJOLEARN_GBDT_DEVICE_COUNT")
 
 
 def _gbdt_fit_impl(
@@ -499,6 +509,7 @@ def _gbdt_fit_impl(
     var n_eval_rows = Int(py=params[20])
 
     var result: GbdtFitResult
+    var device_plan = _gbdt_device_plan()
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         result = gbdt_fit(
@@ -510,6 +521,7 @@ def _gbdt_fit_impl(
             pair_weights=pair_weights,
             target_dim=target_dim,
             x_row_major=row_major,
+            device_plan=device_plan,
         )
         ctx.synchronize()
 
@@ -795,11 +807,13 @@ def gbdt_fit_two_level_feature_freq_binding(
     var l2_leaf_reg = Float32(Float64(py=params[5]))
     var random_seed = UInt64(Int(py=params[6]))
     var text: String
+    var device_plan = _gbdt_device_plan()
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         text = gbdt_fit_two_level_feature_freq(
             ctx, xp, n_rows, n_features, yp, wp, n_weights, sp, n_sources,
             learning_rate, l2_leaf_reg, random_seed,
+            device_plan=device_plan,
         )
         ctx.synchronize()
     return PythonObject(text)
@@ -842,6 +856,7 @@ def gbdt_fit_ordered_rmse_binding(
     var pp = _u32_ptr(Int(py=permutation_addr))
     var text: String
     var x_address = Int(py=x_addr)
+    var device_plan = _gbdt_device_plan()
     with GILReleased(Python()):
         # cpu2-l6-bindings: X (n_rows x n_features) is NOT copied into a host
         # List: `train_ordered_rmse_ptr` uploads it from the caller's
@@ -857,6 +872,7 @@ def gbdt_fit_ordered_rmse_binding(
                 ctx, x_address, ys, n_rows, n_features, permutation,
                 n_estimators, max_depth, border_count, learning_rate,
                 l2_leaf_reg, ws,
+                device_plan=device_plan,
             )
             text = model_text(trained)
             ctx.synchronize()

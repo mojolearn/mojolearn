@@ -128,7 +128,7 @@ from kernel_methods.impl.distance.kernel_matrices import (
     tanh_epilogue_kernel,
 )
 from std.os import getenv
-from core.device_plan import device_plan_setting
+from core.device_plan import DevicePlan, plan_for_single
 
 from std.sys.compile import is_defined
 from checks.numerics import (
@@ -144,8 +144,8 @@ from checks.numerics import (
     identical_tanh,
 )
 from core.gemm import gemm_nt
+from svm.multi_gpu import kernel_matrix_dispatch
 from svm.impl.distance.kernel_matrices import (
-    kernel_op,
     kernel_workspace_floats,
     rbf_kernel_expanded_kernel,
     row_norms_l2sq,
@@ -704,6 +704,7 @@ comptime _SVM_EPILOGUE_TPB = 256
 
 
 def _svm_kernel_op(
+    plan: DevicePlan,
     ctx: DeviceContext,
     kp: KernelParams,
     mut out: DeviceBuffer[DType.float32],
@@ -754,11 +755,10 @@ def _svm_kernel_op(
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
         if m <= 0 or n <= 0:
             return
-        var setting = device_plan_setting("MOJOLEARN_SVM_DEVICE_COUNT")
-        if setting != "" and setting != "1":
-            # `kernel_op`'s refusal, which under FAST fires on every value
-            # that parses (and `Int` raises on one that does not).
-            var count = Int(setting)
+        if not plan.single():
+            # `kernel_matrix_dispatch`'s refusal, which under FAST fires on
+            # every value that parses (and `Int` raises on one that does not).
+            var count = Int(plan.setting)
             _ = count
             raise Error("parallel SVM kernels require IDENTICAL and 1..64 devices")
         gemm_nt(ctx, out, a, b, m, n, k)
@@ -772,7 +772,7 @@ def _svm_kernel_op(
         elif kp.kernel != KERNEL_LINEAR:
             raise Error("svm kernel_op: unimplemented kernel " + String(kp.kernel))
     else:
-        kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
+        kernel_matrix_dispatch(plan, ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
 
 
 # ===========================================================================
@@ -805,8 +805,12 @@ def km_kernel_matrix(
     elem_tpb: Int = KM_EPILOGUE_TPB,
     sabotage: Int = KMSAB_NONE,
     self_kernel: Bool = False,
+    plan: DevicePlan = plan_for_single(),
 ) raises:
     """`out[m x n] = K(a_i, b_j)`, row-major, for the five implemented kernels.
+
+    `plan` is the device plan the kernel-method entry read once; the svm
+    kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
 
     `self_kernel` (fam2-kernel-gp): the caller states `a_input` IS `b_input`
     and m == n. Read only by the KM_IDN_RBF_CELL, KM_IDN_DOT_CELL and
@@ -910,7 +914,7 @@ def km_kernel_matrix(
             block_dim=(elem_tpb, 1, 1),
         )
         var dot_only = KernelParams(KM_KERNEL_LINEAR, kp.degree, kp.gamma, kp.coef0)
-        _svm_kernel_op(ctx, dot_only, out, an, bn, m, n, k, norm_a, norm_b, ws)
+        _svm_kernel_op(plan, ctx, dot_only, out, an, bn, m, n, k, norm_a, norm_b, ws)
         # the normalized copies are this call's own: drain before they go
         ctx.synchronize()
         _ = an^
@@ -962,19 +966,19 @@ def km_kernel_matrix(
         # kernel IS the pinned GEMM, whose own six sabotages live in the gemm
         # lane and are not this lane's to re-drive. `_svm_kernel_op` is
         # `kernel_op` outside FAST; see it for what FAST runs and why.
-        _svm_kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
+        _svm_kernel_op(plan, ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
         return
 
     if kp.kernel == KM_KERNEL_RBF and not via_copy:
         # THEIR CODE, CALLED. `kernel_op` issues the pinned GEMM and svm's
         # implemented expansion epilogue in one call.
-        _svm_kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
+        _svm_kernel_op(plan, ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
         return
 
     # RBF-under-a-copy, POLYNOMIAL and SIGMOID all start from the dot alone,
     # and they get it from the SAME `kernel_op` at a LINEAR parameter block.
     var dot_only = KernelParams(KM_KERNEL_LINEAR, kp.degree, kp.gamma, kp.coef0)
-    _svm_kernel_op(ctx, dot_only, out, a, b, m, n, k, norm_a, norm_b, ws)
+    _svm_kernel_op(plan, ctx, dot_only, out, a, b, m, n, k, norm_a, norm_b, ws)
 
     if kp.kernel == KM_KERNEL_RBF:
         ctx.enqueue_function[sabotage_rbf_epilogue_kernel](

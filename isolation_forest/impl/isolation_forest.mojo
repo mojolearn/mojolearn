@@ -56,7 +56,6 @@ Spelling only; gated by `check_if_refusals` over n = 1..4097.
 ===================================================
 """
 
-from core.device_plan import device_plan_device, device_plan_setting
 from std.math import fma, log2
 from std.memory import bitcast, memcpy, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -106,7 +105,6 @@ from checks.numerics import (
     identical_pow,
 )
 from std.os import getenv
-from core.host_parallel import host_parallelize
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32, float_to_sortable, sortable_to_float
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from metrics.checks.device_io import upload_i32
@@ -880,8 +878,26 @@ def if_predict_epilogue_kernel(
 # ---------------------------------------------------------------------------
 
 
+@fieldwise_init
+struct IFFitShape(Copyable, Movable):
+    """What `IsolationForest.fit_prologue` resolves for the tree build: the
+    column-major block's address (0 when X is lent row-major at `src_addr`)
+    and the per-tree sizes."""
+
+    var cm_addr: Int
+    var n_sampled_rows: Int
+    var max_depth: Int
+    var n_sampled_features: Int
+    var n_trees: Int
+    var total_nodes: Int
+
+
 struct IsolationForest(Movable):
-    """`IsolationForest<float>`: the params and the three methods."""
+    """`IsolationForest<float>`: the params and the three methods.
+
+    Single-device only. The multi-device fit (whole-tree shards over a
+    `DevicePlan`) is `isolation_forest/multi_gpu.mojo::fit_dispatch`, which
+    calls `fit` unchanged when the plan holds one device."""
 
     var params: IF_params
 
@@ -901,25 +917,19 @@ struct IsolationForest(Movable):
                 "n_estimators must be > 0, got " + String(self.params.n_estimators)
             )
 
-    def fit(
+    def fit_prologue(
         self,
-        ctx: DeviceContext,
         input_colmajor: List[Float32],
         n_rows: Int,
         n_cols: Int,
         mut model: IsolationForestModel,
-        mut trace: IdentityTrace,
-        knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
         src_addr: Int = 0,
-        global_tree_start: Int = 0,
-        distribute: Bool = True,
         colmajor_addr: Int = 0,
-    ) raises:
-        """`IsolationForest::fit` (`:70-140`): resolve `n_sampled_rows`,
-        `max_depth`, `n_sampled_features`, `c_normalization`,
-        `max_nodes_per_tree`; allocate; `build_isolation_forest_global`;
-        sync. `input_colmajor` is column-major `n_rows x n_cols` as theirs
-        (`isolation_forest.hpp:118`)."""
+    ) raises -> IFFitShape:
+        """The host-side head of `fit`: argument checks, the per-tree sizes
+        and the model's scalar fields. No device work. `fit` runs it first;
+        the multi-device fit (`isolation_forest/multi_gpu.mojo`) runs it on
+        the root model before building whole-tree shards."""
         self.error_checking(n_rows, n_cols)
         # DEVIATION 2638: with `src_addr` (a borrowed ROW-major X, the binding's
         # path) `input_colmajor` is empty and the scan rides the threaded upload.
@@ -967,20 +977,38 @@ struct IsolationForest(Movable):
         if total_nodes > 2147483647:
             raise Error("Isolation Forest node offsets exceed int range.")
         model.has_feature_indices = n_sampled_features < n_cols
+        return IFFitShape(
+            cm_addr, n_sampled_rows, max_depth, n_sampled_features, n_trees,
+            total_nodes,
+        )
 
-        if distribute:
-            var setting = device_plan_setting("MOJOLEARN_IFOREST_DEVICE_COUNT")
-            if setting != "" and setting != "1":
-                var count = Int(setting)
-                if count < 1 or count > 64:
-                    raise Error("parallel IsolationForest requires 1..64 devices")
-                if trace.enabled:
-                    raise Error("parallel IsolationForest does not export diagnostic traces")
-                comptime if IF_C50_PACKED:
-                    raise Error("C50 IF packed model requires one device; pooled packed models remain pending")
-                _fit_tree_shards(ctx, input_colmajor, src_addr, n_rows, n_cols,
-                                 self.params, model, knobs, count)
-                return
+    def fit(
+        self,
+        ctx: DeviceContext,
+        input_colmajor: List[Float32],
+        n_rows: Int,
+        n_cols: Int,
+        mut model: IsolationForestModel,
+        mut trace: IdentityTrace,
+        knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
+        src_addr: Int = 0,
+        global_tree_start: Int = 0,
+        colmajor_addr: Int = 0,
+    ) raises:
+        """`IsolationForest::fit` (`:70-140`): resolve `n_sampled_rows`,
+        `max_depth`, `n_sampled_features`, `c_normalization`,
+        `max_nodes_per_tree`; allocate; `build_isolation_forest_global`;
+        sync. `input_colmajor` is column-major `n_rows x n_cols` as theirs
+        (`isolation_forest.hpp:118`)."""
+        var shape = self.fit_prologue(
+            input_colmajor, n_rows, n_cols, model, src_addr, colmajor_addr
+        )
+        var cm_addr = shape.cm_addr
+        var n_sampled_rows = shape.n_sampled_rows
+        var max_depth = shape.max_depth
+        var n_sampled_features = shape.n_sampled_features
+        var n_trees = shape.n_trees
+        var total_nodes = shape.total_nodes
 
         var pad = knobs.pad
         var poison = knobs.poison
@@ -1660,123 +1688,6 @@ def predict_into(
     ctx.synchronize()
     _ = scores^
     _ = preds^
-
-
-def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
-    src_addr: Int, rows: Int, columns: Int, params: IF_params,
-    mut model: IsolationForestModel, knobs: IFLaunchKnobs, count: Int,
-) raises:
-    """Build canonical whole-tree ranges and retain each owner's model buffers.
-
-    Training data remains replicated. No complete forest is allocated on the
-    root; only successful owners are published after every worker joins.
-
-    THE NEGATIVE CONTROL is `-D MOJOLEARN_ISOLATION_FOREST_PARALLEL_SABOTAGE=1`
-    below. Unlike the other `par-*` arms it perturbs an RNG STREAM rather than a
-    row offset, because `first` is a curand subsequence base and nothing else:
-    every buffer is indexed by the LOCAL tree id. The shard's trees are then
-    entirely different rather than slightly shifted, so expect a large delta.
-    Owed a two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding
-    restates this driver, so no CPU column can watch it fire.
-    """
-    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("parallel IsolationForest requires IDENTICAL")
-    var active = min(count, params.n_estimators)
-    ctx.synchronize()
-    var shards = List[IFModelShard]()
-    for rank in range(active):
-        var first = params.n_estimators * rank // active
-        var width = params.n_estimators * (rank + 1) // active - first
-        var device = DeviceContext(device_id=device_plan_device(rank))
-        var feature_indices = device.enqueue_create_buffer[DType.int32](1)
-        var feature = device.enqueue_create_buffer[DType.int32](1)
-        var threshold = device.enqueue_create_buffer[DType.float32](1)
-        var left = device.enqueue_create_buffer[DType.int32](1)
-        var right = device.enqueue_create_buffer[DType.int32](1)
-        var offsets = device.enqueue_create_buffer[DType.int32](1)
-        var nodes = device.enqueue_create_buffer[DType.int32](1)
-        var depths = device.enqueue_create_buffer[DType.int32](1)
-        shards.append(IFModelShard(device^, feature_indices^, feature^,
-            threshold^, left^, right^, offsets^, nodes^, depths^, first, width,
-            List[Int32](), List[Int32]()))
-    var failures = List[Int](length=active, fill=0)
-    var sp = rebind[MutPointer[IFModelShard, MutUntrackedOrigin]](shards.unsafe_ptr())
-    var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failures.unsafe_ptr())
-    var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](input_colmajor.unsafe_ptr())
-    var size = len(input_colmajor)
-    var config = params.copy()
-    def task(rank: Int) {imm sp, imm fp, imm xp, imm size, imm src_addr,
-                         imm rows, imm columns, imm knobs, imm config}:
-        try:
-            ref shard = sp[rank]
-            # cpu4-forest: the owner uploads the shared column-major block
-            # from its address (no per-owner host copy)
-            var data = List[Float32]()
-            var cm_addr = 0
-            if src_addr == 0:
-                cm_addr = Int(xp)
-            var local_config = config.copy()
-            local_config.n_estimators = shard.count
-            var forest = IsolationForest(local_config)
-            var local = IsolationForestModel(shard.ctx)
-            var trace = IdentityTrace.disabled()
-            var tree_base = shard.first
-            comptime if is_defined["MOJOLEARN_ISOLATION_FOREST_PARALLEL_SABOTAGE"]():
-                # Check-only arm: later owners seed their trees one RNG stream
-                # early. `shard.first` is the curand subsequence base and has
-                # exactly one consumer -- this call -- so no allocation, no
-                # length and no validation can see it; `shard.count` still
-                # sizes every buffer and every published tree. INERT AT ONE
-                # DEVICE (`active` is 1, only rank 0 runs), which is what makes
-                # a moved `par-iforest` cell attributable to the define rather
-                # than to the second device.
-                if rank > 0:
-                    tree_base = shard.first - 1
-            forest.fit(shard.ctx, data, rows, columns, local, trace,
-                       knobs, src_addr, tree_base, False, cm_addr)
-            swap(shard.global_feature_indices, local.global_feature_indices)
-            swap(shard.node_feature, local.node_feature)
-            swap(shard.node_threshold, local.node_threshold)
-            swap(shard.node_left, local.node_left)
-            swap(shard.node_right, local.node_right)
-            swap(shard.global_tree_offsets, local.global_tree_offsets)
-            swap(shard.global_tree_n_nodes, local.global_tree_n_nodes)
-            swap(shard.global_tree_max_depth, local.global_tree_max_depth)
-            swap(shard.tree_n_nodes_host, local.tree_n_nodes_host)
-            swap(shard.tree_max_depth_host, local.tree_max_depth_host)
-            _ = local^
-            shard.ctx.synchronize()
-        except:
-            fp[rank] = 1
-    if active == 1:
-        task(0)
-    else:
-        host_parallelize(task, active)
-    for rank in range(active):  # small-loop(active: tree-shard owners): one entry per device owner, per-tree metadata words
-        if failures[rank] != 0:
-            raise Error("IsolationForest tree shard failed: " + String(rank))
-    var node_counts = List[Int32]()
-    var max_depths = List[Int32]()
-    for rank in range(active):  # small-loop(active: tree-shard owners): one entry per device owner, per-tree metadata words
-        for tree in range(shards[rank].count):  # small-loop(shards[rank].count: trees of one owner): two metadata words per tree, no rows
-            node_counts.append(shards[rank].tree_n_nodes_host[tree])
-            max_depths.append(shards[rank].tree_max_depth_host[tree])
-    model.tree_n_nodes_host = node_counts^
-    model.tree_max_depth_host = max_depths^
-    # A model previously fitted on one device must also release its old full
-    # root arrays. Allocate every placeholder before replacing any storage.
-    var empty_root = IsolationForestModel(ctx)
-    swap(model.global_feature_indices, empty_root.global_feature_indices)
-    swap(model.node_feature, empty_root.node_feature)
-    swap(model.node_threshold, empty_root.node_threshold)
-    swap(model.node_left, empty_root.node_left)
-    swap(model.node_right, empty_root.node_right)
-    swap(model.global_tree_offsets, empty_root.global_tree_offsets)
-    swap(model.global_tree_n_nodes, empty_root.global_tree_n_nodes)
-    swap(model.global_tree_max_depth, empty_root.global_tree_max_depth)
-    model.shards = shards^
-    _ = empty_root^
-    model.fitted = True
 
 
 def _pooled_path_lengths(ctx: DeviceContext, model: IsolationForestModel,

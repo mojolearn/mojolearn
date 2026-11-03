@@ -127,6 +127,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 from core.device_zero import enqueue_fill
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from core.pinned_reduce import halving_block_sum
 from checks.fixed_point import choose_scale
@@ -2425,6 +2426,9 @@ def fit_ordered(
     od_type: Int,
     od_pvalue: Float64,
     od_wait: Int,
+    # The fit's device plan, read once at the binding entry and handed to
+    # the structure searcher.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> OrderedFitOutput:
     """Train `n_estimators` oblivious trees by their GPU Ordered boosting
     (see the module docstring) into `model`. The learn loss after each tree
@@ -3278,6 +3282,7 @@ def fit_ordered(
             folds=folds, permutation=perms[learn_p], permutation_id=learn_p,
             fold_part_off=fast_part_off, obs_scratch=fast_obs,
             ord_wide=ord_wide, std_scale_word=ss_words^,
+            device_plan=device_plan,
         )
         times.end(ctx, "ord.structure")
         times.begin(ctx)

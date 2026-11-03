@@ -103,7 +103,7 @@ can reach a bit, and `check_cd_is_launch_invariant` is what keeps that
 sentence true.
 """
 
-from core.device_plan import device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
@@ -1301,6 +1301,38 @@ def cd_fit_traced(
     want_residual: Bool,
     row_major: Bool = False,
 ) raises -> Tuple[Int, Float32]:
+    """Plan-less entry: reads the solver plan once and forwards."""
+    return cd_fit_traced(
+        device_plan_current("MOJOLEARN_SOLVER_DEVICE_COUNT"),
+        ctx, x, n_rows, n_cols, labels, coef, fit_intercept, epochs, loss,
+        alpha, l1_ratio, shuffle, tol, has_sample_weight, trace, prefix,
+        launch, residual_out, want_residual, row_major,
+    )
+
+
+def cd_fit_traced(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    mut labels: DeviceBuffer[DType.float32],
+    mut coef: DeviceBuffer[DType.float32],
+    fit_intercept: Bool,
+    epochs: Int,
+    loss: Int,
+    alpha: Float32,
+    l1_ratio: Float32,
+    shuffle: Bool,
+    tol: Float32,
+    has_sample_weight: Bool,
+    mut trace: IdentityTrace,
+    prefix: String,
+    launch: CdLaunch,
+    mut residual_out: DeviceBuffer[DType.float32],
+    want_residual: Bool,
+    row_major: Bool = False,
+) raises -> Tuple[Int, Float32]:
     """`cdFit` with a stage card, a scheduling surface and the residual
     handed out. The dispatch guards first, in their order.
 
@@ -1712,10 +1744,11 @@ def cd_fit_traced(
     var three = False
     var part = contract_partition(n_rows)
     comptime if CD_THREE_LAUNCH:
-        var dc = device_plan_setting("MOJOLEARN_SOLVER_DEVICE_COUNT")
+        # `plan.single()` is the old `dc == "" or dc == "1"` test on
+        # MOJOLEARN_SOLVER_DEVICE_COUNT, by definition: same gate, same bits.
         three = (
             launch.dot_plan < 0
-            and (dc == "" or dc == "1")
+            and plan.single()
             and part[1] > 0
             and choose_gemm_plan(1, 1, n_rows) == PLAN_SPLITK
         )
@@ -1725,10 +1758,9 @@ def cd_fit_traced(
     # lane/gap-nv-classical2: the one-launch coordinate off Apple
     var fused = False
     comptime if CD_FUSED:
-        var dcf = device_plan_setting("MOJOLEARN_SOLVER_DEVICE_COUNT")
         fused = (
             launch.dot_plan < 0
-            and (dcf == "" or dcf == "1")
+            and plan.single()
             and part[1] > 0
             and part[1] <= CONTRACT_MAX_LEAVES
         )

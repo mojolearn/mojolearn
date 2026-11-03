@@ -62,6 +62,7 @@ THE POLICY CHOICES
 """
 
 from max.gpu.host import DeviceContext
+from core.device_plan import DevicePlan, plan_for_single
 from ensemble.instruments import StageTimes as HostStageTimes
 from std.memory import memcpy
 from std.math import isfinite
@@ -128,6 +129,8 @@ def gbdt_fit_two_level_feature_freq(
     learning_rate: Float32 = Float32(0.03),
     l2_leaf_reg: Float32 = Float32(3.0),
     random_seed: UInt64 = UInt64(0),
+    # The fit's device plan, read once at the binding entry.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> String:
     """Explicit two-level FeatureFreq fit for dense categorical inputs.
 
@@ -249,6 +252,7 @@ def gbdt_fit_two_level_feature_freq(
         borders, n_rows, n_features, grid,
         learning_rate=learning_rate, l2_leaf_reg=l2_leaf_reg,
         random_seed=random_seed,
+        device_plan=device_plan,
     )
     var nan_treatment = List[Int]()
     nan_treatment.resize(len(fitted.fold_counts), 0)
@@ -472,6 +476,9 @@ def gbdt_fit(
     # lane/apple-fast-sym-feat: `x` is ROW-MAJOR (`gbdt_fit_rowmajor`);
     # served only under `GBDT_QUANT_DEVICE`, raw float columns only
     x_row_major: Bool = False,
+    # The fit's device plan, read once at the binding entry (one device by
+    # default); `train` hands it to every tree searcher.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> GbdtFitResult:
     """Fit and return the model as `model_text`, plus both loss curves.
 
@@ -633,6 +640,7 @@ def gbdt_fit(
         pair_losers=pair_losers,
         pair_weights=pair_weights,
         target_dim=target_dim,
+        device_plan=device_plan,
     )
     host_times.stop_host("gbdt_fit_train", t_phase)
     t_phase = host_times.start()

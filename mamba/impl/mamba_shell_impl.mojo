@@ -19,8 +19,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.neural_context import neural_ctx
-from core.device_plan import device_plan_root
+from core.neural_context import neural_ctx, neural_device_plan
+from core.device_plan import DevicePlan
 from core.device_scan import device_first_nonfinite
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralMambaContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralMambaContextFast"
@@ -654,6 +654,24 @@ def _mamba2_workspace_step(
     mut workspace: Mamba2PublicWorkspace, a: List[Int], b: Int, dm: Int,
     q0: Int, dt_lo: Float32, dt_hi: Float32,
 ) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return _mamba2_workspace_step(
+        neural_device_plan(),
+        workspace,
+        a,
+        b,
+        dm,
+        q0,
+        dt_lo,
+        dt_hi,
+    )
+
+
+def _mamba2_workspace_step(
+    dplan: DevicePlan,
+    mut workspace: Mamba2PublicWorkspace, a: List[Int], b: Int, dm: Int,
+    q0: Int, dt_lo: Float32, dt_hi: Float32,
+) raises -> Int:
     # Same first refusals as _mamba2_run; no pointer-identity weight cache.
     var dims = Mamba2Dims.of(dm)
     var di = dims.d_inner
@@ -670,7 +688,7 @@ def _mamba2_workspace_step(
             " between calls (contract section 5), so the two sides of this"
             " boundary disagree about the state"
         )
-    var device = max(0, device_plan_root())
+    var device = max(0, dplan.root)
     comptime if AFN_MAMBA_ARENA:
         # The default identical GPU route already groups all buffers into one
         # arena. Retain that allocation without changing its logical views.
@@ -678,7 +696,7 @@ def _mamba2_workspace_step(
         # every legal next step, independent of any benchmark shape.
         if not workspace.ctx or workspace.b != b or workspace.dm != dm or workspace.device != device:
             workspace.clear()
-            workspace.ctx = neural_ctx[_NEURAL_CTX]()
+            workspace.ctx = neural_ctx[_NEURAL_CTX](dplan)
             workspace.arena = MambaArena(workspace.ctx.value(),
                 mamba2_arena_floats(b, 1, M2_CHUNK_SIZE - 1, dims), MAMBA_GUARD)
             workspace.b = b
@@ -706,7 +724,7 @@ def _mamba2_workspace_step(
                 a, b, 1, dm, q0, dt_lo, dt_hi, dims, workspace.weights, workspace.state)
     if not workspace.ctx or workspace.b != b or workspace.dm != dm or workspace.device != device:
         workspace.clear()
-        workspace.ctx = neural_ctx[_NEURAL_CTX]()
+        workspace.ctx = neural_ctx[_NEURAL_CTX](dplan)
         ref setup_ctx = workspace.ctx.value()
         workspace.weights = Mamba2DeviceWeights(setup_ctx, dims)
         # Constructor-owned state buffers are NEVER replaced individually:

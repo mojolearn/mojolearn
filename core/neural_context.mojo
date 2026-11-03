@@ -65,7 +65,7 @@ from max.gpu.host import DeviceContext
 
 from std.atomic import Atomic, Ordering
 
-from core.device_plan import device_plan_root
+from core.device_plan import DevicePlan, device_plan_current
 
 
 struct _NeuralContext(Defaultable, Movable):
@@ -83,13 +83,25 @@ struct _NeuralContext(Defaultable, Movable):
         self.device_lock = List[Int64](length=1, fill=Int64(0))
 
 
+def neural_device_plan() raises -> DevicePlan:
+    """The calling thread's device plan, read once at an entry, for its root
+    only (`DevicePlan.root`, the plan's first device or -1); no family's count
+    setting is consulted, so the name is empty."""
+    return device_plan_current("", "")
+
+
 def process_ctx[name: StaticString]() raises -> DeviceContext:
     """The binding's shared context (slot `name`), created on first use and
     kept for the process; on the calling thread's device-plan root when a
-    plan whose root is not device 0 is bound."""
+    plan whose root is not device 0 is bound. Reads the plan once."""
+    return process_ctx[name](neural_device_plan())
+
+
+def process_ctx[name: StaticString](dplan: DevicePlan) raises -> DeviceContext:
+    """`process_ctx` on the root of a plan the entry already read."""
     comptime SLOT = _Global[StorageType=_NeuralContext, name=name, init_fn=_NeuralContext.__init__]
     var slot = SLOT.get_or_create_ptr()
-    var root = device_plan_root()
+    var root = dplan.root
     if root > 0:
         var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].device_lock.unsafe_ptr())
         while True:  # driver-loop: spin on the per-device list's lock word
@@ -121,3 +133,8 @@ def process_ctx[name: StaticString]() raises -> DeviceContext:
 def neural_ctx[name: StaticString]() raises -> DeviceContext:
     """`process_ctx` under the name the neural bindings first used."""
     return process_ctx[name]()
+
+
+def neural_ctx[name: StaticString](dplan: DevicePlan) raises -> DeviceContext:
+    """`process_ctx` on the root of a plan the entry already read."""
+    return process_ctx[name](dplan)

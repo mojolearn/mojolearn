@@ -21,6 +21,7 @@ from core.pinned_reduce import pinned_block_max
 from std.math import isfinite
 from checks.numerics import ftz, identical_mul, identical_mul_add
 from checks.fixed_point import choose_scale
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from gbdt.methods.dynamic_boosting_folds import TFold, EBoostingType, IQueriesGrouping, create_folds
 from gbdt.methods.doc_parallel_boosting import TEstimationWorkspace, _estimate_and_apply
@@ -274,6 +275,8 @@ def fit_ordered_rmse(
     score_function: Int = SCORE_FUNCTION_COSINE,
     one_hot: List[Bool] = List[Bool](),
     growth_rate: Float64 = 2.0, min_fold_size: Int = 100,
+    # The fit's device plan, read once at the binding entry.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> OrderedFitResult:
     """Native usable Ordered entry; explicit row permutation is mandatory.
 
@@ -387,6 +390,7 @@ def fit_ordered_rmse(
             ctx, layout, n, max_depth, cindex, sw^, sg^, sm_count,
             scale, score_function, pool, l2_leaf_reg,
             one_hot=one_hot, folds=folds, permutation=permutation,
+            device_plan=device_plan,
         )
         var bins = ctx.enqueue_create_buffer[DType.uint32](n)
         if len(splits) == 0:

@@ -123,7 +123,8 @@ from cluster.impl.detail.min_cluster_distance_compute import (
     min_cluster_and_distance_compute,
     min_cluster_and_distance_compute_gated,
 )
-from cluster.multi_gpu import assignment_device_count
+from core.device_plan import DevicePlan
+from cluster.multi_gpu import assignment_device_count, kmeans_device_plan
 from std.memory import bitcast
 from cluster.impl.kmeans_params import (
     INIT_ARRAY,
@@ -487,6 +488,7 @@ def pp_copy_best_kernel(
 
 
 def kmeans_plus_plus(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_norm: DeviceBuffer[DType.float32],
@@ -542,7 +544,7 @@ def kmeans_plus_plus(
         ctx, centroids, centroid_norm, 1, n_features, params.metric
     )
     min_cluster_and_distance_compute(
-        ctx,
+        dplan, ctx,
         x,
         x_norm,
         centroids,
@@ -799,6 +801,37 @@ def _assign_to_candidates(
     n_features: Int,
     cand_count: Int,
 ) raises:
+    """Reads the device plan once and runs the planned overload below."""
+    _assign_to_candidates(
+        kmeans_device_plan(),
+        ctx,
+        x,
+        x_norm,
+        cand,
+        dist_buf,
+        labels,
+        min_dist,
+        params,
+        n_samples,
+        n_features,
+        cand_count,
+    )
+
+
+def _assign_to_candidates(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut cand: DeviceBuffer[DType.float32],
+    mut dist_buf: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut min_dist: DeviceBuffer[DType.float32],
+    params: KMeansParams,
+    n_samples: Int,
+    n_features: Int,
+    cand_count: Int,
+) raises:
     """One `minClusterDistanceCompute` round against the candidate set.
 
     Theirs (`detail/kmeans.cuh:629-640`, `:664-676`) computes distances only;
@@ -815,7 +848,7 @@ def _assign_to_candidates(
         ctx, cand, cand_norm, cand_count, n_features, params.metric
     )
     min_cluster_and_distance_compute(
-        ctx,
+        dplan, ctx,
         x,
         x_norm,
         cand,
@@ -907,6 +940,7 @@ def fold_new_candidates_kernel(
 
 
 def _assign_to_candidates_fast(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_norm: DeviceBuffer[DType.float32],
@@ -927,7 +961,7 @@ def _assign_to_candidates_fast(
     assigned yet. Returns the new assigned count."""
     if assigned == 0:
         _assign_to_candidates(
-            ctx, x, x_norm, cand, dist_buf, labels, min_dist,
+            dplan, ctx, x, x_norm, cand, dist_buf, labels, min_dist,
             params, n_samples, n_features, cand_count,
         )
         return cand_count
@@ -938,7 +972,7 @@ def _assign_to_candidates_fast(
         assigned * n_features, n_new * n_features
     )
     _assign_to_candidates(
-        ctx, x, x_norm, sub, dist_buf, new_labels, new_dist,
+        dplan, ctx, x, x_norm, sub, dist_buf, new_labels, new_dist,
         params, n_samples, n_features, n_new,
     )
     ctx.enqueue_function[fold_new_candidates_kernel](
@@ -952,6 +986,7 @@ def _assign_to_candidates_fast(
 
 
 def init_scalable_kmeans_plus_plus(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_norm: DeviceBuffer[DType.float32],
@@ -1083,7 +1118,7 @@ def init_scalable_kmeans_plus_plus(
     # scalar comes to the host exactly as their `clusterCost.value(stream)`
     # does.
     _assign_to_candidates(
-        ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+        dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
         params, n_samples, d, cand_count,
     )
     _sum_device(
@@ -1119,13 +1154,13 @@ def init_scalable_kmeans_plus_plus(
     for _iter in range(niter):
         comptime if KMEANS_FAST_INCR_INIT:
             incr_assigned = _assign_to_candidates_fast(
-                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
                 incr_labels, incr_dist, params, n_samples, d,
                 incr_assigned, cand_count,
             )
         else:
             _assign_to_candidates(
-                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
                 params, n_samples, d, cand_count,
             )
         _sum_device(
@@ -1265,13 +1300,13 @@ def init_scalable_kmeans_plus_plus(
         )
         comptime if KMEANS_FAST_INCR_INIT:
             incr_assigned = _assign_to_candidates_fast(
-                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
                 incr_labels, incr_dist, params, n_samples, d,
                 incr_assigned, cand_count,
             )
         else:
             _assign_to_candidates(
-                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
                 params, n_samples, d, cand_count,
             )
         ctx.enqueue_function[count_labels_kernel](
@@ -1310,7 +1345,7 @@ def init_scalable_kmeans_plus_plus(
         enqueue_row_norms(ctx, cand_norm_rows, cand_buf, cand_count, d)
         ctx.synchronize()
         kmeans_plus_plus(
-            ctx,
+            dplan, ctx,
             cand_buf,
             cand_norm_rows,
             centroids,
@@ -1358,7 +1393,7 @@ def init_scalable_kmeans_plus_plus(
         if params.recluster_max_iter > 0:
             inner.max_iter = params.recluster_max_iter
         var inner_res = kmeans_fit_main_traced(
-            ctx,
+            dplan, ctx,
             cand_buf,
             weight,
             centroids,
@@ -1510,6 +1545,39 @@ def kmeans_fit_main_traced(
     mut trace: IdentityTrace,
     tag_prefix: String,
 ) raises -> FitResult:
+    """Reads the device plan once and runs the planned overload below."""
+    return kmeans_fit_main_traced(
+        kmeans_device_plan(),
+        ctx,
+        x,
+        weights,
+        centroids,
+        labels,
+        params,
+        n_samples,
+        n_features,
+        sum_scale,
+        weight_scale,
+        trace,
+        tag_prefix,
+    )
+
+
+def kmeans_fit_main_traced(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    params: KMeansParams,
+    n_samples: Int,
+    n_features: Int,
+    sum_scale: Float32,
+    weight_scale: Float32,
+    mut trace: IdentityTrace,
+    tag_prefix: String,
+) raises -> FitResult:
     """`kmeans_fit_main` with the card it writes into passed in. See there.
 
     WHY A FIT IS THE UNIT. The tags carry `restartNN.iterMM.` prefixes,
@@ -1583,7 +1651,7 @@ def kmeans_fit_main_traced(
         dev_conv = (
             (not params.inertia_check)
             and (not trace.enabled)
-            and assignment_device_count() == 1
+            and assignment_device_count(dplan) == 1
         )
     var conv_thresh = kmeans_shift_threshold(params.tol)
     ctx.synchronize()
@@ -1641,7 +1709,7 @@ def kmeans_fit_main_traced(
             # the classic sequential variant, anything else -- including the
             # DEFAULT 2.0 -- picks scalable k-means||.
             init_scalable_kmeans_plus_plus(
-                ctx,
+                dplan, ctx,
                 x,
                 x_norm,
                 cur_centroids,
@@ -1658,7 +1726,7 @@ def kmeans_fit_main_traced(
             )
         else:
             kmeans_plus_plus(
-                ctx,
+                dplan, ctx,
                 x,
                 x_norm,
                 cur_centroids,
@@ -1815,7 +1883,7 @@ def kmeans_fit_main_traced(
             # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
             # row in docs/apple-fast/EXPERIMENTS.md.
             min_cluster_and_distance_compute(
-                ctx,
+                dplan, ctx,
                 x,
                 x_norm,
                 cur_centroids,
@@ -2058,7 +2126,7 @@ def kmeans_fit_main_traced(
             params.metric,
         )
         min_cluster_and_distance_compute(
-            ctx,
+            dplan, ctx,
             x,
             x_norm,
             cur_centroids,

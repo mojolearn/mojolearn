@@ -86,15 +86,28 @@ def test_gpu_binding_registers_the_plan_entries_and_the_host_binding_does_not():
 
 
 def test_owner_loops_take_devices_and_counts_from_the_plan():
-    for relative, variable in (("svm/impl/distance/kernel_matrices.mojo", "MOJOLEARN_SVM_DEVICE_COUNT"),
-                               ("cholesky/multi_gpu.mojo", "MOJOLEARN_CHOLESKY_DEVICE_COUNT"),
-                               ("cholesky/checks/trsm.mojo", None),
-                               ("kernel_methods/checks/kernel_matrix.mojo", "MOJOLEARN_SVM_DEVICE_COUNT")):
+    for relative, variable in (("cholesky/multi_gpu.mojo", "MOJOLEARN_CHOLESKY_DEVICE_COUNT"),
+                               ("cholesky/checks/trsm.mojo", None)):
         source = _read(relative)
         assert "DeviceContext(device_id=rank)" not in source, relative
         if variable is not None:
             assert 'getenv("' + variable + '")' not in source, relative
             assert 'device_plan_setting("' + variable + '")' in source, relative
+
+
+def test_svm_kernel_rows_take_a_plan_value_read_at_the_entries():
+    # docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md: the single-device files
+    # read no plan; the dispatcher takes a DevicePlan value; the entries read it.
+    for relative in ("svm/impl/distance/kernel_matrices.mojo", "svm/impl/smosolver.mojo",
+                     "kernel_methods/checks/kernel_matrix.mojo"):
+        source = _read(relative)
+        assert "device_plan_" not in source, relative
+        assert 'getenv("MOJOLEARN_SVM_DEVICE_COUNT")' not in source, relative
+    shards = _read("svm/multi_gpu.mojo")
+    assert "DeviceContext(device_id=plan.device(rank))" in shards
+    assert "device_plan_" not in shards
+    for relative in ("svm/estimator.mojo", "kernel_methods/estimator.mojo"):
+        assert 'device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")' in _read(relative), relative
 
 
 def test_device_plan_falls_back_to_the_environment_and_the_rank():
@@ -111,6 +124,9 @@ def test_root_context_follows_the_plan():
     # every binding's process-lifetime context (core/neural_context.mojo)
     # opens on the plan's root while a plan whose root is not device 0 is bound
     context = _read("core/neural_context.mojo")
+    # (2026-11-03) the plan-less entry reads the plan once and the plan-taking
+    # overload opens on its root
     body = context[context.index("def process_ctx["):]
-    assert "var root = device_plan_root()" in body
+    assert "return process_ctx[name](neural_device_plan())" in body
+    assert "var root = dplan.root" in body
     assert "DeviceContext(device_id=root)" in body

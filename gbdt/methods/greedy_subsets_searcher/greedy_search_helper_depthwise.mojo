@@ -31,7 +31,6 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     compute_target_std_dev,
     enqueue_leaf_iota,
     enqueue_snap_gradients,
-    launch_histograms_for_blocks,
     resolve_split,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
@@ -147,7 +146,9 @@ from gbdt.methods.helpers import (
     best_split_properties_less,
 )
 from gbdt.models.non_symmetric_tree import TNonSymmetricTree
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
+from gbdt.methods.pointwise_multi_gpu import gbdt_hist_dispatch
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
     BIN_SPLIT_TAKE_GREATER,
@@ -1819,6 +1820,10 @@ def fit_non_symmetric_tree[
     # gradient, sums of absolute values); when present the scale is derived
     # there and `weight_magnitude` / `gradient_magnitude` are not read.
     mags_dev: Optional[DeviceBuffer[DType.float32]] = None,
+    # The fit's device plan, read once at the binding entry. The level
+    # histograms go through `gbdt_hist_dispatch(device_plan, ...)`, which
+    # makes the one-vs-many choice (one device: the unchanged launch).
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> TNonSymmetricTree:
     """`TGreedyTreeLikeStructureSearcher<TNonSymmetricTree>::FitImpl`.
 
@@ -2815,9 +2820,10 @@ def fit_non_symmetric_tree[
                 # needed and none is passed.
                 comptime if NONSYM_GROUP_WIDTH_2661:
                     if use_ridx:
-                        launch_histograms_for_blocks[
+                        gbdt_hist_dispatch[
                             hist2_smem_mode, True, False, True
                         ](
+                            device_plan,
                             ctx, dblocks, iteration - 1, len(non_zero), n_rows,
                             stat_count, max_leaves, sm_count, fixed_scale,
                             cindex, row_index, stats, p_off, p_sz, d_ids,
@@ -2827,9 +2833,10 @@ def fit_non_symmetric_tree[
                             nonsymmetric_work=AFT_N02,
                         )
                     else:
-                        launch_histograms_for_blocks[
+                        gbdt_hist_dispatch[
                             hist2_smem_mode, False, False, True
                         ](
+                            device_plan,
                             ctx, dblocks, iteration - 1, len(non_zero), n_rows,
                             stat_count, max_leaves, sm_count, fixed_scale,
                             cindex, row_index, stats, p_off, p_sz, d_ids,
@@ -2840,9 +2847,10 @@ def fit_non_symmetric_tree[
                         )
                 else:
                     if use_ridx:
-                        launch_histograms_for_blocks[
+                        gbdt_hist_dispatch[
                             hist2_smem_mode, True
                         ](
+                            device_plan,
                             ctx, dblocks, iteration - 1, len(non_zero), n_rows,
                             stat_count, max_leaves, sm_count, fixed_scale,
                             cindex, row_index, stats, p_off, p_sz, d_ids,
@@ -2851,9 +2859,10 @@ def fit_non_symmetric_tree[
                             nonsymmetric_work=AFT_N02,
                         )
                     else:
-                        launch_histograms_for_blocks[
+                        gbdt_hist_dispatch[
                             hist2_smem_mode, False
                         ](
+                            device_plan,
                             ctx, dblocks, iteration - 1, len(non_zero), n_rows,
                             stat_count, max_leaves, sm_count, fixed_scale,
                             cindex, row_index, stats, p_off, p_sz, d_ids,
@@ -4380,6 +4389,7 @@ def fit_depthwise_tree[
     random_seed: UInt64 = UInt64(0),
     sm_count_override: Int = -1,
     tag_prefix: String = String(""),
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> TNonSymmetricTree:
     """The Depthwise name, kept so nothing that already calls it moves.
 
@@ -4426,4 +4436,5 @@ def fit_depthwise_tree[
         random_seed,
         sm_count_override,
         tag_prefix,
+        device_plan=device_plan,
     )

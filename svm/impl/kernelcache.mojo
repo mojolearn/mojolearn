@@ -49,8 +49,9 @@ from svm.checks.device_select import (
     gather_f32_kernel,
     gather_rows_kernel,
 )
+from core.device_plan import DevicePlan
+from svm.multi_gpu import kernel_matrix_dispatch
 from svm.impl.distance.kernel_matrices import (
-    kernel_op,
     kernel_workspace_floats,
     row_norms_l2sq,
 )
@@ -158,10 +159,14 @@ struct KernelCache(Movable):
     var matrix_l2: DeviceBuffer[DType.float32]
     var matrix_l2_ws: DeviceBuffer[DType.float32]
     var gemm_ws: DeviceBuffer[DType.float32]
+    var plan: DevicePlan
+    """The device plan the fit entry read once; `kernel_matrix_dispatch`
+    shards the kernel tile over it (svm/multi_gpu.mojo)."""
 
     def __init__(
         out self,
         ctx: DeviceContext,
+        plan: DevicePlan,
         mut x: DeviceBuffer[DType.float32],
         n_rows: Int,
         n_cols: Int,
@@ -188,6 +193,7 @@ struct KernelCache(Movable):
         self.n_cols = n_cols
         self.n_ws = n_ws
         self.svm_type = svm_type
+        self.plan = plan.copy()
         self.kp = kp.copy()
         self.cache_state = CACHE_READY
         self.cache_size_vecs = 0
@@ -351,8 +357,8 @@ struct KernelCache(Movable):
         var nb = self.matrix_l2_ws.create_sub_buffer[DType.float32](
             0, len(self.matrix_l2_ws)
         )
-        kernel_op(
-            ctx, self.kp, self.kernel_tile, self.x_ws_dense, xb,
+        kernel_matrix_dispatch(
+            self.plan, ctx, self.kp, self.kernel_tile, self.x_ws_dense, xb,
             n_ws, n_ws, self.n_cols, self.matrix_l2_ws, nb,
             self.gemm_ws,
         )
@@ -436,8 +442,8 @@ struct KernelCache(Movable):
                 offset if self.kp.kernel == KERNEL_RBF else 0,
                 batch_size if self.kp.kernel == KERNEL_RBF else 1,
             )
-            kernel_op(
-                ctx, self.kp, self.kernel_tile, self.x_ws_dense, xb,
+            kernel_matrix_dispatch(
+                self.plan, ctx, self.kp, self.kernel_tile, self.x_ws_dense, xb,
                 n_uncached, batch_size, self.n_cols, self.matrix_l2_ws, l2b,
                 self.gemm_ws,
             )

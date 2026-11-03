@@ -93,7 +93,8 @@ from std.sys.info import is_apple_gpu
 from max.gpu.sync import barrier
 # TOMBSTONE: MOJOLEARN_QN_FAST_GRID_SUMS (DROPPED-noise) deleted 2026-10-03 by 5f1e86fd0; code recoverable at 5f1e86fd0^.
 # Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_GRID_SUMS.patch; record in docs/TOMBSTONES.md.
-from glm.impl.qn.multi_gpu import gradient_columns
+from core.device_plan import DevicePlan
+from glm.impl.qn.multi_gpu import glm_device_plan, gradient_columns
 from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies, fast_xtdz_into, fast_xtdz_workspace_floats
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.info import has_apple_gpu_accelerator
@@ -1770,6 +1771,7 @@ def linear_fwd(
 
 
 def linear_bwd(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut g: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -1792,7 +1794,7 @@ def linear_bwd(
     var tiled_multi = qn_tiled_multi_applies(n_rows, d, dims.C)
     var distributed = False
     if not tiled_multi:
-        distributed = gradient_columns(ctx, xtdz, x, dz, n_rows, d, dims.C)
+        distributed = gradient_columns(dplan, ctx, xtdz, x, dz, n_rows, d, dims.C)
     # AUDIT (i): unreached at C == 1; the C == 1 body below is certified.
     if dims.C > 1:
         var cd = dims.C * d
@@ -1928,6 +1930,9 @@ struct GLMWithData(Movable):
     var gnorm_at: Int
     var gnorm_raw: Float32
     var last_pen: Float32
+    # The GLM device plan, read once where the fit builds its objective and
+    # passed to `linear_bwd` (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    var dplan: DevicePlan
 
     def __init__(
         out self,
@@ -1940,6 +1945,22 @@ struct GLMWithData(Movable):
         l2: Float32,
         svr_eps: Float32 = Float32(0.0),
     ) raises:
+        """Reads the GLM device plan once and runs the planned constructor."""
+        self = Self(glm_device_plan(), ctx, x^, y^, n_rows, dims, loss, l2, svr_eps)
+
+    def __init__(
+        out self,
+        dplan: DevicePlan,
+        ctx: DeviceContext,
+        var x: DeviceBuffer[DType.float32],
+        var y: DeviceBuffer[DType.float32],
+        n_rows: Int,
+        dims: GLMDims,
+        loss: Int,
+        l2: Float32,
+        svr_eps: Float32 = Float32(0.0),
+    ) raises:
+        self.dplan = dplan.copy()
         self.dims = dims
         self.n_rows = n_rows
         self.loss = loss
@@ -2112,7 +2133,7 @@ struct GLMWithData(Movable):
         backward. Returns the loss value the device scalar held."""
         linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
         var loss_host = self.get_loss_and_dz(ctx)
-        linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, init_grad_zero)
+        linear_bwd(self.dplan, ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, init_grad_zero)
         return loss_host
 
     def evaluate(
@@ -2189,7 +2210,7 @@ struct GLMWithData(Movable):
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
+                linear_bwd(self.dplan, ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
         else:
             ctx.enqueue_memset(g, Float32(0.0))
             # `G[:, 0:n_param - has_bias]`: the first `C*D` entries of the
@@ -2211,7 +2232,7 @@ struct GLMWithData(Movable):
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
+                linear_bwd(self.dplan, ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
         # `grad_norm`'s reduction of this `g`, speculatively
         var np = self.dims.n_param
         comptime if QN_FAST_SLIM:

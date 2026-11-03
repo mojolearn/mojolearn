@@ -212,6 +212,7 @@ from cluster.resident_centers import (
     kmeans_transform_resident,
 )
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
+from neighbors.impl.multi_gpu import neighbors_device_plan
 from neighbors.resident_index import (
     knn_index_classify,
     knn_index_prepare,
@@ -493,10 +494,12 @@ def knn_classify_binding(
     var dt = _dist_triple(dist_params)
 
     var used: Int
+    # The binding entry reads the neighbors device plan once and passes it down.
+    var dplan = neighbors_device_plan()
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         used = knn_classifier_predict(
-            ctx, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
+            dplan, ctx, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
             want_proba, qt, dt[0], dt[1], dt[2],
         )
         ctx.synchronize()

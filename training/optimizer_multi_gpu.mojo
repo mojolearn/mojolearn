@@ -6,8 +6,8 @@ on each disjoint parameter range with clipping already completed. SGD keeps
 each intersected tensor's original momentum flag. Caller buffers publish only
 after all workers finish; no cross-device floating-point sum is introduced.
 """
-from std.os import getenv
 from max.gpu.host import DeviceContext
+from core.device_plan import DevicePlan
 from core.host_parallel import host_parallelize
 from core.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
@@ -31,6 +31,7 @@ struct OptimizerHostShard(Movable):
 
 def parallel_optimizer_step_host(
     ctx: DeviceContext,
+    plan: DevicePlan,
     param_ptr: MutPointer[Float32, MutUntrackedOrigin],
     grad_ptr: MutPointer[Float32, MutUntrackedOrigin],
     m_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -58,7 +59,8 @@ def parallel_optimizer_step_host(
     first on the caller-signed copy; the global norm reads squares and the
     scale commutes with the sign flip exactly, so the bits are those of the
     negated-copy step."""
-    var devices = Int(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))
+    # The optimizer device count from the binding entry's plan.
+    var devices = plan.count
     if devices == 1:
         return identical_optimizer_step_host(ctx, param_ptr, grad_ptr, m_ptr,
             v_ptr, offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t,
@@ -92,7 +94,7 @@ def parallel_optimizer_step_host(
     if max_norm > Float32(0):
         # Whole tensors have owners; the original global norm uses their
         # canonical sumsq vector. Clipping storage is freed before updates.
-        _ = parallel_clip_grad_norm_host(ctx,
+        _ = parallel_clip_grad_norm_host(ctx, plan,
             rebind[MutPointer[Float32, MutUntrackedOrigin]](g.unsafe_ptr()),
             offsets_ptr,
             rebind[MutPointer[Float32, MutUntrackedOrigin]](info.unsafe_ptr()+1),

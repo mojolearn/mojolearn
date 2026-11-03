@@ -48,6 +48,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_MODE,
 )
 from gbdt.gpu_data.feature_blocks import blocks_for
+from core.device_plan import plan_for_single
 from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
@@ -455,7 +456,7 @@ def main() raises:
     production_borders.append(production_border1^)
     production_borders.append(List[Float32]())
     var production_result = run_sequential_two_level_feature_freq_tree(
-        ctx, production_initial, x, production_base_cindex,
+        plan_for_single(), ctx, production_initial, x, production_base_cindex,
         production_columns, production_folds,
         production_one_hot, 6, 3, 2, grid, production_rows, production_stats,
         Float32(6.0), grad_mag, SCORE_FUNCTION_COSINE, False,

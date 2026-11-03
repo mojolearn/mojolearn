@@ -90,6 +90,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from gbdt.data.permutation import TRandom
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
@@ -414,6 +415,9 @@ def fit_oblivious_tree_structure_traced(
     std_scale_word: List[DeviceBuffer[DType.float32]] = List[
         DeviceBuffer[DType.float32]
     ](),
+    # The fit's device plan, read once at the binding entry and handed to
+    # the scores calcer (`gbdt_hist_dispatch` owns the one-vs-many choice).
+    device_plan: DevicePlan = plan_for_single(),
     # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
     # `sym_parts_out` argument); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch.
 ) raises -> List[TBinarySplit]:
@@ -622,7 +626,8 @@ def fit_oblivious_tree_structure_traced(
         # nothing was hard-coded and nothing needed rewriting. The subsets
         # branch immediately above already took the fold path.
         var calcer_new = ScoresCalcerOnCompressedDataSet(
-            ctx, blocks, layout, stride, max_depth, global_ids, fold_count
+            device_plan,
+            ctx, blocks, layout, stride, max_depth, global_ids, fold_count,
         )
         pool.append(
             PointwiseTreeWorkspace(
@@ -1253,6 +1258,7 @@ def fit_oblivious_tree_structure(
     bootstrapped_observations: Bool = False,
     folds: List[TFold] = List[TFold](),
     permutation: List[UInt32] = List[UInt32](),
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> List[TBinarySplit]:
     """The un-instrumented entry: the exact pre-instrumentation signature,
     forwarding to `fit_oblivious_tree_structure_traced` with BOTH
@@ -1280,6 +1286,7 @@ def fit_oblivious_tree_structure(
         bootstrapped_observations=bootstrapped_observations,
         folds=folds,
         permutation=permutation,
+        device_plan=device_plan,
     )
 
 

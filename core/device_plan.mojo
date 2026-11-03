@@ -34,6 +34,13 @@ released by a release store. Only the owning thread reads or writes a
 slot's devices, so the slot data needs no lock. Entering the same plan again
 on one thread (the driver binds it in each binding it reaches) adds a level;
 a different plan on the same thread is refused by name. No floating-point value is read or written here.
+
+THE RULE (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md): only binding
+entries (a family's public native entry) read the thread-scoped plan, once,
+with `device_plan_current(<family setting name>)`. Everything below the entry
+takes the resulting `DevicePlan` value as an argument and calls no
+`device_plan_*` reader. The readers below stay for the entries and for
+callers not yet moved.
 """
 from std.atomic import Atomic, Ordering
 from std.ffi import _Global, external_call
@@ -289,6 +296,97 @@ def device_plan_setting(name: String, default: String = "") raises -> String:
         if (Int(_words(table[].masks)[slot]) & _family_bit(name)) != 0:
             return String(Int(_words(table[].counts)[slot]))
     return String(getenv(name, default))
+
+
+struct DevicePlan(Copyable, Movable):
+    """The device plan one family entry runs under, read once from the
+    calling thread (`device_plan_current`) and passed down as a value.
+
+    `setting`: the raw text an owner loop parses as its device count, exactly
+    what `device_plan_setting(name, default)` returned at the entry.
+    `count`: the device count that setting names, >= 1 ("" or text that is
+    not a positive integer counts as 1; callers that need the old parse
+    error parse `setting` themselves).
+    `root`: `device_plan_root()` at the entry: the plan's first device, -1
+    when no plan was bound (use `device(0)` for the device of rank 0).
+    `devices`: the device of each rank in plan order: the bound plan's ids,
+    else 0..count-1 (without a plan the rank is the device).
+    `bound`: whether a plan was bound to the thread at the entry.
+    No floating-point value is read or written here."""
+
+    var setting: String
+    var count: Int
+    var root: Int
+    var devices: List[Int]
+    var bound: Bool
+
+    def __init__(out self, setting: String, count: Int, root: Int, var devices: List[Int], bound: Bool):
+        self.setting = setting
+        self.count = count
+        self.root = root
+        self.devices = devices^
+        self.bound = bound
+
+    def single(self) -> Bool:
+        """Exactly one device: `setting == "" or setting == "1"`, the literal
+        test `solver/impl/cd.mojo:1715` and `:1728` apply to
+        `device_plan_setting("MOJOLEARN_SOLVER_DEVICE_COUNT")`. Same truth
+        table as that string test, so a gate moved onto it keeps its bits."""
+        return self.setting == "" or self.setting == "1"
+
+    def device(self, rank: Int) raises -> Int:
+        """The physical device of owner `rank`, as `device_plan_device(rank)`
+        answered at the entry: the plan's entry while a plan was bound (an
+        out-of-range rank raises the same error), else `rank`."""
+        if not self.bound:
+            return rank
+        var count = len(self.devices)
+        if rank < 0 or rank >= count:
+            raise Error("device plan: owner rank " + String(rank) + " outside a plan of " + String(count) + " devices")
+        return self.devices[rank]
+
+
+def _setting_count(setting: String) -> Int:
+    # "" (no setting) is one device; a positive integer is that many; any
+    # other text counts as one here (callers that raised on it keep parsing
+    # `DevicePlan.setting` themselves, so their behavior is unchanged).
+    if setting == "":
+        return 1
+    try:
+        var n = Int(setting)
+        if n >= 1:
+            return n
+    except:
+        pass
+    return 1
+
+
+def device_plan_current(name: String, default: String = "") raises -> DevicePlan:
+    """The calling thread's device plan for the family whose count setting is
+    `name` (e.g. "MOJOLEARN_SVM_DEVICE_COUNT"), read once through
+    `device_plan_setting`, `device_plan_size`, `device_plan_device` and
+    `device_plan_root`. Binding entries call this; code below them takes the
+    value. `default` is what `device_plan_setting(name, default)` falls back
+    to without a plan or variable."""
+    var setting = device_plan_setting(name, default)
+    var count = _setting_count(setting)
+    var size = device_plan_size()
+    var devices = List[Int]()
+    if size > 0:
+        for r in range(size):  # driver-loop: over the plan's ranks
+            devices.append(device_plan_device(r))
+    else:
+        for r in range(count):  # driver-loop: over the plan's ranks
+            devices.append(r)
+    return DevicePlan(setting, count, device_plan_root(), devices^, size > 0)
+
+
+def plan_for_single() -> DevicePlan:
+    """A one-device plan for callers outside any plan and any family entry:
+    setting "", count 1, no plan bound (rank 0 is device 0)."""
+    var devices = List[Int]()
+    devices.append(0)
+    return DevicePlan(String(""), 1, -1, devices^, False)
 
 
 def _log_lock() raises -> MutPointer[Int64, MutUntrackedOrigin]:

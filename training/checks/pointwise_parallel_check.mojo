@@ -8,6 +8,7 @@ from checks.pointwise_identical_multiplier_check import (
 )
 from gbdt.methods.pointwise_kernels import FoldsHistogram, POLICY_ONE_BYTE
 from gbdt.methods.pointwise_multi_gpu import pointwise_feature_shards
+from core.device_plan import device_plan_current
 
 
 def run_sharded_policy(
@@ -39,13 +40,15 @@ def run_sharded_policy(
     if p.policy == POLICY_ONE_BYTE:
         fh = folds_histogram_from_folds(p.folds)
 
+    # The plan a binding entry would pass: no plan is bound here, so rank r is device r.
+    var plan = device_plan_current("MOJOLEARN_GBDT_DEVICE_COUNT")
     var d_hist = ctx.enqueue_create_buffer[DType.float32](2 * line2)
     var h_hist = ctx.enqueue_create_host_buffer[DType.float32](2 * line2)
     ctx.enqueue_memset(d_hist, Float32(0.0))
 
     pointwise_feature_shards(ctx,p.policy,d_off,d_first,d_folds,d_oh,
         d_ci,d_tgt,d_wt,d_idx,d_parts1,d_hist,n,p.line,N_ROWS,1,1,
-        True,fh.copy(),sm_count,FIXED_SCALE,2)
+        True,fh.copy(),sm_count,FIXED_SCALE,2,plan)
     ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
     ctx.synchronize()
     var bits = List[UInt32]()
@@ -55,7 +58,7 @@ def run_sharded_policy(
 
     pointwise_feature_shards(ctx,p.policy,d_off,d_first,d_folds,d_oh,
         d_ci,d_tgt,d_wt,d_idx,d_parts2,d_hist,n,p.line,N_ROWS,2,1,
-        False,fh.copy(),sm_count,FIXED_SCALE,2)
+        False,fh.copy(),sm_count,FIXED_SCALE,2,plan)
     ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
     ctx.synchronize()
     hp = h_hist.unsafe_ptr().unsafe_bitcast[UInt32]()

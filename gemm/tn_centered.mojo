@@ -35,7 +35,7 @@ without. Tiles of TNC_BM x TNC_BM cells, 4 x 4 per thread, KS-row windows
 in shared memory (2 x TNC_KS x TNC_BM floats, 16 KB), a block per (tile,
 leaf) as the split plans launch.
 """
-from core.device_plan import device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.os import getenv
@@ -73,13 +73,23 @@ comptime TNC_LOADS = (TNC_KS * TNC_BM) // TNC_TPB
 
 
 def tn_centered_applies(m: Int, k: Int) raises -> Bool:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    return tn_centered_applies(device_plan_current("MOJOLEARN_GRAM_DEVICE_COUNT"), m, k)
+
+
+def tn_centered_applies(plan: DevicePlan, m: Int, k: Int) raises -> Bool:
     """Whether the shipped IDENTICAL dispatch would run `_launch_split` for
     the Gram (m, m, k) (`identical_gemm_shipped_into`'s branches, in its
     order), on one device (`parallel_gram_outputs` takes the call first when
-    MOJOLEARN_GRAM_DEVICE_COUNT is not 1)."""
+    the Gram plan has more than one owner)."""
     if m <= 0 or k <= 0:
         return False
-    if Int(device_plan_setting("MOJOLEARN_GRAM_DEVICE_COUNT", "1")) != 1:
+    # The one-device gate. Before the plan value this was
+    # `Int(device_plan_setting("MOJOLEARN_GRAM_DEVICE_COUNT", "1")) != 1`;
+    # `plan.single()` covers "" and "1", and any other setting is parsed
+    # exactly as before (core/gram_multi_gpu.mojo `gram_plan_owner_count`),
+    # so the truth table and the bits are unchanged.
+    if not plan.single() and Int(plan.setting) != 1:
         return False
     comptime if GEMM_ARM_TRIAL:
         return False
@@ -176,11 +186,27 @@ def gemm_tn_centered_identical(
     m: Int,
     k: Int,
 ) raises -> Bool:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    return gemm_tn_centered_identical(
+        device_plan_current("MOJOLEARN_GRAM_DEVICE_COUNT"), ctx, z, x, mu, scratch, m, k
+    )
+
+
+def gemm_tn_centered_identical(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises -> Bool:
     """z[m x m] = (x - mu)^T (x - mu) for x k x m, x untouched; False (nothing
     enqueued) when `tn_centered_applies` says the shipped dispatch would not
     run a split plan for this Gram. `scratch` serves as the m * m * P
     partials when it is large enough, else the partials are allocated."""
-    if not tn_centered_applies(m, k):
+    if not tn_centered_applies(plan, m, k):
         return False
     var part = contract_partition(k)
     var leaf = part[0]
