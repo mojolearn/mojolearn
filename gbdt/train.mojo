@@ -23,6 +23,7 @@ from gbdt.models.trained_model import TrainedModel
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
 
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from ensemble.instruments import StageTimes as HostStageTimes
 from gbdt.gpu_data.compressed_index_builder import (
@@ -1221,6 +1222,9 @@ def train(
     # (`y[dim * n_rows + row]`), the layout their device target is stored in
     # (`multilogit.cu:514`, `targets + idx + dim * targetAlignSize`).
     target_dim: Int = 1,
+    # The fit's device plan, read once at the binding entry (one device by
+    # default) and passed to the Plain and the Ordered fit.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -3043,6 +3047,7 @@ def train(
             max_depth, ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
             column_one_hot, o_opts, o_model, trace, test_arm,
             od_kind, od_pvalue, od_wait,
+            device_plan=device_plan,
         )
         # `ShrinkToBestIteration`, the Plain fit's own block below
         if want_best_model == 1 and len(o_out.test_losses) > 0:
@@ -3130,6 +3135,7 @@ def train(
         pair_winners=pair_list.winners.copy(),
         pair_losers=pair_list.losers.copy(),
         pair_weights=pair_list.weights.copy(),
+        device_plan=device_plan,
     )
     host_times.stop_host("train_fit_with_test", t_phase)
     t_phase = host_times.start()
@@ -3539,6 +3545,8 @@ def train_ordered_rmse_ptr(
     learning_rate: Float32 = Float32(0.03),
     l2_leaf_reg: Float32 = Float32(3.0),
     sample_weight: List[Float32] = List[Float32](),
+    # The fit's device plan, read once at the binding entry.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> TrainedModel:
     """cpu2-l6-bindings: `train_ordered_rmse` with the column-major X read
     from the caller's address. X goes to the device ONCE, is refused for
@@ -3601,6 +3609,7 @@ def train_ordered_rmse_ptr(
         n_estimators, max_depth,
         ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
         learning_rate, l2_leaf_reg,
+        device_plan=device_plan,
     )
     var exported_model = result.model.copy()
     return TrainedModel(
