@@ -57,7 +57,7 @@ def distributed_checkpoint[E: Exec & Movable & Deinitable](mut d: DistributedPro
     var slots = optimizer_slots(d.cfg)
     for j in range(len(p.params)):  # driver-loop: physical owners to canonical bytes
         var off = ck.offsets[j]
-        d.workers[0].session.ex.download(FP(unsafe_from_address=Int(ck.param.unsafe_ptr())) + off,
+        d.workers[0].executor.session.ex.download(FP(unsafe_from_address=Int(ck.param.unsafe_ptr())) + off,
                                          d.workers[0].params[j], p.param_shapes[j].count())
         var scalar_owner = -1
         for rank in range(len(d.workers)):  # driver-loop: each owned slice once
@@ -67,10 +67,10 @@ def distributed_checkpoint[E: Exec & Movable & Deinitable](mut d: DistributedPro
             scalar_owner = rank
             var at = off + d.workers[rank].first[j]
             if slots[0]:
-                d.workers[rank].session.ex.download(FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + at,
+                d.workers[rank].executor.session.ex.download(FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + at,
                                                     d.workers[rank].states[j].s1, n)
             if slots[1]:
-                d.workers[rank].session.ex.download(FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + at,
+                d.workers[rank].executor.session.ex.download(FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + at,
                                                     d.workers[rank].states[j].s2, n)
         if scalar_owner >= 0:
             ck.ext_floats.append(d.workers[scalar_owner].states[j].pw1)
@@ -136,12 +136,12 @@ def restore_distributed_state[E: Exec & Movable & Deinitable](mut d: Distributed
             var n = d.workers[rank].width[j]
             var at = ck.offsets[j] + d.workers[rank].first[j]
             if n > 0 and slots[0]:
-                d.workers[rank].session.ex.upload(d.workers[rank].states[j].s1,
+                d.workers[rank].executor.session.ex.upload(d.workers[rank].states[j].s1,
                     FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + at, n)
             if n > 0 and slots[1]:
-                d.workers[rank].session.ex.upload(d.workers[rank].states[j].s2,
+                d.workers[rank].executor.session.ex.upload(d.workers[rank].states[j].s2,
                     FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + at, n)
             d.workers[rank].states[j].pw1 = ck.ext_floats[scalar_at + 3 * j]
             d.workers[rank].states[j].pw2 = ck.ext_floats[scalar_at + 3 * j + 1]
             d.workers[rank].states[j].mu_prod = ck.ext_floats[scalar_at + 3 * j + 2]
-        d.workers[rank].session.ex.sync()
+        d.workers[rank].executor.session.ex.sync()

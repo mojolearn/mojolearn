@@ -128,6 +128,14 @@ def release_training_buffers[E: Exec](
             ex.free(buffer.value())
 
 
+def minibatch_rows(start: Int, n: Int, batch: Int) -> Int:
+    """Rows of the optimizer minibatch that starts at row `start` of an epoch
+    of `n` rows cut into batches of `batch` rows (the last one may be short).
+    Shared scaffolding of Program.fit and the distributed and partitioned fit
+    loops; their arithmetic (fold order, loss weighting) stays their own."""
+    return min(batch, n - start)
+
+
 def train_program_control[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
     target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
@@ -244,7 +252,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 s.ex.launch[OP_SEQ_IOTA](order, n)
             for bi in range(n_batches):  # driver-loop: over minibatches
                 var start = bi * bs
-                var count = min(bs, n - start)
+                var count = minibatch_rows(start, n, bs)
                 s._drop_temps(temps)
                 temps.clear()
                 s.tape.reset()

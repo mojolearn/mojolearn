@@ -1932,6 +1932,58 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if slot >= 0 and slot < len(self.live) and self.live[slot]:
                 self._retire(slot)
 
+    # ------------------------------------------------------------ executor surface
+    # Thin public doors for autograd/program_executor.mojo (the per-device
+    # ProgramExecutor used by distributed and partitioned programs). Each one
+    # forwards to the private helper above unchanged: same launches, same order.
+    def drop_temps(mut self, temps: List[Int]):
+        """Retire the live handles in `temps` (a replay's temporaries)."""
+        self._drop_temps(temps)
+
+    def buffer(self, h: Int) raises -> FP:
+        """The session-owned executor buffer of uploaded tensor h (null for
+        a computed tensor)."""
+        return FP(unsafe_from_address=self.owned[self._slot(h)])
+
+    def is_integer(self, h: Int) raises -> Bool:
+        """Whether tensor h's storage holds int32 words (ids)."""
+        return self.int_words[self._slot(h)]
+
+    def leaf_nd(mut self, buf: FP, shape: ShapeN, requires_grad: Bool, integer_words: Bool) raises -> Int:
+        """A temporary handle of a leaf over the caller's `buf` on the
+        current tape (always recorded with `variable_nd`)."""
+        var t = self.tape.variable_nd(self.ex, buf, shape, requires_grad)
+        var h = self._add(t, 0, requires_grad, 0)
+        self.int_words[self._slot(h)] = integer_words
+        return h
+
+    def run_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """`op` without the inference log."""
+        return self._op_run(code, hs, ints, fs)
+
+    def has_gradient(self, h: Int) raises -> Bool:
+        """Whether the last backward wrote a gradient for tensor h."""
+        return self.tape._nodes[self.tensor(h)._index].grad_ready
+
+    def optimizer_settings(self, o: Int) raises -> _OpsOptimizer:
+        """A copy of optimizer o's configuration and schedule."""
+        return self.opts[self._opt_index(o)]
+
+    def optimizer_state_index(self, o: Int, h: Int) raises -> Int:
+        """The index of (optimizer o, parameter handle h)'s retained state, or
+        -1 when it was never stepped. Allocates nothing."""
+        var oi = self._opt_index(o)
+        var si = -1
+        for k in range(len(self.opt_states)):  # driver-loop: over retained optimizer states
+            if self.opt_states[k].opt == oi and self.opt_states[k].param == h:
+                si = k
+        return si
+
+    def optimizer_state_record(self, i: Int) -> _OpsOptState:
+        """A copy of retained optimizer state i (its buffers stay owned by
+        the session)."""
+        return self.opt_states[i]
+
     def _program_op(mut self, node: Int, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         var start = 0
         if self.program_trace.enabled:
