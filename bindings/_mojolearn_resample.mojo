@@ -19,7 +19,7 @@ as its arrays and scalars; the scalars widen float32 to float64 exactly.
 """
 
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
-from core.device_plan import DevicePlan, device_plan_current, device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
 from core.resample_impl import resample_store_indices
@@ -94,9 +94,7 @@ def _resample_entry_plan() raises -> DevicePlan:
     `resample/estimator.mojo` read before the move: the plan's size while a
     plan driving the RESAMPLE family is bound to this thread, else
     MOJOLEARN_RESAMPLE_DEVICE_COUNT."""
-    var plan = device_plan_current()
-    plan.setting = device_plan_setting("MOJOLEARN_RESAMPLE_DEVICE_COUNT")
-    return plan^
+    return device_plan_current("MOJOLEARN_RESAMPLE_DEVICE_COUNT")
 
 
 def _bootstrap_run(
