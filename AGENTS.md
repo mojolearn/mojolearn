@@ -9,6 +9,17 @@
   mojolearn`, `import mojolearn`, `python -m mojolearn verify`), paths, URLs and
   domains (mojolearn.org). Put them in backticks when they appear in prose.
 
+## Peer communication only for execution (Andrew, 2026-10-29)
+
+- Contact peers or other agent threads only when necessary to execute the
+  authorized work, such as resolving ownership, coordinating a dependency,
+  handing off required work, or preventing conflicting changes.
+- Do not contact peers merely for advice, a second opinion, reassurance, or
+  status to support a conversational answer. Use existing retained evidence
+  and state uncertainty when that evidence is insufficient.
+- This applies to messages, follow-up prompts and status requests; it does not
+  authorize additional delegation or expand the task scope.
+
 ## Within-release identity and fresh reference hashes (Andrew, 2026-10-29)
 
 - Bitwise identity is required across supported GPU vendors (Apple, NVIDIA and

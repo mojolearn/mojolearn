@@ -1,0 +1,36 @@
+Neural performance priorities
+2026-10-28
+
+1. Repair repeated setup in public Mamba .step.
+   The last measured Mamba2 regression was approximately 15x on AMD and
+   29x on NVIDIA. Retain execution plans, weight metadata and state buffers
+   across calls; refresh what actually changes. Preserve mutation detection,
+   ownership and buffer-lifetime checks. The pending typed-transport batch
+   helps, but does not prove that all repeated preparation is gone.
+
+2. Keep generation state on the GPU throughout generation.
+   Finish the resident greedy/EOS batch. Avoid uploading/exporting the KV
+   cache and downloading full logits every token. Target transfers and
+   synchronization in the critical loop.
+
+3. Finish integrating allocation-reuse repairs.
+   Generation vocabulary-copy removal, reusable token/logit buffers and
+   inference scratch reuse have landed. Ensure the public paths benefit;
+   inspect remaining sampling and report allocations. Finish the pending
+   compiled Mamba, resident-generation and SmallMLP batches after review.
+
+4. Freeze and measure the repaired neural paths before expanding the work.
+   When measurements are authorized again, start with the previously
+   regressed public Mamba2 .step workload and representative generation
+   workloads, then run the agreed 29-lane neural suite. Keep public-step
+   and whole-generation results separate: they exercise different overhead.
+   Retain required correctness/identity evidence separately from compilation.
+   This recommendation does not authorize a measurement campaign now.
+
+Defer further broad Python removal and new arithmetic experiments until
+measurements establish recovery. Keep efficient direct CPython calls where
+useful; eliminating CPython references is not itself a performance goal.
+
+The strongest concrete targets are less setup, allocation, copying and
+synchronization per token. Focused compilations and source review establish
+implementation progress, not measured speedups or runtime bitwise identity.

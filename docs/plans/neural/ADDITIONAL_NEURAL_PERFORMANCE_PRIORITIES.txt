@@ -1,0 +1,59 @@
+ADDITIONAL NEURAL PERFORMANCE PRIORITIES
+2026-10-29
+
+Keep the existing main effort focused on:
+- Sampling KV residency with correct failure publication and alias ownership.
+- Remaining public Mamba preparation.
+- Remaining layer/workspace allocations.
+
+The latest neural-read integration already reuses read buffers and finite-check
+scratch. Do not duplicate that work or pursue CPython removal as an end in itself.
+
+ADDITIONAL PRIORITIES
+
+1. Keep intermediate results on-device between repeated program executions.
+
+In autograd/ops_api.mojo, run_program uploads inputs and downloads requested
+outputs each invocation. Where an enclosing native training/control loop
+immediately consumes those outputs again, investigate passing resident handles
+instead. Preserve host downloads when the public API requires host results.
+Do not assume every upload/download is redundant; trace the actual consumer.
+
+2. Audit training -> backward -> optimizer boundaries for round trips.
+
+Inspect the actual selected route for gradients or parameters downloaded only
+to be uploaded by the next stage. Connect existing resident storage where
+possible. Optimizer state already has retained storage; do not rebuild it.
+Preserve public mutable-input behavior and required result publication.
+
+3. Finish Sequential execution-model preparation reuse.
+
+The shape-reuse handoff leaves provider execution-model parsing, layer-identity
+walks and shape-validation temporaries. Prepare stable structure once per
+admitted fit/generation operation and refresh mutable values when needed.
+This can benefit training and prediction beyond generation. Cross-call reuse
+requires correct mutation detection; pointer identity is not immutability.
+
+4. Audit synchronization across the complete token or training step.
+
+Resident finite-check waits have already been combined. Look next for adjacent
+upload waits, status reads and output waits that could share one completion
+boundary. Preserve first-error ordering, partial-progress publication and
+buffer lifetimes. Do not remove waits required for host access or safe reuse.
+
+5. Reduce replay bookkeeping inside long native loops.
+
+Captured inference still creates temporary input/parameter handles and assembles
+argument handles per node. Investigate operation-owned slot mappings or reusable
+private handles to remove repeated bookkeeping without weakening generation,
+lifetime or reentrancy checks. Prioritize this after transfers and allocations.
+
+RECOMMENDED IMMEDIATE ADDITIONS
+
+Add only two immediate workstreams:
+- Training/optimizer transfer audit, including repeated program boundaries.
+- Sequential execution-model preparation reuse.
+
+Keep sampling residency, Mamba preparation and remaining workspace allocations
+as the main effort. These additional items are source-supported opportunities
+to investigate, not established speedups. Measurement work is left for later.

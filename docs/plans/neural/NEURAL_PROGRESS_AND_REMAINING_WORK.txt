@@ -1,0 +1,94 @@
+NEURAL PROGRESS AND REMAINING WORK
+2026-10-28
+Snapshot reviewed at main 3b33899708.
+
+PROGRESS LANDED IN MAIN
+
+1. Resident greedy/EOS generation
+Keeps KV state resident across tokens within a read, exports it once at the
+end, and returns small stop/error signals instead of full logits each token.
+
+2. Public Mamba .step preparation
+Retains state schemas, combines three metadata captures into one, and avoids
+temporary weight-address lists and redundant launch-vector copying.
+
+3. Mamba native execution plans
+Removes Python address-list construction followed by native unboxing.
+
+4. Generation allocation reuse
+Removes per-token vocabulary copies and retains logits, token buffers and
+selection scratch. Fallback sampling now reuses scratch across tokens within
+each read.
+
+5. Captured inference replay
+Retains parameter indexing and scratch capacity. Current ownership, shape
+and liveness checks still refresh execution addresses per invocation.
+
+6. SmallMLP sequence preparation
+Replaces repeated iterator dispatch with direct admitted sequence access
+and preserves iteration errors rather than swallowing them.
+
+7. Resident failure handling
+Preserves partial progress and improves resource cleanup when a read fails.
+
+REMAINING NEURAL WORK, IN PRIORITY ORDER
+
+1. Integrate the Mamba2 retained-workspace pair.
+The native implementation and provider connection are in separate worktree
+batches. Together they retain GPU storage across actual public Mamba2Block.step
+calls, rather than substituting the separate private decode-session API.
+
+Important distinction: the default identical GPU route already uses an arena.
+The default-path improvement is retaining that arena across calls. It is NOT
+removing nine separate weight allocations from the default route. The additional
+host-list, separate-buffer and upload-wait reductions apply to arena-disabled
+execution.
+
+Preserve mutable input refresh, plan invalidation, resource lifetime, failure
+cleanup and private storage on concurrent/reentrant use. Public outputs must
+remain fresh when callers can retain them.
+
+2. Reduce allocations inside resident generation steps.
+Layer/LM activation, normalization, logits and GEMM workspace allocations still
+occur inside steps. Retain compatible private workspace for the operation or
+session, resize when necessary, and preserve required initialization and output
+ownership. Audit the actual selected routes before assuming an allocation occurs.
+
+3. Review per-step synchronization.
+Finite-check synchronization remains inside resident generation steps. Identify
+which waits are necessary and which can be combined while preserving error
+reporting, partial-progress semantics and buffer lifetimes. Resident greedy/EOS
+still returns two stop/error control words per token.
+
+4. Address transfers across public calls through explicit ownership.
+The pending public Mamba workspace still refreshes all live weight, state and
+input bytes each call. Resident generation still loads/exports once per read.
+One-token reads therefore retain substantial transfer overhead.
+
+Removing these transfers requires an explicit ownership/mutation contract.
+Pointer identity alone does not establish that contents are unchanged. Prefer
+existing whole-generation/read operations where they already provide safe
+within-call residency. Any further persistent residency must preserve supported
+mutation and state-publication behavior.
+
+5. Finish remaining sampling-route overhead.
+Fallback sampling scratch is now reused, but sampling does not use the new
+resident greedy/EOS path. Review its remaining copies, allocations and host
+selection costs. Do not introduce unsupported arithmetic workarounds or change
+sampling semantics merely to share the greedy route.
+
+6. Review remaining public Mamba preparation after workspace integration.
+The default arena still constructs small view/layout metadata, zeros its used
+region and performs live transfers each call. The arena-disabled route still
+allocates stage storage per step. Prioritize demonstrated repeated work in the
+actual public route; immutable schema reuse must not bypass mutable-state checks.
+
+DIRECTION
+
+Finish the pending Mamba workspace integration first, then concentrate on the
+remaining per-token allocations, transfers and synchronization. Defer further
+broad Python removal and new arithmetic experiments. Keep efficient direct
+CPython APIs where useful; zero CPython references is not a performance goal.
+
+Measurement and evidence work are intentionally left out of this task list at
+Andrew's request and will be handled later.
