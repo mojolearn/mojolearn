@@ -25,6 +25,8 @@ arithmetic on parameter or gradient values."""
 from std.memory import memcpy, memset_zero
 from std.os import getenv
 
+from core.device_plan import DevicePlan
+
 from sequence.lr_table import LrSpec, lr_spec_value
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -285,13 +287,16 @@ def registry_offsets(nbytes: List[Int], offsets: I32P) raises -> Int:
     return at
 
 
-def resident_wanted_by_env() -> Bool:
+def resident_wanted_by_env(plan: DevicePlan) -> Bool:
     """`MOJOLEARN_OPTIMIZER_RESIDENT=0` keeps the optimizer state off the
     device (the per-call step; the A/B's before arm), and so does a
-    multi-device optimizer count (that route lives in the per-call step)."""
+    multi-device optimizer count (that route lives in the per-call step).
+    The count is the binding entry's plan: its setting is the raw
+    MOJOLEARN_OPTIMIZER_DEVICE_COUNT value (default "1"), tested exactly as
+    before."""
     if String(getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1")) == "0":
         return False
-    if String(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1")) != "1":
+    if plan.setting != "1":
         return False
     return True
 

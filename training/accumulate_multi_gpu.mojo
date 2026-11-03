@@ -9,6 +9,7 @@ The caller receives output only after every owner succeeds.
 from std.os import getenv
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_plan import DevicePlan
 from core.host_parallel import host_parallelize
 from core.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
@@ -24,11 +25,14 @@ def accumulate_pool_fault_available() -> Int:
 
 def parallel_accumulate_host(
     ctx: DeviceContext,
+    plan: DevicePlan,
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     parts_ptr: MutPointer[Float32, MutUntrackedOrigin],
     n: Int, a: Int, t_tokens: Int,
 ) raises -> Int:
-    var devices = Int(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))
+    # The optimizer device count comes from the plan the binding entry
+    # built once from MOJOLEARN_OPTIMIZER_DEVICE_COUNT (parsed as before).
+    var devices = plan.count
     if devices == 1:
         return samba_accumulate_host(ctx,out_ptr,parts_ptr,n,a,t_tokens)
     if devices < 1 or devices > 64:
