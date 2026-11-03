@@ -14,6 +14,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
 from std.memory import memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.os import getenv
+from core.device_plan import DevicePlan
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_copy, py_ints
 from bindings.causal_lm_construct import _model_f32, _model_shape, _model_block, _model_bindings, _model_native_buffer
 from bindings.causal_lm_public import _native_function
@@ -415,10 +416,31 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
     return samba_publish(model, checked, context)
 
 
+def samba_optimizer_device_plan() raises -> DevicePlan:
+    """The optimizer device plan of one Samba entry, read from the
+    environment ONCE there and passed down as a value. `setting` is the raw
+    MOJOLEARN_OPTIMIZER_DEVICE_COUNT (default "1"); `count` is that setting
+    parsed by `Int` exactly as the optimizer's owner loops parsed it. A
+    setting `Int` refuses gets count 0 here instead of raising at the entry,
+    so a call that never reads the count is unchanged and one that does
+    still refuses (the owner loops refuse a count outside 1..64)."""
+    var setting = String(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))
+    var count = 0
+    try:
+        count = Int(setting)
+    except:
+        count = 0
+    var devices = List[Int]()
+    for rank in range(min(max(count, 0), 64)):  # driver-loop: over the plan's ranks
+        devices.append(rank)
+    return DevicePlan(setting=setting, count=count, root=0, devices=devices^)
+
+
 def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
+    var device_plan = samba_optimizer_device_plan()
     var entries = samba_entries(context, state["numeric_mode"])
-    if Int(py=py_call(bi.int, getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))) > 1:
+    if Int(py=py_call(bi.int, device_plan.setting)) > 1:
         for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:  # driver-loop: over cooperative native capability metadata
             if not Bool(py=py_call(bi.hasattr, entries, name)) or Int(py=_native_function(entries, name)()) != 1:
                 raise Error("RuntimeError: native Samba cooperative update is unavailable: " + name)
