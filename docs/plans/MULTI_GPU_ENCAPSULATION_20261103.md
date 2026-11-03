@@ -117,7 +117,10 @@ struct DevicePlan(Copyable, Movable):
     fn single(self) -> Bool    # setting == "" or setting == "1"  (exact old test)
     fn device(self, rank: Int) -> Int
 
-fn device_plan_current() -> DevicePlan   # reads the thread-scoped plan once
+def device_plan_current(name: String, default: String = "") raises -> DevicePlan
+# reads the thread-scoped plan once; `name` is the family's count setting
+# (the setting is per family, so a no-argument form could not reproduce it)
+def plan_for_single() -> DevicePlan      # setting "", one device, for callers outside any entry
 ```
 
 ## Lanes (phase 1, in parallel; phase 2 after the compile is green)
@@ -140,8 +143,12 @@ Phase 2 (one lane, after phase 1 is green): `ProgramExecutor[E]` in
 
 - `rg -n 'device_plan_(setting|device|root)\(' core bindings providers` matches
   only `core/device_plan.mojo` and the binding entries.
-- `rg -n 'getenv\("MOJOLEARN_OPTIMIZER_DEVICE_COUNT"' .` matches only the two
-  samba bindings.
+- `rg -n 'getenv\("MOJOLEARN_OPTIMIZER_DEVICE_COUNT"' .` matches only
+  `training/optimizer_device_plan.mojo` (integration 2026-11-03: the samba
+  bindings never call `training/` directly; the public optimizer entries and
+  the native dispatch tables are entries of their own, so one helper builds
+  the plan for all of them, read once per entry). Owed: the Python-side
+  reads in `bindings/small_mlp_native.mojo` and `parallel_mlp_native.mojo`.
 - The integration compile is green on NVIDIA, AMD and Apple; the identity
   table admit shows no changed digest on any single-device lane.
 - Phase 2: `rg -n '\._(slot|add|op_run|drop_temps|opt_index)|tape\._nodes|\.opt_states' autograd/distributed_* autograd/partition_*` matches nothing.
