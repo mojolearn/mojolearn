@@ -63,7 +63,8 @@ from hierarchy.checks.edge_order import (
 from hierarchy.checks.nan_guard import refuse_nan_distances
 from hierarchy.checks.sabotage_tile import sabotage_distance_tile_kernel
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from hierarchy.impl.cluster.detail.multi_gpu import hierarchy_device_count, pairwise_rows
+from core.device_plan import DevicePlan
+from hierarchy.impl.cluster.detail.multi_gpu import hierarchy_device_count, hierarchy_device_plan, pairwise_rows
 from neighbors.checks.pinned_distance_tile import (
     PINNED_TILE_TPB,
     pinned_distance_tile_kernel,
@@ -147,6 +148,41 @@ def pairwise_distances(
     fill_indices: Bool = True,
     nan_guard: Bool = True,
 ) raises:
+    """Reads the device plan once and runs the planned overload below."""
+    pairwise_distances(
+        hierarchy_device_plan(),
+        ctx,
+        x,
+        m,
+        n,
+        metric,
+        indptr,
+        indices,
+        data,
+        norms,
+        tile_tpb,
+        sabotage,
+        fill_indices,
+        nan_guard,
+    )
+
+
+def pairwise_distances(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    metric: Int,
+    mut indptr: DeviceBuffer[DType.int32],
+    mut indices: DeviceBuffer[DType.int32],
+    mut data: DeviceBuffer[DType.float32],
+    mut norms: DeviceBuffer[DType.float32],
+    tile_tpb: Int = PINNED_TILE_TPB,
+    sabotage: Int32 = LINK_SAB_NONE,
+    fill_indices: Bool = True,
+    nan_guard: Bool = True,
+) raises:
     """`connectivities.cuh:133-176`. `norms` is the caller's `m`-long
     scratch for the row norms (theirs lives inside `cuvs::distance`);
     `tile_tpb` is the IDENTICAL tile's block size, a scheduling knob the
@@ -173,7 +209,7 @@ def pairwise_distances(
             "'l2') and L2Expanded (0) are implemented (pairwise_distance_kmeans"
             " raises on every other metric too, kmeans_common.cuh:320)"
         )
-    var devices = hierarchy_device_count(m, sabotage)
+    var devices = hierarchy_device_count(dplan, m, sabotage)
     var nnz = m * m
 
     # `:147-148`
@@ -231,7 +267,7 @@ def pairwise_distances(
     else:
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
             if devices > 1:
-                pairwise_rows(ctx, x, norms, data, m, n, is_sqrt, tile_tpb, devices)
+                pairwise_rows(ctx, x, norms, data, m, n, is_sqrt, tile_tpb, devices, dplan)
             else:
                 # Tried 2026-10-08 (MOJOLEARN_GRAPH_DIRECT_DISTANCE, run ge123e6f9): (x-y)^2 distances for HDBSCAN's mutual-reachability
                 # MST and the linkage tile; NV/AMD hdbscan istella 1.76x/1.70x, taxi 1.14x/1.16x SLOWER -> deleted. Recoverable at

@@ -15,7 +15,7 @@ cell attributable to the define rather than to the second device. Owed a
 two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this
 driver, so no CPU column can watch it fire.
 """
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from std.os import getenv
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
@@ -45,12 +45,23 @@ struct GradientColumnShard(Movable):
         _ = self.ctx^
 
 
+def glm_device_plan() raises -> DevicePlan:
+    """The GLM family's device plan, read once at a family entry
+    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    `device_plan_setting("MOJOLEARN_GLM_DEVICE_COUNT")` returned, so
+    `gradient_columns` tests the same text as before."""
+    return device_plan_current("MOJOLEARN_GLM_DEVICE_COUNT", "")
+
+
 def gradient_columns(
+    dplan: DevicePlan,
     ctx: DeviceContext, mut output: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     rows: Int, columns: Int, classes: Int,
 ) raises -> Bool:
-    var value = device_plan_setting("MOJOLEARN_GLM_DEVICE_COUNT")
+    """The GLM gradient dispatcher: False (the caller's single-device route
+    runs) when the plan's setting is "" or "1", else the column shards."""
+    var value = dplan.setting
     if value == "" or value == "1":
         return False
     var count = Int(value)
@@ -75,7 +86,7 @@ def gradient_columns(
             Int32(columns), Int32(source), Int32(width), Int32(cells),
             grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1))
         ctx.synchronize()
-        var device = DeviceContext(device_id=device_plan_device(rank))
+        var device = DeviceContext(device_id=dplan.device(rank))
         var local_x = peer_clone(ctx, device, packed)
         _ = packed^
         var local_dz = peer_clone(ctx, device, dz)
