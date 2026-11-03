@@ -152,3 +152,29 @@ Phase 2 (one lane, after phase 1 is green): `ProgramExecutor[E]` in
 - The integration compile is green on NVIDIA, AMD and Apple; the identity
   table admit shows no changed digest on any single-device lane.
 - Phase 2: `rg -n '\._(slot|add|op_run|drop_temps|opt_index)|tape\._nodes|\.opt_states' autograd/distributed_* autograd/partition_*` matches nothing.
+
+## Status (2026-11-03, integration `integ/dp-20261103`)
+
+Phase 1 (eight lanes plus `dp-gbdt-thread`) and phase 2 (`dp-autograd`:
+`autograd/program_executor.mojo`, the four distributed/partition files use
+only public `OpsSession` methods) are merged. Evidence under
+`~/mojolearn-evidence/dp-integ/`:
+
+- every binding build script green on the Mac (82 scripts, Apple identical
+  tier plus the host layout); Linux cross-compile of the 29 changed bindings
+  for sm_89 and gfx942: identical tier 58/58, fast tier 56/56 PASS;
+- Apple identity column recorded at dcdbb6be4ff4 (428 routine lanes, 3,852
+  cells) and again after phase 2 at 87a42d01a789 (340 lanes whose closure
+  changed): every digest part equals the committed reference table, 0 differ
+  (`compare.py`); records retained under `bench/results/identity_break/retained/`;
+- `tools/check_no_recursion_around_kernels.py` now treats each overload as
+  its own node (a plan-less entry forwarding to its plan-taking sibling is not
+  recursion); it reports the same single pre-existing cycle as main.
+
+Owed: NVIDIA and AMD identity columns re-record at the next release freeze
+(the incremental default picks up every lane whose closure changed); the
+Python-side `MOJOLEARN_OPTIMIZER_DEVICE_COUNT` reads in
+`bindings/small_mlp_native.mojo` and `parallel_mlp_native.mojo`; the
+plan-less overloads that remain for callers outside the family entries
+(pca, x_decomp, decomposition, solver estimator, mixture and gram checks) can
+take a plan once their entries hold one.
