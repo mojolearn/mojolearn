@@ -30,6 +30,7 @@ from core.device_liveness import (
     DEAD_DEVICE_POISON,
     SAB_2002_DEAD_DEVICE,
 )
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -824,6 +825,8 @@ def fit_two_level_feature_freq_tree(
     learning_rate: Float32 = Float32(0.03),
     l2_leaf_reg: Float32 = Float32(3.0),
     random_seed: UInt64 = UInt64(0),
+    # The fit's device plan, read once at the binding entry.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> TTwoLevelTensorFitResult:
     """Fit the supported two-level, one-tree RMSE tensor arm.
 
@@ -889,7 +892,7 @@ def fit_two_level_feature_freq_tree(
     var times = StageTimes()
     times.enabled = False
     var tree = run_sequential_two_level_feature_freq_tree(
-        ctx, initial, x_colmajor, base_quantized_cindex,
+        device_plan, ctx, initial, x_colmajor, base_quantized_cindex,
         base_columns, base_fold_counts, base_one_hot,
         n_rows, n_raw_features, 2, grid, rows, stats,
         weight_mag, grad_mag, SCORE_FUNCTION_COSINE, False,
@@ -2659,6 +2662,10 @@ def fit_with_test(
     pair_winners: List[UInt32] = List[UInt32](),
     pair_losers: List[UInt32] = List[UInt32](),
     pair_weights: List[Float32] = List[Float32](),
+    # The fit's device plan, read once at the binding entry and passed to
+    # every tree searcher (`gbdt_hist_dispatch` / the scores calcer own the
+    # one-vs-many choice; one device runs the unchanged launches).
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -3807,6 +3814,7 @@ def fit_with_test(
                 random_seed=tree_seed,
                 tag_prefix=_tree_tag(iteration) + ".",
                 mags_dev=ns_mags_opt^,
+                device_plan=device_plan,
             )
             loop_times.stop_host("iter_tree_search", t_search)
             var n_bins = tree.bin_count()
@@ -4229,6 +4237,7 @@ def fit_with_test(
                 score_std_dev=pointwise_score_std_dev,
                 seed=tree_seed,
                 one_hot=one_hot,
+                device_plan=device_plan,
             )
             # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (a
             # full-depth tree's final subsets as the partition); code recoverable at b639a2bd2.
@@ -4284,6 +4293,7 @@ def fit_with_test(
         else:
             var t_sym = loop_times.start()
             sizes = run_tree_layout_traced(
+                device_plan,
                 ctx, n_rows, tree_folds if feature_fraction < 1 else fold_counts, max_depth,
                 tree_cindex, stats, row_index, lcur,
                 Float32(0.0), Float32(0.0),
