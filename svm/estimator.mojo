@@ -86,6 +86,7 @@ def _family_ctx() raises -> DeviceContext:
         return DeviceContext()
     return neural_ctx[_FAMILY_CTX]()
 
+from core.device_plan import device_plan_current
 from core.identity_trace import IdentityTrace
 from svm.impl.smosolver import SmoTrace
 from svm.impl.svc_impl import svc_fit, svc_fit_borrowed, svc_predict
@@ -223,8 +224,11 @@ def svc_fit_host(
         + " max_iter=" + String(max_iter)
         + " nochange_steps=" + String(nochange_steps)
     )
+    # The family's native entry reads the calling thread's device plan ONCE
+    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var trace = SmoTrace()
-    var model = svc_fit(ctx, x, labels, n_rows, n_cols, param, kp, card, trace)
+    var model = svc_fit(ctx, x, labels, n_rows, n_cols, param, kp, card, trace, plan=plan)
 
     var out = SvcFitOutputs()
     out.n_support = model.n_support
@@ -299,8 +303,11 @@ def svc_fit_host_borrowed(
         + " max_iter=" + String(max_iter)
         + " nochange_steps=" + String(nochange_steps)
     )
+    # The family's native entry reads the calling thread's device plan ONCE
+    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var trace = SmoTrace()
-    var model = svc_fit_borrowed(ctx, x_ptr, labels, n_rows, n_cols, param, kp, card, trace, c_rows)
+    var model = svc_fit_borrowed(ctx, x_ptr, labels, n_rows, n_cols, param, kp, card, trace, c_rows, plan)
 
     var out = SvcFitOutputs()
     out.n_support = model.n_support
@@ -402,8 +409,12 @@ def svc_predict_host(
         + " predict_class=" + String(predict_class)
         + " buffer_mib=" + String(buffer_size_mib)
     )
+    # The family's native entry reads the calling thread's device plan ONCE
+    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var out = svc_predict(
-        ctx, model, x, n_rows, n_cols, kp, buffer_size_mib, predict_class, card
+        ctx, model, x, n_rows, n_cols, kp, buffer_size_mib, predict_class, card,
+        plan,
     )
     _ = model^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
@@ -545,8 +556,11 @@ def svr_fit_host(
         + " max_iter=" + String(max_iter)
         + " nochange_steps=" + String(nochange_steps)
     )
+    # The family's native entry reads the calling thread's device plan ONCE
+    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var trace = SmoTrace()
-    var model = svr_fit(ctx, x, targets, n_rows, n_cols, param, kp, card, trace, c_rows=c_rows)
+    var model = svr_fit(ctx, x, targets, n_rows, n_cols, param, kp, card, trace, c_rows=c_rows, plan=plan)
 
     var out = SvrFitOutputs()
     out.n_support = model.n_support
@@ -649,8 +663,11 @@ def svr_predict_host(
         + " gamma=" + String(gamma)
         + " buffer_mib=" + String(buffer_size_mib)
     )
+    # The family's native entry reads the calling thread's device plan ONCE
+    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var out = svr_predict(
-        ctx, model, x, n_rows, n_cols, kp, buffer_size_mib, card
+        ctx, model, x, n_rows, n_cols, kp, buffer_size_mib, card, plan
     )
     _ = model^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
