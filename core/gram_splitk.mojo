@@ -145,7 +145,12 @@ multiply the same two tile loads in commuted order. OPT-IN ONLY:
 the one caller, so OLS and tSVD are bit-for-bit untouched. DEVIATION 42.
 """
 
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan
+from core.gram_multi_gpu import (
+    gram_plan_current,
+    gram_splitk_launch_centered_dispatch,
+    gram_splitk_launch_dispatch,
+)
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -965,7 +970,7 @@ def _enqueue_reduce(
     )
 
 
-def _splitk_launch(
+def _splitk_launch_one(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -990,10 +995,6 @@ def _splitk_launch(
     # owns which cell, never the order any cell is accumulated in, so it is
     # scheduling, not numerics.
     var cells = gram_splitk_cells_for(m)
-    var unused_mu = x
-    if _gram_parallel[False](ctx, partials, x, unused_mu, m, k, kc, n_chunks):
-        _enqueue_reduce(ctx, z, partials, mn, n_chunks)
-        return
     if cells == 4:
         _enqueue_partial[4](ctx, partials, x, m, k, kc, n_chunks)
     elif cells == 16:
@@ -1005,7 +1006,7 @@ def _splitk_launch(
     _enqueue_reduce(ctx, z, partials, mn, n_chunks)
 
 
-def _splitk_launch_centered(
+def _splitk_launch_centered_one(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -1020,9 +1021,6 @@ def _splitk_launch_centered(
     var kc = _splitk_chunk_rows(k, n_chunks)
     var mn = m * m
     var cells = gram_splitk_cells_for(m)
-    if _gram_parallel[True](ctx, partials, x, mu, m, k, kc, n_chunks):
-        _enqueue_reduce(ctx, z, partials, mn, n_chunks)
-        return
     if cells == 4:
         _enqueue_partial_centered[4](
             ctx, partials, x, mu, m, k, kc, n_chunks
@@ -1036,6 +1034,60 @@ def _splitk_launch_centered(
             ctx, partials, x, mu, m, k, kc, n_chunks
         )
     _enqueue_reduce(ctx, z, partials, mn, n_chunks)
+
+
+def _splitk_launch(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """The plain split-K pair over `plan` (`core/gram_multi_gpu.mojo`
+    `gram_splitk_launch_dispatch`): one device runs `_splitk_launch_one`
+    unchanged."""
+    gram_splitk_launch_dispatch(plan, ctx, z, x, partials, m, k)
+
+
+def _splitk_launch(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """Plan-less entry (checks): reads the Gram plan once and forwards."""
+    _splitk_launch(gram_plan_current(), ctx, z, x, partials, m, k)
+
+
+def _splitk_launch_centered(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`_splitk_launch` with the centered tile read."""
+    gram_splitk_launch_centered_dispatch(plan, ctx, z, x, mu, partials, m, k)
+
+
+def _splitk_launch_centered(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """Plan-less entry (checks): reads the Gram plan once and forwards."""
+    _splitk_launch_centered(gram_plan_current(), ctx, z, x, mu, partials, m, k)
 
 
 def gram_splitk_scratch_covers(m: Int, k: Int) raises -> Bool:
@@ -1056,6 +1108,18 @@ def gemm_tn_splitk(
     m: Int,
     k: Int,
 ) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_tn_splitk(gram_plan_current(), ctx, z, x, m, k)
+
+
+def gemm_tn_splitk(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
     """`z[m x m] = x[k x m]^T . x[k x m]` on the split-K kernel pair,
     allocating its own partials workspace (`n_chunks * m * m` floats, at
     most 15.7 MB at m = 128 and 240 KB at the bench's m = 32), freed at
@@ -1066,7 +1130,7 @@ def gemm_tn_splitk(
     """
     var n_chunks = gram_splitk_chunk_count()
     var partials = ctx.enqueue_create_buffer[DType.float32](n_chunks * m * m)
-    _splitk_launch(ctx, z, x, partials, m, k)
+    _splitk_launch(plan, ctx, z, x, partials, m, k)
     ctx.synchronize()
     # KEEP `partials` ALIVE PAST THE SYNCHRONIZE. Mojo frees a buffer at
     # its LAST USE, which without this line is the launch argument above,
@@ -1085,6 +1149,19 @@ def gemm_tn_splitk_into(
     m: Int,
     k: Int,
 ) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_tn_splitk_into(gram_plan_current(), ctx, z, x, scratch, m, k)
+
+
+def gemm_tn_splitk_into(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
     """`gemm_tn_splitk`, but the partials land in `scratch` when it covers
     them (`gram_splitk_scratch_covers`), skipping the per-call
     `enqueue_create_buffer`. `scratch` is `gemm_tn`'s `xt` alias buffer:
@@ -1095,7 +1172,7 @@ def gemm_tn_splitk_into(
     cover `n_chunks * m * m` (PCA's own 4-column checks), still allocates.
     """
     if gram_splitk_scratch_covers(m, k):
-        _splitk_launch(ctx, z, x, scratch, m, k)
+        _splitk_launch(plan, ctx, z, x, scratch, m, k)
         # DEVIATION 1899 -- SYNC DELETED ON THE SCRATCH-REUSE BRANCH ONLY
         # (the DEVIATION-1877 class). This branch allocates nothing: `z`,
         # `x` and `scratch` are all caller-owned and outlive the call, and
@@ -1104,10 +1181,23 @@ def gemm_tn_splitk_into(
         # `gemm_tn_splitk` below allocates its OWN partials and KEEPS its
         # sync. Fences only -- IDENTICAL's bits do not move.
         return
-    gemm_tn_splitk(ctx, z, x, m, k)
+    gemm_tn_splitk(plan, ctx, z, x, m, k)
 
 
 def gram_centered_splitk(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gram_centered_splitk(gram_plan_current(), ctx, z, x, mu, m, k)
+
+
+def gram_centered_splitk(
+    plan: DevicePlan,
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -1129,7 +1219,7 @@ def gram_centered_splitk(
     """
     var n_chunks = gram_splitk_chunk_count()
     var partials = ctx.enqueue_create_buffer[DType.float32](n_chunks * m * m)
-    _splitk_launch_centered(ctx, z, x, mu, partials, m, k)
+    _splitk_launch_centered(plan, ctx, z, x, mu, partials, m, k)
     ctx.synchronize()
     # KEEP `partials` ALIVE PAST THE SYNCHRONIZE. Mojo frees a buffer at
     # its LAST USE, which without this line is the launch argument above,
@@ -1149,113 +1239,29 @@ def gram_centered_splitk_into(
     m: Int,
     k: Int,
 ) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gram_centered_splitk_into(gram_plan_current(), ctx, z, x, mu, scratch, m, k)
+
+
+def gram_centered_splitk_into(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
     """`gram_centered_splitk`, partials landing in `scratch` (>= k * m
     floats, pure scratch) when `gram_splitk_scratch_covers`, exactly as
     `gemm_tn_splitk_into` does for the plain arm; small k allocates."""
     if gram_splitk_scratch_covers(m, k):
-        _splitk_launch_centered(ctx, z, x, mu, scratch, m, k)
+        _splitk_launch_centered(plan, ctx, z, x, mu, scratch, m, k)
         # DEVIATION 1899 -- SYNC DELETED ON THE SCRATCH-REUSE BRANCH ONLY,
         # same reasoning as `gemm_tn_splitk_into` above: every buffer is
         # caller-owned, nothing is allocated here, and the launch pair is
         # stream-ordered. The allocating sibling `gram_centered_splitk`
         # keeps its sync. Fences only -- IDENTICAL's bits do not move.
         return
-    gram_centered_splitk(ctx, z, x, mu, m, k)
-
-
-@fieldwise_init
-struct GramShard(Movable):
-    var ctx: DeviceContext
-    var x: DeviceBuffer[DType.float32]
-    var mu: DeviceBuffer[DType.float32]
-    var partials: DeviceBuffer[DType.float32]
-    var first: Int
-    var chunks: Int
-    var rows: Int
-
-    def __deinit__(deinit self):
-        _ = self.x^
-        _ = self.mu^
-        _ = self.partials^
-        try:
-            self.ctx.synchronize()
-        except:
-            pass
-        _ = self.ctx^
-
-
-def _gram_shard_launch[CELLS: Int, centered: Bool](mut shard: GramShard, m: Int, kc: Int) raises:
-    comptime if centered:
-        _enqueue_partial_centered[CELLS](shard.ctx, shard.partials, shard.x, shard.mu,
-            m, shard.rows, kc, shard.chunks)
-    else:
-        _enqueue_partial[CELLS](shard.ctx, shard.partials, shard.x,
-            m, shard.rows, kc, shard.chunks)
-
-
-def _gram_parallel[centered: Bool](
-    ctx: DeviceContext, mut partials: DeviceBuffer[DType.float32],
-    mut x: DeviceBuffer[DType.float32], mut mu: DeviceBuffer[DType.float32],
-    m: Int, k: Int, kc: Int, n_chunks: Int,
-) raises -> Bool:
-    """Assign existing pinned K chunks to devices; do not invent new partials.
-
-    Each GPU receives whole original row chunks. The original kernel sees the
-    same row sequence, same chunk_rows and same register width. Only its source
-    address and output slot origin change. The caller still folds all 128
-    partials, including the original zero tail, in its original order.
-    """
-    var requested = device_plan_setting("MOJOLEARN_GRAM_DEVICE_COUNT")
-    if requested == "" or requested == "1":
-        return False
-    var count = Int(requested)
-    if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("parallel Gram requires IDENTICAL and 1..64 devices")
-    var live_chunks = min(n_chunks, (k + kc - 1) // kc)
-    var active = min(count, live_chunks)
-    if active < 1:
-        raise Error("parallel Gram requires nonempty rows")
-    ctx.synchronize()
-    enqueue_fill(ctx, partials, Float32(0))
-    ctx.synchronize()
-    var shards = List[GramShard]()
-    for rank in range(active):
-        var first = live_chunks * rank // active
-        var end = live_chunks * (rank + 1) // active
-        var begin_row = first * kc
-        var rows = min(k, end * kc) - begin_row
-        var device = DeviceContext(device_id=device_plan_device(rank))
-        var source_row = begin_row
-        comptime if is_defined["MOJOLEARN_GRAM_PARALLEL_SABOTAGE"]():
-            # Check-only arm: later owners read their rows one row early. The
-            # length `rows * m`, the partial-output size and the write-back
-            # offset `shard.first * m * m` all keep the true `begin_row`, so no
-            # allocation and no validation moves. INERT AT ONE DEVICE.
-            if rank > 0:
-                source_row = begin_row - 1
-        var view = x.create_sub_buffer[DType.float32](source_row * m, rows * m)
-        var local_x = peer_clone(ctx, device, view)
-        var local_mu: DeviceBuffer[DType.float32]
-        comptime if centered:
-            local_mu = peer_clone(ctx, device, mu)
-        else:
-            local_mu = device.enqueue_create_buffer[DType.float32](1)
-        var out = device.enqueue_create_buffer[DType.float32]((end - first) * m * m)
-        device.synchronize()
-        shards.append(GramShard(device^, local_x^, local_mu^, out^, first, end - first, rows))
-    var cells = gram_splitk_cells_for(m)
-    for rank in range(active):
-        if cells == 4:
-            _gram_shard_launch[4, centered](shards[rank], m, kc)
-        elif cells == 16:
-            _gram_shard_launch[16, centered](shards[rank], m, kc)
-        else:
-            _gram_shard_launch[GRAM_MAX_CELLS_PER_THREAD, centered](shards[rank], m, kc)
-    for rank in range(active):
-        ref shard = shards[rank]
-        var destination = partials.create_sub_buffer[DType.float32](shard.first * m * m, shard.chunks * m * m)
-        shard.partials.enqueue_copy_to(destination)
-        shard.ctx.synchronize()
-    _ = shards^
-    ctx.synchronize()
-    return True
+    gram_centered_splitk(plan, ctx, z, x, mu, m, k)
